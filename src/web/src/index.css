@@ -4329,15 +4329,74 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   gap: 4px;
 }
+/* A failed merge, inset to the row's own padding (.wt-row) rather than flush with the bar's
+   border. A conflict is laid out like .wt-commit-fail — head, why, then the by-hand recipe as
+   two steps; a precondition error is its one .wt-merge-err line. */
+.wt-merge.wt-merge-inset {
+  margin-top: 0;
+  padding: 9px 10px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.wt-merge-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--error);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.wt-merge-why {
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.wt-merge-why b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.wt-merge-steps {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.wt-merge-steps li {
+  display: contents;
+}
+.wt-merge-step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.wt-merge-steps .wt-merge-cmd {
+  justify-self: start;
+  word-break: break-all;
+}
+.wt-merge-cmd-copy {
+  display: none;
+  margin-left: 6px;
+  color: var(--text-3);
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+}
+.wt-merge-cmd:hover .wt-merge-cmd-copy {
+  display: inline;
+}
 .wt-merge-err {
   color: var(--error);
   white-space: pre-wrap;
   word-break: break-word;
-}
-.wt-merge-or {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 /* No worktree: the session edits its workspace's folder directly. Amber bar: why, the folder and
    what that costs on a second line, Initialize git… and ✕. */
@@ -4440,7 +4499,7 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Connective text between the two halves of the by-hand merge recipe (they run in two dirs). */
+/* Where each step of the by-hand merge recipe runs (they run in two dirs). */
 .wt-merge-where {
   color: var(--text-3, var(--text-2));
 }
@@ -8496,6 +8555,20 @@ button.chat-jump-start:hover {
   margin-left: auto;
   color: var(--text-3);
   font-size: 11.5px;
+}
+/* The key Tab is, inside Use, as .approval-kbd draws Enter on a card's button. */
+.composer-optimized-key {
+  margin-left: 8px;
+  font: inherit;
+  font-size: 11px;
+  opacity: 0.75;
+}
+/* No keyboard, no Tab: a touch screen draws neither the key nor its line. */
+@media (hover: none) {
+  .composer-optimized-key,
+  .composer-optimized-tab-hint {
+    display: none;
+  }
 }
 .composer-optimize-link {
   padding: 0;
@@ -17318,6 +17391,52 @@ button.chat-jump-start:hover {
   flex: 1;
   min-width: 0;
 }
+/* The email field with its suggestions (board share-links/14): the wrapper takes the input's place in the row. */
+.share-people-email {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.share-people-email .orbit-input {
+  width: 100%;
+}
+.share-suggestion-head {
+  padding: 4px 12px 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.share-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.share-suggestion-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.share-suggestion-name {
+  color: var(--text-1);
+}
+.share-suggestion-email {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-suggestion b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.share-suggestion-when {
+  flex: none;
+  color: var(--text-4);
+  font-size: 12px;
+}
 .share-people-error {
   padding: 0 10px 8px;
   color: var(--error);
@@ -18190,6 +18309,12 @@ button.chat-jump-start:hover {
   padding-left: 38px;
   font-size: 11.5px;
   color: var(--text-3);
+}
+/* The Google terms line under an Antigravity row: in line with the row's note above it, and its size. */
+.re-google-terms .rsi-hint {
+  margin-top: 7px;
+  padding-left: 38px;
+  font-size: 11.5px;
 }
 .re-dup.re-expiring {
   color: var(--warning-text, var(--warning-solid));

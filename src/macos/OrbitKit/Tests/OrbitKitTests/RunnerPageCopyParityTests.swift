@@ -420,6 +420,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
         ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
         ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
+        ("agentFixSignInBelow", RunnerPageCopy.agentFixSignInBelow(engine: "${engine}")),
     ]
 
     // MARK: the words

@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.schedule.ScheduleWaitingCard
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
@@ -63,7 +65,8 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
     // A terminal asked to be approved, or one was decided elsewhere: its cards are read again, and nothing else.
     val terminalsChanged = rememberTerminalsChanged(app, handle)
     LaunchedEffect(store, terminalsChanged) { if (terminalsChanged > 0) store.loadTerminalRequests() }
-    WaitingOnYouScreen(store, data.runners, route.id, revision, links) { question ->
+    val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
+    WaitingOnYouScreen(store, data.runners, route.id, revision, links, scheduled = scheduled) { question ->
         val coordinator = data.sessions["open"].orEmpty().firstOrNull {
             it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, question.projectId)
         }
@@ -82,7 +85,7 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
  */
 @Composable
 fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>, focused: String?, revision: Long, open: (String) -> Unit,
-    answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
+    scheduled: ScheduledStore? = null, answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(WaitingTab.OPEN) }
@@ -99,7 +102,9 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
     val rows = if (tab == WaitingTab.OPEN) OwnerRequests.openRows(state.open, state.questions) else ended.map { OwnerRequests.OpenRow.Request(it) }
     // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top of the Open tab.
     val terminals = if (tab == WaitingTab.OPEN) state.terminalRequests else emptyList()
-    val empty = rows.isEmpty() && terminals.isEmpty()
+    // A scheduled task's items, whole (board 01 ⑥): each answers at the schedule's own doors.
+    val scheduleItems = if (tab == WaitingTab.OPEN && scheduled != null) state.scheduleItems else emptyList()
+    val empty = rows.isEmpty() && terminals.isEmpty() && scheduleItems.isEmpty()
     Column(Modifier.fillMaxSize().testTag("waiting-on-you")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -119,6 +124,11 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(terminals, key = { "terminal:${it.id}" }) { request -> TerminalApproveCard(request, store, now) }
+            if (scheduled != null) items(scheduleItems, key = { "schedule:${it.id}" }) { item ->
+                val openSchedule: (String) -> Unit = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") }
+                ScheduleWaitingCard(item, scheduled, openSession = { open("orbit-session:$it") }, openSchedule = openSchedule,
+                    openAgentSettings = { openSchedule(item.scheduleId) }, answered = { store.load(OwnerRequestStore.OPEN) })
+            }
             items(rows, key = { row -> when (row) { is OwnerRequests.OpenRow.Request -> row.request.id; is OwnerRequests.OpenRow.Question -> "question:${row.question.itemId}" } }) { row ->
                 when {
                     row is OwnerRequests.OpenRow.Question -> row.question.let { question ->

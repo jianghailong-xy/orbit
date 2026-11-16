@@ -25,9 +25,9 @@ class AccountInUseTest {
     }
 
     @Test fun theHeadingNamesTheEngineAsItsCliAndCountsTheSessions() {
-        assertEquals("This Claude Code account can’t be removed while a session is running on it — end the session below, then remove it",
+        assertEquals("This Claude Code account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account",
             RunnerPage.inUseHeading("claude", 1))
-        assertEquals("This Codex account can’t be removed while 3 sessions are running on it — end them, then remove it",
+        assertEquals("This Codex account can’t be removed while 3 sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account",
             RunnerPage.inUseHeading("codex", 3))
     }
 

@@ -170,13 +170,13 @@ struct WorktreeBar: View {
         let commitFailure = WorktreeBarLogic.commitFailure(commitStatus: d.commitStatus,
                                                            commitError: d.commitError,
                                                            commitResultMessage: d.commitResultMessage)
-        let failure = commitFailure != nil ? nil : WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus,
+        let conflict = commitFailure != nil ? nil : WorktreeBarLogic.mergeConflict(mergeStatus: d.mergeStatus,
                                                                                   mergeError: d.mergeError,
-                                                                                  commitStatus: d.commitStatus,
-                                                                                  commitError: d.commitError)
-        let manualMergeCmd = failure != nil && d.commitStatus != "error"
-            ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
-            : nil
+                                                                                  mergeTarget: d.mergeTarget,
+                                                                                  branch: branch)
+        let failure = commitFailure != nil || conflict != nil ? nil
+            : WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus, mergeError: d.mergeError,
+                                              commitStatus: d.commitStatus, commitError: d.commitError)
         // Work handed to the platform to land (board docs/mocks/session-landing-slot-ios): the landing
         // is the one state the card says, so the merge control gives way to it — its second row while
         // it is on its way, a chip at the end of this row once it settled.
@@ -214,11 +214,23 @@ struct WorktreeBar: View {
                 if let commitFailure {
                     WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
                         .id(d.commitError ?? "")
-                } else if d.mergeRecovery == nil, let failure {
-                    failureView(message: failure, manualMergeCommand: manualMergeCmd)
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 3)
+            // A failed merge is its own section under the row, inset from the bar's edges rather than
+            // sitting on its bottom border (web `.wt-merge-inset`, board docs/mocks/merge-conflict-strip).
+            if d.mergeRecovery == nil, conflict != nil || failure != nil {
+                Divider()
+                Group {
+                    if let conflict {
+                        WorktreeMergeConflictView(conflict: conflict).id(d.mergeError ?? "")
+                    } else if let failure {
+                        failureView(message: failure)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10).padding(.top, 9).padding(.bottom, 10)
+            }
             // A merge held for target recovery is the bar's second row: what holds it, one line, and
             // the review behind it in a sheet — never the review itself, which is taller than the band
             // can give on a phone. The row is the recovery's only way in; the merge slot above gives
@@ -334,7 +346,7 @@ struct WorktreeBar: View {
         .layoutPriority(1)
     }
 
-    private func failureView(message: String, manualMergeCommand: String?) -> some View {
+    private func failureView(message: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.orbitMeta.weight(.semibold))
@@ -350,11 +362,6 @@ struct WorktreeBar: View {
         .contextMenu {
             Button { copyFailureText(message) } label: {
                 Label("Copy failure reason", systemImage: "doc.on.doc")
-            }
-            if let manualMergeCommand {
-                Button { copyFailureText(manualMergeCommand) } label: {
-                    Label("Copy manual merge command", systemImage: "terminal")
-                }
             }
         }
         .accessibilityLabel(message)
@@ -706,6 +713,105 @@ private struct WorktreeCommitFailureView: View {
     private func copy(_ text: String) {
         PlatformPasteboard.copyString(text)
         PlatformHaptics.success()
+    }
+}
+
+/// A merge conflict (mirrors web's conflict panel): what happened, then the by-hand recipe as two
+/// steps — where each runs above its command, which a click copies — with git's own words behind
+/// "Show git output". Keyed on the error by its parent, so a new conflict starts folded again.
+private struct WorktreeMergeConflictView: View {
+    let conflict: WorktreeBarLogic.MergeConflict
+    @State private var showGitOutput = false
+    @State private var copied: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.circle.fill")
+                Text(conflict.headline)
+            }
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(Color.red)
+            why
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(conflict.steps.enumerated()), id: \.offset) { i, step in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(i + 1)")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 16)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(step.place)
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                        Button { copy(step.command) } label: {
+                            Text(copied == step.command ? "Copied" : step.command)
+                                .font(.orbitMono)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy")
+                        .accessibilityLabel("Copy \(step.command)")
+                    }
+                }
+                .padding(.top, 2)
+            }
+            if conflict.gitOutput != nil {
+                Button { showGitOutput.toggle() } label: {
+                    HStack(spacing: 3) {
+                        Text(showGitOutput ? "Hide git output" : "Show git output")
+                        Image(systemName: showGitOutput ? "chevron.down" : "chevron.right")
+                    }
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(showGitOutput ? "Shown" : "Hidden")
+                .padding(.top, 2)
+            }
+            if showGitOutput, let gitOutput = conflict.gitOutput {
+                Text(gitOutput)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .contextMenu {
+            if let gitOutput = conflict.gitOutput {
+                Button { copy(gitOutput) } label: {
+                    Label("Copy git output", systemImage: "terminal")
+                }
+            }
+        }
+    }
+
+    /// The why, with the button it names in the primary colour and semibold (web's `<b>`).
+    private var why: Text {
+        let button = "Resolve in session"
+        guard let range = conflict.why.range(of: button) else { return Text(conflict.why) }
+        return Text(conflict.why[..<range.lowerBound])
+            + Text(button).fontWeight(.semibold).foregroundColor(.primary)
+            + Text(conflict.why[range.upperBound...])
+    }
+
+    private func copy(_ text: String) {
+        PlatformPasteboard.copyString(text)
+        PlatformHaptics.success()
+        copied = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if copied == text { copied = nil }
+        }
     }
 }
 

@@ -272,11 +272,11 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
-    /** Over the sessions a refused removal lists, when one session is running in the account; [engine] is the CLI's own name (Codex,
-     * Claude Code). */
-    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is running on it — end the session below, then remove it"
-    /** The same, when several sessions are running in it. */
-    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are running on it — end them, then remove it"
+    /** Over the sessions a refused removal lists, when one session is in the account — running or between turns, either holds it;
+     * [engine] is the CLI's own name (Codex, Claude Code). */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account"
+    /** The same, when several sessions are in it. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account"
     /** Each listed session's way to it. */
     const val IN_USE_OPEN = "Open session"
     /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
@@ -958,7 +958,8 @@ internal object RunnerPage {
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
      */
     private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        val version = runner.str("version")?.trim()?.takeIf { Regex("^[vV]?[0-9]").containsMatchIn(it) } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
         val report = runner.obj("selfUpdate")

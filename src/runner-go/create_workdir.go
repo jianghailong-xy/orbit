@@ -12,14 +12,18 @@ import (
 
 // A workspace Orbit made in a new folder (POST /sessions newWorkspace.newFolder, docs/first-workspace-contract.md
 // §4) is claimed with createWorkDir, and its workDir is made before the engine starts, but only inside this
-// machine's repos root, symlinks resolved. The control plane named that folder, <reposRoot>/<name> from the root this
-// runner reports, so the runner holds it to that root: a path that resolves anywhere else, through a symlink or
-// otherwise, is not made, and the session fails to start as one whose directory is missing does
+// machine's home directory, symlinks resolved. The control plane named that folder: <reposRoot>/<name> for a runner
+// that declares v1 only, <home>/<name> for one that declares v2, home being the directory the reported repos root
+// sits in (clone.go). Both lie inside home, so the runner holds it to home: a path that resolves anywhere else,
+// through a symlink or otherwise, is not made, and the session fails to start as one whose directory is missing does
 // (startSessionProcess: "working directory … does not exist").
-const createWorkDirCapabilityV1 = "create-workdir/v1"
+const (
+	createWorkDirCapabilityV1 = "create-workdir/v1"
+	createWorkDirCapabilityV2 = "create-workdir/v2"
+)
 
-// createOrbitWorkDir makes dir (mkdir -p, 0755) when it is missing and resolves inside the repos root. Anything
-// else is logged and left as it is.
+// createOrbitWorkDir makes dir (mkdir -p, 0755) when it is missing and resolves inside home. Anything else is
+// logged and left as it is.
 func createOrbitWorkDir(sessionID, dir string) {
 	if _, err := os.Stat(dir); !errors.Is(err, fs.ErrNotExist) {
 		return // there already, or unreadable: nothing is made over it
@@ -33,22 +37,22 @@ func createOrbitWorkDir(sessionID, dir string) {
 		logln(fmt.Sprintf("session %s — cannot create workDir %q: %v", sessionID, dir, err))
 		return
 	}
-	logln(fmt.Sprintf("session %s — created workDir %q in the repos root (createWorkDir)", sessionID, dir))
+	logln(fmt.Sprintf("session %s — created workDir %q (createWorkDir)", sessionID, dir))
 }
 
 // orbitWorkDirTarget is the directory to make for dir, symlinks resolved, when it lies inside this machine's
-// resolved repos root, and why not otherwise. It is made at the resolved path, so no link in the part that
-// exists can carry the mkdir elsewhere.
+// resolved home directory or its resolved repos root (which a link may put on another disk), and why not otherwise.
+// It is made at the resolved path, so no link in the part that exists can carry the mkdir elsewhere.
 func orbitWorkDirTarget(dir string) (string, error) {
-	root := reposRoot()
-	if root == "" {
-		return "", errors.New("this machine has no repos root")
+	home := userHome()
+	if home == "" {
+		return "", errors.New("this machine has no home directory")
 	}
 	if !filepath.IsAbs(dir) {
 		return "", errors.New("it is not an absolute path")
 	}
 	// The kernel applies `..` to where the links before it lead, which filepath.Clean cannot: the path judged and
-	// made would not be the one the engine then runs in. Orbit names a single folder below the root, never this.
+	// made would not be the one the engine then runs in. Orbit names a single folder below home, never this.
 	if slices.Contains(strings.Split(filepath.ToSlash(dir), "/"), "..") {
 		return "", errors.New("it steps up with ..")
 	}
@@ -56,20 +60,36 @@ func orbitWorkDirTarget(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	target := filepath.Join(existing, missing)
+	// Home: mkdir -p makes every missing directory below the nearest one that exists, so that one has to be home or
+	// inside it, and home itself is never made.
+	homeErr := insideRoot(home, existing, target, false)
+	if homeErr == nil {
+		return target, nil
+	}
+	// The repos root, where a v1 control plane names the folder: the root itself may still be made, in home.
+	if insideRoot(reposRoot(), existing, target, true) == nil {
+		return target, nil
+	}
+	return "", homeErr
+}
+
+// insideRoot says why target, whose nearest existing ancestor is existing, may not be made inside root, symlinks
+// resolved; nil when it may. With mayMakeRoot, a root that does not exist yet is made along with it, but nothing
+// above the root is.
+func insideRoot(root, existing, target string, mayMakeRoot bool) error {
 	rootExisting, rootMissing, err := resolveExistingPart(root)
 	if err != nil {
-		return "", err
+		return err
 	}
-	resolvedRoot, target := filepath.Join(rootExisting, rootMissing), filepath.Join(existing, missing)
+	resolvedRoot := filepath.Join(rootExisting, rootMissing)
 	if target == resolvedRoot || !within(resolvedRoot, target) {
-		return "", fmt.Errorf("it resolves to %s, which is not inside the repos root %s", target, resolvedRoot)
+		return fmt.Errorf("it resolves to %s, which is not inside %s", target, resolvedRoot)
 	}
-	// mkdir -p makes every missing directory below the nearest one that exists, so that one has to be the root,
-	// inside it, or where the root itself is to be made: nothing above the root is made.
-	if !within(resolvedRoot, existing) && existing != filepath.Dir(resolvedRoot) {
-		return "", fmt.Errorf("the directory the repos root %s belongs in does not exist", resolvedRoot)
+	if !within(resolvedRoot, existing) && (!mayMakeRoot || existing != filepath.Dir(resolvedRoot)) {
+		return fmt.Errorf("the directory %s does not exist", resolvedRoot)
 	}
-	return target, nil
+	return nil
 }
 
 // within reports whether path is root or below it.

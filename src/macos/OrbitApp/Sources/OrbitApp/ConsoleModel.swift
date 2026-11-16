@@ -3199,7 +3199,8 @@ final class ConsoleModel {
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
-                                            translation: accepted.turnTranslation)
+                                            translation: accepted.turnTranslation,
+                                            placement: accepted.placement)
                 publishStateNow()
             }
         } catch {
@@ -4229,14 +4230,19 @@ final class ConsoleModel {
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this
-    /// enforces the inline-image cap and uploads via the shared path. Mirrors the web composer's
-    /// `onPaste` handler, which swallows the paste only when it carries image data.
+    /// shrinks one past the inline-image cap to a JPEG (`orbitPhotoUpload`), enforces the cap and
+    /// uploads via the shared path. Mirrors the web composer's `onPaste` handler, which swallows the
+    /// paste only when it carries image data.
     func attachPastedImage(pngData: Data) async {
-        if let reason = Attachments.rejectReason(mimeType: "image/png", byteCount: pngData.count) {
+        guard let image = orbitPhotoUpload(pngData, name: "pasted-image") else {
+            statusMessage = "Couldn\u{2019}t read the pasted image"
+            return
+        }
+        if let reason = Attachments.rejectReason(mimeType: image.mimeType, byteCount: image.data.count) {
             statusMessage = reason
             return
         }
-        attach(filename: "pasted-image.png", mimeType: "image/png", data: pngData)
+        attach(filename: image.filename, mimeType: image.mimeType, data: image.data)
     }
 
     /// Stage an attachment optimistically: the chip (with an inline-image thumbnail) appears
@@ -4266,7 +4272,7 @@ final class ConsoleModel {
                 pendingAttachments[idx].remoteID = id
             } catch {
                 pendingAttachments.removeAll { $0.id == uid }
-                statusMessage = "Upload failed — \(filename)"
+                statusMessage = "Upload failed — \(filename): \(APIClient.failureReason(error))"
             }
         }
     }

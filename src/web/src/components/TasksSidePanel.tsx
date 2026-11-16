@@ -870,14 +870,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // so the workspace only decides where the page's back leads), or the first one; with no
   // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
   // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
-  // shows one pane, so there the page is what opens.
+  // shows one pane, so there the page is what opens. A session shared with you is drawn as the guest
+  // view, which has no project column (its owner's read fails for you), so from there the page opens too.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
+    const besideConversation = !!sessionId && !narrow && !sessionQ.isError;
     // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
-    if (sel === `project:${key}` || (!narrow && projectPageId === key)) return;
+    if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
-    if (sessionId && !narrow) {
+    if (besideConversation) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;
     }

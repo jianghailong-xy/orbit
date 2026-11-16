@@ -41,16 +41,17 @@ public enum RunnerAccountCopy {
 
     public static func runnerDefaultUseAgainFailed(name: String) -> String { "Couldn’t use \(name) again" }
 
-    /// Over the sessions a refused removal lists, when one session is running in the account; `engine`
-    /// is the CLI's own name (Codex, Claude Code).
+    /// Over the sessions a refused removal lists, when one session is in the account — running or
+    /// between turns, either holds it; `engine` is the CLI's own name (Codex, Claude Code).
     public static func runnerAccountInUseOne(engine: String) -> String {
-        "This \(engine) account can’t be removed while a session is running on it — end the session below, "
-            + "then remove it"
+        "This \(engine) account can’t be removed while a session is on it — to keep the session, switch it to "
+            + "another account and send it a message, or end it below; then remove the account"
     }
 
-    /// The same, when several sessions are running in it.
+    /// The same, when several sessions are in it.
     public static func runnerAccountInUseMany(engine: String, count: Int) -> String {
-        "This \(engine) account can’t be removed while \(count) sessions are running on it — end them, then remove it"
+        "This \(engine) account can’t be removed while \(count) sessions are on it — to keep them, switch each to "
+            + "another account and send it a message, or end them; then remove the account"
     }
 
     /// Each listed session's way to it.

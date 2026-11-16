@@ -112,43 +112,16 @@
   line-height: 19px;
 }
 
-.msc .msc-options {
+.msc-folder {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 4px;
   margin-top: 10px;
-  font-size: 13px;
-  line-height: normal;
 }
 
-.msc .msc-option {
-  display: flex;
+.msc-folder .msc-input {
   width: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.msc .msc-option:has([data-checked]) {
-  border-color: var(--brand-border);
-  background: var(--brand-tint);
-}
-
-.msc .msc-option .orbit-choice-label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.msc-option-title {
-  font-weight: 500;
 }
 
 .msc-path {
@@ -254,34 +227,6 @@
   scroll-margin-bottom: 24px;
 }
 
-/* The first message, held until the card is done: the bubble it will be, with its state under it. Its
-   copy and time row is the sent message's, so it has no place here. */
-.msc-held {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-top: 14px;
-}
-
-.msc-held .chat-user-wrap {
-  margin: 0 0 0 auto;
-}
-
-.msc-held .chat-user-meta {
-  display: none;
-}
-
-.msc-held-state {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 12px;
-  text-align: right;
-}
-
-.msc-held-error {
-  color: var(--error);
-}
-
 /* The conversation's first line, in the small centred type of the app's own notes. */
 .msc-created {
   display: flex;
@@ -374,4 +319,18 @@ a.msc-change:hover {
 
 .welcome-card .runner-cmd-text {
   font-size: 12px;
+}
+
+/* Create workspace: the card's one way out, under its foot (owner 2026-11-16). */
+.msc-create {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.msc-create-error {
+  margin-top: 8px;
+  color: var(--error);
+  font-size: 12px;
+  line-height: 17px;
 }

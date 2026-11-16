@@ -118,42 +118,6 @@ class MachineSetupTest {
         assertNull(MachineSetup.firstOnlineRunnerId(emptyList(), nowMs))
     }
 
-    // Rule 2: the folder orbit register ran in is a suggestion
-
-    @Test fun aRegisterDirIsNotAskedAboutWhenThePathAloneIsTheAnswer() {
-        for (dir in listOf(null, "", "   ", "~", "/", "~/", "//", " ~ ")) {
-            assertNull("$dir", MachineSetup.registerDirToProbe(dir))
-        }
-    }
-
-    @Test fun aRegisterDirIsAskedAboutAsItWasReportedTidied() {
-        assertEquals("/home/orbit/code/app", MachineSetup.registerDirToProbe("/home/orbit/code/app"))
-        assertEquals("~/code/app", MachineSetup.registerDirToProbe(" ~/code/app/ "))
-        assertEquals("relative/dir", MachineSetup.registerDirToProbe("relative/dir"))
-    }
-
-    @Test fun aFolderIsOfferedOnlyWhenItIsThereAndNeitherHomeNorTheRoot() {
-        assertTrue(MachineSetup.isOfferedFolder(probe()))
-        assertTrue(MachineSetup.isOfferedFolder(probe(isGit = false, branch = null)))
-        assertFalse(MachineSetup.isOfferedFolder(probe(exists = false, isDir = false)))
-        assertFalse(MachineSetup.isOfferedFolder(probe(isDir = false)))
-        assertFalse(MachineSetup.isOfferedFolder(probe(isHome = true)))
-        assertFalse(MachineSetup.isOfferedFolder(probe(path = "/")))
-        assertFalse(MachineSetup.isOfferedFolder(probe(error = "permission denied")))
-        assertFalse(MachineSetup.isOfferedFolder(null))
-    }
-
-    @Test fun theSuggestionIsTheDefaultOnlyWhenItIsAGitRepository() {
-        assertEquals(FolderChoice.SUGGESTED, MachineSetup.defaultFolderChoice(suggested = probe(), offersNewFolder = true))
-        assertEquals(FolderChoice.NEW, MachineSetup.defaultFolderChoice(suggested = probe(isGit = false), offersNewFolder = true))
-        assertEquals(FolderChoice.NEW, MachineSetup.defaultFolderChoice(suggested = null, offersNewFolder = true))
-    }
-
-    @Test fun onAMachineThatCantMakeAFolderWhatIsLeftIsTheDefault() {
-        assertEquals(FolderChoice.SUGGESTED, MachineSetup.defaultFolderChoice(suggested = probe(isGit = false), offersNewFolder = false))
-        assertEquals(FolderChoice.OTHER, MachineSetup.defaultFolderChoice(suggested = null, offersNewFolder = false))
-    }
-
     // What a machine declares
 
     @Test fun aMachineIsAskedAboutAPathOnlyIfItSaysItAnswers() {
@@ -211,6 +175,34 @@ class MachineSetupTest {
 
     // Rule 3: a new folder
 
+    @Test fun newFoldersGoInTheReposFolderOnARunnerThatOnlyMakesThemThere() {
+        val v1 = listOf("create-workdir/v1")
+        assertEquals("/root/orbit-repos", MachineSetup.newFolderRoot("/root/orbit-repos", v1))
+        assertEquals("/root/orbit-repos", MachineSetup.newFolderRoot("/root/orbit-repos/", null))
+    }
+
+    @Test fun newFoldersGoInHomeTheDirectoryTheReposFolderSitsInOnARunnerThatDeclaresV2() {
+        val v2 = listOf("create-workdir/v1", "create-workdir/v2")
+        assertEquals("/root", MachineSetup.newFolderRoot("/root/orbit-repos", v2))
+        assertEquals("/Users/austin", MachineSetup.newFolderRoot("/Users/austin/orbit-repos/", v2))
+        assertEquals("C:\\Users\\orbit", MachineSetup.newFolderRoot("C:\\Users\\orbit\\orbit-repos", v2))
+        assertEquals("/", MachineSetup.newFolderRoot("/orbit-repos", v2))
+        assertEquals("C:\\", MachineSetup.newFolderRoot("C:\\orbit-repos", v2))
+    }
+
+    @Test fun aRunnersNewFolderRootIsReadFromWhatItReports() {
+        assertEquals(
+            "/root",
+            MachineSetup.newFolderRootOf(
+                json("""{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}""")
+            ),
+        )
+        assertEquals(
+            "/root/orbit-repos",
+            MachineSetup.newFolderRootOf(json("""{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}""")),
+        )
+    }
+
     @Test fun aNewFolderTakesTheNamesTheServerTakes() {
         for (good in listOf("app", "payments-api", "a.b_c-1", ".hidden", "x".repeat(64))) {
             assertTrue(good, MachineSetup.isValidNewFolder(good))
@@ -231,9 +223,9 @@ class MachineSetupTest {
                               error: String? = null) =
         probe(path = "/home/orbit/orbit-repos/app", exists = exists, isDir = isDir, isGit = isGit, branch = branch, error = error)
 
-    @Test fun aNewFolderWithNothingThereStartsEmptyAsTheBoardSays() {
+    @Test fun aNewFolderWithNothingThereIsMadeAsTheBoardSays() {
         assertEquals(
-            FolderVerdict(FolderVerdict.Tone.OK, "Starts empty. Ask for a clone or a new project in your first message.",
+            FolderVerdict(FolderVerdict.Tone.OK, "New folder · created as the session starts.",
                 "new folder · created as the session starts", usable = true),
             MachineSetup.newFolderVerdict(inReposFolder(), machine),
         )
@@ -246,9 +238,12 @@ class MachineSetupTest {
     @Test fun aNewFolderThatIsThereAlreadyIsUsedWithWhatIsInItAsThatFolder() {
         val there = inReposFolder(exists = true, isDir = true, isGit = true, branch = "main")
         assertEquals(
-            FolderVerdict(FolderVerdict.Tone.WARN, "This folder already exists on orbit@austin. Sessions will use what’s in it.",
-                "git repository · main", usable = true),
+            FolderVerdict(FolderVerdict.Tone.OK, "Found · git repository · main", "git repository · main", usable = true),
             MachineSetup.newFolderVerdict(there, machine),
+        )
+        assertEquals(
+            MachineSetup.folderVerdict(inReposFolder(exists = true, isDir = true), machine),
+            MachineSetup.newFolderVerdict(inReposFolder(exists = true, isDir = true), machine),
         )
         assertEquals(
             PickedFolder.Existing("/home/orbit/orbit-repos/app", "git repository · main"),
@@ -618,19 +613,6 @@ class MachineSetupTest {
         val script = Script(listOf(DirProbeAnswer(path = "p", status = "pending"), DirProbeAnswer(path = "p", status = "idle")))
         val outcome = runScript(script)
         assertEquals(DirProbeRelay.Outcome.Replaced, outcome)
-    }
-
-    /**
-     * One question at a time per machine: the register directory's, replaced by a path asked before it was answered, is asked again
-     * once nothing else waits, and only while the machine can be asked.
-     */
-    @Test fun aReplacedRegisterQuestionIsAskedAgainOnceNothingElseWaits() {
-        assertTrue(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = true, otherWaiting = false))
-        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = true, otherWaiting = true))
-        assertFalse("offline, what is stored is all", DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Replaced, online = false, otherWaiting = false))
-        assertFalse("still asking", DirProbeRelay.asksAgain(null, online = true, otherWaiting = false))
-        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Unanswered, online = true, otherWaiting = false))
-        assertFalse(DirProbeRelay.asksAgain(DirProbeRelay.Outcome.Answered(probe()), online = true, otherWaiting = false))
     }
 
     @Test fun aMachineThatNeverAnswersIsSaidToHaveNot() {

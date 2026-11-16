@@ -130,7 +130,6 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
-  CREATE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -250,7 +249,7 @@ import {
 import {
   folderNameOf,
   freeWorkspaceName,
-  newFolderWorkDir,
+  newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceTarget,
 } from './new-workspace';
@@ -932,6 +931,37 @@ function refuseUnlessProjectFinished(project: { status: string } | null | undefi
 
 /** A seed as the resolution read it: an anchor's carries the session it came from (start-anchor.ts). */
 type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
+
+/**
+ * The columns "Resolve in session" clears on its session row (resume → createTurn's
+ * `clearSettledWorktreeState`): a settled merge or commit result, whose failure the rebase it asks for
+ * makes stale. One still pending is an operation queued or running, and is left to finish. Read from the
+ * row as locked by the write it goes into.
+ */
+function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'commitStatus'>): Prisma.SessionUncheckedUpdateInput {
+  return {
+    ...(session.mergeStatus && session.mergeStatus !== 'pending'
+      ? {
+          mergeStatus: null,
+          mergeOperationId: null,
+          mergeOperationOwner: null,
+          mergeError: null,
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        }
+      : {}),
+    ...(session.commitStatus && session.commitStatus !== 'pending'
+      ? {
+          commitStatus: null,
+          commitOperationId: null,
+          commitOperationOwner: null,
+          commitError: null,
+          commitResultMessage: null,
+        }
+      : {}),
+  };
+}
 
 @Injectable()
 export class SessionsService {
@@ -1872,19 +1902,9 @@ export class SessionsService {
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
-    if (!makesFolders || !reposRoot) {
-      throw new ConflictException({
-        code: 'NEW_FOLDER_UNSUPPORTED',
-        message: makesFolders
-          ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
-          : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
-      });
-    }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, ask.newFolder),
+      workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
     };
@@ -6983,7 +7003,9 @@ export class SessionsService {
       // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
       if (translateFrom && dto.content) {
         return {
-          turn: await this.insertHeldTurnLocked(tx, ownerId, session, dto, translateFrom, intent, wikiContext),
+          turn: await this.insertHeldTurnLocked(
+            tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+          ),
           placement: 'queued' as const,
           wakeQueue: false,
           wakeInbox: false,
@@ -7227,26 +7249,7 @@ export class SessionsService {
           // "Resolve in session" uses the live-session resume route. Clear its
           // settled receipt in this same row-locked update, never from the stale
           // fast-read snapshot: a newly queued/claimed epoch must win instead.
-          ...(opts?.clearSettledWorktreeState && session.mergeStatus && session.mergeStatus !== 'pending'
-            ? {
-                mergeStatus: null,
-                mergeOperationId: null,
-                mergeOperationOwner: null,
-                mergeError: null,
-                mergedAt: null,
-                mergedSourceSha: null,
-                branchMerged: null,
-              }
-            : {}),
-          ...(opts?.clearSettledWorktreeState && session.commitStatus && session.commitStatus !== 'pending'
-            ? {
-                commitStatus: null,
-                commitOperationId: null,
-                commitOperationOwner: null,
-                commitError: null,
-                commitResultMessage: null,
-              }
-            : {}),
+          ...(opts?.clearSettledWorktreeState ? settledWorktreeStateCleared(session) : {}),
         },
       });
       return {
@@ -7309,6 +7312,7 @@ export class SessionsService {
     from: TranslationLanguage,
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
+    clearSettledWorktreeState: boolean,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -7331,6 +7335,10 @@ export class SessionsService {
         // The owner took over, as in createTurn.
         retryAt: null,
         retryClaimedAt: null,
+        // "Resolve in session" with translation on arrives here rather than at createTurn's update: its
+        // settled merge or commit result is cleared all the same, under this same row lock. Otherwise the
+        // failure outlives the rebase it asked for, and the bar draws it over a branch that has moved on.
+        ...(clearSettledWorktreeState ? settledWorktreeStateCleared(session) : {}),
       },
     });
     return turn;

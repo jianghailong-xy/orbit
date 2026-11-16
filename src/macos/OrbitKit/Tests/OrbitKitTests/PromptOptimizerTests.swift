@@ -364,6 +364,20 @@ final class PromptOptimizerWiringTests: XCTestCase {
         XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.showIn(glossLanguage)"))
     }
 
+    func testTabInTheBoxIsUseOnAMac() throws {
+        // The web's card says the same (src/web/src/components/PromptOptimizer.tsx).
+        XCTAssertEqual(PromptOptimizerCopy.keysHint, "Tab uses it · Esc dismisses · your draft is kept")
+        XCTAssertEqual(PromptOptimizerCopy.useKey, "Tab")
+        let composer = try source(app + "Views/ComposerView.swift")
+        let card = try XCTUnwrap(composer.range(of: "if console.promptOptimizer.suggestion != nil, !showSlash {\n                    console.useOptimization(edit: false)"),
+                                 "Tab with the card open presses Use")
+        let suggestion = try XCTUnwrap(composer.range(of: "guard offeredSuggestion != nil else { return .ignored }"))
+        XCTAssertLessThan(card.lowerBound, suggestion.lowerBound, "the card's Tab is read first")
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.useKey).font(.caption).opacity(0.75)"))
+        XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.keysHint)"))
+    }
+
     func testSettingsDrawTheSwitchOnBothPlatforms() throws {
         let sheet = try source(app + "Views/SettingsSheet.swift")
         XCTAssertTrue(sheet.contains("case .promptOptimizer:\n                    promptOptimizerSection"))

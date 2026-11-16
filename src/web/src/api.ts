@@ -10,6 +10,7 @@ import type {
   PromptOptimizationRequest,
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
+  SessionGuestSuggestion,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRunView,
@@ -1823,6 +1824,9 @@ export const getSessionGuests = (sessionId: string) =>
  *  `No Orbit account uses this email.` */
 export const inviteSessionGuest = (sessionId: string, email: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+/** People the owner invited before, to any session, who can't yet reply in this one: newest first, up to 50. */
+export const getSessionGuestSuggestions = (sessionId: string) =>
+  api<{ people: SessionGuestSuggestion[] }>(`/sessions/${sessionId}/guests/suggestions`);
 export const removeSessionGuest = (sessionId: string, userId: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
 

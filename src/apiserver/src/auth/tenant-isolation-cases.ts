@@ -628,6 +628,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // Session guests (docs/session-guests-design.md §7): the owner's People routes on A's session. The guest door is read
   // by hand (TENANT_ISOLATION_BY_HAND): the account that owns the session is no guest of it.
   'GET /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'GET /sessions/:id/guests/suggestions': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/guests': { request: (of) => ({ params: { id: of.sessionId }, body: { email: of.guestEmail } }) },
   'DELETE /sessions/:id/guests/:userId': { request: (of) => ({ params: { id: of.sessionId, userId: of.spare.guestUserId } }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },

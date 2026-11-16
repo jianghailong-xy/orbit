@@ -1129,6 +1129,22 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
 
+/** What a runner declares when it makes a new folder in its home directory, the directory its reported reposRoot
+ *  sits in (`<home>/orbit-repos`): POST /sessions `newFolder` is then `<home>/<name>` (newFolderRoot) rather than
+ *  `<reposRoot>/<name>`. */
+export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
+
+/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+ *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
+  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
+  if (cut < 0) return root;
+  // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+  return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
@@ -1231,7 +1247,7 @@ export interface DirProbeAnswer {
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
-  /** A new folder under the runner's reposRoot: one path segment of 1–64 characters from
+  /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
 }

@@ -137,6 +137,11 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 					if cs, ok := block["content"].(string); ok {
 						bg.onToolResult(asString(block["tool_use_id"]), cs)
 					}
+					// A background Agent's async ack: remember which call launched that agentId,
+					// so its notifications can be reported under it whatever call they name.
+					if parentID == "" {
+						bg.noteAgentLaunch(asString(block["tool_use_id"]), block["content"])
+					}
 				}
 			}
 		}

@@ -474,3 +474,25 @@ func writeSessionInCodexHome(t *testing.T, orbitHome, sessionID, codexHome strin
 		t.Fatal(err)
 	}
 }
+
+// A refused removal says first how to keep the sessions — switch them to another account, which
+// carries their conversations there — then that ending them frees the account too. A Cursor CLI
+// session can only be ended.
+func TestAccountInUseErrorSaysWhatFreesTheAccount(t *testing.T) {
+	cases := []struct {
+		err  accountInUseError
+		want string
+	}{
+		{accountInUseError{engine: providerClaude, id: "5dd14473", Sessions: []string{"a"}},
+			"claude account 5dd14473 is in use by a session on this machine — to keep the session, switch it to another account, or end it; then remove the account"},
+		{accountInUseError{engine: providerCodex, id: "1a2b3c4d", Sessions: []string{"a", "b", "c"}},
+			"codex account 1a2b3c4d is in use by 3 sessions on this machine — to keep them, switch each to another account, or end them; then remove the account"},
+		{accountInUseError{engine: providerCursor, id: "1a2b3c4d", Sessions: []string{"a"}},
+			"cursor account 1a2b3c4d is in use by a session on this machine — end it, then remove the account"},
+	}
+	for _, c := range cases {
+		if got := c.err.Error(); got != c.want {
+			t.Errorf("Error() = %q\nwant      %q", got, c.want)
+		}
+	}
+}

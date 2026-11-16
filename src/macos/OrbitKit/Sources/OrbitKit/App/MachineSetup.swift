@@ -17,10 +17,6 @@ public struct MachineToSetUp: Equatable, Sendable, Identifiable {
     }
 }
 
-public enum FolderChoice: String, Equatable, Sendable {
-    case suggested, new, other
-}
-
 /// How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a
 /// folder that is not a git repository can, and says what that costs; a repository names its branch.
 public struct FolderVerdict: Equatable, Sendable {
@@ -84,29 +80,27 @@ public enum MachineSetup {
     /// What a runner declares when it answers the directory probe, and when it makes a new folder.
     public static let dirProbeCapability = "dir-probe/v1"
     public static let createWorkDirCapability = "create-workdir/v1"
+    /// What a runner declares when it makes a new folder in its home, the directory its reposRoot sits in
+    /// (`<home>/orbit-repos`): `newFolder` is then `<home>/<name>` rather than `<reposRoot>/<name>`.
+    public static let createWorkDirHomeCapability = "create-workdir/v2"
 
-    /// Whether the directory `orbit register` ran in is worth asking about: the two answers a path can
-    /// give on its face are left unasked. Nil when there is nothing to ask.
-    public static func registerDirToProbe(_ registerDir: String?) -> String? {
-        var dir = (registerDir ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
-        return dir.isEmpty || dir == "~" || dir == "/" ? nil : dir
+    /// The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+    /// create-workdir/v2, else reposRoot itself (@orbit/shared `newFolderRoot`, as the server joins it). The
+    /// separator is the one the root is written with.
+    public static func newFolderRoot(reposRoot: String, capabilities: [String]?) -> String {
+        var root = reposRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+        while root.count > 1, root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
+        guard capabilities?.contains(createWorkDirHomeCapability) == true,
+              let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
+        // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+        if cut == root.startIndex || root[root.index(before: cut)] == ":" { return String(root[...cut]) }
+        return String(root[..<cut])
     }
 
-    /// Rule 2: a checked register directory is offered only when it is a folder that exists and is
-    /// neither the home directory nor the root. The installer runs where the terminal stands, which is
-    /// usually home, and all of home is no default.
-    public static func isOfferedFolder(_ probe: DirProbe?) -> Bool {
-        guard let probe else { return false }
-        return (probe.error ?? "").isEmpty && probe.exists && probe.isDir && !probe.isHome && probe.path != "/"
-    }
-
-    /// Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder.
-    /// The rest is what a machine that can't make one leaves.
-    public static func defaultFolderChoice(suggested: DirProbe?, offersNewFolder: Bool) -> FolderChoice {
-        if suggested?.isGit == true { return .suggested }
-        if offersNewFolder { return .new }
-        return suggested != nil ? .suggested : .other
+    /// The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2,
+    /// its Repos Folder on an older one.
+    public static func newFolderRoot(_ runner: Runner) -> String {
+        newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
     }
 
     /// Whether a machine can be asked about a path at all: the capability it declares (§2).
@@ -154,10 +148,10 @@ public enum MachineSetup {
         }
     }
 
-    /// Where a new folder lands: `<reposRoot>/<name>`, as the server joins it.
-    public static func newFolderPath(reposRoot: String, name: String) -> String {
-        let separator = reposRoot.contains("\\") && !reposRoot.contains("/") ? "\\" : "/"
-        var root = reposRoot
+    /// Where a new folder lands: `<root>/<name>`, as the server joins it.
+    public static func newFolderPath(root: String, name: String) -> String {
+        let separator = root.contains("\\") && !root.contains("/") ? "\\" : "/"
+        var root = root
         while root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
         return root + separator + name
     }
@@ -181,9 +175,9 @@ public enum MachineSetup {
                              short: short, usable: true)
     }
 
-    /// What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a
-    /// new folder starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a
-    /// file can't become one.
+    /// What the folder step's name finds at `<root>/<name>`, asked before anything is sent. Nothing there is a new
+    /// folder, made as the session starts; a directory is used as it stands, read as any folder is; a file can't
+    /// become one.
     public static func newFolderVerdict(_ probe: DirProbe, machine: String) -> FolderVerdict {
         func refused(_ text: String) -> FolderVerdict {
             FolderVerdict(tone: .bad, text: text, short: text, usable: false)
@@ -196,18 +190,17 @@ public enum MachineSetup {
                                  short: MachineSetupCopy.SETUP_NEW_FOLDER_DONE, usable: true)
         }
         if !probe.isDir { return refused(MachineSetupCopy.setupNewFolderIsFile(machine: machine)) }
-        return FolderVerdict(tone: .warn, text: MachineSetupCopy.setupNewFolderExists(machine: machine),
-                             short: folderVerdict(probe, machine: machine).short, usable: true)
+        return folderVerdict(probe, machine: machine)
     }
 
     /// What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is,
     /// which is then a folder like any other and is sent by its path.
-    public static func newFolderPick(_ probe: DirProbe, name: String, reposRoot: String, machine: String) -> PickedFolder? {
+    public static func newFolderPick(_ probe: DirProbe, name: String, root: String, machine: String) -> PickedFolder? {
         let verdict = newFolderVerdict(probe, machine: machine)
         guard verdict.usable else { return nil }
         return probe.exists
             ? .existing(path: probe.path, note: verdict.short)
-            : .new(name: name, path: newFolderPath(reposRoot: reposRoot, name: name))
+            : .new(name: name, path: newFolderPath(root: root, name: name))
     }
 
     /// The login CLIs installed here, in the app's order.
@@ -429,13 +422,6 @@ public enum DirProbeRelay {
         /// The question was replaced, or a stored answer was all there was to read.
         case replaced
         case unanswered
-    }
-
-    /// Whether the register directory is asked about again. A path asked before the machine had answered about it
-    /// took its question's place, and the suggestion would never come: it is asked again once nothing else on the
-    /// card waits for an answer. Only while the machine can be asked: offline, a stored answer is all there is.
-    public static func asksAgain(_ outcome: Outcome?, online: Bool, otherWaiting: Bool) -> Bool {
-        outcome == .replaced && online && !otherWaiting
     }
 
     /// `ask` is nil where only what is stored can be read, which is all an offline machine gives.

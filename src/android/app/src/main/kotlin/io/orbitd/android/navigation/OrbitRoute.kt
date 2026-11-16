@@ -16,6 +16,9 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     WIKI_ACTIVITY, WIKI_TRASH,
     /** The owner requests inbox (web `WaitingOnYouPage`): `id` the request whose card opens focused, from a push's action. */
     WAITING_ON_YOU,
+    /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
+     * opens over the timeline, from a push or a card's Open. */
+    SCHEDULED,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
     GUEST_SESSION }
@@ -174,9 +177,11 @@ object OrbitLinks {
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
     // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
+    // `orbit://schedule/<id>` is a scheduled task's push that names no run session: the Scheduled page, its detail sheet open.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
-            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU)
+            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU,
+            "schedule" to Destination.SCHEDULED)
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:

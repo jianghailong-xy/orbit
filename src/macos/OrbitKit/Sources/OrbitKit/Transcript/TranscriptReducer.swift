@@ -764,8 +764,19 @@ public struct TranscriptReducer: Sendable, Codable {
     /// stream may not have caught up with, while the server decided this under the Session row
     /// lock — so a bubble that says "Queued" here stops saying it, and trades the queue's Cancel
     /// for a steer's own Withdraw (`SteerDelivery.offersWithdraw`).
+    ///
+    /// `placement` is the same response's `placement` (`TurnAccepted.placement`), and moves the
+    /// bubble to where the server put it when the send guessed wrong (web parity: the receipt alone
+    /// decides inline vs. queued). A send guessed idle that the server `queued` — a turn was in
+    /// flight that this end's status had not caught up with — leaves the transcript for the queued
+    /// tail, so it reads "Queued" with a Cancel instead of sitting on "Sending…" until its turn comes.
+    /// A send guessed queued that the server `accepted` is delivered now and comes inline.
+    /// A message held for its translation is the exception: the server answers `queued` for it
+    /// whatever is ahead of it, so that word says nothing about its place, and it stays in the
+    /// conversation with its chip (web parity: `inPendingTray` leaves out `heldForTranslation`).
     public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false,
-                                             translation: TurnTranslation? = nil) {
+                                             translation: TurnTranslation? = nil,
+                                             placement: String? = nil) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
         // `translation`: the send's answer says the message is being translated (Settings ›
         // Translation), so its bubble wears the "Translating…" chip from the moment it is known.
@@ -773,6 +784,12 @@ public struct TranscriptReducer: Sendable, Codable {
             state.queued[i].turnId = turnId
             if steer { state.queued[i].steer = true }
             if let translation { state.queued[i].translation = translation }
+            if placement == "accepted" {
+                var b = state.queued.remove(at: i)
+                b.queued = false
+                flushStreaming()
+                state.items.append(.user(b))
+            }
             return
         }
         guard let i = state.items.firstIndex(where: {
@@ -782,6 +799,15 @@ public struct TranscriptReducer: Sendable, Codable {
         b.turnId = turnId
         if steer { b.steer = true }
         if let translation { b.translation = translation }
+        if placement == "queued", b.translation?.held != true {
+            state.items.remove(at: i)
+            // The open-bubble cursors are item INDICES: close the gap, as `removeOptimisticUser` does.
+            if let o = openAssistant, o > i { openAssistant = o - 1 }
+            if let o = openThinking, o > i { openThinking = o - 1 }
+            b.queued = true
+            state.queued.append(b)
+            return
+        }
         state.items[i] = .user(b)
     }
 
