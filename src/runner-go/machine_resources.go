@@ -28,6 +28,8 @@ type MachineResources struct {
 	MemAvailableBytes *uint64 `json:"memAvailableBytes,omitempty"`
 	// The disk the machine page has always shown: the fullest filesystem among the agents' working directories
 	// (as the heartbeat's agentDirProbes measure them), else the one holding the repos root.
+	// A managed runner on Docker reports its volume instead, once the control plane has sent its storage budget
+	// (checkoutStorage.diskResources).
 	DiskTotalBytes *uint64 `json:"diskTotalBytes,omitempty"`
 	DiskFreeBytes  *uint64 `json:"diskFreeBytes,omitempty"`
 }

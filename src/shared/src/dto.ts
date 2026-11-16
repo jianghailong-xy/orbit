@@ -1146,7 +1146,8 @@ export interface RunnerResources {
   memTotalBytes?: number;
   /** What the system can hand out without swapping; dropped page cache counts as available. */
   memAvailableBytes?: number;
-  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. A managed
+   *  runner on Docker reports its volume instead: the volume's limit, and what is left of it. */
   diskTotalBytes?: number;
   diskFreeBytes?: number;
 }
