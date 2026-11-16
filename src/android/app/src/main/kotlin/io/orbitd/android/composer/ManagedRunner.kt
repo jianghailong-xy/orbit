@@ -230,21 +230,12 @@ object ManagedRunner {
     object Setup {
         val NOTICE = mapOf(
             "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",
-            "preparingSend" to "Orbit is setting up your managed runner. You can send your first message now; it starts when it’s ready.",
             "asleep" to "Your managed runner is asleep. Your first message wakes it (about 10 s)."
         )
         val FOLDER_UNCHECKED = mapOf(
             "preparing" to "Not checked until your managed runner is up: used if it’s there, created if not.",
             "asleep" to "Not checked while it’s asleep: used if it’s there, created if not."
         )
-        val FOLDER_PICKED = mapOf(
-            "preparing" to "checked when it’s up · created if not there",
-            "asleep" to "checked when it wakes · created if not there"
-        )
-        const val ON_KEY = "API key · the first session starts on it"
-        const val NO_ENGINE_TITLE = "Coding CLI"
-        const val NO_ENGINE_HELP = "Your managed runner says which one is ready once it’s up."
-        const val ADD_KEY = "Add a model key to start on it now."
     }
 
     fun managedSetupState(runnerId: String?, status: Status?): String? {

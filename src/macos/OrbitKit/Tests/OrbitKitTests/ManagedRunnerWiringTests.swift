@@ -147,13 +147,11 @@ final class ManagedRunnerWiringTests: XCTestCase {
 
     func testManagedSetupUsesTheSharedNoticeAndSkipsProbes() throws {
         let card = try source("Views/MachineSetupCard.swift")
-        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.Notice.preparingSend"))
+        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.Notice.preparing"))
         XCTAssertTrue(card.contains("guard managedState == nil, !disabled"))
-        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.noEngineTitle"))
-        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.onKey"))
-        let console = try source("ConsoleModel.swift")
-        XCTAssertTrue(console.contains("machineSetup?.managedProvider"))
-        XCTAssertTrue(console.contains("machineSetup?.managedEngine"))
+        XCTAssertTrue(card.contains("MachineSetup.uncheckedFolder(name: folder, root: root)"))
+        XCTAssertFalse(card.contains("RunnerSignInView"))
+        XCTAssertFalse(try source("ConsoleModel.swift").contains("machineSetup"))
     }
 
     // MARK: Machines & models and the actions

@@ -360,7 +360,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
         let composer = try source(app + "Views/ComposerView.swift")
         XCTAssertTrue(composer.contains("PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)"))
         XCTAssertTrue(composer.contains("PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }"))
-        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization, sheet: false)"),
+        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization)"),
                       "a Mac draws the card above the composer")
         XCTAssertTrue(composer.contains(".sheet(isPresented: optimizationSheetShown) {"), "a phone draws it as a sheet")
         XCTAssertTrue(composer.contains("PromptOptimizationFailureLine(retry:"))
@@ -388,6 +388,20 @@ final class PromptOptimizerWiringTests: XCTestCase {
         XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.showIn(glossLanguage)"))
     }
 
+    func testAPhoneSheetLeadsWithTheOwnersLanguage() throws {
+        XCTAssertEqual(PromptOptimizerCopy.edit, "Edit")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(.en), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(nil), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.usedLine(["this session's last 106 turns", "session recap"]),
+                       "Used this session's last 106 turns · session recap")
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("if let gloss = optimization.gloss { Text(gloss) } else { promptRuns(optimization, codeStyle: .body) }"),
+                      "the gloss, what Use inserts, is the sheet's text")
+        XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.hide : PromptOptimizerCopy.show)"))
+        let composer = try source(app + "Views/ComposerView.swift")
+        XCTAssertTrue(composer.contains("PromptOptimizationSheet(\n                    optimization: optimization,"))
+    }
+
     func testTabInTheBoxIsUseOnAMac() throws {
         // The web's card says the same (src/web/src/components/PromptOptimizer.tsx).
         XCTAssertEqual(PromptOptimizerCopy.keysHint, "Tab uses it · Esc dismisses · your draft is kept")
@@ -403,7 +417,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
     }
 
     func testTabOnADraftOptimizesOnAMac() throws {
-        XCTAssertEqual(PromptOptimizerCopy.optimizeHelp, "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O")
+        XCTAssertEqual(PromptOptimizerCopy.optimizeHelpWithKeys, "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O")
         let composer = try source(app + "Views/ComposerView.swift")
         let card = try XCTUnwrap(composer.range(of: "if console.promptOptimizer.suggestion != nil, !showSlash {"))
         let draft = try XCTUnwrap(composer.range(of: "console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {\n                    console.optimizePrompt()"),

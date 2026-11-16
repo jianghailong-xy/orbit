@@ -88,6 +88,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         req.path == "runners" -> json(if (fleet == Fleet.NONE) "[]" else "[${runnerRow()}]")
         req.path == "runners/$rid" -> json(runnerRow())
         req.path == "runners/$rid/login" -> json("""{"status":null,"engine":null,"url":null,"userCode":null,"message":null}""")
+        req.path == "workspaces" && req.method == "POST" -> json(workspaceRow())
         req.path == "workspaces" -> json(if (managedOn && hadSession) "[${workspaceRow()}]" else "[]")
         req.path == "workspaces/$wid" -> json(workspaceRow())
         else -> null
@@ -116,14 +117,6 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         settle()
     }
 
-    /** Step 2's sign-in as the web's RunnerSignIn draws it on the welcome card. */
-    private fun verifyWebSignIn(engine: String) {
-        await("Sign in to $engine") { says("Sign in to $engine") }
-        verify("Use an API key instead beside it", says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
-        verify("the key hint under them", says(WelcomeSignInCopy.KEY_HINT))
-        verify("no bare Sign In", !says(RunnerCopy.SIGN_IN))
-    }
-
     /** The two reads that decide whether the account is new have both been answered. */
     private fun awaitNewAccountRead() {
         await("the Open and Completed reads") { calls.any { it.startsWith("GET sessions?") && "view=open" in it && "limit=1" in it } &&
@@ -137,63 +130,67 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         verify("the lead says what Orbit is", says(WelcomeCopy.WELCOME_LEAD))
     }
 
-    private fun verifyPlaceholder() = verify("the composer asks for a task", says(WelcomeCopy.WELCOME_PLACEHOLDER))
+    private fun verifyWorkspaceOnlyCard() {
+        verify("no composer, sign-in or examples", !exists(hasTestTag("composer-input"), unmerged = true) &&
+            !exists(hasTestTag("welcome-example"), unmerged = true) && !says("Sign in to Claude Code"))
+        verify("name field", exists(hasTestTag("setup-workspace-name") and isEnabled(), unmerged = true))
+    }
+
+    private fun typeManagedFolder(state: String) {
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("my-project")
+        awaitText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(state))
+        verify("the name follows the folder", exists(hasTestTag("setup-workspace-name") and hasText("my-project"), unmerged = true))
+        verify("Create is enabled", exists(hasTestTag("setup-create") and isEnabled(), unmerged = true))
+        verify("no probe is sent", calls.none { "dir-probe" in it })
+    }
 
     @Test fun managedPreparing() = journey {
         fleet = Fleet.MANAGED_PREPARING
         landOnManagedDraft()
         verifyHead()
-        verify("the managed preparing notice", says(ManagedRunner.Setup.NOTICE.getValue("preparingSend")))
-        verify("folder name is enabled", exists(hasTestTag("setup-new-folder-name") and isEnabled(), unmerged = true))
-        verify("no model yet is explained", says(ManagedRunner.Setup.NO_ENGINE_HELP))
-        compose.onNodeWithTag("setup-new-folder-name").performTextInput("my-project")
-        awaitText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue("preparing"))
-        compose.onNodeWithText(MachineSetupCopy.SETUP_USE_FOLDER).performClick()
-        awaitText(ManagedRunner.Setup.FOLDER_PICKED.getValue("preparing"))
-        verify("no probe is sent", calls.none { "dir-probe" in it })
-        verifyPlaceholder()
+        awaitText(ManagedRunner.Setup.NOTICE.getValue("preparing"))
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
         capture("1-managed")
     }
 
     @Test fun managedPreparingWithKey() = journey {
         fleet = Fleet.MANAGED_KEY
         landOnManagedDraft()
-        awaitText(ManagedRunner.Setup.ON_KEY)
-        verify("the server's key is named", says("deepseek"))
-        verify("no sign-in on the setup card", !says("Sign in to Claude Code"))
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
     }
 
     @Test fun managedAsleep() = journey {
         fleet = Fleet.MANAGED_ASLEEP
         landOnManagedDraft()
         awaitText(ManagedRunner.Setup.NOTICE.getValue("asleep"))
-        compose.onNodeWithTag("setup-new-folder-name").performTextInput("app")
-        awaitText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue("asleep"))
-        compose.onNodeWithText(MachineSetupCopy.SETUP_USE_FOLDER).performClick()
-        awaitText(ManagedRunner.Setup.FOLDER_PICKED.getValue("asleep"))
-        verify("asleep machine was not probed", calls.none { "dir-probe" in it })
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("asleep")
+        compose.onNodeWithTag("setup-workspace-name").performTextReplacement("My project")
+        compose.onNodeWithTag("setup-create").performClick()
+        awaitTag("new-session-engine")
+        val posted = bodies.single { it.first.startsWith("POST workspaces") }.second
+        val body = kotlinx.serialization.json.Json.parseToJsonElement(posted) as kotlinx.serialization.json.JsonObject
+        verify("only a new folder is sent", body["newFolder"].toString() == "\"my-project\"" && body["workDir"] == null)
+        verify("the edited name is sent", body["name"].toString() == "\"My project\"")
+        verify("creating did not start a session", bodies.none { it.first.startsWith("POST sessions") })
     }
 
     @Test fun managedModel() = journey {
         fleet = Fleet.MANAGED_MODEL
         landOnManagedDraft()
         verifyHead()
-        verify("managed setup has no sign-in", !says("Sign in to Claude Code"))
-        verify("no model yet does not hide the folder", exists(hasTestTag("setup-new-folder-name") and isEnabled(), unmerged = true))
-        verify("a model key can be added", says(ManagedRunner.Setup.ADD_KEY))
+        verifyWorkspaceOnlyCard()
+        typeManagedFolder("preparing")
         capture("2-model")
     }
 
     @Test fun managedReady() = journey {
         fleet = Fleet.MANAGED_READY
         landOnManagedDraft()
-        await("signed in on managed machine") { says(MachineSetupCopy.setupSignedIn("managed-mia")) }
-        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performScrollTo().performClick()
-        settle()
-        val first = WelcomeCopy.WELCOME_EXAMPLES.first()
-        await("the example in the composer") { exists(hasTestTag("composer-input") and hasText(first), unmerged = true) }
+        verifyWorkspaceOnlyCard()
         verify("nothing was sent", bodies.none { it.first.startsWith("POST sessions") })
-        dropFocus()
         capture("3-ready")
     }
 
@@ -202,14 +199,11 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         signIn()
         awaitTag("machine-setup-card")
         await("the welcome head on the setup card") { says(WelcomeCopy.welcomeTitle("Mia Chen")) }
-        verify("the setup title gives way to the greeting", !says("machine-setup-card", "Set up mia-macbook"))
-        verifyPlaceholder()
-        verifyWebSignIn("Claude Code")
-        verify("the other installed CLI is offered", says(MachineSetupCopy.setupUseEngine("Codex")))
+        verify("the card's title gives way to the greeting", !says(MachineSetupCopy.setupNewWorkspaceTitle("mia-macbook")))
+        // The card makes the workspace from a folder and a name: no sign-in, no examples, no composer.
+        verify("the folder and the name", says(MachineSetupCopy.SETUP_FOLDER_HINT) && says(MachineSetupCopy.SETUP_NAME_HINT))
+        verify("no sign-in and no examples", !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD) && !exists(hasTestTag("welcome-example"), unmerged = true))
         capture("4-machine")
-        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performScrollTo()
-        verify("step 3 offers the three examples", WelcomeCopy.WELCOME_EXAMPLES.all { says(it) } && says(WelcomeCopy.WELCOME_FIRST))
-        capture("4-machine-examples")
     }
 
     @Test fun noMachine() = journey {
@@ -248,10 +242,10 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         fleet = Fleet.MACHINE
         signIn()
         awaitTag("machine-setup-card")
-        await("the setup title") { says("Set up mia-macbook") }
+        await("the card's title") { says(MachineSetupCopy.setupNewWorkspaceTitle("mia-macbook")) }
         awaitNewAccountRead()
         verify("no greeting and no examples", !says(WelcomeCopy.welcomeTitle("Mia Chen")) && !exists(hasTestTag("welcome-example"), unmerged = true))
-        verify("the setup card keeps its own Sign In", says(RunnerCopy.SIGN_IN) && !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
+        verify("no sign-in on the card", !says(RunnerCopy.SIGN_IN) && !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
         capture("6-history-machine")
     }
 }

@@ -48,10 +48,12 @@ the way every machine's is, from the setup card (`docs/first-workspace-contract.
    `ManagedWelcomeDraft`, Android's managed landing).
 8. A new account lands on the managed runner's setup card whatever state the runner is in. The runner counts
    as "a machine to set up" while it is preparing, asleep or waking, not only while it is online.
-9. On that card, while the runner is not up: the engine choice is the server's `firstSessionProvider`, only
-   "new folder" is offered, and Create (web) or the first message (native) is accepted. Sending queues the
-   session and wakes the runner, as sending to any managed session already does. The managed notice above it
-   still says the runner's state.
+9. On that card (since 2026-11-16 only a folder, a name and Create workspace on every client,
+   `docs/mocks/new-folder-in-home/workspace-card-with-name`), while the runner is not up: the notice says it is
+   being set up or asleep instead of offline, the folder name is taken unchecked (no directory probe) and sent
+   as `newFolder`, and Create workspace works. The workspace's first message queues and wakes the runner, as
+   sending to any managed session already does. Frames A–C of board 01 drew an engine step and a picked-folder
+   line; main's card dropped both, so they are not built.
 
 Points 8 and 9 change three clients' UI, so each needs a design board under `docs/mocks/` signed off first.
 

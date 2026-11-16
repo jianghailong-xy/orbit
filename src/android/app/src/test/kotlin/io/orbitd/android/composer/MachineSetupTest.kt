@@ -10,11 +10,11 @@ import org.junit.Test
 /**
  * The rules of a machine's first workspace, from docs/mocks/first-workspace-in-conversation/04-rules:
  * the same cases as OrbitKit `MachineSetupTests` and the web's `lib/machineSetup.test.ts`, plus empty-machine
- * detection (`machinesToSetUp`), first online machine landing (`firstOnlineRunnerId`), the waiting message
- * lifecycle (`MachineSetupState`), the directory probe relay (`DirProbeRelay`), and the `Created workspace` line.
+ * detection (`machinesToSetUp`), first online machine landing (`firstOnlineRunnerId`), the card's Name and
+ * Create workspace, the directory probe relay (`DirProbeRelay`), and the `Created workspace` line.
  */
 class MachineSetupTest {
-    @Test fun preparingAndAsleepManagedMachinesOfferSetupAndAcceptTheFirstMessage() {
+    @Test fun preparingAndAsleepManagedMachinesOfferSetup() {
         val runnerId = "0198f3a2-2222-7000-8000-000000000002"
         val runner = json("""{"id":"$runnerId","name":"Managed runner","status":"OFFLINE","lastHeartbeatAt":null}""")
         for (initial in listOf("null", "\"claude\"")) {
@@ -24,8 +24,6 @@ class MachineSetupTest {
             assertEquals(if (initial == "null") "preparing" else "asleep", setup)
             assertEquals(runnerId, MachineSetup.firstOnlineRunnerId(listOf(runner), managedStatus = status))
             assertEquals(listOf(runnerId), MachineSetup.machinesToSetUp(listOf(runner), emptyList(), managedStatus = status).map { it.id })
-            assertTrue(MachineSetup.isReady(true, PickedFolder.New("app", ManagedRunner.REPOS_ROOT + "/app"), false, SetupCredential.SignIn, setup))
-            assertFalse(MachineSetup.isReady(true, null, false, SetupCredential.SignIn, setup))
             assertNull(MachineSetup.firstOnlineRunnerId(listOf(runner)))
         }
     }
@@ -330,7 +328,7 @@ class MachineSetupTest {
         assertFalse(refused.usable)
     }
 
-    // What POST /sessions is told
+    // What POST /workspaces is told
 
     @Test fun aNewFolderGoesByItsNameAnExistingOneByThePathTheRunnerResolved() {
         assertEquals(
@@ -341,15 +339,6 @@ class MachineSetupTest {
             NewWorkspaceRequest(workDir = "/home/orbit/code/app"),
             PickedFolder.Existing(path = "/home/orbit/code/app", note = "").newWorkspace
         )
-    }
-
-    @Test fun theWorkspaceNameAFolderGivesAsTheServerDerivesIt() {
-        assertEquals("app", MachineSetup.folderName("/home/orbit/code/app"))
-        assertEquals("app", MachineSetup.folderName("/home/orbit/code/app/"))
-        assertEquals("app", MachineSetup.folderName("C:\\work\\app"))
-        assertEquals("/", MachineSetup.folderName("/"))
-        assertEquals("app", PickedFolder.Existing(path = "/home/orbit/code/app", note = "").workspaceName)
-        assertEquals("payments", PickedFolder.New(name = "payments", path = "/r/payments").workspaceName)
     }
 
     // Which engine a machine's first draft starts on
@@ -432,37 +421,6 @@ class MachineSetupTest {
         assertEquals(SetupCredential.SignedIn, MachineSetup.credential(runner = google, engine = "antigravity", provider = null))
     }
 
-    @Test fun readyIsBothStepsAndTheMachineHere() {
-        val folder = PickedFolder.New(name = "app", path = "/r/app")
-        assertTrue(MachineSetup.isReady(bare = true, folder = folder, online = true, credential = SetupCredential.SignedIn))
-        assertTrue(MachineSetup.isReady(bare = true, folder = folder, online = true, credential = SetupCredential.OnKey("k", pool = false)))
-        assertFalse(MachineSetup.isReady(bare = true, folder = null, online = true, credential = SetupCredential.SignedIn))
-        assertFalse(MachineSetup.isReady(bare = true, folder = folder, online = true, credential = SetupCredential.SignIn))
-        assertFalse(MachineSetup.isReady(bare = true, folder = folder, online = true, credential = SetupCredential.NotInstalled))
-        assertFalse(MachineSetup.isReady(bare = true, folder = folder, online = false, credential = SetupCredential.SignedIn))
-        assertFalse(MachineSetup.isReady(bare = false, folder = folder, online = true, credential = SetupCredential.SignedIn))
-    }
-
-    @Test fun useXInsteadIsTheOtherSignInsInstalledHere() {
-        val row = machineRunner(
-            listOf(
-                engine("claude", "no"),
-                engine("codex", "no"),
-                engine("kimi", "no", installed = false),
-                engine("opencode", "unknown"),
-            )
-        )
-        assertEquals(listOf("codex"), MachineSetup.otherEngines(runner = row, engine = "claude", fleet = listOf(row)))
-        assertEquals(listOf("claude"), MachineSetup.otherEngines(runner = row, engine = "codex", fleet = listOf(row)))
-    }
-
-    @Test fun cursorIsOfferedOnlyOnceTheFleetKnowsIt() {
-        val row = machineRunner(listOf(engine("claude", "no"), engine("cursor", "no")))
-        val older = machineRunner(listOf(engine("claude", "no")))
-        assertEquals(listOf("cursor"), MachineSetup.otherEngines(runner = row, engine = "claude", fleet = listOf(row)))
-        assertEquals(emptyList<String>(), MachineSetup.otherEngines(runner = row, engine = "claude", fleet = listOf(older)))
-    }
-
     @Test fun useAnApiKeyLandsOnAKeyThatCanRunTheDraftsEngineFirst() {
         val claude = engineChoice("claude", listOf(choice("claude", CredentialKind.LOGIN), choice("deepseek", CredentialKind.KEY)))
         val codex = engineChoice("codex", listOf(choice("codex", CredentialKind.LOGIN), choice("team", CredentialKind.POOL)))
@@ -477,99 +435,49 @@ class MachineSetupTest {
         assertNull(MachineSetup.firstKey(engines = emptyList(), preferring = "claude"))
     }
 
-    // Rule 6: the message waiting
+    // The card's Name and Create workspace (docs/mocks/new-folder-in-home/workspace-card-with-name)
 
-    private val pickedFolder = PickedFolder.Existing(path = "/home/orbit/code/app", note = "git repository · main")
-    private val heldMessage = HeldMessage(content = "Fix the flaky login test")
+    private val existing = PickedFolder.Existing(path = "/home/orbit/develop", note = "git repository · main")
+    private val newFolder = PickedFolder.New(name = "orbit", path = "/home/orbit/orbit")
 
-    @Test fun readyTheSendMakesTheWorkspace() {
-        val state = MachineSetupState(folder = pickedFolder)
+    @Test fun theNameFollowsTheFolderUntilItIsEdited() {
+        assertEquals("", MachineSetup.shownName(edited = null, folder = ""))
+        assertEquals("orbit", MachineSetup.shownName(edited = null, folder = "orbit"))
+        assertEquals("develop", MachineSetup.shownName(edited = null, folder = "develop"))
+        assertEquals(MachineSetupCopy.SETUP_NAME_HINT to false, MachineSetup.nameLine(edited = null))
+    }
+
+    @Test fun anEditedNameStaysWhateverTheFolderBecomes() {
+        assertEquals("Orbit backend", MachineSetup.shownName(edited = "Orbit backend", folder = "develop"))
+        assertEquals("Orbit backend", MachineSetup.shownName(edited = "Orbit backend", folder = "payments"))
+        assertEquals(MachineSetupCopy.SETUP_NAME_EDITED to false, MachineSetup.nameLine(edited = "Orbit backend"))
+    }
+
+    @Test fun anEmptiedNameIsNeverFilledInAgainAndBlocksCreate() {
+        assertEquals("", MachineSetup.shownName(edited = "", folder = "develop"))
+        assertEquals(MachineSetupCopy.SETUP_NAME_EMPTY to true, MachineSetup.nameLine(edited = ""))
+        assertEquals(MachineSetupCopy.SETUP_NAME_EMPTY to true, MachineSetup.nameLine(edited = "   "))
+        assertFalse(MachineSetup.canCreate(existing, name = "", usable = true, creating = false))
+        assertFalse(MachineSetup.canCreate(existing, name = "   ", usable = true, creating = false))
+    }
+
+    @Test fun createNeedsAUsableFolderANameAMachineThatCanAndNothingOut() {
+        assertTrue(MachineSetup.canCreate(existing, name = "develop", usable = true, creating = false))
+        assertTrue(MachineSetup.canCreate(newFolder, name = "orbit", usable = true, creating = false))
+        assertFalse("no folder found usable", MachineSetup.canCreate(null, name = "orbit", usable = true, creating = false))
+        assertFalse("offline or too old", MachineSetup.canCreate(newFolder, name = "orbit", usable = false, creating = false))
+        assertFalse("already creating", MachineSetup.canCreate(newFolder, name = "orbit", usable = true, creating = true))
+    }
+
+    @Test fun createSendsTheTrimmedNameTheRunnerAndTheFolder() {
         assertEquals(
-            MachineSend.Create(NewWorkspaceRequest(workDir = "/home/orbit/code/app")),
-            state.send(bare = true, ready = true)
+            json("""{"name":"Orbit backend","runnerId":"r1","workDir":"/home/orbit/develop"}"""),
+            MachineSetup.createWorkspaceBody("  Orbit backend ", "r1", existing),
         )
-    }
-
-    @Test fun notReadyTheMessageWaits() {
-        assertEquals(MachineSend.Hold, MachineSetupState().send(bare = true, ready = false))
-        assertEquals(MachineSend.Hold, MachineSetupState(folder = pickedFolder).send(bare = true, ready = false))
-    }
-
-    @Test fun oneWaitsAtATime() {
-        assertEquals(MachineSend.AlreadyWaiting, MachineSetupState(folder = pickedFolder, held = heldMessage).send(bare = true, ready = true))
-        assertEquals(MachineSend.AlreadyWaiting, MachineSetupState(held = heldMessage).send(bare = true, ready = false))
-    }
-
-    @Test fun aMachineNotKnownToBeBareSendsNothing() {
-        assertEquals(MachineSend.Nothing, MachineSetupState(folder = pickedFolder).send(bare = false, ready = false))
-    }
-
-    @Test fun bothStepsDoneItGoesWithNobodyPressingAnythingOnce() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        val result = state.takeHeldToSend(ready = true, busy = false)
-        assertNotNull(result)
-        val (next, taken) = result!!
-        assertEquals(heldMessage, taken.first)
-        assertEquals(NewWorkspaceRequest(workDir = "/home/orbit/code/app"), taken.second)
-        assertTrue(next.sendingHeld)
-        assertNull("a send makes a workspace: it must not go twice", next.takeHeldToSend(ready = true, busy = false))
-    }
-
-    @Test fun itWaitsForTheStepsAndForASendAlreadyOut() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        assertNull(state.takeHeldToSend(ready = false, busy = false))
-        assertNull(state.takeHeldToSend(ready = true, busy = true))
-        assertNull(MachineSetupState(held = heldMessage).takeHeldToSend(ready = true, busy = false))
-        assertNull(MachineSetupState(folder = pickedFolder).takeHeldToSend(ready = true, busy = false))
-        assertFalse(state.sendingHeld)
-    }
-
-    @Test fun aRefusalStaysSayingWhyUntilItIsTriedAgain() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        val (sending, _) = state.takeHeldToSend(ready = true, busy = false)!!
-        val failed = sending.failHeld("Claude Code isn’t signed in")
-        assertEquals("Claude Code isn’t signed in", failed.held?.error)
-        assertFalse(failed.sendingHeld)
-        assertNull("it waits on the person, not on another try", failed.takeHeldToSend(ready = true, busy = false))
-
-        val retried = failed.retryHeld()
-        assertNull(retried.held?.error)
-        assertEquals(heldMessage, retried.takeHeldToSend(ready = true, busy = false)?.second?.first)
-    }
-
-    @Test fun withdrawnItComesBackAndNothingIsLeftWaiting() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        val (next, withdrawn) = state.withdraw()
-        assertEquals(heldMessage, withdrawn)
-        assertNull(next.held)
-        assertEquals("the folder stays answered", pickedFolder, next.folder)
-        assertNull(next.withdraw().second)
-    }
-
-    @Test fun aMessageOnItsWayCantBeWithdrawn() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        val (sending, _) = state.takeHeldToSend(ready = true, busy = false)!!
-        assertNull(sending.withdraw().second)
-        assertEquals(heldMessage, sending.held)
-    }
-
-    @Test fun aMessageAlreadyRefusedCanBeWithdrawn() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage)
-        val (sending, _) = state.takeHeldToSend(ready = true, busy = false)!!
-        val failed = sending.failHeld("no")
-        assertEquals(heldMessage.content, failed.withdraw().second?.content)
-    }
-
-    @Test fun changingTheFolderKeepsTheMessageWaiting() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage).pick(null)
-        assertNull(state.folder)
-        assertEquals(heldMessage, state.held)
-        assertNull("no folder, nothing to send it with", state.takeHeldToSend(ready = true, busy = false))
-    }
-
-    @Test fun aMachineWithAWorkspaceHasNothingLeftToRemember() {
-        val state = MachineSetupState(folder = pickedFolder, held = heldMessage).finish()
-        assertEquals(MachineSetupState(), state)
+        assertEquals(
+            json("""{"name":"orbit","runnerId":"r1","newFolder":"orbit"}"""),
+            MachineSetup.createWorkspaceBody("orbit", "r1", newFolder),
+        )
     }
 
     // The directory probe relay

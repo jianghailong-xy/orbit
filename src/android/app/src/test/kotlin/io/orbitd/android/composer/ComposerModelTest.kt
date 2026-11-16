@@ -95,25 +95,6 @@ class ComposerModelTest {
         suspend fun cold(): ComposerModel { session = auth(); session.restore(); return model() }
     }
 
-    @Test fun managedFirstWorkspaceUsesOnlyTheServersProviderOrLetsTheServerDeriveIt() = runTest {
-        for (provider in listOf(null, "claude", "deepseek")) {
-            val rig = Rig(this); rig.start()
-            val target = DraftTarget("", runnerId = "r")
-            val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target)
-            runCurrent()
-            model.managedSetup = true
-            model.managedFirstProvider = provider
-            assertNull(model.sendHeld(HeldMessage("Build it"), NewWorkspaceRequest(newFolder = "app")))
-            val body = Wire.json.parseToJsonElement(rig.calls.last { it.path == listOf("sessions") && it.method == HttpMethod.POST }.body!!.decodeToString()).jsonObject
-            assertEquals("r", body.text("assignedRunnerId"))
-            assertEquals("app", body["newWorkspace"]!!.jsonObject.text("newFolder"))
-            assertNull(body["workspaceId"])
-            assertNull(body["newWorkspace"]!!.jsonObject["workDir"])
-            assertEquals(provider, body.text("provider"))
-            if (provider == null) assertNull(body["engine"])
-        }
-    }
-
     @Test fun creationKeepsWorkspaceFolderAndAccountAndNeverBlindlyReplaysAmbiguousCreate() = runTest {
         val rig = Rig(this); rig.start()
         val target = DraftTarget("w", "folder")

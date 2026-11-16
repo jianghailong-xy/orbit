@@ -161,21 +161,12 @@ public enum ManagedRunnerCopy {
         public static let reposRoot = "/var/lib/orbit/home/orbit-repos"
         public enum Notice {
             public static let preparing = "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready."
-            public static let preparingSend = "Orbit is setting up your managed runner. You can send your first message now; it starts when it’s ready."
             public static let asleep = "Your managed runner is asleep. Your first message wakes it (about 10 s)."
         }
         public enum FolderUnchecked {
             public static let preparing = "Not checked until your managed runner is up: used if it’s there, created if not."
             public static let asleep = "Not checked while it’s asleep: used if it’s there, created if not."
         }
-        public enum FolderPicked {
-            public static let preparing = "checked when it’s up · created if not there"
-            public static let asleep = "checked when it wakes · created if not there"
-        }
-        public static let onKey = "API key · the first session starts on it"
-        public static let noEngineTitle = "Coding CLI"
-        public static let noEngineHelp = "Your managed runner says which one is ready once it’s up."
-        public static let addKey = "Add a model key to start on it now."
     }
 
     public enum Asleep {

@@ -319,6 +319,10 @@ test('the sentences about a merge into main name the project’s main branch, an
       payload: { jobKind: 'CHECK_PROMOTION', failureClass: 'CHECK_TIMED_OUT' }, step: STEPS.TIMED_OUT,
     },
     {
+      kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER',
+      payload: { jobKind: 'LAND_PROMOTION', failureClass: 'CHECK_TIMED_OUT' }, step: STEPS.TIMED_OUT,
+    },
+    {
       kind: 'INTEGRATION_ERROR', assignee: 'OWNER',
       payload: { jobKind: 'LAND_PROMOTION', failureClass: 'ERROR', errorCode: 'PUSH_REJECTED' }, step: STEPS.REPAIR,
     },

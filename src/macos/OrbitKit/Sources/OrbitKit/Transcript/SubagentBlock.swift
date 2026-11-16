@@ -9,7 +9,7 @@ import Foundation
 /// engine and an arrow when Orbit moved the work to another one — then the tier and the type
 /// (`Background` in the type's place), `Read-only`, and `on <workspace>` for a run on another machine.
 /// The third says what came of it: how many files it changed, or the first line it handed back, with
-/// how long it took and what it cost; while it runs, the view draws what it is on instead.
+/// how long it took (no cost); while it runs, the view draws what it is on instead.
 public struct SubagentBlock: Equatable, Sendable {
     public static let toolName = "mcp__orbit__delegate"
     /// What the block's row calls it.
@@ -42,7 +42,7 @@ public struct SubagentBlock: Equatable, Sendable {
     public let outcomeIsFiles: Bool
     /// The run did not finish: the outcome is how it ended, drawn in red.
     public let outcomeIsFailure: Bool
-    /// `41s · $0.03`, once the run has ended.
+    /// `41s`, once the run has ended. The run's cost is left out.
     public let numbers: String?
     /// The opened block's Why line: the server's one-line Why, or, from a server or a row from before
     /// it was kept, the router's reasons in order, joined. A run on another workspace leads with how
@@ -97,7 +97,7 @@ public struct SubagentBlock: Equatable, Sendable {
             default: outcome = firstLine(result)
             }
         }
-        let numbers = [duration(run), cost(run)].compactMap { $0 }.joined(separator: " · ")
+        let numbers = duration(run) ?? ""
 
         return SubagentBlock(
             type: type,
@@ -203,13 +203,6 @@ public struct SubagentBlock: Equatable, Sendable {
         }
         return WikiRunsLogic.duration(end.timeIntervalSince(start))
     }
-
-    /// What the run cost, once it has ended: `$0.03` in cents, or `<$0.01` when it came to less.
-    private static func cost(_ run: SubagentRunView?) -> String? {
-        guard let run, !run.isRunning else { return nil }
-        guard run.costUsd >= 0.01 else { return "<$0.01" }
-        return String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), run.costUsd)
-    }
 }
 
 /// What a SubAgent handed back: a foreground call's result is `{ runId, status, result, … }`; a
@@ -275,8 +268,6 @@ public struct SubagentGroup: Equatable, Sendable {
     public let engines: String?
     /// `2 machines` when some ran on another workspace.
     public let machines: String?
-    /// `$0.03 so far` while any runs, `$0.07` once none does; nil before any has cost a cent's worth.
-    public let cost: String?
     /// How many ended well, how many failed, how many still run: the head's bar.
     public let done: Int
     public let failed: Int
@@ -305,11 +296,8 @@ public struct SubagentGroup: Equatable, Sendable {
             : (parentEngine.map { "\(SubagentBlock.shortName($0)) → " } ?? "") + moved.joined(separator: ", ")
         let places = Set(runs.map { $0?.workspaceName ?? "" })
         let machines = places.count > 1 ? "\(places.count) machines" : nil
-        let spent = runs.reduce(0.0) { $0 + ($1?.costUsd ?? 0) }
-        let cost: String? = spent < 0.01 ? nil
-            : String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), spent) + (running > 0 ? " so far" : "")
         return SubagentGroup(title: "\(blocks.count) Agents", progress: progress, engines: engines,
-                             machines: machines, cost: cost, done: done, failed: failed, running: running)
+                             machines: machines, done: done, failed: failed, running: running)
     }
 }
 

@@ -98,9 +98,22 @@ final class ManagedRunnerFixtureTests: XCTestCase {
                 XCTAssertEqual(LoadFailureLogic.defaultLanding(agents: ListLoadState().afterSuccess(), orderedAgentIDs: [],
                     lastAgentID: nil, section: .agents, selectedAgentID: nil, selectedSessionID: nil,
                     firstOnlineMachine: runnerID), .machine(runnerID))
-                let folder = PickedFolder.new(name: "app", path: ManagedRunnerCopy.Setup.reposRoot + "/app")
-                XCTAssertTrue(MachineSetup.isReady(bare: true, folder: folder, online: false, credential: .signIn, managedState: setup))
-                XCTAssertFalse(MachineSetup.isReady(bare: true, folder: nil, online: false, credential: .signIn, managedState: setup))
+                let root = MachineSetup.setupFolderRoot(runner, managedState: setup)
+                XCTAssertEqual(root, ManagedRunnerCopy.Setup.reposRoot)
+                let folder = try XCTUnwrap(MachineSetup.uncheckedFolder(name: "app", root: root))
+                XCTAssertNil(MachineSetup.uncheckedFolder(name: "../app", root: root))
+                let request = MachineSetup.createRequest(folder: folder, name: "My app", runnerID: runnerID)
+                XCTAssertEqual(request.newFolder, "app")
+                XCTAssertNil(request.workDir)
+                XCTAssertEqual(MachineSetup.folderLine(folder: "app", createError: nil, found: nil,
+                    unanswered: false, machine: "Managed runner", managedState: setup),
+                    .meta(setup == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep))
+                XCTAssertFalse(MachineSetup.canCreate(pick: folder, name: " ", online: false,
+                    checksFolders: false, creating: false, managedState: setup))
+                XCTAssertFalse(MachineSetup.canCreate(pick: folder, name: "app", online: false,
+                    checksFolders: false, creating: true, managedState: setup))
+                XCTAssertTrue(MachineSetup.canCreate(pick: folder, name: "app", online: false, checksFolders: false, creating: false, managedState: setup))
+                XCTAssertFalse(MachineSetup.canCreate(pick: nil, name: "app", online: false, checksFolders: false, creating: false, managedState: setup))
                 XCTAssertEqual(folder.newWorkspace, NewWorkspaceRequest(newFolder: "app"))
             }
         }
@@ -111,16 +124,9 @@ final class ManagedRunnerFixtureTests: XCTestCase {
         let expected: [String: Any] = [
             "reposRoot": ManagedRunnerCopy.Setup.reposRoot,
             "notice": ["preparing": ManagedRunnerCopy.Setup.Notice.preparing,
-                       "preparingSend": ManagedRunnerCopy.Setup.Notice.preparingSend,
                        "asleep": ManagedRunnerCopy.Setup.Notice.asleep],
             "folderUnchecked": ["preparing": ManagedRunnerCopy.Setup.FolderUnchecked.preparing,
                                 "asleep": ManagedRunnerCopy.Setup.FolderUnchecked.asleep],
-            "folderPicked": ["preparing": ManagedRunnerCopy.Setup.FolderPicked.preparing,
-                             "asleep": ManagedRunnerCopy.Setup.FolderPicked.asleep],
-            "onKey": ManagedRunnerCopy.Setup.onKey,
-            "noEngineTitle": ManagedRunnerCopy.Setup.noEngineTitle,
-            "noEngineHelp": ManagedRunnerCopy.Setup.noEngineHelp,
-            "addKey": ManagedRunnerCopy.Setup.addKey,
         ]
         XCTAssertEqual(NSDictionary(dictionary: setup), NSDictionary(dictionary: expected))
     }

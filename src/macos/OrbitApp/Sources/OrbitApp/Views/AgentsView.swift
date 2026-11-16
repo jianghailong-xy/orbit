@@ -1590,10 +1590,6 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
-            // What waited on this machine before it got this workspace.
-            if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
-                draft.restoreHeld(held)
-            }
             await draft.prepareDraft()
         }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its

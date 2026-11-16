@@ -214,7 +214,7 @@ struct AgentGroupView: View {
                 Spacer(minLength: 0)
                 ToolStatusGlyph(status: group.running > 0 ? .running : group.failed > 0 ? .error : .ok)
             }
-            let facts = [group.engines, group.machines, group.cost].compactMap { $0 }
+            let facts = [group.engines, group.machines].compactMap { $0 }
             if !facts.isEmpty {
                 Text(facts.joined(separator: " · "))
                     .font(.orbitLabel).foregroundStyle(.secondary)

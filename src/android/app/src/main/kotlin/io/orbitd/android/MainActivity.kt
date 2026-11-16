@@ -187,6 +187,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
+        // Admin is a drawer row for an admin, as iOS's is, since Settings' list took the web nav's groups and lost its row.
+        var admin by remember(signedIn.handle) { mutableStateOf(false) }
+        LaunchedEffect(management) {
+            admin = try { (management.get("users/me") as? kotlinx.serialization.json.JsonObject)?.text("role") == "ADMIN" }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false }
+        }
         val scopeList = remember(api) { SessionScopeList(api) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
@@ -337,6 +343,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
                             badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
+                        if (admin) NavigationDrawerItem(label = { Text("Admin") }, selected = route.destination == Destination.SETTINGS && route.id == "admin",
+                            icon = { Icon(painterResource(R.drawable.ic_admin), null) }, modifier = Modifier.testTag("drawer:admin"),
+                            onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, "admin", origin = Origin.DRAWER)) })
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
