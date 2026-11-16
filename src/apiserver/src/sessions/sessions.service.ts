@@ -277,6 +277,7 @@ import {
   HELD_TURN_STATUS,
   accountAgentLanguage,
   heldTurnColumns,
+  isSlashCommand,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -1771,7 +1772,7 @@ export class SessionsService {
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
-      && !opts.externalSender && !opts.fence && dto.prompt.trim()
+      && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const session = await (newWorkspace
@@ -6969,9 +6970,10 @@ export class SessionsService {
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
-    // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    // written. Words only — a `!cmd` and a `/command` are commands, and attachments alone carry no words.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -7669,7 +7671,7 @@ export class SessionsService {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // Settings › Translation: the follow-up's words are held until translated; the interrupt is not.
-    const heldFrom = opts?.translate && content.trim() ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
+    const heldFrom = opts?.translate && content.trim() && !isSlashCommand(content) ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
     // follow-up the server filed separately, and the flag that says this interrupt also ends the
     // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
@@ -10544,6 +10546,7 @@ export class SessionsService {
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
     const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
