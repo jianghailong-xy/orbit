@@ -44,8 +44,10 @@ data class EventPage(val events: List<RunEvent>, val hasMore: Boolean = false, v
 @Serializable
 data class RecordAnchor(val kind: String, val id: String, val seq: Long)
 
+/** [agentId] is the envelope's own: the workspace of the session the event is about, null for an account-scoped event. */
 @Serializable
-data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()))
+data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()),
+    val agentId: String? = null)
 
 /** The lists the store reads as its directory ([RealtimeRest.directory]). */
 internal enum class DirectoryList {

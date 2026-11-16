@@ -32,6 +32,54 @@ object MachineSetupCopy {
     fun setupNewFolderIsFile(machine: String): String =
         "There’s already a file with this name on $machine. Pick another name."
     fun setupOtherFolder(machine: String): String = "Another folder on $machine"
+
+    // From GitHub (docs/mocks/github-workspace, board 01 P1–P4): the fourth option, between A new folder and Another folder.
+    const val SETUP_FROM_GITHUB = "From GitHub"
+    const val SETUP_NEW_TAG = "NEW"
+    const val SETUP_GITHUB_META =
+        "Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine."
+    const val SETUP_CONNECT_GITHUB = "Connect GitHub"
+    const val SETUP_CONNECT_GITHUB_META = "Opens GitHub, then comes back here."
+    fun setupGithubSignInAgain(login: String): String = "@$login needs to sign in again."
+    const val SETUP_RECONNECT_GITHUB = "Reconnect GitHub"
+    fun setupGithubConnectFailed(why: String): String = "Couldn’t start connecting GitHub: $why"
+    /** The web's one GitHub template with a condition in it: the count is left out when GitHub wasn't asked. */
+    fun setupGithubAccount(login: String, repositories: Int?): String =
+        if (repositories == null) "Signed in to GitHub as @$login"
+        else "Signed in to GitHub as @$login · $repositories ${if (repositories == 1) "repository" else "repositories"}"
+    const val SETUP_GITHUB_SEARCH = "Search your repositories"
+    const val SETUP_GITHUB_NOT_LISTED = "Not listed?"
+    const val SETUP_GITHUB_ADD_REPOSITORIES = "Add repositories on GitHub"
+    const val SETUP_GITHUB_LOADING = "Loading your repositories…"
+    const val SETUP_GITHUB_NONE = "No repository matches."
+    fun setupGithubListFailed(why: String): String = "Couldn’t list your repositories: $why"
+    const val SETUP_GITHUB_PRIVATE = "Private"
+    const val SETUP_GITHUB_CLONED_META = "Cloned before the session starts. Work lands back on GitHub."
+    const val SETUP_OTHER_BRANCH = "Other branch"
+    const val SETUP_DEFAULT_BRANCH = "Default branch"
+    const val SETUP_BRANCH = "Branch"
+    fun setupGithubFolderExists(machine: String): String = "This folder already exists on $machine. Pick another name."
+    /** Board 03 draws the card's button in the platform's title case, as Use This Folder; the words are the web's. */
+    const val SETUP_USE_REPOSITORY = "Use This Repository"
+    const val SETUP_GITHUB_DONE = "cloned before the session starts"
+    fun setupGithubDonePath(repository: String, path: String): String = "$repository → $path"
+    fun setupCloneUpdating(machine: String): String = "$machine updates itself first: this version can’t clone yet."
+    fun setupCloneNeedsUpdate(machine: String): String = "$machine can’t clone on this version, and it can’t update itself."
+    /** When a repository was last pushed, as the picker's row says it: minutes, hours, yesterday, then the date. */
+    fun pushedAgo(pushedAt: String?, nowMs: Long = System.currentTimeMillis()): String {
+        val at = pushedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return ""
+        val minutes = maxOf(0L, Math.floorDiv(nowMs - at.toEpochMilli(), 60_000L))
+        if (minutes < 1) return "pushed just now"
+        if (minutes < 60) return "pushed $minutes ${if (minutes == 1L) "minute" else "minutes"} ago"
+        val hours = minutes / 60
+        if (hours < 24) return "pushed $hours ${if (hours == 1L) "hour" else "hours"} ago"
+        if (hours < 48) return "pushed yesterday"
+        val zone = java.time.ZoneId.systemDefault()
+        val date = at.atZone(zone)
+        val sameYear = date.year == java.time.Instant.ofEpochMilli(nowMs).atZone(zone).year
+        val pattern = if (sameYear) "MMM d" else "MMM d, yyyy"
+        return "pushed " + java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.US).format(date)
+    }
     /** Board 03 draws it in the platform's title case; the words are the web's. */
     const val SETUP_USE_FOLDER = "Use This Folder"
     const val SETUP_CHANGE = "Change"
@@ -57,6 +105,8 @@ object MachineSetupCopy {
     const val SETUP_FOOT = "Nothing is created until you send. You can rename the workspace or change these later."
     fun setupReady(workspace: String, path: String): String =
         "Ready. Send a task — Orbit adds the workspace “$workspace” for $path as it starts."
+    fun setupReadyClone(repository: String, path: String, workspace: String): String =
+        "Ready. Send a task — Orbit clones $repository into $path and adds the workspace “$workspace” as it starts."
 
     fun composerPlaceholderFor(machine: String): String = "Send $machine a task…"
 
@@ -74,6 +124,21 @@ object MachineSetupCopy {
     const val CREATED_SETTINGS = "Settings"
     const val CREATED_RENAME_LABEL = "Workspace name"
     const val CREATED_RENAME_FAILED = "Couldn’t rename the workspace"
+
+    // A workspace cloned from GitHub: the same first line while its clone runs, once it is done, and when it failed (board 01, P5).
+    const val CLONE_CLONING = "Cloning"
+    const val CLONE_WAITING = "Waiting to clone"
+    /** The reason arrives with the session's next read, a moment after the frame that says the clone failed: until then the sentence
+     *  ends at the repository, with no colon left hanging. */
+    fun cloneCouldNot(repository: String, why: String): String =
+        if (why.isEmpty()) "Couldn’t clone $repository." else "Couldn’t clone $repository: $why"
+    fun cloneAppRemoved(repository: String): String = "Orbit’s GitHub App is no longer installed on $repository."
+    const val CLONE_INSTALL_ON_GITHUB = "Install on GitHub"
+    const val CLONE_SIGN_IN_EXPIRED = "Your GitHub sign-in expired."
+    const val CLONE_RECONNECT = "Reconnect GitHub"
+    const val CLONE_RETRY = "Retry"
+    const val CLONE_RETRY_FAILED = "Couldn’t retry the clone"
+    const val CLONE_STARTS_WHEN_DONE = "Starts when the clone is done"
 
     const val START_A_SESSION = "Start a session"
     const val REGISTER_NEXT =

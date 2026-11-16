@@ -363,6 +363,7 @@ private fun MachineDraftComposer(
                         onOpenMachine = {
                             open(OrbitRoute(Destination.RUNNER, runner.text("id") ?: runnerId))
                         },
+                        onOpenGithubSettings = { open(OrbitRoute(Destination.SETTINGS, "github")) },
                         onSignedIn = {
                             app.realtime.refreshDirectory()
                             scope.launch {

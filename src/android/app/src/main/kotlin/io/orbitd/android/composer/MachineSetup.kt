@@ -53,22 +53,36 @@ data class DirProbeAnswer(
 
 /**
  * Sent on `POST /sessions` when the session makes its machine's first workspace (docs/first-workspace-contract.md §3).
- * Exactly one of [workDir] or [newFolder] is set.
+ * Exactly one of the three is set. [workDir] is a folder the runner has confirmed, as it resolved it; [newFolder] is one path segment the
+ * server joins to the runner's Repos Folder; [github] is a clone of one of the person's repositories into that folder
+ * (docs/github-workspace-design.md §5.3).
  */
 data class NewWorkspaceRequest(
     val workDir: String? = null,
     val newFolder: String? = null,
+    val github: GithubClone? = null,
 ) {
+    /** `newWorkspace.github`: the repository by GitHub's id, the branch when it isn't the default one, and the folder under the Repos
+     *  Folder. */
+    data class GithubClone(val repoId: Long, val ref: String? = null, val folder: String? = null)
+
     fun toJson(): JsonObject = buildJsonObject {
         workDir?.let { put("workDir", it) }
         newFolder?.let { put("newFolder", it) }
+        github?.let { clone ->
+            put("github", buildJsonObject {
+                put("repoId", clone.repoId)
+                clone.folder?.let { put("folder", it) }
+                clone.ref?.let { put("ref", it) }
+            })
+        }
     }
 }
 
 /** A machine as a Set up row names it (rule 9). */
 data class MachineToSetUp(val id: String, val name: String)
 
-enum class FolderChoice { SUGGESTED, NEW, OTHER }
+enum class FolderChoice { SUGGESTED, NEW, GITHUB, OTHER }
 
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
@@ -90,12 +104,17 @@ sealed interface PickedFolder {
 
     data class Existing(override val path: String, val note: String) : PickedFolder
     data class New(val name: String, override val path: String) : PickedFolder
+    /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3). */
+    data class Github(val pick: GithubPick) : PickedFolder {
+        override val path: String get() = pick.path
+    }
 
     /** What `POST /sessions` is told. An existing folder is sent as the runner resolved it. */
     val newWorkspace: NewWorkspaceRequest
         get() = when (this) {
             is Existing -> NewWorkspaceRequest(workDir = path)
             is New -> NewWorkspaceRequest(newFolder = name)
+            is Github -> NewWorkspaceRequest(github = NewWorkspaceRequest.GithubClone(pick.repoId, pick.ref, pick.name))
         }
 
     /** The workspace it makes, as the server names it (§3.2). */
@@ -103,8 +122,43 @@ sealed interface PickedFolder {
         get() = when (this) {
             is Existing -> MachineSetup.folderName(path)
             is New -> name
+            is Github -> pick.name
+        }
+
+    /** The folder's line once it is picked: the path, or for a clone `owner/repo → ~/orbit-repos/repo` (board 01, P4). */
+    val doneLine: String
+        get() = when (this) {
+            is Existing, is New -> path
+            is Github -> MachineSetupCopy.setupGithubDonePath(pick.repository, MachineSetup.homeShortPath(pick.path))
+        }
+
+    /** What it says under that line. */
+    val doneNote: String
+        get() = when (this) {
+            is Existing -> note
+            is New -> MachineSetupCopy.SETUP_NEW_FOLDER_DONE
+            is Github -> MachineSetupCopy.SETUP_GITHUB_DONE
+        }
+
+    /** The card's foot once both steps are done. */
+    val readySentence: String
+        get() = when (this) {
+            is Github -> MachineSetupCopy.setupReadyClone(pick.repository, MachineSetup.homeShortPath(pick.path), pick.name)
+            else -> MachineSetupCopy.setupReady(workspaceName, path)
         }
 }
+
+/** The repository From GitHub picked, and the folder it is cloned into. [ref] null is the repository's default branch, which
+ *  [defaultBranch] names. */
+data class GithubPick(
+    val repoId: Long,
+    val repository: String,
+    val isPrivate: Boolean,
+    val defaultBranch: String,
+    val ref: String?,
+    val name: String,
+    val path: String,
+)
 
 /** The second step's answer for the draft's engine and credential. */
 sealed interface SetupCredential {
@@ -128,6 +182,8 @@ data class EnginePick(val engine: String, val provider: String)
 object MachineSetup {
     const val DIR_PROBE_CAPABILITY = "dir-probe/v1"
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
+    /** What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6). */
+    const val CLONE_WORKDIR_CAPABILITY = "clone-workdir/v1"
 
     /**
      * Whether the directory `orbit register` ran in is worth asking about: the two answers a path can give on its face are left
@@ -163,6 +219,40 @@ object MachineSetup {
     /** Whether it can make a new folder: the capability, and the Repos Folder it goes in (§3.1). */
     fun makesNewFolders(runner: JsonObject): Boolean =
         CREATE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    /**
+     * Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the Repos Folder the clone
+     * goes in. POST /sessions refuses either missing.
+     */
+    fun clonesRepositories(runner: JsonObject): Boolean =
+        CLONE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    private val homePrefix = Regex("""^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)""")
+
+    /** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
+    fun homeShortPath(path: String): String = homePrefix.replaceFirst(path, "~")
+
+    /** The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder name. */
+    fun repositoryFolder(fullName: String): String {
+        val name = fullName.split('/').last()
+        return if (isValidNewFolder(name)) name else ""
+    }
+
+    /** The branch a clone is asked for: what was typed under Other branch, unless it is empty or the default. */
+    fun cloneRef(typed: String?, defaultBranch: String): String? {
+        val ref = typed?.trim().orEmpty()
+        return if (ref.isEmpty() || ref == defaultBranch) null else ref
+    }
+
+    /** How many repositories the picker shows before anything is typed (board 01, note 4). */
+    const val FIRST_REPOSITORIES = 8
+
+    /** What From GitHub would pick, on the machine's answer about the folder: only a folder that isn't there yet can be cloned into. */
+    fun githubPick(repository: GithubRepository, name: String, ref: String?, reposRoot: String, probe: DirProbe?): PickedFolder? {
+        if (!isValidNewFolder(name) || probe == null || !probe.error.isNullOrEmpty() || probe.exists) return null
+        return PickedFolder.Github(GithubPick(repository.id, repository.fullName, repository.private, repository.defaultBranch, ref, name,
+            newFolderPath(reposRoot, name)))
+    }
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is
@@ -444,6 +534,11 @@ data class CreatedWorkspaceLine(
     val machine: String,
     val path: String?,
     val live: Boolean,
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §8): its `owner/name`, and where its clone stood when the detail
+     *  was read ([cloneError] is why it failed). All null for one that is not. */
+    val repository: String? = null,
+    val cloneState: String? = null,
+    val cloneError: String? = null,
 ) {
     companion object {
         fun fromSession(
@@ -471,12 +566,18 @@ data class CreatedWorkspaceLine(
             val path = liveWorkspace?.text("workDir")?.takeIf { it.isNotEmpty() }
                 ?: agent?.text("workDir")?.takeIf { it.isNotEmpty() }
             val deleted = agent != null && agent["deletedAt"] != null && agent["deletedAt"] !is JsonNull
+            // The clone's fields ride on the detail's workspace; the web reads them as `workspace`, OrbitKit as `agent`.
+            val made = listOfNotNull(agent, detail["workspace"] as? JsonObject)
+            fun cloneField(key: String) = made.firstNotNullOfOrNull { it.text(key)?.takeIf(String::isNotEmpty) }
             return CreatedWorkspaceLine(
                 workspaceId = workspaceId,
                 name = name,
                 machine = machine,
                 path = path,
                 live = !deleted,
+                repository = WorkspaceClone.repositoryOf(cloneField("repoUrl")),
+                cloneState = cloneField("cloneState"),
+                cloneError = cloneField("cloneError"),
             )
         }
     }

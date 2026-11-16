@@ -36,6 +36,7 @@ import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.composer.ManagementGithub
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
 import kotlinx.coroutines.CancellationException
@@ -57,6 +58,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision, open)
+        "github" -> GithubSettingsPage(remember(api) { ManagementGithub(api) }, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "terminals" -> TerminalsSettings(api, revision, terminalsChanged)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
@@ -83,7 +85,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         else -> null
     } ?: MachinesAndModels.TITLE
     "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "terminals" -> Terminals.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "terminals" -> Terminals.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -252,6 +254,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
             SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
+        }
+        // Integrations → GitHub, as the web's settings nav groups it (docs/github-workspace-design.md §8).
+        SettingsGroup(GithubCopy.INTEGRATIONS, footer = GithubCopy.GITHUB_ROW_HINT) {
+            SettingsLink(GithubCopy.TITLE, R.drawable.ic_github) { page("github") }
         }
         SettingsGroup("Account") {
             SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty())

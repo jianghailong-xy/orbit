@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -30,6 +31,15 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastTone
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.management.Ink
@@ -65,7 +75,12 @@ internal fun MachineSetupCard(
     /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers first messages to try, which fill
      *  the page's composer. */
     welcome: MachineWelcome? = null,
+    /** The GitHub routes From GitHub asks; the app's own unless a test hands in its own. */
+    github: GithubSource? = null,
+    /** From GitHub's Change: Settings → GitHub. */
+    onOpenGithubSettings: () -> Unit = {},
 ) {
+    val githubSource = remember(managementApi, github) { github ?: ManagementGithub(managementApi) }
     val machine = RunnerPage.displayName(runner)
     val offline = !online
     val probes = MachineSetup.answersDirProbe(runner)
@@ -153,7 +168,7 @@ internal fun MachineSetupCard(
                         ) {
                             Text(MachineSetupCopy.SETUP_FOLDER, fontWeight = FontWeight.SemiBold)
                             Text(
-                                folder.path,
+                                folder.doneLine,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,
                                 maxLines = 1,
@@ -170,10 +185,7 @@ internal fun MachineSetupCard(
                             )
                         }
                         Text(
-                            when (folder) {
-                                is PickedFolder.Existing -> folder.note
-                                is PickedFolder.New -> MachineSetupCopy.SETUP_NEW_FOLDER_DONE
-                            },
+                            folder.doneNote,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -185,6 +197,8 @@ internal fun MachineSetupCard(
                         disabled = offline || !probes,
                         probeDir = probeDir,
                         onPick = onPickFolder,
+                        github = githubSource,
+                        onOpenGithubSettings = onOpenGithubSettings,
                     )
                 }
             }
@@ -290,7 +304,7 @@ internal fun MachineSetupCard(
             val folder = state.folder
             if (ready && folder != null) {
                 Text(
-                    MachineSetupCopy.setupReady(folder.workspaceName, folder.path),
+                    folder.readySentence,
                     style = MaterialTheme.typography.bodySmall,
                     color = Ink.green,
                     modifier = Modifier.padding(top = 8.dp),
@@ -381,11 +395,24 @@ private fun FolderOptionsSection(
     disabled: Boolean,
     probeDir: suspend (path: String, ask: Boolean) -> DirProbeRelay.Outcome,
     onPick: (PickedFolder) -> Unit,
+    github: GithubSource,
+    onOpenGithubSettings: () -> Unit,
 ) {
     val runnerId = runner.text("id").orEmpty()
     val machine = RunnerPage.displayName(runner)
     val offersNewFolder = MachineSetup.makesNewFolders(runner)
-    var touched by remember(runnerId) { mutableStateOf<FolderChoice?>(null) }
+    // Kept across the page being made again: a GitHub sign-in goes through the browser, and From GitHub is still the choice after it
+    // (board 01, note 2).
+    var touched by rememberSaveable(runnerId) { mutableStateOf<FolderChoice?>(null) }
+    // From GitHub (docs/github-workspace-design.md §8): offered only where the deployment has a GitHub App. Read again each time the app
+    // comes back to the front, which is where a sign-in in the browser ends; the last answer stands while it is read.
+    var integration by remember(runnerId) { mutableStateOf<GithubIntegration?>(null) }
+    val resumes = rememberResumes()
+    LaunchedEffect(runnerId, resumes) {
+        integration = try { github.integration() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { integration }
+    }
+    val offersGithub = integration?.available == true
+    var githubCandidate by remember(runnerId) { mutableStateOf<PickedFolder?>(null) }
     var newName by remember(runnerId) { mutableStateOf("") }
     var typed by remember(runnerId) { mutableStateOf("") }
     var registered by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
@@ -412,6 +439,7 @@ private fun FolderOptionsSection(
         FolderChoice.NEW -> if (offersNewFolder && MachineSetup.isValidNewFolder(name) && found != null) {
             MachineSetup.newFolderPick(found, name, reposRoot, machine)
         } else null
+        FolderChoice.GITHUB -> if (offersGithub) githubCandidate else null
         FolderChoice.OTHER -> checked?.let {
             val verdict = MachineSetup.folderVerdict(it, machine)
             if (verdict.usable) PickedFolder.Existing(it.path, verdict.short) else null
@@ -572,7 +600,45 @@ private fun FolderOptionsSection(
                 }
             }
         }
-        if (suggested != null || offersNewFolder) HorizontalDivider(Modifier.padding(start = 36.dp))
+        val currentIntegration = integration
+        if (offersGithub && currentIntegration != null) {
+            if (suggested != null || offersNewFolder) HorizontalDivider(Modifier.padding(start = 36.dp))
+            Column {
+                FolderOptionRow(
+                    selected = choice == FolderChoice.GITHUB,
+                    enabled = !disabled,
+                    onClick = { touched = FolderChoice.GITHUB },
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(painterResource(R.drawable.ic_github), null, Modifier.size(15.dp))
+                        Text(MachineSetupCopy.SETUP_FROM_GITHUB, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            MachineSetupCopy.SETUP_NEW_TAG,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+                if (choice == FolderChoice.GITHUB) {
+                    GithubFolderOption(
+                        runner = runner,
+                        integration = currentIntegration,
+                        github = github,
+                        disabled = disabled,
+                        probeDir = probeDir,
+                        onCandidate = { githubCandidate = it },
+                        onEnter = { githubCandidate?.let(onPick) },
+                        onOpenSettings = onOpenGithubSettings,
+                    )
+                }
+            }
+        }
+        if (suggested != null || offersNewFolder || offersGithub) HorizontalDivider(Modifier.padding(start = 36.dp))
         Column {
             FolderOptionRow(
                 selected = choice == FolderChoice.OTHER,
@@ -622,7 +688,7 @@ private fun FolderOptionsSection(
         shape = CircleShape,
         modifier = Modifier.padding(top = 9.dp),
     ) {
-        Text(MachineSetupCopy.SETUP_USE_FOLDER)
+        Text(if (choice == FolderChoice.GITHUB) MachineSetupCopy.SETUP_USE_REPOSITORY else MachineSetupCopy.SETUP_USE_FOLDER)
     }
 }
 
@@ -653,16 +719,16 @@ private fun FolderOptionRow(
 }
 
 @Composable
-private fun MetaText(text: String) {
+internal fun MetaText(text: String) {
     Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
-private fun CheckingText(machine: String) = MetaText(MachineSetupCopy.setupChecking(machine))
+internal fun CheckingText(machine: String) = MetaText(MachineSetupCopy.setupChecking(machine))
 
 /** A check the machine gave no answer to, and the way to ask it again. */
 @Composable
-private fun NoAnswerRow(machine: String, onAgain: () -> Unit) {
+internal fun NoAnswerRow(machine: String, onAgain: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         VerdictText(MachineSetupCopy.setupNoAnswer(machine), FolderVerdict.Tone.BAD)
         Text(
@@ -675,7 +741,7 @@ private fun NoAnswerRow(machine: String, onAgain: () -> Unit) {
 }
 
 @Composable
-private fun VerdictText(text: String, tone: FolderVerdict.Tone) {
+internal fun VerdictText(text: String, tone: FolderVerdict.Tone) {
     val color = when (tone) {
         FolderVerdict.Tone.OK -> Ink.green
         FolderVerdict.Tone.WARN -> Ink.amber
@@ -762,7 +828,9 @@ internal fun HeldFirstMessageView(
 }
 
 /**
- * The first line of a conversation that made its workspace (rule 8): what was made, where, and Rename · Settings.
+ * The first line of a conversation that made its workspace (rule 8): what was made, where, and Rename · Settings. A workspace cloned
+ * from GitHub draws the same line while its clone has not finished ([clone], what [WorkspaceClone.now] makes of the detail and the
+ * stream), and once it has, the repository it came from.
  */
 @Composable
 internal fun CreatedWorkspaceLineView(
@@ -770,9 +838,20 @@ internal fun CreatedWorkspaceLineView(
     settingsEnabled: Boolean,
     onRename: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    clone: CloneHeard? = null,
+    github: GithubSource? = null,
+    /** Retry: `POST /workspaces/:id/clone/retry`, then PENDING heard here and the session read again. Throws what refused it. */
+    onRetry: suspend () -> Unit = {},
 ) {
+    val repository = line.repository?.takeIf { clone != null }
+    if (clone != null && repository != null && line.live && clone.state != CloneState.READY) {
+        CloneStatusLine(line, repository, clone, settingsEnabled, onOpenSettings, github, onRetry)
+        return
+    }
     var renaming by remember { mutableStateOf(false) }
     var draft by remember { mutableStateOf("") }
+    val uri = LocalUriHandler.current
+    val linkColor = MaterialTheme.colorScheme.primary
 
     Column(
         Modifier
@@ -791,6 +870,13 @@ internal fun CreatedWorkspaceLineView(
                 append(" ${MachineSetupCopy.CREATED_ON} ${line.machine}")
                 if (!line.path.isNullOrEmpty()) {
                     append(" · ${line.path}")
+                }
+                if (repository != null) {
+                    append(" · ")
+                    val url = "https://github.com/$repository"
+                    withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = linkColor))) { uri.openUri(url) }) {
+                        append(repository)
+                    }
                 }
             },
             style = MaterialTheme.typography.labelSmall,
@@ -840,6 +926,133 @@ internal fun CreatedWorkspaceLineView(
                         .alpha(if (settingsEnabled) 1f else 0.38f)
                         .clickable(enabled = settingsEnabled, role = Role.Button, onClick = onOpenSettings),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The same first line while a GitHub workspace's clone has not finished (board 01, P5; web `CloneStatusLine`): Cloning with git's
+ * percentage, or why it failed with the way out — Retry always, and before it what the reason asks for: the App installed again, GitHub
+ * connected again, or the workspace's settings.
+ */
+@Composable
+private fun CloneStatusLine(
+    line: CreatedWorkspaceLine,
+    repository: String,
+    clone: CloneHeard,
+    settingsEnabled: Boolean,
+    onOpenSettings: () -> Unit,
+    github: GithubSource?,
+    onRetry: suspend () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val uri = LocalUriHandler.current
+    val failure = if (clone.state == CloneState.FAILED) WorkspaceClone.failureOf(line.cloneError) else null
+    var retrying by remember { mutableStateOf(false) }
+    // Where to install the App again: only asked for when the App is what is missing.
+    var installUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(failure == CloneFailure.APP_REMOVED, github) {
+        if (failure != CloneFailure.APP_REMOVED || github == null) return@LaunchedEffect
+        installUrl = try { github.integration().installUrl } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
+    }
+    fun retry() {
+        retrying = true
+        scope.launch {
+            try {
+                onRetry()
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                OrbitToasts.show(MachineSetupCopy.CLONE_RETRY_FAILED, detail = githubWhy(e), tone = ToastTone.ERROR)
+            } finally {
+                retrying = false
+            }
+        }
+    }
+    fun reconnect() {
+        val source = github ?: return
+        scope.launch {
+            try {
+                uri.openUri(source.start())
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                OrbitToasts.show(MachineSetupCopy.setupGithubConnectFailed(githubWhy(e)), tone = ToastTone.ERROR)
+            }
+        }
+    }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable
+    fun sep() = Text("·", style = MaterialTheme.typography.labelSmall, color = muted)
+
+    FlowRow(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("created-workspace-clone")
+            .semantics { stateDescription = failure?.name ?: clone.state.wire },
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (failure != null) {
+            val reason = when (failure) {
+                CloneFailure.APP_REMOVED -> MachineSetupCopy.cloneAppRemoved(repository)
+                CloneFailure.SIGN_IN_EXPIRED -> MachineSetupCopy.CLONE_SIGN_IN_EXPIRED
+                else -> MachineSetupCopy.cloneCouldNot(repository, WorkspaceClone.reason(line.cloneError))
+            }
+            Text(
+                buildAnnotatedString {
+                    append("⚠ ")
+                    append(reason)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Ink.red,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("created-workspace-clone-reason"),
+            )
+            when (failure) {
+                CloneFailure.APP_REMOVED -> installUrl?.let { url ->
+                    ChangeLink("${MachineSetupCopy.CLONE_INSTALL_ON_GITHUB} ↗", enabled = true, tag = "clone-install") { uri.openUri(url) }
+                    sep()
+                }
+                CloneFailure.SIGN_IN_EXPIRED -> {
+                    ChangeLink(MachineSetupCopy.CLONE_RECONNECT, enabled = github != null, tag = "clone-reconnect", onClick = ::reconnect)
+                    sep()
+                }
+                else -> Unit
+            }
+            ChangeLink(MachineSetupCopy.CLONE_RETRY, enabled = !retrying, tag = "clone-retry", onClick = ::retry)
+            if (failure != CloneFailure.APP_REMOVED && failure != CloneFailure.SIGN_IN_EXPIRED) {
+                sep()
+                ChangeLink(MachineSetupCopy.CREATED_SETTINGS, enabled = settingsEnabled, tag = "clone-settings", onClick = onOpenSettings)
+            }
+        } else {
+            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+            Text(
+                buildAnnotatedString {
+                    append(if (clone.state == CloneState.CLONING) MachineSetupCopy.CLONE_CLONING else MachineSetupCopy.CLONE_WAITING)
+                    append(" ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(repository) }
+                    append(" ${MachineSetupCopy.CREATED_ON} ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)) { append(line.machine) }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = muted,
+            )
+            clone.progress?.let { progress ->
+                LinearProgressIndicator(
+                    progress = { progress / 100f },
+                    modifier = Modifier
+                        .width(72.dp)
+                        .height(4.dp)
+                        .semantics { contentDescription = "${MachineSetupCopy.CLONE_CLONING} $repository" }
+                        .testTag("created-workspace-clone-bar"),
+                    drawStopIndicator = {},
+                    gapSize = 0.dp,
+                )
+                Text("$progress%", style = MaterialTheme.typography.labelSmall, color = muted)
             }
         }
     }
