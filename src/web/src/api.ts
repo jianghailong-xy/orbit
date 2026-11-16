@@ -2120,6 +2120,13 @@ export interface SessionDetail {
     kimiAccount?: string | null;
     /** The Cursor CLI account this workspace's sessions run on; null is Default. */
     cursorAccount?: string | null;
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+     *  stands. All null for one that is not. */
+    repoUrl?: string | null;
+    githubRepoId?: string | null;
+    cloneRef?: string | null;
+    cloneState?: string | null;
+    cloneError?: string | null;
   } | null;
   /** This session made its workspace (docs/first-workspace-contract.md §3.3): the conversation opens
    *  by saying so. Only the detail carries it. */

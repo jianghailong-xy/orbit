@@ -542,11 +542,21 @@ final class ConsoleModel {
     private(set) var regionChecking = false
     /// The workspace this session made, as its detail read it (`createdWorkspaceLine`).
     private var madeWorkspace: SessionAgentRef?
+    /// When that detail was read: a clone frame heard before it is older news than its cloneState.
+    private(set) var madeWorkspaceReadAt: Date?
+    var madeWorkspaceID: String? { madeWorkspace?.id }
     /// The line this conversation opens with, when it made its workspace (board rule 8).
     var createdWorkspaceLine: CreatedWorkspaceLine? {
         guard let madeWorkspace, let name = madeWorkspace.name, let runnerName else { return nil }
         return CreatedWorkspaceLine(workspaceID: madeWorkspace.id, name: name, machine: runnerName,
-                                    path: madeWorkspace.workDir, live: madeWorkspace.deletedAt == nil)
+                                    path: madeWorkspace.workDir, live: madeWorkspace.deletedAt == nil,
+                                    repository: WorkspaceClone.repositoryOf(madeWorkspace.repoUrl),
+                                    cloneState: madeWorkspace.cloneState, cloneError: madeWorkspace.cloneError)
+    }
+
+    /// Read the detail again for the workspace this conversation made: its clone moved, or was retried.
+    func refreshMadeWorkspace() async {
+        await refreshServerStatus()
     }
 
     /// Rename, from that line. Trimmed; an empty or unchanged name is no edit, and a refusal says so.
@@ -2470,7 +2480,10 @@ final class ConsoleModel {
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
-        if session.createdWorkspace == true { madeWorkspace = session.agent }
+        if session.createdWorkspace == true {
+            madeWorkspace = session.agent
+            madeWorkspaceReadAt = Date()
+        }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
         if CursorRuntime.conversationStarted(session) { conversationStarted = true }

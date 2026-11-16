@@ -13,12 +13,18 @@ final class SettingsHomeTests: XCTestCase {
     // MARK: - The list
 
     /// The web Settings nav's groups and rows, in its order (`settingsIndex.ts`, `SettingsLayout.tsx`):
-    /// Personal, then Machines, then Providers — the pages the app has no page for left out.
+    /// Personal, then Integrations, then Machines, then Providers — the pages the app has no page for left out.
     func testTheGroupsReadAsTheWebsNavDoes() {
         // Machines and Providers have no header: each one row says that name.
-        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", nil, nil])
+        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", "Integrations", nil, nil])
         XCTAssertEqual(SettingsHome.rows(.personal),
                        [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals])
+        // Integrations, as the web's settings nav groups it: GitHub's page (docs/github-workspace-design.md §8).
+        XCTAssertEqual(SettingsHome.rows(.integrations), [.github])
+        XCTAssertEqual(SettingsHome.page(.github), .github)
+        XCTAssertEqual(SettingsHome.githubValue(nil), nil)
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: true, login: "ada")), "@ada")
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: false)), nil)
         XCTAssertEqual(SettingsHome.rows(.machines), [.machines])
         XCTAssertEqual(SettingsHome.rows(.providers), [.providers])
     }
@@ -37,7 +43,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
         XCTAssertEqual(rows.map(SettingsHome.title),
                        ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
-                        "Terminals", "Machines", "Providers"])
+                        "Terminals", "GitHub", "Machines", "Providers"])
         XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
     }
 

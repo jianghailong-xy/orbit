@@ -161,7 +161,7 @@ final class MachineSetupWiringTests: XCTestCase {
         let press = try slice(setup, from: "func create(", to: "\n    }\n")
         try assertInOrder(press, ["guard !creating else { return }", "creating = true", "createError = nil",
                                   "await app.createMachineWorkspace(runnerID: runnerID, folder: pick,",
-                                  "name: name.name(folder: folder))", "creating = false", "createError = why"],
+                                  "name: name.name(folder: followed))", "creating = false", "createError = why"],
                           "one at a time, and a refusal kept")
         XCTAssertTrue(setup.contains("var busy: Bool { creating }"), "the page doesn't move on under a create still out")
     }
@@ -196,7 +196,7 @@ final class MachineSetupWiringTests: XCTestCase {
         try assertInOrder(card, ["guard let answer, let question, answer.path == question else { return nil }",
                                  "case .answered(let probe)? = current",
                                  "MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)",
-                                 "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: folder), online: !offline,"],
+                                 "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: followed), online: !offline,"],
                           "the folder is picked on the machine's answer to this name")
         try assertInOrder(card, [".task(id: Question(path: question, attempt: attempt)) {",
                                  "await app.probeDir(runnerID: runner.id, path: asked, ask: true)",
@@ -206,16 +206,47 @@ final class MachineSetupWiringTests: XCTestCase {
                                  "MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,",
                                  "noAnswer { attempt += 1 }"],
                           "the field after its fixed root, and what it says")
-        try assertInOrder(card, ["Text(MachineSetupCopy.SETUP_NAME)", "WorkspaceNameField.placeholder(folder: folder)",
-                                 "setup.name.shown(folder: folder)", "setup.name.edit($0, folder: folder)",
+        try assertInOrder(card, ["Text(MachineSetupCopy.SETUP_NAME)", "WorkspaceNameField.placeholder(folder: followed)",
+                                 "setup.name.shown(folder: followed)", "setup.name.edit($0, folder: followed)",
                                  ".onSubmit { create() }", ".accessibilityLabel(MachineSetupCopy.SETUP_NAME)",
-                                 ".disabled(disabled || setup.creating)", "Button(action: create)",
+                                 ".disabled((fromGithub ? offline : disabled) || setup.creating)", "Button(action: create)",
                                  "if setup.creating { ProgressView()", "Text(MachineSetupCopy.SETUP_CREATE)",
-                                 ".disabled(!canCreate)", "setup.name.line(folder: folder)"],
+                                 ".disabled(!canCreate)", "setup.name.line(folder: followed)"],
                           "the name, with Create workspace beside it")
         for gone in ["SETUP_REGISTER_DIR", "setupOtherFolder", "FolderChoice", "registerDir", "FolderName("] {
             XCTAssertFalse(page.contains(gone), "the card still has \(gone)")
         }
+    }
+
+    /// Board 04 A on the one-field card: under the folder and its Name, an "or" rule and the From GitHub row, locked only
+    /// offline; pressing it swaps the folder field for the repository picker, whose pick the Name follows and Create
+    /// workspace sends; "Type a folder name instead" swaps back. Which is open is kept with the page.
+    func testFromGithubIsARowUnderTheNameThatSwapsTheFolderFieldForThePicker() throws {
+        let page = try app("Views/MachineSetupCard.swift")
+        XCTAssertTrue(page.contains("private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }"),
+                      "offered only where the deployment has a GitHub App")
+        let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
+        try assertInOrder(card, ["if fromGithub { return setup.repository }", "checksFolders: fromGithub || checksFolders"],
+                          "the picked repository is what Create workspace makes, locked only offline")
+        try assertInOrder(card, ["if let github, setup.githubOpen { githubField(github) } else { folderField }", "nameField",
+                                 "if github != nil, !setup.githubOpen {", "githubRow"],
+                          "the picker in the folder field's place, and the row under the Name")
+        let row = try slice(card, from: "@ViewBuilder private var githubRow: some View {", to: "private func githubField(")
+        try assertInOrder(row, ["MachineSetupCopy.SETUP_OR", "setup.githubOpen = true", "MachineSetupCopy.SETUP_FROM_GITHUB",
+                                "SetupNewTag()", "MachineSetupCopy.SETUP_GITHUB_META", ".disabled(offline || setup.creating)"],
+                          "the or rule, then the row")
+        let field = try slice(card, from: "private func githubField(", to: "private func noAnswer(again:")
+        try assertInOrder(field, ["MachineSetupCopy.SETUP_FOLDER", "MachineSetupCopy.SETUP_FROM_GITHUB", "SetupNewTag()",
+                                  "GithubFolderOption(runner: runner, integration: integration,",
+                                  "onCandidate: { setup.repository = $0 }, onEnter: { create() })",
+                                  "MachineSetupCopy.setupGithubDonePath(", "MachineSetupCopy.SETUP_GITHUB_DONE",
+                                  "MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD", "setup.githubOpen = false", "setup.repository = nil"],
+                          "the picker, what it makes, and the way back")
+        XCTAssertFalse(page.contains("SETUP_USE_REPOSITORY"), "Create workspace sends the clone: no Use button of its own")
+        let model = try app("MachineSetupModel.swift")
+        XCTAssertTrue(model.contains("var githubOpen = false"), "kept with the page, so GitHub's sign-in comes back to it")
+        try assertInOrder(model, ["var followed: String {", "if case .github(let pick)? = repository { return pick.name }",
+                                  "name: name.name(folder: followed)"], "the Name follows the picked repository's folder")
     }
 
     // MARK: the line a created workspace opens with
@@ -225,8 +256,8 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine)"))
         XCTAssertTrue(view.contains("case .createdWorkspace(let line):\n            CreatedWorkspaceLineView(line: line, console: console)"))
         let model = try app("ConsoleModel.swift")
-        XCTAssertTrue(model.contains("if session.createdWorkspace == true { madeWorkspace = session.agent }"),
-                      "only the detail moves it: a list row's nil says nothing")
+        XCTAssertTrue(model.contains("if session.createdWorkspace == true {\n            madeWorkspace = session.agent\n            madeWorkspaceReadAt = Date()"),
+                      "only the detail moves it: a list row's nil says nothing; when it was read weighs a clone frame against it")
         let line = try slice(try app("Views/MachineSetupCard.swift"), from: "struct CreatedWorkspaceLineView: View {", to: "private var made: AttributedString")
         try assertInOrder(line, ["if line.live {", "MachineSetupCopy.CREATED_RENAME", "MachineSetupCopy.CREATED_SETTINGS"],
                           "Rename and Settings, while there is a workspace to change")

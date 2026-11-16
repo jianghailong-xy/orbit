@@ -3048,6 +3048,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0800_pool_login_token_subagent_credential',
       // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
       '0810_coordinator_handoff',
+      // 0820 adds github_app_config, github_connection and github_oauth_flow, and seven nullable workspace columns with
+      // one CHECK; no preserved rows, triggers or DONE fence change, and no row is written. Main stepped around this
+      // number (its 0830 says so), so it lands below main's 0830-0860.
+      '0820_github_app_connection',
       // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
       // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
       // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
@@ -3070,10 +3074,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
       // changes.
       '0910_account_remove_sessions',
+      // 0920 adds a nullable workspace.clone_credential with one CHECK (GitHub workspaces P2: which credential a clone
+      // used); catalog-only, no trigger, function or DONE fence changes, and no row is written. Numbered 0880 on the
+      // project line until main's 0880_attachment_guest_uploader took that number.
+      '0920_workspace_clone_credential',
       // 0930 makes managed_runner.default_workspace_id nullable, clears it on mappings whose workspace nobody used, and
       // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
       // DONE fence changes.
-      '0930_managed_runner_no_default_workspace'],
+      '0930_managed_runner_no_default_workspace',
+      // 0950 adds a nullable schedule.read_back and fills it from each schedule's own create card; schedule is not one
+      // of the preserved relations, and no trigger, function or DONE fence changes.
+      '0950_schedule_read_back'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
