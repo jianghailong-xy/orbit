@@ -15,6 +15,12 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// When the account's profile photo was set — the version it is fetched and cached by
     /// (`GET /users/me/avatar`). Nil while there is none, and in login's user payload.
     public let avatarUpdatedAt: String?
+    /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
+    /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
+    public let translationAvailable: Bool?
+    /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
+    /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
+    public let promptOptimizerAvailable: Bool?
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -566,6 +572,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var queuedHeldByJobs: Int? = nil
     /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
     public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
+    /// What the engine is doing before it says anything, as the runner names it — so far only
+    /// `compacting`; nil when none (the server clears it on any engine output). Kept as the word: a
+    /// runner can name a phase this build has never heard of.
+    public var enginePhase: String? = nil
+    /// The handoff this coordinator is handing over through (docs/coordinator-handoff.md), as the
+    /// detail read and `session.updated` carry it: nil when there is none, or it was cancelled.
+    public var coordinatorHandoff: SessionCoordinatorHandoff? = nil
+    /// On a successor coordinator: the handoff it opened with — the note card and the moved waits.
+    public var coordinatorHandoffReceived: SessionCoordinatorHandoffReceived? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -622,6 +637,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
+    /// read; nil for every other session. What puts the run's header over its conversation.
+    public var scheduleRunId: String? = nil
     /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
@@ -833,6 +851,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
         queuedHeldByJobs = try? values.decodeIfPresent(Int.self, forKey: .queuedHeldByJobs)
         queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
+        enginePhase = try? values.decodeIfPresent(String.self, forKey: .enginePhase)
+        // A shape this build cannot read is no handoff, rather than a session that fails to decode.
+        coordinatorHandoff = try? values.decodeIfPresent(SessionCoordinatorHandoff.self, forKey: .coordinatorHandoff)
+        coordinatorHandoffReceived = try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
+                                                                 forKey: .coordinatorHandoffReceived)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -852,6 +875,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -1199,14 +1223,18 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): the text is the optimizer's English, sent exactly as inserted, so
+    /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
+    public let skipTranslation: Bool?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.skipTranslation = skipTranslation
     }
 }
 
@@ -1269,6 +1297,10 @@ public struct TurnAccepted: Codable, Sendable {
     /// sends it keeps behaving exactly as it did.
     /// Contract: `docs/session-message-routing-contract.md` §2.1.
     public let routedToSessionId: String?
+    /// Settings › Translation: the message is being translated (state TRANSLATING) before the engine
+    /// gets it. Raw, read by `TurnTranslation.parse`; absent when translation was not involved.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
 }
 
 /// One user turn from GET /sessions/:id/turns?view=active that no transcript event draws yet: the
@@ -1400,6 +1432,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// Settings › Translation: a held message (TRANSLATING / FAILED, `content` still what the owner
+    /// wrote) or a delivered one. Raw, read by `TurnTranslation.parse`.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
     /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
     /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
     /// from a server that predates the field.
@@ -1416,7 +1452,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil, opening: Bool? = nil) {
+                deliveryReason: String? = nil, translation: JSONValue? = nil, opening: Bool? = nil) {
+        self.translation = translation
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1492,6 +1529,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
     /// the transaction that creates it (docs/first-workspace-contract.md §3).
     public let newWorkspace: NewWorkspaceRequest?
+    /// Prompt optimizer (D2): the opening message is the optimizer's English, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1499,7 +1538,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
-                newWorkspace: NewWorkspaceRequest? = nil) {
+                newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil) {
+        self.skipTranslation = skipTranslation
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1535,6 +1575,9 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
+    /// `ApprovalTranslation.parse`.
+    public let translation: JSONValue?
 }
 
 /// One background shell from GET /sessions/:id/background — the server's authoritative, complete
@@ -1607,9 +1650,13 @@ public struct ApprovalDecisionRequest: Codable, Sendable {
     /// also starts the new task's run. Nil leaves the key out of the JSON altogether, so every other
     /// answer, that card's own Create it included, is the body it was before the choice existed.
     public let startAfterCreate: Bool?
+    /// Settings › Translation: send the owner's own words untranslated — the Send as written of a
+    /// decision refused 422 TRANSLATION_FAILED. Nil leaves the key out.
+    public let sendAsWritten: Bool?
     public init(behavior: ApprovalBehavior, message: String? = nil,
                 answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil,
-                startAfterCreate: Bool? = nil) {
+                startAfterCreate: Bool? = nil, sendAsWritten: Bool? = nil) {
+        self.sendAsWritten = sendAsWritten
         self.behavior = behavior
         self.message = message
         self.answers = answers
@@ -1979,11 +2026,15 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): a revive whose words are the optimizer's English, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
-                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil) {
+                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                skipTranslation: Bool? = nil) {
+        self.skipTranslation = skipTranslation
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind

@@ -107,7 +107,7 @@ var permissionMatrix = []struct {
 		{matrixCarded, ownCardOutsidePlan},
 		{matrixJob, backgroundGate},
 	}},
-	{surfaceClaudeCLI, "The in-session `orbit` CLI through Claude Code's shell, where every command `capabilities --json` offers the session is pre-approved (orbitCLIAllowedTools, generated from the catalogue). Claude Code runs an allowlisted command in every mode, Plan included, so the CLI's own Plan gate refuses a write there, with the MCP tool's words.", []matrixRow{
+	{surfaceClaudeCLI, "The in-session `orbit` CLI through Claude Code's shell, where every command `capabilities --json` offers the session is pre-approved (orbitCLIAllowedTools, generated from the catalogue). A command withheld because a session switch is off (`WATCHES_OFF`, `WIKI_OFF`) keeps its rule. A command withheld for any other reason (`ORCHESTRATION_DISABLED`, `HUMAN_ONLY`) has none. Every `orbit` command outside the catalogue is excluded with a kind and a reason (docs/orbit-agent-contract.md §2.5). Claude Code runs an allowlisted command in every mode, Plan included, so the CLI's own Plan gate refuses a write there, with the MCP tool's words.", []matrixRow{
 		{matrixRead, runsEverywhere},
 		{matrixWait, runsEverywhere},
 		{matrixQuestion, runsEverywhere},

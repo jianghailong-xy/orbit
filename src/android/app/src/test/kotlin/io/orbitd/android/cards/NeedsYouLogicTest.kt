@@ -21,23 +21,62 @@ class NeedsYouLogicTest {
         agentName?.let { name -> putJsonObject("agent") { put("id", agentId ?: "a"); put("name", name) } }
     }
 
+    // the conversation's own capsule (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule; OrbitKit's twin)
+
+    /** Its cards first, in their words and direction; its approvals after them, at its tail — so alone they say "below". */
+    @Test fun theConversationsOwnCapsuleCountsItsCardsAndItsApprovals() {
+        val alone = NeedsYouLogic.here(emptyList(), listOf(BelowRow("approval:a1", false)), null)!!
+        assertEquals("1 waiting below", alone.text)
+        assertEquals("approval:a1", alone.rowId)
+        assertEquals(ReaderSide.BELOW, alone.side)
+        assertEquals(NeedsYouGlyph.HAND, alone.glyph)
+        val both = NeedsYouLogic.here(listOf(BelowRow("q1", true)), listOf(BelowRow("approval:a1", false)), ReaderSide.ABOVE)!!
+        assertEquals("2 waiting above", both.text)
+        assertEquals("q1", both.rowId)
+        assertEquals(NeedsYouGlyph.QUESTION, both.glyph)
+        assertEquals("1 open question below", NeedsYouLogic.here(listOf(BelowRow("q1", true)), emptyList(), ReaderSide.BELOW)?.text)
+        assertNull(NeedsYouLogic.here(emptyList(), emptyList(), ReaderSide.BELOW))
+    }
+
     // swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats; OrbitKit's twin test)
 
-    /** A swipe puts away what is waiting now; only something new brings the bar back. */
-    @Test fun aSwipedBarComesBackOnlyForSomethingNew() {
-        val a = session("a", approvals = 1, lastTurnAt = "2026-11-15T01:00:00Z")
-        val b = session("b", approvals = 1, lastTurnAt = "2026-11-15T02:00:00Z")
-        val idle = session("idle", lastTurnAt = "2026-11-15T00:00:00Z")
-        val dismissed = NeedsYouLogic.dismissalKeys(listOf(a, b, idle))
-        assertEquals(setOf("a|2026-11-15T01:00:00Z", "b|2026-11-15T02:00:00Z"), dismissed)
-        assertTrue(NeedsYouLogic.isDismissed(listOf(a, b, idle), null, dismissed))
-        assertTrue("one answered: still away", NeedsYouLogic.isDismissed(listOf(a), null, dismissed))
-        assertTrue("on a conversation's page too", NeedsYouLogic.isDismissed(listOf(a, b), "a", dismissed))
-        val c = session("c", approvals = 1, lastTurnAt = "2026-11-15T03:00:00Z")
-        assertFalse("a new one", NeedsYouLogic.isDismissed(listOf(a, b, c), null, dismissed))
-        val bAgain = session("b", approvals = 1, lastTurnAt = "2026-11-15T04:00:00Z")
-        assertFalse("stopped again", NeedsYouLogic.isDismissed(listOf(a, bAgain), null, dismissed))
-        assertFalse("nothing to put away", NeedsYouLogic.isDismissed(listOf(idle), null, dismissed))
+    /** A wait is noticed once, by the conversation's name and what it waits on (the owner, 2026-11-15,
+     * docs/mocks/needs-you-capsule/12-once; OrbitKit's twin). */
+    @Test fun aWaitIsNoticedOnceByNameAndWhat() {
+        val a = session("a", 1, "w1", "orbit-develop", "Android update fails", "2026-11-15T01:00:00Z")
+        val b = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T02:00:00Z")
+        val seen = setOf(NeedsYouLogic.waitKey(a))
+        val fresh = NeedsYouLogic.newlyWaiting(listOf(a, b), seen)
+        assertEquals("only what was not waiting before", listOf("b"), fresh.map { it.target.text("id") })
+        assertEquals("Wire up Ollama", fresh.single().title)
+        assertEquals("Needs your reply · orbit-op", fresh.single().line)
+        assertEquals(NeedsYouGlyph.HAND, fresh.single().glyph)
+        val bothSeen = setOf(a, b).map(NeedsYouLogic::waitKey).toSet()
+        assertTrue("the same wait, not again", NeedsYouLogic.newlyWaiting(listOf(a, b), bothSeen).isEmpty())
+        val bAgain = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T03:00:00Z")
+        assertEquals("stopping again is a new wait", listOf("b"), NeedsYouLogic.newlyWaiting(listOf(a, bAgain), bothSeen).map { it.target.text("id") })
+        assertTrue("the conversation on screen has its own card", NeedsYouLogic.newlyWaiting(listOf(a, b), seen, "b").isEmpty())
+    }
+
+    /** The first look only takes stock; at most three notices, the rest "and N more"; a notice whose wait ended goes. */
+    @Test fun theNoticesTakeStockFirstAndShowAtMostThree() {
+        val notices = NeedsYouNotices()
+        val a = session("a", 1, lastTurnAt = "2026-11-15T01:00:00Z")
+        notices.look(listOf(a), null)
+        assertTrue("what waits at launch is not news", notices.toasts.isEmpty())
+        val more = (1..4).map { session("n$it", 1, lastTurnAt = "2026-11-15T0${it + 1}:00:00Z") }
+        notices.look(listOf(a) + more, null)
+        assertEquals(3, notices.toasts.size)
+        assertEquals(1, notices.more)
+        notices.look(listOf(a) + more.drop(1), null)
+        assertEquals("an answered wait takes its notice", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.retake()
+        notices.look(listOf(a) + more + session("late", 1, lastTurnAt = "2026-11-15T09:00:00Z"), null)
+        assertEquals("back in the foreground: stock again", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.dismiss("n2|2026-11-15T03:00:00Z")
+        notices.dismiss("n3|2026-11-15T04:00:00Z")
+        assertTrue(notices.toasts.isEmpty())
+        assertEquals(0, notices.more)
     }
 
     // banner

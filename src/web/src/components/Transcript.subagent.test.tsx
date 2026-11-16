@@ -68,6 +68,10 @@ const run = (over: Partial<SubagentRunView>): SubagentRunView => ({
   costUsd: 0.21,
   resultSummary: 'Three callers, all in quota/.',
   workspaceName: null,
+  description: null,
+  engine: 'claude',
+  readonly: false,
+  changedFiles: [],
   createdAt: '2026-11-11T10:00:01.000Z',
   endedAt: '2026-11-11T10:00:42.000Z',
   ...over,
@@ -137,12 +141,12 @@ const card = (seq: number) => container.querySelector(`.chat-tool-card[data-seq=
 const text = (el: Element | null) => el?.textContent ?? null;
 
 describe('the SubAgent block', () => {
-  it('folds to one row: SubAgent, type · description, and grey tier · model', () => {
+  it('folds to one row: Agent, type · description, and grey tier · model', () => {
     render([FG, BG_RUNNING]);
     const bg = card(5);
     expect(bg.className).toContain('chat-tone-agent');
     expect(bg.className).toContain('chat-tool-task');
-    expect(text(bg.querySelector('.chat-tool-name'))).toBe('SubAgent');
+    expect(text(bg.querySelector('.chat-tool-name'))).toBe('Agent');
     expect(text(bg.querySelector('.chat-tool-summary'))).toBe('spec-writer · Write the backoff spec');
     expect(text(bg.querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium');
     // Folded, the Why is nowhere: no colour and no tag beyond the meta.
@@ -278,7 +282,7 @@ describe('the SubAgent block', () => {
   it('draws the row before its run is read, with no meta and no Why', () => {
     render([]);
     const fg = card(1);
-    expect(text(fg.querySelector('.chat-tool-name'))).toBe('SubAgent');
+    expect(text(fg.querySelector('.chat-tool-name'))).toBe('Agent');
     expect(fg.querySelector('.chat-tool-meta')).toBeNull();
     act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
     expect(fg.querySelector('.chat-subagent-why')).toBeNull();

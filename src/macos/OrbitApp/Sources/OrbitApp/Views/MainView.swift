@@ -51,7 +51,11 @@ struct MainView: View {
                 // when the window narrows.
                 .navigationSplitViewColumnWidth(min: 320, ideal: 420, max: 480)
                 #else
-                .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
+                // Scheduled's timeline is the web board's page, with the long row line, so it takes the width a
+                // list column does not; its right-hand panel is the detail column (web board 01 ②).
+                .navigationSplitViewColumnWidth(min: model.selectedSection == .scheduled ? 400 : 240,
+                                                ideal: model.selectedSection == .scheduled ? 520 : 300,
+                                                max: model.selectedSection == .scheduled ? 760 : 420)
                 #endif
         } detail: {
             // The page is kept mounted under the task, so the conversation's scroll position and
@@ -104,10 +108,6 @@ struct MainView: View {
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
         // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
-        #if os(iOS)
-        // The needs-you bar over a section whose columns carry none (see `needsYouOverPage`).
-        .needsYouOverPage(wide: true)
-        #endif
         .toastHost()
     }
 
@@ -194,6 +194,10 @@ struct SectionSidebar: View {
             wiki: model.wiki?.shown == true,
             projectsWaiting: model.projects?.needsYouCount ?? 0,
             wikiWaiting: model.wiki?.waiting ?? 0,
+            // Scheduled under Tasks with the schedules failing or held (web board 01 ①): account-wide, never a
+            // row of a workspace's list; away while the server predates scheduled tasks.
+            scheduled: model.scheduled.map { !$0.unsupported } ?? false,
+            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
             // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
             newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
@@ -272,6 +276,8 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
+        // Scheduled's number — the schedules failing or held — read with the rail like the others.
+        .task { await model.scheduled?.load() }
         .task { await model.followSharedWithMe() }
         .onChange(of: selection) { _, now in
             guard now != applied else { return }
@@ -328,6 +334,7 @@ struct SectionSidebar: View {
                 .accessibilityLabel("\(row.waiting) waiting on you")
         }
         .tag(SidebarSelection.section(row.section))
+        .accessibilityIdentifier("sidebar-\(row.section.rawValue)")
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
@@ -627,6 +634,14 @@ struct SectionContent: View {
             TasksListView()
         case .wiki:
             WikiContentsColumn()
+        case .scheduled:
+            // The phone's drawer and the iPad's sidebar open the phone's page; the Mac's source list opens the web
+            // board's timeline, its panel in the detail column.
+            #if os(iOS)
+            ScheduledPage()
+            #else
+            ScheduledMacPage()
+            #endif
         case .following:
             FollowingListView()
         case .agents:
@@ -676,6 +691,14 @@ struct SectionDetail: View {
             TaskDetailView()
         case .wiki:
             WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
+        case .scheduled:
+            #if os(iOS)
+            // The detail is the page's own bottom panel.
+            ContentUnavailableView(section.title, systemImage: section.systemImage)
+            #else
+            // The right-hand panel: a row's detail, a draft, or a run's session (web boards 01 ②④, 02 ⑤).
+            ScheduledMacDetail()
+            #endif
         case .following:
             WatchDetailView()
         case .agents:

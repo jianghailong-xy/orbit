@@ -28,6 +28,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
+import type { ApprovalTranslation } from './translation';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
 
@@ -222,6 +223,10 @@ export interface AgentExecConfig {
    *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
    *  Like fastMode it is read once, at spawn. */
   promptSuggestions?: boolean;
+  /** The session serves a scheduled CHECK_ONLY run (docs/scheduled-tasks-design.md §6.2): in Plan, Codex then runs
+   *  in its own read-only sandbox with no approvals, so it reads the checkout and the OS refuses writes. Absent on
+   *  every other session, which keeps Codex's ordinary Plan (every command declined); an older runner ignores it. */
+  scheduledCheckOnly?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
@@ -2538,6 +2543,8 @@ export interface SubagentDecision {
   moves?: string[];
   /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
   workspace?: SubagentWorkspaceChoice;
+  /** The definition's read-only flag, as the start sent it, which the block marks `Read-only`. Absent on older rows. */
+  readonly?: boolean;
 }
 
 /** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
@@ -2625,6 +2632,15 @@ export interface SubagentRunView {
   resultSummary: string | null;
   /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
   workspaceName: string | null;
+  /** The `delegate` call's description, which the session's list of Agents names each run by. Null on older rows. */
+  description: string | null;
+  /** The engine it runs on now (`claude`, `codex`, …): its last attempt's, else the pick's. Null on a shadow row,
+   *  which runs on the parent's engine, and when no candidate was left. */
+  engine: string | null;
+  /** The definition is read-only: the child could read the repository but not write it. */
+  readonly: boolean;
+  /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
+  changedFiles: string[];
   createdAt: string;
   endedAt: string | null;
 }
@@ -2871,6 +2887,9 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
+   *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
+  scheduleRun?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -2942,6 +2961,11 @@ export interface ApprovalInfo {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A, @orbit/shared translation.ts): what the card shows, in the owner's
+   *  language — an AskUserQuestion's questions and options, a tool card's description and plan.
+   *  Draw these instead of the same fields of `input`, which stays the English the engine sent.
+   *  Absent while the card is being translated and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Runner (orbit MCP permission tool) → control plane: register a pending tool
@@ -3002,8 +3026,15 @@ export interface WorkspacePermissionRuleInfo {
  *  remembers both `cd` and `git add`, not just the leading `cd`. */
 export interface ApprovalDecisionRequest {
   behavior: 'allow' | 'deny';
+  /** With Settings › Translation on, translated into English before the engine reads it (3A). */
   message?: string;
+  /** With Settings › Translation on, keyed by the question as shown and holding the labels as shown,
+   *  original or translated (ApprovalInfo.translation): the server maps them back to the original
+   *  English, and translates any other answer into English like a message (3A). */
   answers?: QuestionAnswers;
+  /** Send the owner's own words (`message`, typed answers) untranslated: the "Send as written" of a
+   *  decision refused 422 TRANSLATION_FAILED. Options are still mapped back to their originals. */
+  sendAsWritten?: boolean;
   rememberRules?: PermissionRule[];
   /** The single-task create card's "Create and start": the owner's yes also starts the new task's
    *  run, so they are not asked again to start it. Accepted only on an `allow` of an
@@ -3332,6 +3363,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
+  scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

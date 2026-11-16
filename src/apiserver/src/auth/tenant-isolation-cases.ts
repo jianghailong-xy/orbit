@@ -55,6 +55,8 @@ export interface Tenant {
   /** An event of the session's transcript: its id, which a page around it names, and its seq. */
   eventId: string;
   eventSeq: number;
+  /** An `assistant` reply's seq: what POST …/events/:seq/translation/retry translates again. */
+  replyEventSeq: number;
   sessionRequestId: string;
   folderId: string;
   tagId: string;
@@ -399,6 +401,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/coordinator': { request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }) },
   'POST /projects/:id/coordinator/replace': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/coordinator/status': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /projects/:id/coordinator/pending-waits': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/skip': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/cancel': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/retry': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/pending-addressees': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/coordinator/rebind': {
     request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }),
@@ -612,6 +619,14 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },
+  'POST /sessions/:id/turns/:turnId/translation/retry': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
   'POST /sessions/:id/resume': { request: (of) => ({ params: { id: of.sessionId }, body: turn('resume') }) },
   // Session guests (docs/session-guests-design.md §7): the owner's People routes on A's session. The guest door is read
   // by hand (TENANT_ISOLATION_BY_HAND): the account that owns the session is no guest of it.
@@ -661,6 +676,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/events/page': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/search': { request: (of) => ({ params: { id: of.sessionId }, query: { q: 'census' } }) },
   'GET /sessions/:id/events/:seq/full': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
+  'POST /sessions/:id/events/:seq/translation/retry': { request: (of) => ({ params: { id: of.sessionId, seq: of.replyEventSeq } }) },
   'GET /sessions/:id/created-tasks': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
@@ -868,6 +884,31 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + 'another account\'s repository that the caller cannot see on GitHub is answered 404 GITHUB_REPO_NOT_FOUND before '
     + 'GitHub is asked for its branches. The census server has no GitHub; github-connection.pg.spec.ts sends it across '
     + 'two accounts against a fake GitHub',
+  // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
+  'GET /schedules/:id':
+    "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'GET /schedules/:id/runs':
+    "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
+  'POST /schedules/:id/pause':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /schedules/:id/resume':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /schedules/:id/undo':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'DELETE /schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /schedules/:id/run':
+    'the schedule is locked only when its owner is the caller, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)',
+  'POST /schedule-runs/:id/stop':
+    "the run's schedule is locked only when its owner is the caller, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
+  'GET /schedule-requests/:id':
+    "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:163)",
+  'POST /schedule-requests/:id/allow':
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427); schedule-doors.pg.spec.ts presses real ones",
+  'POST /schedule-requests/:id/decline':
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
+  'GET /sessions/:id/schedule-cards':
+    "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
   // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
@@ -1172,6 +1213,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
     request: (of, mine) => ({ params: {}, body: sessionBody(mine, { attachmentIds: [of.attachmentId] }) }),
   },
   'POST /sessions body folderId': { request: (of, mine) => ({ params: {}, body: sessionBody(mine, { folderId: of.folderId }) }) },
+  'POST /prompt-optimizations body sessionId': { request: (of) => ({ params: {}, body: { draft: 'census draft', sessionId: of.sessionId } }) },
+  'POST /prompt-optimizations body workspaceId': { request: (of) => ({ params: {}, body: { draft: 'census draft', workspaceId: of.workspaceId } }) },
+  'POST /prompt-optimizations body projectId': { request: (of) => ({ params: {}, body: { draft: 'census draft', projectId: of.projectId } }) },
   'GET /sessions query projectId': { request: (of) => ({ params: {}, query: { projectId: of.projectId } }) },
   'GET /sessions query tagId': { request: (of) => ({ params: {}, query: { tagId: of.tagId } }) },
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
@@ -1402,6 +1446,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /schedules query workspaceId':
+    "a filter on the caller's own schedules (ownerId, then workspaceId), so another account's workspace id answers the empty list an id that names nothing does (schedules/schedule-reads.service.ts:71)",
+  'POST /schedules/drafts body workspaceId':
+    "handed to SessionsService.create, which reads the workspace by (id, the caller) and refuses one that is not the caller's before anything is written (sessions/sessions.service.ts:1244), as POST /sessions body workspaceId",
   'POST /workspaces/:id/main-checkout/actions body targetSessionId':
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':

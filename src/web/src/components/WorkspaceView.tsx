@@ -1,4 +1,10 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import {
+  COORDINATOR_HANDOFF_COPY,
+  type MergeRecoveryAction,
+  type ProjectSidebarTaskCounts,
+  type SessionCoordinatorHandoff,
+  type SessionCoordinatorHandoffReceived,
+} from '@orbit/shared';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
@@ -50,6 +56,17 @@ import {
   type ReferenceMap,
 } from '../lib/composerRefs';
 import { WAITING_ON_YOU } from '../lib/ownerRequests';
+import {
+  ContextActions,
+  CoordinatorHandedOverBanner,
+  CoordinatorHandoffConfirm,
+  CoordinatorHandoffFailure,
+  CoordinatorHandoffProgress,
+  CoordinatorHandoffReceivedCard,
+  coordinatorHandoffRequest,
+  type ContextActionsProps,
+  type CoordinatorHandoffAction,
+} from './CoordinatorHandoff';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -283,7 +300,6 @@ import {
   createMergeRepairSession,
   createInteractiveSession,
   createSessionFolder,
-  decideApproval,
   deleteSession,
   deleteSessionFolder,
   cleanUpWorkspaceRepo,
@@ -295,7 +311,6 @@ import {
   completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
-  type PermissionRule,
   pinSession,
   purgeSession,
   getSessionRetryMessage,
@@ -313,8 +328,15 @@ import {
   updateSessionConfig,
   switchSessionAccount,
   uploadAttachment,
+  retryTurnTranslation,
+  sendTurnAsWritten,
+  retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import type { TranslationActionResponse } from '@orbit/shared';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
+import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -346,6 +368,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -481,6 +504,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -608,6 +632,7 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { OPTIMIZE_SHORTCUT, usePromptOptimizer, type PromptOptimizerTarget } from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -667,6 +692,8 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
+  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English. */
+  skipTranslation?: boolean;
   /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
    *  of a workspace. */
   firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
@@ -830,6 +857,7 @@ function ContextWindowIndicator({
   modelCatalog,
   configured,
   unavailable,
+  actions,
 }: {
   tokens: number;
   /** The window this session reported alongside its tokens, when it did. */
@@ -841,7 +869,11 @@ function ContextWindowIndicator({
   /** Why there will never be a reading: an engine that does not report context use (Cursor CLI over
    *  ACP, docs/cursor-runtime-contract.md §4.1), in a sentence. Never a 0% or a token count then. */
   unavailable?: string;
+  /** Compact and Start a new coordinator, below the gauge (board 01); absent where neither applies. */
+  actions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }) {
+  // Controlled, so picking an action closes the popover it was picked in.
+  const [open, setOpen] = useState(false);
   if (unavailable) {
     return (
       <Popover
@@ -849,6 +881,8 @@ function ContextWindowIndicator({
         side="top"
         align="end"
         openOnHover
+        open={open}
+        onOpenChange={setOpen}
         nativeButton={false}
         trigger={
           <span className="composer-pill composer-usage" aria-label="Context window unavailable">
@@ -866,6 +900,7 @@ function ContextWindowIndicator({
             <div className="cu-reset">{unavailable}</div>
           </div>
         </div>
+        {actions && <ContextActions {...actions} pct={0} onPicked={() => setOpen(false)} />}
       </Popover>
     );
   }
@@ -887,7 +922,7 @@ function ContextWindowIndicator({
           <span className="cu-pct">{headline}</span>
         </div>
         {sized && (
-          <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+          <div className={`runner-util ${pct >= 90 ? 'danger' : pct >= 75 ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -910,6 +945,8 @@ function ContextWindowIndicator({
       side="top"
       align="end"
       openOnHover
+      open={open}
+      onOpenChange={setOpen}
       // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
       nativeButton={false}
       trigger={
@@ -929,6 +966,7 @@ function ContextWindowIndicator({
       }
     >
       {pop}
+      {actions && <ContextActions {...actions} pct={pct} onPicked={() => setOpen(false)} />}
     </Popover>
   );
 }
@@ -2192,7 +2230,9 @@ function StopSquareIcon({ className }: { className?: string }) {
  * and stays in the conversation with it.
  */
 export function inPendingTray(turn: QueuedTurn): boolean {
-  return turn.delivery == null && returnsToComposer(turn);
+  // A message held for its translation is drawn in the conversation, with its chip or its failure
+  // (Settings › Translation, board frame 6) — not in the tray, which only waits for the engine.
+  return turn.delivery == null && returnsToComposer(turn) && !heldForTranslation(turn.translation);
 }
 
 /** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
@@ -2239,11 +2279,14 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  translationHeld,
   held,
   onCancel,
   onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
+  /** Held for its translation (Settings › Translation): the bubble's own foot says how it stands. */
+  translationHeld?: boolean;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
@@ -2255,6 +2298,7 @@ export function QueuedTurnMeta({
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
+  if (translationHeld) return null;
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
@@ -2436,6 +2480,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it is
+  // already English and skips Translation. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<string | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -2919,7 +2966,9 @@ export function WorkspaceView({
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
-    const rows = (sessionsQ.data ?? []).slice();
+    // A scheduled task's run is in no session list (owner ruling, docs/scheduled-tasks-design.md §7.4): the server
+    // leaves them out, and a row that says it is one is not drawn here either. It is reached from the schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3670,6 +3719,16 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
+  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
+  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
+  useEffect(() => {
+    if (!composing) return;
+    const entry = window.history.state as { usr?: { composerText?: string } } | null;
+    const seed = entry?.usr?.composerText;
+    if (!seed) return;
+    setText(seed);
+    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
+  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -4475,6 +4534,38 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
+  // retry a held message's translation or send it as written (1A), retry a reply's (2A) — and whether
+  // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
+  // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
+  const translationIsOn = translationOn(me.data);
+  const translationBilingual = bilingualOn(me.data);
+  const translationAgentLanguage = agentLanguageOf(me.data);
+  const translationActions = useMemo<TranslationActions>(() => {
+    const settle = (res: TranslationActionResponse) =>
+      setQueued((current) =>
+        current.map((turn) => (turn.turnId === res.turnId ? { ...turn, translation: res.translation } : turn)),
+      );
+    const failed = (what: string) => (e: unknown) =>
+      message.error(what, e instanceof Error ? e.message : undefined);
+    return {
+      on: translationIsOn,
+      bilingual: translationBilingual,
+      agentLanguage: translationAgentLanguage,
+      retryTurn: (turnId) =>
+        selectedId
+          ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+      sendAsWritten: (turnId) =>
+        selectedId
+          ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
+          : Promise.resolve(),
+      retryReply: (seq) =>
+        selectedId
+          ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+    };
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -5389,6 +5480,12 @@ export function WorkspaceView({
     startOwnerRequestChat,
   );
 
+  // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
+  // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
+  const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
@@ -5397,8 +5494,8 @@ export function WorkspaceView({
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -5598,24 +5695,7 @@ export function WorkspaceView({
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    message?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    if (!selectedId) return;
-    setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
-    try {
-      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated: untranslatedDecisions } = useApprovalDecisions(selectedId, setApprovals);
 
   // If the question the composer is replying to gets answered another way (the user picks an
   // option, an SSE approval_resolved arrives, or the confirmation is settled on a phone), drop the
@@ -5726,6 +5806,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
+          vars.skipTranslation,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5739,15 +5820,17 @@ export function WorkspaceView({
           ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
         ];
         const queuedItem =
-          placement === 'accepted'
+          placement === 'accepted' && !res.translation
             ? undefined
             : {
                 turnId: res.turnId,
                 content,
                 shell,
-                placement,
+                // Held for its translation: on the queue, whatever its place will be once delivered.
+                placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                 ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
                 ...(attachments.length ? { attachments } : {}),
+                ...(res.translation ? { translation: res.translation } : {}),
               };
         return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
@@ -5778,17 +5861,19 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
+            vars.skipTranslation,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                   ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5828,6 +5913,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
+            vars.skipTranslation,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -5840,13 +5926,14 @@ export function WorkspaceView({
           // row-locked placement preserves a real queued/steer state here.
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5921,6 +6008,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
+        ...(vars.skipTranslation ? { skipTranslation: true } : {}),
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -6083,6 +6171,8 @@ export function WorkspaceView({
       // and the toast below would be gone by the time anyone looks.
       if (vars.held) {
         if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
+        // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
+        else if (!vars.firstWorkspace) message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -7224,10 +7314,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
+    // D2: still exactly what the optimizer put in the box, so it is English already.
+    const skipTranslation = optimizedInsert !== null && c === optimizedInsert.trim();
+    setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
@@ -7374,6 +7468,81 @@ export function WorkspaceView({
     () => composerSlashItems(runner.commands, runner.skills, codexComposer, shownEngine, composerWorkspaceId),
     [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
+  // ── Compact and Start a new coordinator (boards 01 and 02, docs/coordinator-handoff.md) ──
+  // The handoff as the open session's detail and `session.updated` carry it: on the outgoing
+  // coordinator (`coordinatorHandoff`) and on its successor (`coordinatorHandoffReceived`).
+  const handoffRow = (selected ? (selectedSession ?? selected) : null) as any;
+  const coordinatorHandoff: SessionCoordinatorHandoff | null = handoffRow?.coordinatorHandoff ?? null;
+  const coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null =
+    handoffRow?.coordinatorHandoffReceived ?? null;
+  const handingOver = coordinatorHandoff?.state === 'WRITING' || coordinatorHandoff?.state === 'HANDING_OVER';
+  const coordinatorHandedOver = coordinatorHandoff?.state === 'COMPLETED';
+  const turnRunning = !!handoffRow && isGenerating(handoffRow, sessionRunStateOf(handoffRow));
+  // Only the project's current coordinator is its COORDINATOR member, and only while it is not completed.
+  const handoffProjectId: string | null =
+    handoffRow && !selectedTrashed && handoffRow.projectMembership?.role === 'COORDINATOR'
+      && sessionLifecycleStateOf(handoffRow) !== 'COMPLETED'
+      ? handoffRow.projectMembership.projectId
+      : null;
+  // Compact is the engine's own `/compact`, offered where the engine advertises it among its slash
+  // assets (Claude Code does; Cursor, Codex and the engines without a registry do not).
+  const compactOffered =
+    !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
+    && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
+  const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
+  const [followHandoff, setFollowHandoff] = useState<string | null>(null);
+  const handoffAction = useMutation({
+    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
+      coordinatorHandoffRequest(projectId, action),
+    onSuccess: (view, { sessionId, action }) => {
+      qc.invalidateQueries({ queryKey: ['session', sessionId] });
+      refreshSessionLists();
+      if (action !== 'cancel') setFollowHandoff(sessionId);
+      if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
+    },
+    onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
+  });
+  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+    const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
+    if (!projectId || !selectedId || handoffAction.isPending) return;
+    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+  };
+  useEffect(() => {
+    if (!followHandoff || followHandoff !== selectedId) return;
+    if (coordinatorHandoff?.state === 'COMPLETED' && coordinatorHandoff.handedOverToSessionId) {
+      setFollowHandoff(null);
+      navigate(sessionPath(coordinatorHandoff.handedOverToSessionId));
+    }
+  }, [followHandoff, selectedId, coordinatorHandoff?.state, coordinatorHandoff?.handedOverToSessionId]);
+  const composerContextActions: Omit<ContextActionsProps, 'pct' | 'onPicked'> | undefined =
+    compactOffered || (handoffProjectId && !coordinatorHandoff)
+      ? {
+          running: turnRunning,
+          compact: compactOffered
+            ? {
+                // Through the send path, as if typed — but by itself: whatever is in the composer stays.
+                onCompact: () => {
+                  if (send.isPending) return;
+                  pinToBottom();
+                  send.mutate({ content: '/compact', images: [], intent: 'NEXT_TURN', held: true });
+                },
+              }
+            : undefined,
+          startCoordinator:
+            // Hidden while the session carries any handoff, FAILED included: that row has its own doors.
+            handoffProjectId && !coordinatorHandoff
+              ? {
+                  onStart: () =>
+                    setHandoffConfirm({
+                      projectId: handoffProjectId,
+                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'the project',
+                      running: turnRunning,
+                    }),
+                }
+              : undefined,
+        }
+      : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -8161,6 +8330,16 @@ export function WorkspaceView({
   // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
+  // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
+  // draft has none yet, so it names the workspace the composer picked.
+  const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
+    () => ({
+      ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      onInserted: setOptimizedInsert,
+    }),
+    [selectedId, shownWorkspaceId],
+  );
+  useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
   // view is locked to one workspace. In those cases the Select is dropped from the controls row
   // entirely — the workspace is already named in the header and the sidebar.
@@ -8169,7 +8348,8 @@ export function WorkspaceView({
     workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
     selected?.workspace?.name ??
     lockedWorkspace?.name;
-  const composerDisabled = selectedTrashed || selectedMissing;
+  // While the outgoing coordinator writes its note and hands over, nothing more goes to it (board 02-2).
+  const composerDisabled = selectedTrashed || selectedMissing || handingOver;
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -9186,7 +9366,13 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
+  // While a handoff note is written and the replacement runs, the outgoing coordinator's header
+  // says "Handing over" in place of the run word (board 02-2).
+  const headRunWord = !selected
+    ? ''
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -9201,6 +9387,14 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
+    : selected && isScheduleRun && scheduleRun
+      ? scheduleRunHeadText({
+          state: headLifecycleWord,
+          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
+          run: scheduleRun.run,
+          now: new Date(),
+        })
     : selected
       ? [
           headRunWord,
@@ -9217,6 +9411,8 @@ export function WorkspaceView({
         : '';
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.handingOver
     : selectedMissing
       ? 'Session not found'
       : sameSessionSendBlocked
@@ -9716,7 +9912,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -9936,6 +10132,7 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
+            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10035,7 +10232,8 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
@@ -10395,6 +10593,7 @@ export function WorkspaceView({
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <TranslationCtx.Provider value={translationActions}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -10473,6 +10672,14 @@ export function WorkspaceView({
               {/* An unvisited session's history is still in flight: hold the shape of a
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
+              {/* The successor opens with its predecessor's note and the waits that moved here (board
+                  02-3): the conversation's first lines, so drawn once its first page is. */}
+              {selected && !selectedTrashed && coordinatorHandoffReceived && !hasMoreOlder && placeholder !== 'skeleton' && (
+                <CoordinatorHandoffReceivedCard
+                  received={coordinatorHandoffReceived}
+                  onOpenPrevious={() => navigate(sessionPath(coordinatorHandoffReceived.handoffFromSessionId))}
+                />
+              )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <QueuedFootCtx.Provider value={queuedFoot}>
@@ -10687,6 +10894,26 @@ export function WorkspaceView({
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
+              {/* The outgoing coordinator writing its handoff note, handing over, or failing to (board
+                  02-2, 02-5). */}
+              {selected && !selectedTrashed && coordinatorHandoff && handingOver && (
+                <CoordinatorHandoffProgress
+                  handoff={coordinatorHandoff}
+                  compacting={handoffRow?.enginePhase === 'compacting'}
+                  busy={handoffAction.isPending}
+                  onSkip={() => runHandoffAction('skip')}
+                  onCancel={() => runHandoffAction('cancel')}
+                />
+              )}
+              {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
+                <CoordinatorHandoffFailure
+                  handoff={coordinatorHandoff}
+                  busy={handoffAction.isPending}
+                  onRetry={() => runHandoffAction('retry')}
+                  onSkip={() => runHandoffAction('skip')}
+                  onKeep={() => runHandoffAction('cancel')}
+                />
+              )}
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
@@ -10697,6 +10924,7 @@ export function WorkspaceView({
                 <ApprovalPanel
                   approval={a}
                   onDecide={decide}
+                  untranslated={untranslatedDecisions[a.id]}
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
@@ -10732,6 +10960,7 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
+                        translationHeld={heldForTranslation(q.translation)}
                         held={queuedHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
@@ -10787,6 +11016,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
             // A scroller of its own, not `scrollRef`: this is no conversation, and the card is read from
@@ -11078,6 +11308,17 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* A coordinator that handed over takes nothing more: its composer's place says where the
+            project went (board 02-4). */}
+        {coordinatorHandedOver ? (
+          <CoordinatorHandedOverBanner
+            onOpen={
+              coordinatorHandoff?.handedOverToSessionId
+                ? () => navigate(sessionPath(coordinatorHandoff.handedOverToSessionId as string))
+                : undefined
+            }
+          />
+        ) : (
         <SessionComposer
           text={text}
           setText={setText}
@@ -11164,12 +11405,32 @@ export function WorkspaceView({
           configuredProviders={configuredProviders}
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
-          canSend={canSend}
+          canSend={canSend && !handingOver}
           sending={send.isPending}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
+          contextActions={composerContextActions}
+          promptOptimizer={promptOptimizerTarget}
         />
+        )}
+        {handoffConfirm && (
+          <CoordinatorHandoffConfirm
+            projectId={handoffConfirm.projectId}
+            projectTitle={handoffConfirm.projectTitle}
+            running={handoffConfirm.running}
+            onClose={() => setHandoffConfirm(null)}
+            onHandOver={async () => {
+              if (!selectedId) return;
+              const sessionId = selectedId;
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              setFollowHandoff(sessionId);
+              qc.invalidateQueries({ queryKey: ['session', sessionId] });
+              refreshSessionLists();
+              if (view.handedOverToSessionId) navigate(sessionPath(view.handedOverToSessionId));
+            }}
+          />
+        )}
       </div>
         </>
         )}
@@ -11326,6 +11587,11 @@ export interface SessionComposerProps {
   onSend: (intentOverride?: SessionTurnIntent) => void;
   queueOffered: boolean;
   defaultSendIntent: SessionTurnIntent;
+  /** Compact and Start a new coordinator in the Context popover (board 01). */
+  contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
+  /** The prompt optimizer's ✦ Optimize (docs/prompt-optimizer-design.md): where the draft's context
+   *  comes from. Absent, the composer offers no optimizer. */
+  promptOptimizer?: PromptOptimizerTarget;
 }
 
 export function SessionComposer({
@@ -11396,7 +11662,13 @@ export function SessionComposer({
   onSend,
   queueOffered,
   defaultSendIntent,
+  contextActions,
+  promptOptimizer,
 }: SessionComposerProps) {
+  // Settings › Translation (6A): the account's switch and language, for the composer's tag.
+  const navigate = useNavigate();
+  const me = useQuery(meQuery());
+  const translationIsOn = translationOn(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -11609,6 +11881,16 @@ export function SessionComposer({
   // and a reply-to-question draft resolves an approval instead), so the composer only turns
   // red when the send really would be a shell turn.
   const shellMode = shellOffered && !replyTo && text.trim().startsWith('!');
+  // ✦ Optimize (board docs/mocks/prompt-optimizer, frames 2–6).
+  const optimizer = usePromptOptimizer({
+    target: promptOptimizer,
+    text,
+    setText,
+    taRef,
+    shellMode,
+    disabled: !!composerDisabled || !!replyTo,
+    resetKey: selectedId,
+  });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   const insertShell = (): void => {
@@ -11659,6 +11941,7 @@ export function SessionComposer({
 
   return (
     <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+      {optimizer.card}
       {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
           Only shown once the box has hit its auto-grow cap or the user set a manual
           height — an empty/short composer has nothing worth resizing. */}
@@ -11934,6 +12217,7 @@ export function SessionComposer({
               return;
             }
           }
+          if (optimizer.onKeyDown(e)) return;
           // Tab takes the offered suggestion. An open menu above has already had the key, and
           // with no suggestion on offer Tab moves focus as it always has.
           if (
@@ -12292,7 +12576,40 @@ export function SessionComposer({
             modelCatalog={runner.modelCatalog}
             configured={configuredProviders}
             unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
+            actions={contextActions}
           />
+        )}
+        {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
+            is sent, never while it is typed. The tag opens the setting. */}
+        {translationIsOn && (
+          <button
+            type="button"
+            className="composer-translation-tag"
+            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+          >
+            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+          </button>
+        )}
+        {optimizer.buttonShown && (
+          <button
+            type="button"
+            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            onClick={optimizer.press}
+            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+          >
+            {optimizer.busy ? (
+              <>
+                <span className="composer-optimize-spin" aria-hidden="true" />
+                Optimizing…
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">✦</span> Optimize
+              </>
+            )}
+          </button>
         )}
         {showStop ? (
           <Button
@@ -12862,7 +13179,8 @@ export function usePendingTray({
       return {
         key: turn.turnId,
         heading: intoTurn ? 'current' : 'next',
-        text: turn.content,
+        // Translated (Settings › Translation): the words the owner wrote, not the English delivered.
+        text: turn.translation?.original ?? turn.content,
         shell: turn.shell,
         ...trayPictures(turnImages[turn.turnId], refs),
         // Held by its runner's update or by a full runner, run or batch: the tag says which, as it does

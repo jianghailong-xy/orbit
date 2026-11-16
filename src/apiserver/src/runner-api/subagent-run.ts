@@ -318,6 +318,9 @@ export function subagentRunView(
     endedAt: Date | null;
     /** The workspace a remote run went to (§10), read beside the row; absent for one on the parent's machine. */
     workspace?: { name: string } | null;
+    attempts?: unknown;
+    changedFiles?: string[];
+    description?: string | null;
   },
   labels?: ReadonlyMap<string, string>,
 ): SubagentRunView {
@@ -325,6 +328,8 @@ export function subagentRunView(
   const instead = decision.runModel !== undefined;
   const model = (instead ? decision.runModel : decision.model) ?? null;
   const effort = (instead ? decision.runEffort : decision.effort) ?? null;
+  // A shadow row runs on the parent's engine, whatever it picked; a moved run on its last attempt's.
+  const engine = decision.applied === false ? null : attemptsOf(row.attempts).at(-1)?.engine ?? decision.engine ?? null;
   return {
     toolUseId: row.toolUseId,
     type: row.type,
@@ -341,6 +346,10 @@ export function subagentRunView(
     resultSummary: row.resultSummary,
     // The workspace's name now, else the one the decision recorded (a workspace deleted since leaves the column null).
     workspaceName: row.workspace?.name ?? decision.workspace?.name ?? null,
+    description: row.description ?? null,
+    engine,
+    readonly: decision.readonly === true,
+    changedFiles: row.changedFiles ?? [],
     createdAt: row.createdAt.toISOString(),
     endedAt: row.endedAt ? row.endedAt.toISOString() : null,
   };

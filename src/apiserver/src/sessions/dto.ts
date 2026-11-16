@@ -117,6 +117,9 @@ export interface CreateSessionDto {
    *  normalized, with no `..` segment (work-subdir.ts); anything else, or one sent for a session that has a
    *  worktree, is a 400 and nothing is created. Omitted runs the session at workDir. */
   workSubdir?: string;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
+   *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
+  skipTranslation?: boolean;
 }
 
 export interface SessionTurnDto {
@@ -136,6 +139,9 @@ export interface SessionTurnDto {
    *  delivery reads and appends as the control plane's note, so `content` stays the words alone. Taken
    *  only by a chat; a message to any other session that carries one is a 400. */
   wikiContext?: WikiChatContext | null;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
+   *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
+  skipTranslation?: boolean;
 }
 
 /** Stop the running turn, and — when a follow-up rides along — queue what to do instead,
