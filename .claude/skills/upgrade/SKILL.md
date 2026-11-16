@@ -20,6 +20,26 @@ Database migrations are **not** a separate step — the apiserver container runs
 recreating it applies any new migrations against the persisted `orbit_pg`
 volume.
 
+## Who runs it
+
+An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. If the
+session runs on one, such as an Opus or Fable model, hand the run to a cheaper one with the Agent tool
+(`subagent_type: "general-purpose"`, `model: "sonnet"`) instead of running it yourself. On Sonnet, Haiku or
+another inexpensive model, run it yourself as below.
+
+- Settle every choice before you hand it off, since the agent cannot ask the owner: which checkout to run
+  from (see [Where to run it](#where-to-run-it)), the exact command and flags the owner asked for, and for a
+  two-stage release the commit and the `ORBIT_REGISTRY`/`ORBIT_DEPLOY_HOST` values.
+- The brief tells the agent to read this file, run exactly that command, stop and report at the first
+  failure without retrying, working around a guard (such as adding `--allow-dirty`) or rolling back, and hand back the
+  script's last 30 lines and `docker compose ps` (for a two-stage release, the plan table and the deploy's last lines).
+- Run the agent in the background (a build takes 10 to 15 minutes) and report its result to the owner when
+  it arrives. Do not run the upgrade yourself as well.
+
+This covers running `upgrade.sh` from this session. From another workspace, production deploys through
+`delegate` SubAgents instead (see [Production from another workspace](#production-from-another-workspace)).
+Those SubAgents run on their workspaces' own engines, and this session only briefs and waits for them.
+
 ## How to use
 
 Run the script of the checkout the deployment runs from (see [Where to run it](#where-to-run-it)). Your
