@@ -35,7 +35,7 @@ var dshCLIVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-
 var dshNodeVersionPattern = regexp.MustCompile(`^v26\.[0-9]+\.[0-9]+$`)
 
 func dshVersionDir() string {
-	return filepath.Join(machineHome(), "engines", providerDsh, dshSupportedVersion)
+	return filepath.Join(engineStore(), "engines", providerDsh, dshSupportedVersion)
 }
 
 func dshVersionCompatible(version string) bool {

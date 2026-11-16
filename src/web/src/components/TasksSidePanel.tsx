@@ -1307,20 +1307,22 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   ),
                   children: [
                     ...machineList.map((runner) => {
+                      // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
                       const managedRow = managedRowOf(accountManaged, runner.id);
+                      const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
                       return {
                         key: `machine-${runner.id}`,
                         textValue: runner.displayName || runner.name,
                         icon: (
                           <span
                             className="tp-account-machine-dot"
-                            data-online={managedRow ? managedRow.acceptsWork : runner.online}
+                            data-online={ready}
                           />
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
                             <span>{runner.displayName || runner.name}</span>
-                            {(managedRow || !runner.online) && (
+                            {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
                           </span>
