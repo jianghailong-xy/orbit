@@ -72,6 +72,8 @@ import io.orbitd.android.composer.rememberManagedOffered
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.LocalManagedRunnerStatus
 import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.ManagedRunnerIdentity
+import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
@@ -353,7 +355,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
-                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { RunnerPage.nameOf(it.id, it.name, it.displayName) },
+                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { if (ObjectId.same(it.id, ManagedRunnerIdentity.runnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
                                     if (!workspace.enabled) "Disabled" else if (runner?.online == false)
                                         ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                     sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
