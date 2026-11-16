@@ -303,6 +303,8 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
 - **不能续跑**：worktree 随结束删掉，没有可续的对话。`resume` 一个远程 runId 时 runner 直说它在哪个 workspace 跑过、
   该带完整 brief 新开一个（`subagentResumeRefusal`）；父 runner 为远程运行也写 `run.json`（带 `workspace`），重启后照样这么答。
+- **记录的回收**：父 runner 上 `runs/<session>/subagents/` 存着续跑要的 `run.json` 和各次尝试的引擎状态。worktree GC 的同一轮
+  问 `worktrees-removable`，父会话已 Completed、删除、不存在或移走时整个删掉（`gcSubagentRuns`）；`runs/<session>/` 其余内容不动。
 
 ### 10.3 路由、显示、生命周期
 

@@ -2866,6 +2866,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		gcWorktrees(t, liveSet, pressure)
 		worktreeGC.sweepResumable(t, pool, pressure, false)
 		gcUploads(liveSet)
+		gcSubagentRuns(t, liveSet)
 	}
 
 	// A managed instance claims nothing before its first heartbeat (managedStartupBeat): the manager's
@@ -2964,6 +2965,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure, false)
+			gcSubagentRuns(t, pool.ids())
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is

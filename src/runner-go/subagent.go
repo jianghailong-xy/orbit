@@ -628,6 +628,43 @@ func subagentDir(sessionID, runID string) string {
 	return filepath.Join(runDir(sessionID), "subagents", runID)
 }
 
+// gcSubagentRuns removes the SubAgent records (run.json and each attempt's engine state) of sessions the control
+// plane says are over: Completed, deleted, missing or moved off this runner, the same answer that frees their
+// checkouts. Nothing resumes a SubAgent of such a session. A live one, and any session the query cannot answer
+// for, keeps them. The rest of the session's run dir (meta.json, which `orbit resume` reads) stays.
+func gcSubagentRuns(t *Transport, live map[string]bool) {
+	entries, err := os.ReadDir(runsDir())
+	if err != nil {
+		return
+	}
+	var ids []string
+	for _, e := range entries {
+		if !e.IsDir() || live[e.Name()] {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(runsDir(), e.Name(), "subagents")); err == nil && info.IsDir() {
+			ids = append(ids, e.Name())
+		}
+	}
+	// The control plane answers for at most 1000 ids a call.
+	for len(ids) > 0 {
+		batch := ids[:min(len(ids), 1000)]
+		ids = ids[len(batch):]
+		removable, err := t.worktreesRemovable(batch)
+		if err != nil {
+			logln("gc: worktrees-removable query failed, keeping all SubAgent records:", err)
+			return
+		}
+		for _, id := range removable {
+			if err := os.RemoveAll(filepath.Join(runsDir(), id, "subagents")); err != nil {
+				logln("gc: removing SubAgent records of", id, "failed:", err)
+				continue
+			}
+			logln("gc: removed SubAgent records of ended session", id)
+		}
+	}
+}
+
 func (s *bgJobService) handleSubagent(op string, args map[string]interface{}) bgSocketResponse {
 	switch op {
 	case "subagent_start":
