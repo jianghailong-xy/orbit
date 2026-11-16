@@ -193,7 +193,9 @@ private struct RunnerEngineContent: View {
                 // Install failed: an agent can be sent to fix it, under the failure; Retry stays as it is.
                 if let fix = RunnerAgentFixLogic.installFailedState(runner, engine: engine) {
                     VStack(alignment: .leading, spacing: 6) {
-                        RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixInstall() }
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                            fixWithAnAgent(RunnerAgentFixTarget(kind: .installFailed, engine: engine))
+                        }
                         RunnerAgentFixLine(state: fix) { openSession($0) }
                     }
                 }
@@ -365,6 +367,15 @@ private struct RunnerEngineContent: View {
                             .font(.orbitLabel)
                             .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
                     }
+                }
+            }
+            // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+            if let fix = RunnerAgentFixLogic.engineUpdateState(runner) {
+                VStack(alignment: .leading, spacing: 6) {
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                        fixWithAnAgent(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+                    }
+                    RunnerAgentFixLine(state: fix) { openSession($0) }
                 }
             }
         } footer: {
@@ -905,11 +916,10 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// Fix with an agent on the failed install: one press, no sheet; the list read after it turns the
-    /// button into the fixing line, and the page stays. A refusal is the server's own sentence.
-    private func fixInstall() {
+    /// Fix with an agent on a failed install or engine update: one press, no sheet; the list read after it
+    /// turns the button into the fixing line, and the page stays. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
         let id = runner.id
-        let target = RunnerAgentFixTarget(kind: .installFailed, engine: engine)
         fixPressing = true
         Task {
             if let failure = await runners.fixAttention(id, target: target) {
