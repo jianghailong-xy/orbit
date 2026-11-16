@@ -1445,4 +1445,27 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertNil(ExceptionCards.coordinatorFixLabel(.runnerDown, workspace: "w"))
         try require(workspace, "button: '\(CoordinatorChangeCopy.button)'")
     }
+
+    /// Ask again's note names the project's escalation window, as the browser's
+    /// `askAgainFreshClock` does; without a window it keeps the plain consequence.
+    func testAskAgainsNoteNamesTheProjectsWindow() throws {
+        let escalated = CoordinatorReading(cause: .escalated)
+        let handed = CoordinatorReading(cause: .handedOver)
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: 7_200),
+                       "It goes back to the coordinator with a fresh 2h clock.")
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), handed, escalationSeconds: 5_400),
+                       "It goes back to the coordinator with a fresh 1h 30m clock.")
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: nil),
+                       ExceptionCards.actionConsequence(conflict(), .askCoordinatorAgain))
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: 0),
+                       ExceptionCards.actionConsequence(conflict(), .askCoordinatorAgain))
+        // The window does not reach the other causes' notes.
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: .coordinatorEnded),
+                                                         escalationSeconds: 7_200),
+                       ExceptionCards.askAgainOnceBack)
+        XCTAssertNil(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: .runnerDown),
+                                                       escalationSeconds: 7_200))
+        let web = try webSource()
+        try require(web, "`It goes back to the coordinator with a fresh ${formatSpan(escalationSeconds * 1000)} clock.`")
+    }
 }

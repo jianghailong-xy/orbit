@@ -250,7 +250,8 @@ struct WhoFixesItBody: View {
                     Text(SessionMoveCopy.progress(changePhase)).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
-            if let note = ExceptionCards.coordinatorRowNote(row, reading) {
+            if let note = ExceptionCards.coordinatorRowNote(row, reading,
+                                                             escalationSeconds: console.projectEscalationSeconds) {
                 Text(note)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
