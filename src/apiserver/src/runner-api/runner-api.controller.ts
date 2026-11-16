@@ -502,6 +502,7 @@ import {
   serverMatchedRuntime,
 } from '../common/permission-rules';
 import {
+  mergeFencesTurn,
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
@@ -4477,6 +4478,11 @@ export class RunnerApiController {
     return response;
   }
 
+  /** The capabilities this runner last declared, for mergeFencesTurn: a plain read of its row. */
+  private async runnerCapabilitiesIn(tx: Prisma.TransactionClient, runnerId: string): Promise<string[] | undefined> {
+    return (await tx.runner.findUnique({ where: { id: runnerId }, select: { capabilities: true } }))?.capabilities;
+  }
+
   /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/takeover-leases')
@@ -4542,12 +4548,12 @@ export class RunnerApiController {
         return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
       }
       if (
-        pendingWorktreeOperationMayBeExecuting(
+        (pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
           owned[0].mergeOperationId,
           owned[0].mergeOperationOwner,
           owned[0].mergeRequestedAt,
-        ) ||
+        ) && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id))) ||
         pendingWorktreeOperationMayBeExecuting(
           owned[0].commitStatus,
           owned[0].commitOperationId,
@@ -4747,6 +4753,9 @@ export class RunnerApiController {
         FOR UPDATE
       `;
       const byId = new Map(locked.map((row) => [row.id, row]));
+      // Read only when some row's merge is pending: the common takeover reads no runner.
+      const mergeFences = locked.some((row) => row.mergeStatus === 'pending')
+        && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id));
       const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
       for (const { sessionId, expectedLeaseOwner } of asked) {
         const refused = refusedBeforeLock.get(sessionId);
@@ -4777,7 +4786,7 @@ export class RunnerApiController {
           continue;
         }
         if (
-          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          (mergeFences && pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt)) ||
           pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
         ) {
           conflict('wait for the pending worktree operation to finish');
