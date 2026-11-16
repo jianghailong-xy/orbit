@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Managed runner without a Default workspace · setup card before it is up · board 01</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="board.css">
+<style>
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-bottom: 26px; align-items: start; }
+  .app .msc { max-width: none; }
+  .app .msc-prefix { white-space: nowrap; }
+</style>
+<body>
+<div class="board">
+<h1>Managed runner without a “Default” workspace · its setup card before it is up</h1>
+<div class="lede">
+Owner 2026-11-16: the managed runner no longer creates a <code>Default</code> workspace; it is a machine with no workspace, set up
+from the same card as any other (option A). Today that card turns everything off while the machine is offline, and a managed
+runner is usually still being set up or asleep. In the proposal, a managed runner that is not up still takes a <b>new folder</b>
+and makes the workspace. Its coding CLI is the one the server names (<code>firstSessionProvider</code>), not a sign-in on the card.
+The first message wakes it, as sending already does today.
+</div>
+
+<div class="section"><span class="sec now">Today</span><span class="sec-sub">A machine with no workspace while it is not up: the same card, everything off</span></div>
+<div class="grid3" id="today"></div>
+
+<div class="section"><span class="sec after">Proposed</span><span class="sec-sub">A managed runner that is not up: the folder and Create work; the engine comes from the server</span></div>
+<div class="grid3" id="after"></div>
+
+<figure class="tile wide">
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t"><b>Where a new account lands:</b> this card, in every state of its managed runner (setting up, waking, asleep, up). Today an offline machine isn't offered for setup at all (<code>machinesToSetUp</code> needs it online), so a managed runner that isn't up would open its settings page.</span></li>
+    <li><span class="num">2</span><span class="t"><b>The notice says the runner's state, not “offline”:</b> being set up, or asleep. Creating the workspace doesn't wake it; the first message does.</span></li>
+    <li><span class="num">3</span><span class="t"><b>Folder, without a check:</b> a runner that isn't up can't look, so the name isn't checked. It is used if it's there and created if not, when the first session starts: the rule the card already states. The prefix is the runner's home once it has reported, otherwise <code>/var/lib/orbit/home/orbit-repos/</code>, a folder every runner version can create.</span></li>
+    <li><span class="num">4</span><span class="t"><b>Engine:</b> nothing to sign in on the card. The line names what the first session starts on (the server's <code>firstSessionProvider</code>), and <i>Change</i> leads to Machines &amp; models.</span></li>
+    <li><span class="num">5</span><span class="t"><b>No model yet</b> (no key, and the runner has never been ready): the workspace can still be created. The first message is held until the runner is up, as today's draft is.</span></li>
+    <li><span class="num">6</span><span class="t"><b>Up:</b> no change. The card checks the folder and offers sign-in as for any machine.</span></li>
+    <li><span class="num">7</span><span class="t"><b>Removed:</b> the Default workspace's welcome card and its send block (web, macOS/iOS, Android), and Android's landing in it. The setup confirmation's “…and add a workspace for it” goes: <i>“Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are.”</i></span></li>
+    <li><span class="num">8</span><span class="t"><b>Native clients:</b> the same rules on their own card (they make the workspace with the first message). The managed runner's sidebar or drawer <i>Set up</i> entry shows in every state.</span></li>
+  </ul>
+</figure>
+</div>
+<script>
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const head = (welcome) => welcome
+  ? `<div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span><div><div class="msc-title">Welcome to Orbit, Hailong</div><div class="msc-sub">Orbit gives a coding agent a computer and a task, and keeps the conversation and its results here — on the web and on your phone.</div></div></div>`
+  : `<div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span><div><div class="msc-title">Set up Managed runner</div><div class="msc-sub">Pick where it works and sign in a coding CLI, then create the workspace.</div></div></div>`;
+const folderStep = ({ prefix, value, meta, metaTone = 'meta', disabled, mark }) => `
+  <div class="msc-step msc-step-unnumbered" data-step="folder"><div style="position:relative">
+    <div class="msc-step-title">Folder</div>
+    <div class="msc-step-help">Where on Managed runner should sessions work? They can read and change everything in it.</div>
+    <div class="msc-folder">
+      <span class="orbit-text-control orbit-input orbit-input-affix msc-input${disabled ? ' orbit-input-disabled' : ''}" style="display:flex"><span class="orbit-input-prefix"><span class="msc-prefix">${prefix}</span></span><input class="orbit-input-field" placeholder="name" value="${esc(value)}" ${disabled ? 'disabled' : ''}></span>
+      <span class="${metaTone === 'meta' ? 'msc-meta' : 'msc-verdict ' + metaTone}">${esc(meta)}</span>
+    </div>
+    ${mark ? `<span class="num m" style="right:-6px;top:4px">${mark}</span>` : ''}
+    <button class="orbit-button orbit-button-primary orbit-button-small msc-use" type="button" ${disabled || !value ? 'disabled' : ''}>Use this folder</button>
+  </div></div>`;
+const folderDone = (path, meta) => `
+  <div class="msc-step msc-step-unnumbered" data-step="folder"><div><div class="msc-done-line">
+    <span class="msc-step-title">Folder</span><span class="msc-path">${path}</span><span class="msc-meta">${esc(meta)}</span><button class="msc-change" type="button">Change</button>
+  </div></div></div>`;
+const engineStep = ({ html, mark, done }) => `
+  <div class="msc-step" data-step="engine" style="position:relative">${done ? '<span class="msc-num done" style="color:var(--success)"><i data-ic="check"></i></span>' : '<span class="msc-num">2</span>'}<div>${html}</div>
+  ${mark ? `<span class="num m" style="right:-6px;top:4px">${mark}</span>` : ''}</div>`;
+const foot = (ready, text, enabled) => `
+  <div class="msc-foot${ready ? ' ready' : ''}">${esc(text)}</div>
+  <div class="msc-create"><button class="orbit-button orbit-button-primary orbit-button-middle" type="button" ${enabled ? '' : 'disabled'}>Create workspace</button></div>`;
+const notice = (text, mark) => `<div class="msc-notice" style="position:relative">${esc(text)}${mark ? `<span class="num m" style="right:-6px;top:-8px">${mark}</span>` : ''}</div>`;
+const frame = (title, body, n) => `<figure class="tile"><div class="tile-title">${title}</div><div class="app">${n ? `<span class="num m" style="left:-8px;top:-8px">${n}</span>` : ''}<div class="msc">${body}</div></div></figure>`;
+
+const signInOff = `<div class="msc-step-title">Sign in Claude Code on Managed runner</div><div class="msc-step-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div>`;
+document.getElementById('today').innerHTML = [
+  frame('Being set up (never connected)', head(true)
+    + notice('Waiting for Managed runner to connect. It can check folders and sign in as soon as it does.')
+    + folderStep({ prefix: '/', value: '', meta: 'Uses this folder if it exists, otherwise creates it.', disabled: true })
+    + engineStep({ html: signInOff })
+    + foot(false, 'Nothing is created until you create the workspace. You can rename it or change these later.', false)),
+  frame('Asleep', head(false)
+    + notice('Managed runner is offline. It can’t check folders or sign in until it’s back.')
+    + folderStep({ prefix: '/var/lib/orbit/home/', value: '', meta: 'Uses this folder if it exists, otherwise creates it.', disabled: true })
+    + engineStep({ html: signInOff })
+    + foot(false, 'Nothing is created until you create the workspace. You can rename it or change these later.', false)),
+  `<figure class="tile"><div class="tile-title">…and in fact never shown</div><div class="notes" style="font-size:14px">
+    An offline machine gets no <i>Set up</i> entry (<code>machinesToSetUp</code> keeps online ones only), and a new account with no workspace and no online machine lands on the machine's settings page (web) or Machines &amp; models (iOS, Android).<br><br>
+    With the Default workspace gone and nothing else changed, a new account whose managed runner isn't up yet has nothing to do. That is why the proposal below is needed.</div></figure>`,
+].join('');
+
+document.getElementById('after').innerHTML = [
+  frame('A · Being set up, model known · typing the folder', head(true)
+    + notice('Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.', 2)
+    + folderStep({ prefix: '/var/lib/orbit/home/orbit-repos/', value: 'my-project', meta: 'Not checked until your managed runner is up: used if it’s there, created if not.', mark: 3 })
+    + engineStep({ done: true, mark: 4, html: `<div class="msc-done-line"><span class="msc-step-title">deepseek</span><span class="msc-meta">API key · the first session starts on it</span><button class="msc-change" type="button">Change</button></div>` })
+    + foot(false, 'Nothing is created until you create the workspace. You can rename it or change these later.', false), 1),
+  frame('B · Being set up, no model yet · folder picked', head(true)
+    + notice('Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.')
+    + folderDone('/var/lib/orbit/home/orbit-repos/my-project', 'checked when it’s up · created if not there')
+    + engineStep({ mark: 5, html: `<div class="msc-step-title">Coding CLI</div><div class="msc-step-help">Your managed runner says which one is ready once it’s up. Or <a href="#">add a model key</a> to start on it now.</div>` })
+    + foot(true, 'Ready. Orbit adds the workspace “my-project” for /var/lib/orbit/home/orbit-repos/my-project.', true)),
+  frame('C · Asleep (it was up before) · folder picked', head(false)
+    + notice('Your managed runner is asleep. Your first message wakes it (about 10 s).', 2)
+    + folderDone('/var/lib/orbit/home/api-server', 'checked when it wakes · created if not there')
+    + engineStep({ done: true, html: `<div class="msc-done-line"><span class="msc-step-title">Claude Code</span><span class="msc-meta">signed in on Managed runner</span><button class="msc-change" type="button">Change</button></div>` })
+    + foot(true, 'Ready. Orbit adds the workspace “api-server” for /var/lib/orbit/home/api-server.', true)),
+].join('');
+</script>
+<script src="icons.js"></script>
+</body>
+</html>

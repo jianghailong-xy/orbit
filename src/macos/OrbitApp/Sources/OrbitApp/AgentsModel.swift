@@ -404,11 +404,18 @@ final class AgentsModel {
         updateMachinesToSetUp()
     }
 
+    private var managedStatus: ManagedRunnerStatus?
+
+    func adoptManagedStatus(_ status: ManagedRunnerStatus?) {
+        managedStatus = status
+        updateMachinesToSetUp()
+    }
+
     private func updateMachinesToSetUp() {
         guard workspacesAnswered else { return }
-        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items)
+        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
-        let first = runnerRows.first(where: AgentListLogic.isOnline)?.id
+        let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }
 

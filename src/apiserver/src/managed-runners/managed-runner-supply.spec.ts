@@ -84,7 +84,7 @@ test('a first session with no runtime ready is refused, to be signed in from the
   const prisma = { session: { findFirst: async () => null } } as never;
   await assert.rejects(
     assertManagedFirstSessionRuntime(prisma, {
-      workspaceId: 'w',
+      runnerId: 'r',
       runtime: 'claude',
       bringsOwnCredentials: false,
       runner: { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] },
@@ -194,20 +194,20 @@ test('a first session on its own credential is queued for a runner that has repo
   const prisma = { session: { findFirst: async () => null } } as never;
   const unreported = { defaultRemoved: [], engines: null, capabilities: [] };
   // The owner's model key on Claude Code: queued, and run once the runner is READY.
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: unreported });
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'codex', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'codex', bringsOwnCredentials: true, runner: unreported });
   const refused = (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE;
   // Claude Code's own sign-in: nobody could have signed it in on a runner that has never come up.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: false, runner: unreported }), refused);
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: false, runner: unreported }), refused);
   // Every engine of the managed image is queued for on a key: OpenCode and DeepSeek Harness included.
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'opencode', bringsOwnCredentials: true, runner: unreported });
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'dsh', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'opencode', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'dsh', bringsOwnCredentials: true, runner: unreported });
   // A runtime the image does not have waits for nothing.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'gemini-cli', bringsOwnCredentials: true, runner: unreported }), refused);
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'gemini-cli', bringsOwnCredentials: true, runner: unreported }), refused);
   // Once the runner has reported, what it said decides, as before: Claude Code not installed, the key's session is refused.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [] } }), refused);
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [] } }), refused);
   await assert.rejects(
-    assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [engine('claude', { installed: false })] } }),
+    assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [engine('claude', { installed: false })] } }),
     refused,
   );
 });
@@ -243,7 +243,7 @@ test('the first session the status names is the one the create takes: READY\'s r
   for (const [name, key, runner, named] of cases) {
     assert.equal(managedFirstSessionProvider(null, key, runner), named, name);
     // The create, for the session a client sends with nothing named: the key, on its own engine.
-    const taken = await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: key.engine, bringsOwnCredentials: true, runner })
+    const taken = await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: key.engine, bringsOwnCredentials: true, runner })
       .then(() => true, () => false);
     assert.equal(taken, named !== null, `${name}: the create agrees`);
   }
@@ -268,7 +268,7 @@ test('a first session is never named on a key no engine on the runner runs: a Ki
   const prisma = { session: { findFirst: async () => null } } as never;
   for (const runner of [claudeCodex]) {
     await assert.rejects(
-      assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'kimi', bringsOwnCredentials: true, runner }),
+      assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'kimi', bringsOwnCredentials: true, runner }),
       (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE,
     );
   }
@@ -287,4 +287,15 @@ test('with a Kimi key first and a DeepSeek key after it, a Claude/Codex runner i
   assert.equal(await managedFirstSessionKey(keysOf([moonshot(), key('deepseek')], withKimi).prisma, 'o'), 'moonshot');
   // READY on the same runner records DeepSeek too.
   assert.equal(await managedKeySupply(keysOf([moonshot(), key('deepseek')]).prisma, 'o', claudeCodex), 'deepseek');
+});
+
+
+test('first-session history is scoped to the runner and excludes task runs, children and landing rows', async () => {
+  let seen: unknown;
+  const prisma = { session: { findFirst: async (args: unknown) => { seen = args; return { id: 'earlier-conversation' }; } } } as never;
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'managed-runner', runtime: 'claude', bringsOwnCredentials: false, runner: { defaultRemoved: [], engines: null } });
+  assert.deepEqual(seen, {
+    where: { assignedRunnerId: 'managed-runner', taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
+    select: { id: true },
+  });
 });

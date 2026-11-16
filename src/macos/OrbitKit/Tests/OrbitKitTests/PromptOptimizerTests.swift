@@ -417,7 +417,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
     }
 
     func testTabOnADraftOptimizesOnAMac() throws {
-        XCTAssertEqual(PromptOptimizerCopy.optimizeHelp, "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O")
+        XCTAssertEqual(PromptOptimizerCopy.optimizeHelpWithKeys, "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O")
         let composer = try source(app + "Views/ComposerView.swift")
         let card = try XCTUnwrap(composer.range(of: "if console.promptOptimizer.suggestion != nil, !showSlash {"))
         let draft = try XCTUnwrap(composer.range(of: "console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {\n                    console.optimizePrompt()"),

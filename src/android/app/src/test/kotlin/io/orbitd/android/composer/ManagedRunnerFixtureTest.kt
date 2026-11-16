@@ -33,6 +33,9 @@ class ManagedRunnerFixtureTest {
             assertNotNull(name, status)
             val expected = entry["display"]?.takeIf { it !is JsonNull }
             assertEquals(name, expected, ManagedRunner.display(status)?.asJson())
+            assertEquals(name, entry["setupState"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content,
+                ManagedRunner.managedSetupState(status?.runnerId, status))
+            assertNull(ManagedRunner.managedSetupState("another-runner", status))
         }
     }
 
@@ -103,6 +106,16 @@ class ManagedRunnerFixtureTest {
             assertNull(name, ManagedRunner.row("0198f3a2-7777-7000-8000-000000000007", status))
         }
         assertNull(ManagedRunner.row(null, null))
+    }
+
+    @Test fun setupCopyMatchesTheFixture() {
+        val setup = fixture.getValue("setup").jsonObject
+        assertEquals(setup["reposRoot"]!!.jsonPrimitive.content, ManagedRunner.REPOS_ROOT)
+        assertEquals(setOf("notice", "folderUnchecked", "reposRoot"), setup.keys)
+        for ((key, words) in mapOf("notice" to ManagedRunner.Setup.NOTICE,
+            "folderUnchecked" to ManagedRunner.Setup.FOLDER_UNCHECKED)) {
+            assertEquals(setup[key]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }, words)
+        }
     }
 
     private companion object { const val FIXTURE = "src/shared/src/managed-runner-states.fixture.json" }

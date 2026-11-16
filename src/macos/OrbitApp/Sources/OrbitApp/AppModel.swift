@@ -607,7 +607,7 @@ final class AppModel {
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
-        managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        managedRunnerModel.onStatusChanged = { [weak self] status in self?.agents?.adoptManagedStatus(status) }
         managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -2210,48 +2210,37 @@ final class AppModel {
 
     /// That page's model, made the first time and kept (`MachineSetupModel`). Call from a `.task` or an
     /// event handler, never a view `body`.
-    func machineSetup(for runner: Runner) -> MachineSetupModel? {
+    func machineSetup(for runner: Runner) -> MachineSetupModel {
         let key = PublicID.storageKey(runner.id)
         if let kept = machineSetups[key] { return kept }
-        guard let agents, let consoleRegistry else { return nil }
-        let standIn = Agent.machineDraft(runnerID: runner.id, name: RunnerPageFormat.displayName(runner),
-                                         engine: MachineSetup.firstEngineOn(runner.engines))
-        let draft = consoleRegistry.draftModel(
-            for: standIn, defaultModel: agents.effectiveDefaultModel(for: standIn),
-            configuredProviders: agents.configuredProviders,
-            configuredProvidersLoaded: agents.configuredProvidersLoaded,
-            providerPools: agents.providerPools, sharedPools: agents.sharedPools,
-            modelCatalog: agents.modelCatalog(for: runner.id),
-            accountDefaultEffort: user?.preferences?.defaultEffort) { [weak self] session in
-                self?.openCreatedMachineSession(session, runnerID: runner.id)
-            }
-        let setup = MachineSetupModel(runner: runner, draft: draft)
+        let setup = MachineSetupModel(runner: runner)
         machineSetups[key] = setup
         return setup
     }
 
-    /// The first message made the workspace: the page you are on becomes the conversation, in the
-    /// workspace it made, and the Set up row turns into that workspace's row.
-    private func openCreatedMachineSession(_ session: Session, runnerID: String) {
-        registerCreatedAgentSession(session)
-        machineSetups[PublicID.storageKey(runnerID)] = nil
-        if machineDraftRunnerID == runnerID {
-            show(.console(sessionID: session.id, origin: .list), agent: session.agent?.id ?? session.agentId)
+    /// The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+    /// name the card was given (POST /workspaces). The list then says the machine has one, and the page moves
+    /// on to the new workspace's new session page. Why it was refused, or nil.
+    func createMachineWorkspace(runnerID: String, folder: PickedFolder, name: String) async -> String? {
+        guard let api else { return "Not signed in." }
+        do {
+            let made = try await api.createAgent(MachineSetup.createRequest(folder: folder, name: name,
+                                                                            runnerID: runnerID))
+            await agents?.load()
+            machineSetups[PublicID.storageKey(runnerID)] = nil
+            if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
         }
-        Task { await agents?.load() }
     }
 
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
-    /// to it, and what was being set up here no longer applies. What was waiting comes back in that
-    /// workspace's composer rather than vanishing.
+    /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
-        let key = PublicID.storageKey(runnerID)
-        if let held = machineSetups[key]?.handOff() {
-            consoleRegistry?.queueDraftMessage(agentID: workspace.id, message: held)
-        }
-        machineSetups[key] = nil
+        machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
     }
 
@@ -3981,6 +3970,7 @@ final class AppModel {
     /// Load the agent list, then land on the app's home if we're still on the launch default — see
     /// `resolveDefaultLanding`.
     func loadAgentsThenLand() async {
+        await managedRunner?.load()
         await agents?.load()
         resolveDefaultLanding()
     }

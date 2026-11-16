@@ -618,8 +618,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // session page, where its setup card is (board rule 9). Not before the list is known: every machine
   // would read as bare until it lands.
   const bareMachines = useMemo(
-    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data) : []),
-    [runners.data, workspaces.data, workspaces.isSuccess],
+    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data, accountManaged?.status) : []),
+    [runners.data, workspaces.data, workspaces.isSuccess, accountManaged],
   );
 
   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,

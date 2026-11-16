@@ -85,6 +85,52 @@ final class ManagedRunnerFixtureTests: XCTestCase {
         }
     }
 
+    func testSetupStatesAndEligibilityMatchTheSharedFixture() throws {
+        for entry in try Self.cases("states") {
+            let status = try Self.status(entry["status"])
+            let setup = ManagedRunnerLogic.managedSetupState(runnerID: status.runnerId, status: status)
+            XCTAssertEqual(setup?.rawValue, entry["setupState"] as? String, entry["name"] as? String ?? "?")
+            XCTAssertNil(ManagedRunnerLogic.managedSetupState(runnerID: "another", status: status))
+            if let setup, let runnerID = status.runnerId {
+                let runner = try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject:
+                    ["id": runnerID, "name": "Managed runner", "status": "OFFLINE", "online": false]))
+                XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner], agents: [], managedStatus: status).map(\.id), [runnerID])
+                XCTAssertEqual(LoadFailureLogic.defaultLanding(agents: ListLoadState().afterSuccess(), orderedAgentIDs: [],
+                    lastAgentID: nil, section: .agents, selectedAgentID: nil, selectedSessionID: nil,
+                    firstOnlineMachine: runnerID), .machine(runnerID))
+                let root = MachineSetup.setupFolderRoot(runner, managedState: setup)
+                XCTAssertEqual(root, ManagedRunnerCopy.Setup.reposRoot)
+                let folder = try XCTUnwrap(MachineSetup.uncheckedFolder(name: "app", root: root))
+                XCTAssertNil(MachineSetup.uncheckedFolder(name: "../app", root: root))
+                let request = MachineSetup.createRequest(folder: folder, name: "My app", runnerID: runnerID)
+                XCTAssertEqual(request.newFolder, "app")
+                XCTAssertNil(request.workDir)
+                XCTAssertEqual(MachineSetup.folderLine(folder: "app", createError: nil, found: nil,
+                    unanswered: false, machine: "Managed runner", managedState: setup),
+                    .meta(setup == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep))
+                XCTAssertFalse(MachineSetup.canCreate(pick: folder, name: " ", online: false,
+                    checksFolders: false, creating: false, managedState: setup))
+                XCTAssertFalse(MachineSetup.canCreate(pick: folder, name: "app", online: false,
+                    checksFolders: false, creating: true, managedState: setup))
+                XCTAssertTrue(MachineSetup.canCreate(pick: folder, name: "app", online: false, checksFolders: false, creating: false, managedState: setup))
+                XCTAssertFalse(MachineSetup.canCreate(pick: nil, name: "app", online: false, checksFolders: false, creating: false, managedState: setup))
+                XCTAssertEqual(folder.newWorkspace, NewWorkspaceRequest(newFolder: "app"))
+            }
+        }
+    }
+
+    func testSetupCopyMatchesTheSharedFixture() throws {
+        let setup = try XCTUnwrap(Self.fixture()["setup"] as? [String: Any])
+        let expected: [String: Any] = [
+            "reposRoot": ManagedRunnerCopy.Setup.reposRoot,
+            "notice": ["preparing": ManagedRunnerCopy.Setup.Notice.preparing,
+                       "asleep": ManagedRunnerCopy.Setup.Notice.asleep],
+            "folderUnchecked": ["preparing": ManagedRunnerCopy.Setup.FolderUnchecked.preparing,
+                                "asleep": ManagedRunnerCopy.Setup.FolderUnchecked.asleep],
+        ]
+        XCTAssertEqual(NSDictionary(dictionary: setup), NSDictionary(dictionary: expected))
+    }
+
     func testTheStatesTheClientsWereAskedForAreAllThere() throws {
         let kinds = Set(try Self.cases("states").compactMap { ($0["display"] as? [String: Any])?["kind"] as? String })
         for kind in ["preparing", "waitingCapacity", "available", "sleeping", "waking", "failed", "removed"] {

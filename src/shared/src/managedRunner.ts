@@ -176,6 +176,7 @@ export interface ManagedRunnerStatus {
   managementState: ManagedRunnerReadState;
   desiredState: ManagedRunnerDesiredState | null;
   runnerId: string | null;
+  /** @deprecated Always null: a managed runner has no default workspace (docs/managed-runner-no-default-workspace.md). */
   workspaceId: string | null;
   /** The runner row's own heartbeat observation (`ONLINE`, `OFFLINE`, `DRAINING`). */
   heartbeatStatus: string | null;

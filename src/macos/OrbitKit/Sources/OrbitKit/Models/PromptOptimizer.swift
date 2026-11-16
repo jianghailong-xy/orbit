@@ -141,7 +141,9 @@ public enum PromptOptimizerCopy {
     // Composer (frames 2–3)
     public static let optimize = "Optimize"
     public static let optimizing = "Optimizing…"
-    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O"
+    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
+    /// The Mac's ✦ tooltip: optimizeHelp with the keys that press it there. Android, with no Tab, says optimizeHelp.
+    public static let optimizeHelpWithKeys = optimizeHelp + " · Tab · ⌘⇧O"
     public static let cancelHelp = "Stop optimizing"
     public static let buttonIdentifier = "composer.optimize"
 

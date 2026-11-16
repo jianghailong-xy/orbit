@@ -42,7 +42,7 @@ export const serverCapabilitiesQuery = () =>
 /**
  * Where first-run setup sends the account it just created. The registration guide, as always —
  * unless the server offers managed runners, in which case bootstrap has started one for it and the
- * default landing opens its workspace. A capability that cannot be read is no capability.
+ * default landing opens its setup card. A capability that cannot be read is no capability.
  */
 export async function firstRunLanding(): Promise<string> {
   try {
@@ -101,13 +101,8 @@ export function managedRowOf(managed: ManagedRunner | null, runnerId: string | n
   return managedRunnerRow(id, managed.status);
 }
 
-/**
- * What a first session in the managed default workspace starts on moves while its runner comes up —
- * the owner adds a key, READY records what it was found ready with — and the workspace list says
- * it as the draft's default (`lastProvider`, which the server derives): the list is read again
- * when it moves, so the draft offers what the server would start rather than what the list said
- * before. Nothing is read on the first answer, or without managed runners.
- */
+/** Refresh workspace defaults when the managed runner names a different first-session provider.
+ * The server seeds any workspace on that runner that has no interactive history yet. */
 export function useFollowFirstSessionProvider(managed: ManagedRunner | null): void {
   const qc = useQueryClient();
   const startsOn = managed ? firstSessionProvider(managed.status) : undefined;
@@ -172,8 +167,7 @@ export function useManagedRunnerActions() {
       }),
     onSuccess: (status) => {
       answered(status);
-      // The mapping brings its runner and default workspace with it.
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      // The new mapping brings its runner into the machine list.
       void qc.invalidateQueries({ queryKey: ['runners'] });
     },
     onError: refused("Couldn't set up the managed runner"),
