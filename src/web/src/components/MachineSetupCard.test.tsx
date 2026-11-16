@@ -277,7 +277,9 @@ describe('the card’s head and foot', () => {
     // Both steps are their done lines: no question is left on the card.
     expect(said(page.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/code/app git repository · main Change');
     expect(said(page.querySelector('[data-step="engine"]'))).toBe('Claude Code signed in on orbit@austin');
-    expect(page.querySelectorAll('.msc-num.done')).toHaveLength(2);
+    // Folder is drawn without a step number or tick; only the sign-in step has one.
+    expect(page.querySelector('[data-step="folder"] .msc-num')).toBeNull();
+    expect(page.querySelectorAll('.msc-num.done')).toHaveLength(1);
   });
 
   it('both done on a new folder: the workspace it names is the folder’s', async () => {
@@ -299,6 +301,8 @@ describe('the folder step: one name, in the machine’s home', () => {
   it('asks for one name in home, and nothing else', async () => {
     const page = await open();
     expect(said(page.querySelector('.msc-prefix'))).toBe('/home/orbit/');
+    // The card's one question carries no step number.
+    expect(page.querySelector('[data-step="folder"] .msc-num')).toBeNull();
     expect(page.querySelectorAll('input')).toHaveLength(1);
     expect(page.querySelector('[role="radio"]')).toBeNull();
     expect(folderStep()).not.toContain('Another folder');

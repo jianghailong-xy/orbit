@@ -82,6 +82,10 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.msc-step-unnumbered {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .msc-num {
   width: 22px;
   height: 22px;
