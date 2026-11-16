@@ -97,6 +97,8 @@ export interface RunnerObjects {
   runningTaskId: string;
   runningTaskSessionId: string;
   allowedApprovalId: string;
+  /** Of `machineSessionId`: an ended SubAgent run, which a delegate call's `resumeOf` names. */
+  subagentRunId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
@@ -957,6 +959,14 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // A delegate call resuming A's ended SubAgent run, from B's own session: looked up only among that session's runs.
+  'POST /runner/sessions/:id/subagents body resumeOf': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_resume', type: 'general', definitionSource: 'builtin', resumeOf: of.runner.subagentRunId },
+    }),
+  },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
   'POST /runner/link/welcome body sessionIds[]': {
     as: RUNNER,
@@ -1555,11 +1565,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',
-  'POST /runner/sessions/:id/subagents body resumeOf':
-    'a SubAgent run to continue, looked up only among the runs of the session the path names, by (id, that session) '
-    + '(runner-api/runner-subagents.controller.ts:354), after the door checked that session is the runner\'s owner\'s '
-    + 'and assigned to it (assertParentOfRunner, :207); any other id, another account\'s run included, is 404 '
-    + 'SUBAGENT_RESUME_NOT_FOUND (:359)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',

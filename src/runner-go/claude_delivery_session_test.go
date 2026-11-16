@@ -947,3 +947,24 @@ func TestSessionRefilesASteerWithNoTurnToJoinSilently(t *testing.T) {
 		t.Errorf("a steer with no turn to steer was written to the engine: %v", run.fake.Stdin())
 	}
 }
+
+// `/compact` ends with the same result the resume carrier does — success, num_turns 0, an empty
+// result and no assistant text — because its "Compacted" comes back as a <local-command-stdout>
+// user message (captured off Claude Code 2.1.325). Dropped as a carrier, the turn never completed
+// and the session sat RUNNING for good. The compact_boundary ahead of it is what tells them apart.
+func TestCompactTurnCompletesDespiteCarrierShapedResult(t *testing.T) {
+	zero := 0
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "system_status", Subtype: "compact_boundary"},
+			{Emit: "local_command_stdout", Text: "Compacted "},
+			{Emit: "result", NumTurns: &zero},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{messageTurn("turn-1", "/compact")}, nil)
+
+	if got := run.turnResult("turn-1"); got == nil || got.Status != stSucceeded {
+		t.Fatalf("turn-1 = %+v, want it completed as succeeded", got)
+	}
+}

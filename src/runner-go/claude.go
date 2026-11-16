@@ -230,11 +230,15 @@ func isAPIError(s string) bool {
 // The carrier is the one result that produced nothing at all: no API round trip (numTurns 0)
 // and not a word on the wire. A slash command claude resolves client-side (`/help`) is also
 // numTurns 0, but it streams its answer as assistant text and repeats it in `result`, and it
-// IS a real turn that must be acked — hence both text checks. Errors are excluded outright: a
-// failed turn reports no work either, and must still reach the control plane.
-func isResumeCarrierResult(r ExecResult, streamedText string) bool {
+// IS a real turn that must be acked — hence both text checks. A `/compact` looks the same on
+// the result (numTurns 0, empty result, nothing streamed: its "Compacted" comes back as a
+// <local-command-stdout> user message), so a compaction boundary since the last result rules
+// the carrier out too; dropping it left the session RUNNING with its turn never completed.
+// Errors are excluded outright: a failed turn reports no work either, and must still reach
+// the control plane.
+func isResumeCarrierResult(r ExecResult, streamedText string, compacted bool) bool {
 	return r.Subtype == "success" && r.Status == stSucceeded &&
-		r.NumTurns == 0 && r.Result == "" && streamedText == ""
+		r.NumTurns == 0 && r.Result == "" && streamedText == "" && !compacted
 }
 
 // connectionFailureMarkers mirrors CONNECTION_FAILURE_MARKERS in @orbit/shared: every marker of a

@@ -699,6 +699,7 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 	if b.ctx.Err() == nil || reason != "" {
 		if b.markTerminal(job.id) {
 			b.emit(evBackgroundTask, job.endPayload(status, exit, reason))
+			bgBetweenEndAndWake()
 			b.wakeOnEnd(job, reason)
 		}
 	}
@@ -706,6 +707,22 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 		removeBgJobRecord(b.sessionID, job.id)
 	}
 	close(job.done)
+}
+
+// bgBetweenEndAndWake runs after finishJob has reported a job's end and before it sends the wake that
+// end owes. A variable only so a test can hold a job there while the runner begins to stop — the
+// moment a job that exits on its own as the runner stops sits in, too briefly to hit from outside.
+var bgBetweenEndAndWake = func() {}
+
+// finished reports whether finishJob has done everything a job's end owes: reported it, sent its
+// wake, and closed done.
+func (j *bgJob) finished() bool {
+	select {
+	case <-j.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // endLocked records how a job ended — killed when a reason was named for killing it, otherwise as its
@@ -976,6 +993,8 @@ func (b *bgTailer) sendWake(wake bgWake) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
+		logln(fmt.Sprintf("background %s %s: its %s wake was not sent — the session's background work had already stopped",
+			wake.Kind, wake.JobID, wake.Trigger))
 		return
 	}
 	b.wg.Add(1)
@@ -1213,6 +1232,12 @@ func (b *bgTailer) drainJobs(budget time.Duration) {
 	var services, jobs []*bgJob
 	for _, job := range b.jobs {
 		if job.status != bgStatusRunning {
+			// Ended, but finishJob may not have sent the wake its end owes yet. Wait for it as for a
+			// running job: stopAll closes the gate sendWake checks once this drain returns, and a wake
+			// arriving after that was dropped (2026-11-16, a job that exited as the runner stopped).
+			if !job.finished() {
+				jobs = append(jobs, job)
+			}
 			continue
 		}
 		// A job still waiting for its card has nothing to land, so waiting for it would only hold the drain.
