@@ -137,7 +137,6 @@ final class SessionCreatedTasksCopyParityTests: XCTestCase {
         let theirs = try fixture().copy
         let mine: [String: String] = [
             "title": SessionCreatedTasksCopy.title,
-            "viewAll": SessionCreatedTasksCopy.viewAll,
             "openProject": SessionCreatedTasksCopy.openProject,
             "replacesPrefix": SessionCreatedTasksCopy.replacesPrefix,
             "createdInChip": SessionCreatedTasksCopy.createdInChip,

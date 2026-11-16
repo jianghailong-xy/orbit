@@ -310,7 +310,7 @@ describe('the opened list', () => {
     );
     await click(one('.bg-tray-row'));
 
-    expect(link(fixture.copy.viewAll)).toBeUndefined();
+    expect(link('View all in Tasks ›')).toBeUndefined();
     const projects = all('.ct-foot a').filter((a) => a.textContent === fixture.copy.openProject);
     expect(projects.map((a) => a.getAttribute('href'))).toEqual([`/projects/${PROJECT}`]);
   });
