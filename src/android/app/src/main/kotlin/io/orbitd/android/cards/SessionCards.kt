@@ -104,7 +104,7 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
      * not success. While reconnecting it is what it last saw. */
     fun shown(session: SessionState, current: List<InteractionCard> = current(session)): List<InteractionCard> =
         (if (session.fresh) current + previous.filter { old -> current.none { it.key == old.key } }.map(::stale) else previous.ifEmpty { current })
-            .distinctBy { it.key }.map(::withPlan)
+            .distinctBy { it.key }.filter { CoordinatorCleanStart.drawsCard(session.snapshot?.detail?.text("createdAt"), it) }.map(::withPlan)
     /** The start card reads the project's task graph beside its request (A11b). */
     fun withPlan(card: InteractionCard) =
         if (card.family == CardFamily.START && graph != null) card.copy(context = JsonObject(card.context + ("plan" to graph!!))) else card
@@ -264,7 +264,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             }
         } }
         // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).
-        PromotionCards.receipts(cards.merged).forEach { receipt ->
+        PromotionCards.receipts(cards.merged).filter { CoordinatorCleanStart.drawsRecord(session.snapshot?.detail?.text("createdAt"), it.moment) }.forEach { receipt ->
             PromotionReceiptLine(receipt.promotion, "${receipt.id}:line", Modifier.testTag(receipt.id)) { cards.receipt = receipt.promotion }
         }
         // A08-6: what this conversation created is the Tasks card above the composer (`SessionTasksCard`), with what its watches wait on.
