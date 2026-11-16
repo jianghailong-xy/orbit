@@ -2,7 +2,9 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TurnTranslation } from '@orbit/shared';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import type { BilingualPair, TurnTranslation } from '@orbit/shared';
 
 /**
  * Settings › Translation in a conversation (docs/mocks/session-translation/01-board.png, frames 4–6):
@@ -23,6 +25,12 @@ const { TranslationCtx } = await import('./TranslationParts');
 type RunEvent = import('./Transcript').RunEvent;
 
 const TS = '2026-11-11T10:00:00.000Z';
+/** The shared pairing cases (@orbit/shared bilingual-pairs.fixture.json). */
+const bilingualFixture = (
+  JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/bilingual-pairs.fixture.json'), 'utf8')) as {
+    cases: Array<{ name: string; translation: string; original: string; pairs: BilingualPair[] | null }>;
+  }
+).cases;
 const ORIGINAL = '登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好';
 const ENGLISH = 'The Google sign-in button on the login page does nothing in Safari. Find out why and fix it.';
 const REPLY_EN = "Found it: Safari blocks popups that aren't opened directly by a click.";
@@ -285,9 +293,11 @@ describe('the reply streaming', () => {
 });
 
 /**
- * "Show both languages" (docs/mocks/session-translation/02-bilingual.png): your language on top, the
- * English the agent read or wrote under a dashed divider; a reply's English over six lines collapses to
- * a two-line preview with "Show English · N lines" (frame 3). Off, everything above holds unchanged.
+ * "Show both languages" (docs/mocks/session-translation/02-bilingual.png, 03-interleaved.png): your
+ * language on top, the English the agent read or wrote under it. A reply whose blocks pair is drawn
+ * block by block, each original right under its translation and never collapsed; one that does not
+ * pair is drawn whole under a dashed divider as before, its English over six lines collapsing to a
+ * two-line preview with "Show English · N lines". Off, everything above holds unchanged.
  */
 describe('Show both languages', () => {
   const both = async (node: ReactNode, bilingual = true) => {
@@ -333,19 +343,75 @@ describe('Show both languages', () => {
     expect(copied.at(-1)).toBe(ORIGINAL);
   });
 
-  it('a short reply: the translation, its English in full below, "Translated" and no flip', async () => {
+  it('a short reply: the translation, its English right under it, "Translated" and no flip', async () => {
     await both(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: REPLY_ZH }), ended(3)]} />);
-    expect(container.querySelector('.chat-assistant')!.textContent).toContain(REPLY_ZH);
-    const english = container.querySelector('.chat-bilingual-reply .chat-bilingual')!;
-    expect(english.textContent).toContain(REPLY_EN);
-    expect(english.classList.contains('is-collapsed')).toBe(false);
+    const pair = container.querySelector('.chat-interleaved .chat-interleaved-pair')!;
+    expect(pair.textContent).toContain(REPLY_ZH);
+    expect(pair.querySelector('.chat-bilingual-original')!.textContent).toBe(REPLY_EN);
+    expect(pair.textContent!.indexOf(REPLY_ZH)).toBeLessThan(pair.textContent!.indexOf(REPLY_EN));
+    expect(container.querySelector('.chat-bilingual-reply')).toBeNull();
     expect(container.querySelector('.chat-translate-foot.is-reply')!.textContent).toBe('Translated');
     expect(text()).not.toContain('Show English');
     await act(async () => container.querySelector<HTMLButtonElement>('.chat-turn-foot .chat-copy')!.click());
     expect(copied.at(-1)).toBe(REPLY_ZH);
   });
 
-  it('a long reply collapses to "Show English · N lines", which opens it in place; code is not repeated', async () => {
+  // The reply on the board (03-interleaved.png, frames 2 and 3).
+  const BOARD = bilingualFixture.find((c) => c.name.startsWith('headings and bullet lists'))!;
+  const MERGED = bilingualFixture.find((c) => c.name.includes('merged two paragraphs'))!;
+  const CODE = bilingualFixture.find((c) => c.name.startsWith('code blocks'))!;
+  const fixtureReply = (seq: number, c: (typeof bilingualFixture)[number]): RunEvent => ({
+    seq,
+    type: 'assistant',
+    payload: { text: c.original, translation: { lang: 'zh-Hans', text: c.translation } },
+    ts: TS,
+  });
+
+  it('a reply that pairs is drawn block by block: each item, heading and paragraph with its original under it, never collapsed', async () => {
+    await both(<Transcript events={[user(1, done), fixtureReply(2, BOARD)]} />);
+    const pairs = [...container.querySelectorAll('.chat-interleaved-pair')];
+    expect(pairs.map((p) => p.className.replace('chat-interleaved-pair is-', ''))).toEqual(BOARD.pairs!.map((p) => p.kind));
+    pairs.forEach((p, i) => {
+      expect(p.querySelector('.chat-bilingual-original')!.textContent).toBe(
+        BOARD.pairs![i].original!.replace(/\*\*|`/g, ''),
+      );
+    });
+    // An item's original sits inside its own list item, under its words.
+    const item = pairs[2].querySelector('li')!;
+    expect(item.firstElementChild!.textContent).toContain('main 尚未更新');
+    expect(item.lastElementChild!.className).toBe('chat-bilingual-original');
+    // A heading's original is drawn under it, lighter.
+    expect(pairs[5].querySelector('h2')!.textContent).toBe('升级');
+    expect(pairs[5].querySelector('.chat-bilingual-original')!.className).toBe('chat-bilingual-original is-heading');
+    // Inline code stays code, in both languages.
+    expect(pairs[2].querySelectorAll('code')).toHaveLength(2);
+    // No divider, no collapse, the one foot.
+    expect(container.querySelector('.chat-translated-reply .chat-bilingual')).toBeNull();
+    expect(text()).not.toContain('Show English');
+    expect(container.querySelector('.chat-translate-foot.is-reply')!.textContent).toBe('Translated');
+  });
+
+  it('code blocks and tables are drawn once, from the translation, between the pairs', async () => {
+    await both(<Transcript events={[user(1, done), fixtureReply(2, CODE)]} />);
+    expect(container.querySelectorAll('.chat-interleaved pre')).toHaveLength(2);
+    expect(container.querySelectorAll('.chat-interleaved table')).toHaveLength(1);
+    expect(text()).not.toContain('Platform');
+    expect(container.querySelector('.chat-interleaved-pair.is-quote blockquote .chat-bilingual-original')!.textContent).toBe(
+      'Note: it needs a restart.',
+    );
+  });
+
+  it('a reply whose blocks do not pair is drawn whole, translation over the English under the divider (frame 4)', async () => {
+    await both(<Transcript events={[user(1, done), fixtureReply(2, MERGED)]} />);
+    expect(container.querySelector('.chat-interleaved')).toBeNull();
+    const english = container.querySelector('.chat-bilingual-reply .chat-bilingual')!;
+    expect(english.textContent).toContain('The original has three paragraphs.');
+    expect(english.textContent).toContain("So this message falls back to today's layout.");
+    expect(container.querySelector('.chat-assistant')!.textContent).toContain('所以这一条按今天的方式显示。');
+    expect(container.querySelector('.chat-translate-foot.is-reply')!.textContent).toBe('Translated');
+  });
+
+  it('a long reply that does not pair still collapses to "Show English · N lines", which opens it in place; code is not repeated', async () => {
     await both(<Transcript events={[user(1, done), longReply(2)]} />);
     const english = () => container.querySelector('.chat-bilingual-reply .chat-bilingual')!;
     expect(english().classList.contains('is-collapsed')).toBe(true);

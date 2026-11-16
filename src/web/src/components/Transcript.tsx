@@ -190,7 +190,14 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
-import { BILINGUAL_COLLAPSE_LINES, bilingualEnglish, bilingualLineCount, DEFAULT_AGENT_LANGUAGE } from '@orbit/shared';
+import {
+  BILINGUAL_COLLAPSE_LINES,
+  bilingualEnglish,
+  bilingualLineCount,
+  bilingualPairs,
+  DEFAULT_AGENT_LANGUAGE,
+  type BilingualPair,
+} from '@orbit/shared';
 import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
   ReplyTranslationFoot,
@@ -4324,9 +4331,19 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const flipped = shownOriginal && !bilingual;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
+  // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
+  const pairs = useMemo(
+    () => (bilingual && translation?.text !== undefined ? bilingualPairs(translation.text, node.text) : null),
+    [bilingual, translation?.text, node.text],
+  );
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
-      {bilingual ? (
+      {bilingual && pairs ? (
+        <>
+          <InterleavedReply pairs={pairs} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      ) : bilingual ? (
         <>
           <AssistantBubble text={translated} seq={node.seq} />
           <div className="chat-bilingual-reply">
@@ -4347,6 +4364,57 @@ function TranslatedReply({ node }: { node: TextNode }) {
           <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
         </>
       )}
+    </div>
+  );
+}
+
+// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): each block of
+// the translation with the original's matching block right under it, smaller and grey, and no divider
+// inside a pair. An item's original sits under its own words, indented with them; a heading's under the
+// heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
+function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const original = (pair: BilingualPair) =>
+    pair.original ? (
+      <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
+        <MD breaks>{pair.original}</MD>
+      </div>
+    ) : null;
+  return (
+    <div className="chat-msg chat-assistant chat-interleaved" data-seq={seq}>
+      {pairs.map((pair, i) => {
+        const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
+        let body: ReactNode;
+        if (pair.kind === 'item') {
+          const ordered = /^\d/.test(pair.marker ?? '');
+          const item = (
+            <li>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </li>
+          );
+          body = ordered ? <ol start={parseInt(pair.marker ?? '1', 10)}>{item}</ol> : <ul>{item}</ul>;
+        } else if (pair.kind === 'quote') {
+          body = (
+            <blockquote>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </blockquote>
+          );
+        } else {
+          body = (
+            <>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </>
+          );
+        }
+        return (
+          <div key={i} className={`chat-interleaved-pair is-${pair.kind}`} style={indent}>
+            <div className="md">{body}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }

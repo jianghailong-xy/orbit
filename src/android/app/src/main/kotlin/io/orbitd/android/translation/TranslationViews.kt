@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.text.MarkdownText
 
 /** Settings › Translation's words, identical on Web (`TRANSLATION_COPY`, SettingsPage's Translation card) and iOS/macOS. */
 object TranslationCopy {
@@ -87,8 +89,18 @@ object BilingualShown {
     fun userEnglish(english: String, turn: Translation.Turn?, bilingual: Boolean): String? =
         if (bilingual && turn?.state == Translation.TurnState.DONE) Translation.bilingualEnglish(english).ifEmpty { null } else null
 
-    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? =
-        if (bilingual && reply?.text != null) Translation.bilingualEnglish(english).ifEmpty { null } else null
+    /** A reply drawn whole under the divider: only when its blocks do not pair with its translation's ([replyPairs], frame 4). */
+    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? {
+        val translated = reply?.text
+        return if (bilingual && translated != null && Translation.bilingualPairs(translated, english) == null)
+            Translation.bilingualEnglish(english).ifEmpty { null } else null
+    }
+
+    /** A reply drawn block by block, each original under its translation (03-interleaved.png); null draws it as before. */
+    fun replyPairs(english: String, reply: Translation.Reply?, bilingual: Boolean): List<Translation.BilingualPair>? {
+        val translated = reply?.text
+        return if (bilingual && translated != null) Translation.bilingualPairs(translated, english) else null
+    }
 
     fun collapses(english: String): Boolean = Translation.bilingualLineCount(english) > Translation.BILINGUAL_COLLAPSE_LINES
 }
@@ -105,8 +117,48 @@ internal fun inlineCode(english: String, ground: Color): AnnotatedString = build
 }
 
 /**
- * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey. A
- * reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
+ * "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): a reply drawn pair by pair — each block in the
+ * owner's language with its original right under it, a size smaller and grey, no divider inside a pair and the usual block gap between
+ * pairs. An item's original sits under its own words, indented with them; a heading's under the heading, in the regular weight. Code,
+ * tables and images are drawn once, from the translation. Never collapsed.
+ */
+@Composable
+fun InterleavedReply(pairs: List<Translation.BilingualPair>, open: (String) -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().testTag("translation-interleaved"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        pairs.forEach { pair ->
+            val indent = Modifier.padding(start = (pair.depth * 24).dp, top = if (pair.kind == Translation.BlockKind.HEADING) 4.dp else 0.dp)
+            when (pair.kind) {
+                // The marker drawn here, as MarkdownText draws a list's, so the original sits under the item's words.
+                Translation.BlockKind.ITEM -> Row(indent) {
+                    Text(pair.number?.let { "$it. " } ?: "• ", Modifier.widthIn(min = 24.dp))
+                    InterleavedWords(pair, open, Modifier.weight(1f))
+                }
+                Translation.BlockKind.QUOTE -> Row(indent.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp)) {
+                    InterleavedWords(pair, open)
+                }
+                else -> InterleavedWords(pair, open, indent)
+            }
+        }
+    }
+}
+
+/** One pair's words: the translated block, and its original right under it in the bilingual style. */
+@Composable
+private fun InterleavedWords(pair: Translation.BilingualPair, open: (String) -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    val code = MaterialTheme.colorScheme.surfaceVariant
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        MarkdownText(pair.text, open = open)
+        pair.original?.let { original ->
+            Text(remember(original, code) { inlineCode(original, code) }, Modifier.testTag("translation-original"),
+                color = muted, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey — the
+ * owner's message, and a reply whose blocks do not pair (frame 4 of 03-interleaved.png). A reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
  * which opens it in place (frame 3); per message, never kept.
  */
 @Composable
