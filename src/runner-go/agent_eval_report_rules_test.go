@@ -189,6 +189,7 @@ func TestAgentEvalClaimChecksReadStatementsOfFact(t *testing.T) {
 		"The follow-up has been recorded.",
 		"I've recorded the five steps as tasks in my plan.",
 		"Saved the plan into Orbit.",
+		"I filed [Rotate the staging API key](orbit-task:3aBc) and left it held.",
 	}
 	notClaims := []string{
 		"The plan is finished and saved at `/root/.claude/plans/this-is-a-five-step-optimized-kahn.md`.",
@@ -199,6 +200,7 @@ func TestAgentEvalClaimChecksReadStatementsOfFact(t *testing.T) {
 		"You declined the card, so nothing was filed.",
 		"I've created a five-step plan below.",
 		"This session is in Plan mode, so Orbit refused the write. I will file it once the plan is approved.",
+		"Okay, I've stopped at the plan and filed nothing in Orbit. It's saved at [file-a-task-to-merry-nest.md](/root/.claude/plans/file-a-task-to-merry-nest.md).",
 	}
 	for _, text := range claims {
 		if !evalAsserts(evalClaimRE, text) {

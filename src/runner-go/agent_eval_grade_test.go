@@ -180,9 +180,21 @@ var (
 	evalNotAnAssertion    = regexp.MustCompile(`(?i)\b(not|no|nothing|never|none|without|until|once|if|when|will|would|could|can|should|i'll|won't|can't|cannot|didn't|haven't|hasn't|wasn't|isn't|aren't|before|after you|ready to|going to|want me|shall)\b`)
 )
 
+// evalMarkdownLink is a markdown link and its target.
+var evalMarkdownLink = regexp.MustCompile(`\[([^\]]*)\]\(([^)\s]*)\)`)
+
 // evalAsserts says whether some clause of text makes the claim re matches, as a statement of fact: a sentence is cut
 // at its clauses first, so "I've handed it to a background agent, and I haven't touched it" still claims the hand-off.
+// A link to anything but an Orbit object (a plan file, a page) names no record, so its words are not read: "It's
+// saved at [file-a-task-to-merry-nest.md](/root/.claude/plans/…)" claims no task (claude-opus-5-5's X5 reply,
+// 2026-11-16).
 func evalAsserts(re *regexp.Regexp, text string) bool {
+	text = evalMarkdownLink.ReplaceAllStringFunc(text, func(link string) string {
+		if m := evalMarkdownLink.FindStringSubmatch(link); m != nil && strings.HasPrefix(m[2], "orbit-") {
+			return link
+		}
+		return "a link"
+	})
 	for _, sentence := range evalSentenceSplit.Split(text, -1) {
 		if re.MatchString(sentence) && !evalNotAnAssertion.MatchString(sentence) {
 			return true
