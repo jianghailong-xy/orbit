@@ -91,171 +91,218 @@
   .b-box li { margin: 4px 0; }
   .b-rec { display: inline-block; background: #dcfce7; color: #15803d; font-size: 12px; padding: 0 7px; border-radius: 8px; margin-left: 6px; }
   code { font-family: "JetBrains Mono", monospace; font-size: .92em; }
+
+  .np { text-align: center; padding-top: 60px; }
+  .np-mark { width: 56px; height: 56px; border-radius: 15px; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: #fff; font: 700 22px Inter, sans-serif; }
+  .np-mark.ds { background: linear-gradient(135deg, #6f8cff, #3d5afe); box-shadow: 0 8px 22px rgba(61,90,254,.34); }
+  .np-mark.cc { background: linear-gradient(135deg, #e39a6e, #c96442); box-shadow: 0 8px 22px rgba(201,100,66,.34); }
+  .np-name { font-size: 17px; font-weight: 700; margin-top: 10px; }
+  .np-name .chev { color: #9aa0a8; font-weight: 400; font-size: 13px; margin-left: 4px; }
+  .np-copy { color: #6b7280; font-size: 13px; margin-top: 6px; }
+  .np-model { color: #9aa0a8; font-size: 12px; margin-top: 2px; }
+  .np-sum { font-size: 12.5px; margin-top: 8px; color: #4a505a; }
+  .np-sum b { color: #1f2329; } .np-sum .warn { color: #b45309; } .np-sum a { color: #3b6cf0; }
+  .cwl { font-size: 12px; color: #8a9099; text-align: center; margin-top: 2px; }
+  .cwl i { font-style: italic; } .cwl a { color: #3b6cf0; }
+  .signin { margin: 14px auto 0; width: 290px; border: 1px solid #e3e5e8; border-radius: 10px; padding: 10px 12px; text-align: left; font-size: 12.5px; }
+  .signin .bt { display: inline-block; margin: 8px 8px 0 0; padding: 3px 10px; border-radius: 6px; background: #3b6cf0; color: #fff; font-size: 12px; }
+  .signin .bt.ghost { background: #f3f4f6; color: #3b6cf0; }
+
+  .phones { display: flex; gap: 26px; align-items: flex-start; flex-wrap: nowrap; }
+  .pcol { width: 330px; flex: 0 0 auto; }
+  .ph { width: 330px; height: 700px; border-radius: 44px; border: 1px solid #d6d9de; background: #f2f2f7; position: relative; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.05); font-size: 13px; }
+  .ph.and { border-radius: 26px; background: #f7f8fb; }
+  .ph-st { height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 6px 28px 0; font-weight: 600; font-size: 13px; }
+  .ph-home { position: absolute; bottom: 8px; left: 50%; margin-left: -55px; width: 110px; height: 4px; border-radius: 2px; background: #1f2329; }
+  .ph.and .ph-home { width: 90px; margin-left: -45px; background: #9aa0a8; }
+  .ph-nav { display: flex; align-items: center; gap: 10px; padding: 4px 14px 8px; }
+  .ph-burger { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .ph-t { font-weight: 700; font-size: 15px; line-height: 1.2; } .ph-t small { display: block; font-weight: 400; color: #8a8a8d; font-size: 11.5px; }
+  .ph-card { background: #fff; margin: 4px 12px; border-radius: 16px; padding: 12px 14px; font-size: 12.5px; }
+  .ph.and .ph-card { border-radius: 14px; border: 1px solid #e3e6ec; }
+  .grp { background: rgba(120,120,128,.1); border-radius: 10px; margin-top: 6px; }
+  .grp .o { padding: 7px 10px 7px 28px; position: relative; border-top: 1px solid rgba(0,0,0,.06); }
+  .grp .o:first-child { border-top: 0; }
+  .grp .o.on::before { content: "✓"; position: absolute; left: 10px; color: #3b6cf0; font-weight: 700; }
+  .ph.and .grp .o { padding-left: 32px; } .ph.and .grp .o::before { content: ""; position: absolute; left: 10px; top: 10px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #9aa0a8; box-sizing: border-box; }
+  .ph.and .grp .o.on::before { border: 4px solid #3b6cf0; content: ""; }
+  .cap { display: inline-block; margin-top: 9px; padding: 5px 13px; border-radius: 16px; background: #3b6cf0; color: #fff; font-weight: 600; font-size: 12.5px; }
+  .ph.and .cap { border-radius: 18px; }
+  .fld { background: #fff; border: 1px solid #d5d9df; border-radius: 7px; padding: 3px 7px; margin-top: 4px; font: 11.5px "JetBrains Mono", monospace; color: #8a9099; }
+  .fld b { color: #1f2329; font-weight: 400; }
+  .ph-comp { position: absolute; left: 12px; right: 12px; bottom: 26px; background: #fff; border-radius: 20px; padding: 10px 14px; color: #9aa0a8; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .ph-comp .r { display: flex; justify-content: space-between; margin-top: 14px; font-size: 12px; color: #4a505a; }
+  .ph-comp .go { width: 22px; height: 22px; border-radius: 50%; background: #d4d7dc; display: inline-block; vertical-align: middle; }
+  .drawer { position: absolute; inset: 40px 70px 0 0; background: #f9f9fb; border-right: 1px solid #e3e5e8; padding: 14px 16px; }
+  .drawer .h1 { font-size: 22px; font-weight: 800; margin-bottom: 10px; }
+  .drawer .row { padding: 6px 0; } .drawer .sec { color: #8a8a8d; margin-top: 14px; font-size: 12px; border-top: 1px solid #e3e5e8; padding-top: 10px; }
+  .drawer .pill { background: #e4ebfd; color: #2f5bd8; border-radius: 10px; padding: 7px 10px; margin-top: 6px; }
+  .mac { display: flex; height: 470px; }
+  .b-done { background: #ecfdf3; border: 1px solid #b7ebc9; }
+  .b-done h3 { color: #15803d; }
 </style>
 </head>
 <body>
-
-<!-- ============ Part 1: today vs proposal ============ -->
 <section class="b-part">
-  <h1>设置卡：点 Use this folder 之后直接进新会话页</h1>
-  <p class="b-lead">机器 jdcloud 还没有 workspace。所有者 11-16 的要求：选好文件夹 → 点确认 → 跳到新会话页。今天点确认只是把第 1 步折成一行「完成」，页面不动，还得再发一条消息才会建 workspace。下面上排是今天，下排是方案。</p>
+<h1>设置卡只问文件夹：确认 = 建 workspace → 进它的新会话页 <span style="font-size:15px;color:#15803d;font-weight:500">v2 · 按 11-16 拍板：A 只要文件夹、不再要求登录 · B 空 workspace 保留 · C 按推荐 · D 四端一起</span></h1>
+<p class="b-lead">机器 jdcloud 还没有 workspace。今天设置卡有两步（文件夹 + 登录），确认文件夹后页面不动，还得发一条消息才建 workspace。方案：卡上只剩文件夹一步，点按钮就建 workspace 并跳到它的「New session」页；登录挪到那一页，用现有的「引擎不可用 · 修复」那一行和现有的 sign-in 卡。</p>
 
-  <div class="b-stage"><span class="b-tag today">今天</span>选文件夹 → 确认 → 停在原地等发消息</div>
-  <div class="b-row">
-    <div class="b-col">
-      <div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div>
-        <div class="w-body">
-          <div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div>
-          <div class="w-main">
-            <div class="msc">
-              <div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
-              <div class="msc-step"><div class="msc-num">1</div><div style="flex:1">
-                <div class="msc-st">Folder</div><div class="msc-help">Where on jdcloud should sessions work? They can read and change everything in it.</div>
-                <div class="msc-opt on"><div class="msc-radio"></div><div style="flex:1"><div class="msc-st" style="font-weight:500">A new folder</div><div class="msc-input">/root/orbit-repos/ <b>my-app</b></div><div class="msc-meta">Nothing at this path yet. Orbit makes it.</div></div></div>
-                <div class="msc-opt"><div class="msc-radio"></div><div>Another folder on jdcloud</div></div>
-                <div class="b-ring msc-btn primary" style="outline-offset:3px">Use this folder<span class="b-pin">1</span></div>
-              </div></div>
-              <div class="msc-step" style="border-bottom:0"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">DeepSeek</span><span class="msc-meta">API key</span><span class="msc-link">Change</span></div></div>
-              <div class="msc-foot">Nothing is created until you send. You can rename the workspace or change these later.</div>
-            </div>
-            <div class="w-fill"></div>
-            <div class="composer">Send jdcloud a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div>
-          </div>
-        </div>
-      </div>
-      <ul class="b-note"><li><span class="b-pin">1</span>确认是一个独立按钮；新文件夹名字被机器检查通过后才可点。</li></ul>
-    </div>
-    <div class="b-arrow">→</div>
-    <div class="b-col">
-      <div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div>
-        <div class="w-body">
-          <div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div>
-          <div class="w-main">
-            <div class="msc">
-              <div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
-              <div class="msc-step"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">Folder</span><span class="msc-path">/root/orbit-repos/my-app</span><span class="msc-meta">new folder</span><span class="msc-link">Change</span></div></div>
-              <div class="msc-step" style="border-bottom:0"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">DeepSeek</span><span class="msc-meta">API key</span><span class="msc-link">Change</span></div></div>
-              <div class="b-ring msc-foot ready" style="outline-offset:2px">Ready. Send a task — Orbit adds the workspace “my-app” for /root/orbit-repos/my-app as it starts.<span class="b-pin">2</span></div>
-            </div>
-            <div class="w-fill"></div>
-            <div class="composer">Send jdcloud a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div>
-          </div>
-        </div>
-      </div>
-      <ul class="b-note"><li><span class="b-pin">2</span>两步都绿了，但页面没变：还是设置卡，workspace 还不存在，侧边栏仍是空的。</li>
-      <li class="b-bad">要再发一条消息，才会「建 workspace + 建会话 + 跳过去」一起发生。确认按钮看起来像终点，其实不是。</li></ul>
-    </div>
-    <div class="b-arrow">→</div>
-    <div class="b-col" style="align-self:center; color:#6b7280; font-size:14px; max-width:420px">
-      <div class="b-box"><h3>今天为什么这样</h3>
-      <p style="margin:0">first-workspace-in-conversation（10-31）定的：<b>发消息时</b>把 workspace、会话、第一条消息放在一个事务里建（<code>POST /sessions</code> 带 <code>newWorkspace</code>），所以「Nothing is created until you send」。好处是没发消息就不会留下空 workspace；代价就是这里这一步的落差。</p></div>
-    </div>
-  </div>
+<div class="b-stage"><span class="b-tag today">今天 · web</span>两步都要做完，再发消息才建</div>
+<div class="b-row">
+ <div class="b-col"><div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div><div class="w-body"><div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div><div class="w-main"><div class="msc">
+<div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
+<div class="msc-step"><div class="msc-num">1</div><div style="flex:1"><div class="msc-st">Folder</div><div class="msc-help">Where on jdcloud should sessions work? They can read and change everything in it.</div><div class="msc-opt on"><div class="msc-radio"></div><div style="flex:1"><div class="msc-st" style="font-weight:500">A new folder</div><div class="msc-input">/root/orbit-repos/ <b>my-app</b></div><div class="msc-meta">Nothing at this path yet. Orbit makes it.</div></div></div>
+<div class="msc-opt"><div class="msc-radio"></div><div>Another folder on jdcloud</div></div>
+<div class="b-ring msc-btn primary" style="outline-offset:3px">Use this folder<span class="b-pin">1</span></div></div></div>
+<div class="b-ring msc-step" style="border-bottom:0;outline-offset:0"><div class="msc-num">2</div><div style="flex:1"><div class="msc-st">Sign in Claude Code on jdcloud</div><div class="msc-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div><div class="msc-btn primary">Sign in</div> <div class="msc-btn">Use an API key</div></div><span class="b-pin">2</span></div>
+<div class="msc-foot">Nothing is created until you send. You can rename the workspace or change these later.</div></div>
+<div class="w-fill"></div><div class="composer">Send jdcloud a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div></div></div></div>
+  <ul class="b-note"><li><span class="b-pin">1</span>确认只是把第 1 步折成完成行。</li><li><span class="b-pin">2</span>第 2 步登录挡在前面：没登录（或没配 key）就永远到不了下一步。</li></ul></div>
+ <div class="b-arrow">→</div>
+ <div class="b-col"><div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div><div class="w-body"><div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div><div class="w-main"><div class="msc">
+<div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="msc-sub">Pick where it works and sign in a coding CLI. Anything you send waits until both are done.</div></div></div>
+<div class="msc-step"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">Folder</span><span class="msc-path">/root/orbit-repos/my-app</span><span class="msc-meta">new folder</span><span class="msc-link">Change</span></div></div>
+<div class="msc-step" style="border-bottom:0"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">DeepSeek</span><span class="msc-meta">API key</span><span class="msc-link">Change</span></div></div>
+<div class="b-ring msc-foot ready" style="outline-offset:2px">Ready. Send a task — Orbit adds the workspace “my-app” for /root/orbit-repos/my-app as it starts.<span class="b-pin">3</span></div></div>
+<div class="w-fill"></div><div class="composer">Send jdcloud a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div></div></div></div>
+  <ul class="b-note"><li><span class="b-pin">3</span>两步都绿了，页面还是设置卡，侧边栏还是空的；<span class="b-bad">要再发一条消息才建 workspace</span>。</li></ul></div>
+ <div class="b-col" style="max-width:120px"></div>
+</div>
 
-  <hr class="b-sep">
+<hr class="b-sep">
 
-  <div class="b-stage"><span class="b-tag new">方案</span>选文件夹 → 确认 = 建 workspace → 跳到它的新会话页</div>
-  <div class="b-row">
-    <div class="b-col">
-      <div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div>
-        <div class="w-body">
-          <div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div>
-          <div class="w-main">
-            <div class="msc">
-              <div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="b-ring msc-sub" style="outline-offset:2px">Pick where it works and sign in a coding CLI. Then it opens a new session there.<span class="b-pin">3</span></div></div></div>
-              <div class="msc-step"><div class="msc-num">1</div><div style="flex:1">
-                <div class="msc-st">Folder</div><div class="msc-help">Where on jdcloud should sessions work? They can read and change everything in it.</div>
-                <div class="msc-opt on"><div class="msc-radio"></div><div style="flex:1"><div class="msc-st" style="font-weight:500">A new folder</div><div class="msc-input">/root/orbit-repos/ <b>my-app</b></div><div class="msc-meta">Nothing at this path yet. Orbit makes it.</div></div></div>
-                <div class="msc-opt"><div class="msc-radio"></div><div>Another folder on jdcloud</div></div>
-                <div class="b-ring msc-btn primary" style="outline-offset:3px">Create workspace and open<span class="b-pin">4</span></div>
-              </div></div>
-              <div class="msc-step" style="border-bottom:0"><div class="msc-num done">✓</div><div class="msc-done"><span class="msc-st">DeepSeek</span><span class="msc-meta">API key</span><span class="msc-link">Change</span></div></div>
-              <div class="b-ring msc-foot" style="outline-offset:2px">Creates the workspace “my-app” for /root/orbit-repos/my-app. You can rename it or change these later.<span class="b-pin">5</span></div>
-            </div>
-            <div class="w-fill"></div>
-            <div class="composer">Send jdcloud a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div>
-          </div>
-        </div>
-      </div>
-      <ul class="b-note">
-        <li><span class="b-pin">3</span>开头一句改掉「Anything you send waits…」，说清这张卡的终点是新会话页。</li>
-        <li><span class="b-pin">4</span>第 2 步已完成时，按钮就是最后一步：文案说出它会做什么（Create workspace and open）。第 2 步还没完成时仍叫 Use this folder，行为同今天（折成完成行）。</li>
-        <li><span class="b-pin">5</span>页脚预告要建的 workspace 名（重名时显示服务端会给的「my-app 2」需等结果，见待定 C）。</li>
-      </ul>
-    </div>
-    <div class="b-arrow">→</div>
-    <div class="b-col">
-      <div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/workspaces/my-app</span></div>
-        <div class="w-body">
-          <div class="w-side"><div class="h">Machines</div><div class="it">jdcloud</div><div class="h">Workspaces</div><div class="b-ring it on" style="outline-offset:1px">my-app<span class="b-pin">7</span></div></div>
-          <div class="w-main">
-            <div class="hero">
-              <div class="t">New session</div>
-              <div class="s">my-app · jdcloud · <code>/root/orbit-repos/my-app</code></div>
-              <div class="tiles"><div class="tile"><div>Claude Code</div><div class="k">Not signed in</div></div><div class="tile"><div>Codex</div><div class="k">Not signed in</div></div><div class="tile on"><div>DeepSeek</div><div class="k">API key</div></div></div>
-              <div class="b-ring toast" style="outline-offset:3px">Created workspace “my-app” on jdcloud<span class="b-pin">6</span></div>
-            </div>
-            <div class="w-fill"></div>
-            <div class="b-ring composer" style="color:#1f2329; outline-offset:3px">Send a task…<span class="b-pin">8</span><div class="row"><span>DeepSeek</span><span class="send"></span></div></div>
-          </div>
-        </div>
-      </div>
-      <ul class="b-note">
-        <li><span class="b-pin">6</span>点下去：按钮转圈（Creating…）→ workspace 建好 → 路由换到这个 workspace 的新会话页，和其他 workspace 的「New session」是同一页。顶部一行灰字说刚建了什么，一次性的。</li>
-        <li><span class="b-pin">7</span>侧边栏立刻出现 my-app 并选中；设置卡不再出现（这台机器已有 workspace）。</li>
-        <li><span class="b-pin">8</span>引擎沿用卡上选的 DeepSeek（API key），composer 已聚焦，直接打字发送。新文件夹在第一个会话被机器领取时才真正建（今天的 <code>createWorkDir</code> 机制不变）。</li>
-      </ul>
-    </div>
-    <div class="b-arrow">→</div>
-    <div class="b-col" style="align-self:center; max-width:420px">
-      <div class="b-box"><h3>其他走法怎么接</h3>
-      <ul style="font-size:14px">
-        <li><b>先登录、后选文件夹</b>（第 2 步最后完成）：选好文件夹点按钮 → 同上直接跳。</li>
-        <li><b>先选文件夹、后登录</b>（第 1 步先完成）：文件夹折成完成行；登录成功那一刻页脚出现 <code>Open new session</code> 按钮，<b>不自动跳</b>（见待定 A）。</li>
-        <li><b>没设完就先发了消息</b>：今天的「消息先等着」保留；两步完成后照旧一起建 workspace + 会话，直接跳到<b>那个会话</b>，不是空的新会话页。</li>
-        <li><b>建失败</b>（机器离线、目录已被占）：留在卡上，按钮下一行红字，按钮恢复可点。</li>
-      </ul></div>
-    </div>
-  </div>
+<div class="b-stage"><span class="b-tag new">方案 · web</span>只选文件夹 → 建 → 跳；登录在新会话页上需要时再做</div>
+<div class="b-row">
+ <div class="b-col"><div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/runners/jdcloud/new</span></div><div class="w-body"><div class="w-side"><div class="h">Machines</div><div class="it on">jdcloud</div><div class="h">Workspaces</div><div class="it dim">— none yet —</div></div><div class="w-main"><div class="msc">
+<div class="msc-head"><div class="msc-icon">▭</div><div><div class="msc-title">Set up jdcloud</div><div class="b-ring msc-sub" style="outline-offset:2px">Pick the folder sessions work in. It opens a new session there.<span class="b-pin">1</span></div></div></div>
+<div class="msc-step" style="border-bottom:0"><div class="msc-num">1</div><div style="flex:1"><div class="msc-st">Folder</div><div class="msc-help">Where on jdcloud should sessions work? They can read and change everything in it.</div><div class="msc-opt on"><div class="msc-radio"></div><div style="flex:1"><div class="msc-st" style="font-weight:500">A new folder</div><div class="msc-input">/root/orbit-repos/ <b>my-app</b></div><div class="msc-meta">Nothing at this path yet. Orbit makes it.</div></div></div>
+<div class="msc-opt"><div class="msc-radio"></div><div>Another folder on jdcloud</div></div>
+<div class="b-ring msc-btn primary" style="outline-offset:3px">Create workspace and open<span class="b-pin">2</span></div></div></div>
+<div class="b-ring msc-foot" style="outline-offset:2px">Creates the workspace “my-app” for /root/orbit-repos/my-app. You can rename it or change it later.<span class="b-pin">3</span></div></div>
+<div class="w-fill"></div>
+<div class="composer" style="opacity:.55">Send jdcloud a task…<div class="row"><span>Auto</span><span class="send"></span></div></div></div></div></div>
+  <ul class="b-note">
+   <li><span class="b-pin">1</span>开头一句只讲文件夹和终点；登录那一步整段删掉。</li>
+   <li><span class="b-pin">2</span>按钮从 Use this folder 改名 <b>Create workspace and open</b>；文件夹被机器检查通过才可点（同今天）。点下去转圈 Creating…；失败留在卡上，按钮下一行红字。</li>
+   <li><span class="b-pin">3</span>页脚预告名字和路径；重名时真正的名字（my-app 2）在下一页那行里说（C）。下面的输入框置灰：这一页不再收消息。</li>
+  </ul></div>
+ <div class="b-arrow">→</div>
+ <div class="b-col"><div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/workspaces/my-app</span></div><div class="w-body"><div class="w-side"><div class="h">Machines</div><div class="it">jdcloud</div><div class="h">Workspaces</div><div class="b-ring it on" style="outline-offset:1px">my-app<span class="b-pin">4</span></div></div><div class="w-main"><div class="b-ring cwl" style="outline-offset:3px">Created workspace <i>my-app</i> on jdcloud · /root/orbit-repos/my-app · <a>Rename</a> · <a>Settings</a><span class="b-pin">4</span></div>
+<div class="np"><div class="np-mark ds">D</div><div class="np-name">DeepSeek<span class="chev">▾</span></div><div class="np-copy">Send a task to get started.</div><div class="np-model">deepseek-v4 · API key</div></div>
+<div class="w-fill"></div>
+<div class="b-ring composer" style="color:#1f2329;outline-offset:3px">Send a task…<span class="b-pin">5</span><div class="row"><span>DeepSeek</span><span class="send"></span></div></div></div></div></div>
+  <ul class="b-note">
+   <li><span class="b-pin">4</span>现有的 <code>CreatedWorkspaceLine</code>（今天是建 workspace 的会话第一行）挪到这一页顶部：<i>Created workspace my-app on jdcloud</i> · Rename · Settings。发出第一条消息后它跟进这个会话的第一行，不再出现在后续新会话页。</li>
+   <li><span class="b-pin">5</span>就是普通的 New session 页（<code>NewSessionProviderHero</code>）：引擎沿用机器上能用的那个（这里 DeepSeek 已配 key），输入框聚焦，直接发。侧边栏出现 my-app 并选中。</li>
+  </ul></div>
+ <div class="b-arrow">→</div>
+ <div class="b-col"><div class="w"><div class="w-bar"><i></i><i></i><i></i><span>/workspaces/my-app</span></div><div class="w-body"><div class="w-side"><div class="h">Machines</div><div class="it">jdcloud</div><div class="h">Workspaces</div><div class="it on">my-app</div></div><div class="w-main"><div class="cwl">Created workspace <i>my-app</i> on jdcloud · /root/orbit-repos/my-app · <a>Rename</a> · <a>Settings</a></div>
+<div class="np"><div class="np-mark cc">✳</div><div class="np-name">Claude Code<span class="chev">▾</span></div>
+<div class="b-ring np-sum" style="outline-offset:3px;display:inline-block"><b>Claude Code on jdcloud</b> · <span class="warn">Not signed in</span> · <a>Sign in</a><span class="b-pin">6</span></div>
+<div class="b-ring signin" style="outline-offset:3px"><b>Sign in Claude Code on jdcloud</b><div class="msc-help">Sessions run on the coding CLIs signed in on that machine.</div><span class="bt">Sign in</span><span class="bt ghost">Use an API key</span><span class="b-pin">7</span></div></div>
+<div class="w-fill"></div>
+<div class="composer" style="color:#1f2329">Send a task…<div class="row"><span>Claude Code</span><span class="send"></span></div></div></div></div></div>
+  <ul class="b-note">
+   <li><span class="b-pin">6</span>选到一个还没登录的引擎：hero 下面现有的「不可用」摘要行：<i>Claude Code on jdcloud · Not signed in</i>，链接文字从 Fix it 换成 <b>Sign in</b>。</li>
+   <li><span class="b-pin">7</span>点 Sign in 在原地展开现有的 <code>RunnerSignIn</code> 卡（设置卡第 2 步原样搬过来），登录完收起，不离开这一页（见待定 E）。没登录就发消息：照今天的 409 → 会话里的登录卡。</li>
+  </ul></div>
+</div>
 </section>
-
-<!-- ============ Part 2: rules, changes, decisions ============ -->
 <section class="b-part">
-  <h2>改动清单 · 待你定</h2>
-  <div class="b-row" style="align-items:stretch">
-    <div class="b-col b-box">
-      <h3>规则</h3>
-      <ol>
-        <li>确认按钮是设置的终点：两步都完成时，点它就建 workspace 并进入它的新会话页。</li>
-        <li>建出来的 workspace 和 10-31 的规则一致：名字取文件夹名、重名加「 2」、隔离关、新文件夹 <code>autoCreateWorkDir</code>。</li>
-        <li>引擎/凭据沿用卡上已选的，带到新会话页的草稿。</li>
-        <li>已有等待中的消息时，不建空 workspace，直接按今天的路建 workspace + 会话。</li>
-        <li>失败不跳页、不留半个 workspace（服务端一个请求一个事务）。</li>
-        <li>「Nothing is created until you send」这句删掉；SETUP_LEAD、setupReady 换成新文案。</li>
-      </ol>
-    </div>
-    <div class="b-col b-box">
-      <h3>落地（按代价排）</h3>
-      <table class="b-t">
-        <tr><th>层</th><th>改什么</th><th>量</th></tr>
-        <tr><td>apiserver</td><td><code>POST /workspaces</code> 接受 <code>{ runnerId, newWorkspace: { workDir | newFolder } }</code>，复用 <code>newWorkspaceFor</code>（取名去重、reposRoot 拼路径、<code>autoCreateWorkDir</code>、能力检查 409 <code>NEW_FOLDER_UNSUPPORTED</code>）。pg spec 覆盖两种文件夹 + 重名。</td><td>小</td></tr>
-        <tr><td>web</td><td><code>MachineSetupCard</code> 按钮文案/状态；<code>WorkspaceView</code> 在两步完成且无等待消息时调用新接口，成功后 <code>setup.finish</code> + 导航到 <code>/workspaces/:id</code>（空草稿） 并带上草稿引擎；一次性提示行；copy 改动 + 测试。</td><td>中</td></tr>
-        <tr><td>contract</td><td><code>docs/first-workspace-contract.md</code> 加 §3b：不带会话建 workspace。</td><td>小</td></tr>
-        <tr><td>iOS / macOS / Android</td><td>同样的终点行为（它们的设置卡已跟 web）。</td><td>中 · 可后跟</td></tr>
-      </table>
-    </div>
-  </div>
+<h2>iPhone · Android · Mac：同一条规则，四端一起上（D）</h2>
+<p class="b-lead">三个原生端今天的设置卡和 web 一样两步（<code>MachineSetupCard.swift</code>、<code>MachineSetupCard.kt</code>）。一样删掉登录步，按钮改成建 + 跳；跳过去的是各端现有的 workspace 新会话页，顶部是各端现有的 <code>CreatedWorkspaceLine</code>。手绘，结构取自现有代码，文案照代码。</p>
+<div class="phones">
+ <div class="pcol"><div class="b-stage"><span class="b-tag new">iPhone</span>设置卡</div><div class="ph"><div class="ph-st"><span>9:41</span><span>●●● ▮</span></div><div class="ph-nav"><div class="ph-burger">☰</div><div class="ph-t">New session<small>jdcloud</small></div></div>
+<div class="ph-card"><div style="display:flex;gap:8px"><div class="msc-icon" style="width:22px;height:22px;font-size:12px">▭</div><div><b>Set up jdcloud</b><div class="msc-help" style="font-size:11.5px">Pick the folder sessions work in. It opens a new session there.</div></div></div>
+<div style="margin-top:10px"><b>Folder</b><div class="msc-help" style="font-size:11.5px">Where on jdcloud should sessions work? They can read and change everything in it.</div>
+<div class="grp"><div class="o on">A new folder<div class="fld">/root/orbit-repos/ <b>my-app</b></div><div class="msc-meta">Nothing at this path yet. Orbit makes it.</div></div><div class="o">Another folder…</div></div>
+<div class="b-ring cap" style="outline-offset:3px">Create Workspace and Open<span class="b-pin">1</span></div></div>
+<div class="msc-meta" style="margin-top:10px;border-top:1px solid #eee;padding-top:8px">Creates the workspace “my-app” for /root/orbit-repos/my-app. You can rename it or change it later.</div></div><div class="ph-comp" style="opacity:.5">Send jdcloud a task…<div class="r"><span>＋ Auto</span><span>DeepSeek <span class="go"></span></span></div></div><div class="ph-home"></div></div></div>
+ <div class="b-arrow">→</div>
+ <div class="pcol"><div class="b-stage"><span class="b-tag new">iPhone</span>建好、跳到新会话页</div><div class="ph"><div class="ph-st"><span>9:41</span><span>●●● ▮</span></div><div class="ph-nav"><div class="ph-burger">☰</div><div class="b-ring ph-t" style="outline-offset:3px">New session<small>my-app · jdcloud</small><span class="b-pin">2</span></div></div>
+<div class="b-ring cwl" style="margin:8px 16px;outline-offset:3px">Created workspace <i>my-app</i> on jdcloud · /root/orbit-repos/my-app<br><a>Rename</a> · <a>Settings</a><span class="b-pin">3</span></div>
+<div class="np" style="padding-top:110px"><div class="np-mark ds">D</div><div class="np-name">DeepSeek<span class="chev">▾</span></div><div class="np-copy">Send a task to get started.</div></div><div class="ph-comp" style="">Send a task…<div class="r"><span>＋ Auto</span><span>DeepSeek <span class="go"></span></span></div></div><div class="ph-home"></div></div></div>
+ <div class="pcol"><div class="b-stage"><span class="b-tag new">iPhone</span>抽屉</div><div class="ph"><div class="ph-st"><span>9:41</span><span>●●● ▮</span></div><div class="drawer"><div class="h1">Orbit</div><div class="row">▦ Projects</div><div class="row">☰ Tasks</div><div class="row">▤ Wiki</div>
+<div class="sec">Workspaces</div><div class="b-ring pill" style="outline-offset:2px">my-app <span style="color:#8a8a8d;font-size:11px">jdcloud</span><span class="b-pin">4</span></div></div><div class="ph-home"></div></div></div>
+ <div class="pcol" style="width:30px"></div>
+ <div class="pcol"><div class="b-stage"><span class="b-tag new">Android</span>设置卡</div><div class="ph and"><div class="ph-st" style="padding:6px 20px 0"><span>9:41</span><span>▾ ▮</span></div><div class="ph-nav" style="padding:6px 12px 8px"><span style="font-size:18px">☰</span><div class="ph-t">New session<small>jdcloud</small></div></div>
+<div class="ph-card"><b style="font-size:14px">Set up jdcloud</b><div class="msc-help" style="font-size:11.5px">Pick the folder sessions work in. It opens a new session there.</div>
+<div style="margin-top:10px"><b>Folder</b>
+<div class="grp" style="background:#fff;border:1px solid #e3e6ec"><div class="o on">A new folder<div class="fld">/root/orbit-repos/ <b>my-app</b></div></div><div class="o">Another folder on jdcloud</div></div>
+<div class="b-ring cap" style="outline-offset:3px">Create workspace and open<span class="b-pin">5</span></div></div>
+<div class="msc-meta" style="margin-top:10px">Creates the workspace “my-app” for /root/orbit-repos/my-app.</div></div><div class="ph-comp" style="border-radius:24px;opacity:.5">Send jdcloud a task…<div class="r"><span>＋</span><span>DeepSeek <span class="go"></span></span></div></div><div class="ph-home"></div></div></div>
+ <div class="b-arrow">→</div>
+ <div class="pcol"><div class="b-stage"><span class="b-tag new">Android</span>新会话页 · 未登录引擎</div><div class="ph and"><div class="ph-st" style="padding:6px 20px 0"><span>9:41</span><span>▾ ▮</span></div><div class="ph-nav" style="padding:6px 12px 8px"><span style="font-size:18px">☰</span><div class="ph-t">New session<small>my-app · jdcloud</small></div></div>
+<div class="cwl" style="margin:8px 16px">Created workspace <i>my-app</i> on jdcloud<br><a>Rename</a> · <a>Settings</a></div>
+<div class="np" style="padding-top:90px"><div class="np-mark cc">✳</div><div class="np-name">Claude Code<span class="chev">▾</span></div>
+<div class="b-ring np-sum" style="outline-offset:3px;display:inline-block"><b>Claude Code on jdcloud</b> · <span class="warn">Not signed in</span> · <a>Sign in</a><span class="b-pin">6</span></div></div><div class="ph-comp" style="border-radius:24px;">Send a task…<div class="r"><span>＋</span><span>DeepSeek <span class="go"></span></span></div></div><div class="ph-home"></div></div></div>
+</div>
+<div class="b-row" style="margin-top:22px">
+ <div class="b-col"><ul class="b-note" style="font-size:14px">
+  <li><span class="b-pin">1</span>iOS 胶囊按钮，标题式大写 <b>Create Workspace and Open</b>（同今天 Use This Folder 的写法）。</li>
+  <li><span class="b-pin">2</span>标题栏从机器名换成 workspace 名 + 机器：和点抽屉里任何 workspace 进来的新会话页一样。</li>
+  <li><span class="b-pin">3</span>现有的 <code>CreatedWorkspaceLineView</code>，放在新会话页顶部。</li>
+  <li><span class="b-pin">4</span>抽屉里 <i>Set up jdcloud</i> 那一行换成 my-app 的 workspace 行。</li>
+  <li><span class="b-pin">5</span>Android 跟 iOS：同一张卡、同一个按钮（Material 圆角按钮，句首大写）。</li>
+  <li><span class="b-pin">6</span>引擎没登录时，hero 下一行 <i>Not signed in · Sign in</i>，点开现有的 sign-in 卡；三端一样。</li>
+ </ul></div>
+ <div class="b-col" style="flex:0 0 auto"><div class="w" style="width:640px"><div class="w-bar"><i></i><i></i><i></i><span>Orbit — my-app</span></div><div class="mac">
+<div class="w-side" style="width:150px"><div class="h">Workspaces</div><div class="b-ring it on" style="outline-offset:1px">my-app<span class="b-pin">7</span></div><div class="h" style="margin-top:14px">jdcloud</div></div>
+<div style="flex:1"><div style="display:flex;height:100%"><div style="flex:1;padding:14px"><div class="cwl">Created workspace <i>my-app</i> on jdcloud · /root/orbit-repos/my-app · <a>Rename</a> · <a>Settings</a></div>
+<div class="np" style="padding-top:70px"><div class="np-mark ds">D</div><div class="np-name">DeepSeek<span class="chev">▾</span></div><div class="np-copy">Send a task to get started.</div></div>
+<div class="composer" style="margin-top:110px;color:#1f2329">Send a task…<div class="row"><span>DeepSeek</span><span class="send"></span></div></div></div></div></div></div></div>
+  <ul class="b-note" style="font-size:14px;max-width:640px"><li><span class="b-pin">7</span>Mac：侧边栏 jdcloud 分组下的 <i>Set up jdcloud</i> 换成 my-app 行并选中；主区同 web。</li></ul></div>
+</div>
+</section>
+<section class="b-part">
+<h2>规则 · 改动 · 已定 / 还待你定</h2>
+<div class="b-row" style="align-items:stretch">
+ <div class="b-col b-box">
+  <h3>规则</h3>
+  <ol>
+   <li>设置卡只问一件事：文件夹。登录不再是建 workspace 的前提（A）。</li>
+   <li>按钮 = 建 workspace + 跳到它的新会话页。按钮在文件夹被机器检查通过前不可点（同今天）。</li>
+   <li>建出来的 workspace 和 10-31 规则一致：名字取文件夹名、重名加「 2」、隔离关、新文件夹 <code>autoCreateWorkDir</code>（第一个会话被领取时由机器建）。</li>
+   <li>点了没发消息就离开：workspace 留着，就是普通 workspace（B）。</li>
+   <li>名字以服务端为准，在新会话页的 Created workspace 行里说（C）。</li>
+   <li>新会话页的引擎：沿用机器上能直接跑的那个（已登录或已配 key）；都不能跑时选第一个已装的，hero 下显示 Not signed in · Sign in。</li>
+   <li>设置卡这一页不再收消息：输入框置灰（「消息先等着」这套 held message 删掉，见待定 F）。</li>
+   <li>失败不跳页、不留半个 workspace（一个请求一个事务）。</li>
+   <li>四端同一批（D）；文案全英文，三端共用一份 copy。</li>
+  </ol>
+ </div>
+ <div class="b-col b-box">
+  <h3>落地（按代价排）</h3>
+  <table class="b-t">
+   <tr><th>层</th><th>改什么</th><th>量</th></tr>
+   <tr><td>apiserver</td><td><code>POST /workspaces</code> 接受 <code>{ runnerId, newWorkspace: { workDir | newFolder } }</code>，复用 <code>newWorkspaceFor</code>（取名去重、reposRoot 拼路径、<code>autoCreateWorkDir</code>、409 <code>NEW_FOLDER_UNSUPPORTED</code>）。不查登录。pg spec：两种文件夹、重名、并发两次。</td><td>小</td></tr>
+   <tr><td>contract</td><td><code>docs/first-workspace-contract.md</code> 加 §3b：不带会话建 workspace；§3 的带会话路径保留给老客户端。</td><td>小</td></tr>
+   <tr><td>web</td><td><code>MachineSetupCard</code> 删登录步、按钮/文案；<code>WorkspaceView</code> 建好后 <code>setup.finish</code> + 导航；<code>CreatedWorkspaceLine</code> 能挂在新会话页；hero 的 Not signed in 行 + 原地 <code>RunnerSignIn</code>；<code>WelcomeCard</code> 同步；copy + 测试。</td><td>中</td></tr>
+   <tr><td>iOS / macOS</td><td><code>MachineSetupCard.swift</code>、<code>MachineSetupModel</code>、<code>CreatedWorkspaceLineView</code> 挂点、抽屉/侧边栏行；OrbitKit API + 测试。</td><td>中</td></tr>
+   <tr><td>Android</td><td><code>MachineSetupCard.kt</code>、<code>ComposerModel</code>、<code>ComposerApi</code>、抽屉行；跟 iOS 并排对帧。</td><td>中</td></tr>
+  </table>
+ </div>
+</div>
 
-  <div class="b-box" style="margin-top:22px">
-    <h3>待定 · 要你拍板</h3>
-    <table class="b-t">
-      <tr><th style="width:22%">问题</th><th>方案 A</th><th>方案 B</th><th style="width:16%">推荐</th></tr>
-      <tr><td><b>A. 先选文件夹、后登录时，登录成功要不要自动跳？</b></td><td>不自动跳；页脚出 <code>Open new session</code> 按钮，用户点了才建、才跳。「确认才建」一条规则贯穿。</td><td>登录成功就自动建 + 跳。少点一次，但登录回调常在另一个标签/页面完成，回来时页面已变，容易迷路。</td><td>A<span class="b-rec">推荐</span></td></tr>
-      <tr><td><b>B. 确认后、还没发消息就离开，空 workspace 留不留？</b></td><td>留着。它就是一个普通 workspace（和机器页表单建的一样），下次打开直接用。</td><td>没发过消息的 workspace 在离开时删掉，回到「没发就不建」。逻辑复杂，还会让侧边栏闪一下又消失。</td><td>A<span class="b-rec">推荐</span></td></tr>
-      <tr><td><b>C. 重名时按钮/页脚显示什么名？</b></td><td>页脚写文件夹名；真正的名字（可能是「my-app 2」）以服务端结果为准，在新会话页提示行里说出来。</td><td>先问服务端预取名再显示。多一次请求，名字可能被并发抢走。</td><td>A<span class="b-rec">推荐</span></td></tr>
-      <tr><td><b>D. 原生端一起上吗？</b></td><td>web 先上，iOS/macOS/Android 跟一个任务。</td><td>四端同一批落地。</td><td>A<span class="b-rec">推荐</span></td></tr>
-    </table>
-  </div>
+<div class="b-row" style="margin-top:22px;align-items:stretch">
+ <div class="b-col b-box b-done">
+  <h3>已定（11-16）</h3>
+  <ul>
+   <li><b>A</b> 选好文件夹就建 workspace 并跳到新会话页；设置卡不再要求登录。</li>
+   <li><b>B</b> 没发消息就离开，空 workspace 保留。</li>
+   <li><b>C</b> 页脚写文件夹名，真正的名字以服务端为准、在新会话页说。</li>
+   <li><b>D</b> web、iOS、macOS、Android 一起上。</li>
+  </ul>
+ </div>
+ <div class="b-col b-box" style="flex:2">
+  <h3>还待你定（因为 A 新冒出来的）</h3>
+  <table class="b-t">
+   <tr><th style="width:24%">问题</th><th>方案 A</th><th>方案 B</th><th style="width:12%">推荐</th></tr>
+   <tr><td><b>E. 新会话页上引擎没登录，Sign in 在哪做？</b></td><td>原地展开现有的 <code>RunnerSignIn</code> 卡（就是设置卡第 2 步原样搬过来），登录完收起，不离开页面。</td><td>沿用今天的 Fix it：跳到机器设置页的引擎那一行登录，再自己回来。零新界面，但新用户第一次要绕一圈。</td><td>A<span class="b-rec">推荐</span></td></tr>
+   <tr><td><b>F. 设置卡页上还没选文件夹就打字发送？</b></td><td>不收：输入框置灰，占位写 <i>Pick a folder first</i>。「消息先等着」那套（held message、Withdraw、Waiting for…）整个删掉，少一条路。</td><td>保留：消息先等着，点建的同时把它一起发出去，跳到那个会话。今天的代码能复用，但多一种状态要四端都维护。</td><td>A<span class="b-rec">推荐</span></td></tr>
+  </table>
+ </div>
+</div>
 </section>
 </body>
 </html>
