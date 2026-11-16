@@ -626,6 +626,20 @@ describe('a conversation still going', () => {
       expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(1);
     });
 
+    it('falls back to polling when reopening a dropped stream is refused with a 429', async () => {
+      await mountRunning();
+      await wires[0].end();
+      streamReply = () => ({ ok: false, status: 429, statusText: 'Too Many Requests', json: async () => ({}) }) as Response;
+      await elapse(1_000);
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(2);
+      added = [at(rows.OLDER_PROGRESS_1, 209)];
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+      await elapse(60_000);
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(2);
+    });
+
     it('falls back to polling against a server from before the stream (404)', async () => {
       streamReply = () => notFound();
       await mountRunning();

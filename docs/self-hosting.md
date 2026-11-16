@@ -153,6 +153,23 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 Orbit can execute code with the runner account's privileges. Do not expose an instance to untrusted users or
 attach a runner with broader credentials than its users should be able to exercise.
 
+### Live viewers of shared sessions
+
+A public link's page and a guest's page follow the session over a live stream, which stays open while the page is.
+Each apiserver caps how many are open at once:
+
+| Cap | Limit |
+| --- | --- |
+| One visitor (address) on one public link | 4 |
+| One public link, all visitors | 200 |
+| One apiserver, every public and guest stream | 2000, or `VIEWER_STREAMS_MAX` |
+
+A stream over a cap is refused with `429`, and the page then follows the session by reloading what is new every few
+seconds instead. Set `VIEWER_STREAMS_MAX` in `.env` to a whole number of streams to change the per-apiserver total,
+then recreate the apiserver. Any other value stops the apiserver at start. Behind a proxy, list it in
+`TRUSTED_PROXIES` too: otherwise every visitor has the proxy's address, and four streams fill the first cap for a
+link ([configuration](configuration.md)).
+
 ## 4. Register a runner
 
 With managed runners on, every account is given a runner at sign-in, and this step is optional: register a machine
