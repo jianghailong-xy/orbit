@@ -250,7 +250,8 @@ function CloneStatusLine({
         </div>
       );
     }
-    const why = (error ?? '').trim().replace(/\.?$/, '.');
+    const said = (error ?? '').trim();
+    const why = said ? said.replace(/\.?$/, '.') : '';
     return (
       <div className="msc-created" data-clone="FAILED" data-clone-failure={failure.kind}>
         <span className="msc-clone-error">

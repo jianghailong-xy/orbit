@@ -141,7 +141,9 @@ export const CREATED_RENAME_FAILED = 'Couldn’t rename the workspace';
 export const CLONE_CLONING = 'Cloning';
 // Not on a board: before the machine has started it.
 export const CLONE_WAITING = 'Waiting to clone';
-export const cloneCouldNot = (repository: string, why: string) => `Couldn’t clone ${repository}: ${why}`;
+// The reason arrives with the session's next read, a moment after the frame that says the clone failed.
+export const cloneCouldNot = (repository: string, why: string) =>
+  why ? `Couldn’t clone ${repository}: ${why}` : `Couldn’t clone ${repository}.`;
 export const cloneAppRemoved = (repository: string) => `Orbit’s GitHub App is no longer installed on ${repository}.`;
 export const CLONE_INSTALL_ON_GITHUB = 'Install on GitHub';
 export const CLONE_SIGN_IN_EXPIRED = 'Your GitHub sign-in expired.';

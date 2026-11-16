@@ -200,6 +200,11 @@ describe('the first line when the clone failed (P5 failed)', () => {
     expect(connectGithub).toHaveBeenCalledWith('/');
   });
 
+  it('failed before its reason has been read: says so without an empty reason', async () => {
+    const page = await line({ cloneState: 'FAILED', cloneError: null });
+    expect(said(page.querySelector('.msc-created'))).toBe('Couldn’t clone orbit-labs/orbit-web. Retry · Settings');
+  });
+
   it('git’s own words otherwise', async () => {
     const page = await line({ cloneState: 'FAILED', cloneError: 'git clone failed: fatal: unable to access' });
     expect(said(page.querySelector('.msc-created'))).toBe(
