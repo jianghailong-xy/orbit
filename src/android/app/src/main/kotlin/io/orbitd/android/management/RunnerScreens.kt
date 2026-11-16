@@ -376,7 +376,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
 fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revision: Long, open: (OrbitRoute) -> Unit,
                  back: () -> Unit, openWorkspace: (String) -> Unit) {
     when {
-        runnerId == null -> MachinesAndModelsPage(api, revision, open, record)
+        runnerId == null -> MachinesAndModelsPage(api, revision, open, record = record)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
         record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision, open)
         else -> RunnerDetail(api, runnerId, record, revision, open, back, openWorkspace)
@@ -557,6 +557,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revisi
                     HorizontalDivider()
                     TextButton(onClick = { updateEngines() }, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                     RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                    // A failed line: an agent can be sent to fix it, under the report (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                    RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                            }
+                            AgentFixLine(view, "update-fix:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+                        }
+                    }
                     TextButton(onClick = { scope.launch {
                         notice.show(model.press { api.post("runners/$id/refresh-models") } ?: "Re-reading this machine’s model lists — the picker updates within a minute.")
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
@@ -1039,6 +1048,15 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                 RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+                RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                    Column(Modifier.padding(bottom = 8.dp)) {
+                        AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                            scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                        }
+                        AgentFixLine(view, "update-fix:line", ::openSession)
+                    }
+                }
             }
             Spacer(Modifier.height(48.dp))
         }

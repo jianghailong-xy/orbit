@@ -56,6 +56,9 @@ internal class MachinesAndModelsModel(private val api: ManagementApi) {
      * under the reader as each list arrives. */
     val settled get() = (machines.loaded || machines.failed) && keysAnswered && poolsAnswered && sharedAnswered
 
+    /** Both pool lists have had their answer: all a pool's Needs you line is read from, as Settings' Providers row counts them. */
+    val poolsSettled get() = poolsAnswered && sharedAnswered
+
     suspend fun loadKeys() {
         val read = try { providerObjects(api.get("providers/mine")) } catch (e: CancellationException) { throw e }
             catch (e: Exception) { if (!keysLoaded) keysError = personalFailure(e); keysAnswered = true; return }
@@ -93,18 +96,26 @@ internal class MachinesAndModelsModel(private val api: ManagementApi) {
         MachinesAndModels.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs, managedRunnerId)
 }
 
+/** Which of the Machines & models page's halves is shown (iOS RunnersListView.Part): Settings opens it twice, as the web's Settings nav
+ * has Machines and Providers; everywhere else it is the whole page. */
+internal enum class MachinesAndModelsPart { ALL, MACHINES, PROVIDERS }
+
 /**
  * The Machines & models page (iOS RunnersListView, docs/mocks/infrastructure-page/03-ios.png), Settings › Machines & models: what needs a person,
  * the machines (each opening its record; reordered and removed here), Add Runner, then the account pools and the API keys. Every way out
  * stays in the app: an engine is signed in on its page, a machine on its record, a pool on its page, a DeepSeek key on its page.
  */
 @Composable
-internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, record: String? = null) {
+internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit,
+    part: MachinesAndModelsPart = MachinesAndModelsPart.ALL, record: String? = null) {
+    val machinesHalf = part != MachinesAndModelsPart.PROVIDERS
+    val providersHalf = part != MachinesAndModelsPart.MACHINES
     val model = remember(api) { MachinesAndModelsModel(api) }
     // Terminals asking to be approved head Needs you (docs/mocks/waiting-on-you-removal/02 ①); opened from the push
     // ([record] `terminal:<id>`), the page is at its top with that card lit.
     val terminalStore = remember(api) { TerminalRequestStore.of(api) }
-    val terminals = rememberLiveTerminalRequests(terminalStore)
+    // Terminals are machines' business: the Providers half draws none.
+    val terminals = if (machinesHalf) rememberLiveTerminalRequests(terminalStore) else emptyList()
     val litTerminal = TerminalNeedsYou.requestOf(record)
     val scroll = rememberScrollState()
     LaunchedEffect(litTerminal) { if (litTerminal != null) scroll.animateScrollTo(0) }
@@ -145,7 +156,7 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
     fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = record))
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            when {
+            if (machinesHalf) when {
                 !machines.loaded && machines.failed -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Machines couldn't be loaded", style = MaterialTheme.typography.titleMedium)
@@ -164,7 +175,7 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
             }
             if (model.settled || terminals.isNotEmpty()) {
                 val attention = if (model.settled) model.attention(machines.runners, machines.workspaces, now, managedRow?.let { managedRunnerId })
-                    else emptyList()
+                    .filter { part == MachinesAndModelsPart.ALL || it.isMachine == machinesHalf } else emptyList()
                 if (attention.isNotEmpty() || terminals.isNotEmpty()) NeedsYouSection(attention, {
                     TerminalRequestCards(terminals, terminalStore, litTerminal, notice::show)
                 }) { item ->
@@ -176,21 +187,25 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                     }
                 }
             }
-            managed.shown?.takeIf { it.display.ensure && it.display.kind == "setup" }?.let { shown ->
+            if (machinesHalf) managed.shown?.takeIf { it.display.ensure && it.display.kind == "setup" }?.let { shown ->
                 ManagedRunnerSection(shown.display, busy = managed.busy) {
                     // An account with a machine or a workspace is asked first (D3); a new one sets it up at once.
                     if (machines.runners.isNotEmpty() || machines.workspaces.isNotEmpty()) confirmingSetup = true else setUp()
                 }
             }
-            if (machines.loaded && machines.runners.isNotEmpty()) {
-                FormSection(MachinesAndModels.MACHINES, MachinesAndModels.machinesCount(machines.runners), MachinesAndModels.MACHINES_DETAIL) {
-                    MachineRows(machines, now, ::runner, managedStatus) { removing = it }
+            if (machinesHalf) {
+                if (machines.loaded && machines.runners.isNotEmpty()) {
+                    FormSection(MachinesAndModels.MACHINES, MachinesAndModels.machinesCount(machines.runners), MachinesAndModels.MACHINES_DETAIL) {
+                        MachineRows(machines, now, ::runner, managedStatus) { removing = it }
+                    }
                 }
+                FormSection(footer = RunnerCopy.ADD_FOOTER) { TextButton(onClick = { adding = true }) { Text(RunnerCopy.ADD) } }
             }
-            FormSection(footer = RunnerCopy.ADD_FOOTER) { TextButton(onClick = { adding = true }) { Text(RunnerCopy.ADD) } }
-            PoolsSection(model.memberPools(now), model.ownPools(now), now, ::page)
-            KeysSection(model, ::page)
-            ModelTiersSection(api, revision)
+            if (providersHalf) {
+                PoolsSection(model.memberPools(now), model.ownPools(now), now, ::page)
+                KeysSection(model, ::page)
+                ModelTiersSection(api, revision)
+            }
             Spacer(Modifier.height(48.dp))
         }
         notice.Host(Modifier.align(Alignment.BottomCenter))

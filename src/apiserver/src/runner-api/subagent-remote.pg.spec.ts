@@ -21,6 +21,9 @@
  *      and the skip recorded; nothing usable is NO_SUBAGENT_PROVIDER with each provider's reason.
  *  12. A target runner whose Claude region verdict is blocked: the default Claude sign-in, an Anthropic key and a Claude
  *      pool are all skipped with "claude can’t use Anthropic on …", and the run goes to a DeepSeek key on Claude Code.
+ *  13. Resume: a finished remote run is continued on the workspace and runner that ran it, whose claim names it in
+ *      `resumeOf`; refused while it runs, with a placement, for a run that did not run elsewhere, for a runner that
+ *      does not declare SUBAGENT_REMOTE_RESUME_V1, and once the workspace has moved to another runner.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-remote.pg.spec.ts
  *
@@ -31,7 +34,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { CLAUDE_REGION_V1, RunEventType, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
+import { CLAUDE_REGION_V1, RunEventType, SUBAGENT_REMOTE_RESUME_V1, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
 import { HttpException } from '@nestjs/common';
 import { Client } from 'pg';
 
@@ -593,5 +596,44 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
         `${provider} is removed for the region`);
     }
     assert.deepEqual([opened.decision.provider, opened.decision.engine], [deepseek.slug, 'claude'], 'the DeepSeek key on Claude Code runs it');
+  });
+
+  await t.test('resume: back to the workspace and runner that ran it, with the run it continues in the claim', async () => {
+    const e = await estate();
+    const first = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01First', workspace: 'orbit-macos' }));
+    const again = (toolUseId: string, fields: Partial<SubagentRunCreateDto> = {}) =>
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId, resumeOf: first.runId, prompt: 'Now run the tests.', ...fields }));
+
+    await assert.rejects(again('toolu_01Early'), refusedWith('SUBAGENT_RESUME_RUNNING'), 'refused while it runs');
+    await subagents.claimRemoteSubagentRun(e.mac, first.runId);
+    await subagents.endRemoteSubagentRun(e.mac, first.runId, update({ status: 'DONE', resultSummary: 'Built.' }));
+
+    await assert.rejects(again('toolu_01Old'), refusedWith('SUBAGENT_RESUME_UNSUPPORTED'),
+      'a runner that keeps no conversation would start a new one');
+    await prisma.runner.update({ where: { id: e.mac.id }, data: { capabilities: ['os:darwin', SUBAGENT_REMOTE_RESUME_V1] } });
+    await assert.rejects(again('toolu_01Placed', { workspace: 'orbit-macos' }), refusedWith('SUBAGENT_RESUME_PLACED'));
+    const local = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01Local' }));
+    await assert.rejects(
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01NotRemote', resumeOf: local.runId })),
+      refusedWith('SUBAGENT_RESUME_NOT_FOUND'), "a run on the parent's own machine is resumed there, not through the server");
+
+    const resumed = await again('toolu_01Again') as SubagentRemoteRunCreateResponse;
+    assert.deepEqual(resumed.remote, { workspaceId: e.macos, workspaceName: 'orbit-macos' });
+    assert.notEqual(resumed.runId, first.runId, 'a resume is a run of its own');
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: resumed.runId } });
+    assert.equal(row.targetRunnerId, e.mac.id, 'on the runner that has the conversation');
+    const firstRow = await prisma.subagentRun.findUniqueOrThrow({ where: { id: first.runId } });
+    const modelOf = (attempts: unknown) => (attempts as Array<{ model: string }>).at(-1)?.model;
+    assert.equal(modelOf(row.attempts), modelOf(firstRow.attempts), 'on the model it last ran on, so on its engine');
+    const claim = await subagents.claimRemoteSubagentRun(e.mac, resumed.runId);
+    assert.equal(claim.resumeOf, first.runId, 'the claim names the run it continues');
+    assert.equal(claim.prompt, 'Now run the tests.');
+    await subagents.endRemoteSubagentRun(e.mac, resumed.runId, update({ status: 'DONE', resultSummary: 'Tests passed.' }));
+
+    const other = await machine(e.ownerId, 'mac-studio', { capabilities: ['os:darwin', SUBAGENT_REMOTE_RESUME_V1] });
+    await prisma.workspace.update({ where: { id: e.macos }, data: { runnerId: other.id } });
+    let message = '';
+    await assert.rejects(again('toolu_01Moved'), refusedWith('SUBAGENT_RESUME_MOVED', (said) => { message = said; }));
+    assert.match(message, /orbit-macos has moved to another machine/);
   });
 });

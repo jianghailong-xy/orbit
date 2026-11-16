@@ -318,7 +318,7 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
       name: 'TASK_ACCEPTANCE',
       command: row.acceptanceCommand,
       expectedExitCode: row.acceptanceExpectedExitCode,
-      timeoutSeconds: row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds('TASK_ACCEPTANCE', row),
     });
   }
   // The kind is checked as well as the flag even though 0393's CHECK makes the combination
@@ -327,18 +327,31 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
   // the check it was queued for rather than landing unchecked.
   const landing = row.kind === 'LAND_TASK';
   const command = landing ? row.landingCheckCommand ?? row.mergeCheckCommand : row.mergeCheckCommand;
-  const timeout = landing
-    ? row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds
-    : row.mergeCheckTimeoutSeconds;
   if (command && !(landing && row.skipMergeCheck)) {
     checks.push({
       name: landing ? 'LANDING_CHECK' : 'MERGE_CHECK',
       command,
       expectedExitCode: 0,
-      timeoutSeconds: timeout ?? DEFAULT_CHECK_TIMEOUT_SECONDS,
+      timeoutSeconds: checkTimeoutSeconds(landing ? 'LANDING_CHECK' : 'MERGE_CHECK', row),
     });
   }
   return checks;
+}
+
+/**
+ * The budget `checksFor` gives the check of this name: the task's acceptance its own, a landing check
+ * the project's landing budget or else its merge-check budget, a merge check the merge-check budget.
+ * Also what a timed-out check's item records as the limit it was stopped at.
+ */
+export function checkTimeoutSeconds(
+  name: IntegrationCheckSpec['name'],
+  row: Pick<IntegrationCheckSource, 'acceptanceTimeoutSeconds' | 'landingCheckTimeoutSeconds' | 'mergeCheckTimeoutSeconds'>,
+): number {
+  if (name === 'TASK_ACCEPTANCE') return row.acceptanceTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  if (name === 'LANDING_CHECK') {
+    return row.landingCheckTimeoutSeconds ?? row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
+  }
+  return row.mergeCheckTimeoutSeconds ?? DEFAULT_CHECK_TIMEOUT_SECONDS;
 }
 
 /**

@@ -292,7 +292,7 @@ const mounted = () => {
 const composer = () => mounted().querySelector<HTMLTextAreaElement>('.workspace-composer textarea')!;
 const sendButton = () => mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]')!;
 const card = () => mounted().querySelector<HTMLElement>('.msc');
-const createButton = () => card()!.querySelector<HTMLButtonElement>('.msc-create button')!;
+const createButton = () => card()!.querySelector<HTMLButtonElement>('[data-field="name"] button')!;
 const button = (label: string) =>
   [...mounted().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label);
 function said(element: Element | null | undefined): string {
@@ -331,14 +331,20 @@ async function open(entry: string): Promise<void> {
 /** Austin's new session page, with "app" typed in the folder step and the machine's answer about it in. */
 async function openMachine(id = AUSTIN): Promise<void> {
   await open(`/runners/${id}/new`);
-  await waitForUi(() => expect(card()?.querySelector('.msc-input input')).toBeTruthy());
-  const name = card()!.querySelector<HTMLInputElement>('.msc-input input')!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'app');
-    name.dispatchEvent(new Event('input', { bubbles: true }));
-  });
+  await typeFolder('app');
   await waitForUi(() => expect(card()!.textContent).toContain('Found · git repository · main'));
 }
+
+/** Something typed into one of the card's two fields. */
+async function typeInto(which: 'folder' | 'name', value: string): Promise<void> {
+  await waitForUi(() => expect(card()?.querySelector(`[data-field="${which}"] input`)).toBeTruthy());
+  const input = card()!.querySelector<HTMLInputElement>(`[data-field="${which}"] input`)!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+const typeFolder = (value: string) => typeInto('folder', value);
 
 async function type(text: string): Promise<void> {
   const area = composer();
@@ -363,25 +369,12 @@ async function create(): Promise<void> {
   await waitForUi(() => expect(composer()).toBeTruthy());
 }
 
-const useFolder = async () => {
-  await act(async () => button('Use this folder')!.click());
-  await settle();
-};
-/** The machine's next report: its engines as they are now, read back the way a refetch would. */
-async function machineReports(machine: Machine): Promise<void> {
-  runners = [machine];
-  await act(async () => {
-    await client!.invalidateQueries({ queryKey: ['runners'] });
-  });
-  await settle();
-}
-const signedIn = () => austin({ engines: [health('claude', 'yes'), health('codex', 'no')] });
 
 describe('rule 1: the page itself', () => {
   it('is the setup card, in the engine hero’s place, addressed to the machine', async () => {
     await openMachine();
     expect(mounted().querySelector('.np-hero')).toBeNull();
-    expect(said(card()!.querySelector('.msc-title'))).toBe('Set up orbit@austin');
+    expect(said(card()!.querySelector('.msc-title'))).toBe('New workspace on orbit@austin');
     // The card alone: no session column beside it, no session title above it, no composer under it
     // (owner 2026-11-16). The card's own button makes the workspace.
     expect(mounted().querySelector('.session-col')).toBeNull();
@@ -389,14 +382,13 @@ describe('rule 1: the page itself', () => {
     expect(mounted().querySelector('.workspace-header')).toBeNull();
     expect(mounted().querySelector('.workspace-composer')).toBeNull();
     expect(said(createButton())).toBe('Create workspace');
-    expect(createButton().disabled).toBe(true);
+    // No sign-in on the card (owner 2026-11-16): the new workspace's sessions ask for one where they need it.
+    expect(card()!.textContent).not.toContain('Sign in');
   });
 
   it('is read from its top: the conversation’s tail pin stays away from it, however short the pane', async () => {
     await openMachine();
     const pane = card()!.closest<HTMLElement>('.workspace-sessions')!;
-    expect(pinned).not.toContain(pane);
-    await useFolder();
     expect(pinned).not.toContain(pane);
   });
 
@@ -413,7 +405,7 @@ describe('rule 1: the page itself', () => {
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(card()).toBeTruthy());
     expect(said(card()!.querySelector('.msc-notice'))).toBe(
-      'Waiting for orbit@austin to connect. It can check folders and sign in as soon as it does.',
+      'Waiting for orbit@austin to connect. It can check folders as soon as it does.',
     );
     expect(mounted().textContent).not.toContain('updates itself first');
     expect(createButton().disabled).toBe(true);
@@ -453,44 +445,28 @@ describe('rule 1: the page itself', () => {
     await waitForUi(() => expect(where).toBe('/'));
   });
 
-  it('starts on an engine that can run: a signed-in Codex, not a sign-in for Claude Code', async () => {
-    runners = [austin({ engines: [health('claude', 'no'), health('codex', 'yes')] })];
-    await openMachine();
-    expect(said(card()!.querySelector('[data-step="engine"]'))).toBe('Codex signed in on orbit@austin');
-  });
 });
 
-describe('Create workspace, once both steps are done', () => {
-  it('waits for the second step when only the first is done', async () => {
-    await openMachine();
-    await useFolder();
+describe('Create workspace, from a folder and a name', () => {
+  it('waits for a folder the machine has answered about', async () => {
+    await open(`/runners/${AUSTIN}/new`);
+    await waitForUi(() => expect(card()).toBeTruthy());
     expect(createButton().disabled).toBe(true);
+    await typeFolder('app');
+    await waitForUi(() => expect(createButton().disabled).toBe(false));
   });
 
-  it('waits for the first step when only the second is done', async () => {
-    runners = [signedIn()];
+  it('needs no sign-in: an existing folder by its path, named after it, and the page moves on to its draft', async () => {
     await openMachine();
-    expect(createButton().disabled).toBe(true);
-  });
-
-  it('an existing folder by its path, and the page moves on to the workspace’s draft', async () => {
-    runners = [signedIn()];
-    await openMachine();
-    await useFolder();
-    expect(said(card()!.querySelector('.msc-foot.ready'))).toBe('Ready. Orbit adds the workspace “app” for /home/orbit/app.');
-
     await create();
     expect(made).toEqual([{ name: 'app', runnerId: AUSTIN, workDir: REGISTER }]);
     // Nothing was sent: the workspace is made alone, and its first session is the owner's next send.
     expect(createMock).not.toHaveBeenCalled();
     expect(mounted().querySelector('.session-col')).toBeTruthy();
     expect(composer().placeholder).toBe('Send this workspace a task…');
-    // The setup is over: its folder is not kept for the machine's page.
-    expect(sessionStorage.getItem(`orbit.machineSetup.${AUSTIN}`)).toBeNull();
   });
 
   it('a new folder by its name', async () => {
-    runners = [signedIn()];
     // Nothing is in home by that name yet.
     vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({
       path,
@@ -498,103 +474,33 @@ describe('Create workspace, once both steps are done', () => {
       result: { ...FOUND, path, exists: false, isDir: false, isGit: false, branch: null },
     }));
     await open(`/runners/${AUSTIN}/new`);
-    await waitForUi(() => expect(card()?.querySelector('.msc-input input')).toBeTruthy());
-    const name = card()!.querySelector<HTMLInputElement>('.msc-input input')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'payments-api');
-      name.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await typeFolder('payments-api');
     // Asked about where it would go before it can be used.
-    await waitForUi(() => expect(button('Use this folder')!.disabled).toBe(false));
+    await waitForUi(() => expect(createButton().disabled).toBe(false));
     expect(askDirProbe).toHaveBeenCalledWith(AUSTIN, '/home/orbit/payments-api');
-    await useFolder();
     await create();
     expect(made).toEqual([{ name: 'payments-api', runnerId: AUSTIN, newFolder: 'payments-api' }]);
   });
 
+  it('under the name it was given, when it was given one', async () => {
+    await openMachine();
+    await typeInto('name', 'Payments backend');
+    await create();
+    expect(made).toEqual([{ name: 'Payments backend', runnerId: AUSTIN, workDir: REGISTER }]);
+  });
+
   it('a refusal stays on the card, saying why', async () => {
     refuseMake = new ApiError('This runner is too old to make a new folder', 409, 'NEW_FOLDER_UNSUPPORTED');
-    runners = [signedIn()];
     await openMachine();
-    await useFolder();
+    await waitForUi(() => expect(createButton().disabled).toBe(false));
     await act(async () => createButton().click());
     await waitForUi(() =>
-      expect(said(card()!.querySelector('.msc-create-error'))).toBe(
+      expect(said(card()!.querySelector('[data-field="folder"] .msc-line'))).toBe(
         'Couldn’t create the workspace: This runner is too old to make a new folder',
       ),
     );
     expect(where).toBe(`/runners/${AUSTIN}/new`);
     expect(createButton().disabled).toBe(false);
-  });
-
-  it('the folder picked outlives the page, and is this machine’s alone', async () => {
-    runners = [austin(), austin({ id: HPC, name: 'orbit@hpc' })];
-    await openMachine();
-    await useFolder();
-    await closePage();
-    await open(`/runners/${AUSTIN}/new`);
-    await waitForUi(() => expect(card()).toBeTruthy());
-    expect(said(card()!.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/app git repository · main Change');
-    await closePage();
-    await openMachine(HPC);
-    expect(card()!.querySelector('[data-step="folder"] .msc-done-line')).toBeNull();
-  });
-
-  it('the engine the card was moved to is the one the first session runs on', async () => {
-    await openMachine();
-    await act(async () => button('Use Codex instead')!.click());
-    await settle();
-    expect(said(card()!.querySelector('[data-step="engine"] .msc-step-title'))).toBe('Sign in Codex on orbit@austin');
-    await useFolder();
-    await machineReports(austin({ engines: [health('claude', 'no'), health('codex', 'yes')] }));
-    await create();
-    await send('Fix it');
-    expect(createMock.mock.calls[0][0]).toMatchObject({ workspaceId: MADE_WORKSPACE, engine: 'codex', provider: 'codex' });
-  });
-});
-
-describe('rule 5: Use an API key', () => {
-  const key = {
-    slug: 'anthropic-key',
-    label: 'Anthropic',
-    runtime: 'claude',
-    presetSlug: 'anthropic',
-    engines: ['claude'],
-    models: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }],
-    defaultModel: 'claude-opus-5',
-  };
-
-  it('with a key the machine can run: that key answers the step, and the session is on it', async () => {
-    providers = [key];
-    await openMachine();
-    await waitForUi(() => expect(button('Use an API key instead')).toBeTruthy());
-    await act(async () => button('Use an API key instead')!.click());
-    await settle();
-    expect(said(card()!.querySelector('[data-step="engine"]'))).toBe('Anthropic API key Change');
-
-    await useFolder();
-    await create();
-    await send('Fix it');
-    expect(createMock.mock.calls[0][0]).toMatchObject({ engine: 'claude', provider: 'anthropic-key' });
-  });
-
-  it('Change goes back to signing in', async () => {
-    providers = [key];
-    await openMachine();
-    await waitForUi(() => expect(button('Use an API key instead')).toBeTruthy());
-    await act(async () => button('Use an API key instead')!.click());
-    await settle();
-    await act(async () => card()!.querySelector<HTMLButtonElement>('[data-step="engine"] .msc-change')!.click());
-    await settle();
-    expect(said(card()!.querySelector('[data-step="engine"] .msc-step-title'))).toBe('Sign in Claude Code on orbit@austin');
-  });
-
-  it('with none yet: to where one is connected, and what was answered is kept for the way back', async () => {
-    await openMachine();
-    await useFolder();
-    await act(async () => button('Use an API key instead')!.click());
-    await settle();
-    expect(where).toBe('/settings/providers');
   });
 });
 
@@ -701,15 +607,15 @@ describe('a new account', () => {
     history = [];
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(said(card()?.querySelector('.msc-title'))).toBe('Welcome to Orbit, Reader'));
-    expect(card()!.querySelector('[data-step="folder"]')).toBeTruthy();
-    expect(card()!.querySelector('[data-step="engine"]')).toBeTruthy();
+    expect(card()!.querySelector('[data-field="folder"]')).toBeTruthy();
+    expect(card()!.querySelector('[data-field="name"]')).toBeTruthy();
     expect(card()!.querySelector('.welcome-example')).toBeNull();
     expect(mounted().querySelector('.workspace-composer')).toBeNull();
   });
 
   it('an account that has had a session gets the setup card as before', async () => {
     await openMachine();
-    expect(said(card()!.querySelector('.msc-title'))).toBe('Set up orbit@austin');
+    expect(said(card()!.querySelector('.msc-title'))).toBe('New workspace on orbit@austin');
     expect(card()!.querySelector('.welcome-example')).toBeNull();
   });
 });

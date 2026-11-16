@@ -1374,6 +1374,17 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.queued[0].pending, true)
     }
 
+    /// A send the server accepted is stamped with when it was accepted, the time its bubble shows until
+    /// the echo brings the runner's own, rather than "Sending…" (web: `acceptedAt`).
+    func testAnAcceptedSendIsStampedWithItsAcceptance() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted",
+                              acceptedAt: "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.ts, "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
+    }
+
     /// A first message held for its translation comes back `queued` with nothing ahead of it: that is
     /// the translation hold, not a place in the queue, so it stays in the conversation (web parity).
     func testTranslationHeldSendStaysInlineDespiteQueuedPlacement() {
@@ -1600,6 +1611,56 @@ final class TranscriptReducerTests: XCTestCase {
 
         XCTAssertNil(r.state.oldestSeq)
         XCTAssertFalse(r.state.hasMoreOlder, "never render a spinner whose before= cursor is nil")
+    }
+
+    /// Every tail page failed (an apiserver restart), so the stream's cursor-less replay filled the
+    /// window, starting mid-conversation. Its first event is the older edge, with history above it;
+    /// the window used to say "nothing older" and the transcript stopped there for good.
+    func testCursorlessReplayStartingMidConversationOffersOlderHistory() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 435, type: .user, payload: .object(["text": .string("mid question")])))
+        r.apply(RunEvent(seq: 436, type: .assistant, payload: .object(["text": .string("mid reply")])))
+        XCTAssertEqual(r.state.oldestSeq, 435)
+        XCTAssertTrue(r.state.hasMoreOlder, "events 1–434 are on the server")
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])),
+        ], hasMore: false))
+        XCTAssertEqual(r.state.items.first?.asUser?.text, "first question")
+        XCTAssertFalse(r.state.hasMoreOlder)
+    }
+
+    func testCursorlessReplayFromTheFirstEventHasNothingOlder() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "a new session's replay starts at its beginning")
+    }
+
+    func testATailPageDecidesTheEdgeEvenAfterAReplayWasExpected() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("hi")])),
+        ], hasMore: false))
+        r.apply(RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hello")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "the page said history starts here")
+    }
+
+    /// A snapshot the replay path wrote before the fix: a window from seq 35 claiming nothing older.
+    func testARestoredWindowThatStartsLateReopensItsOlderEdge() throws {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 35, type: .user, payload: .object(["text": .string("late start")])))
+        XCTAssertFalse(r.state.hasMoreOlder)
+        var restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
+        restored.reopenUnsettledOlderEdge()
+        XCTAssertTrue(restored.state.hasMoreOlder)
+
+        var complete = TranscriptReducer()
+        complete.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first")])))
+        complete.reopenUnsettledOlderEdge()
+        XCTAssertFalse(complete.state.hasMoreOlder, "a window holding the first event is whole")
     }
 
     func testPrependOlderGraftsHistoryInFront() {

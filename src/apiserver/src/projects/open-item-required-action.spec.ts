@@ -79,6 +79,46 @@ test('promotion check failure owned by the account owner keeps the approved copy
   }), 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.');
 });
 
+/**
+ * 2026-11-16: an owner card said "until this check passes" over a check marked "timed out after 4h".
+ * A timed-out promotion check is the owner's timeout sentence too, on both promotion jobs and both
+ * kinds of candidate, naming the coordinator only while Ask again is drawn; a failed one keeps the
+ * approved copy.
+ */
+test('an owner’s timed-out promotion check says it must finish, and a failed one that it must pass', () => {
+  for (const sourceJob of ['CHECK_PROMOTION', 'LAND_PROMOTION'] as const) {
+    for (const taskBranch of [false, true]) {
+      for (const askable of [true, false]) {
+        const row = {
+          kind: 'INTEGRATION_CHECK_FAILED',
+          assignee: 'OWNER',
+          taskId: null,
+          promotionId: 'promotion-id',
+          fuseEpisodeId: null,
+          askable,
+          state: 'OPEN',
+          payload: { jobKind: sourceJob, ...(taskBranch ? { sourceKind: 'TASK_BRANCH' } : {}) },
+        } as const;
+        const where = `${sourceJob}${taskBranch ? '/TASK_BRANCH' : ''}${askable ? '' : '/no coordinator'}`;
+        assert.equal(openItemActions(row).includes('ASK_COORDINATOR_AGAIN'), askable, `${where}: Ask again drawn`);
+        const ask = askable ? ' or ask the coordinator to fix it' : '';
+        assert.equal(
+          openItemRequiredAction({ ...row, payload: { ...row.payload, failureClass: 'CHECK_TIMED_OUT' } }),
+          `${taskBranch ? 'This task’s branch' : 'The project branch'} cannot reach main until this check finishes — `
+            + `re-run it with a reason${ask}.`,
+          `${where}: timed out`,
+        );
+        assert.equal(
+          openItemRequiredAction({ ...row, payload: { ...row.payload, failureClass: 'CHECK_FAILED' } }),
+          `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches main until this check passes — `
+            + `re-run it${ask}.`,
+          `${where}: failed`,
+        );
+      }
+    }
+  }
+});
+
 test('status, live repair, and handover facts change the required sentence without a second read', () => {
   const base = {
     kind: 'INTEGRATION_ERROR',

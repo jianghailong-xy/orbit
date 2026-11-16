@@ -210,7 +210,7 @@ private struct DashedDivider: View {
     }
 }
 
-/// The composer's tag (6A): "<Language> → <Agent language>", pressing which opens Settings › Sessions, where
+/// The composer's tag (6A): "<Language> → <Agent language>", pressing which opens Settings › General, where
 /// Translation is. Drawn only while the account translates.
 struct ComposerTranslationTag: View {
     let language: TranslationLanguage

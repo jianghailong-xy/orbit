@@ -1379,8 +1379,25 @@ private extension View {
     /// Adds the leading hamburger that opens the nav drawer. Applied to a section's *root* view so it
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
-        toolbar {
-            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+        modifier(DrawerToggle(open: open))
+    }
+}
+
+/// The hamburger's toolbar item. On iOS 26 the count is the item content's badge, which the system
+/// draws outside the item's glass; earlier versions overlay it on the glyph.
+private struct DrawerToggle: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) {
+                    DrawerToggleButton(open: open).badge(model.needsYouSessions.count)
+                }
+            } else {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            }
         }
     }
 }
@@ -1396,8 +1413,8 @@ private struct DrawerToggleButton: View {
         Button(action: open) {
             Image(systemName: "line.3.horizontal")
                 .overlay(alignment: .topTrailing) {
-                    if waiting > 0 {
-                        Text("\(waiting)")
+                    if overlaidCount > 0 {
+                        Text("\(overlaidCount)")
                             .font(.caption2.weight(.bold).monospacedDigit())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
@@ -1410,6 +1427,12 @@ private struct DrawerToggleButton: View {
         }
         .accessibilityLabel("Open navigation")
         .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
+    }
+
+    /// The count drawn on the glyph: on iOS 26 the toolbar item's badge carries it instead.
+    private var overlaidCount: Int {
+        if #available(iOS 26.0, *) { return 0 }
+        return model.needsYouSessions.count
     }
 }
 

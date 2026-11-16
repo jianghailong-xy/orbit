@@ -26,7 +26,13 @@
  *       running: the drain is called off;
  *   (7) a draining instance whose Pod vanishes without the kubelet's report is fenced, as anywhere;
  *   (8) the sweep wakes a sleeping runner whose work no hook announced;
- *   (9) the owner's explicit sleep and wake.
+ *   (9) the owner's explicit sleep and wake;
+ *  (10) a runner up with no runtime signed in waits for a login past its startup deadline, never
+ *       FAILED; idle, it drains and sleeps like a READY runner, compute given back and the reason
+ *       kept; demand before it accepts sends it back to waiting; a wake brings it up again, and once
+ *       a runtime is signed in it is READY by itself, with no retry;
+ *  (11) a runner an earlier version FAILED for want of a login is taken up again by itself: it waits
+ *       on the same instance, and is READY once a runtime is signed in.
  *
  * Not destructive: every row belongs to a user this run creates.
  */
@@ -365,5 +371,125 @@ test('managed runner idle sleep and wake against a fake cluster', {
     assert.equal(woken.desiredState, 'RUNNING');
     assert.equal((await w.service.wake(ownerId, 'wake-1')).revision, woken.revision, 'the same request again is answered as it was');
     assert.equal((await w.drive(ownerId)).at(-1), 'READY');
+  });
+
+  const SIGNED_OUT = [{ engine: 'claude', installed: true, auth: 'no' }];
+  const SIGNED_IN = [{ engine: 'claude', installed: true, auth: 'yes' }];
+
+  /** A new owner's runner brought up with no runtime signed in: STARTING, waiting for a login. */
+  async function waitingForLogin(w: ManagedRunnerWorld, label: string): Promise<{ ownerId: string; mapping: ManagedRunner }> {
+    w.runnerSide.engines = SIGNED_OUT;
+    const ownerId = await w.makeUser(label);
+    await w.service.ensure(ownerId, `ensure-${label}`);
+    await upToLoginWait(w, ownerId);
+    return { ownerId, mapping: await w.mappingOf(ownerId) };
+  }
+
+  /** Reconcile, heartbeating signed out once an instance runs, until the mapping waits for a login. */
+  async function upToLoginWait(w: ManagedRunnerWorld, ownerId: string): Promise<void> {
+    const seen: string[] = [];
+    for (let i = 0; i < 40; i += 1) {
+      const m = await w.mappingOf(ownerId);
+      if (m.managementState === 'STARTING' && (m.lastError as { code?: string } | null)?.code === 'MODEL_UNAVAILABLE') return;
+      if (m.podUid && m.managementState === 'STARTING') {
+        w.advance(1_000);
+        await w.heartbeat(m.runnerId);
+      }
+      if (m.nextAttemptAt && m.nextAttemptAt > w.now()) w.clock.ms = m.nextAttemptAt.getTime() + 1;
+      seen.push(await w.primary.reconcile(m.id));
+    }
+    assert.fail(`never waited for a login: ${seen.join(' → ')}`);
+  }
+
+  await t.test('(10) no runtime signed in: it waits past the startup deadline, sleeps when idle, wakes, and is READY once one is signed in', async () => {
+    const w = managedRunnerWorld(db);
+    const { ownerId, mapping } = await waitingForLogin(w, 'nologin');
+    const podUid = mapping.podUid;
+    assert.ok(podUid);
+
+    // Past the startup deadline, still heartbeating: waiting, not FAILED; the deadline is moved on.
+    w.advance(w.profile.lifecycle.startupDeadlineSeconds * 1000 + 1_000);
+    await w.heartbeat(mapping.runnerId, { idleSeconds: 5 });
+    assert.equal(await w.primary.reconcile(mapping.id), 'WAITING');
+    const waiting = await w.mappingOf(ownerId);
+    assert.equal(waiting.managementState, 'STARTING');
+    assert.equal((waiting.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    assert.ok(waiting.startupDeadlineAt! > w.now(), 'a deadline still stands for an instance that stops reporting');
+    assert.equal(await w.primary.reconcile(mapping.id), 'WAITING');
+    assert.equal((await w.mappingOf(ownerId)).revision, waiting.revision, 'nothing rewritten while it waits');
+    const status = await w.service.status(ownerId);
+    assert.equal(status.reason?.code, 'MODEL_UNAVAILABLE');
+    assert.doesNotMatch(status.reason!.message, /retried/);
+    assert.equal(status.actions.canRetry, false);
+
+    // Idle the profile's interval: it drains, the reason kept. Demand before it accepts calls that off.
+    w.advance(w.profile.lifecycle.idleSeconds * 1000);
+    await w.heartbeat(mapping.runnerId, { idleSeconds: w.profile.lifecycle.idleSeconds + 1 });
+    assert.equal(await w.primary.reconcile(mapping.id), 'DRAINING');
+    let draining = await w.mappingOf(ownerId);
+    assert.equal((draining.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    await recordManagedDemand(prisma, mapping.runnerId, w.now());
+    await w.primary.reconcile(mapping.id);
+    const back = await w.mappingOf(ownerId);
+    assert.equal(back.managementState, 'STARTING', 'called off, it waits for a login again — never READY without one');
+    assert.equal((back.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    assert.equal(back.podUid, podUid);
+
+    // Idle again: drains, accepts, exits; asleep, compute back in the pool, the reason still said.
+    w.advance(w.profile.lifecycle.idleSeconds * 1000 + 1_000);
+    await w.heartbeat(mapping.runnerId, { idleSeconds: w.profile.lifecycle.idleSeconds + 1 });
+    assert.equal(await w.primary.reconcile(mapping.id), 'DRAINING');
+    draining = await w.mappingOf(ownerId);
+    const answer = await managedRunnerHeartbeat(prisma, instanceOf(draining), { ...IDLE, sleepReady: draining.stopRequestedAt!.toISOString() }, w.now());
+    assert.equal(answer.sleep?.confirmed, true);
+    w.cluster.stopPod(managedPodName(mapping.runnerId));
+    for (let i = 0; i < 6 && (await w.mappingOf(ownerId)).managementState !== 'SLEEPING'; i += 1) await w.primary.reconcile(mapping.id);
+    const asleep = await w.mappingOf(ownerId);
+    assert.equal(asleep.managementState, 'SLEEPING');
+    assert.equal((asleep.reservation as { compute: unknown }).compute, null, 'compute given back');
+    const ledger = await w.ledger();
+    assert.deepEqual(ledger.pool, ledger.shares);
+    assert.equal(ledger.pool.pods, 0);
+    const sleepingStatus = await w.service.status(ownerId);
+    assert.equal(sleepingStatus.reason?.code, 'MODEL_UNAVAILABLE', 'asleep, it still says what it needs');
+    assert.equal(sleepingStatus.actions.canWake, true);
+
+    // A wake (opening Machines & models to sign in) brings it up again, still waiting for a login.
+    await w.service.wake(ownerId, 'wake-to-sign-in');
+    await upToLoginWait(w, ownerId);
+    const woken = await w.mappingOf(ownerId);
+    assert.equal(woken.generation, asleep.generation);
+    assert.notEqual(woken.podUid, podUid);
+
+    // A runtime signed in: READY at the next pass, with no retry.
+    w.runnerSide.engines = SIGNED_IN;
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId);
+    assert.equal(await w.primary.reconcile(mapping.id), 'READY');
+    const ready = await w.mappingOf(ownerId);
+    assert.equal(ready.initialProvider, 'claude');
+    assert.equal(ready.lastError, null);
+  });
+
+  await t.test('(11) a runner FAILED for want of a login by an earlier version waits for one again, by itself', async () => {
+    const w = managedRunnerWorld(db);
+    const { ownerId, mapping } = await waitingForLogin(w, 'oldfail');
+    // As the previous version left it once the startup deadline had passed.
+    await db.managedRunner.update({
+      where: { id: mapping.id },
+      data: {
+        managementState: 'FAILED',
+        lastError: { code: 'MODEL_UNAVAILABLE', message: 'old words', retryable: true, detail: 'no runtime signed in' },
+        revision: { increment: 1 },
+      },
+    });
+    assert.ok((await w.primary.dueMappings(50)).includes(mapping.id), 'the manager picks it up');
+    await upToLoginWait(w, ownerId);
+    const waiting = await w.mappingOf(ownerId);
+    assert.equal(waiting.podUid, mapping.podUid, 'the same instance, waited on again');
+    w.runnerSide.engines = SIGNED_IN;
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId);
+    assert.equal(await w.primary.reconcile(mapping.id), 'READY');
   });
 });

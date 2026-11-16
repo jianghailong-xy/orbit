@@ -12,76 +12,49 @@ final class SettingsHomeTests: XCTestCase {
 
     // MARK: - The list
 
-    /// The order the owner picked from docs/mocks/ios-settings-order (1A, 2A): what needs you first —
-    /// the machines and models agents run on — then the app's preferences, Sessions' among them, then
-    /// the account.
-    func testTheGroupsReadInTheOrderTheyWerePicked() {
-        // Machines & models has no header: its one row says that name (docs/mocks/machines-and-models, ⑥-2).
-        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), [nil, "Preferences", "Account"])
-        // One row: the web's Runners and Providers pages are one page, Machines & models.
-        XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.machinesAndModels])
-        // The five session settings are one row's page now (`SessionSettings`), first in Preferences.
-        XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.sessions, .notifications, .appearance])
-        XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword])
-    }
-
-    /// Admin is role-gated here as everywhere else, and comes last in Account.
-    func testAdminIsOnlyAnAdminsRow() {
-        XCTAssertEqual(SettingsHome.rows(.account, isAdmin: true).last, .admin)
-        for group in SettingsHome.Group.allCases {
-            XCTAssertFalse(SettingsHome.rows(group, isAdmin: false).contains(.admin), "\(group)")
-        }
+    /// The web Settings nav's groups and rows, in its order (`settingsIndex.ts`, `SettingsLayout.tsx`):
+    /// Personal, then Machines, then Providers — the pages the app has no page for left out.
+    func testTheGroupsReadAsTheWebsNavDoes() {
+        // Machines and Providers have no header: each one row says that name.
+        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), ["Personal", nil, nil])
+        XCTAssertEqual(SettingsHome.rows(.personal),
+                       [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals])
+        XCTAssertEqual(SettingsHome.rows(.machines), [.machines])
+        XCTAssertEqual(SettingsHome.rows(.providers), [.providers])
     }
 
     /// Every row is in exactly one group, so the list can't drop one or draw one twice.
     func testEveryRowIsInExactlyOneGroup() {
-        let listed = SettingsHome.Group.allCases.flatMap { SettingsHome.rows($0, isAdmin: true) }
+        let listed = SettingsHome.Group.allCases.flatMap { SettingsHome.rows($0) }
         XCTAssertEqual(listed.count, Set(listed).count, "a row is listed twice")
         XCTAssertEqual(Set(listed), Set(SettingsHome.Row.allCases), "a row is in no group")
     }
 
-    /// Each row has a name and a glyph of its own; Machines & models and Admin keep their sections'.
+    /// Each row has a name and a glyph of its own: the web nav's labels.
     func testEveryRowHasItsOwnNameAndGlyph() {
         let rows = SettingsHome.Row.allCases
         XCTAssertEqual(Set(rows.map(SettingsHome.title)).count, rows.count, "two rows share a name")
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
-        XCTAssertEqual(SettingsHome.title(.machinesAndModels), "Machines & models")
-        XCTAssertEqual(SettingsHome.title(.machinesAndModels), AppSection.runners.title)
-        XCTAssertEqual(SettingsHome.systemImage(.machinesAndModels), AppSection.runners.systemImage)
-        XCTAssertEqual(SettingsHome.title(.admin), AppSection.admin.title)
-        XCTAssertEqual(SettingsHome.systemImage(.admin), AppSection.admin.systemImage)
+        XCTAssertEqual(rows.map(SettingsHome.title),
+                       ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
+                        "Terminals", "Machines", "Providers"])
+        XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
     }
 
-    /// The rows that open a page open their own, titled as the row is; Appearance's menu and the two
-    /// lines that only say something open nothing. Machines & models is one of them: the runners list's
-    /// frame of its own went with the Providers page.
+    /// The rows that open a page open their own, titled as the row is; Appearance's menu opens nothing,
+    /// and Change password is Profile's page, not the list's.
     func testTheRowsThatOpenAPageOpenTheirOwn() {
         let opening = SettingsHome.Row.allCases.compactMap(SettingsHome.page)
-        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases), "a page no row opens, or a row opening two")
-        XCTAssertEqual(opening.count, SettingsPage.allCases.count)
+        XCTAssertEqual(Set(opening), Set(SettingsPage.allCases).subtracting([.changePassword]),
+                       "a page no row opens, or a row opening two")
+        XCTAssertEqual(opening.count, SettingsPage.allCases.count - 1)
         for row in SettingsHome.Row.allCases {
             if let page = SettingsHome.page(row) {
                 XCTAssertEqual(page.title, SettingsHome.title(row), "the page is called what its row is")
             }
         }
-        for row in [SettingsHome.Row.appearance, .email, .instance] {
-            XCTAssertNil(SettingsHome.page(row), "\(row) opens no SettingsPage")
-        }
-        XCTAssertEqual(SettingsHome.page(.sessions), .sessions)
-        XCTAssertEqual(SettingsPage.sessions.title, "Sessions")
-        XCTAssertEqual(SettingsHome.page(.machinesAndModels), .machinesAndModels)
-        XCTAssertEqual(SettingsPage.machinesAndModels.title, "Machines & models")
-    }
-
-    /// Machines & models says what its one row is for, in the web page's own line; no other group has
-    /// a line under it.
-    func testOnlyMachinesAndModelsHasALineUnderIt() {
-        XCTAssertEqual(SettingsHome.footer(.machines), "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), MachinesAndModels.subtitle)
-        for group in [SettingsHome.Group.preferences, .account] {
-            XCTAssertNil(SettingsHome.footer(group), "\(group)")
-        }
+        XCTAssertNil(SettingsHome.page(.appearance))
+        XCTAssertEqual(SettingsPage.changePassword.title, "Change password")
     }
 
     /// Sessions, the page Preferences' first row opens: the web's Session defaults and Session
@@ -139,6 +112,20 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.machinesAndModelsValue(needsYou: lines.count, runners: fleet), "1 needs you")
     }
 
+    /// Settings' Machines row counts the machines' lines and its Providers row the pools': a pool no
+    /// session can start on is the Providers page's, and the Providers row says nothing without one.
+    func testMachineAndPoolLinesSplitBetweenTheTwoRows() throws {
+        let fleet = try [runner("a", online: false)]
+        let lines = MachinesAndModels.attention(runners: fleet, workspaces: [], memberPools: [], ownPools: [])
+        XCTAssertEqual(lines.map(\.isMachine), [true])
+        let pool = MachinesAndModels.Attention(kind: .poolUnavailable(poolID: "p", own: true),
+                                               line: "", names: [], detail: "")
+        XCTAssertFalse(pool.isMachine)
+        XCTAssertEqual(SettingsHome.needsYouValue(1), "1 needs you")
+        XCTAssertEqual(SettingsHome.needsYouValue(2), "2 need you")
+        XCTAssertNil(SettingsHome.needsYouValue(0))
+    }
+
     /// A machine online where no coding CLI is signed in, and no workspace runs on a key, is one line of
     /// it too, as the web's Settings row counts it (docs/mocks/first-workspace-in-conversation 02, rule 10
     /// of 04): orbit@austin on 2026-10-31, Claude Code and Codex installed and neither signed in.
@@ -177,20 +164,6 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(SettingsHome.notificationsValue(allowed: true), "On")
         XCTAssertEqual(SettingsHome.notificationsValue(allowed: false), "Off")
         XCTAssertNil(SettingsHome.notificationsValue(allowed: nil), "not asked yet is not Off")
-    }
-
-    /// The instance as the sign-in screen asked for it: the host, and a port only when there is one.
-    func testTheInstanceIsTheHostYouSignedInTo() {
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "https://orbitd.io")), "orbitd.io")
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "https://orbitd.io/")), "orbitd.io")
-        XCTAssertEqual(SettingsHome.instanceName(URL(string: "http://10.0.0.5:3000")), "10.0.0.5:3000")
-        XCTAssertNil(SettingsHome.instanceName(nil))
-    }
-
-    func testTheBuildLineNamesVersionAndBuild() {
-        XCTAssertEqual(SettingsHome.versionLine(version: "0.1.2", build: "3581"), "Orbit 0.1.2 (3581)")
-        XCTAssertEqual(SettingsHome.versionLine(version: "0.1.2", build: nil), "Orbit 0.1.2")
-        XCTAssertNil(SettingsHome.versionLine(version: nil, build: "3581"))
     }
 
     // MARK: - Copy that is composed

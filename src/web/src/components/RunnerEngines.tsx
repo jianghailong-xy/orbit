@@ -21,7 +21,7 @@ import {
   type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
-import { agentFixView, installFixTarget } from '../lib/agentFix';
+import { agentFixView, engineNotUpdatingFixTarget, installFixTarget } from '../lib/agentFix';
 import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
@@ -742,6 +742,8 @@ function EngineRow({
     : updateNoteOf(health?.update, undefined, engine === 'cursor', engineUpdateDismissedFor(runner, engine));
   const warn = note?.tone === 'warn' && !offline;
   const dismissWarning = useDismissEngineUpdateWarning(runner.id);
+  // Fix with an agent on this row's update warning: the same fix the machine's Needs Attention card starts.
+  const updateFixView = warn ? agentFixView(runner.agentFix, engineNotUpdatingFixTarget(engine), 'panel') : null;
 
   const action = () => {
     if (antigravity?.supported === false) return null;
@@ -1076,6 +1078,15 @@ function EngineRow({
               lives now, and telling someone to open a terminal for something the UI can do was
               only ever a symptom of the button being on the wrong page. On that page its Update
               engines is already above, and the link would only lead back to it. */}
+          {/* Fix with an agent, beside the panel's own links (lib/agentFix.ts). */}
+          {updateFixView && (
+            <div className="re-panel-hint agent-fix-row">
+              {updateFixView.state === 'fixing'
+                ? <AgentFixLine view={updateFixView} />
+                : <AgentFixButton view={updateFixView} target={engineNotUpdatingFixTarget(engine)} runnerId={runner.id} />}
+            </div>
+          )}
+          {updateFixView?.state !== 'fixing' && <AgentFixLine view={updateFixView} />}
           <div className="re-panel-hint">
             Orbit tries every 30 min.
             {/* Until the next release: only a warning against a known latest has one to wait for. */}

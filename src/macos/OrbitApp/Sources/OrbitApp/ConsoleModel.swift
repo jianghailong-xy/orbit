@@ -1202,7 +1202,8 @@ final class ConsoleModel {
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
-        if let reducer {
+        if var reducer {
+            reducer.reopenUnsettledOlderEdge()
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
@@ -1516,6 +1517,9 @@ final class ConsoleModel {
             }
             catchUpPending = false
             catchUpAfterFailure = false
+            // No page seeded the window (every tail attempt failed): the connect below is cursor-less
+            // and its capped replay can start mid-conversation, so its first event sets the older edge.
+            if reducer.state.maxSeq == 0 { reducer.expectReplayToSetOlderEdge() }
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
                 // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
@@ -2102,7 +2106,7 @@ final class ConsoleModel {
 
     /// × / Esc: the card (or the failure line) goes; the draft is kept.
     func dismissOptimization() {
-        promptOptimizer.dismiss()
+        promptOptimizer.dismiss(current: composerText)
     }
 
     /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
@@ -2987,11 +2991,15 @@ final class ConsoleModel {
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
     /// they have staged (a retry carries its own message's files; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
-              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false,
+              overrideAttachments: [TurnAttachment]? = nil, takesStagedAttachments: Bool = false,
+              queueForNextTurn: Bool = false,
               wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
+        // Whether this send consumes the composer's staged chips: its own send, or a sentence the
+        // composer's armed reply built around what was typed there (an owner item's).
+        let takesChips = fromComposer || takesStagedAttachments
         // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
         // the row once the server took them. A sentence handed in (a card's own) carries neither.
         let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
@@ -3082,9 +3090,11 @@ final class ConsoleModel {
             // the card that armed it is untouched, and its own Start is still the other way out.
             // Discussing an item that became the owner's reaches no door either: the coordinator
             // is told about it in words and decides what to do with the doors it has.
+            // The chips staged with the sentence go with it, as on the web: they were picked for
+            // this message, and left behind they would sit in the composer looking unsent.
             case .ownerItem(let context):
                 await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
-                           overrideAttachments: [])
+                           takesStagedAttachments: true)
             case .planChange(let context):
                 // Says outright that it carries no attachments, rather than leaving that to how
                 // its text arrived: a question about a plan is the typed sentence and nothing else
@@ -3163,7 +3173,7 @@ final class ConsoleModel {
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
         if fromComposer { composerText = "" }
-        if fromComposer { pendingAttachments = [] }
+        if takesChips { pendingAttachments = [] }
 
         sending = true
         defer { sending = false }
@@ -3215,7 +3225,8 @@ final class ConsoleModel {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
                                             translation: accepted.turnTranslation,
-                                            placement: accepted.placement)
+                                            placement: accepted.placement,
+                                            acceptedAt: ISO8601DateFormatter().string(from: Date()))
                 publishStateNow()
             }
         } catch {
@@ -3231,7 +3242,7 @@ final class ConsoleModel {
             composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
             // The chips come back the same way — but only for a send that took them: a retry never
             // did, and putting them back would double them.
-            if fromComposer { pendingAttachments = staged + pendingAttachments }
+            if takesChips { pendingAttachments = staged + pendingAttachments }
             // The one place this end stops flattening a refusal into a sentence. A code it knows
             // becomes a card with a way out; anything else — an older server, a code invented
             // later, a connection that simply failed — still reads the server's own words.

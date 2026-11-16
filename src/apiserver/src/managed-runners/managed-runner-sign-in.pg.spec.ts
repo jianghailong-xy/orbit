@@ -42,8 +42,9 @@
  *           READY, and the first session with nothing named starts on it and is claimed; another
  *           account's key, a disabled key and a shared key do not.
  *
- * (C) The manager, on the test's clock: MODEL_UNAVAILABLE until the startup deadline, then FAILED
- *     and retryable; a retry once a runtime is signed in is READY with that runtime.
+ * (C) The manager, on the test's clock: MODEL_UNAVAILABLE for as long as no runtime is signed in,
+ *     past the startup deadline too — never FAILED — and READY with the runtime once one is signed in,
+ *     with no retry.
  *
  * Destructive only to its own disposable database: (A) and (B) truncate its accounts to run the
  * first-user bootstrap.
@@ -89,7 +90,7 @@ import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/mana
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
 import type { ManagedKubeClient, Pod, Secret } from './kube-client';
 import { EVERY_ACCOUNT } from './managed-runner-eligibility';
-import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
+import { ManagedRunnerManager } from './managed-runner-manager';
 import {
   GENERATION_ANNOTATION,
   MANAGED_RUNNER_NAME,
@@ -762,7 +763,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
   });
 
   // ── (C) the manager on the test's clock ────────────────────────────────────────────────────
-  await t.test('(C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY', async () => {
+  await t.test('(C) no supply past the startup deadline: still waiting, not FAILED; READY by itself once one is signed in', async () => {
     const clockProfile = testManagedRunnerProfile();
     const fake = installManagedRunnerAdmission(new FakeKubeCluster(clockProfile.kubernetes.namespace), db as unknown as PrismaService, clockProfile);
     const clock = { ms: Date.parse('2026-10-07T08:00:00.000Z') };
@@ -774,8 +775,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     await service.signedIn({ id: user.id });
     const mapping = (await mappingOf(user.id))!;
     const pass = () => manager.reconcile(mapping.id);
-    const outcomes: ReconcileOutcome[] = [];
-    for (let i = 0; i < 4 && !(await mappingOf(user.id))!.podUid; i += 1) outcomes.push(await pass());
+    for (let i = 0; i < 4 && !(await mappingOf(user.id))!.podUid; i += 1) await pass();
     const beat = (engines: unknown[]) =>
       db.runner.update({ where: { id: mapping.runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: now(), engines: engines as never } });
 
@@ -788,29 +788,29 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(await pass(), 'WAITING');
     assert.equal((await mappingOf(user.id))!.revision, waiting.revision, 'said once, not rewritten every pass');
 
-    clock.ms += clockProfile.lifecycle.startupDeadlineSeconds * 1000;
+    // Past the startup deadline, heartbeating with nothing signed in: still waiting, never FAILED.
+    clock.ms += clockProfile.lifecycle.startupDeadlineSeconds * 1000 + 1_000;
+    assert.ok(waiting.startupDeadlineAt! < now(), 'the startup deadline has passed');
     await beat([engine('claude', { auth: 'no' })]);
-    assert.equal(await pass(), 'FAILED');
-    const failed = (await mappingOf(user.id))!;
-    assert.deepEqual(
-      { code: (failed.lastError as { code: string }).code, retryable: (failed.lastError as { retryable: boolean }).retryable },
-      { code: 'MODEL_UNAVAILABLE', retryable: true },
-    );
-    assert.equal(failed.initialProvider, null);
-    assert.equal((await service.status(user.id)).actions.canRetry, true);
+    assert.equal(await pass(), 'WAITING');
+    const still = (await mappingOf(user.id))!;
+    assert.equal(still.managementState, 'STARTING');
+    assert.equal((still.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    assert.equal(still.initialProvider, null);
+    const status = await service.status(user.id);
+    assert.equal(status.reason?.code, 'MODEL_UNAVAILABLE');
+    assert.doesNotMatch(status.reason!.message, /retried/);
+    assert.equal(status.actions.canRetry, false, 'nothing to retry');
 
-    await service.retry(user.id, `retry-${RUN}`, failed.revision);
-    for (let i = 0; i < 4; i += 1) {
-      const outcome = await pass();
-      if ((await mappingOf(user.id))!.managementState === 'STARTING') break;
-      outcomes.push(outcome);
-    }
+    // A runtime signed in on it: READY at the next pass, on the same instance, and no retry was called.
     clock.ms += 1_000;
     await beat([engine('claude', { auth: 'no' }), engine('kimi')]);
     assert.equal(await pass(), 'READY');
     const ready = (await mappingOf(user.id))!;
     assert.equal(ready.initialProvider, 'kimi');
-    assert.equal(ready.podUid, failed.podUid, 'the same instance, waited on rather than replaced');
+    assert.equal(ready.lastError, null);
+    assert.equal(ready.podUid, waiting.podUid, 'the same instance, waited on rather than replaced');
+    assert.equal(ready.lastRequestKey, waiting.lastRequestKey, 'no retry request was made');
     assert.equal(fake.count('delete'), 0);
   });
 });
