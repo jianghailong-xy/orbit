@@ -129,11 +129,15 @@ internal object RunnerCopy {
     const val REFRESH_MODEL_LISTS = "Refresh Model Lists"
     const val ENGINES_FOOTER = "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends " +
         "that subscription, nothing to paste."
+    /** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+    const val ENGINES_MANAGED_FOOTER = "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends " +
+        "that subscription, nothing to paste."
     const val ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
     /** DeepSeek Harness has no sign-in: its row, its page and the footer under it say what it runs on instead (board 1 ⑤⑥⑦). */
     const val USES_API_KEYS = "Uses API keys"
     const val DSH_READY = "Ready · each session uses the DeepSeek key it was started with"
     const val DSH_FOOTER = "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    const val DSH_MANAGED_FOOTER = "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     fun enginesChecked(whenText: String) = "Checked $whenText"
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
