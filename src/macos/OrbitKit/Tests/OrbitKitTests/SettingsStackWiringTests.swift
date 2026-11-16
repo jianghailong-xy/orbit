@@ -263,9 +263,9 @@ final class SettingsStackWiringTests: XCTestCase {
             ("Toggle(TranslationCopy.translateConversations, isOn: $translation)",
              "UpdatePreferencesRequest(translationEnabled: value)",
              "translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true"),
-            // Settings › Prompt optimizer: absent is off, and a server without a key draws it off.
+            // Settings › Prompt optimizer: absent is on, and a server without a key draws it off.
             ("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
-             "promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true"),
+             "promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)"),
             // Show both languages (02-bilingual.png, mark A): absent is off.
             ("Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)",
              "UpdatePreferencesRequest(translationBilingual: value)",
@@ -275,8 +275,10 @@ final class SettingsStackWiringTests: XCTestCase {
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 7,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 6,
                        "every switch's write is guarded against the account's own value")
+        XCTAssertTrue(page.contains("PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }"),
+                      "the prompt optimizer's write is guarded against the account's own value (absent = on)")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile

@@ -30,7 +30,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Settings › Sessions › Prompt optimizer on Android (board docs/mocks/prompt-optimizer, frames 1 and 1b; iOS SessionSettings'
- * promptOptimizerSection): one switch right under Suggested replies, off by default, no NEW badge, written alone as it moves; on a
+ * promptOptimizerSection): one switch right under Suggested replies, on by default (absent = on; owner's decision of 2026-11-16), no NEW badge, written alone as it moves; on a
  * server without a DeepSeek key, off and disabled under the DEEPSEEK_API_KEY notice. Frames go to
  * `src/android/build/evidence/prompt-optimizer-android/`.
  */
@@ -86,9 +86,10 @@ class PromptOptimizerSettingsTest {
         PromptOptimizerFrames.shot(compose, name)
     }
 
-    @Test fun theSwitchSitsUnderSuggestedRepliesIsOffByDefaultAndIsWrittenAlone() {
+    @Test fun theSwitchSitsUnderSuggestedRepliesIsOnByDefaultAndIsWrittenAlone() {
         open()
-        toggle.assertIsOff().assertIsEnabled()
+        assertFalse("an untouched account", preferences.containsKey("promptOptimizer"))
+        toggle.assertIsOn().assertIsEnabled()
         assertTrue(top(SUGGESTED_REPLIES) < top(PromptOptimizerCopy.TITLE) && top(PromptOptimizerCopy.TITLE) < top(SESSION_RECAPS))
         compose.onNodeWithText(PromptOptimizerCopy.HINT).assertExists()
         compose.onAllNodesWithText(PromptOptimizerCopy.UNAVAILABLE).assertCountEquals(0)
@@ -96,11 +97,17 @@ class PromptOptimizerSettingsTest {
         frame("1-settings")
         toggle.performClick()
         compose.waitUntil(60_000) { writes.isNotEmpty() }
-        assertEquals(buildJsonObject { put("promptOptimizer", true) }, writes.single())
-        compose.waitUntil(60_000) { runCatching { toggle.assertIsOn() }.isSuccess }
+        assertEquals(buildJsonObject { put("promptOptimizer", false) }, writes.single())
+        compose.waitUntil(60_000) { runCatching { toggle.assertIsOff() }.isSuccess }
         toggle.performClick()
         compose.waitUntil(60_000) { writes.size == 2 }
-        assertEquals(buildJsonObject { put("promptOptimizer", false) }, writes[1])
+        assertEquals(buildJsonObject { put("promptOptimizer", true) }, writes[1])
+    }
+
+    @Test fun anAccountThatTurnedItOffReadsOff() {
+        preferences = JsonObject(preferences + ("promptOptimizer" to JsonPrimitive(false)))
+        open()
+        toggle.assertIsOff().assertIsEnabled()
     }
 
     @Test fun aServerWithoutAKeyDrawsItOffAndDisabledUnderTheNotice() {

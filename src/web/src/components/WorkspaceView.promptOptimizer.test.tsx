@@ -335,8 +335,13 @@ describe('✦ Optimize (frame 2)', () => {
     expect(optimizeButton()).toBeNull();
   });
 
-  it('is hidden with the switch off (absent preference)', async () => {
+  it('is shown for an account that never set the switch (absent = on)', async () => {
     preferences = { translationEnabled: true };
+    await ready();
+  });
+
+  it('is hidden with the switch off (promptOptimizer: false)', async () => {
+    preferences = { translationEnabled: true, promptOptimizer: false };
     await mount();
     await waitForUi(() => expect(box()).toBeTruthy());
     await typeDraft(DRAFT);

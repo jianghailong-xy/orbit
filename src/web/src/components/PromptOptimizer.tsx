@@ -86,7 +86,7 @@ export function usePromptOptimizer({
   resetKey: string | null;
 }) {
   const me = useQuery(meQuery());
-  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer === true;
+  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer !== false;
   const [state, setState] = useState<OptimizerState>({ kind: 'idle' });
   // The press now in flight; a cancel or a newer press makes its answer nobody's.
   const inFlight = useRef<AbortController | null>(null);

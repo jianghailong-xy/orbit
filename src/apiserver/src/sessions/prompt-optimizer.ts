@@ -290,7 +290,7 @@ export class PromptOptimizerService {
   async optimize(ownerId: string, dto: PromptOptimizationRequest, opts: { timeoutMs?: number } = {}): Promise<PromptOptimization> {
     const user = await this.prisma.user.findUnique({ where: { id: ownerId }, select: { preferences: true } });
     const preferences = (user?.preferences ?? null) as { promptOptimizer?: unknown } | null;
-    if (!promptOptimizerAvailable() || preferences?.promptOptimizer !== true) {
+    if (!promptOptimizerAvailable() || preferences?.promptOptimizer === false) {
       throw new ConflictException({ code: PROMPT_OPTIMIZER_OFF_CODE, message: 'The prompt optimizer is off for this account.' });
     }
     const draft = typeof dto.draft === 'string' ? dto.draft : '';

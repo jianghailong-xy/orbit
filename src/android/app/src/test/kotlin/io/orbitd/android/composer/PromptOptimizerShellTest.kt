@@ -21,10 +21,11 @@ internal object PromptOptimizerFixture {
     const val GLOSS = "登录后，用户落在了错误的页面，而不是他们开始时所在的页面。重定向目标应当来自 `returnTo` 查询参数（本会话上一轮改过 `src/web/src/auth/LoginPage.tsx`）。\n\n" +
         "1. 复现：未登录时打开一个受保护页面，登录，记下落在哪里。\n2. 找到登录后重定向的选择位置并修复，使其回到原页面。\n3. 保留现有规则：外部的 `returnTo` URL 会被拒绝。"
 
-    /** `users/me`: the switch [on], the server able to ([available]), and Translation on (the owner's language the default). */
-    fun me(on: Boolean = true, available: Boolean = true) = buildJsonObject {
+    /** `users/me`: the switch [on] (null: never set, which reads on), the server able to ([available]), and Translation on (the owner's
+     * language the default). */
+    fun me(on: Boolean? = null, available: Boolean = true) = buildJsonObject {
         put("id", "u1"); put("email", "owner@a07c.test"); put("name", "Owner")
-        putJsonObject("preferences") { if (on) put("promptOptimizer", true); put("translationEnabled", true) }
+        putJsonObject("preferences") { on?.let { put("promptOptimizer", it) }; put("translationEnabled", true) }
         put("promptOptimizerAvailable", available); put("translationAvailable", true)
     }.toString()
 
@@ -54,7 +55,7 @@ internal object PromptOptimizerFixture {
     /** What the box holds after Use with Translation on (D2): the owner-language gloss. */
     val inserted: String get() = GLOSS
 
-    fun install(on: Boolean = true, available: Boolean = true, respond: () -> ApiResponse = { ApiResponse(200, answer().encodeToByteArray()) }) {
+    fun install(on: Boolean? = null, available: Boolean = true, respond: () -> ApiResponse = { ApiResponse(200, answer().encodeToByteArray()) }) {
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, me(on, available).encodeToByteArray()) }
         ComposerShell.answers["POST prompt-optimizations"] = respond
     }
@@ -94,7 +95,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         type("  "); await { !has(button) }
     }
 
-    private fun neverDrawn(on: Boolean, available: Boolean) {
+    private fun neverDrawn(on: Boolean?, available: Boolean) {
         PromptOptimizerFixture.install(on, available)
         signIn(); openSession()
         await { ComposerShell.calls.contains("GET users/me") }
@@ -106,7 +107,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
 
     @Test fun theButtonIsNeverDrawnWithTheSwitchOff() = neverDrawn(on = false, available = true)
 
-    @Test fun theButtonIsNeverDrawnOnAServerWithoutAKey() = neverDrawn(on = true, available = false)
+    @Test fun theButtonIsNeverDrawnOnAServerWithoutAKey() = neverDrawn(on = null, available = false)
 
     @Test fun aPressSendsTheSessionsDraftAndPressingTheBusyButtonCancels() {
         val gate = CompletableDeferred<Unit>()
