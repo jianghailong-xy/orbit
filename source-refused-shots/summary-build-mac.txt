@@ -1,0 +1,6 @@
+Test Case '-[GithubMacProbeUITests.GithubShotTests testMacGithubStates]' started.
+Test Case '-[GithubMacProbeUITests.GithubShotTests testMacGithubStates]' passed (356.668 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 356.668 (356.670) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 356.668 (356.671) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 356.668 (356.672) seconds
+** TEST SUCCEEDED **

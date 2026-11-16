@@ -1,0 +1,300 @@
+    t =    38.49s Checking existence of `Any (First Match)`
+    t =    38.68s Checking existence of `Window (First Match)`
+    t =    39.15s Added attachment named 'ios-0-from-github-row'
+    t =    39.15s Requesting snapshot of accessibility hierarchy for app with pid 59106
+    t =    40.08s Requesting snapshot of accessibility hierarchy for app with pid 59106
+    t =    40.20s Added attachment named 'tree-ios-0-from-github-row.txt'
+    t =    40.21s Terminate io.orbitd.githubp3probe:59106
+    t =    41.32s Open io.orbitd.githubp3probe
+    t =    41.32s     Launch io.orbitd.githubp3probe
+2026-11-16 13:53:19.096 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:53:19.096 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    43.38s         Setting up automation session
+    t =    45.90s         Wait for io.orbitd.githubp3probe to idle
+    t =    49.12s Checking existence of `Any (First Match)`
+    t =    51.45s Checking existence of `Any (First Match)`
+    t =    52.54s Checking existence of `Any (First Match)`
+    t =    53.39s Checking existence of `Any (First Match)`
+    t =    55.44s Checking existence of `Any (First Match)`
+    t =    57.97s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "From GitHub"'
+    t =    58.10s Checking existence of `Button (Element at index 0)`
+    t =    58.20s Find the Button (Element at index 0)
+    t =    58.33s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    58.46s Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    58.65s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    58.73s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    58.81s Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    58.90s Find the Window (First Match)
+    t =    58.93s Tap "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    58.93s     Wait for io.orbitd.githubp3probe to idle
+    t =    58.94s     Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    59.08s     Check for interrupting elements affecting "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    59.21s     Synthesize event
+    t =    59.79s     Wait for io.orbitd.githubp3probe to idle
+    t =    60.80s Checking existence of `Any (First Match)`
+    t =    62.32s Checking existence of `Any (First Match)`
+    t =    62.61s Checking existence of `Any (First Match)`
+    t =    62.91s Checking existence of `Window (First Match)`
+    t =    63.20s Added attachment named 'ios-1-from-github-connect'
+    t =    63.21s Requesting snapshot of accessibility hierarchy for app with pid 60216
+    t =    63.90s Requesting snapshot of accessibility hierarchy for app with pid 60216
+    t =    64.06s Added attachment named 'tree-ios-1-from-github-connect.txt'
+    t =    64.06s Terminate io.orbitd.githubp3probe:60216
+    t =    65.14s Open io.orbitd.githubp3probe
+    t =    65.14s     Launch io.orbitd.githubp3probe
+2026-11-16 13:53:42.929 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:53:42.930 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    67.54s         Setting up automation session
+    t =    69.85s         Wait for io.orbitd.githubp3probe to idle
+    t =    72.47s Checking existence of `Any (First Match)`
+    t =    73.48s Checking existence of `Any (First Match)`
+    t =    74.32s Checking existence of `Any (First Match)`
+    t =    75.24s Checking existence of `Any (First Match)`
+    t =    76.97s Checking existence of `Any (First Match)`
+    t =    79.49s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "From GitHub"'
+    t =    79.69s Checking existence of `Button (Element at index 0)`
+    t =    79.79s Find the Button (Element at index 0)
+    t =    79.94s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    80.04s Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    80.18s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    80.28s Checking existence of `"From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button`
+    t =    80.40s Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    80.53s Find the Window (First Match)
+    t =    80.56s Tap "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    80.56s     Wait for io.orbitd.githubp3probe to idle
+    t =    80.56s     Find the "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    80.75s     Check for interrupting elements affecting "From GitHub, NEW, Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine." Button
+    t =    80.97s     Synthesize event
+    t =    81.33s     Wait for io.orbitd.githubp3probe to idle
+    t =    82.36s Checking existence of `Any (First Match)`
+    t =    84.03s Checking existence of `Any (First Match)`
+    t =    84.46s Checking existence of `Any (First Match)`
+    t =    85.00s Checking existence of `Any (First Match)`
+    t =    85.23s Checking existence of `Any (First Match)`
+    t =    85.42s Checking existence of `Window (First Match)`
+    t =    85.68s Added attachment named 'ios-2-repo-picker'
+    t =    85.69s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =    86.37s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =    86.52s Added attachment named 'tree-ios-2-repo-picker.txt'
+    t =    86.53s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "orbit-labs/orbit-web"'
+    t =    86.63s Checking existence of `Any (First Match)`
+    t =    86.96s Checking existence of `Any (First Match)`
+    t =    87.34s Find the Any (First Match)
+    t =    87.78s Find the Window (First Match)
+    t =    87.79s Tap "Private, orbit-labs/orbit-web, pushed 12 minutes ago" Button
+    t =    87.79s     Wait for io.orbitd.githubp3probe to idle
+    t =    87.80s     Find the "Private, orbit-labs/orbit-web, pushed 12 minutes ago" Button
+    t =    88.13s     Check for interrupting elements affecting "Private, orbit-labs/orbit-web, pushed 12 minutes ago" Button
+    t =    88.28s     Synthesize event
+    t =    88.72s     Wait for io.orbitd.githubp3probe to idle
+    t =    89.74s Checking existence of `Any (First Match)`
+    t =    95.37s Checking existence of `Any (First Match)`
+    t =    95.67s Checking existence of `Any (First Match)`
+    t =    95.89s Checking existence of `Any (First Match)`
+    t =    96.44s Checking existence of `Any (First Match)`
+    t =    96.73s Checking existence of `Window (First Match)`
+    t =    97.04s Added attachment named 'ios-3-repo-picked'
+    t =    97.06s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =    97.66s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =    97.81s Added attachment named 'tree-ios-3-repo-picked.txt'
+    t =    97.81s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Other branch"'
+    t =    97.91s Checking existence of `Button (Element at index 0)`
+    t =    98.00s Find the Button (Element at index 0)
+    t =    98.11s Checking existence of `"Other branch" Button`
+    t =    98.19s Find the "Other branch" Button
+    t =    98.32s Checking existence of `"Other branch" Button`
+    t =    98.39s Checking existence of `"Other branch" Button`
+    t =    98.48s Find the "Other branch" Button
+    t =    98.55s Find the Window (First Match)
+    t =    98.57s Tap "Other branch" Button
+    t =    98.57s     Wait for io.orbitd.githubp3probe to idle
+    t =    98.58s     Find the "Other branch" Button
+    t =    98.67s     Check for interrupting elements affecting "Other branch" Button
+    t =    98.75s     Synthesize event
+    t =    99.06s     Wait for io.orbitd.githubp3probe to idle
+    t =   103.29s Checking existence of `Window (First Match)`
+    t =   103.62s Added attachment named 'ios-3b-other-branch'
+    t =   103.62s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =   104.28s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =   104.44s Added attachment named 'tree-ios-3b-other-branch.txt'
+    t =   104.44s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Use This Repository"'
+    t =   104.53s Checking existence of `Button (Element at index 0)`
+    t =   104.66s Find the Button (Element at index 0)
+    t =   104.79s Checking existence of `"Use This Repository" Button`
+    t =   104.87s Find the "Use This Repository" Button
+    t =   105.00s Checking existence of `"Use This Repository" Button`
+    t =   105.09s Checking existence of `"Use This Repository" Button`
+    t =   105.16s Find the "Use This Repository" Button
+    t =   105.23s Find the Window (First Match)
+    t =   105.24s Tap "Use This Repository" Button
+    t =   105.24s     Wait for io.orbitd.githubp3probe to idle
+    t =   105.25s     Find the "Use This Repository" Button
+    t =   105.33s     Check for interrupting elements affecting "Use This Repository" Button
+    t =   105.41s     Synthesize event
+    t =   105.74s     Wait for io.orbitd.githubp3probe to idle
+    t =   106.76s Checking existence of `Any (First Match)`
+    t =   108.67s Checking existence of `Any (First Match)`
+    t =   108.95s Checking existence of `Any (First Match)`
+    t =   109.16s Checking existence of `Window (First Match)`
+    t =   109.39s Added attachment named 'ios-4-ready'
+    t =   109.39s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =   109.79s Requesting snapshot of accessibility hierarchy for app with pid 61023
+    t =   109.91s Added attachment named 'tree-ios-4-ready.txt'
+    t =   109.91s Terminate io.orbitd.githubp3probe:61023
+    t =   110.94s Open io.orbitd.githubp3probe
+    t =   110.95s     Launch io.orbitd.githubp3probe
+2026-11-16 13:54:28.720 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:54:28.720 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   112.37s         Setting up automation session
+    t =   114.27s         Wait for io.orbitd.githubp3probe to idle
+    t =   116.65s Checking existence of `Any (First Match)`
+    t =   118.18s Checking existence of `Any (First Match)`
+    t =   119.05s Checking existence of `Any (First Match)`
+    t =   121.45s Checking existence of `Any (First Match)`
+    t =   125.00s Checking existence of `Any (First Match)`
+    t =   125.31s Checking existence of `Window (First Match)`
+    t =   125.51s Added attachment named 'ios-5-cloning'
+    t =   125.51s Requesting snapshot of accessibility hierarchy for app with pid 63591
+    t =   126.22s Requesting snapshot of accessibility hierarchy for app with pid 63591
+    t =   126.42s Added attachment named 'tree-ios-5-cloning.txt'
+    t =   126.42s Terminate io.orbitd.githubp3probe:63591
+    t =   127.53s Open io.orbitd.githubp3probe
+    t =   127.53s     Launch io.orbitd.githubp3probe
+2026-11-16 13:54:45.306 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:54:45.306 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   128.78s         Setting up automation session
+    t =   130.83s         Wait for io.orbitd.githubp3probe to idle
+    t =   133.45s Checking existence of `Any (First Match)`
+    t =   134.45s Checking existence of `Any (First Match)`
+    t =   135.30s Checking existence of `Any (First Match)`
+    t =   136.03s Checking existence of `Any (First Match)`
+    t =   139.17s Checking existence of `Any (First Match)`
+    t =   142.82s Checking existence of `Any (First Match)`
+    t =   143.05s Checking existence of `Window (First Match)`
+    t =   143.24s Added attachment named 'ios-6-failed-git'
+    t =   143.24s Requesting snapshot of accessibility hierarchy for app with pid 64037
+    t =   143.77s Requesting snapshot of accessibility hierarchy for app with pid 64037
+    t =   143.91s Added attachment named 'tree-ios-6-failed-git.txt'
+    t =   143.91s Terminate io.orbitd.githubp3probe:64037
+    t =   144.98s Open io.orbitd.githubp3probe
+    t =   144.98s     Launch io.orbitd.githubp3probe
+2026-11-16 13:55:02.755 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:55:02.755 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   146.31s         Setting up automation session
+    t =   149.22s         Wait for io.orbitd.githubp3probe to idle
+    t =   152.45s Checking existence of `Any (First Match)`
+    t =   153.66s Checking existence of `Any (First Match)`
+    t =   154.43s Checking existence of `Any (First Match)`
+    t =   155.25s Checking existence of `Any (First Match)`
+    t =   156.07s Checking existence of `Any (First Match)`
+    t =   157.97s Checking existence of `Any (First Match)`
+    t =   161.70s Checking existence of `Any (First Match)`
+    t =   161.89s Checking existence of `Window (First Match)`
+    t =   162.07s Added attachment named 'ios-7-failed-app-removed'
+    t =   162.07s Requesting snapshot of accessibility hierarchy for app with pid 64867
+    t =   162.71s Requesting snapshot of accessibility hierarchy for app with pid 64867
+    t =   162.84s Added attachment named 'tree-ios-7-failed-app-removed.txt'
+    t =   162.84s Terminate io.orbitd.githubp3probe:64867
+    t =   163.88s Open io.orbitd.githubp3probe
+    t =   163.88s     Launch io.orbitd.githubp3probe
+2026-11-16 13:55:21.658 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:55:21.659 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   164.84s         Setting up automation session
+    t =   166.15s         Wait for io.orbitd.githubp3probe to idle
+    t =   168.31s Checking existence of `Any (First Match)`
+    t =   169.12s Checking existence of `Any (First Match)`
+    t =   169.85s Checking existence of `Any (First Match)`
+    t =   170.55s Checking existence of `Any (First Match)`
+    t =   171.24s Checking existence of `Any (First Match)`
+    t =   174.06s Checking existence of `Any (First Match)`
+    t =   178.79s Checking existence of `Any (First Match)`
+    t =   179.20s Checking existence of `Window (First Match)`
+    t =   179.40s Added attachment named 'ios-8-failed-sign-in'
+    t =   179.41s Requesting snapshot of accessibility hierarchy for app with pid 65732
+    t =   180.13s Requesting snapshot of accessibility hierarchy for app with pid 65732
+    t =   180.27s Added attachment named 'tree-ios-8-failed-sign-in.txt'
+    t =   180.27s Terminate io.orbitd.githubp3probe:65732
+    t =   181.41s Open io.orbitd.githubp3probe
+    t =   181.41s     Launch io.orbitd.githubp3probe
+2026-11-16 13:55:39.196 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:55:39.196 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   182.62s         Setting up automation session
+    t =   184.16s         Wait for io.orbitd.githubp3probe to idle
+    t =   186.73s Checking existence of `Any (First Match)`
+    t =   187.77s Checking existence of `Any (First Match)`
+    t =   188.53s Checking existence of `Any (First Match)`
+    t =   189.30s Checking existence of `Any (First Match)`
+    t =   191.32s Checking existence of `Any (First Match)`
+    t =   194.77s Checking existence of `Any (First Match)`
+    t =   195.27s Checking existence of `Window (First Match)`
+    t =   195.48s Added attachment named 'ios-9-failed-no-reason'
+    t =   195.48s Requesting snapshot of accessibility hierarchy for app with pid 66739
+    t =   196.12s Requesting snapshot of accessibility hierarchy for app with pid 66739
+    t =   196.24s Added attachment named 'tree-ios-9-failed-no-reason.txt'
+    t =   196.24s Terminate io.orbitd.githubp3probe:66739
+    t =   197.36s Open io.orbitd.githubp3probe
+    t =   197.36s     Launch io.orbitd.githubp3probe
+2026-11-16 13:55:55.141 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:55:55.141 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   198.46s         Setting up automation session
+    t =   200.11s         Wait for io.orbitd.githubp3probe to idle
+    t =   202.23s Checking existence of `Any (First Match)`
+    t =   203.38s Checking existence of `Any (First Match)`
+    t =   204.15s Checking existence of `Any (First Match)`
+    t =   205.13s Checking existence of `Any (First Match)`
+    t =   207.48s Checking existence of `Any (First Match)`
+    t =   211.00s Checking existence of `Any (First Match)`
+    t =   211.19s Checking existence of `Window (First Match)`
+    t =   211.36s Added attachment named 'ios-10-created'
+    t =   211.36s Requesting snapshot of accessibility hierarchy for app with pid 67236
+    t =   211.99s Requesting snapshot of accessibility hierarchy for app with pid 67236
+    t =   212.13s Added attachment named 'tree-ios-10-created.txt'
+    t =   212.13s Terminate io.orbitd.githubp3probe:67236
+    t =   213.25s Open io.orbitd.githubp3probe
+    t =   213.25s     Launch io.orbitd.githubp3probe
+2026-11-16 13:56:11.029 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-16 13:56:11.029 xcodebuild[35490:98264] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   214.39s         Setting up automation session
+    t =   216.43s         Wait for io.orbitd.githubp3probe to idle
+    t =   218.68s Checking existence of `Any (First Match)`
+    t =   219.58s Checking existence of `Any (First Match)`
+    t =   220.31s Checking existence of `Any (First Match)`
+    t =   221.08s Checking existence of `Any (First Match)`
+    t =   222.51s Checking existence of `Any (First Match)`
+    t =   226.14s Checking existence of `Any (First Match)`
+    t =   226.59s Checking existence of `Any (First Match)`
+    t =   227.00s Checking existence of `Window (First Match)`
+    t =   227.22s Added attachment named 'ios-11-settings-github'
+    t =   227.23s Requesting snapshot of accessibility hierarchy for app with pid 67897
+    t =   228.21s Requesting snapshot of accessibility hierarchy for app with pid 67897
+    t =   228.41s Added attachment named 'tree-ios-11-settings-github.txt'
+    t =   228.42s Checking existence of `Any (First Match)`
+    t =   228.74s Find the Any (First Match)
+    t =   229.05s Find the Window (First Match)
+    t =   230.27s Checking existence of `Any (First Match)`
+    t =   230.68s Checking existence of `Any (First Match)`
+    t =   231.00s Checking existence of `Window (First Match)`
+    t =   231.21s Added attachment named 'ios-11b-settings-github-workspaces'
+    t =   231.21s Requesting snapshot of accessibility hierarchy for app with pid 67897
+    t =   232.22s Requesting snapshot of accessibility hierarchy for app with pid 67897
+    t =   232.48s Added attachment named 'tree-ios-11b-settings-github-workspaces.txt'
+    t =   232.49s Terminate io.orbitd.githubp3probe:67897
+    t =   233.52s Tear Down
+    t =   233.52s     Added attachment named 'GithubShotTeststestIPhoneGithubStates-notes.txt'
+Test Case '-[GithubProbeUITests.GithubShotTests testIPhoneGithubStates]' passed (234.046 seconds).
+Test Suite 'GithubShotTests' passed at 2026-11-16 13:56:31.822.
+	 Executed 1 test, with 0 failures (0 unexpected) in 234.046 (234.052) seconds
+Test Suite 'GithubProbeUITests.xctest' passed at 2026-11-16 13:56:31.823.
+	 Executed 1 test, with 0 failures (0 unexpected) in 234.046 (234.054) seconds
+Test Suite 'All tests' passed at 2026-11-16 13:56:31.823.
+	 Executed 1 test, with 0 failures (0 unexpected) in 234.046 (234.056) seconds
+2026-11-16 13:56:59.399 xcodebuild[35490:98264] [MT] IDETestOperationsObserverDebug: 307.870 elapsed -- Testing started completed.
+2026-11-16 13:56:59.404 xcodebuild[35490:98264] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-16 13:56:59.404 xcodebuild[35490:98264] [MT] IDETestOperationsObserverDebug: 307.870 sec, +307.870 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.sr-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

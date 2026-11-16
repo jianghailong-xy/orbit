@@ -1,0 +1,216 @@
+Attributes: Application, 0x11902ebc0, pid: 61023, label: 'GithubProbe'
+Element subtree:
+ →Application, 0x11902ebc0, pid: 61023, label: 'GithubProbe'
+    Window (Main), 0x11902ed00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11902ee40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x11902ef80, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x11902f0c0, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x11902f200, {{0.0, 0.0}, {402.0, 874.0}}
+              CollectionView, 0x11902f340, {{0.0, 0.0}, {305.5, 874.0}}
+                Other, 0x11902f480, {{0.0, -1620.0}, {305.7, 3984.0}}
+                Cell, 0x11902f5c0, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11902f700, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11902f840, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11902f980, {{0.0, 128.0}, {305.3, 44.3}}
+                  Other, 0x11902fac0, {{0.0, 128.0}, {305.3, 44.3}}
+                    Other, 0x11902fc00, {{0.0, 128.0}, {305.3, 44.3}}
+                      Other, 0x11902fd40, {{0.0, 128.0}, {305.3, 44.3}}
+                        Button, 0x11902fe80, {{0.0, 128.0}, {305.3, 44.3}}, label: 'Projects'
+                          Image, 0x119030000, {{26.3, 142.3}, {15.3, 15.3}}, identifier: 'square.grid.2x2', label: 'Grid View'
+                          StaticText, 0x119030140, {{58.0, 140.0}, {62.3, 20.3}}, label: 'Projects'
+                Cell, 0x119030280, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x1190303c0, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x119030500, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x119030640, {{0.0, 172.3}, {305.3, 44.3}}
+                  Other, 0x119030780, {{0.0, 172.3}, {305.3, 44.3}}
+                    Other, 0x1190308c0, {{0.0, 172.3}, {305.3, 44.3}}
+                      Other, 0x119030a00, {{0.0, 172.3}, {305.3, 44.3}}
+                        Button, 0x119030b40, {{0.0, 172.3}, {305.3, 44.3}}, label: 'Tasks'
+                          Image, 0x119030c80, {{24.7, 186.0}, {18.7, 17.0}}, identifier: 'checklist', label: 'checklist'
+                          StaticText, 0x119030dc0, {{58.0, 184.3}, {43.0, 20.3}}, label: 'Tasks'
+                Cell, 0x119030f00, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x119031040, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x119031180, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x1190312c0, {{0.0, 216.7}, {305.3, 44.3}}
+                  Other, 0x119031400, {{0.0, 216.7}, {305.3, 44.3}}
+                    Other, 0x119031540, {{0.0, 216.7}, {305.3, 44.3}}
+                      Other, 0x119031680, {{0.0, 216.7}, {305.3, 44.3}}
+                        Button, 0x1190317c0, {{0.0, 216.7}, {305.3, 44.3}}, label: 'Wiki'
+                          Image, 0x119031900, {{27.0, 230.0}, {14.0, 18.0}}, identifier: 'book.closed', label: 'book.closed'
+                          StaticText, 0x119031a40, {{58.0, 228.7}, {32.7, 20.3}}, label: 'Wiki'
+                Cell, 0x119031b80, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x119031cc0, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x119031e00, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x119031f40, {{0.0, 261.0}, {305.3, 44.7}}
+                  Other, 0x119032080, {{0.0, 261.0}, {305.3, 44.7}}
+                    Other, 0x1190321c0, {{0.0, 261.0}, {305.3, 44.7}}
+                      Other, 0x119032300, {{0.0, 261.0}, {305.3, 44.7}}
+                        StaticText, 0x119032440, {{0.0, 261.0}, {305.3, 44.7}}, label: 'Workspaces'
+                Cell, 0x119032580, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x1190326c0, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x119032800, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x119032940, {{0.0, 305.7}, {305.3, 44.3}}
+                  Other, 0x119032a80, {{0.0, 305.7}, {305.3, 44.3}}
+                    Other, 0x119032bc0, {{0.0, 305.7}, {305.3, 44.3}}
+                      Other, 0x119032d00, {{0.0, 305.7}, {305.3, 44.3}}
+                        Button, 0x119032e40, {{0.0, 305.7}, {305.3, 44.3}}, label: 'orbit-web,  · build-box'
+                          Other, 0x119032f80, {{24.7, 320.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x1190330c0, {{24.7, 320.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x119033200, {{58.0, 317.7}, {74.0, 20.3}}, label: 'orbit-web'
+                          StaticText, 0x119033340, {{132.0, 317.7}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x119033480, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x1190335c0, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x119033700, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x119033840, {{0.0, 350.0}, {305.3, 44.3}}
+                  Other, 0x119033980, {{0.0, 350.0}, {305.3, 44.3}}
+                    Other, 0x119033ac0, {{0.0, 350.0}, {305.3, 44.3}}
+                      Other, 0x119033c00, {{0.0, 350.0}, {305.3, 44.3}}
+                        Button, 0x119033d40, {{0.0, 350.0}, {305.3, 44.3}}, label: 'orbit-web 2,  · build-box'
+                          Other, 0x119033e80, {{24.7, 364.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118c04000, {{24.7, 364.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118c04140, {{58.0, 362.0}, {88.3, 20.3}}, label: 'orbit-web 2'
+                          StaticText, 0x118c04280, {{146.3, 362.0}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x118c043c0, {{0.0, 394.3}, {305.3, 44.3}}
+                  Other, 0x118c04500, {{0.0, 394.3}, {305.3, 44.3}}
+                    Other, 0x118c04640, {{0.0, 394.3}, {305.3, 44.3}}
+                      Other, 0x118c04780, {{0.0, 394.3}, {305.3, 44.3}}
+                  Other, 0x118c048c0, {{0.0, 394.3}, {305.3, 44.3}}
+                    Other, 0x118c04a00, {{0.0, 394.3}, {305.3, 44.3}}
+                      Other, 0x118c04b40, {{0.0, 394.3}, {305.3, 44.3}}
+                        Button, 0x118c04c80, {{0.0, 394.3}, {305.3, 44.3}}, label: 'orbit-web 3,  · build-box'
+                          Other, 0x118c04dc0, {{24.7, 408.7}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118c04f00, {{24.7, 408.7}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118c05040, {{58.0, 406.3}, {88.7, 20.3}}, label: 'orbit-web 3'
+                          StaticText, 0x118c05180, {{146.7, 406.3}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x118c052c0, {{0.0, 438.7}, {305.3, 44.3}}
+                  Other, 0x118c05400, {{0.0, 438.7}, {305.3, 44.3}}
+                    Other, 0x118c05540, {{0.0, 438.7}, {305.3, 44.3}}
+                      Other, 0x118c05680, {{0.0, 438.7}, {305.3, 44.3}}
+                  Other, 0x118c057c0, {{0.0, 438.7}, {305.3, 44.3}}
+                    Other, 0x118c05900, {{0.0, 438.7}, {305.3, 44.3}}
+                      Other, 0x118c05a40, {{0.0, 438.7}, {305.3, 44.3}}
+                        Button, 0x118c05b80, {{0.0, 438.7}, {305.3, 44.3}}, label: 'orbit-web 4,  · build-box'
+                          Other, 0x118c05cc0, {{24.7, 453.0}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118c05e00, {{24.7, 453.0}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118c05f40, {{58.0, 450.7}, {89.0, 20.3}}, label: 'orbit-web 4'
+                          StaticText, 0x118c06080, {{147.0, 450.7}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x118c061c0, {{0.0, 483.0}, {305.3, 44.3}}
+                  Other, 0x118c06300, {{0.0, 483.0}, {305.3, 44.3}}
+                    Other, 0x118c06440, {{0.0, 483.0}, {305.3, 44.3}}
+                      Other, 0x118c06580, {{0.0, 483.0}, {305.3, 44.3}}
+                  Other, 0x118c066c0, {{0.0, 483.0}, {305.3, 44.3}}
+                    Other, 0x118c06800, {{0.0, 483.0}, {305.3, 44.3}}
+                      Other, 0x118c06940, {{0.0, 483.0}, {305.3, 44.3}}
+                        Button, 0x118c06a80, {{0.0, 483.0}, {305.3, 44.3}}, label: 'orbit-web 5,  · build-box'
+                          Other, 0x118c06bc0, {{24.7, 497.3}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118c06d00, {{24.7, 497.3}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118c06e40, {{58.0, 495.0}, {88.7, 20.3}}, label: 'orbit-web 5'
+                          StaticText, 0x118c06f80, {{146.7, 495.0}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x118c070c0, {{0.0, 527.3}, {305.3, 44.3}}
+                  Other, 0x118c07200, {{0.0, 527.3}, {305.3, 44.3}}
+                    Other, 0x118c07340, {{0.0, 527.3}, {305.3, 44.3}}
+                      Other, 0x118c07480, {{0.0, 527.3}, {305.3, 44.3}}
+                  Other, 0x118c075c0, {{0.0, 527.3}, {305.3, 44.3}}
+                    Other, 0x118c07700, {{0.0, 527.3}, {305.3, 44.3}}
+                      Other, 0x118c07840, {{0.0, 527.3}, {305.3, 44.3}}
+                        Button, 0x118c07980, {{0.0, 527.3}, {305.3, 44.3}}, label: 'orbit-web 6,  · build-box'
+                          Other, 0x118c07ac0, {{24.7, 541.7}, {19.0, 15.3}}, label: 'Runner offline'
+                            Image, 0x118c07c00, {{24.7, 541.7}, {19.0, 15.3}}, identifier: 'folder', label: 'Move'
+                          StaticText, 0x118c07d40, {{58.0, 539.3}, {89.0, 20.3}}, label: 'orbit-web 6'
+                          StaticText, 0x118c07e80, {{147.0, 539.3}, {86.0, 20.3}}, label: ' · build-box'
+                Cell, 0x118c10000, {{0.0, 571.7}, {305.3, 44.3}}
+                  Other, 0x118c10140, {{0.0, 571.7}, {305.3, 44.3}}
+                    Other, 0x118c10280, {{0.0, 571.7}, {305.3, 44.3}}
+                      Other, 0x118c103c0, {{0.0, 571.7}, {305.3, 44.3}}
+                  Other, 0x118c10500, {{0.0, 571.7}, {305.3, 44.3}}
+                    Other, 0x118c10640, {{0.0, 571.7}, {305.3, 44.3}}
+                      Other, 0x118c10780, {{0.0, 571.7}, {305.3, 44.3}}
+                        Button, 0x118c108c0, {{0.0, 571.7}, {305.3, 44.3}}, label: 'Set up studio-mac'
+                          Image, 0x118c10a00, {{24.3, 585.7}, {23.7, 16.7}}, identifier: 'folder.badge.plus', label: 'New Folder'
+                          StaticText, 0x118c10b40, {{58.0, 583.7}, {140.7, 20.3}}, label: 'Set up studio-mac'
+                Other, 0x118c10c80, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118c10dc0, {{299.2, 561.0}, {3.0, 310.0}}
+                Other, 0x118c10f00, {{272.2, 128.0}, {30.0, 746.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                  Other, 0x118c11040, {{299.2, 561.0}, {3.0, 310.0}}
+              StaticText, 0x118c11180, {{22.0, 84.8}, {52.3, 26.3}}, label: 'Orbit'
+              Button, 0x118c112c0, {{251.7, 76.0}, {44.0, 44.0}}, identifier: 'magnifyingglass', label: 'Search sessions'
+              Button, 0x118c11400, {{10.0, 788.7}, {165.0, 43.0}}, label: 'New session'
+                Image, 0x118c11540, {{31.0, 801.0}, {18.3, 18.3}}, identifier: 'square.and.pencil', label: 'Compose'
+                StaticText, 0x118c11680, {{57.0, 799.8}, {100.0, 20.3}}, label: 'New session'
+              Button, 0x118c117c0, {{251.7, 788.0}, {44.0, 44.0}}, identifier: 'gearshape', label: 'Settings'
+              Other, 0x118c11900, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x118c11a40, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Other, 0x118c11b80, {{20.0, 66.0}, {36.0, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                    Other, 0x118c11cc0, {{20.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x118c11e00, {{22.3, 66.0}, {31.3, 36.0}}, identifier: 'line.3.horizontal', label: 'Open navigation'
+                  Other, 0x118c11f40, {{76.0, 66.0}, {100.0, 36.0}}, label: 'New session'
+                    Other, 0x118c12080, {{76.0, 66.0}, {100.0, 36.0}}
+                      StaticText, 0x118c121c0, {{76.0, 66.0}, {100.0, 20.3}}, label: 'New session'
+                      StaticText, 0x118c12300, {{76.0, 86.3}, {69.3, 15.7}}, label: 'studio-mac'
+                Other, 0x118c12440, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118c12580, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x118c126c0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x118c12800, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x118c12940, {{0.0, 116.0}, {402.0, 724.0}}
+                        ScrollView, 0x118c12a80, {{0.0, 0.0}, {402.0, 739.0}}
+                          Other, 0x118c12bc0, {{0.0, 0.0}, {402.0, 739.0}}
+                            Other, 0x118c12d00, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x118c12e40, {{0.0, 0.0}, {402.0, 739.0}}
+                          Other, 0x118c12f80, {{0.0, 116.0}, {402.0, 558.7}}
+                            Image, 0x118c130c0, {{34.0, 151.7}, {17.7, 15.0}}, identifier: 'desktopcomputer', label: 'Computer'
+                            StaticText, 0x118c13200, {{68.0, 144.0}, {146.3, 20.3}}, label: 'Set up studio-mac'
+                            StaticText, 0x118c13340, {{68.0, 165.3}, {306.0, 38.0}}, label: 'Pick where it works and sign in a coding CLI. Anything you send waits until both are done.'
+                            StaticText, 0x118c13480, {{35.7, 229.8}, {6.7, 15.7}}, label: '1'
+                            StaticText, 0x118c135c0, {{60.0, 226.7}, {50.7, 20.3}}, label: 'Folder'
+                            StaticText, 0x118c13700, {{60.0, 249.0}, {307.7, 33.7}}, label: 'Where on studio-mac should sessions work? They can read and change everything in it.'
+                            StaticText, 0x118c13840, {{83.0, 292.7}, {101.0, 20.3}}, label: 'From GitHub'
+                            StaticText, 0x118c13980, {{193.0, 296.2}, {26.3, 13.3}}, label: 'NEW'
+                            Image, 0x118c13ac0, {{61.7, 326.0}, {7.3, 10.7}}, identifier: 'lock.fill', label: 'Private'
+                            StaticText, 0x118c13c00, {{76.7, 319.0}, {157.3, 20.3}}, label: 'orbit-labs/orbit-web'
+                            Button, 0x118c13d40, {{327.3, 323.0}, {46.7, 15.7}}, label: 'Change'
+                            Image, 0x118c13e80, {{62.0, 355.7}, {15.7, 15.7}}, identifier: 'arrow.triangle.branch', label: 'Divide'
+                            TextField, 0x118c14000, {{83.7, 346.3}, {290.3, 34.0}}, label: 'Branch', placeholderValue: 'main'
+                            Button, 0x118c14140, {{60.0, 383.3}, {32.3, 15.7}}, label: 'main'
+                            Button, 0x118c14280, {{98.3, 383.3}, {24.3, 15.7}}, label: 'dev'
+                            Button, 0x118c143c0, {{128.7, 383.3}, {88.7, 15.7}}, label: 'release/1.4'
+                            Button, 0x118c14500, {{223.3, 383.3}, {72.3, 15.7}}, label: 'fix/login'
+                            StaticText, 0x118c14640, {{60.0, 415.2}, {153.0, 15.7}}, label: '/Users/ada/orbit-repos/'
+                            TextField, 0x118c14780, {{217.0, 406.0}, {157.0, 34.0}}, label: 'name', placeholderValue: 'name', value: orbit-web
+                            StaticText, 0x118c148c0, {{60.0, 443.0}, {307.7, 33.7}}, label: 'Cloned before the session starts. Work lands back on GitHub.'
+                            Button, 0x118c14a00, {{60.0, 487.7}, {163.3, 28.0}}, label: 'Use This Repository'
+                            Button, 0x118c14b40, {{60.0, 523.7}, {163.7, 15.7}}, label: 'Type a folder name instead'
+                            Image, 0x118c14c80, {{30.7, 564.3}, {17.0, 17.0}}, identifier: 'checkmark.circle.fill', label: 'Selected', Selected
+                            StaticText, 0x118c14dc0, {{60.0, 561.7}, {102.0, 20.3}}, label: 'Claude Code'
+                            StaticText, 0x118c14f00, {{170.0, 565.7}, {146.3, 15.7}}, label: 'signed in on studio-mac'
+                            StaticText, 0x118c15040, {{28.0, 603.0}, {330.0, 33.7}}, label: 'Nothing is created until you send. You can rename the workspace or change these later.'
+                          Other, 0x118c15180, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118c152c0, {{396.0, 119.0}, {3.0, 526.3}}
+                          Other, 0x118c15400, {{369.0, 116.0}, {30.0, 623.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118c15540, {{396.0, 119.0}, {3.0, 526.3}}
+                        TextView, 0x118c15680, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x118c157c0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Send studio-mac a task…'
+                          Other, 0x118c15900, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x118c15a40, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x118c15b80, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x118c15cc0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x118c15e00, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x118c15f40, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x118c16080, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x118c161c0, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x118c16300, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x118c16440, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x118c16580, {{208.7, 797.0}, {105.3, 18.0}}, label: 'Model Opus 5, effort Default'
+                          Button, 0x118c166c0, {{208.7, 797.0}, {105.3, 18.0}}
+                            StaticText, 0x118c16800, {{208.7, 797.0}, {51.0, 18.0}}, label: 'Opus 5'
+                            StaticText, 0x118c16940, {{264.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x118c16a80, {{322.0, 798.0}, {16.0, 16.0}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x118c16bc0, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x118c16d00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118c16e40, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x11902ebc0, pid: 61023, label: 'GithubProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.githubp3probe'
+  Output: {
+    Application, 0x118c16f80, pid: 61023, label: 'GithubProbe'
+  }

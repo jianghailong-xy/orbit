@@ -1,0 +1,797 @@
+13:31:57 "GET /api/sessions HTTP/1.1" 200 -
+13:39:19 "POST /__reset HTTP/1.1" 200 -
+13:39:19 "POST /__github HTTP/1.1" 200 -
+13:39:38 "GET /api/users/me HTTP/1.1" 200 -
+13:39:38 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:39:38 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:39:38 "GET /api/agents HTTP/1.1" 200 -
+13:39:38 "GET /api/projects HTTP/1.1" 200 -
+13:39:38 NOT SERVED /api/schedules
+13:39:38 NOT SERVED /api/guest-sessions
+13:39:38 "GET /api/schedules HTTP/1.1" 404 -
+13:39:38 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:39:38 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:39:39 NOT SERVED /api/wiki/trash
+13:39:39 "GET /api/users/me HTTP/1.1" 200 -
+13:39:39 "GET /api/agents HTTP/1.1" 200 -
+13:39:39 "GET /api/runners HTTP/1.1" 200 -
+13:39:39 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:39:39 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:39:39 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:39:39 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:39:39 "GET /api/providers HTTP/1.1" 200 -
+13:39:39 "GET /api/providers HTTP/1.1" 200 -
+13:39:39 NOT SERVED /api/wiki/trash
+13:39:39 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:39:39 "GET /api/session-folders HTTP/1.1" 200 -
+13:39:39 "GET /api/watches HTTP/1.1" 200 -
+13:39:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:39:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:39:39 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:39:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:39:39 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:39:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:39:39 "GET /api/runners HTTP/1.1" 200 -
+13:39:39 NOT SERVED /api/owner-requests?state=open
+13:39:39 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:39:39 "GET /api/session-tags HTTP/1.1" 200 -
+13:39:40 "GET /api/agents HTTP/1.1" 200 -
+13:39:40 "GET /api/projects HTTP/1.1" 200 -
+13:39:40 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:39:40 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:39:40 "GET /api/session-folders HTTP/1.1" 200 -
+13:39:40 "GET /api/agents HTTP/1.1" 200 -
+13:39:40 "GET /api/runners HTTP/1.1" 200 -
+13:39:40 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:39:40 NOT SERVED /api/auth/capabilities
+13:39:40 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:39:40 "GET /api/projects HTTP/1.1" 200 -
+13:39:40 "GET /api/providers HTTP/1.1" 200 -
+13:39:40 "GET /api/providers/pools HTTP/1.1" 200 -
+13:39:40 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:39:40 "GET /api/task-lists HTTP/1.1" 200 -
+13:39:40 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:39:42 "GET /api/runners HTTP/1.1" 200 -
+13:39:42 "GET /api/runners HTTP/1.1" 200 -
+13:39:42 "GET /api/sessions?view=open&limit=1 HTTP/1.1" 200 -
+13:39:42 "GET /api/integrations/github HTTP/1.1" 200 -
+13:39:42 "GET /api/providers/pools HTTP/1.1" 200 -
+13:39:42 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:39:42 "GET /api/providers HTTP/1.1" 200 -
+13:39:47 "POST /__reset HTTP/1.1" 200 -
+13:39:47 "POST /__github HTTP/1.1" 200 -
+13:40:04 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:04 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:40:04 "GET /api/agents HTTP/1.1" 200 -
+13:40:04 "GET /api/projects HTTP/1.1" 200 -
+13:40:04 "GET /api/users/me HTTP/1.1" 200 -
+13:40:04 NOT SERVED /api/schedules
+13:40:04 "GET /api/schedules HTTP/1.1" 404 -
+13:40:04 NOT SERVED /api/guest-sessions
+13:40:04 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:40:04 NOT SERVED /api/wiki/trash
+13:40:04 "GET /api/users/me HTTP/1.1" 200 -
+13:40:04 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:40:04 "GET /api/runners HTTP/1.1" 200 -
+13:40:04 "GET /api/agents HTTP/1.1" 200 -
+13:40:04 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:40:04 "GET /api/providers HTTP/1.1" 200 -
+13:40:05 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:40:05 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:05 "GET /api/runners HTTP/1.1" 200 -
+13:40:05 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:40:05 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:40:05 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:40:05 "GET /api/session-folders HTTP/1.1" 200 -
+13:40:05 NOT SERVED /api/wiki/trash
+13:40:05 "GET /api/providers HTTP/1.1" 200 -
+13:40:05 "GET /api/agents HTTP/1.1" 200 -
+13:40:05 "GET /api/runners HTTP/1.1" 200 -
+13:40:05 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:05 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:40:05 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:05 "GET /api/session-tags HTTP/1.1" 200 -
+13:40:05 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:40:06 "GET /api/watches HTTP/1.1" 200 -
+13:40:06 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:40:06 "GET /api/providers HTTP/1.1" 200 -
+13:40:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:06 "GET /api/session-folders HTTP/1.1" 200 -
+13:40:06 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:40:06 NOT SERVED /api/owner-requests?state=open
+13:40:06 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:06 "GET /api/projects HTTP/1.1" 200 -
+13:40:06 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:06 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:40:06 "GET /api/runners HTTP/1.1" 200 -
+13:40:06 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:06 "GET /api/projects HTTP/1.1" 200 -
+13:40:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:07 "GET /api/agents HTTP/1.1" 200 -
+13:40:07 "GET /api/task-lists HTTP/1.1" 200 -
+13:40:07 NOT SERVED /api/auth/capabilities
+13:40:07 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:40:07 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:40:11 "GET /api/runners HTTP/1.1" 200 -
+13:40:12 "GET /api/runners HTTP/1.1" 200 -
+13:40:12 "GET /api/sessions?view=open&limit=1 HTTP/1.1" 200 -
+13:40:12 "GET /api/integrations/github HTTP/1.1" 200 -
+13:40:12 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:12 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:13 "GET /api/providers HTTP/1.1" 200 -
+13:40:17 "GET /api/runners HTTP/1.1" 200 -
+13:40:20 "POST /__reset HTTP/1.1" 200 -
+13:40:20 "POST /__github HTTP/1.1" 200 -
+13:40:38 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:38 "GET /api/agents HTTP/1.1" 200 -
+13:40:38 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:40:38 NOT SERVED /api/guest-sessions
+13:40:38 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:40:38 "GET /api/users/me HTTP/1.1" 200 -
+13:40:38 NOT SERVED /api/schedules
+13:40:38 "GET /api/schedules HTTP/1.1" 404 -
+13:40:38 "GET /api/projects HTTP/1.1" 200 -
+13:40:38 NOT SERVED /api/wiki/trash
+13:40:38 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:40:38 "GET /api/users/me HTTP/1.1" 200 -
+13:40:38 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:40:38 "GET /api/runners HTTP/1.1" 200 -
+13:40:38 "GET /api/agents HTTP/1.1" 200 -
+13:40:38 "GET /api/providers HTTP/1.1" 200 -
+13:40:38 "GET /api/runners HTTP/1.1" 200 -
+13:40:38 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:40:38 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:38 "GET /api/session-folders HTTP/1.1" 200 -
+13:40:38 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:40:38 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:40:38 NOT SERVED /api/wiki/trash
+13:40:38 "GET /api/providers HTTP/1.1" 200 -
+13:40:38 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:38 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:40:39 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:40:39 "GET /api/agents HTTP/1.1" 200 -
+13:40:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:39 "GET /api/watches HTTP/1.1" 200 -
+13:40:39 "GET /api/runners HTTP/1.1" 200 -
+13:40:39 "GET /api/session-tags HTTP/1.1" 200 -
+13:40:39 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:40:39 "GET /api/providers HTTP/1.1" 200 -
+13:40:39 "GET /api/runners HTTP/1.1" 200 -
+13:40:39 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:40:39 NOT SERVED /api/owner-requests?state=open
+13:40:39 "GET /api/session-folders HTTP/1.1" 200 -
+13:40:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:39 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:40:39 "GET /api/agents HTTP/1.1" 200 -
+13:40:39 "GET /api/projects HTTP/1.1" 200 -
+13:40:39 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:39 "GET /api/projects HTTP/1.1" 200 -
+13:40:39 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:40:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:39 NOT SERVED /api/auth/capabilities
+13:40:39 "GET /api/task-lists HTTP/1.1" 200 -
+13:40:39 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:40:39 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:40:42 "GET /api/runners HTTP/1.1" 200 -
+13:40:42 "GET /api/sessions?view=open&limit=1 HTTP/1.1" 200 -
+13:40:42 "GET /api/runners HTTP/1.1" 200 -
+13:40:42 "GET /api/integrations/github HTTP/1.1" 200 -
+13:40:42 "GET /api/providers/pools HTTP/1.1" 200 -
+13:40:42 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:40:42 "GET /api/providers HTTP/1.1" 200 -
+13:40:45 "GET /api/integrations/github/repos HTTP/1.1" 200 -
+13:40:47 "GET /api/runners HTTP/1.1" 200 -
+13:40:49 BODY /api/runners/r2/dir-probe {"path":"\/Users\/ada\/orbit-repos\/orbit-web"}
+13:40:49 "POST /api/runners/r2/dir-probe HTTP/1.1" 200 -
+13:40:49 "GET /api/runners/r2/dir-probe?path=/Users/ada/orbit-repos/orbit-web HTTP/1.1" 200 -
+13:40:52 "GET /api/runners HTTP/1.1" 200 -
+13:40:57 "GET /api/runners HTTP/1.1" 200 -
+13:40:58 "GET /api/integrations/github/repos/1000/branches HTTP/1.1" 200 -
+13:40:58 "GET /api/runners HTTP/1.1" 200 -
+13:41:02 "GET /api/runners HTTP/1.1" 200 -
+13:41:08 "GET /api/runners HTTP/1.1" 200 -
+13:41:13 "GET /api/runners HTTP/1.1" 200 -
+13:41:15 "GET /api/runners HTTP/1.1" 200 -
+13:41:16 "POST /__reset HTTP/1.1" 200 -
+13:41:17 "POST /__github HTTP/1.1" 200 -
+13:41:38 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:41:38 "GET /api/agents HTTP/1.1" 200 -
+13:41:38 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:41:38 NOT SERVED /api/guest-sessions
+13:41:38 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:41:38 "GET /api/users/me HTTP/1.1" 200 -
+13:41:38 "GET /api/projects HTTP/1.1" 200 -
+13:41:38 NOT SERVED /api/schedules
+13:41:38 "GET /api/schedules HTTP/1.1" 404 -
+13:41:38 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:41:38 NOT SERVED /api/wiki/trash
+13:41:38 "GET /api/users/me HTTP/1.1" 200 -
+13:41:38 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:41:38 "GET /api/agents HTTP/1.1" 200 -
+13:41:38 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:41:38 "GET /api/runners HTTP/1.1" 200 -
+13:41:38 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:41:38 "GET /api/providers HTTP/1.1" 200 -
+13:41:38 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:41:39 "GET /api/watches HTTP/1.1" 200 -
+13:41:39 NOT SERVED /api/wiki/trash
+13:41:39 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:41:39 "GET /api/session-folders HTTP/1.1" 200 -
+13:41:39 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:41:39 "GET /api/providers HTTP/1.1" 200 -
+13:41:39 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:41:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:41:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:41:39 NOT SERVED /api/owner-requests?state=open
+13:41:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:41:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:41:39 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:41:39 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:41:39 "GET /api/projects HTTP/1.1" 200 -
+13:41:39 "GET /api/runners HTTP/1.1" 200 -
+13:41:39 "GET /api/session-tags HTTP/1.1" 200 -
+13:41:39 "GET /api/agents HTTP/1.1" 200 -
+13:41:39 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:41:39 NOT SERVED /api/auth/capabilities
+13:41:39 "GET /api/agents HTTP/1.1" 200 -
+13:41:39 "GET /api/runners HTTP/1.1" 200 -
+13:41:39 "GET /api/session-folders HTTP/1.1" 200 -
+13:41:39 "GET /api/providers HTTP/1.1" 200 -
+13:41:39 "GET /api/providers/pools HTTP/1.1" 200 -
+13:41:39 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:41:39 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:41:39 "GET /api/projects HTTP/1.1" 200 -
+13:41:39 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:41:39 "GET /api/task-lists HTTP/1.1" 200 -
+13:41:39 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1 HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1/created-tasks HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:41:42 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+13:41:42 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+13:41:42 "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1 HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1/turns?view=active HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1/schedule-cards HTTP/1.1" 200 -
+13:41:42 "GET /api/sessions/S1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:41:42 "GET /api/runners HTTP/1.1" 200 -
+13:41:42 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+13:41:42 "GET /api/sessions/S1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:41:42 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+13:41:42 "GET /api/providers/pools HTTP/1.1" 200 -
+13:41:43 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:41:43 "GET /api/sessions/S1/background HTTP/1.1" 200 -
+13:41:43 "GET /api/sessions/S1/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:41:43 "GET /api/providers HTTP/1.1" 200 -
+13:41:43 "GET /api/sessions/S1 HTTP/1.1" 200 -
+13:41:44 "GET /api/sessions/S1/turns?view=active HTTP/1.1" 200 -
+13:41:44 "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 200 -
+13:41:44 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+13:41:44 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+13:41:44 "GET /api/runners HTTP/1.1" 200 -
+13:41:44 "GET /api/sessions/S1/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:41:44 "GET /api/sessions/S1 HTTP/1.1" 200 -
+13:41:46 "GET /api/sessions/S1/approvals?status=PENDING HTTP/1.1" 200 -
+13:41:46 "GET /api/sessions/S1/turns?view=active HTTP/1.1" 200 -
+13:41:46 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+13:41:46 "GET /api/runners HTTP/1.1" 200 -
+13:41:47 "GET /api/sessions/S1/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:41:47 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S1 HTTP/1.1" 404 -
+13:41:47 "POST /__reset HTTP/1.1" 200 -
+13:41:47 "POST /__github HTTP/1.1" 200 -
+13:42:05 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:05 "GET /api/agents HTTP/1.1" 200 -
+13:42:05 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:42:05 NOT SERVED /api/guest-sessions
+13:42:05 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:42:05 NOT SERVED /api/schedules
+13:42:05 "GET /api/projects HTTP/1.1" 200 -
+13:42:05 "GET /api/users/me HTTP/1.1" 200 -
+13:42:05 "GET /api/schedules HTTP/1.1" 404 -
+13:42:05 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:42:05 NOT SERVED /api/wiki/trash
+13:42:05 "GET /api/runners HTTP/1.1" 200 -
+13:42:05 "GET /api/users/me HTTP/1.1" 200 -
+13:42:05 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:42:05 "GET /api/agents HTTP/1.1" 200 -
+13:42:05 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:42:06 "GET /api/providers HTTP/1.1" 200 -
+13:42:06 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:42:06 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:42:06 "GET /api/runners HTTP/1.1" 200 -
+13:42:06 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:06 NOT SERVED /api/wiki/trash
+13:42:06 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:42:06 "GET /api/agents HTTP/1.1" 200 -
+13:42:06 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:06 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:42:06 "GET /api/providers HTTP/1.1" 200 -
+13:42:06 "GET /api/runners HTTP/1.1" 200 -
+13:42:06 "GET /api/watches HTTP/1.1" 200 -
+13:42:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:06 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:06 "GET /api/providers HTTP/1.1" 200 -
+13:42:06 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:42:06 "GET /api/session-tags HTTP/1.1" 200 -
+13:42:06 NOT SERVED /api/owner-requests?state=open
+13:42:06 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:42:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:06 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:06 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:42:06 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:07 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:07 "GET /api/projects HTTP/1.1" 200 -
+13:42:07 "GET /api/runners HTTP/1.1" 200 -
+13:42:07 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:07 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:07 "GET /api/projects HTTP/1.1" 200 -
+13:42:07 "GET /api/task-lists HTTP/1.1" 200 -
+13:42:07 NOT SERVED /api/auth/capabilities
+13:42:07 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:42:07 "GET /api/agents HTTP/1.1" 200 -
+13:42:07 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:42:09 "GET /api/session-tags HTTP/1.1" 200 -
+13:42:09 "GET /api/sessions/S2 HTTP/1.1" 200 -
+13:42:09 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:09 "GET /api/sessions/S2/created-tasks HTTP/1.1" 200 -
+13:42:09 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S2
+13:42:09 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+13:42:09 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:42:09 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/turns?view=active HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2 HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/schedule-cards HTTP/1.1" 200 -
+13:42:10 "GET /api/projects HTTP/1.1" 200 -
+13:42:10 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:10 "GET /api/runners HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:10 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:10 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S2
+13:42:10 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+13:42:10 "GET /api/sessions/S2/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2/background HTTP/1.1" 200 -
+13:42:10 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:10 "GET /api/sessions/S2 HTTP/1.1" 200 -
+13:42:10 "GET /api/providers HTTP/1.1" 200 -
+13:42:11 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S2
+13:42:11 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+13:42:11 "GET /api/sessions/S2/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:11 "GET /api/sessions/S2/turns?view=active HTTP/1.1" 200 -
+13:42:11 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:11 "GET /api/runners HTTP/1.1" 200 -
+13:42:11 "GET /api/sessions/S2 HTTP/1.1" 200 -
+13:42:13 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S2
+13:42:13 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+13:42:13 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:13 "GET /api/sessions/S2/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:13 "GET /api/runners HTTP/1.1" 200 -
+13:42:13 "GET /api/sessions/S2/turns?view=active HTTP/1.1" 200 -
+13:42:13 "GET /api/sessions/S2 HTTP/1.1" 200 -
+13:42:15 "POST /__reset HTTP/1.1" 200 -
+13:42:15 "POST /__github HTTP/1.1" 200 -
+13:42:32 "GET /api/agents HTTP/1.1" 200 -
+13:42:32 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:32 NOT SERVED /api/guest-sessions
+13:42:32 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:42:32 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:42:32 "GET /api/projects HTTP/1.1" 200 -
+13:42:32 NOT SERVED /api/schedules
+13:42:32 "GET /api/schedules HTTP/1.1" 404 -
+13:42:32 "GET /api/users/me HTTP/1.1" 200 -
+13:42:33 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:42:33 "GET /api/users/me HTTP/1.1" 200 -
+13:42:33 NOT SERVED /api/wiki/trash
+13:42:33 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:42:33 "GET /api/agents HTTP/1.1" 200 -
+13:42:33 "GET /api/runners HTTP/1.1" 200 -
+13:42:33 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:42:33 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:42:33 "GET /api/providers HTTP/1.1" 200 -
+13:42:33 "GET /api/providers HTTP/1.1" 200 -
+13:42:33 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:42:33 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:33 NOT SERVED /api/wiki/trash
+13:42:33 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:42:33 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:42:33 "GET /api/watches HTTP/1.1" 200 -
+13:42:33 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:42:33 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:33 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:33 "GET /api/agents HTTP/1.1" 200 -
+13:42:33 NOT SERVED /api/owner-requests?state=open
+13:42:33 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:33 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:42:33 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:33 "GET /api/runners HTTP/1.1" 200 -
+13:42:33 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:33 "GET /api/projects HTTP/1.1" 200 -
+13:42:33 "GET /api/runners HTTP/1.1" 200 -
+13:42:33 "GET /api/session-tags HTTP/1.1" 200 -
+13:42:34 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:42:34 "GET /api/providers HTTP/1.1" 200 -
+13:42:34 "GET /api/agents HTTP/1.1" 200 -
+13:42:34 NOT SERVED /api/auth/capabilities
+13:42:34 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:34 "GET /api/projects HTTP/1.1" 200 -
+13:42:34 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:34 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:42:34 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:34 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:34 "GET /api/task-lists HTTP/1.1" 200 -
+13:42:34 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:42:36 "GET /api/session-tags HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/created-tasks HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3 HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:37 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S3
+13:42:37 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S3 HTTP/1.1" 404 -
+13:42:37 "GET /api/session-folders HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/schedule-cards HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/turns?view=active HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3 HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:37 "GET /api/runners HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/schedule-cards HTTP/1.1" 200 -
+13:42:37 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S3
+13:42:37 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S3 HTTP/1.1" 404 -
+13:42:37 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:37 "GET /api/projects HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:42:37 "GET /api/providers/pools HTTP/1.1" 200 -
+13:42:37 "GET /api/integrations/github HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:37 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3/background HTTP/1.1" 200 -
+13:42:37 "GET /api/providers HTTP/1.1" 200 -
+13:42:37 "GET /api/sessions/S3 HTTP/1.1" 200 -
+13:42:38 "GET /api/sessions/S3/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:38 "GET /api/sessions/S3/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:38 "GET /api/sessions/S3/turns?view=active HTTP/1.1" 200 -
+13:42:38 "GET /api/runners HTTP/1.1" 200 -
+13:42:38 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S3
+13:42:38 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S3 HTTP/1.1" 404 -
+13:42:38 "GET /api/sessions/S3 HTTP/1.1" 200 -
+13:42:41 "GET /api/sessions/S3/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:42:41 "GET /api/sessions/S3/turns?view=active HTTP/1.1" 200 -
+13:42:41 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S3
+13:42:41 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S3 HTTP/1.1" 404 -
+13:42:41 "GET /api/sessions/S3/approvals?status=PENDING HTTP/1.1" 200 -
+13:42:41 "GET /api/runners HTTP/1.1" 200 -
+13:42:41 "GET /api/sessions/S3 HTTP/1.1" 200 -
+13:42:42 "POST /__reset HTTP/1.1" 200 -
+13:42:42 "POST /__github HTTP/1.1" 200 -
+13:42:59 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:42:59 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:42:59 "GET /api/agents HTTP/1.1" 200 -
+13:42:59 NOT SERVED /api/guest-sessions
+13:42:59 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:42:59 "GET /api/users/me HTTP/1.1" 200 -
+13:42:59 NOT SERVED /api/schedules
+13:42:59 "GET /api/schedules HTTP/1.1" 404 -
+13:42:59 "GET /api/projects HTTP/1.1" 200 -
+13:42:59 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:42:59 NOT SERVED /api/wiki/trash
+13:43:00 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:00 "GET /api/users/me HTTP/1.1" 200 -
+13:43:00 "GET /api/agents HTTP/1.1" 200 -
+13:43:00 "GET /api/runners HTTP/1.1" 200 -
+13:43:00 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:43:00 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:43:00 "GET /api/providers HTTP/1.1" 200 -
+13:43:00 "GET /api/providers HTTP/1.1" 200 -
+13:43:00 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:43:00 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:00 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:43:00 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:00 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:00 NOT SERVED /api/wiki/trash
+13:43:00 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:00 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:00 "GET /api/watches HTTP/1.1" 200 -
+13:43:00 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:00 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:43:00 "GET /api/session-tags HTTP/1.1" 200 -
+13:43:01 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:43:01 NOT SERVED /api/owner-requests?state=open
+13:43:01 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:43:01 "GET /api/runners HTTP/1.1" 200 -
+13:43:01 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:01 "GET /api/agents HTTP/1.1" 200 -
+13:43:01 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:01 "GET /api/agents HTTP/1.1" 200 -
+13:43:01 "GET /api/runners HTTP/1.1" 200 -
+13:43:01 "GET /api/projects HTTP/1.1" 200 -
+13:43:01 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:01 "GET /api/projects HTTP/1.1" 200 -
+13:43:01 NOT SERVED /api/auth/capabilities
+13:43:01 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:43:01 "GET /api/providers HTTP/1.1" 200 -
+13:43:01 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:01 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:01 "GET /api/task-lists HTTP/1.1" 200 -
+13:43:01 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:43:03 "GET /api/session-tags HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/created-tasks HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4 HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:43:04 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/turns?view=active HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:04 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S4
+13:43:04 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S4 HTTP/1.1" 404 -
+13:43:04 "GET /api/sessions/S4 HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/schedule-cards HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:04 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:04 "GET /api/runners HTTP/1.1" 200 -
+13:43:04 "GET /api/projects HTTP/1.1" 200 -
+13:43:04 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S4
+13:43:04 "GET /api/sessions/S4/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:04 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S4 HTTP/1.1" 404 -
+13:43:04 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:04 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/background HTTP/1.1" 200 -
+13:43:04 "GET /api/sessions/S4/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:04 "GET /api/providers HTTP/1.1" 200 -
+13:43:05 "GET /api/sessions/S4 HTTP/1.1" 200 -
+13:43:06 "GET /api/sessions/S4/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:06 "GET /api/sessions/S4/turns?view=active HTTP/1.1" 200 -
+13:43:06 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S4
+13:43:06 "GET /api/runners HTTP/1.1" 200 -
+13:43:06 "GET /api/sessions/S4/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:06 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S4 HTTP/1.1" 404 -
+13:43:06 "GET /api/sessions/S4 HTTP/1.1" 200 -
+13:43:08 "GET /api/sessions/S4/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:08 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S4
+13:43:08 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S4 HTTP/1.1" 404 -
+13:43:08 "GET /api/sessions/S4/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:08 "GET /api/sessions/S4/turns?view=active HTTP/1.1" 200 -
+13:43:08 "GET /api/runners HTTP/1.1" 200 -
+13:43:08 "GET /api/sessions/S4 HTTP/1.1" 200 -
+13:43:09 "POST /__reset HTTP/1.1" 200 -
+13:43:10 "POST /__github HTTP/1.1" 200 -
+13:43:28 "GET /api/agents HTTP/1.1" 200 -
+13:43:28 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:43:28 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:28 NOT SERVED /api/guest-sessions
+13:43:28 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:43:28 "GET /api/users/me HTTP/1.1" 200 -
+13:43:28 "GET /api/projects HTTP/1.1" 200 -
+13:43:28 NOT SERVED /api/schedules
+13:43:28 "GET /api/schedules HTTP/1.1" 404 -
+13:43:28 NOT SERVED /api/wiki/trash
+13:43:28 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:43:28 "GET /api/users/me HTTP/1.1" 200 -
+13:43:28 "GET /api/agents HTTP/1.1" 200 -
+13:43:28 "GET /api/runners HTTP/1.1" 200 -
+13:43:28 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:28 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:43:28 "GET /api/providers HTTP/1.1" 200 -
+13:43:28 "GET /api/providers HTTP/1.1" 200 -
+13:43:28 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:43:28 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:43:28 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:28 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:43:28 NOT SERVED /api/wiki/trash
+13:43:28 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:28 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:28 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:28 "GET /api/watches HTTP/1.1" 200 -
+13:43:28 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:28 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:43:28 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:28 "GET /api/session-tags HTTP/1.1" 200 -
+13:43:29 NOT SERVED /api/owner-requests?state=open
+13:43:29 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:43:29 "GET /api/runners HTTP/1.1" 200 -
+13:43:29 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:43:29 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:29 "GET /api/agents HTTP/1.1" 200 -
+13:43:29 "GET /api/projects HTTP/1.1" 200 -
+13:43:29 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:29 "GET /api/agents HTTP/1.1" 200 -
+13:43:29 NOT SERVED /api/auth/capabilities
+13:43:29 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:43:29 "GET /api/runners HTTP/1.1" 200 -
+13:43:29 "GET /api/projects HTTP/1.1" 200 -
+13:43:29 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:29 "GET /api/providers HTTP/1.1" 200 -
+13:43:29 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:29 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:29 "GET /api/task-lists HTTP/1.1" 200 -
+13:43:29 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:43:31 "GET /api/session-tags HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6 HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/created-tasks HTTP/1.1" 200 -
+13:43:32 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6 HTTP/1.1" 200 -
+13:43:32 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S6
+13:43:32 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S6 HTTP/1.1" 404 -
+13:43:32 "GET /api/sessions/S6/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/turns?view=active HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/schedule-cards HTTP/1.1" 200 -
+13:43:32 "GET /api/runners HTTP/1.1" 200 -
+13:43:32 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:32 "GET /api/projects HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:32 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:43:32 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/background HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:32 "GET /api/providers HTTP/1.1" 200 -
+13:43:32 "GET /api/sessions/S6 HTTP/1.1" 200 -
+13:43:33 "GET /api/sessions/S6/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:33 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S6
+13:43:33 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S6 HTTP/1.1" 404 -
+13:43:33 "GET /api/sessions/S6/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:33 "GET /api/runners HTTP/1.1" 200 -
+13:43:33 "GET /api/sessions/S6/turns?view=active HTTP/1.1" 200 -
+13:43:33 "GET /api/sessions/S6 HTTP/1.1" 200 -
+13:43:36 "GET /api/sessions/S6/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:43:36 "GET /api/sessions/S6/approvals?status=PENDING HTTP/1.1" 200 -
+13:43:36 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S6
+13:43:36 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S6 HTTP/1.1" 404 -
+13:43:36 "GET /api/sessions/S6/turns?view=active HTTP/1.1" 200 -
+13:43:36 "GET /api/runners HTTP/1.1" 200 -
+13:43:36 "GET /api/sessions/S6 HTTP/1.1" 200 -
+13:43:37 "POST /__reset HTTP/1.1" 200 -
+13:43:37 "POST /__github HTTP/1.1" 200 -
+13:43:55 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:43:55 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:55 "GET /api/agents HTTP/1.1" 200 -
+13:43:55 NOT SERVED /api/guest-sessions
+13:43:55 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:43:55 "GET /api/projects HTTP/1.1" 200 -
+13:43:56 "GET /api/users/me HTTP/1.1" 200 -
+13:43:56 NOT SERVED /api/schedules
+13:43:56 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:43:56 NOT SERVED /api/wiki/trash
+13:43:56 "GET /api/users/me HTTP/1.1" 200 -
+13:43:56 "GET /api/runners HTTP/1.1" 200 -
+13:43:56 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:56 "GET /api/providers HTTP/1.1" 200 -
+13:43:56 "GET /api/agents HTTP/1.1" 200 -
+13:43:56 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:43:56 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:43:56 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:56 NOT SERVED /api/wiki/trash
+13:43:56 "GET /api/schedules HTTP/1.1" 404 -
+13:43:56 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:43:56 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:43:56 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:56 "GET /api/runners HTTP/1.1" 200 -
+13:43:56 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:43:56 "GET /api/agents HTTP/1.1" 200 -
+13:43:56 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:56 "GET /api/providers HTTP/1.1" 200 -
+13:43:56 "GET /api/watches HTTP/1.1" 200 -
+13:43:56 "GET /api/runners HTTP/1.1" 200 -
+13:43:56 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:43:57 "GET /api/session-tags HTTP/1.1" 200 -
+13:43:57 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:57 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:43:57 "GET /api/providers HTTP/1.1" 200 -
+13:43:57 NOT SERVED /api/owner-requests?state=open
+13:43:57 "GET /api/session-folders HTTP/1.1" 200 -
+13:43:57 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:43:57 "GET /api/providers/pools HTTP/1.1" 200 -
+13:43:57 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:57 "GET /api/projects HTTP/1.1" 200 -
+13:43:57 "GET /api/projects HTTP/1.1" 200 -
+13:43:57 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:43:57 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:57 "GET /api/task-lists HTTP/1.1" 200 -
+13:43:57 NOT SERVED /api/auth/capabilities
+13:43:57 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:43:57 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:43:57 "GET /api/runners HTTP/1.1" 200 -
+13:43:57 "GET /api/agents HTTP/1.1" 200 -
+13:43:58 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:44:00 "GET /api/session-tags HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5/created-tasks HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5 HTTP/1.1" 200 -
+13:44:00 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S5
+13:44:00 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S5 HTTP/1.1" 404 -
+13:44:00 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5/approvals?status=PENDING HTTP/1.1" 200 -
+13:44:00 "GET /api/session-folders HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5 HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5/turns?view=active HTTP/1.1" 200 -
+13:44:00 "GET /api/sessions/S5/schedule-cards HTTP/1.1" 200 -
+13:44:01 "GET /api/runners HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:44:01 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5/schedule-cards HTTP/1.1" 200 -
+13:44:01 "GET /api/projects HTTP/1.1" 200 -
+13:44:01 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S5
+13:44:01 "GET /api/providers/pools HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+13:44:01 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S5 HTTP/1.1" 404 -
+13:44:01 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5/background HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:44:01 "GET /api/providers HTTP/1.1" 200 -
+13:44:01 "GET /api/sessions/S5 HTTP/1.1" 200 -
+13:44:02 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S5
+13:44:02 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S5 HTTP/1.1" 404 -
+13:44:02 "GET /api/sessions/S5/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:44:02 "GET /api/sessions/S5/approvals?status=PENDING HTTP/1.1" 200 -
+13:44:02 "GET /api/sessions/S5/turns?view=active HTTP/1.1" 200 -
+13:44:02 "GET /api/runners HTTP/1.1" 200 -
+13:44:02 "GET /api/sessions/S5 HTTP/1.1" 200 -
+13:44:04 "GET /api/sessions/S5/approvals?status=PENDING HTTP/1.1" 200 -
+13:44:04 "GET /api/sessions/S5/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 200 -
+13:44:04 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S5
+13:44:04 "GET /api/sessions/S5/turns?view=active HTTP/1.1" 200 -
+13:44:04 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S5 HTTP/1.1" 404 -
+13:44:04 "GET /api/runners HTTP/1.1" 200 -
+13:44:04 "GET /api/sessions/S5 HTTP/1.1" 200 -
+13:44:06 "POST /__reset HTTP/1.1" 200 -
+13:44:06 "POST /__github HTTP/1.1" 200 -
+13:44:24 "GET /api/agents HTTP/1.1" 200 -
+13:44:24 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:44:24 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:44:24 "GET /api/projects HTTP/1.1" 200 -
+13:44:24 NOT SERVED /api/schedules
+13:44:24 NOT SERVED /api/guest-sessions
+13:44:24 "GET /api/users/me HTTP/1.1" 200 -
+13:44:24 "GET /api/schedules HTTP/1.1" 404 -
+13:44:24 "GET /api/guest-sessions HTTP/1.1" 404 -
+13:44:24 NOT SERVED /api/wiki/trash
+13:44:24 "GET /api/users/me HTTP/1.1" 200 -
+13:44:24 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+13:44:24 "GET /api/agents HTTP/1.1" 200 -
+13:44:24 "GET /api/runners HTTP/1.1" 200 -
+13:44:24 "GET /api/providers HTTP/1.1" 200 -
+13:44:24 "GET /api/providers HTTP/1.1" 200 -
+13:44:24 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:44:24 "GET /api/providers/pools HTTP/1.1" 200 -
+13:44:24 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+13:44:24 "GET /api/providers/pools HTTP/1.1" 200 -
+13:44:24 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:44:24 "GET /api/session-folders HTTP/1.1" 200 -
+13:44:24 "GET /api/wiki/spaces HTTP/1.1" 200 -
+13:44:24 NOT SERVED /api/wiki/trash
+13:44:24 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+13:44:24 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+13:44:24 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:44:24 "GET /api/wiki/trash HTTP/1.1" 404 -
+13:44:24 "GET /api/runners HTTP/1.1" 200 -
+13:44:24 "GET /api/watches HTTP/1.1" 200 -
+13:44:25 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+13:44:25 "GET /api/session-tags HTTP/1.1" 200 -
+13:44:25 "GET /api/agents HTTP/1.1" 200 -
+13:44:25 "GET /api/session-folders HTTP/1.1" 200 -
+13:44:25 NOT SERVED /api/owner-requests?state=open
+13:44:25 "GET /api/sessions?view=open HTTP/1.1" 200 -
+13:44:25 "GET /api/agents HTTP/1.1" 200 -
+13:44:25 "GET /api/runners HTTP/1.1" 200 -
+13:44:25 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+13:44:25 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:44:25 "GET /api/projects HTTP/1.1" 200 -
+13:44:25 "GET /api/providers HTTP/1.1" 200 -
+13:44:25 "GET /api/projects HTTP/1.1" 200 -
+13:44:25 "GET /api/projects/sidebar HTTP/1.1" 200 -
+13:44:25 "GET /api/providers/pools HTTP/1.1" 200 -
+13:44:25 NOT SERVED /api/auth/capabilities
+13:44:25 "GET /api/auth/capabilities HTTP/1.1" 404 -
+13:44:25 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+13:44:25 "GET /api/task-lists HTTP/1.1" 200 -
+13:44:25 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+13:44:27 "GET /api/runners HTTP/1.1" 200 -
+13:44:27 NOT SERVED /api/access-tokens
+13:44:27 "GET /api/integrations/github HTTP/1.1" 200 -
+13:44:27 "GET /api/access-tokens HTTP/1.1" 404 -
+13:44:28 "GET /api/agents HTTP/1.1" 200 -
+13:44:45 "GET /api/runners HTTP/1.1" 200 -
+13:45:02 "GET /api/runners HTTP/1.1" 200 -
