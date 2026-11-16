@@ -157,7 +157,8 @@ const evalOwnerPolicyVersion = 2
 // evalPlaneVersion names the rules the eval's control plane keeps (agent_eval_plane_test.go) in the suite hash: a
 // rule the plane gains changes what an agent meets, so a transcript played under the old rules is not regraded as if
 // under the new. 2: a session asking for a wider mode than its own is refused (PERMISSION_MODE_WIDER_THAN_SESSION).
-const evalPlaneVersion = 2
+// 3: a start of a task with unmet prerequisites or no assignee is the server's 400, not a 200 that skipped it.
+const evalPlaneVersion = 3
 
 // evalOwnerDefault is how the eval's owner answers a card no scenario rule covers: every Orbit write card yes, a
 // command that runs Orbit's CLI or only reads yes, and everything else — a file edit, a command that would change

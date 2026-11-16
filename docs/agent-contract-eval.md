@@ -37,7 +37,8 @@ the rules the scenarios turn on, as the real control plane keeps them:
   "Chat about this" with the owner's words. A command card is answered yes when it runs Orbit's CLI or only reads,
   and no otherwise. A request to leave Plan is answered no.
 - `autoRunWhenReady` defaults to true. `startNow` arrives as a run time followed by an execute. A caller key
-  answers a repeated create with the first task.
+  answers a repeated create with the first task. A start of a task whose prerequisites are not done, or that has no
+  assignee, is refused with the server's own 400.
 - The orchestration routes answer only while the scenario's switch is on, and a session may not start one in a wider
   permission mode than its own: the mode is refused `PERMISSION_MODE_WIDER_THAN_SESSION` by the control plane's own
   rule (`WIDER_THAN`, `src/apiserver/src/common/permission-mode.ts`), and nothing is created.

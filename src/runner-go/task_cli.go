@@ -2154,9 +2154,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	cliRecord().setEntity(raw)
 	cliRecord().startOutcome(startedBy, started, deferred)
-	if deferred == "" {
-		cliRecord().note(startedAtOnceNote)
-	}
+	cliRecord().note(createStartNote(startedBy, started, deferred))
 	if err := writeCLIRawJSON(out, raw, *jsonOut); err != nil {
 		return err
 	}
@@ -2164,10 +2162,20 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		fmt.Fprintln(cliNoticeOut, "orbit task create: "+deferred)
 		return nil
 	}
+	if refusal := answerRefusal(started); refusal != nil {
+		// A 2xx answer that says it started nothing (a skipped start) is not a start.
+		fmt.Fprintln(cliNoticeOut, "orbit task create: created, but not started: "+refusal.Message)
+		return nil
+	}
 	var compact bytes.Buffer
 	if json.Compact(&compact, started) != nil {
 		compact.Reset()
 		compact.Write(started)
+	}
+	if startedBy == "owner" {
+		fmt.Fprintln(cliNoticeOut, "orbit task create: the owner answered the card with Create and start, so it was "+
+			"started at once; that is their decision, so do not clear its start or run 'orbit task start' for it: "+compact.String())
+		return nil
 	}
 	fmt.Fprintln(cliNoticeOut, "orbit task create: started at once, as 'orbit task start' would have started it: "+compact.String())
 	return nil

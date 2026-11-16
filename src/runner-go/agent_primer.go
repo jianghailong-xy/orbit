@@ -68,8 +68,7 @@ const (
 
 	agentPrimerStart = "Start is its own decision: task_start runs recorded work, task_create with startNow: true " +
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
-		"until they say so, pass autoRunWhenReady: false and do not call task_start; left out, an assigned task can " +
-		"start by itself once it is ready."
+		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
 	agentPrimerCards = "A create, a batch, a project, a provider change or an agent change puts a confirmation card " +
 		"in front of the user and writes nothing until they confirm it, so first say in a sentence or two what you " +
@@ -91,8 +90,9 @@ const (
 		"`[title](orbit-wiki:<id>)`."
 
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. Without session_* tools, do not try `orbit session`: record the work as a task, " +
-		"tell the user the switch is in Settings -> Session orchestration, and never claim a delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +
+		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
+		"orchestration, and never claim a delegation."
 
 	agentPrimerRederive = "After compaction or a resume, read before you act -- task_get with no id reads this " +
 		"session's task -- and never rebuild an id, a status or an approval from memory or a summary."

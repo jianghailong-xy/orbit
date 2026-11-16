@@ -1248,10 +1248,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			s.rec.setEntity(raw)
 			s.rec.startOutcome(by, started, deferred)
-			if deferred == "" {
-				s.rec.note(startedAtOnceNote)
-			}
-			return toolResult(startedTaskResult(raw, started, deferred), false)
+			s.rec.note(createStartNote(by, started, deferred))
+			return toolResult(startedTaskResult(raw, started, deferred, by), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 

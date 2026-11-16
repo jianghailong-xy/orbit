@@ -28,8 +28,11 @@ var agentPrimerHashes = map[string]string{
 	"1.1.0": "42df1a6cdb6d4ca75601578a5c8b1dc7cacbda7ae9b44d8226853023aa2e80f5",
 	// Agent Contract 1.8.0 (P1-03): the first line names the new contract; no rule changed.
 	"1.2.0": "fefb962238b42c773beef5a583f091d19c3d24b68ddfdc0286e1f810114fbd2c",
-	// Agent Contract 1.9.0 (P2-01): the first line names the new contract; no rule changed.
-	"1.3.0": "e090b828c4868c8bf14e176badad204a533a250ac8319df639420e9476fc6650",
+	// Agent Contract 1.9.0 (P2-01): the first line names the new contract, and without orchestration the agent is
+	// sent to task_start the work task_list shows recorded before recording it (the agent-contract eval measured
+	// claude-sonnet-5-5 filing recorded work again in E7, three runs of three); the start paragraph no longer
+	// repeats the first's autoRunWhenReady default. No rule changed.
+	"1.3.0": "a2f8545151a69611f5b5803badb03624728e0a2a793e5d8db6f2fbacd2d5017e",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

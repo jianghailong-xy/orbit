@@ -786,15 +786,19 @@ func (p *evalPlane) taskRoute(w http.ResponseWriter, r *http.Request, rest []str
 				by = "owner"
 			}
 		}
-		if task.AssigneeID == "" {
-			writeEvalJSON(w, 200, map[string]interface{}{"ok": false, "skipped": "no-assignee"})
-			return 200, "NOT_DONE"
-		}
+		// A person's or an agent's start is refused as the server refuses it (tasks.service.ts execute): the
+		// prerequisites first, then the assignee, each a 400 with the server's own sentence and no code.
 		for _, dep := range task.DependsOn {
 			if prereq := p.taskByIDLocked(dep); prereq != nil && prereq.Status != "DONE" {
-				writeEvalJSON(w, 200, map[string]interface{}{"ok": false, "skipped": "prerequisites-not-done"})
-				return 200, "NOT_DONE"
+				writeEvalJSON(w, 400, map[string]interface{}{"statusCode": 400, "error": "Bad Request",
+					"message": "Prerequisites are not all complete yet, cannot run"})
+				return 400, "HTTP_400"
 			}
+		}
+		if task.AssigneeID == "" {
+			writeEvalJSON(w, 400, map[string]interface{}{"statusCode": 400, "error": "Bad Request",
+				"message": "Assign a responsible workspace to the task first"})
+			return 400, "HTTP_400"
 		}
 		s := p.startSession(task, by)
 		writeEvalJSON(w, 200, map[string]interface{}{"ok": true, "sessionId": s.ID, "session": map[string]interface{}{"id": s.ID, "status": s.Status}})
