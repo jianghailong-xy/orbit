@@ -37,7 +37,7 @@ struct PromptOptimizeButton: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(busy ? PromptOptimizerCopy.cancelHelp : PromptOptimizerCopy.optimizeHelp)
+        .help(busy ? PromptOptimizerCopy.cancelHelp : PromptOptimizerCopy.optimizeHelpWithKeys)
         .accessibilityIdentifier(PromptOptimizerCopy.buttonIdentifier)
         .accessibilityLabel(busy ? PromptOptimizerCopy.optimizing : PromptOptimizerCopy.optimize)
     }
