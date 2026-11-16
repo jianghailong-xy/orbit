@@ -216,6 +216,7 @@ describe('Orbit Cloud: the managed runner\'s name, version line and updates on i
     expect(metaline(page)).toMatch(/^Kept up to date by Orbit · Last Check-in /);
     expect(page.textContent).not.toContain('managed-95884');
     expect(about(page)).toContain('Kept up to date by Orbit');
+    expect(about(page)).not.toContain('Last Update');
     expect(page.textContent).not.toContain('Updates are turned off');
     expect(page.textContent).not.toContain('ORBIT_NO_SELFUPDATE');
   });

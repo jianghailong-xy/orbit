@@ -488,7 +488,8 @@ export function MachineSettingsPage() {
   // The last update it installed into itself, for a runner that reports it: when, and its versions.
   const lastUpdate = (() => {
     const report = runner.selfUpdate;
-    if (!report) return null;
+    // A managed runner never installs a release into itself: Orbit replaces its image.
+    if (!report || managed) return null;
     const versions =
       report.lastUpdatedFrom && report.lastUpdatedTo
         ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
