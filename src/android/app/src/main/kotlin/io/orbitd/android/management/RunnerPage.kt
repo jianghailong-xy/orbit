@@ -270,6 +270,19 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
+    /** Over the sessions a refused removal lists, when one session is running in the account; [engine] is the CLI's own name (Codex,
+     * Claude Code). */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is running on it — end the session below, then remove it"
+    /** The same, when several sessions are running in it. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are running on it — end them, then remove it"
+    /** Each listed session's way to it. */
+    const val IN_USE_OPEN = "Open session"
+    /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
+    const val IN_USE_RUNNING = "Running"
+    /** A listed session between turns (AWAITING_INPUT): its process still holds the account. */
+    const val IN_USE_WAITING = "Waiting for input"
+    /** A listed session with no title yet. */
+    const val IN_USE_UNTITLED = "Untitled session"
 }
 
 /**
@@ -1336,6 +1349,29 @@ internal object RunnerPage {
     fun removal(state: JsonObject?, engine: String, account: String): Pair<Boolean, String?>? {
         if (state == null || state.str("engine") != engine || state.str("account") != account) return null
         return (state.str("status") == "pending") to (if (state.str("status") == "failed") state.str("message") else null)
+    }
+
+    /** A session a refused removal names as running in the account: its title, and its RunStatus as the server says it. */
+    data class InUseSession(val id: String, val title: String, val status: String?)
+
+    /** The sessions the machine refused this account's removal over (`sessions`): none unless it was refused for them, and none from a
+     * server older than the list. */
+    fun inUseSessions(state: JsonObject?, engine: String, account: String): List<InUseSession> {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "failed") return emptyList()
+        return state.list("sessions").mapNotNull { session -> session.str("id")?.let { InUseSession(it, session.str("title").orEmpty(), session.str("status")) } }
+    }
+
+    /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
+    fun inUseHeading(engine: String, count: Int) =
+        if (count == 1) RunnerAccountCopy.inUseOne(engineName(engine)) else RunnerAccountCopy.inUseMany(engineName(engine), count)
+
+    fun inUseTitle(session: InUseSession) = session.title.ifBlank { RunnerAccountCopy.IN_USE_UNTITLED }
+
+    /** A listed session's state, and its dot's tone: in a turn (green), waiting for input (amber), else no words and a grey dot. */
+    fun inUseStatus(status: String?): Pair<String?, String?> = when (status) {
+        "RUNNING", "PENDING" -> RunnerAccountCopy.IN_USE_RUNNING to "ok"
+        "AWAITING_INPUT" -> RunnerAccountCopy.IN_USE_WAITING to "warn"
+        else -> null to null
     }
 
     /** The Default an engine leaves out while its owner removed it from Orbit (`removedDefault`: its directory, and its name if it was

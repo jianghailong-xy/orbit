@@ -253,6 +253,52 @@ describe('a removal the machine would not do', () => {
     expect(workRow.querySelector('.re-meta')?.textContent).toContain('~/.orbit/codex-accounts/3fa91c2e');
   });
 
+  it('lists the sessions running in it, each opening its session', () => {
+    const refused = 'codex account 3fa91c2e is in use by a session running on this machine — end that session, then remove it';
+    const one = mount([
+      runner([DEFAULT, WORK], {
+        accountRemove: {
+          engine: 'codex', account: WORK.id, status: 'failed', message: refused,
+          sessions: [{ id: '019fc086-c7c7-7c92-8215-778ad8a6280a', title: 'Fix login redirect', status: 'RUNNING' }],
+        },
+      }),
+    ]);
+    const [, workRow] = accountsOf(one);
+    const panel = workRow.querySelector('.re-panel.bad')!;
+    expect(panel.querySelector('.re-panel-row')?.textContent).toBe(
+      'This Codex account can’t be removed while a session is running on it — end the session below, then remove it',
+    );
+    const rows = [...panel.querySelectorAll('.re-blocking-row')];
+    expect(rows.map((r) => r.textContent)).toEqual(['Fix login redirectRunningOpen session →']);
+    expect(rows[0].getAttribute('href')).toBe('/sessions/33zx0JhRhJo8rd25d3qAM');
+    // The account is still there, and the hint still says so.
+    expect(panel.querySelector('.re-panel-hint')?.textContent).toContain('is untouched');
+    act(() => root?.unmount());
+    root = null;
+
+    const many = mount([
+      runner([DEFAULT, WORK], {
+        accountRemove: {
+          engine: 'codex', account: WORK.id, status: 'failed', message: refused,
+          sessions: [
+            { id: '019fc086-c7c7-7c92-8215-778ad8a6280a', title: 'Fix login redirect', status: 'RUNNING' },
+            { id: '019fc086-c7c7-7c92-8215-778ad8a6280b', title: '  ', status: 'AWAITING_INPUT' },
+            { id: '019fc086-c7c7-7c92-8215-778ad8a6280c', title: 'Old one', status: 'INTERRUPTED' },
+          ],
+        },
+      }),
+    ]);
+    const [, manyRow] = accountsOf(many);
+    expect(manyRow.querySelector('.re-panel-row')?.textContent).toBe(
+      'This Codex account can’t be removed while 3 sessions are running on it — end them, then remove it',
+    );
+    expect([...manyRow.querySelectorAll('.re-blocking-row')].map((r) => r.textContent)).toEqual([
+      'Fix login redirectRunningOpen session →',
+      'Untitled sessionWaiting for inputOpen session →',
+      'Old oneOpen session →',
+    ]);
+  });
+
   it('leaves another account’s row alone', () => {
     const page = mount([
       runner([DEFAULT, WORK, PERSONAL], {

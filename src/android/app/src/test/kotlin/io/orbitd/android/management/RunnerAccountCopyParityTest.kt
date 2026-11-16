@@ -34,7 +34,13 @@ class RunnerAccountCopyParityTest {
             "runnerAccountRemoveDetailLast" to RunnerAccountCopy.removeDetailLast("{runner}", "{name}"),
             "runnerDefaultRemovedLine" to RunnerAccountCopy.defaultRemovedLine("{name}", "{dir}"),
             "RUNNER_DEFAULT_USE_AGAIN" to RunnerAccountCopy.USE_AGAIN,
-            "runnerDefaultUseAgainFailed" to RunnerAccountCopy.useAgainFailed("{name}"))
+            "runnerDefaultUseAgainFailed" to RunnerAccountCopy.useAgainFailed("{name}"),
+            "runnerAccountInUseOne" to RunnerAccountCopy.inUseOne("{engine}"),
+            "runnerAccountInUseMany" to RunnerAccountCopy.inUseMany("{engine}", 7).replace("7", "{count}"),
+            "RUNNER_ACCOUNT_IN_USE_OPEN" to RunnerAccountCopy.IN_USE_OPEN,
+            "RUNNER_ACCOUNT_IN_USE_RUNNING" to RunnerAccountCopy.IN_USE_RUNNING,
+            "RUNNER_ACCOUNT_IN_USE_WAITING" to RunnerAccountCopy.IN_USE_WAITING,
+            "RUNNER_ACCOUNT_IN_USE_UNTITLED" to RunnerAccountCopy.IN_USE_UNTITLED)
         val web = templates + constants
         for ((name, said) in android) assertEquals(name, web[name], said)
         // Every sentence of the web's is said here but the two of the workspace form's account field, which no Android page has.

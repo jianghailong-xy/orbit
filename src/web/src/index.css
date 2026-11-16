@@ -18199,6 +18199,64 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+/* The sessions an account removal was refused over, each a way to that session. */
+.re-blocking {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.re-blocking li + li {
+  border-top: 1px solid var(--error-border);
+}
+.re-blocking-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.re-blocking-row:hover {
+  background: var(--error-bg);
+}
+.re-blocking-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.re-blocking-dot.running {
+  background: var(--success-solid);
+}
+.re-blocking-dot.waiting {
+  background: var(--warning);
+}
+.re-blocking-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brand);
+  font-weight: 500;
+}
+.re-blocking-row:hover .re-blocking-title {
+  text-decoration: underline;
+}
+.re-blocking-state {
+  flex: none;
+}
+.re-blocking-open {
+  flex: none;
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 11.5px;
+}
 .re-cmd {
   display: inline-block;
   margin-top: 4px;
