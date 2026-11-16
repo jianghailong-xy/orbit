@@ -25,20 +25,15 @@ export const SETUP_OPEN_MACHINE = 'Open machine';
 export const SETUP_FOLDER = 'Folder';
 export const setupFolderHelp = (machine: string) =>
   `Where on ${machine} should sessions work? They can read and change everything in it.`;
-export const SETUP_REGISTER_DIR = 'Where you ran orbit register';
-export const SETUP_NEW_FOLDER = 'A new folder';
 export const SETUP_NEW_FOLDER_NAME = 'name';
-export const SETUP_NEW_FOLDER_META = 'Starts empty. Ask for a clone or a new project in your first message.';
+export const SETUP_FOLDER_HINT = 'Uses this folder if it exists, otherwise creates it.';
+export const SETUP_NEW_FOLDER_META = 'New folder · created as the session starts.';
 export const SETUP_NEW_FOLDER_DONE = 'new folder · created as the session starts';
 // Not on a board: what the server's newFolder rule refuses, said before it has to.
 export const SETUP_NEW_FOLDER_INVALID = 'Use letters, digits, dots, dashes and underscores, up to 64 characters.';
-// Not on a board: a new folder's name the machine already has at <reposRoot>/<name>. A directory is used with what is in it, so
-// it doesn't start empty; a file can't become one.
-export const setupNewFolderExists = (machine: string) =>
-  `This folder already exists on ${machine}. Sessions will use what’s in it.`;
+// Not on a board: a folder's name the machine already has as a file, which can't become one.
 export const setupNewFolderIsFile = (machine: string) =>
   `There’s already a file with this name on ${machine}. Pick another name.`;
-export const setupOtherFolder = (machine: string) => `Another folder on ${machine}`;
 export const SETUP_USE_FOLDER = 'Use this folder';
 export const SETUP_CHANGE = 'Change';
 

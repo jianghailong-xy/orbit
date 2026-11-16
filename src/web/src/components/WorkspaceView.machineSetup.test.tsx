@@ -59,7 +59,8 @@ const WORKSPACE = encodeId('0195c0de-0000-7000-8000-0000000000b1');
 const MADE_WORKSPACE = encodeId('0195c0de-0000-7000-8000-0000000000b2');
 const SESSION = encodeId('0195c0de-0000-7000-8000-0000000000c1');
 
-const REGISTER = '/home/orbit/code/app';
+/** The folder the tests name in the folder step: a repository already in the machine's home. */
+const REGISTER = '/home/orbit/app';
 const FOUND: DirProbe = {
   path: REGISTER,
   exists: true,
@@ -87,7 +88,7 @@ const austin = (over: Partial<Machine> = {}): Machine => ({
   name: 'orbit@austin',
   online: true,
   engines: [health('claude', 'no'), health('codex', 'no')],
-  capabilities: ['dir-probe/v1', 'create-workdir/v1'],
+  capabilities: ['dir-probe/v1', 'create-workdir/v1', 'create-workdir/v2'],
   registerDir: REGISTER,
   reposRoot: '/home/orbit/orbit-repos',
   lastHeartbeatAt: '2026-10-31T09:00:00Z',
@@ -327,11 +328,16 @@ async function open(entry: string): Promise<void> {
   });
 }
 
-/** Austin's new session page, with the machine's answer about its register directory in. */
+/** Austin's new session page, with "app" typed in the folder step and the machine's answer about it in. */
 async function openMachine(id = AUSTIN): Promise<void> {
   await open(`/runners/${id}/new`);
-  await waitForUi(() => expect(card()).toBeTruthy());
-  await waitForUi(() => expect(mounted().textContent).toContain('Where you ran orbit register'));
+  await waitForUi(() => expect(card()?.querySelector('.msc-input input')).toBeTruthy());
+  const name = card()!.querySelector<HTMLInputElement>('.msc-input input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'app');
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await waitForUi(() => expect(card()!.textContent).toContain('Found · git repository · main'));
 }
 
 async function type(text: string): Promise<void> {
@@ -421,9 +427,8 @@ describe('rule 1: the page itself', () => {
     runners = [austin()];
     const beat = Date.now();
     await waitForUi(() => expect(card()!.querySelector('.msc-notice')).toBeNull());
-    await waitForUi(() => expect(button('Use this folder')!.disabled).toBe(false));
+    await waitForUi(() => expect(card()!.querySelector<HTMLInputElement>('.msc-input input')!.disabled).toBe(false));
     expect(Date.now() - beat).toBeLessThan(5_000);
-    expect(mounted().textContent).toContain('Where you ran orbit register');
   });
 
   it('a machine with a workspace has no card: its page goes on to that workspace’s draft', async () => {
@@ -472,7 +477,7 @@ describe('Create workspace, once both steps are done', () => {
     runners = [signedIn()];
     await openMachine();
     await useFolder();
-    expect(said(card()!.querySelector('.msc-foot.ready'))).toBe('Ready. Orbit adds the workspace “app” for /home/orbit/code/app.');
+    expect(said(card()!.querySelector('.msc-foot.ready'))).toBe('Ready. Orbit adds the workspace “app” for /home/orbit/app.');
 
     await create();
     expect(made).toEqual([{ name: 'app', runnerId: AUSTIN, workDir: REGISTER }]);
@@ -485,14 +490,12 @@ describe('Create workspace, once both steps are done', () => {
   });
 
   it('a new folder by its name', async () => {
-    runners = [{ ...signedIn(), registerDir: '/home/orbit' }];
-    // Home is where it was registered; nothing is in the Repos Folder yet.
+    runners = [signedIn()];
+    // Nothing is in home by that name yet.
     vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({
       path,
       status: 'done',
-      result: path.startsWith('/home/orbit/orbit-repos/')
-        ? { ...FOUND, path, exists: false, isDir: false, isGit: false, branch: null }
-        : { ...FOUND, path, isGit: false, branch: null, isHome: true },
+      result: { ...FOUND, path, exists: false, isDir: false, isGit: false, branch: null },
     }));
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(card()?.querySelector('.msc-input input')).toBeTruthy());
@@ -503,7 +506,7 @@ describe('Create workspace, once both steps are done', () => {
     });
     // Asked about where it would go before it can be used.
     await waitForUi(() => expect(button('Use this folder')!.disabled).toBe(false));
-    expect(askDirProbe).toHaveBeenCalledWith(AUSTIN, '/home/orbit/orbit-repos/payments-api');
+    expect(askDirProbe).toHaveBeenCalledWith(AUSTIN, '/home/orbit/payments-api');
     await useFolder();
     await create();
     expect(made).toEqual([{ name: 'payments-api', runnerId: AUSTIN, newFolder: 'payments-api' }]);
@@ -531,7 +534,7 @@ describe('Create workspace, once both steps are done', () => {
     await closePage();
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(card()).toBeTruthy());
-    expect(said(card()!.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/code/app git repository · main Change');
+    expect(said(card()!.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/app git repository · main Change');
     await closePage();
     await openMachine(HPC);
     expect(card()!.querySelector('[data-step="folder"] .msc-done-line')).toBeNull();
@@ -603,7 +606,7 @@ describe('rule 8: the line that opens the conversation', () => {
     detail = made;
     await open(`/sessions/${SESSION}`);
     await waitForUi(() => expect(line()).toBeTruthy());
-    expect(said(line())).toBe('Created workspace app on orbit@austin · /home/orbit/code/app · Rename · Settings');
+    expect(said(line())).toBe('Created workspace app on orbit@austin · /home/orbit/app · Rename · Settings');
     expect(line()!.querySelector('b')?.textContent).toBe('app');
     expect(line()!.querySelector('code')?.textContent).toBe(REGISTER);
   });
@@ -684,7 +687,7 @@ describe('rule 8: the line that opens the conversation', () => {
     detail = { ...made, workspace: { id: MADE_WORKSPACE, name: 'app', workDir: REGISTER, deletedAt: '2026-10-31T00:00:00Z' } };
     await open(`/sessions/${SESSION}`);
     await waitForUi(() => expect(line()).toBeTruthy());
-    expect(said(line())).toBe('Created workspace app on orbit@austin · /home/orbit/code/app');
+    expect(said(line())).toBe('Created workspace app on orbit@austin · /home/orbit/app');
     expect(button('Rename')).toBeUndefined();
   });
 });

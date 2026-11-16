@@ -6,22 +6,18 @@ import type { CursorRunnerFacts } from '../lib/cursorRuntime';
 import { encodeId } from '../lib/idCodec';
 import {
   answersDirProbe,
-  defaultFolderChoice,
   firstEngineOn,
-  folderVerdict,
   installedLogins,
   isConnecting,
-  isOfferedFolder,
   isValidNewFolder,
   makesNewFolders,
   machineName,
   newFolderPath,
   newFolderPick,
+  newFolderRootOf,
   newFolderVerdict,
   newWorkspaceName,
-  registerDirToProbe,
   updatesItself,
-  type FolderChoice,
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
@@ -31,15 +27,13 @@ import {
   SETUP_FOLDER,
   SETUP_FOOT_CREATE,
   SETUP_LEAD_CREATE,
-  SETUP_NEW_FOLDER,
   SETUP_NEW_FOLDER_DONE,
   SETUP_NEW_FOLDER_INVALID,
-  SETUP_NEW_FOLDER_META,
+  SETUP_FOLDER_HINT,
   SETUP_NEW_FOLDER_NAME,
   SETUP_ON_A_KEY,
   SETUP_ON_A_POOL,
   SETUP_OPEN_MACHINE,
-  SETUP_REGISTER_DIR,
   SETUP_SIGN_IN_HELP,
   SETUP_USE_FOLDER,
   setupChecking,
@@ -50,7 +44,6 @@ import {
   setupNoAnswer,
   setupNotInstalled,
   setupOffline,
-  setupOtherFolder,
   setupReadyCreate,
   setupSignIn,
   setupSignedIn,
@@ -66,7 +59,6 @@ import { ENGINE_NAME, probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn'
 import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { Radio, RadioGroup } from './ui/Radio';
 import { WelcomeHead } from './WelcomeCard';
 import './MachineSetupCard.css';
 
@@ -119,9 +111,9 @@ function useSettled(value: string): string {
   return settled;
 }
 
-/** Step one before it has an answer: the folder `orbit register` ran in when that is a fair suggestion,
- *  a new folder, or any other, which the machine itself checks as it is typed. */
-function FolderOptions({
+/** Step one before it has an answer: one folder name in the machine's home (its Repos Folder on an older runner),
+ *  which the machine itself checks as it is typed. A folder that is there is used; one that isn't is made. */
+function FolderName({
   runner,
   disabled,
   onPick,
@@ -131,140 +123,55 @@ function FolderOptions({
   onPick: (folder: PickedFolder) => void;
 }) {
   const machine = machineName(runner);
-  const online = runner.online === true;
-  const probes = answersDirProbe(runner);
-  const registerDir = probes ? registerDirToProbe(runner.registerDir) : undefined;
-  // Offline it can't be asked, and what it last answered is still worth showing.
-  const registered = useDirProbe(runner.id, registerDir, online);
-  const suggested = registered.state === 'answered' && isOfferedFolder(registered.probe) ? registered.probe : null;
-  const offersNewFolder = makesNewFolders(runner);
-  const reposRoot = runner.reposRoot ?? '';
-
-  // Untouched, the choice follows what the machine says: its answer about the register directory can
-  // arrive a heartbeat after the card does.
-  const [touched, setTouched] = useState<FolderChoice | null>(null);
-  const choice = touched ?? defaultFolderChoice(suggested, offersNewFolder);
-  const [newName, setNewName] = useState('');
-  const name = newName.trim();
+  const root = newFolderRootOf(runner);
+  const [typed, setTyped] = useState('');
+  const name = typed.trim();
   const settledName = useSettled(name);
-  // A new folder's name is asked about where it would go: a folder, or a file, may be there already.
-  const newProbe = useDirProbe(
+  // The name is asked about where it would go: a folder, or a file, may be there already.
+  const probe = useDirProbe(
     runner.id,
-    choice === 'new' && offersNewFolder && !disabled && isValidNewFolder(settledName)
-      ? newFolderPath(reposRoot, settledName)
-      : undefined,
+    !disabled && isValidNewFolder(settledName) ? newFolderPath(root, settledName) : undefined,
     true,
   );
-  const found = settledName === name && newProbe.state === 'answered' ? newProbe.probe : null;
-  const newVerdict = found ? newFolderVerdict(found, machine) : null;
-  const [typed, setTyped] = useState('');
-  const path = typed.trim();
-  const settled = useSettled(path);
-  const typedProbe = useDirProbe(runner.id, choice === 'other' && !disabled && settled ? settled : undefined, true);
-  const checked = settled === path && typedProbe.state === 'answered' ? typedProbe.probe : null;
-  const verdict = checked ? folderVerdict(checked, machine) : null;
+  const found = settledName === name && probe.state === 'answered' ? probe.probe : null;
+  const verdict = found ? newFolderVerdict(found, machine) : null;
+  const candidate = found && isValidNewFolder(name) ? newFolderPick(found, name, root, machine) : null;
 
-  // The machine holds one question at a time (contract §2): a path asked before it had answered about the
-  // register directory took that question's place, and the suggestion would never come. It is asked again
-  // once nothing else on this card is waiting for an answer.
-  const askRegisteredAgain =
-    registered.state === 'idle' && !!registerDir && online && typedProbe.state !== 'checking' && newProbe.state !== 'checking';
-  const registeredAgain = registered.again;
-  useEffect(() => {
-    if (askRegisteredAgain) registeredAgain();
-  }, [askRegisteredAgain, registeredAgain]);
-
-  let candidate: PickedFolder | null = null;
-  if (choice === 'suggested' && suggested) {
-    candidate = { kind: 'existing', path: suggested.path, note: folderVerdict(suggested, machine).short };
-  } else if (choice === 'new' && offersNewFolder && isValidNewFolder(name) && found) {
-    candidate = newFolderPick(found, name, reposRoot, machine);
-  } else if (choice === 'other' && checked && verdict?.usable) {
-    candidate = { kind: 'existing', path: checked.path, note: verdict.short };
-  }
-
-  // The field's keys stay its own (a radio group takes the arrows), and Enter is the button beside it.
   const onFieldKey = (e: KeyboardEvent) => {
-    e.stopPropagation();
     if (e.key === 'Enter' && candidate) onPick(candidate);
   };
-  const suggestion = suggested && folderVerdict(suggested, machine);
   return (
     <>
       <div className="msc-step-title">{SETUP_FOLDER}</div>
       <div className="msc-step-help">{setupFolderHelp(machine)}</div>
-      <RadioGroup<FolderChoice> className="msc-options" value={choice} onValueChange={setTouched} disabled={disabled}>
-        {suggested && suggestion && (
-          <Radio value="suggested" className="msc-option">
-            <span className="msc-path">{suggested.path}</span>
-            <span className={`msc-verdict ${suggestion.tone}`}>{suggestion.text}</span>
-            <span className="msc-meta">{SETUP_REGISTER_DIR}</span>
-          </Radio>
-        )}
-        {offersNewFolder && (
-          <Radio value="new" className="msc-option">
-            <span className="msc-option-title">{SETUP_NEW_FOLDER}</span>
-            {choice === 'new' && (
-              <Input
-                className="msc-input"
-                size="small"
-                prefix={<span className="msc-prefix">{newFolderPath(runner.reposRoot ?? '', '')}</span>}
-                placeholder={SETUP_NEW_FOLDER_NAME}
-                aria-label={SETUP_NEW_FOLDER}
-                value={newName}
-                disabled={disabled}
-                autoFocus={touched === 'new'}
-                // Typing here is a choice, which a late answer about the register directory must not undo.
-                onChange={(e) => {
-                  setTouched('new');
-                  setNewName(e.target.value);
-                }}
-                onKeyDown={onFieldKey}
-                invalid={!!name && !isValidNewFolder(name)}
-              />
-            )}
-            {choice !== 'new' || !name ? (
-              <span className="msc-meta">{SETUP_NEW_FOLDER_META}</span>
-            ) : !isValidNewFolder(name) ? (
-              <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
-            ) : newVerdict ? (
-              // Nothing there yet reads as the board draws a new folder; anything there says what it means.
-              <span className={newVerdict.tone === 'ok' ? 'msc-meta' : `msc-verdict ${newVerdict.tone}`}>{newVerdict.text}</span>
-            ) : settledName === name && (newProbe.state === 'unanswered' || newProbe.state === 'idle') ? (
-              <NoAnswer machine={machine} onAgain={newProbe.again} />
-            ) : (
-              <span className="msc-verdict wait">{setupChecking(machine)}</span>
-            )}
-          </Radio>
-        )}
-        <Radio value="other" className="msc-option">
-          <span className="msc-option-title">{setupOtherFolder(machine)}</span>
-          {choice === 'other' && (
-            <>
-              <Input
-                className="msc-input msc-path-input"
-                size="small"
-                placeholder="/path/to/project"
-                aria-label={setupOtherFolder(machine)}
-                value={typed}
-                disabled={disabled}
-                autoFocus={touched === 'other'}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(e) => setTyped(e.target.value)}
-                onKeyDown={onFieldKey}
-              />
-              {path && (verdict ? (
-                <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
-              ) : settled === path && (typedProbe.state === 'unanswered' || typedProbe.state === 'idle') ? (
-                <NoAnswer machine={machine} onAgain={typedProbe.again} />
-              ) : (
-                <span className="msc-verdict wait">{setupChecking(machine)}</span>
-              ))}
-            </>
-          )}
-        </Radio>
-      </RadioGroup>
+      <div className="msc-folder">
+      <Input
+        className="msc-input"
+        size="small"
+        prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
+        placeholder={SETUP_NEW_FOLDER_NAME}
+        aria-label={SETUP_FOLDER}
+        value={typed}
+        disabled={disabled}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(e) => setTyped(e.target.value)}
+        onKeyDown={onFieldKey}
+        invalid={!!name && !isValidNewFolder(name)}
+      />
+      {!name ? (
+        <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
+      ) : !isValidNewFolder(name) ? (
+        <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+      ) : verdict ? (
+        // Nothing there yet reads as a note; anything there says what it is.
+        <span className={found?.exists ? `msc-verdict ${verdict.tone}` : 'msc-meta'}>{verdict.text}</span>
+      ) : settledName === name && (probe.state === 'unanswered' || probe.state === 'idle') ? (
+        <NoAnswer machine={machine} onAgain={probe.again} />
+      ) : (
+        <span className="msc-verdict wait">{setupChecking(machine)}</span>
+      )}
+      </div>
       <Button
         className="msc-use"
         variant="primary"
@@ -362,7 +269,7 @@ export function MachineSetupCard({
         // one too old to check folders either.
         <div className="msc-notice">{isConnecting(runner) ? setupConnecting(machine) : setupOffline(machine)}</div>
       ) : (
-        !probes && (
+        !(probes && makesNewFolders(runner)) && (
           <div className="msc-notice">
             {updatesItself(runner) ? (
               setupUpdating(machine)
@@ -388,7 +295,7 @@ export function MachineSetupCard({
               </button>
             </div>
           ) : (
-            <FolderOptions runner={runner} disabled={offline || !probes} onPick={onFolder} />
+            <FolderName runner={runner} disabled={offline || !probes || !makesNewFolders(runner)} onPick={onFolder} />
           )}
         </div>
       </div>

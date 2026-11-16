@@ -158,7 +158,7 @@ workspace, the session and its first message are made together.
 ```ts
 interface NewWorkspaceRequest {
   workDir?: string;    // a folder on the machine, already confirmed there through §2
-  newFolder?: string;  // a new folder under the runner's reposRoot, made by the runner (§4)
+  newFolder?: string;  // a new folder in the runner's home (reposRoot on a v1-only runner), made by the runner (§4)
 }
 // CreateSessionDto gains: newWorkspace?: NewWorkspaceRequest
 ```
@@ -182,8 +182,11 @@ Checked in this order. None of them writes anything.
 
 1. **The workspace**, owned by the caller:
    - `runnerId` = `assignedRunnerId`;
-   - `workDir` = `newWorkspace.workDir` (trimmed), or `<reposRoot>/<newFolder>` (the runner's reported
-     `reposRoot`, any trailing separator dropped, joined with the separator it uses);
+   - `workDir` = `newWorkspace.workDir` (trimmed), or `<root>/<newFolder>`, joined with the separator the
+     root uses. `root` is `newFolderRoot` (@orbit/shared): on a runner that declares `create-workdir/v2`
+     (`CREATE_WORKDIR_HOME_CAPABILITY`), its home, the directory its reported `reposRoot` sits in
+     (`<home>/orbit-repos`); on one that declares only v1, `reposRoot` itself. Any trailing separator
+     is dropped;
    - `name` = the folder's name: `newFolder`, or the last segment of `workDir` (the whole of it for `/`).
      When the caller has a workspace that is not deleted with that name, ` 2`, ` 3`, … is added: the
      smallest number free. Picked under a per-account lock (`pg_advisory_xact_lock`), so two requests at
@@ -231,10 +234,11 @@ clients still make the first workspace with the first session (§3).
 (`GET /runner/sessions/reclaim`): present, and true, only when the session's workspace has
 `autoCreateWorkDir` (a workspace made with `newFolder`). Absent otherwise, never false.
 
-The runner (`create-workdir/v1`), before it spawns the engine: when `workDir` does not exist and
-`createWorkDir` is true, `mkdir -p` it with mode 0755, but only when the path, resolved (symlinks
-evaluated), lies inside its own resolved `reposRoot`. A path that resolves outside it, through a symlink or
-otherwise, is not created, and the session fails to start with the error it fails with today. The control
+The runner (`create-workdir/v1`, and since v2 also in home), before it spawns the engine: when `workDir`
+does not exist and `createWorkDir` is true, `mkdir -p` it with mode 0755, but only when the path, resolved
+(symlinks evaluated), lies inside its own resolved home directory (never home itself, which is never made)
+or its own resolved `reposRoot`. A path that resolves outside both, through a symlink or otherwise, is not
+created, and the session fails to start with the error it fails with today. The control
 plane never gives `newFolder` to a runner that does not declare `create-workdir/v1` (§3.1); a runner that
 ignores the field starts the session as it always has.
 

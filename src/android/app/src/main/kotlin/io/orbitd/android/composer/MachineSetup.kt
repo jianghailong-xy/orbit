@@ -68,8 +68,6 @@ data class NewWorkspaceRequest(
 /** A machine as a Set up row names it (rule 9). */
 data class MachineToSetUp(val id: String, val name: String)
 
-enum class FolderChoice { SUGGESTED, NEW, OTHER }
-
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
  * repository can, and says what that costs; a repository names its branch.
@@ -128,33 +126,8 @@ data class EnginePick(val engine: String, val provider: String)
 object MachineSetup {
     const val DIR_PROBE_CAPABILITY = "dir-probe/v1"
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
-
-    /**
-     * Whether the directory `orbit register` ran in is worth asking about: the two answers a path can give on its face are left
-     * unasked. Null when there is nothing to ask.
-     */
-    fun registerDirToProbe(registerDir: String?): String? {
-        var dir = registerDir?.trim().orEmpty()
-        while (dir.length > 1 && dir.endsWith("/")) dir = dir.dropLast(1)
-        return if (dir.isEmpty() || dir == "~" || dir == "/") null else dir
-    }
-
-    /**
-     * Rule 2: a checked register directory is offered only when it is a folder that exists and is neither the home directory nor the
-     * root. The installer runs where the terminal stands, which is usually home, and all of home is no default.
-     */
-    fun isOfferedFolder(probe: DirProbe?): Boolean =
-        probe != null && probe.error.isNullOrEmpty() && probe.exists && probe.isDir && !probe.isHome && probe.path != "/"
-
-    /**
-     * Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder. The rest is what a machine
-     * that can't make one leaves.
-     */
-    fun defaultFolderChoice(suggested: DirProbe?, offersNewFolder: Boolean): FolderChoice {
-        if (suggested?.isGit == true) return FolderChoice.SUGGESTED
-        if (offersNewFolder) return FolderChoice.NEW
-        return if (suggested != null) FolderChoice.SUGGESTED else FolderChoice.OTHER
-    }
+    /** A runner that makes a new folder in its home, the directory its reposRoot (`<home>/orbit-repos`) sits in. */
+    const val CREATE_WORKDIR_HOME_CAPABILITY = "create-workdir/v2"
 
     /** Whether a machine can be asked about a path at all: the capability it declares (§2). */
     fun answersDirProbe(runner: JsonObject): Boolean =
@@ -163,6 +136,24 @@ object MachineSetup {
     /** Whether it can make a new folder: the capability, and the Repos Folder it goes in (§3.1). */
     fun makesNewFolders(runner: JsonObject): Boolean =
         CREATE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    /**
+     * The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares create-workdir/v2, else
+     * reposRoot itself. The separator is the one the root is written with. Port of @orbit/shared `newFolderRoot`.
+     */
+    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String {
+        var root = reposRoot.trim()
+        while (root.length > 1 && (root.endsWith("/") || root.endsWith("\\"))) root = root.dropLast(1)
+        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) != true) return root
+        val cut = maxOf(root.lastIndexOf('/'), root.lastIndexOf('\\'))
+        if (cut < 0) return root
+        // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+        return if (cut == 0 || root[cut - 1] == ':') root.take(cut + 1) else root.take(cut)
+    }
+
+    /** The directory the folder step's name goes in: the machine's home, or its Repos Folder on an older runner. */
+    fun newFolderRootOf(runner: JsonObject): String =
+        newFolderRoot(runner.text("reposRoot").orEmpty(), runner.strings("capabilities"))
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is
@@ -197,12 +188,12 @@ object MachineSetup {
         return name.all { ch -> ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' || ch == '.' || ch == '_' || ch == '-' }
     }
 
-    /** Where a new folder lands: `<reposRoot>/<name>`, as the server joins it. */
-    fun newFolderPath(reposRoot: String, name: String): String {
-        val separator = if ('\\' in reposRoot && '/' !in reposRoot) "\\" else "/"
-        var root = reposRoot
-        while (root.endsWith("/") || root.endsWith("\\")) root = root.dropLast(1)
-        return "$root$separator$name"
+    /** Where a new folder lands: `<root>/<name>`, as the server joins it. */
+    fun newFolderPath(root: String, name: String): String {
+        val separator = if ('\\' in root && '/' !in root) "\\" else "/"
+        var dir = root
+        while (dir.endsWith("/") || dir.endsWith("\\")) dir = dir.dropLast(1)
+        return "$dir$separator$name"
     }
 
     /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
@@ -224,8 +215,8 @@ object MachineSetup {
     }
 
     /**
-     * What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a new folder
-     * starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a file can't become one.
+     * What the folder step's name finds at `<root>/<name>`, asked before anything is sent. Nothing there is a new folder, made as the
+     * session starts; a directory is used as it stands, read as any folder is; a file can't become one.
      */
     fun newFolderVerdict(probe: DirProbe, machine: String): FolderVerdict {
         fun refused(text: String) = FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false)
@@ -239,20 +230,15 @@ object MachineSetup {
             )
         }
         if (!probe.isDir) return refused(MachineSetupCopy.setupNewFolderIsFile(machine))
-        return FolderVerdict(
-            FolderVerdict.Tone.WARN,
-            MachineSetupCopy.setupNewFolderExists(machine),
-            folderVerdict(probe, machine).short,
-            usable = true,
-        )
+        return folderVerdict(probe, machine)
     }
 
     /** What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
-    fun newFolderPick(probe: DirProbe, name: String, reposRoot: String, machine: String): PickedFolder? {
+    fun newFolderPick(probe: DirProbe, name: String, root: String, machine: String): PickedFolder? {
         val verdict = newFolderVerdict(probe, machine)
         if (!verdict.usable) return null
         return if (probe.exists) PickedFolder.Existing(probe.path, verdict.short)
-        else PickedFolder.New(name, newFolderPath(reposRoot, name))
+        else PickedFolder.New(name, newFolderPath(root, name))
     }
 
     /** The login CLIs installed here, in the app's order. */
@@ -494,14 +480,6 @@ object DirProbeRelay {
         data object Replaced : Outcome
         data object Unanswered : Outcome
     }
-
-    /**
-     * Whether the register directory is asked about again. A path asked before the machine had answered about it took its question's
-     * place, and the suggestion would never come: it is asked again once nothing else on the card waits for an answer. Only while the
-     * machine can be asked: offline, a stored answer is all there is.
-     */
-    fun asksAgain(outcome: Outcome?, online: Boolean, otherWaiting: Boolean): Boolean =
-        outcome == Outcome.Replaced && online && !otherWaiting
 
     suspend fun probe(
         ask: (suspend () -> Unit)?,
