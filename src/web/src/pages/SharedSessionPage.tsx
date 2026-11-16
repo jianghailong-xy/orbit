@@ -497,7 +497,8 @@ function SharedConversation() {
         end: ({ opened, status }) => {
           close = null;
           if (opened) streamed = true;
-          if (!streamed) return fallBack();
+          // Never opened, or over the anonymous caps on reopening one that did: the page polls.
+          if (!streamed || (!opened && status === 429)) return fallBack();
           // A link that opened a stream before and is refused now has been revoked, or no longer
           // opens this conversation.
           if (!opened && status === 404) return linkGone();

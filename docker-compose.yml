@@ -236,6 +236,9 @@ services:
       # visitor's own address through them from X-Forwarded-For, as the register approval page shows it; unset, a visitor
       # is the address that connected to the gateway, which behind a proxy is the proxy's.
       TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"
+      # Optional: how many live viewer streams (public links' and guests' pages) this apiserver keeps open at once;
+      # unset, 2000 (docs/self-hosting.md, "Live viewers of shared sessions").
+      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
       # session titles and filing the session under a few semantic tags. Session creation and
       # worktree branch generation never wait on it.

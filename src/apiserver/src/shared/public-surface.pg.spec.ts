@@ -22,7 +22,10 @@
  *       Tool output and one without: no field or event type the read does not carry, deltas on both,
  *       tool output only on the first, head frames saying what `events?after=` says; it is answered
  *       no-store and noindex, a token that opens nothing is a 404 status, and an open spends the
- *       visitor's budget like any request.
+ *       visitor's budget like any request;
+ *   (i) the anonymous stream caps (§6, D5): a visitor's fifth open stream on one link, a link's stream past its cap and
+ *       a stream past the apiserver's total are each refused 429, and closing one stream frees its slot. The harness
+ *       keeps the real per-visitor cap (4) and lowers the other two, so each is reached in a handful of streams.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/shared/public-surface.pg.spec.ts
  *
@@ -59,6 +62,7 @@ import {
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
+import { VIEWER_STREAM_CAPS, ViewerStreamCaps } from '../sessions/viewer-stream-caps';
 import { RealtimeService } from '../realtime/realtime.service';
 import { openStream, type HeldStream } from '../test-support/sse-client';
 import { viewerStreamCrossings } from '../test-support/viewer-door-checks';
@@ -71,8 +75,11 @@ import { SharedStreamGuard } from './shared-stream.guard';
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 
-/** The budget this harness gives the guard, so (d) can spend it in a handful of requests. */
-const BUDGET = 5;
+/** The budget this harness gives the guard, so (d) can spend it in a handful of requests — and (i) a visitor its
+ *  four streams, a refused fifth, and one more after closing one. */
+const BUDGET = 6;
+/** The stream caps this harness gives the guard: the real one per visitor, and lowered ones per link and in all. */
+const STREAM_CAPS = { perVisitor: VIEWER_STREAM_CAPS.perVisitor, perLink: 6, total: 9 };
 /** Filler replies at seq 2..LAST_FILLER: more history than one page may hold (500). */
 const LAST_FILLER = 600;
 /** Length of the two bulky tool bodies, and the smallest cap `maxPayload` accepts. */
@@ -250,6 +257,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   // (onModuleInit is never called), so nothing from another process reaches it.
   const realtime = new RealtimeService(prisma, { scheduleBadgeSync: () => undefined, notifySessionSettled: () => undefined } as never);
   t.after(() => realtime.onModuleDestroy());
+  const caps = new ViewerStreamCaps(STREAM_CAPS);
   @Module({
     controllers: [SharedController, ShareLinksController],
     providers: [
@@ -258,6 +266,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: BUDGET, windowMs: 60_000 }) },
       { provide: ViewerStreamService, useValue: new ViewerStreamService(prisma, realtime, sessions) },
+      { provide: ViewerStreamCaps, useValue: caps },
       SharedStreamGuard,
       JwtAuthGuard,
       Reflector,
@@ -438,6 +447,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       await visit(on('/events/1'), spender),
       await visit(on(''), spender),
       await visit(on('/events?limit=1'), spender),
+      await visit(on('/events?limit=2'), spender),
     ];
     assert.equal(spent.length, BUDGET);
     assert.deepEqual(spent.map((a) => a.status), spent.map(() => 200));
@@ -636,6 +646,74 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const over = await openStream(`${base}/api/shared/${bareAt}/stream`, { 'x-real-ip': spender });
     await over.ended;
     assert.equal(over.status, 429, 'a stream open past the budget');
+  });
+
+  await t.test('(i) the anonymous stream caps: 429 at cap + 1 per visitor, per link and in all, and a closed stream frees its slot', async (st) => {
+    const held: HeldStream[] = [];
+    st.after(() => held.forEach((s) => s.close()));
+    /** Wait until the caps count `n` open streams: a slot is given back when the server sees the answer close. */
+    const settled = async (n: number, what: string) => {
+      for (const started = Date.now(); caps.held !== n; await new Promise((r) => setTimeout(r, 20))) {
+        if (Date.now() - started > 10_000) assert.fail(`${what}: the caps still count ${caps.held} streams, not ${n}`);
+      }
+    };
+    await settled(0, 'the streams (h) closed');
+    const linkA = newToken();
+    const linkB = newToken();
+    await conversation('Capped A', { shareToken: linkA });
+    await conversation('Capped B', { shareToken: linkB });
+    const open = async (link: string, from = freshAddress()) => {
+      const s = await openStream(`${base}/api/shared/${encodeURIComponent(link)}/stream`, { 'x-real-ip': from });
+      if (s.status === 200) held.push(s);
+      else await s.ended;
+      return s;
+    };
+    const refusedByCap = async (link: string, from: string | undefined, what: string) => {
+      const before = caps.held;
+      const s = await open(link, from);
+      assert.equal(s.status, 429, `${what}: ${s.body()}`);
+      assert.match(s.body(), /too many live viewers/, `${what}: the caps' refusal, not the request budget's`);
+      assert.equal(s.headers['cache-control'], 'no-store', what);
+      assert.equal(caps.held, before, `${what}: a refused stream holds no slot`);
+      return s;
+    };
+    const closeOne = async (s: HeldStream, what: string) => {
+      const n = caps.held;
+      s.close();
+      held.splice(held.indexOf(s), 1);
+      await settled(n - 1, what);
+    };
+
+    // Per visitor on one link (4): the fifth is refused; another address on that link and the visitor on another
+    // link are not; one closed, the visitor opens again.
+    const visitor = '198.51.100.90';
+    const mine: HeldStream[] = [];
+    for (let n = 1; n <= STREAM_CAPS.perVisitor; n += 1) {
+      const s = await open(linkA, visitor);
+      assert.equal(s.status, 200, `the visitor's stream ${n}`);
+      mine.push(s);
+    }
+    await refusedByCap(linkA, visitor, 'the visitor\'s fifth stream on the link');
+    assert.equal((await open(linkA)).status, 200, 'another address on the same link');
+    await closeOne(mine[0]!, 'the visitor closed one');
+    assert.equal((await open(linkA, visitor)).status, 200, 'the visitor again, after closing one');
+    assert.equal(caps.held, 5);
+
+    // Per link (6 here): one more from a new address fills it, the next new address is refused; one closed frees it.
+    assert.equal((await open(linkA)).status, 200, 'the link\'s sixth stream');
+    await refusedByCap(linkA, undefined, 'the link\'s seventh stream');
+    await closeOne(held.find((s) => !mine.includes(s))!, 'one of the link\'s streams closed');
+    assert.equal((await open(linkA)).status, 200, 'the link again, after closing one');
+
+    // In all (9 here): three on another link fill it, the next stream anywhere is refused; one closed frees it.
+    for (let n = 7; n <= STREAM_CAPS.total; n += 1) assert.equal((await open(linkB)).status, 200, `stream ${n} in all`);
+    await refusedByCap(linkB, undefined, 'the tenth stream in all');
+    await closeOne(held.at(-1)!, 'one stream closed');
+    assert.equal((await open(linkB)).status, 200, 'a stream again, after closing one');
+
+    // Every slot is given back when its stream ends.
+    held.splice(0).forEach((s) => s.close());
+    await settled(0, 'every stream closed');
   });
 
   await t.test('(c) …and so did every other /shared answer this run received', () => {
