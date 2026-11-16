@@ -360,7 +360,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
         let composer = try source(app + "Views/ComposerView.swift")
         XCTAssertTrue(composer.contains("PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)"))
         XCTAssertTrue(composer.contains("PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }"))
-        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization, sheet: false)"),
+        XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization)"),
                       "a Mac draws the card above the composer")
         XCTAssertTrue(composer.contains(".sheet(isPresented: optimizationSheetShown) {"), "a phone draws it as a sheet")
         XCTAssertTrue(composer.contains("PromptOptimizationFailureLine(retry:"))
@@ -386,6 +386,20 @@ final class PromptOptimizerWiringTests: XCTestCase {
         XCTAssertTrue(views.contains("if !showingPrompt, let gloss = optimization.gloss { return Text(gloss) }"))
         XCTAssertTrue(views.contains("Text(PromptOptimizerCopy.agentReceives(optimization.promptLanguage))"))
         XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.showIn(glossLanguage)"))
+    }
+
+    func testAPhoneSheetLeadsWithTheOwnersLanguage() throws {
+        XCTAssertEqual(PromptOptimizerCopy.edit, "Edit")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(.en), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.sentToAgent(nil), "Sent to the agent in English")
+        XCTAssertEqual(PromptOptimizerCopy.usedLine(["this session's last 106 turns", "session recap"]),
+                       "Used this session's last 106 turns · session recap")
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        XCTAssertTrue(views.contains("if let gloss = optimization.gloss { Text(gloss) } else { promptRuns(optimization, codeStyle: .body) }"),
+                      "the gloss, what Use inserts, is the sheet's text")
+        XCTAssertTrue(views.contains("Button(showingPrompt ? PromptOptimizerCopy.hide : PromptOptimizerCopy.show)"))
+        let composer = try source(app + "Views/ComposerView.swift")
+        XCTAssertTrue(composer.contains("PromptOptimizationSheet(\n                    optimization: optimization,"))
     }
 
     func testTabInTheBoxIsUseOnAMac() throws {
