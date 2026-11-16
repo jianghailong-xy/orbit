@@ -11817,6 +11817,8 @@ export class SessionsService {
    */
   async remove(ownerId: string, id: string) {
     const ended = await this.transitionEnd(ownerId, id, SessionEndReason.DELETED, 'deletedAt');
+    // Nobody watches a session in the Trash: its guests' and links' viewer streams end (viewer-stream.service.ts).
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
     this.realtime.publishSessionLifecycleChanged(
@@ -11840,6 +11842,7 @@ export class SessionsService {
       true,
     );
     if (ended.projectBound) return false;
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     this.realtime.publishSessionLifecycleChanged(
       id,
@@ -12322,6 +12325,7 @@ export class SessionsService {
       }
       await tx.session.delete({ where: { id: session.id } });
     }, loggedRetry(this.logger, 'sessions.purge'));
+    this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }
 }

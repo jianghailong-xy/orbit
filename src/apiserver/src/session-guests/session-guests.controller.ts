@@ -120,6 +120,7 @@ export class GuestSessionsController {
   @UseGuards(GuestInvitationGuard)
   @Sse(':id/stream')
   stream(
+    @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Query('sinceSeq') sinceSeq?: string,
     @Query('maxPayload') maxPayload?: string,
@@ -127,6 +128,11 @@ export class GuestSessionsController {
     return this.viewerStreams.stream(
       id,
       { kind: 'GUEST', waitingOnOwner: (sessionId) => this.guests.waitingOnOwner(sessionId) },
+      {
+        // The session gone, or this guest's invitation ended; a link's signals are not the guest's.
+        named: (r) => !('linkId' in r) && r.sessionId === id && (r.guestId === undefined || r.guestId === user.userId),
+        check: async () => ((await this.guests.isInvited(user.userId, id)) ? { until: null } : null),
+      },
       { sinceSeq, maxPayload: parseMaxPayload(maxPayload) },
     );
   }

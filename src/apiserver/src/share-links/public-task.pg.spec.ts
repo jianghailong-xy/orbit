@@ -63,6 +63,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
 import { TasksController } from '../tasks/tasks.controller';
 import { TasksService } from '../tasks/tasks.service';
 import { keysOf, redLineCrossings } from '../test-support/share-red-line';
@@ -318,6 +319,8 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
   @Module({
     controllers: [SharedController, ShareLinksController, TasksController],
     providers: [
+      // SharedController's streams, which nothing here opens.
+      { provide: ViewerStreamService, useValue: {} },
       { provide: SessionsService, useValue: sessions },
       { provide: TasksService, useValue: tasks },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
