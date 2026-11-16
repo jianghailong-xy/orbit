@@ -300,7 +300,7 @@ describe('the opened list', () => {
     expect(all('.ct-replaces')).toHaveLength(1);
   });
 
-  it('links to every task this session created, and to each project they belong to', async () => {
+  it('links to each project its tasks belong to, and not to the Tasks page', async () => {
     await mount(
       created({
         total: 2,
@@ -310,7 +310,7 @@ describe('the opened list', () => {
     );
     await click(one('.bg-tray-row'));
 
-    expect(link(fixture.copy.viewAll)?.getAttribute('href')).toBe(`/tasks?createdIn=${SESSION}`);
+    expect(link(fixture.copy.viewAll)).toBeUndefined();
     const projects = all('.ct-foot a').filter((a) => a.textContent === fixture.copy.openProject);
     expect(projects.map((a) => a.getAttribute('href'))).toEqual([`/projects/${PROJECT}`]);
   });
@@ -318,8 +318,8 @@ describe('the opened list', () => {
   it('offers no project link when none of its tasks is in a project', async () => {
     await mount(created({ total: 2, items: [row(1), row(2)] }));
     await click(one('.bg-tray-row'));
-    expect(link(fixture.copy.viewAll)).toBeDefined();
     expect(link(fixture.copy.openProject)).toBeUndefined();
+    expect(one('.ct-foot')).toBeNull();
   });
 });
 
