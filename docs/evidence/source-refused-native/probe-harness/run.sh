@@ -35,7 +35,7 @@ STUB_PID=""
 STATUS=0
 run_pass() {  # $1 label, $2 scheme, $3 destination, $4 shots dir
   echo "==> $1"
-  TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project RunStartProbe.xcodeproj -scheme "$2" \
+  TEST_RUNNER_SHOTS_DIR="$4" xcodebuild test -project GithubProbe.xcodeproj -scheme "$2" \
     -destination "$3" -derivedDataPath ".dd-$1" -resultBundlePath "results/$1.xcresult" \
     CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- > "build-$1.log" 2>&1 || STATUS=1
   grep -E "Test Case|Executed|error:|\*\* TEST" "build-$1.log" | tail -60 || true
@@ -72,9 +72,9 @@ xcrun simctl status_bar "$IPHONE_UDID" override --time "15:12" --batteryState ch
 
 # The Mac first: a crash in the simulator leaves a "quit unexpectedly" panel on the Mac's screen.
 serve "$OUT/mac/requests.log"
-run_pass mac RunStartMacProbe "platform=macOS" "$OUT/mac"
+run_pass mac GithubMacProbe "platform=macOS" "$OUT/mac"
 serve "$OUT/ios/requests.log"
-run_pass ios RunStartProbe "id=$IPHONE_UDID" "$OUT/ios"
+run_pass ios GithubProbe "id=$IPHONE_UDID" "$OUT/ios"
 kill "$STUB_PID" 2>/dev/null || true
 
 # What the Mac probe app did to its own windows (`-probe.windowLog`): the UI-test runner's sandbox
