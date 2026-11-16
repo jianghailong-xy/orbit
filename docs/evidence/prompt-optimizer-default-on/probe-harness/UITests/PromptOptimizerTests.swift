@@ -134,7 +134,12 @@ final class PromptOptimizerTests: ProbeCase {
         XCTAssertTrue(sw.isEnabled, "the switch is usable on a server with a key")
         shot(app, name)
         write(app.debugDescription, "tree-\(name).txt")
+        #if os(iOS)
+        // The element is the whole row; a SwiftUI Toggle flips only from its switch, at the row's right end.
+        sw.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        #else
         press(sw)
+        #endif
         XCTAssertTrue(waitUntil(15, { self.storedSwitch() == "false" }), "turning it off writes promptOptimizer: false")
         _ = waitUntil(10, { !self.isOn(sw) })
         note("\(name): after the press, switch value \(String(describing: sw.value)), stored \(storedSwitch())")
