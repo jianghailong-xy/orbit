@@ -260,8 +260,8 @@ public enum MachineSetup {
     }
 
     /// Rule 1 and §3: both steps are done and the machine is here, so the next send makes the workspace.
-    public static func isReady(bare: Bool, folder: PickedFolder?, online: Bool, credential: SetupCredential) -> Bool {
-        bare && folder != nil && online && credential.done
+    public static func isReady(bare: Bool, folder: PickedFolder?, online: Bool, credential: SetupCredential, managedState: ManagedSetupState? = nil) -> Bool {
+        bare && folder != nil && (managedState != nil || (online && credential.done))
     }
 }
 

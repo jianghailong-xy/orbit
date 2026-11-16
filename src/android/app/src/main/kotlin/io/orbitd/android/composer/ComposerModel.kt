@@ -32,6 +32,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val scope = CoroutineScope(parent.coroutineContext + job)
     internal val api = ComposerApi(auth, handle, sessionId, target)
     /** Set by a bare machine's new session page to decide whether Send holds the message or creates the workspace and session. */
+    var managedSetup = false
+    var managedFirstProvider: String? = null
     var machineSend: ((HeldMessage) -> MachineSend)? = null
     private val key = "composer-v1:${ObjectId.canonical(sessionId) ?: sessionId}"
     private val disk = Mutex()
@@ -541,8 +543,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     ): JsonObject {
         val config = state.value.draft.resumeConfig
         return buildJsonObject {
-            config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
-            if (config["model"] == null) seedModel?.let { put("model", it) }
+            config.filterKeys { it != "account" && !(newWorkspace != null && managedSetup && it in setOf("engine", "provider", "model")) }.forEach { (k, v) -> put(k, v) }
+            if (config["model"] == null && !(newWorkspace != null && managedSetup)) seedModel?.let { put("model", it) }
             if (newWorkspace != null) {
                 put("assignedRunnerId", target?.runnerId ?: detail.text("runnerId").orEmpty())
                 put("newWorkspace", newWorkspace.toJson())
@@ -550,8 +552,15 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val engine = config.text("engine") ?: state.value.catalog?.engineOf(effective)
                     ?: detail.text("lastEngine") ?: ProviderEngines.CLAUDE
                 val provider = config.text("provider") ?: detail.text("lastProvider") ?: engine
-                put("engine", engine)
-                put("provider", provider)
+                if (managedSetup) {
+                    managedFirstProvider?.let {
+                        put("provider", it)
+                        (state.value.catalog?.providerEngines(it)?.firstOrNull() ?: it.takeIf { name -> name in ProviderEngines.LOGIN_ENGINES })?.let { engineName -> put("engine", engineName) }
+                    }
+                } else {
+                    put("engine", engine)
+                    put("provider", provider)
+                }
             } else {
                 put("workspaceId", target!!.workspaceId)
                 target.folderId?.let { put("folderId", it) }

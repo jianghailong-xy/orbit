@@ -69,22 +69,12 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertTrue(adopt.contains("ManagedRunnerLogic.refreshInterval(display)"))
     }
 
-    func testAMovedFirstSessionProviderReadsTheWorkspaceListAgain() throws {
-        // The draft of the managed default workspace starts on the workspace's `lastProvider`, which
-        // the server derives: when the status's first-session provider moves (a key added, READY's
-        // record), the list is read again — never on the first answer, and a failed read forgets nothing.
-        let model = code(try source("ManagedRunnerModel.swift"))
-        let adopt = flat(try slice(model, from: "private func adopt(", to: "\n    }"))
-        XCTAssertTrue(adopt.contains("let startsOn = ManagedRunnerLogic.firstSessionProvider(answer)"))
-        XCTAssertTrue(adopt.contains("if let seen = seenFirstSessionProvider, seen != startsOn { onFirstSessionProviderChanged() }"))
-        XCTAssertTrue(adopt.contains("seenFirstSessionProvider = .some(startsOn)"))
-        let answered = try XCTUnwrap(adopt.range(of: "if let answer {"))
-        XCTAssertLessThan(answered.lowerBound, try XCTUnwrap(adopt.range(of: "onFirstSessionProviderChanged()")).lowerBound)
-        let reset = try slice(model, from: "func reset() {", to: "\n    }")
-        XCTAssertTrue(reset.contains("seenFirstSessionProvider = nil"))
-        let app = code(try source("AppModel.swift"))
-        let configure = try slice(app, from: "sharedPools = SharedPoolsModel(", to: "runnerControl = RunnerControl(")
-        XCTAssertTrue(configure.contains("managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }"))
+    func testManagedStatusUpdatesTheSetupEntries() throws {
+        XCTAssertTrue(try source("ManagedRunnerModel.swift").contains("onStatusChanged(answer)"))
+        XCTAssertTrue(try source("AppModel.swift").contains("self?.agents?.adoptManagedStatus(status)"))
+        let agents = try source("AgentsModel.swift")
+        XCTAssertTrue(agents.contains("managedStatus: managedStatus"))
+        XCTAssertTrue(agents.contains("ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil"))
     }
 
     func testTheAppBuildsItPollsItAndForgetsItOnSignOut() throws {
@@ -114,7 +104,7 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let managed = try slice(console, from: "var managed: ManagedRunnerConsole? {", to: "\n    }")
         XCTAssertTrue(managed.contains("managedRunner?.console(runnerID: runnerID ?? draftAgent?.runnerId"))
         let availability = try slice(console, from: "var availability: SendAvailability {", to: "\n    }")
-        XCTAssertTrue(availability.contains("isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)"))
+        XCTAssertTrue(availability.contains("isDraft ? .sendNow"))
         XCTAssertTrue(availability.contains("capabilities: sendCapabilities"))
         let lift = try slice(console, from: "private var sendCapabilities: SessionCapabilities? {", to: "\n    }")
         XCTAssertTrue(lift.contains("ManagedRunnerLogic.sendCapabilities(serverCapabilities, acceptsWork: managed?.display.acceptsWork == true)"))
@@ -147,15 +137,23 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertFalse(folded.contains("ManagedRunnerBanner"), "about the runner the message goes to: never folded away")
     }
 
-    func testADraftThatCannotStartShowsTheStateInsteadOfAnEngine() throws {
-        let views = code(try source("Views/AgentsView.swift"))
-        let draft = try slice(views, from: "struct NewSessionView: View {", to: "ComposerView(console: draft, autoFocus: focusesComposer)")
-        let blocked = try XCTUnwrap(draft.range(of: "if let managed = draft.managed, managed.blocksNewSession {"))
-        let hero = try XCTUnwrap(draft.range(of: "} else if draft.localStatusCards.isEmpty {"))
-        let engine = try XCTUnwrap(draft.range(of: "ProviderMark(provider: currentEngine.slug"))
-        XCTAssertLessThan(blocked.lowerBound, hero.lowerBound)
-        XCTAssertLessThan(hero.lowerBound, engine.lowerBound, "the engine is drawn only on the other branch")
-        XCTAssertTrue(draft.contains("if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {"))
+    func testDraftsKeepTheirEngineAndHaveNoDefaultWorkspaceWelcomeOrSendBlock() throws {
+        let view = code(try source("Views/AgentsView.swift"))
+        XCTAssertFalse(view.contains("ManagedWelcomeCard"))
+        XCTAssertFalse(view.contains("blocksNewSession"))
+        XCTAssertTrue(view.contains("ProviderMark(provider: currentEngine.slug"))
+        XCTAssertTrue(view.contains("if let managed = draft.managed, managed.showsBanner {"))
+    }
+
+    func testManagedSetupUsesTheSharedNoticeAndSkipsProbes() throws {
+        let card = try source("Views/MachineSetupCard.swift")
+        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.Notice.preparingSend"))
+        XCTAssertTrue(card.contains("guard managedState == nil, !disabled"))
+        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.noEngineTitle"))
+        XCTAssertTrue(card.contains("ManagedRunnerCopy.Setup.onKey"))
+        let console = try source("ConsoleModel.swift")
+        XCTAssertTrue(console.contains("machineSetup?.managedProvider"))
+        XCTAssertTrue(console.contains("machineSetup?.managedEngine"))
     }
 
     // MARK: Machines & models and the actions
@@ -249,10 +247,11 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertTrue(picker.contains("Text(managed.label).font(.orbitLabel).foregroundStyle(managed.ink)"))
     }
 
-    func testABlockedDraftShowsNoModelInTheComposer() throws {
+    func testDraftShowsTheModelInTheComposer() throws {
         let composer = code(try source("Views/ComposerView.swift"))
         let toolbar = try slice(composer, from: "private var toolbar: some View {", to: "sendControls\n")
-        XCTAssertTrue(toolbar.contains("if console.managed?.blocksNewSession != true { modelMenu }"))
+        XCTAssertTrue(toolbar.contains("modelMenu"))
+        XCTAssertFalse(toolbar.contains("blocksNewSession"))
     }
 
     func testRetryCallsTheServersRetryWithTheRevisionItRead() throws {

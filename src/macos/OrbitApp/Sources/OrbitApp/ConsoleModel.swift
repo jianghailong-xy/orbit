@@ -2129,7 +2129,7 @@ final class ConsoleModel {
     }
 
     var availability: SendAvailability {
-        isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)
+        isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 
@@ -3704,9 +3704,9 @@ final class ConsoleModel {
             // credential of it (contract §3.2). Leaving both off keeps the server's
             // inherit-from-workspace path, which re-checks that pair as it starts the session. A
             // workspace about to be made has nothing to inherit, so its first session always names it.
-            engine: newWorkspace == nil ? draftPick?.engine : engine,
-            provider: newWorkspace == nil ? draftPick?.provider : provider,
-            model: providerCapabilitiesResolved ? modelID : nil,
+            engine: newWorkspace == nil ? draftPick?.engine : (machineSetup?.managedState != nil ? machineSetup?.managedEngine : engine),
+            provider: newWorkspace == nil ? draftPick?.provider : (machineSetup?.managedState != nil ? machineSetup?.managedProvider : provider),
+            model: machineSetup?.managedState != nil ? nil : (providerCapabilitiesResolved ? modelID : nil),
             permissionMode: permissionMode.rawValue, effort: effort.rawValue,
             // Sent only when on, like every other override that has an "off" default: a
             // session that never touched Speed starts without the lane rather than with an

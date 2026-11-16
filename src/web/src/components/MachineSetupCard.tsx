@@ -1,7 +1,8 @@
 import { CheckCircleFilled, DesktopOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { LoginEngine } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, firstSessionProvider, type ManagedSetupState, type LoginEngine } from '@orbit/shared';
+import type { ManagedRunner } from '../lib/managedRunner';
 import type { CursorRunnerFacts } from '../lib/cursorRuntime';
 import { encodeId } from '../lib/idCodec';
 import {
@@ -116,26 +117,30 @@ function useSettled(value: string): string {
 function FolderName({
   runner,
   disabled,
+  managedState,
   onPick,
 }: {
   runner: Runner;
   disabled: boolean;
+  managedState: ManagedSetupState | null;
   onPick: (folder: PickedFolder) => void;
 }) {
   const machine = machineName(runner);
-  const root = newFolderRootOf(runner);
+  const root = managedState && !runner.reposRoot?.trim() ? MANAGED_RUNNER_REPOS_ROOT : newFolderRootOf(runner);
   const [typed, setTyped] = useState('');
   const name = typed.trim();
   const settledName = useSettled(name);
   // The name is asked about where it would go: a folder, or a file, may be there already.
   const probe = useDirProbe(
     runner.id,
-    !disabled && isValidNewFolder(settledName) ? newFolderPath(root, settledName) : undefined,
+    !managedState && !disabled && isValidNewFolder(settledName) ? newFolderPath(root, settledName) : undefined,
     true,
   );
   const found = settledName === name && probe.state === 'answered' ? probe.probe : null;
   const verdict = found ? newFolderVerdict(found, machine) : null;
-  const candidate = found && isValidNewFolder(name) ? newFolderPick(found, name, root, machine) : null;
+  const candidate: PickedFolder | null = managedState && isValidNewFolder(name)
+    ? { kind: 'new', name, path: newFolderPath(root, name) }
+    : found && isValidNewFolder(name) ? newFolderPick(found, name, root, machine) : null;
 
   const onFieldKey = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && candidate) onPick(candidate);
@@ -163,6 +168,8 @@ function FolderName({
         <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
       ) : !isValidNewFolder(name) ? (
         <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+      ) : managedState ? (
+        <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
       ) : verdict ? (
         // Nothing there yet reads as a note; anything there says what it is.
         <span className={found?.exists ? `msc-verdict ${verdict.tone}` : 'msc-meta'}>{verdict.text}</span>
@@ -194,6 +201,7 @@ function FolderName({
  */
 export function MachineSetupCard({
   runner,
+  managed,
   fleet,
   engine,
   credential,
@@ -208,6 +216,7 @@ export function MachineSetupCard({
   welcome,
 }: {
   runner: Runner;
+  managed?: ManagedRunner | null;
   /** Every runner of the account, which decides whether Cursor CLI is drawn at all (webShowsEngine). */
   fleet: readonly CursorRunnerFacts[] | null;
   /** The engine the draft runs on, which the composer's picks follow too. */
@@ -229,11 +238,13 @@ export function MachineSetupCard({
   welcome?: boolean;
 }) {
   const machine = machineName(runner);
-  const offline = runner.online !== true;
+  const managedState = managedSetupState(runner.id, managed?.status);
+  const startsOn = managedState && managed ? firstSessionProvider(managed.status) : null;
+  const offline = !managedState && runner.online !== true;
   const probes = answersDirProbe(runner);
   const name = engineName(engine);
   const others = installedLogins(runner.engines).filter((e) => e !== engine && webShowsEngine(e, fleet));
-  const done = credential.step === 'signedIn' || credential.step === 'onKey';
+  const done = managedState ? !!startsOn : credential.step === 'signedIn' || credential.step === 'onKey';
 
   const alternatives = others.length > 0 && (
     <div className="msc-alt">
@@ -264,7 +275,9 @@ export function MachineSetupCard({
         </div>
       )}
 
-      {offline ? (
+      {managedState ? (
+        <div className="msc-notice">{MANAGED_RUNNER_COPY.setup.notice[managedState]}</div>
+      ) : offline ? (
         // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
         // one too old to check folders either.
         <div className="msc-notice">{isConnecting(runner) ? setupConnecting(machine) : setupOffline(machine)}</div>
@@ -289,13 +302,13 @@ export function MachineSetupCard({
             <div className="msc-done-line">
               <span className="msc-step-title">{SETUP_FOLDER}</span>
               <span className="msc-path">{folder.path}</span>
-              <span className="msc-meta">{folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.note}</span>
+              <span className="msc-meta">{managedState ? MANAGED_RUNNER_COPY.setup.folderPicked[managedState] : folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.note}</span>
               <button className="msc-change" type="button" disabled={offline} onClick={() => onFolder(null)}>
                 {SETUP_CHANGE}
               </button>
             </div>
           ) : (
-            <FolderName runner={runner} disabled={offline || !probes || !makesNewFolders(runner)} onPick={onFolder} />
+            <FolderName runner={runner} managedState={managedState} disabled={!managedState && (offline || !probes || !makesNewFolders(runner))} onPick={onFolder} />
           )}
         </div>
       </div>
@@ -303,7 +316,22 @@ export function MachineSetupCard({
       <div className="msc-step" data-step="engine">
         {done ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">2</span>}
         <div>
-          {credential.step === 'signedIn' ? (
+          {managedState ? (
+            startsOn ? (
+              <div className="msc-done-line">
+                <span className="msc-step-title">{isLoginProvider(startsOn) ? engineName(startsOn) : credential.step === 'onKey' ? credential.label : startsOn}</span>
+                <span className="msc-meta">{isLoginProvider(startsOn) ? setupSignedIn(machine) : MANAGED_RUNNER_COPY.setup.onKey}</span>
+                <Link className="msc-change" to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_CHANGE}</Link>
+              </div>
+            ) : (
+              <>
+                <div className="msc-step-title">{MANAGED_RUNNER_COPY.setup.noEngineTitle}</div>
+                <div className="msc-step-help">{MANAGED_RUNNER_COPY.setup.noEngineHelp}{' '}
+                  <Link to="/settings/providers">{MANAGED_RUNNER_COPY.setup.addKey}</Link>
+                </div>
+              </>
+            )
+          ) : credential.step === 'signedIn' ? (
             <div className="msc-done-line">
               <span className="msc-step-title">{name}</span>
               <span className="msc-meta">{setupSignedIn(machine)}</span>

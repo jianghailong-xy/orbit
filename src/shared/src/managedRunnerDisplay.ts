@@ -164,7 +164,7 @@ export const MANAGED_RUNNER_COPY = {
   /** Asked before Set up on an account that already has a runner or a workspace (D3). */
   confirm: {
     title: 'Set up a managed runner?',
-    body: 'Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are.',
+    body: 'Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are.',
     cancel: 'Cancel',
     confirm: 'Set up',
   },
@@ -174,6 +174,34 @@ export const MANAGED_RUNNER_COPY = {
     row: 'Wakes automatically when you start a session',
     /** Above the composer of a workspace whose managed runner is asleep. */
     composer: 'Your managed runner is asleep. Sending wakes it (about 10 s).',
+  },
+  /**
+   * A managed runner's setup card while it is not up (`managedSetupState`; board
+   * docs/mocks/managed-runner-no-default-workspace): it has no workspace until the owner makes one there.
+   */
+  setup: {
+    /** The notice over the card. The web card makes the workspace with its button; the native cards with the first message. */
+    notice: {
+      preparing: 'Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.',
+      preparingSend: 'Orbit is setting up your managed runner. You can send your first message now; it starts when it’s ready.',
+      asleep: 'Your managed runner is asleep. Your first message wakes it (about 10 s).',
+    },
+    /** Under a typed folder name, which a runner that is not up cannot check. */
+    folderUnchecked: {
+      preparing: 'Not checked until your managed runner is up: used if it’s there, created if not.',
+      asleep: 'Not checked while it’s asleep: used if it’s there, created if not.',
+    },
+    /** Beside a picked folder. */
+    folderPicked: {
+      preparing: 'checked when it’s up · created if not there',
+      asleep: 'checked when it wakes · created if not there',
+    },
+    /** Beside the engine the server names (`firstSessionProvider`) when it is one of the owner's keys. */
+    onKey: 'API key · the first session starts on it',
+    /** The engine step when the server names none yet. */
+    noEngineTitle: 'Coding CLI',
+    noEngineHelp: 'Your managed runner says which one is ready once it’s up.',
+    addKey: 'Add a model key to start on it now.',
   },
 } as const;
 
@@ -239,6 +267,24 @@ export function managedRunnerRow(
     acceptsWork: display.acceptsWork,
     asleep: (kind === 'sleeping' || kind === 'stopping') && display.acceptsWork,
   };
+}
+
+/**
+ * How a machine's setup card treats the account's managed runner (docs/managed-runner-no-default-workspace.md):
+ * `preparing` while it is not up and was never ready, `asleep` while it is not up after it had been; either way the
+ * card takes a new folder and makes the workspace, and the first message waits for it or wakes it. Null when the
+ * runner is not the managed one, when it is up or unresponsive (the card reads its heartbeat, as for any machine),
+ * or when it is in a state no work is accepted in (failed, an operator awaited, removed, switched off).
+ */
+export type ManagedSetupState = 'preparing' | 'asleep';
+
+export function managedSetupState(
+  runnerId: string | null | undefined,
+  status: ManagedRunnerStatus | null | undefined,
+): ManagedSetupState | null {
+  const row = managedRunnerRow(runnerId, status);
+  if (!row || !row.acceptsWork || row.kind === 'available' || row.kind === 'unresponsive') return null;
+  return status?.initialProvider ? 'asleep' : 'preparing';
 }
 
 /** How often a client reads the status again: soon while it moves by itself, rarely otherwise. */
@@ -314,7 +360,7 @@ export function managedRunnerDisplay(status: ManagedRunnerStatus | null | undefi
 }
 
 /**
- * What a first session in the managed default workspace starts on, as the server says: its
+ * What a first session on the managed runner starts on, as the server says: its
  * `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which the
  * field equals whenever the runner has one).
  */

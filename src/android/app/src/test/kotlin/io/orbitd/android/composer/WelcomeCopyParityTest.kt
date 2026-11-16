@@ -80,6 +80,12 @@ class WelcomeCopyParityTest {
         assertTrue("Sign in to <engine> moved in RunnerSignIn.tsx", web.contains("`Sign in to \${ENGINE_NAME[engine]}`"))
     }
 
+    @Test fun theNativeSetupNoticeUsesTheFirstMessageWords() {
+        val card = File(root, "src/android/app/src/main/kotlin/io/orbitd/android/composer/MachineSetupCard.kt").readText()
+        assertTrue(card.contains("ManagedRunner.Setup.NOTICE.getValue(\"preparingSend\")"))
+        assertTrue(ManagedRunner.Setup.NOTICE.getValue("preparingSend").contains("send your first message"))
+    }
+
     private companion object {
         const val WEB = "src/web/src/lib/welcomeCopy.ts"
         const val KOTLIN = "src/android/app/src/main/kotlin/io/orbitd/android/composer/WelcomeCopy.kt"

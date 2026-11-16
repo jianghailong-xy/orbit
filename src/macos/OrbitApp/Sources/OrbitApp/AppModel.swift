@@ -607,7 +607,7 @@ final class AppModel {
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
-        managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        managedRunnerModel.onStatusChanged = { [weak self] status in self?.agents?.adoptManagedStatus(status) }
         managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -3973,6 +3973,7 @@ final class AppModel {
     /// Load the agent list, then land on the app's home if we're still on the launch default — see
     /// `resolveDefaultLanding`.
     func loadAgentsThenLand() async {
+        await managedRunner?.load()
         await agents?.load()
         resolveDefaultLanding()
     }

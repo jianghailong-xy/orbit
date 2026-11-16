@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import type { DirProbe } from '@orbit/shared';
+import { managedRunnerDisplay, managedSetupState, MANAGED_RUNNER_COPY, type ManagedRunnerStatus, type DirProbe } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ManagedRunner } from '../lib/managedRunner';
 import { encodeId } from '../lib/idCodec';
 import type { PickedFolder } from '../lib/machineSetup';
 
@@ -80,6 +81,7 @@ function Page({
   ready,
   fleet,
   start,
+  managed,
 }: {
   runner: never;
   engine: string;
@@ -87,16 +89,18 @@ function Page({
   ready: boolean;
   fleet: never[] | null;
   start: PickedFolder | null;
+  managed?: ManagedRunner;
 }) {
   const [folder, setFolder] = useState<PickedFolder | null>(start);
   return (
     <MachineSetupCard
       runner={runner}
+      managed={managed}
       fleet={fleet}
       engine={engine}
       credential={setupCredentialOf(runner, engine, provider)}
       folder={folder}
-      ready={ready}
+      ready={managed ? !!folder : ready}
       onFolder={(next) => {
         picked = next;
         setFolder(next);
@@ -125,6 +129,7 @@ async function open({
   ready = false,
   fleet = null,
   start = null,
+  managed,
 }: {
   runner?: never;
   engine?: string;
@@ -132,6 +137,7 @@ async function open({
   ready?: boolean;
   fleet?: never[] | null;
   start?: PickedFolder | null;
+  managed?: ManagedRunner;
 } = {}): Promise<HTMLDivElement> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
@@ -141,7 +147,7 @@ async function open({
     root!.render(
       <QueryClientProvider client={client!}>
         <MemoryRouter>
-          <Page runner={runner} engine={engine} provider={provider} ready={ready} fleet={fleet} start={start} />
+          <Page runner={runner} engine={engine} provider={provider} ready={ready} fleet={fleet} start={start} managed={managed} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -705,4 +711,45 @@ describe('rule 5: the sign-in', () => {
     expect(page.querySelector('.msc-not-installed')).toBeNull();
     expect(page.querySelector('.rsi')).not.toBeNull();
   });
+});
+
+const managedFixture = JSON.parse(readFileSync(join(process.cwd(), '../shared/src/managed-runner-states.fixture.json'), 'utf8'));
+describe('managed runner setup before it is up', () => {
+  it('matches the shared setup state and copy fixture', () => {
+    for (const sample of managedFixture.states) {
+      expect(managedSetupState(sample.status.runnerId, sample.status)).toBe(sample.setupState);
+    }
+    const { reposRoot, ...copy } = managedFixture.setup;
+    expect(copy).toEqual(MANAGED_RUNNER_COPY.setup);
+    expect(reposRoot).toBe('/var/lib/orbit/home/orbit-repos');
+  });
+  for (const sampleName of ["waiting for capacity before the first start, a first session waits on the owner's key", 'preparing: starting', 'sleeping']) {
+    it(`${sampleName}: picks an unchecked new folder and creates without sign-in`, async () => {
+      const status = { ...managedFixture.states.find((s: { name: string }) => s.name === sampleName).status, runnerId: RUNNER_ID } as ManagedRunnerStatus;
+      const managed = { status, display: managedRunnerDisplay(status)! };
+      const setupState = managedSetupState(RUNNER_ID, status)!;
+      await open({ managed, runner: machine({ online: false, reposRoot: null, capabilities: [], engines: null }), engine: status.firstSessionProvider ?? 'claude', provider: { kind: 'key', label: 'My key' } });
+      expect(nameField().disabled).toBe(false);
+      expect(host!.textContent).toContain(MANAGED_RUNNER_COPY.setup.notice[setupState]);
+      expect(host!.querySelector('.rsi')).toBeNull();
+      const engineLine = said(host!.querySelector('[data-step="engine"]'));
+      if (!status.firstSessionProvider) {
+        expect(engineLine).toContain(MANAGED_RUNNER_COPY.setup.noEngineTitle);
+        expect(host!.querySelector('a[href="/settings/providers"]')?.textContent).toBe(MANAGED_RUNNER_COPY.setup.addKey);
+      } else if (setupState === 'asleep') {
+        expect(engineLine).toContain('Claude Code signed in on orbit@austin');
+      } else {
+        expect(engineLine).toContain(`My key ${MANAGED_RUNNER_COPY.setup.onKey}`);
+      }
+      await checkName('my-project');
+      expect(folderLine()).toBe(MANAGED_RUNNER_COPY.setup.folderUnchecked[setupState]);
+      expect(askDirProbe).not.toHaveBeenCalled();
+      await press(useFolder());
+      expect(picked).toEqual({ kind: 'new', name: 'my-project', path: '/var/lib/orbit/home/orbit-repos/my-project' });
+      expect(folderStep()).toContain(MANAGED_RUNNER_COPY.setup.folderPicked[setupState]);
+      expect(button('Create workspace')!.disabled).toBe(false);
+      await press(button('Create workspace')!);
+      expect(onCreate).toHaveBeenCalledOnce();
+    });
+  }
 });

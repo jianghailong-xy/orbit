@@ -140,8 +140,8 @@ final class MachineSetupWiringTests: XCTestCase {
                           "the composer's send on a machine's page")
         let request = try slice(model, from: "private func draftRequest(", to: "private func draftSessionCreated(")
         for piece in ["agentId: newWorkspace == nil ? agent.id : nil", "assignedRunnerId: newWorkspace == nil ? nil : agent.runnerId",
-                      "engine: newWorkspace == nil ? draftPick?.engine : engine",
-                      "provider: newWorkspace == nil ? draftPick?.provider : provider", "newWorkspace: newWorkspace,"] {
+                      "engine: newWorkspace == nil ? draftPick?.engine : (machineSetup?.managedState != nil ? machineSetup?.managedEngine : engine)",
+                      "provider: newWorkspace == nil ? draftPick?.provider : (machineSetup?.managedState != nil ? machineSetup?.managedProvider : provider)", "newWorkspace: newWorkspace,"] {
             XCTAssertTrue(request.contains(piece), "the create lost \(piece)")
         }
     }
@@ -164,11 +164,11 @@ final class MachineSetupWiringTests: XCTestCase {
     /// The folder step is one name in the machine's home: asked about where it would go, and picked on the answer.
     func testTheFolderStepIsOneNameAskedAboutWhereItWouldGo() throws {
         let page = try app("Views/MachineSetupCard.swift")
-        try assertInOrder(page, ["FolderName(runner: runner, disabled: offline || !probes || !MachineSetup.makesNewFolders(runner))"],
+        try assertInOrder(page, ["FolderName(runner: runner, disabled: setup.managedState == nil && (offline || !probes || !MachineSetup.makesNewFolders(runner)), managedState: setup.managedState)"],
                           "a machine that can't make a folder can't be typed into")
         let step = try slice(page, from: "private struct FolderName: View {", to: "private var checking: some View {")
-        XCTAssertTrue(step.contains("private var root: String { MachineSetup.newFolderRoot(runner) }"))
-        try assertInOrder(step, ["case .answered(let probe)? = answer", "MachineSetup.isValidNewFolder(name), let found",
+        XCTAssertTrue(step.contains("return MachineSetup.newFolderRoot(runner)"))
+        try assertInOrder(step, ["case .answered(let probe)? = answer", "guard let found else { return nil }",
                                  "MachineSetup.newFolderPick(found, name: name, root: root, machine: machine)"],
                           "the folder is picked on the machine's answer")
         XCTAssertTrue(step.contains("return MachineSetup.newFolderPath(root: root, name: name)"))

@@ -138,27 +138,6 @@ final class WelcomeTests: XCTestCase {
         XCTAssertFalse(Welcome.isNewAccount(openRows: nil, completedRows: nil))
     }
 
-    func testTheFootIsTheWebsThreeLines() {
-        XCTAssertEqual(Welcome.foot(startsNow: false, up: false, signedIn: false), .wait)
-        XCTAssertEqual(Welcome.foot(startsNow: false, up: true, signedIn: true), .wait)
-        XCTAssertEqual(Welcome.foot(startsNow: true, up: false, signedIn: true), .sendNow)
-        XCTAssertEqual(Welcome.foot(startsNow: true, up: true, signedIn: false), .sendNow)
-        XCTAssertEqual(Welcome.foot(startsNow: true, up: true, signedIn: true), .ready)
-        XCTAssertEqual(Welcome.Foot.wait.text, WelcomeCopy.WELCOME_FOOT_WAIT)
-        XCTAssertEqual(Welcome.Foot.sendNow.text, WelcomeCopy.WELCOME_FOOT_SEND_NOW)
-        XCTAssertEqual(Welcome.Foot.ready.text, WelcomeCopy.WELCOME_FOOT_READY)
-    }
-
-    /// Up is `available` or `modelUnavailable` (web `UP`), or the runner online.
-    func testTheComputerIsUpByItsKindOrItsHeartbeat() {
-        XCTAssertTrue(Welcome.computerUp(.available, runnerOnline: false))
-        XCTAssertTrue(Welcome.computerUp(.modelUnavailable, runnerOnline: false))
-        XCTAssertTrue(Welcome.computerUp(.preparing, runnerOnline: true))
-        XCTAssertFalse(Welcome.computerUp(.preparing, runnerOnline: false))
-        XCTAssertFalse(Welcome.computerUp(.failed, runnerOnline: false))
-        XCTAssertFalse(Welcome.computerUp(nil, runnerOnline: false))
-    }
-
     func testAnExampleIsPickedWhileTheComposerHoldsItUntouched() {
         let example = WelcomeCopy.WELCOME_EXAMPLES[0]
         XCTAssertTrue(Welcome.picked(example, example))
@@ -167,10 +146,4 @@ final class WelcomeTests: XCTestCase {
         XCTAssertFalse(Welcome.picked("", example))
     }
 
-    /// The draft's engine when a first session can start and it signs in; the runner's first otherwise.
-    func testTheEngineOfferedIsTheDraftsOrTheRunnersFirst() {
-        XCTAssertEqual(Welcome.engine(draftEngine: "codex", startsNow: true, runner: nil), .codex)
-        XCTAssertEqual(Welcome.engine(draftEngine: "codex", startsNow: false, runner: nil), .claude)
-        XCTAssertEqual(Welcome.engine(draftEngine: "opencode", startsNow: true, runner: nil), .claude)
-    }
 }

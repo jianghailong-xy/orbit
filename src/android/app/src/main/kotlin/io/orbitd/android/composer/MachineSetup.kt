@@ -311,8 +311,8 @@ object MachineSetup {
     }
 
     /** Rule 1 and §3: both steps are done and the machine is here, so the next send makes the workspace. */
-    fun isReady(bare: Boolean, folder: PickedFolder?, online: Boolean, credential: SetupCredential): Boolean =
-        bare && folder != null && online && credential.done
+    fun isReady(bare: Boolean, folder: PickedFolder?, online: Boolean, credential: SetupCredential, managedSetup: String? = null): Boolean =
+        bare && folder != null && (managedSetup != null || (online && credential.done))
 
     /**
      * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
@@ -322,11 +322,12 @@ object MachineSetup {
         runners: List<JsonObject>?,
         workspaces: List<JsonObject>,
         nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
         return runners.mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
-            if (RunnerPage.isOffline(runner, nowMs)) return@mapNotNull null
+            if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
@@ -338,8 +339,8 @@ object MachineSetup {
     /**
      * Rule 11: the first online machine in the runner list's order, for landing or New session when the account has no workspaces.
      */
-    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis()): String? =
-        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) }?.text("id")
+    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis(), managedStatus: ManagedRunner.Status? = null): String? =
+        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) || ManagedRunner.managedSetupState(it.text("id"), managedStatus) != null }?.text("id")
 
     /**
      * What a machine's first draft stands on (`Agent.machineDraft` in OrbitKit). The composer's engine, model and account pickers

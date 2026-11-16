@@ -115,6 +115,7 @@ struct MachineDraftPage: View {
             }
         }
         .onChange(of: runner, initial: true) { _, _ in adopt() }
+        .onChange(of: app.managedRunner?.status) { _, _ in adopt() }
         .onChange(of: setup == nil) { _, _ in adopt() }
         .onChange(of: bare) { _, _ in adopt() }
         // The machine got a workspace some other way, or from a first send still being settled: the
@@ -224,7 +225,7 @@ private struct MachineDraftContent: View {
         // whether it is one as the page appears, as the web's query does.
         .task { await app.readNewAccount() }
         // The welcome placeholder, except on a machine that is offline, which keeps its own.
-        .onChange(of: welcome && setup.online, initial: true) { _, now in draft.welcomes = now }
+        .onChange(of: welcome && (setup.online || setup.managedState != nil), initial: true) { _, now in draft.welcomes = now }
         // Both steps done with a message waiting: it goes by itself (rule 6).
         .onChange(of: Send(ready: ready, held: setup.state.held, busy: draft.sending), initial: true) { _, _ in
             setup.sendHeldIfReady()
@@ -256,7 +257,7 @@ private struct MachineSetupCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 11)
             Divider()
-            step(number: 2, done: setup.credential.done) { engineStep }
+            step(number: 2, done: setup.managedState != nil ? setup.managedProvider != nil : setup.credential.done) { engineStep }
             Divider()
             if welcome {
                 WelcomeExamplesStep(step: 3, console: setup.draft)
@@ -288,6 +289,9 @@ private struct MachineSetupCard: View {
     /// Why a step can't be done yet: the machine isn't here (rule 1), or it can't be asked about a path. Never
     /// heard from is a machine still coming up, not one gone away, nor one too old to check folders.
     private var notice: String? {
+        if let state = setup.managedState {
+            return state == .preparing ? ManagedRunnerCopy.Setup.Notice.preparingSend : ManagedRunnerCopy.Setup.Notice.asleep
+        }
         if offline {
             return MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnecting(machine: machine)
                 : MachineSetupCopy.setupOffline(machine: machine)
@@ -304,7 +308,7 @@ private struct MachineSetupCard: View {
                 .font(.orbitLabel)
                 .foregroundStyle(SetupInk.warn)
                 .fixedSize(horizontal: false, vertical: true)
-            if !offline, !(probes && MachineSetup.makesNewFolders(runner)), !MachineSetup.updatesItself(runner) { openMachine }
+            if setup.managedState == nil, !offline, !(probes && MachineSetup.makesNewFolders(runner)), !MachineSetup.updatesItself(runner) { openMachine }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -341,11 +345,14 @@ private struct MachineSetupCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            FolderName(runner: runner, disabled: offline || !probes || !MachineSetup.makesNewFolders(runner)) { setup.pick($0) }
+            FolderName(runner: runner, disabled: setup.managedState == nil && (offline || !probes || !MachineSetup.makesNewFolders(runner)), managedState: setup.managedState) { setup.pick($0) }
         }
     }
 
     private func folderNote(_ folder: PickedFolder) -> String {
+        if let state = setup.managedState {
+            return state == .preparing ? ManagedRunnerCopy.Setup.FolderPicked.preparing : ManagedRunnerCopy.Setup.FolderPicked.asleep
+        }
         switch folder {
         case .existing(_, let note): return note
         case .new: return MachineSetupCopy.SETUP_NEW_FOLDER_DONE
@@ -355,49 +362,75 @@ private struct MachineSetupCard: View {
     private var engineName: String { ProviderEngines.cliName(setup.draft.engine) }
 
     @ViewBuilder private var engineStep: some View {
-        switch setup.credential {
-        case .signedIn:
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(engineName).fontWeight(.semibold)
-                Text(MachineSetupCopy.setupSignedIn(machine: machine))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-            }
-        case .onKey(let label, let pool):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(label).fontWeight(.semibold).lineLimit(1)
-                Text(pool ? MachineSetupCopy.SETUP_ON_A_POOL : MachineSetupCopy.SETUP_ON_A_KEY)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                // Back to a sign-in: this engine's, or for one that has none, the machine's first.
-                change {
-                    setup.useEngine(LoginEngine(rawValue: setup.draft.engine) ?? MachineSetup.firstEngineOn(runner.engines))
+        if setup.managedState != nil {
+            if let provider = setup.managedProvider {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(setup.managedEngineLabel ?? provider).fontWeight(.semibold)
+                    Text(LoginEngine(rawValue: provider) != nil
+                         ? MachineSetupCopy.setupSignedIn(machine: machine) : ManagedRunnerCopy.Setup.onKey)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    change { openModels() }
                 }
+            } else {
+                Text(ManagedRunnerCopy.Setup.noEngineTitle).fontWeight(.semibold)
+                Text(ManagedRunnerCopy.Setup.noEngineHelp).font(.orbitLabel).foregroundStyle(.secondary)
+                Button(ManagedRunnerCopy.Setup.addKey) { openModels(keys: true) }
+                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(Color.accentColor)
             }
-        case .signIn:
-            signInHead
-            // Nothing to drive offline; the notice says so.
-            if !offline, let engine = LoginEngine(rawValue: setup.draft.engine) {
-                RunnerSignInView(runnerID: runner.id, engine: engine,
-                                 onSignedIn: { Task { await app.agents?.refreshRunnerSnapshot() } },
-                                 signInTitle: RunnerPageCopy.RUNNER_SIGN_IN,
-                                 onUseApiKey: setup.keyToUse == nil ? nil : { setup.useKey() })
-                    .id(engine)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
-                    .padding(.top, 7)
+        } else {
+            switch setup.credential {
+            case .signedIn:
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(engineName).fontWeight(.semibold)
+                    Text(MachineSetupCopy.setupSignedIn(machine: machine))
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
+            case .onKey(let label, let pool):
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(label).fontWeight(.semibold).lineLimit(1)
+                    Text(pool ? MachineSetupCopy.SETUP_ON_A_POOL : MachineSetupCopy.SETUP_ON_A_KEY)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 4)
+                    // Back to a sign-in: this engine's, or for one that has none, the machine's first.
+                    change {
+                        setup.useEngine(LoginEngine(rawValue: setup.draft.engine) ?? MachineSetup.firstEngineOn(runner.engines))
+                    }
+                }
+            case .signIn:
+                signInHead
+                // Nothing to drive offline; the notice says so.
+                if !offline, let engine = LoginEngine(rawValue: setup.draft.engine) {
+                    RunnerSignInView(runnerID: runner.id, engine: engine,
+                                     onSignedIn: { Task { await app.agents?.refreshRunnerSnapshot() } },
+                                     signInTitle: RunnerPageCopy.RUNNER_SIGN_IN,
+                                     onUseApiKey: setup.keyToUse == nil ? nil : { setup.useKey() })
+                        .id(engine)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .padding(.top, 7)
+                }
+                alternatives
+            case .notInstalled:
+                signInHead
+                Text(MachineSetupCopy.setupNotInstalled(engine: engineName, machine: machine))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                openMachine
+                alternatives
             }
-            alternatives
-        case .notInstalled:
-            signInHead
-            Text(MachineSetupCopy.setupNotInstalled(engine: engineName, machine: machine))
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-            openMachine
-            alternatives
         }
+    }
+
+    private func openModels(keys: Bool = false) {
+        #if os(iOS)
+        app.push(.settingsPage(keys ? .providers : .machines))
+        #else
+        app.selectedSection = .runners
+        #endif
     }
 
     private var signInHead: some View {
@@ -429,7 +462,7 @@ private struct MachineSetupCard: View {
             .buttonStyle(.plain)
             .font(.orbitLabel)
             .foregroundStyle(Color.accentColor)
-            .disabled(offline)
+            .disabled(offline && setup.managedState == nil)
     }
 
     private var foot: some View {
@@ -454,6 +487,7 @@ private struct FolderName: View {
     @Environment(AppModel.self) private var app
     let runner: Runner
     let disabled: Bool
+    var managedState: ManagedSetupState? = nil
     let onPick: (PickedFolder) -> Void
 
     @State private var typed = ""
@@ -463,7 +497,10 @@ private struct FolderName: View {
     @State private var attempt = 0
 
     private var machine: String { RunnerPageFormat.displayName(runner) }
-    private var root: String { MachineSetup.newFolderRoot(runner) }
+    private var root: String {
+        if managedState != nil, (runner.reposRoot ?? "").isEmpty { return ManagedRunnerCopy.Setup.reposRoot }
+        return MachineSetup.newFolderRoot(runner)
+    }
     private var name: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var found: DirProbe? {
@@ -472,7 +509,9 @@ private struct FolderName: View {
     }
 
     private var candidate: PickedFolder? {
-        guard MachineSetup.isValidNewFolder(name), let found else { return nil }
+        guard MachineSetup.isValidNewFolder(name) else { return nil }
+        if managedState != nil { return .new(name: name, path: MachineSetup.newFolderPath(root: root, name: name)) }
+        guard let found else { return nil }
         return MachineSetup.newFolderPick(found, name: name, root: root, machine: machine)
     }
 
@@ -483,7 +522,7 @@ private struct FolderName: View {
 
     /// The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
     private var question: String? {
-        guard !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
+        guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
         return MachineSetup.newFolderPath(root: root, name: name)
     }
 
@@ -533,6 +572,8 @@ private struct FolderName: View {
             meta(MachineSetupCopy.SETUP_FOLDER_HINT)
         } else if !MachineSetup.isValidNewFolder(name) {
             verdictLine(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, tone: .bad)
+        } else if let state = managedState {
+            meta(state == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep)
         } else if let found {
             let verdict = MachineSetup.newFolderVerdict(found, machine: machine)
             // Nothing there yet reads as a note; anything there says what it is.

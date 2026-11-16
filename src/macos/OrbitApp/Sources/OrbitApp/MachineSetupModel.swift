@@ -31,6 +31,27 @@ final class MachineSetupModel {
         self.bare = bare
         self.fleet = fleet
         draft.adoptMachine(runner)
+        if managedState != nil, let provider = managedProvider, let engine = managedEngine,
+           draft.engine != engine || draft.provider != provider {
+            draft.pickDraft(engine: engine, provider: provider)
+        }
+    }
+
+    var managedState: ManagedSetupState? {
+        ManagedRunnerLogic.managedSetupState(runnerID: runnerID, status: draft.managedRunner?.status)
+    }
+
+    var managedProvider: String? {
+        draft.managedRunner?.status.flatMap(ManagedRunnerLogic.firstSessionProvider)
+    }
+
+    var managedEngine: String? {
+        ProviderEngines.defaultEngine(ofProvider: managedProvider, configured: draft.configuredProviders)
+    }
+
+    var managedEngineLabel: String? {
+        guard let provider = managedProvider else { return nil }
+        return draft.configuredProviders.first { $0.slug == provider }?.label ?? (LoginEngine(rawValue: provider) != nil ? ProviderEngines.cliName(provider) : provider)
     }
 
     var online: Bool { AgentListLogic.isOnline(runner) }
@@ -57,7 +78,7 @@ final class MachineSetupModel {
 
     /// Both steps are done and the machine is here: the next send makes the workspace.
     var ready: Bool {
-        MachineSetup.isReady(bare: bare, folder: state.folder, online: online, credential: credential)
+        MachineSetup.isReady(bare: bare, folder: state.folder, online: online, credential: credential, managedState: managedState)
     }
 
     /// Rule 5's Use X instead.

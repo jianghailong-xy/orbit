@@ -799,7 +799,7 @@ export class ManagedRunnerManager {
     if (!report) return this.waitWithin(mapping);
     // READY needs model supply as well as a live instance: a runtime signed in on the runner, or else
     // one of the owner's own model keys a runtime it has installed runs. What it is found ready with —
-    // the runtime's name, or the key's slug — is what a default workspace with no history starts on,
+    // the runtime's name, or the key's slug — is what a first session on this runner starts on,
     // recorded, never guessed later.
     const [runtime] = managedRuntimeSupply(report);
     const initialProvider = runtime ?? (await managedKeySupply(this.prisma, mapping.ownerId, report));
@@ -1172,7 +1172,7 @@ export class ManagedRunnerManager {
    *   - Asleep, it stays asleep: a wake desired before the account was disabled is dropped.
    *   - FENCING still waits for its proof; once it is proven, the next step puts the mapping to sleep.
    *
-   * The data volume with its storage share, the runner row and the default workspace stay. Enabled
+   * The data volume with its storage share, the runner row and its workspaces stay. Enabled
    * again, it is an ordinary sleeping mapping: demand wakes it on the same volume and runner.
    */
   private async whileDisabled(mapping: ManagedRunner): Promise<Step> {

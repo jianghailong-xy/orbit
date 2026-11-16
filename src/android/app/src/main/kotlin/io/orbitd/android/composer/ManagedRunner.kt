@@ -76,7 +76,6 @@ object ManagedRunner {
         val managementState: String,
         val desiredState: String?,
         val runnerId: String?,
-        val workspaceId: String?,
         val usable: Boolean,
         val reasonCode: String?,
         val reasonMessage: String?,
@@ -124,7 +123,6 @@ object ManagedRunner {
             managementState = o.str("managementState") ?: return null,
             desiredState = o.str("desiredState"),
             runnerId = o.str("runnerId"),
-            workspaceId = o.str("workspaceId"),
             usable = o.bool("usable"),
             reasonCode = reason?.str("code"),
             reasonMessage = reason?.str("message"),
@@ -175,7 +173,7 @@ object ManagedRunner {
         )
     }
 
-    /** What a first session in the managed default workspace starts on, as the server says. */
+    /** What a first session on the managed runner starts on, as the server says. */
     fun firstSessionProvider(status: Status): String? = status.firstSessionProvider ?: status.initialProvider
 
     // The managed runner as one machine in the machine list (docs/managed-runner-existing-account-entry-design.md), MANAGED_RUNNER_COPY's
@@ -217,7 +215,7 @@ object ManagedRunner {
     /** Asked before Set up on an account that already has a machine or a workspace. */
     object Confirm {
         const val TITLE = "Set up a managed runner?"
-        const val BODY = "Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are."
+        const val BODY = "Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are."
         const val CANCEL = "Cancel"
         const val CONFIRM = "Set up"
     }
@@ -226,6 +224,33 @@ object ManagedRunner {
     object Asleep {
         const val ROW = "Wakes automatically when you start a session"
         const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
+    }
+
+    const val REPOS_ROOT = "/var/lib/orbit/home/orbit-repos"
+    object Setup {
+        val NOTICE = mapOf(
+            "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",
+            "preparingSend" to "Orbit is setting up your managed runner. You can send your first message now; it starts when it’s ready.",
+            "asleep" to "Your managed runner is asleep. Your first message wakes it (about 10 s)."
+        )
+        val FOLDER_UNCHECKED = mapOf(
+            "preparing" to "Not checked until your managed runner is up: used if it’s there, created if not.",
+            "asleep" to "Not checked while it’s asleep: used if it’s there, created if not."
+        )
+        val FOLDER_PICKED = mapOf(
+            "preparing" to "checked when it’s up · created if not there",
+            "asleep" to "checked when it wakes · created if not there"
+        )
+        const val ON_KEY = "API key · the first session starts on it"
+        const val NO_ENGINE_TITLE = "Coding CLI"
+        const val NO_ENGINE_HELP = "Your managed runner says which one is ready once it’s up."
+        const val ADD_KEY = "Add a model key to start on it now."
+    }
+
+    fun managedSetupState(runnerId: String?, status: Status?): String? {
+        val row = row(runnerId, status) ?: return null
+        if (!row.acceptsWork || row.kind == "available" || row.kind == "unresponsive") return null
+        return if (!status?.initialProvider.isNullOrEmpty()) "asleep" else "preparing"
     }
 
     /** A machine row's (or a workspace's runner's) reading of the account's managed runner (`managedRunnerRow`). */

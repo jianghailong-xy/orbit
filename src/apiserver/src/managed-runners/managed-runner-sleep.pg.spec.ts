@@ -71,9 +71,10 @@ test('managed runner idle sleep and wake against a fake cluster', {
 
   /** A session of the runner, in `status`, as a turn queued or run there leaves one. */
   async function session(m: ManagedRunner, status: string, extra: Record<string, unknown> = {}): Promise<string> {
+    const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const id = randomUUID();
     const columns: Record<string, unknown> = {
-      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: m.defaultWorkspaceId, assigned_runner_id: m.runnerId,
+      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'managed work', prompt: 'work', provider: 'claude', status, num_turns: 1,
       runtime_session_id: randomUUID(), ...extra,
     };
@@ -162,6 +163,7 @@ test('managed runner idle sleep and wake against a fake cluster', {
   await t.test('(2) idle: it drains, the instance accepts and exits, and only the kubelet\'s report of that stop puts it to sleep', async () => {
     const w = managedRunnerWorld(db);
     const { ownerId, mapping } = await w.readyRunner('sleeper');
+    const workspace = await db.workspace.create({ data: { ownerId, runnerId: mapping.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const credentialBefore = bootstrapCredentialOf(w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!)!;
     const before = await w.ledger();
 
@@ -215,7 +217,7 @@ test('managed runner idle sleep and wake against a fake cluster', {
     assert.equal(w.cluster.all('persistentvolumeclaims').length, 1, 'the PVC stays');
     assert.equal(w.cluster.object<PersistentVolumeClaim>('persistentvolumeclaims', asleep.pvcName)!.metadata.uid, mapping.pvcUid);
     assert.ok(await db.runner.findUnique({ where: { id: mapping.runnerId } }), 'the runner row stays');
-    assert.ok(await db.workspace.findFirst({ where: { id: mapping.defaultWorkspaceId, deletedAt: null } }), 'its workspace stays');
+    assert.ok(await db.workspace.findFirst({ where: { id: workspace.id, deletedAt: null } }), 'its workspace stays');
     assert.notEqual((await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } })).tokenHash, sha256(credentialBefore), 'the old credential is dead');
     const reservation = asleep.reservation as { storage: unknown; compute: unknown };
     assert.ok(reservation.storage);

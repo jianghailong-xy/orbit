@@ -200,7 +200,7 @@ test('firstSessionProvider: READY names what it was found ready with; before tha
   const status = (change: Partial<ManagedRunner>, runner: Parameters<typeof managedRunnerStatus>[0]['runner'], firstSessionKey?: typeof deepseek | null) =>
     managedRunnerStatus({ enabled: true, available: true, mapping: mapping(change), runner, firstSessionKey, now: NOW, heartbeatFreshMs: FRESH });
   const unreported = { status: 'OFFLINE' as const, lastHeartbeatAt: null, engines: null };
-  // No mapping, no default workspace: nothing to start a session in.
+  // Without a mapping there is no managed runner to offer a first-session provider.
   assert.equal(managedRunnerStatus({ enabled: true, available: true, mapping: null, runner: null, firstSessionKey: deepseek, now: NOW, heartbeatFreshMs: FRESH }).firstSessionProvider, null);
   // Found ready on a runtime or a key: that, as `initialProvider` says, asleep or awake.
   assert.equal(status({ initialProvider: 'codex' }, beat(1000)).firstSessionProvider, 'codex');
@@ -223,4 +223,13 @@ test('firstSessionProvider: READY names what it was found ready with; before tha
   assert.equal(missing.firstSessionProvider, null);
   assert.equal(status({ managementState: 'PROVISIONING' }, unreported, null).firstSessionProvider, null);
   assert.equal(status({ managementState: 'PROVISIONING' }, unreported).firstSessionProvider, null);
+});
+
+
+test('status never exposes a workspace, even for a legacy mapping that still names one', () => {
+  for (const defaultWorkspaceId of [null, 'legacy-workspace']) {
+    const status = managedRunnerStatus({ enabled: true, available: true, mapping: mapping({ defaultWorkspaceId }), runner: beat(1000), now: NOW, heartbeatFreshMs: FRESH });
+    assert.equal(status.workspaceId, null);
+    assert.equal(status.runnerId, 'r');
+  }
 });

@@ -65,14 +65,19 @@ internal fun MachineSetupCard(
     /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers first messages to try, which fill
      *  the page's composer. */
     welcome: MachineWelcome? = null,
+    managedSetup: String? = null,
+    managedProvider: String? = null,
+    managedProviderLabel: String? = null,
+    onOpenModels: () -> Unit = onOpenMachine,
 ) {
     val machine = RunnerPage.displayName(runner)
-    val offline = !online
+    val offline = !online && managedSetup == null
     val probes = MachineSetup.answersDirProbe(runner)
     val makesNewFolders = MachineSetup.makesNewFolders(runner)
     val engineName = ProviderEngines.cliName(engine)
 
     val notice = when {
+        managedSetup != null -> if (managedSetup == "asleep") ManagedRunner.Setup.NOTICE.getValue("asleep") else ManagedRunner.Setup.NOTICE.getValue("preparingSend")
         // Never heard from is a machine still coming up, not one gone away, nor one too old to check folders.
         offline -> if (MachineSetup.isConnecting(runner)) MachineSetupCopy.setupConnecting(machine) else MachineSetupCopy.setupOffline(machine)
         !(probes && makesNewFolders) -> if (MachineSetup.updatesItself(runner)) MachineSetupCopy.setupUpdating(machine)
@@ -130,7 +135,7 @@ internal fun MachineSetupCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(notice, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
-                    if (!offline && !(probes && makesNewFolders) && !MachineSetup.updatesItself(runner)) {
+                    if (managedSetup == null && !offline && !(probes && makesNewFolders) && !MachineSetup.updatesItself(runner)) {
                         Text(
                             MachineSetupCopy.SETUP_OPEN_MACHINE,
                             style = MaterialTheme.typography.labelMedium,
@@ -172,7 +177,7 @@ internal fun MachineSetupCard(
                             )
                         }
                         Text(
-                            when (folder) {
+                            managedSetup?.let { ManagedRunner.Setup.FOLDER_PICKED.getValue(it) } ?: when (folder) {
                                 is PickedFolder.Existing -> folder.note
                                 is PickedFolder.New -> MachineSetupCopy.SETUP_NEW_FOLDER_DONE
                             },
@@ -183,7 +188,8 @@ internal fun MachineSetupCard(
                 } else {
                     FolderNameSection(
                         runner = runner,
-                        disabled = offline || !probes || !makesNewFolders,
+                        disabled = managedSetup == null && (offline || !probes || !makesNewFolders),
+                        managedSetup = managedSetup,
                         probeDir = probeDir,
                         onPick = onPickFolder,
                     )
@@ -192,7 +198,20 @@ internal fun MachineSetupCard(
 
             HorizontalDivider()
 
-            SetupStepRow(number = 2, done = credential.done) {
+            if (managedSetup != null) {
+                SetupStepRow(number = 2, done = managedProvider != null) {
+                    if (managedProvider == null) {
+                        Text(ManagedRunner.Setup.NO_ENGINE_TITLE, fontWeight = FontWeight.SemiBold)
+                        MetaText(ManagedRunner.Setup.NO_ENGINE_HELP)
+                        TextButton(onClick = onOpenModels) { Text(ManagedRunner.Setup.ADD_KEY) }
+                    } else {
+                        Text(if (managedProvider in ProviderEngines.LOGIN_ENGINES) ProviderEngines.cliName(managedProvider) else managedProviderLabel ?: managedProvider,
+                            fontWeight = FontWeight.SemiBold)
+                        MetaText(if (managedProvider in ProviderEngines.LOGIN_ENGINES) MachineSetupCopy.setupSignedIn(machine) else ManagedRunner.Setup.ON_KEY)
+                        TextButton(onClick = onOpenModels) { Text(MachineSetupCopy.SETUP_CHANGE) }
+                    }
+                }
+            } else SetupStepRow(number = 2, done = credential.done) {
                 when (credential) {
                     SetupCredential.SignedIn -> {
                         Row(
@@ -383,12 +402,13 @@ private fun OtherEngineButtons(otherEngines: List<String>, offline: Boolean, onU
 private fun FolderNameSection(
     runner: JsonObject,
     disabled: Boolean,
+    managedSetup: String?,
     probeDir: suspend (path: String, ask: Boolean) -> DirProbeRelay.Outcome,
     onPick: (PickedFolder) -> Unit,
 ) {
     val runnerId = runner.text("id").orEmpty()
     val machine = RunnerPage.displayName(runner)
-    val root = MachineSetup.newFolderRootOf(runner)
+    val root = if (managedSetup != null && runner.text("reposRoot").isNullOrBlank()) ManagedRunner.REPOS_ROOT else MachineSetup.newFolderRootOf(runner)
     var typed by remember(runnerId) { mutableStateOf("") }
     var answer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
     // Check again.
@@ -396,10 +416,11 @@ private fun FolderNameSection(
 
     val name = typed.trim()
     val found = (answer as? DirProbeRelay.Outcome.Answered)?.probe
-    val candidate = if (found != null && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPick(found, name, root, machine) else null
+    val candidate = if (managedSetup != null && MachineSetup.isValidNewFolder(name)) PickedFolder.New(name, MachineSetup.newFolderPath(root, name))
+        else if (found != null && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPick(found, name, root, machine) else null
 
     // The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
-    val query = if (!disabled && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPath(root, name) else null
+    val query = if (managedSetup == null && !disabled && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPath(root, name) else null
     LaunchedEffect(runnerId, query, attempt) {
         answer = null
         if (query == null) return@LaunchedEffect
@@ -457,6 +478,7 @@ private fun FolderNameSection(
         when {
             name.isEmpty() -> MetaText(MachineSetupCopy.SETUP_FOLDER_HINT)
             !MachineSetup.isValidNewFolder(name) -> VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+            managedSetup != null -> MetaText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(managedSetup))
             found != null -> {
                 val verdict = MachineSetup.newFolderVerdict(found, machine)
                 // Nothing there yet reads as a note; anything there says what it is.

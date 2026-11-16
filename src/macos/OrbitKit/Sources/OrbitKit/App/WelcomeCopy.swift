@@ -37,39 +37,6 @@ public enum WelcomeCopy {
         "Write a script that renames my photos by the date they were taken",
     ]
 
-    /// The managed draft's foot: a first session can't start yet, can start and wait, or starts now.
-    public static let WELCOME_FOOT_WAIT = "Your first message can go once steps 1 and 2 are done."
-    public static let WELCOME_FOOT_SEND_NOW = "You can send now — it starts as soon as steps 1 and 2 are done."
-    public static let WELCOME_FOOT_READY = "All set. Send it and the agent starts right away."
-
-    public static let WELCOME_PLACEHOLDER = "Describe a task for the agent…"
-
-    // MARK: the web's words for the model step's done line, which it writes inline
-
-    /// `${engineName} signed in on ${machine}` (web `ManagedWelcomeCard`).
-    public static func welcomeSignedIn(engine: String, machine: String) -> String { "\(engine) signed in on \(machine)" }
-}
-
-/// The welcome card's rules (docs/mocks/new-user-onboarding, board 03), the web's `WelcomeCard.tsx`'s.
-public enum Welcome {
-    /// The managed draft's foot (board 02, P1/P2).
-    public enum Foot: Equatable, Sendable {
-        /// A first session can't start yet.
-        case wait
-        /// It can be sent now, and starts as soon as steps 1 and 2 are done.
-        case sendNow
-        /// Both steps are done: it starts right away.
-        case ready
-
-        public var text: String {
-            switch self {
-            case .wait: return WelcomeCopy.WELCOME_FOOT_WAIT
-            case .sendNow: return WelcomeCopy.WELCOME_FOOT_SEND_NOW
-            case .ready: return WelcomeCopy.WELCOME_FOOT_READY
-            }
-        }
-    }
-
     /// Whether this account has never had a session: the Open list and the Completed list, each read
     /// with `limit=1`, both answered empty. A read that failed (nil) is an account that is not new.
     /// Nothing is stored to remember it (board 03, rule 1).
@@ -77,34 +44,9 @@ public enum Welcome {
         openRows == 0 && completedRows == 0
     }
 
-    /// A New Session draft in the managed runner's default workspace — the one page the managed welcome
-    /// card stands on. Compared through `PublicID.storageKey`, as the managed console compares.
-    public static func isManagedDefaultDraft(status: ManagedRunnerStatus?, workspaceID: String?) -> Bool {
-        guard let managed = status?.workspaceId, let workspaceID else { return false }
-        return PublicID.storageKey(managed) == PublicID.storageKey(workspaceID)
-    }
-
-    /// The managed runner is up, whatever it still lacks: its kind says so, or the runner is online.
-    public static func computerUp(_ kind: ManagedRunnerDisplayKind?, runnerOnline: Bool) -> Bool {
-        kind == .available || kind == .modelUnavailable || runnerOnline
-    }
-
-    /// WAIT / SEND_NOW / READY, exactly as the web's foot: ready only when a first session can start,
-    /// the computer is up and the model step is done.
-    public static func foot(startsNow: Bool, up: Bool, signedIn: Bool) -> Foot {
-        if startsNow && up && signedIn { return .ready }
-        return startsNow ? .sendNow : .wait
-    }
-
     /// The example the composer holds, if it holds one untouched (the web marks it pressed).
     public static func picked(_ composerText: String, _ example: String) -> Bool {
         composerText.trimmingCharacters(in: .whitespacesAndNewlines) == example
     }
 
-    /// The engine the managed card offers a sign-in for: the draft's own when a first session can start
-    /// and it is one that signs in, else the runner's first installed one (web `welcomeEngine`).
-    public static func engine(draftEngine: String, startsNow: Bool, runner: Runner?) -> LoginEngine {
-        if startsNow, let own = LoginEngine(rawValue: draftEngine) { return own }
-        return MachineSetup.firstEngineOn(runner?.engines)
-    }
 }

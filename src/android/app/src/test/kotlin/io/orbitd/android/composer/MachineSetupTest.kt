@@ -14,6 +14,22 @@ import org.junit.Test
  * lifecycle (`MachineSetupState`), the directory probe relay (`DirProbeRelay`), and the `Created workspace` line.
  */
 class MachineSetupTest {
+    @Test fun preparingAndAsleepManagedMachinesOfferSetupAndAcceptTheFirstMessage() {
+        val runnerId = "0198f3a2-2222-7000-8000-000000000002"
+        val runner = json("""{"id":"$runnerId","name":"Managed runner","status":"OFFLINE","lastHeartbeatAt":null}""")
+        for (initial in listOf("null", "\"claude\"")) {
+            val status = ManagedRunner.status(json("""{"contractVersion":1,"enabled":true,"managementState":"STARTING",
+                "runnerId":"$runnerId","initialProvider":$initial,"actions":{"canWake":true}}"""))!!
+            val setup = ManagedRunner.managedSetupState(runnerId, status)
+            assertEquals(if (initial == "null") "preparing" else "asleep", setup)
+            assertEquals(runnerId, MachineSetup.firstOnlineRunnerId(listOf(runner), managedStatus = status))
+            assertEquals(listOf(runnerId), MachineSetup.machinesToSetUp(listOf(runner), emptyList(), managedStatus = status).map { it.id })
+            assertTrue(MachineSetup.isReady(true, PickedFolder.New("app", ManagedRunner.REPOS_ROOT + "/app"), false, SetupCredential.SignIn, setup))
+            assertFalse(MachineSetup.isReady(true, null, false, SetupCredential.SignIn, setup))
+            assertNull(MachineSetup.firstOnlineRunnerId(listOf(runner)))
+        }
+    }
+
     private val nowMs = 1_760_000_000_000L
     private val machine = "orbit@austin"
 

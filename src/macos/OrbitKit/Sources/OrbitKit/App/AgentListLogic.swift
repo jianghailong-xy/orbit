@@ -161,12 +161,11 @@ public enum AgentListLogic {
         }.filter { seen.insert($0.id).inserted }
     }
 
-    /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
-    /// workspace of this account on them: an offline one is already what Machines & models says needs
-    /// you. A runner the server hasn't said is online is not one.
-    public static func machinesToSetUp(runners: [Runner], agents: [Agent]) -> [MachineToSetUp] {
+    /// Machines with no workspace, in the runner list's order: online machines and managed runners
+    /// whose setup card accepts a folder while preparing or asleep.
+    public static func machinesToSetUp(runners: [Runner], agents: [Agent], managedStatus: ManagedRunnerStatus? = nil) -> [MachineToSetUp] {
         let taken = Set(agents.compactMap(\.runnerId))
-        return runners.filter { !taken.contains($0.id) && isOnline($0) }
+        return runners.filter { !taken.contains($0.id) && (isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil) }
             .map { MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0)) }
     }
 

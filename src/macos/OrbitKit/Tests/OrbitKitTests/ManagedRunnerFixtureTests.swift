@@ -85,6 +85,46 @@ final class ManagedRunnerFixtureTests: XCTestCase {
         }
     }
 
+    func testSetupStatesAndEligibilityMatchTheSharedFixture() throws {
+        for entry in try Self.cases("states") {
+            let status = try Self.status(entry["status"])
+            let setup = ManagedRunnerLogic.managedSetupState(runnerID: status.runnerId, status: status)
+            XCTAssertEqual(setup?.rawValue, entry["setupState"] as? String, entry["name"] as? String ?? "?")
+            XCTAssertNil(ManagedRunnerLogic.managedSetupState(runnerID: "another", status: status))
+            if let setup, let runnerID = status.runnerId {
+                let runner = try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject:
+                    ["id": runnerID, "name": "Managed runner", "status": "OFFLINE", "online": false]))
+                XCTAssertEqual(AgentListLogic.machinesToSetUp(runners: [runner], agents: [], managedStatus: status).map(\.id), [runnerID])
+                XCTAssertEqual(LoadFailureLogic.defaultLanding(agents: ListLoadState().afterSuccess(), orderedAgentIDs: [],
+                    lastAgentID: nil, section: .agents, selectedAgentID: nil, selectedSessionID: nil,
+                    firstOnlineMachine: runnerID), .machine(runnerID))
+                let folder = PickedFolder.new(name: "app", path: ManagedRunnerCopy.Setup.reposRoot + "/app")
+                XCTAssertTrue(MachineSetup.isReady(bare: true, folder: folder, online: false, credential: .signIn, managedState: setup))
+                XCTAssertFalse(MachineSetup.isReady(bare: true, folder: nil, online: false, credential: .signIn, managedState: setup))
+                XCTAssertEqual(folder.newWorkspace, NewWorkspaceRequest(newFolder: "app"))
+            }
+        }
+    }
+
+    func testSetupCopyMatchesTheSharedFixture() throws {
+        let setup = try XCTUnwrap(Self.fixture()["setup"] as? [String: Any])
+        let expected: [String: Any] = [
+            "reposRoot": ManagedRunnerCopy.Setup.reposRoot,
+            "notice": ["preparing": ManagedRunnerCopy.Setup.Notice.preparing,
+                       "preparingSend": ManagedRunnerCopy.Setup.Notice.preparingSend,
+                       "asleep": ManagedRunnerCopy.Setup.Notice.asleep],
+            "folderUnchecked": ["preparing": ManagedRunnerCopy.Setup.FolderUnchecked.preparing,
+                                "asleep": ManagedRunnerCopy.Setup.FolderUnchecked.asleep],
+            "folderPicked": ["preparing": ManagedRunnerCopy.Setup.FolderPicked.preparing,
+                             "asleep": ManagedRunnerCopy.Setup.FolderPicked.asleep],
+            "onKey": ManagedRunnerCopy.Setup.onKey,
+            "noEngineTitle": ManagedRunnerCopy.Setup.noEngineTitle,
+            "noEngineHelp": ManagedRunnerCopy.Setup.noEngineHelp,
+            "addKey": ManagedRunnerCopy.Setup.addKey,
+        ]
+        XCTAssertEqual(NSDictionary(dictionary: setup), NSDictionary(dictionary: expected))
+    }
+
     func testTheStatesTheClientsWereAskedForAreAllThere() throws {
         let kinds = Set(try Self.cases("states").compactMap { ($0["display"] as? [String: Any])?["kind"] as? String })
         for kind in ["preparing", "waitingCapacity", "available", "sleeping", "waking", "failed", "removed"] {
