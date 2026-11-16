@@ -119,6 +119,7 @@ class EntrypointFixture(unittest.TestCase):
         self.assertEqual(env["CODEX_HOME"], str(self.runner.paths()[0] / ".codex"))
         self.assertEqual(env["ORBIT_NO_SELFUPDATE"], "1")
         self.assertEqual(env["ORBIT_NO_ENGINE_UPDATE"], "1")
+        self.assertEqual(env["ORBIT_ENGINE_STORE"], "/opt/orbit-engines")
         self.assertFalse(any(key.startswith("ORBIT_RUNNER_") for key in env))
         for key in ("ORBIT_SESSION_ID", "ORBIT_SERVICE_TOKEN", "KUBECONFIG", "DOCKER_HOST"):
             self.assertNotIn(key, env)

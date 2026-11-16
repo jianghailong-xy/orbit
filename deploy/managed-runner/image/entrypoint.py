@@ -84,7 +84,8 @@ def clean_env():
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("ORBIT_") and key not in ("KUBECONFIG", "DOCKER_HOST")}
     env.update(HOME=str(home), ORBIT_HOME=str(orbit), CODEX_HOME=str(home / ".codex"),
-               CLAUDE_CONFIG_DIR=str(home / ".claude"), ORBIT_NO_SELFUPDATE="1",
+               CLAUDE_CONFIG_DIR=str(home / ".claude"), ORBIT_ENGINE_STORE="/opt/orbit-engines",
+               ORBIT_NO_SELFUPDATE="1",
                ORBIT_NO_ENGINE_UPDATE="1",
                PATH=":".join(["/usr/local/go/bin", "/usr/local/bin", "/usr/bin", "/bin",
                               str(home / ".local/bin"), str(home / ".opencode/bin"),
