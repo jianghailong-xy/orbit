@@ -21,6 +21,61 @@ public enum MachineSetupCopy {
     public static func setupNewFolderIsFile(machine: String) -> String {
         "There’s already a file with this name on \(machine). Pick another name."
     }
+    // From GitHub (docs/mocks/github-workspace, board 01 P1–P4; board 04 A): a row under the folder's name field, behind an
+    // "or" rule, that swaps the step to the repository picker; the link under the picker swaps it back.
+    public static let SETUP_OR = "or"
+    public static let SETUP_FOLDER_NAME_INSTEAD = "Type a folder name instead"
+    public static let SETUP_FROM_GITHUB = "From GitHub"
+    public static let SETUP_NEW_TAG = "NEW"
+    public static let SETUP_GITHUB_META =
+        "Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine."
+    public static let SETUP_CONNECT_GITHUB = "Connect GitHub"
+    public static let SETUP_CONNECT_GITHUB_META = "Opens GitHub, then comes back here."
+    public static func setupGithubSignInAgain(login: String) -> String { "@\(login) needs to sign in again." }
+    public static let SETUP_RECONNECT_GITHUB = "Reconnect GitHub"
+    public static func setupGithubConnectFailed(why: String) -> String { "Couldn’t start connecting GitHub: \(why)" }
+    /// The web's one GitHub template with a condition in it: the count is left out when GitHub wasn't asked.
+    public static func setupGithubAccount(login: String, repositories: Int?) -> String {
+        guard let repositories else { return "Signed in to GitHub as @\(login)" }
+        return "Signed in to GitHub as @\(login) · \(repositories) \(repositories == 1 ? "repository" : "repositories")"
+    }
+    public static let SETUP_GITHUB_SEARCH = "Search your repositories"
+    public static let SETUP_GITHUB_NOT_LISTED = "Not listed?"
+    public static let SETUP_GITHUB_ADD_REPOSITORIES = "Add repositories on GitHub"
+    public static let SETUP_GITHUB_LOADING = "Loading your repositories…"
+    public static let SETUP_GITHUB_NONE = "No repository matches."
+    public static func setupGithubListFailed(why: String) -> String { "Couldn’t list your repositories: \(why)" }
+    public static let SETUP_GITHUB_PRIVATE = "Private"
+    public static let SETUP_GITHUB_CLONED_META = "Cloned before the session starts. Work lands back on GitHub."
+    public static let SETUP_OTHER_BRANCH = "Other branch"
+    public static let SETUP_DEFAULT_BRANCH = "Default branch"
+    public static let SETUP_BRANCH = "Branch"
+    public static func setupGithubFolderExists(machine: String) -> String {
+        "This folder already exists on \(machine). Pick another name."
+    }
+    public static let SETUP_GITHUB_DONE = "cloned before the session starts"
+    public static func setupGithubDonePath(repository: String, path: String) -> String { "\(repository) → \(path)" }
+    public static func setupCloneUpdating(machine: String) -> String {
+        "\(machine) updates itself first: this version can’t clone yet."
+    }
+    public static func setupCloneNeedsUpdate(machine: String) -> String {
+        "\(machine) can’t clone on this version, and it can’t update itself."
+    }
+    /// When a repository was last pushed, as the picker's row says it: minutes, hours, yesterday, then the date.
+    public static func pushedAgo(_ pushedAt: String?, now: Date = Date()) -> String {
+        guard let pushedAt, let at = RelativeTime.parse(pushedAt) else { return "" }
+        let minutes = max(0, Int((now.timeIntervalSince(at) / 60).rounded(.down)))
+        if minutes < 1 { return "pushed just now" }
+        if minutes < 60 { return "pushed \(minutes) \(minutes == 1 ? "minute" : "minutes") ago" }
+        let hours = minutes / 60
+        if hours < 24 { return "pushed \(hours) \(hours == 1 ? "hour" : "hours") ago" }
+        if hours < 48 { return "pushed yesterday" }
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US")
+        let calendar = Calendar.current
+        format.dateFormat = calendar.component(.year, from: at) == calendar.component(.year, from: now) ? "MMM d" : "MMM d, yyyy"
+        return "pushed \(format.string(from: at))"
+    }
     /// Board 03 draws it in the platform's title case; the words are the web's.
     public static let SETUP_CHANGE = "Change"
 
@@ -77,6 +132,24 @@ public enum MachineSetupCopy {
     public static let CREATED_SETTINGS = "Settings"
     public static let CREATED_RENAME_LABEL = "Workspace name"
     public static let CREATED_RENAME_FAILED = "Couldn’t rename the workspace"
+
+    // A workspace cloned from GitHub: the same first line while its clone runs, once it is done, and when it failed (board 01, P5).
+    public static let CLONE_CLONING = "Cloning"
+    public static let CLONE_WAITING = "Waiting to clone"
+    /// The reason arrives with the session's next read, a moment after the frame that says the clone failed: until
+    /// then the sentence ends at the repository, with no colon left hanging.
+    public static func cloneCouldNot(repository: String, why: String) -> String {
+        why.isEmpty ? "Couldn’t clone \(repository)." : "Couldn’t clone \(repository): \(why)"
+    }
+    public static func cloneAppRemoved(repository: String) -> String {
+        "Orbit’s GitHub App is no longer installed on \(repository)."
+    }
+    public static let CLONE_INSTALL_ON_GITHUB = "Install on GitHub"
+    public static let CLONE_SIGN_IN_EXPIRED = "Your GitHub sign-in expired."
+    public static let CLONE_RECONNECT = "Reconnect GitHub"
+    public static let CLONE_RETRY = "Retry"
+    public static let CLONE_RETRY_FAILED = "Couldn’t retry the clone"
+    public static let CLONE_STARTS_WHEN_DONE = "Starts when the clone is done"
 
     public static let START_A_SESSION = "Start a session"
     public static let REGISTER_NEXT =

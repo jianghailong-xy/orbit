@@ -847,6 +847,9 @@ export interface RunnerHeartbeatRequest {
    *  AWAITING_INPUT session whose runtime is warm or has gone cold. Absent from older
    *  runners (the bar then waits for the first turn-complete as before). */
   sessions?: SessionLiveState[];
+  /** Where each clone the runner was asked for stands (RunnerHeartbeatResponse.cloneRequests,
+   *  docs/github-workspace-design.md §5.4). Absent on runners without clone-workdir/v1. */
+  cloneReports?: CloneReport[];
   /** What the runner found at each agent working directory it was asked about last heartbeat
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
@@ -1247,13 +1250,86 @@ export interface DirProbeAnswer {
 
 /** POST /sessions `newWorkspace`: the workspace a session makes in its own transaction, on its
  *  `assignedRunnerId`, when the request names no workspace (docs/first-workspace-contract.md §3).
- *  Exactly one of the two. */
+ *  Exactly one of the three. */
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
   /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
+  /** A clone of one of the caller's GitHub repositories into `<reposRoot>/<folder>`
+   *  (docs/github-workspace-design.md §5.3). The session is not dispatched until the clone is READY. */
+  github?: NewWorkspaceGithub;
+}
+
+/** `newWorkspace.github` (docs/github-workspace-design.md §5.3). */
+export interface NewWorkspaceGithub {
+  /** GitHub's repository id, as GET /integrations/github/repos answers it (a number, or its decimal string). */
+  repoId: number | string;
+  /** The branch or tag to check out; absent clones the default branch. */
+  ref?: string;
+  /** The folder under reposRoot, by newFolder's rule; absent takes the repository's name. */
+  folder?: string;
+}
+
+/** What a runner declares when it clones a GitHub workspace's repository on request (cloneRequests,
+ *  docs/github-workspace-design.md §6). POST /sessions makes a GitHub workspace only on a runner that declares it. */
+export const CLONE_WORKDIR_CAPABILITY = 'clone-workdir/v1';
+
+/** A workspace's clone state (Workspace.cloneState); null for a workspace that does not come from GitHub. */
+export type WorkspaceCloneState = 'PENDING' | 'CLONING' | 'READY' | 'FAILED';
+
+/** Control plane → runner: a GitHub workspace to clone (RunnerHeartbeatResponse.cloneRequests, §5.4). Every
+ *  full answer lists every PENDING and CLONING workspace of the runner, so the list is a full reconcile: the runner
+ *  handles each one idempotently, and a workspace missing from it is no longer the runner's to clone. */
+export interface CloneRequest {
+  workspaceId: string;
+  /** The absolute directory to clone into, `<reposRoot>/<folder>`. */
+  workDir: string;
+  /** `https://github.com/<owner>/<name>.git`, without any credential. */
+  url: string;
+  /** The branch or tag to check out; null clones the default branch. */
+  ref: string | null;
+  /** Where the control plane holds it: PENDING (not started) or CLONING (a report said it started). */
+  state: 'PENDING' | 'CLONING';
+}
+
+/** Runner → control plane: where one clone stands (RunnerHeartbeatRequest.cloneReports, §5.4). A report answers the
+ *  request the runner saw last: once a workspace is listed PENDING again (a Retry), the runner forgets any outcome it
+ *  had for it. */
+export interface CloneReport {
+  workspaceId: string;
+  state: 'CLONING' | 'READY' | 'FAILED';
+  /** Why it failed, in English; FAILED only. Redacted and cut to 500 characters before it is stored. */
+  error?: string;
+  /** Git's progress, 0–100. Relayed to the account's clients and never stored. */
+  progress?: number;
+  /** Which credential the clone used: the machine's own or Orbit's GitHub App (§6 step 4). */
+  credential?: 'machine' | 'github-app';
+}
+
+/** POST /runner/git-credential (§5.4): the runner's credential helper asking for one workspace's token. */
+export interface RunnerGitCredentialRequest {
+  workspaceId: string;
+  /** The host git is asking about: only `github.com` is answered. */
+  host: string;
+  /** The repository path git is asking about, `<owner>/<name>` with or without `.git`. */
+  path: string;
+}
+
+/** The answer: an installation token for that repository alone, contents:write and metadata:read. Never stored. */
+export interface RunnerGitCredentialAnswer {
+  username: 'x-access-token';
+  password: string;
+  /** ISO-8601. */
+  expiresAt: string;
+}
+
+/** A clone's progress, relayed to the owner's clients as it is reported (realtime `workspace.clone_progress`). */
+export interface WorkspaceCloneProgress {
+  workspaceId: string;
+  state: WorkspaceCloneState;
+  progress: number | null;
 }
 
 /** Runner → control plane: how the repair went, and where the checkout's old content lives now. */
@@ -1399,6 +1475,9 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** Every PENDING and CLONING GitHub workspace of this runner (docs/github-workspace-design.md §5.4), on every full
+   *  answer to a runner that declared clone-workdir/v1: a full reconcile, answered by cloneReports. Absent otherwise. */
+  cloneRequests?: CloneRequest[];
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;

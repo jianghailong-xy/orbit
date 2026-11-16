@@ -118,6 +118,7 @@ func init() {
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
@@ -468,6 +469,16 @@ func (t *Transport) register(b RegisterRequest) (*RegisterResponse, error) {
 
 func (t *Transport) deregister() error {
 	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
+}
+
+// gitCredential is POST /runner/git-credential: Orbit's GitHub App token for one workspace's repository
+// (github_credential.go). Never logged.
+func (t *Transport) gitCredential(ctx context.Context, request RunnerGitCredentialRequest) (*RunnerGitCredentialAnswer, error) {
+	var answer RunnerGitCredentialAnswer
+	if err := t.do(ctx, "POST", "/runner/git-credential", request, &answer, orbitGitCredentialTimeout); err != nil {
+		return nil, err
+	}
+	return &answer, nil
 }
 
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {

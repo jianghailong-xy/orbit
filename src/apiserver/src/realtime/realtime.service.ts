@@ -1332,6 +1332,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A GitHub workspace's clone moved, or reported progress (docs/github-workspace-design.md §5.4). Keyed by the owner,
+   *  like repoHealth; `clone` carries the state and git's percentage, which nothing stores — a client that missed
+   *  one reads the state from the workspace and waits for the next percentage. */
+  publishWorkspaceCloneChanged(ownerId: string, workspaceId: string, clone: { state: string; progress: number | null }): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.AGENT_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { id: workspaceId, clone: { state: clone.state, progress: clone.progress }, affectsTaskRows: false },
+    });
+  }
+
   /**
    * One of the owner's watches changed — made, edited, paused, resumed or stopped; matched, expired
    * or ended unmatched; or one of its deliveries delivered or dead-lettered. User-scoped, because a
@@ -1451,6 +1463,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                   ? { affectsTaskRows: ev.payload.affectsTaskRows }
                   : {}),
                 ...(ev.payload.repoHealth === true ? { repoHealth: true } : {}),
+                ...(cloneOf(ev.payload.clone) ? { clone: cloneOf(ev.payload.clone) } : {}),
               }
             : { id: String(ev.payload.id ?? '') };
       return {
@@ -2125,4 +2138,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         };
       });
   }
+}
+
+/** A clone relay's payload as it is passed on (publishWorkspaceCloneChanged), or null for anything else. */
+function cloneOf(value: unknown): { state: string; progress: number | null } | null {
+  if (!value || typeof value !== 'object') return null;
+  const { state, progress } = value as { state?: unknown; progress?: unknown };
+  if (typeof state !== 'string') return null;
+  return { state, progress: typeof progress === 'number' ? progress : null };
 }

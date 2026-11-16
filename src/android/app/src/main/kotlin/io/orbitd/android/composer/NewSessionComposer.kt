@@ -183,6 +183,8 @@ private fun MachineDraftComposer(
                 onOpenMachine = { open(OrbitRoute(Destination.RUNNER, runner.text("id") ?: runnerId)) },
                 welcome = machineWelcome,
                 welcomeName = welcomeName,
+                github = remember(managementApi) { ManagementGithub(managementApi) },
+                onOpenGithubSettings = { open(OrbitRoute(Destination.SETTINGS, "github")) },
             )
         } else if (data.ready) {
             Text("This runner is no longer on your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)

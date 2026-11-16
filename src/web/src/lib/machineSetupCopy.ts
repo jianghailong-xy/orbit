@@ -26,6 +26,56 @@ export const SETUP_NEW_FOLDER_INVALID = 'Use letters, digits, dots, dashes and u
 // Not on a board: a folder's name the machine already has as a file, which can't become one.
 export const setupNewFolderIsFile = (machine: string) =>
   `There’s already a file with this name on ${machine}. Pick another name.`;
+// From GitHub (docs/mocks/github-workspace, board 01 P1–P4; board 04 A): a row under the folder's name field, behind an
+// "or" rule, that swaps the step to the repository picker; the link under the picker swaps it back.
+export const SETUP_OR = 'or';
+export const SETUP_FOLDER_NAME_INSTEAD = 'Type a folder name instead';
+export const SETUP_FROM_GITHUB = 'From GitHub';
+export const SETUP_NEW_TAG = 'NEW';
+export const SETUP_GITHUB_META =
+  'Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.';
+export const SETUP_CONNECT_GITHUB = 'Connect GitHub';
+export const SETUP_CONNECT_GITHUB_META = 'Opens GitHub, then comes back here.';
+// Not on a board: a connection GitHub no longer takes, and a press that could not leave for GitHub.
+export const setupGithubSignInAgain = (login: string) => `@${login} needs to sign in again.`;
+export const SETUP_RECONNECT_GITHUB = 'Reconnect GitHub';
+export const setupGithubConnectFailed = (why: string) => `Couldn’t start connecting GitHub: ${why}`;
+export const setupGithubAccount = (login: string, repositories: number | null) =>
+  repositories === null
+    ? `Signed in to GitHub as @${login}`
+    : `Signed in to GitHub as @${login} · ${repositories} ${repositories === 1 ? 'repository' : 'repositories'}`;
+export const SETUP_GITHUB_SEARCH = 'Search your repositories';
+export const SETUP_GITHUB_NOT_LISTED = 'Not listed?';
+export const SETUP_GITHUB_ADD_REPOSITORIES = 'Add repositories on GitHub';
+// Not on a board: the list's other answers.
+export const SETUP_GITHUB_LOADING = 'Loading your repositories…';
+export const SETUP_GITHUB_NONE = 'No repository matches.';
+export const setupGithubListFailed = (why: string) => `Couldn’t list your repositories: ${why}`;
+export const SETUP_GITHUB_PRIVATE = 'Private';
+export const SETUP_GITHUB_CLONED_META = 'Cloned before the session starts. Work lands back on GitHub.';
+export const SETUP_OTHER_BRANCH = 'Other branch';
+export const SETUP_DEFAULT_BRANCH = 'Default branch';
+export const SETUP_BRANCH = 'Branch';
+export const setupGithubFolderExists = (machine: string) => `This folder already exists on ${machine}. Pick another name.`;
+export const SETUP_GITHUB_DONE = 'cloned before the session starts';
+export const setupGithubDonePath = (repository: string, path: string) => `${repository} → ${path}`;
+// A machine too old to clone: the board's edge row, in the words the folder check already uses for the same case.
+export const setupCloneUpdating = (machine: string) => `${machine} updates itself first: this version can’t clone yet.`;
+export const setupCloneNeedsUpdate = (machine: string) => `${machine} can’t clone on this version, and it can’t update itself.`;
+export const pushedAgo = (pushedAt: string | null, now: number = Date.now()): string => {
+  if (!pushedAt) return '';
+  const at = Date.parse(pushedAt);
+  if (!Number.isFinite(at)) return '';
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+  if (minutes < 1) return 'pushed just now';
+  if (minutes < 60) return `pushed ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `pushed ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  if (hours < 48) return 'pushed yesterday';
+  const date = new Date(at);
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  return `pushed ${date.toLocaleDateString('en-US', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })}`;
+};
 export const SETUP_CHANGE = 'Change';
 
 export const setupChecking = (machine: string) => `Checking on ${machine}…`;
@@ -77,6 +127,21 @@ export const CREATED_SETTINGS = 'Settings';
 // Not on a board: the field Rename opens, and a refusal of it.
 export const CREATED_RENAME_LABEL = 'Workspace name';
 export const CREATED_RENAME_FAILED = 'Couldn’t rename the workspace';
+
+// A workspace cloned from GitHub: the same first line while its clone runs, once it is done, and when it failed (board 01, P5).
+export const CLONE_CLONING = 'Cloning';
+// Not on a board: before the machine has started it.
+export const CLONE_WAITING = 'Waiting to clone';
+// The reason arrives with the session's next read, a moment after the frame that says the clone failed.
+export const cloneCouldNot = (repository: string, why: string) =>
+  why ? `Couldn’t clone ${repository}: ${why}` : `Couldn’t clone ${repository}.`;
+export const cloneAppRemoved = (repository: string) => `Orbit’s GitHub App is no longer installed on ${repository}.`;
+export const CLONE_INSTALL_ON_GITHUB = 'Install on GitHub';
+export const CLONE_SIGN_IN_EXPIRED = 'Your GitHub sign-in expired.';
+export const CLONE_RECONNECT = 'Reconnect GitHub';
+export const CLONE_RETRY = 'Retry';
+export const CLONE_RETRY_FAILED = 'Couldn’t retry the clone';
+export const CLONE_STARTS_WHEN_DONE = 'Starts when the clone is done';
 
 export const START_A_SESSION = 'Start a session';
 export const ENROLL_NEXT_TITLE = 'Next: start your first session';

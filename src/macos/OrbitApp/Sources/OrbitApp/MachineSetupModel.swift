@@ -15,6 +15,11 @@ final class MachineSetupModel {
     var typed = ""
     /// The workspace's name: the folder's until it is edited (`WorkspaceNameField`).
     var name = WorkspaceNameField()
+    /// The folder field is From GitHub's picker (board 04 A), kept with the page: a card come back from GitHub's
+    /// sign-in in the browser is still on it (board 01, note 2).
+    var githubOpen = false
+    /// What the picker would pick, as it last said: the workspace's name follows its folder until edited.
+    var repository: PickedFolder?
     /// Create workspace is out: the fields and the button wait.
     private(set) var creating = false
     /// Why the last Create workspace was refused, said on the card until the next try.
@@ -38,6 +43,13 @@ final class MachineSetupModel {
     /// The folder field's text trimmed: the name asked about and the one the workspace's name follows.
     var folder: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// The folder the workspace's name follows: the typed one, or on From GitHub the picked repository's.
+    var followed: String {
+        guard githubOpen else { return folder }
+        if case .github(let pick)? = repository { return pick.name }
+        return ""
+    }
+
     /// Create workspace: the workspace alone, in this folder and under this name. On success the app moves on
     /// to its new session page; a refusal stays on the card, with what was typed.
     func create(_ pick: PickedFolder, in app: AppModel) async {
@@ -45,7 +57,7 @@ final class MachineSetupModel {
         creating = true
         createError = nil
         let why = await app.createMachineWorkspace(runnerID: runnerID, folder: pick,
-                                                   name: name.name(folder: folder))
+                                                   name: name.name(folder: followed))
         creating = false
         createError = why
     }
