@@ -32,15 +32,17 @@ extension Image {
     }
 }
 
-/// A photo-library pick as it goes up. A PNG, JPEG, WebP or GIF under the inline-image cap goes as
-/// it is; anything else (a HEIC camera photo, or one past the cap) is redrawn upright as a JPEG no
-/// wider than `maxPixels` on its long edge. Re-encoding a camera photo as a full-size PNG, as this
-/// used to, made a 12–48 MP shot tens of MB, which the server refused. nil when the bytes are no image.
-func orbitPhotoUpload(_ data: Data, maxPixels: Int = 2048) -> (data: Data, mimeType: String, filename: String)? {
+/// A picked or pasted image as it goes up, named `name` plus its extension. A PNG, JPEG, WebP or GIF
+/// under the inline-image cap goes as it is; anything else (a HEIC camera photo, or one past the cap)
+/// is redrawn upright as a JPEG no wider than `maxPixels` on its long edge. Re-encoding a camera
+/// photo as a full-size PNG, as the pickers used to, made a 12–48 MP shot tens of MB, which the
+/// server refused. nil when the bytes are no image.
+func orbitPhotoUpload(_ data: Data, name: String = "photo",
+                      maxPixels: Int = 2048) -> (data: Data, mimeType: String, filename: String)? {
     if let ext = AttachmentLink.fileExtension(sniffing: data), ext != "pdf",
        let mime = UTType(filenameExtension: ext)?.preferredMIMEType,
        Attachments.rejectReason(mimeType: mime, byteCount: data.count) == nil {
-        return (data, mime, "photo.\(ext)")
+        return (data, mime, "\(name).\(ext)")
     }
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
     let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -53,7 +55,7 @@ func orbitPhotoUpload(_ data: Data, maxPixels: Int = 2048) -> (data: Data, mimeT
     CGImageDestinationAddImage(destination, image,
                                [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
     guard CGImageDestinationFinalize(destination) else { return nil }
-    return (out as Data, "image/jpeg", "photo.jpg")
+    return (out as Data, "image/jpeg", "\(name).jpg")
 }
 
 extension PlatformImage {

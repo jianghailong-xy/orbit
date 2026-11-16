@@ -1814,10 +1814,11 @@ struct ComposerView: View {
         }
     }
 
-    /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
+    /// Clipboard image → PNG (the server's inline-image type) → the shared paste path, which
+    /// shrinks one past the cap and enforces it.
     private func attachClipboardImage(_ image: UIImage) async {
         guard let png = image.orbitPNGData() else { return }
-        console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
+        await console.attachPastedImage(pngData: png)
     }
     #endif
 }
