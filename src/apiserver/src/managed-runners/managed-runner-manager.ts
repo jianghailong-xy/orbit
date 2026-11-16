@@ -2119,12 +2119,14 @@ export class ManagedRunnerManager {
    */
   private async startupResumed(mapping: ManagedRunner): Promise<Step | null> {
     if ((mapping.lastError as { code?: unknown } | null)?.code !== 'STARTUP_TIMEOUT' || mapping.desiredState !== 'RUNNING') return null;
-    if (!mapping.podUid || !(await this.reportSince(mapping, mapping.stateEnteredAt))) return { done: 'FAILED' };
+    // Strictly after the failure: a beat from before it, however close, is the silence the deadline judged.
+    const since = new Date(mapping.stateEnteredAt.getTime() + 1);
+    if (!mapping.podUid || !(await this.reportSince(mapping, since))) return { done: 'FAILED' };
     this.log.warn(`managed runner ${mapping.id}: FAILED STARTUP_TIMEOUT, and its ${this.backend.terms.instance} ${mapping.podUid} of generation ${mapping.generation} has reported in since; starting it again`);
     return {
       next: await this.commit(mapping, {
         managementState: 'STARTING',
-        stateEnteredAt: mapping.stateEnteredAt,
+        stateEnteredAt: since,
         nextAttemptAt: null,
         startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
         lastError: Prisma.DbNull,
