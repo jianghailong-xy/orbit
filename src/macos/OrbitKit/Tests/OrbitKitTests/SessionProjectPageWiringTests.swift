@@ -1098,19 +1098,23 @@ final class SessionProjectPageWiringTests: XCTestCase {
         }
         // The conversation reads the project's page as it appears, at the address the sheet will
         // open, so the count is the sheet's before the sheet is ever presented.
-        let read = try slice(console, from: ".task(id: projectSheetAddress) {", to: ".sheet(item: $projectSheet")
-        XCTAssertTrue(read.contains("if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }"))
-        // The button's running dot: a member or landing session spinning, or a landing or merge in
-        // flight, polled as the page polls them so it moves with the sheet closed.
-        XCTAssertTrue(draw.contains("let running = appModel.projectRunning(projectID)"))
-        XCTAssertTrue(draw.contains("if running {\n                    Circle().fill(Color.accentColor)"))
+        let read = try slice(console, from: ".task(id: projectButtonReadAddress) {", to: ".sheet(item: $projectSheet")
+        XCTAssertTrue(read.contains("if let address = projectButtonReadAddress { await appModel.loadProjectSessions(address) }"))
+        // While the sheet is open its page reads these itself: the conversation's reads stop.
+        let readAddress = try slice(console, from: "private var projectButtonReadAddress: SessionProjectAddress? {", to: "\n    }")
+        XCTAssertTrue(readAddress.contains("projectSheet == nil ? projectSheetAddress : nil"))
+        // The button's spinner (owner 2026-11-17, option C): anything the sheet shows as active,
+        // polled as the page polls it so it moves with the sheet closed.
+        XCTAssertTrue(draw.contains("let active = appModel.projectActive(projectID)"))
+        XCTAssertTrue(draw.contains("if active {\n                    SpinnerGlyph(color: .accentColor)"))
         for poll in ["await appModel.pollProjectSessions(address)", "await appModel.loadProjectIntegration(address)",
                      "await appModel.loadProjectMerge(address)"] {
             XCTAssertTrue(read.contains(poll), "the conversation keeps `\(poll)` current for the button")
         }
         let running = try slice(code(try appSource("AppModel.swift")),
-                                from: "func projectRunning(_ projectID: String) -> Bool {", to: "\n    }")
-        for part in ["projectSessionsLandingRunning", "projectSessionsMergeRunning", "== .spinner"] {
+                                from: "func projectActive(_ projectID: String) -> Bool {", to: "\n    }")
+        for part in ["projectSessionsLandingRunning", "integration.queuedCount", "projectSessionsMergeRunning",
+                     "glyph.shape == .spinner || glyph.pulse"] {
             XCTAssertTrue(running.contains(part), "the dot reads `\(part)`")
         }
         let address = try slice(console, from: "private var projectSheetAddress: SessionProjectAddress? {", to: "\n    }")
