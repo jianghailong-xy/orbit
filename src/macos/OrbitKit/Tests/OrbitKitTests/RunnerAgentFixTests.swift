@@ -243,6 +243,48 @@ final class RunnerAgentFixTests: XCTestCase {
                        .ready(hint: "Starts a session in orbit-dev on this machine, with Claude Code."))
     }
 
+    // MARK: the Update Engines Now report (docs/mocks/engine-update-fix-with-agent/03-mobile.png)
+
+    /// An Update Engines Now run on vmi3753066 that ended `status`, reporting `message`.
+    private func updated(_ agentFix: String?, status: String = "failed",
+                         message: String = "Codex — updated 0.168.2 → 0.169.0\nOpenCode — update timed out after 5m0s") throws -> Runner {
+        let escaped = message.replacingOccurrences(of: "\n", with: "\\n")
+        return try JSONDecoder().decode(Runner.self, from: Data(#"""
+        {"id":"r","name":"vmi3753066","online":true,"lastHeartbeatAt":"2026-09-29T00:14:50Z",
+         "engines":[{"engine":"claude","installed":true,"version":"2.1.325","auth":"yes"}],
+         "install":{"status":"\#(status)","engine":null,"command":"orbit engine-update","message":"\#(escaped)",
+                    "mode":"update"}\#(agentFix ?? "")}
+        """#.utf8))
+    }
+
+    func testTheUpdateReportHasItOnlyWhileARunFailed() throws {
+        XCTAssertEqual(RunnerAgentFixLogic.engineUpdateState(try updated(agentFix())),
+                       .ready(hint: "Starts a session in orbit-dev on this machine, with Claude Code."))
+        // Nothing failed, a run still going, an install's failure, an older server: no button.
+        XCTAssertNil(RunnerAgentFixLogic.engineUpdateState(
+            try updated(agentFix(), status: "done", message: "OpenCode — updated 1.0.98 → 1.0.112")))
+        XCTAssertNil(RunnerAgentFixLogic.engineUpdateState(try updated(agentFix(), status: "installing")))
+        XCTAssertNil(RunnerAgentFixLogic.engineUpdateState(try installFailed(agentFix())))
+        XCTAssertNil(RunnerAgentFixLogic.engineUpdateState(try updated(nil)))
+    }
+
+    func testTheUpdateReportIsBlockedOrFixingAsThePanelIs() throws {
+        XCTAssertEqual(RunnerAgentFixLogic.engineUpdateState(
+            try updated(agentFix(blocked: ("engineSignedOut", Self.signedOut)))),
+                       .blocked(reason: Self.signedOut + " Sign in to Claude Code above to use this."))
+        let fixing = #"{"kind":"engineUpdateFailed","engine":null,"sessionId":"s9","workspaceId":"ws1","workspaceName":"orbit-dev"}"#
+        XCTAssertEqual(RunnerAgentFixLogic.engineUpdateState(try updated(agentFix(fixing: fixing))),
+                       .fixing(RunnerAgentFixing(kind: "engineUpdateFailed", engine: nil, sessionId: "s9",
+                                                 workspaceId: "ws1", workspaceName: "orbit-dev")))
+        // Another warning's agent is not this one's.
+        let install = #"{"kind":"installFailed","engine":"codex","sessionId":"s1","workspaceId":"ws1","workspaceName":"orbit-dev"}"#
+        XCTAssertEqual(RunnerAgentFixLogic.engineUpdateState(try updated(agentFix(fixing: install))),
+                       .ready(hint: "Starts a session in orbit-dev on this machine, with Claude Code."))
+        XCTAssertEqual(RunnerAgentFixLogic.request(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil),
+                                                   latestVersion: "0.1.250"),
+                       RunnerAttentionFixRequest())
+    }
+
     // MARK: the press
 
     func testTheRequestCarriesTheEngineOrTheLatestRelease() {

@@ -144,6 +144,13 @@ public enum RunnerPageCopy {
         "installs when the runner has been idle for \(minutes) min"
     }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
+    /// A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the
+    /// owner renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read.
+    public static let MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
+    public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /// About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to.
+    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =
@@ -458,6 +465,8 @@ public enum RunnerPageCopy {
     }
     /// After a signed-out reason on an Install failed panel, whose engine's Sign In is above it.
     public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
+    /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
+    public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
     /// The head of what a press that didn't start a session says, before the server's own sentence.
     public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.

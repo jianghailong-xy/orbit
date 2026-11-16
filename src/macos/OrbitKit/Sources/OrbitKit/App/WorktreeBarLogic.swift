@@ -252,9 +252,34 @@ public enum WorktreeBarLogic {
             + " the work on this branch with a message that describes it. Do not push."
     }
 
-    public static func manualMergeCommand(mergeTarget: String?, branch: String) -> String {
-        let target = mergeTarget ?? "main"
-        return "git rebase \(target) \(branch) && git checkout \(target) && git merge --ff-only \(branch)"
+    /// A merge conflict, laid out as web's conflict panel (`.wt-merge-manual`, board
+    /// docs/mocks/merge-conflict-strip): a headline naming the target, what happened, and the by-hand
+    /// recipe as two steps — two because they run in two places: the branch is checked out in the
+    /// session's worktree and the target in the machine's checkout, and git refuses to check either
+    /// out twice. git's own words stay behind "Show git output".
+    public struct MergeConflict: Equatable {
+        public struct Step: Equatable {
+            public let place: String
+            public let command: String
+        }
+        public let headline: String
+        public let why: String
+        public let steps: [Step]
+        public let gitOutput: String?
+    }
+
+    public static func mergeConflict(mergeStatus: String?, mergeError: String?, mergeTarget: String?,
+                                     branch: String) -> MergeConflict? {
+        guard mergeStatus == "conflict" else { return nil }
+        let target = trimmed(mergeTarget) ?? "main"
+        return MergeConflict(
+            headline: "Merge conflict with \(target)",
+            why: "The merge was aborted and nothing changed. Use Resolve in session, or resolve it by hand:",
+            steps: [
+                .init(place: "In the session’s worktree", command: "git rebase \(target)"),
+                .init(place: "Then in the repo", command: "git merge --ff-only \(branch)"),
+            ],
+            gitOutput: trimmed(mergeError))
     }
 
     /// Whether the compact file list is ahead of the lazily stored per-file patches. Heartbeats

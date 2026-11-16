@@ -422,9 +422,6 @@ final class ConsoleModel {
         autoRetryTakenOver == nil ? runConflict : nil
     }
     var isDraft: Bool { draftAgent != nil }
-    /// A machine's first draft: what its send does, and the folder of the workspace it makes. Nil on
-    /// every other draft, whose workspace exists (`MachineSetupModel`).
-    @ObservationIgnored weak var machineSetup: MachineSetupModel?
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
     /// Set while a wiki chat's panel draws this console's composer (board 43): what its messages carry beside the
@@ -1202,7 +1199,8 @@ final class ConsoleModel {
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
-        if let reducer {
+        if var reducer {
+            reducer.reopenUnsettledOlderEdge()
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
@@ -1224,7 +1222,7 @@ final class ConsoleModel {
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
-        self.agentID = agent.standsInForMachine ? nil : agent.id
+        self.agentID = agent.id
         self.draftAgent = agent
         self.draftFolderID = folderID
         self.attachments = attachments
@@ -1509,6 +1507,9 @@ final class ConsoleModel {
             }
             catchUpPending = false
             catchUpAfterFailure = false
+            // No page seeded the window (every tail attempt failed): the connect below is cursor-less
+            // and its capped replay can start mid-conversation, so its first event sets the older edge.
+            if reducer.state.maxSeq == 0 { reducer.expectReplayToSetOlderEdge() }
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
                 // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
@@ -2095,7 +2096,7 @@ final class ConsoleModel {
 
     /// × / Esc: the card (or the failure line) goes; the draft is kept.
     func dismissOptimization() {
-        promptOptimizer.dismiss()
+        promptOptimizer.dismiss(current: composerText)
     }
 
     /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
@@ -2119,13 +2120,8 @@ final class ConsoleModel {
         focusRequests &+= 1
     }
 
-    /// What an empty composer says on a machine's new session page, which has no workspace to send to.
-    var machinePlaceholder: String? {
-        draftAgent.flatMap { $0.standsInForMachine ? MachineSetupCopy.composerPlaceholderFor(machine: $0.name) : nil }
-    }
-
     var availability: SendAvailability {
-        isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)
+        isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 
@@ -2226,19 +2222,8 @@ final class ConsoleModel {
     private var syncedConfig: (model: String, permissionMode: String, effort: String,
                                fastMode: Bool)?
 
-    /// What a machine's new session page hears about its machine as it moves: a sign-in landing, a key
-    /// that can now run. And until something is picked, the engine it can run on (`firstEngineOn`).
-    func adoptMachine(_ runner: Runner) {
-        adoptRunnerSnapshot(runner)
-        guard draftPick == nil else { return }
-        let first = MachineSetup.firstEngineOn(runner.engines).rawValue
-        guard first != engine else { return }
-        pickDraft(engine: first, provider: first)
-        draftPick = nil
-    }
-
     private func adoptRunnerSnapshot(_ runner: Runner) {
-        runnerName = runner.displayName?.isEmpty == false ? runner.displayName : runner.name
+        runnerName = RunnerPageFormat.displayName(runner)
         runnerRegion = runner.region
         runnerOnline = runner.online
         runnerHeartbeatLeaseOwner = runner.heartbeatLeaseOwner
@@ -2972,11 +2957,15 @@ final class ConsoleModel {
     /// way out, nor take the draft they are part-way through typing with it — nor the attachments
     /// they have staged (a retry carries its own message's files; see `carried` below).
     func send(authoritative: RunStatus? = nil, overrideText: String? = nil,
-              overrideAttachments: [TurnAttachment]? = nil, queueForNextTurn: Bool = false,
+              overrideAttachments: [TurnAttachment]? = nil, takesStagedAttachments: Bool = false,
+              queueForNextTurn: Bool = false,
               wikiContext: WikiChatContext? = nil, accepted onAccepted: (@MainActor () -> Void)? = nil) async {
         guard !sending, !waitingForUploads else { return }
         // `false` for a retry: its message was handed in, so the composer keeps what it holds.
         let fromComposer = overrideText == nil
+        // Whether this send consumes the composer's staged chips: its own send, or a sentence the
+        // composer's armed reply built around what was typed there (an owner item's).
+        let takesChips = fromComposer || takesStagedAttachments
         // A wiki chat's composer: the page and the selection its attachment row shows go beside the words, and leave
         // the row once the server took them. A sentence handed in (a card's own) carries neither.
         let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)
@@ -3067,9 +3056,11 @@ final class ConsoleModel {
             // the card that armed it is untouched, and its own Start is still the other way out.
             // Discussing an item that became the owner's reaches no door either: the coordinator
             // is told about it in words and decides what to do with the doors it has.
+            // The chips staged with the sentence go with it, as on the web: they were picked for
+            // this message, and left behind they would sit in the composer looking unsent.
             case .ownerItem(let context):
                 await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
-                           overrideAttachments: [])
+                           takesStagedAttachments: true)
             case .planChange(let context):
                 // Says outright that it carries no attachments, rather than leaving that to how
                 // its text arrived: a question about a plan is the typed sentence and nothing else
@@ -3148,7 +3139,7 @@ final class ConsoleModel {
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
         if fromComposer { composerText = "" }
-        if fromComposer { pendingAttachments = [] }
+        if takesChips { pendingAttachments = [] }
 
         sending = true
         defer { sending = false }
@@ -3199,7 +3190,9 @@ final class ConsoleModel {
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
-                                            translation: accepted.turnTranslation)
+                                            translation: accepted.turnTranslation,
+                                            placement: accepted.placement,
+                                            acceptedAt: ISO8601DateFormatter().string(from: Date()))
                 publishStateNow()
             }
         } catch {
@@ -3215,7 +3208,7 @@ final class ConsoleModel {
             composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
             // The chips come back the same way — but only for a send that took them: a retry never
             // did, and putting them back would double them.
-            if fromComposer { pendingAttachments = staged + pendingAttachments }
+            if takesChips { pendingAttachments = staged + pendingAttachments }
             // The one place this end stops flattening a refusal into a sentence. A code it knows
             // becomes a card with a way out; anything else — an older server, a code invented
             // later, a connection that simply failed — still reads the server's own words.
@@ -3601,27 +3594,6 @@ final class ConsoleModel {
             return
         }
         let attachmentIds = pendingAttachments.compactMap(\.remoteID)
-        // A machine's first draft has a card over it, which decides what this send does (board rule 6).
-        var newWorkspace: NewWorkspaceRequest?
-        if let machineSetup {
-            switch machineSetup.composerSend() {
-            case .nothing:
-                return
-            case .alreadyWaiting:
-                onToast(ToastRequest(message: MachineSetupCopy.HELD_ALREADY_WAITING,
-                                     detail: MachineSetupCopy.HELD_ALREADY_WAITING_DETAIL, tone: .info))
-                return
-            case .hold:
-                machineSetup.hold(heldMessage(text, shell: shell))
-                composerText = ""
-                pendingAttachments = []
-                // What a refusal said about these words is over: from here it says so under them.
-                statusMessage = nil
-                return
-            case .create(let folder):
-                newWorkspace = folder
-            }
-        }
         sending = true
         defer { sending = false }
         do {
@@ -3630,7 +3602,7 @@ final class ConsoleModel {
             cancelOptimizePrompt()
             promptOptimizer.dismiss()
             let session = try await api.createSession(draftRequest(
-                agent, prompt: text, shell: shell, attachmentIds: attachmentIds, newWorkspace: newWorkspace,
+                agent, prompt: text, shell: shell, attachmentIds: attachmentIds,
                 skipTranslation: skip, optimizedTranslation: optimizedTranslation))
             promptOptimizer.sent()
             composerText = ""
@@ -3641,46 +3613,8 @@ final class ConsoleModel {
         }
     }
 
-    /// The message that waited under a machine's setup card, going by itself: the composer has nothing
-    /// to do with it by now, and what it holds may be somebody's next thought. Why it was refused, or nil.
-    func sendHeld(_ held: HeldMessage, folder: NewWorkspaceRequest) async -> String? {
-        guard let agent = draftAgent else { return nil }
-        do {
-            draftSessionCreated(try await api.createSession(draftRequest(
-                agent, prompt: held.content, shell: held.shell, attachmentIds: held.attachments.map(\.id),
-                newWorkspace: folder)))
-            return nil
-        } catch {
-            return APIClient.failureReason(error)
-        }
-    }
-
-    /// The composer's words and files, as they wait under the card.
-    private func heldMessage(_ text: String, shell: Bool) -> HeldMessage {
-        HeldMessage(content: text, shell: shell, attachments: pendingAttachments.compactMap { chip in
-            chip.remoteID.map {
-                HeldMessage.Attachment(id: $0, filename: chip.filename, mimeType: chip.mimeType,
-                                       byteCount: chip.byteCount, preview: chip.previewImageData)
-            }
-        })
-    }
-
-    /// A waiting message taken back: its words and files return to the composer, the way a queued
-    /// message's do, an explicit press that a draft keeps its place above.
-    func restoreHeld(_ held: HeldMessage) {
-        if !held.content.isEmpty {
-            let body = held.shell ? "!" + held.content : held.content
-            composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? body : composerText + "\n\n" + body
-        }
-        pendingAttachments += held.attachments.map {
-            PendingAttachment(id: UUID().uuidString, remoteID: $0.id, filename: $0.filename, mimeType: $0.mimeType,
-                              byteCount: $0.byteCount, previewImageData: $0.preview)
-        }
-    }
-
     private func draftRequest(_ agent: Agent, prompt: String, shell: Bool, attachmentIds: [String],
-                              newWorkspace: NewWorkspaceRequest?, skipTranslation: Bool = false,
+                              skipTranslation: Bool = false,
                               optimizedTranslation: String? = nil) -> CreateSessionRequest {
         CreateSessionRequest(
             // Send the raw effort — "" (Default) included:
@@ -3690,16 +3624,12 @@ final class ConsoleModel {
             // a placeholder. Omit it so the server applies the configured provider's own
             // default instead of persisting a guessed Claude model.
             prompt: prompt,
-            // A machine's first session names the machine and a folder instead of a workspace, and
-            // the workspace is made with it, in one transaction (docs/first-workspace-contract.md §3).
-            agentId: newWorkspace == nil ? agent.id : nil,
-            assignedRunnerId: newWorkspace == nil ? nil : agent.runnerId,
+            agentId: agent.id,
             // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
             // credential of it (contract §3.2). Leaving both off keeps the server's
-            // inherit-from-workspace path, which re-checks that pair as it starts the session. A
-            // workspace about to be made has nothing to inherit, so its first session always names it.
-            engine: newWorkspace == nil ? draftPick?.engine : engine,
-            provider: newWorkspace == nil ? draftPick?.provider : provider,
+            // inherit-from-workspace path, which re-checks that pair as it starts the session.
+            engine: draftPick?.engine,
+            provider: draftPick?.provider,
             model: providerCapabilitiesResolved ? modelID : nil,
             permissionMode: permissionMode.rawValue, effort: effort.rawValue,
             // Sent only when on, like every other override that has an "off" default: a
@@ -3718,7 +3648,6 @@ final class ConsoleModel {
             // The folder page this draft was opened from, if any: the session is filed in it as
             // it is created (§3.3). Omitted for a draft from a list.
             folderId: draftFolderID,
-            newWorkspace: newWorkspace,
             // D2: the opening message is the unedited optimized text. Only ever `true` or absent.
             skipTranslation: skipTranslation ? true : nil,
             // D2: …or its reading copy, with the optimizer's agent-language prompt to release it with.
@@ -4229,14 +4158,19 @@ final class ConsoleModel {
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this
-    /// enforces the inline-image cap and uploads via the shared path. Mirrors the web composer's
-    /// `onPaste` handler, which swallows the paste only when it carries image data.
+    /// shrinks one past the inline-image cap to a JPEG (`orbitPhotoUpload`), enforces the cap and
+    /// uploads via the shared path. Mirrors the web composer's `onPaste` handler, which swallows the
+    /// paste only when it carries image data.
     func attachPastedImage(pngData: Data) async {
-        if let reason = Attachments.rejectReason(mimeType: "image/png", byteCount: pngData.count) {
+        guard let image = orbitPhotoUpload(pngData, name: "pasted-image") else {
+            statusMessage = "Couldn\u{2019}t read the pasted image"
+            return
+        }
+        if let reason = Attachments.rejectReason(mimeType: image.mimeType, byteCount: image.data.count) {
             statusMessage = reason
             return
         }
-        attach(filename: "pasted-image.png", mimeType: "image/png", data: pngData)
+        attach(filename: image.filename, mimeType: image.mimeType, data: image.data)
     }
 
     /// Stage an attachment optimistically: the chip (with an inline-image thumbnail) appears
@@ -4266,7 +4200,7 @@ final class ConsoleModel {
                 pendingAttachments[idx].remoteID = id
             } catch {
                 pendingAttachments.removeAll { $0.id == uid }
-                statusMessage = "Upload failed — \(filename)"
+                statusMessage = "Upload failed — \(filename): \(APIClient.failureReason(error))"
             }
         }
     }

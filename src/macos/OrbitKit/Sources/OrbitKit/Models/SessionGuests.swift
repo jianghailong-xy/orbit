@@ -30,6 +30,29 @@ struct SessionGuestList: Decodable {
     let guests: [SessionGuestPerson]
 }
 
+/// Someone the owner has invited before, to any of their sessions, as
+/// `GET /sessions/:id/guests/suggestions` offers them to the email field of People who can reply
+/// (board docs/mocks/share-links/14-guest-suggestions). Mirrors `@orbit/shared`'s `SessionGuestSuggestion`.
+public struct SessionGuestSuggestion: Codable, Equatable, Sendable, Identifiable {
+    public let name: String
+    public let email: String
+    /// The owner's latest invitation of this person, to any session.
+    public let lastInvitedAt: String
+
+    public var id: String { email }
+
+    public init(name: String, email: String, lastInvitedAt: String) {
+        self.name = name
+        self.email = email
+        self.lastInvitedAt = lastInvitedAt
+    }
+}
+
+/// What the suggestions route answers: newest invitation first, people already in the session left out.
+struct SessionGuestSuggestionList: Decodable {
+    let people: [SessionGuestSuggestion]
+}
+
 struct InviteSessionGuestRequest: Encodable {
     let email: String
 }

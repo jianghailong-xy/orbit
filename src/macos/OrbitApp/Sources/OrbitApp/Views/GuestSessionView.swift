@@ -204,12 +204,13 @@ final class GuestConversationModel {
     }
 
     /// Stage bytes that were pasted, dropped or picked: one of the four image types as it is, any
-    /// other image (HEIC, TIFF…) re-encoded as PNG, and anything else on to be refused.
+    /// other image (HEIC, TIFF…) re-encoded by `orbitPhotoUpload`, and anything else on to be refused.
     func stage(_ data: Data, type: UTType?, filename: String) {
         let mime = type?.preferredMIMEType ?? "application/octet-stream"
-        if !Attachments.isInlineImage(mimeType: mime), let png = PlatformImage(data: data)?.orbitPNGData() {
-            let stem = (filename as NSString).deletingPathExtension
-            attachImage(filename: (stem.isEmpty ? "image" : stem) + ".png", mimeType: "image/png", data: png)
+        let stem = (filename as NSString).deletingPathExtension
+        if !Attachments.isInlineImage(mimeType: mime),
+           let image = orbitPhotoUpload(data, name: stem.isEmpty ? "image" : stem) {
+            attachImage(filename: image.filename, mimeType: image.mimeType, data: image.data)
         } else {
             attachImage(filename: filename, mimeType: mime, data: data)
         }
@@ -488,10 +489,11 @@ private struct GuestConversationPage: View {
                       event.charactersIgnoringModifiers?.lowercased() == "v",
                       NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil),
                       let image = NSImage(pasteboard: NSPasteboard.general),
-                      let png = image.orbitPNGData()
+                      let png = image.orbitPNGData(),
+                      let pasted = orbitPhotoUpload(png, name: "pasted-image")
                 else { return event }
                 Task { @MainActor in
-                    conversation.attachImage(filename: "pasted-image.png", mimeType: "image/png", data: png)
+                    conversation.attachImage(filename: pasted.filename, mimeType: pasted.mimeType, data: pasted.data)
                 }
                 return nil
             }
@@ -513,8 +515,9 @@ private struct GuestConversationPage: View {
             // `hasImages` does not read the clipboard, so no paste banner until the tap.
             if UIPasteboard.general.hasImages {
                 Button {
-                    if let png = UIPasteboard.general.image?.orbitPNGData() {
-                        conversation.attachImage(filename: "pasted.png", mimeType: "image/png", data: png)
+                    if let png = UIPasteboard.general.image?.orbitPNGData(),
+                       let pasted = orbitPhotoUpload(png, name: "pasted") {
+                        conversation.attachImage(filename: pasted.filename, mimeType: pasted.mimeType, data: pasted.data)
                     }
                 } label: { Label("Paste image", systemImage: "doc.on.clipboard") }
             }
@@ -614,12 +617,12 @@ private struct GuestConversationPage: View {
         }
     }
     #elseif os(iOS)
-    /// Photo-library picks, normalized to PNG as the owner composer does (often HEIC otherwise).
+    /// Photo-library picks, made an inline image under the cap as the owner composer does.
     private func attachPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            conversation.attachImage(filename: "photo.png", mimeType: "image/png", data: png)
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let photo = orbitPhotoUpload(data) else { continue }
+            conversation.attachImage(filename: photo.filename, mimeType: photo.mimeType, data: photo.data)
         }
     }
     #endif

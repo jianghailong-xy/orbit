@@ -22,6 +22,9 @@ interface MenuAction {
    *  another provider opens the composer's Provider level). Left out, the level opens on hover and press as usual. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** A row with `children` only: a class on its level's popup, as `popupClassName` is on the menu's own (the account
+   *  menu's levels draw their rows as tall as its own). */
+  popupClassName?: string;
   /** A class on the item itself, for a row the page styles apart (the account menu's profile row). */
   className?: string;
   /** The item's native tip, as the replaced item's `title` (P5.3: a session row's Complete that cannot run says why). */
@@ -96,7 +99,7 @@ function Submenu({ item, contents, container, zIndex, slide }: { item: MenuActio
     }}>{contents}<RightOutlined className="orbit-menu-submenu-icon" aria-hidden /></BaseMenu.SubmenuTrigger>
     <BaseMenu.Portal container={container()}>
       <BaseMenu.Positioner ref={positioner} side="right" align="start" {...placement} collisionPadding={8} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: zIndex + 1 }}>
-        <BaseMenu.Popup ref={popup} className="orbit-menu" onClick={(event) => event.stopPropagation()}><Items items={item.children!} container={container} zIndex={zIndex + 1} slide={slide} /></BaseMenu.Popup>
+        <BaseMenu.Popup ref={popup} className={`orbit-menu${item.popupClassName ? ` ${item.popupClassName}` : ''}`} onClick={(event) => event.stopPropagation()}><Items items={item.children!} container={container} zIndex={zIndex + 1} slide={slide} /></BaseMenu.Popup>
       </BaseMenu.Positioner>
     </BaseMenu.Portal>
   </BaseMenu.SubmenuRoot>;

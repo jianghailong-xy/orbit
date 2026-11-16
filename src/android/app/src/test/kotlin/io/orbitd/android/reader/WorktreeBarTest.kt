@@ -147,7 +147,14 @@ class WorktreeBarTest {
         detail = session("mergeStatus" to JsonPrimitive("conflict"), "mergeError" to JsonPrimitive("CONFLICT (content): src/reader/Bar.kt"),
             "mergeTarget" to JsonPrimitive("main"))
         show()
-        compose.onNodeWithText("Merge conflict — aborted, working tree left clean.\nCONFLICT (content): src/reader/Bar.kt").assertIsDisplayed()
+        compose.onNodeWithText("⊗ Merge conflict with main").assertIsDisplayed()
+        compose.onNodeWithText("The merge was aborted and nothing changed. Use Resolve in session, or resolve it by hand:").assertIsDisplayed()
+        compose.onNodeWithText("git rebase main").assertIsDisplayed()
+        compose.onNodeWithText("git merge --ff-only orbit/a06c-worktree-85cfd1").performClick()
+        compose.onNodeWithText("Copied").assertIsDisplayed()
+        compose.onNodeWithText("CONFLICT (content): src/reader/Bar.kt").assertDoesNotExist()
+        compose.onNodeWithText("Show git output ▸").performClick()
+        compose.onNodeWithText("CONFLICT (content): src/reader/Bar.kt").assertIsDisplayed()
         compose.onNodeWithText("Resolve in session").performClick()
         compose.waitUntil(5_000) { sent("sessions", id, "resume").isNotEmpty() }
         val resume = body(sent("sessions", id, "resume").single())

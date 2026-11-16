@@ -241,6 +241,12 @@ runner builds none and moves no hosted runner. A commit without `deploy/managed-
 build: one that is in the registry already is kept and never pushed again (to rebuild it, delete it from the
 registry first). For each image that is not there yet:
 
+0. Room first. A build needs `ORBIT_BUILD_MIN_FREE_GB` (15 unless set) free on the disk that holds Docker's data.
+   Below that, before anything is built, it removes this registry's earlier release images on this host
+   (`<registry>/orbit-*:<tag>` but this release's own: each is in the registry, which a deploy and a rollback
+   pull from, and one a container uses is kept), then prunes dangling images, then build cache older than a
+   week, then all build cache, re-checking after each and stopping at the first that is enough. Still short, it
+   stops before building and prints `docker system df`: what fills the disk is then not Docker's to clear.
 1. `docker compose build apiserver wiki-worker web`, under those names. This checkout's `.env` supplies the
    build arguments (`PUBLIC_ORIGIN`, and `COMPOSE_FILE` where it adds the macOS signing file), so they have to
    be the target's. The web image keeps the runner release the target's `web` serves at `/dl/previous/`, as
@@ -477,8 +483,9 @@ never on wikova. Never edit 10.66.0.4's .env. Never print a value from any .env.
 
 1. Nothing else is releasing. `cat /tmp/orbit-upgrade.lock/pid` here and `ssh root@10.66.0.4 cat
    /tmp/orbit-upgrade.lock/pid` there must name no live process, and `systemctl list-units 'orbit-build-*'
-   'orbit-deploy-*' --no-legend` must list none running. `df -h / /dev/shm`: at least 15G free on / and 1.5G on
-   /dev/shm.
+   'orbit-deploy-*' --no-legend` must list none running. `df -h / /dev/shm`: at least 1.5G free on /dev/shm.
+   Note / as it is, but do not stop for it: the build in step 4 makes its own room on / (earlier release images,
+   then build cache) and stops by itself if that is not enough.
 2. `git -C /root/orbit fetch origin` and `git -C /root/orbit cat-file -e "<commit>^{commit}"`. The commit production
    runs, R, is the second field of `ssh root@10.66.0.4 tail -1 /root/orbit/.upgrade/history`. R must be an ancestor
    of <commit> (`git -C /root/orbit merge-base --is-ancestor R <commit>`): otherwise this would roll production
@@ -531,9 +538,12 @@ the checkout's files named in step 4. Stop and report at the first step that fai
    old="$(git rev-parse HEAD)"
    git fetch --quiet origin +refs/heads/main:refs/remotes/origin/main && git cat-file -e "<commit>^{commit}"
    git update-ref --no-deref HEAD <commit> && git reset -q && git update-index -q --refresh
-   `git status --porcelain --untracked-files=no` now lists only files the release did not ship. If it lists
-   docker-compose.yml, or anything under gateway/, scripts/, deploy/ or src/link-gateway/ as modified (` M`), stop:
-   the deployed files are not the commit's. Otherwise bring the rest up to the commit:
+   The files the release shipped (RELEASE_FILES in deploy/two-stage/release.sh) must already be the commit's:
+   git status --porcelain --untracked-files=no -- docker-compose.yml gateway scripts/pg-archive-wal.sh \
+     scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy
+   must print nothing; if it prints anything, stop: the deployed files are not the commit's. Any other file it lists
+   without that pathspec only lags behind the commit (a CI script, client sources), and is no reason to stop.
+   Bring the rest up to the commit:
    git diff --name-only -z | xargs -0 -r git checkout --
    git diff --name-only -z --diff-filter=D "$old" <commit> | xargs -0 -r rm -f --
    `git status --porcelain --untracked-files=no` must then print nothing.

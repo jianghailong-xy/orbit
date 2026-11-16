@@ -188,7 +188,13 @@ public enum RunnerUpdating {
     /// The message whose foot row carries `Queued · runner updating` where the queued tail holds
     /// nothing (`tailHolds`): the reader's last one in the transcript (web `queuedFoot`). Nil where the
     /// transcript has none, and then the queued page says it instead — the two are never drawn together.
-    public static func footBubbleID(_ items: [TranscriptItem]) -> String? {
+    ///
+    /// `accepted` is the accepted head (`TranscriptState.accepted`): a message the server has but no
+    /// runner has echoed yet, drawn after the transcript. It is the last message on screen, so it is
+    /// the one the full runner or the update holds (web draws it as a placeholder `user` event, which
+    /// `lastUserEventSeq` lands on).
+    public static func footBubbleID(_ items: [TranscriptItem], accepted: [UserBubble] = []) -> String? {
+        if let last = accepted.last { return last.id }
         for item in items.reversed() {
             if case .user(let bubble) = item { return bubble.id }
         }

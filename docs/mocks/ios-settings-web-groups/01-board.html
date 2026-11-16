@@ -1,0 +1,403 @@
+<!doctype html>
+<!-- Design board: iOS Settings' list regrouped as the web's Settings nav (SettingsLayout.tsx, settingsIndex.ts).
+     Phones are drawn, not captured, with the ios-settings-order board's sx-* pieces; sample account and machines.
+     Not shipped code. Render: ../ios-settings-order/render.mjs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS Settings · web groups</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="../cursor-engine/board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<style>
+  .m-sheet { width: 2060px; }
+  .b-row { display: flex; gap: 30px; align-items: flex-start; }
+  .b-phones { display: flex; gap: 26px; align-items: flex-start; flex: none; }
+  .b-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .b-side .m-notes { margin: 0; }
+  .b-side h4 { margin: 0; font-size: 13.5px; color: var(--text-1); display: flex; align-items: center; gap: 8px; }
+  .b-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 0; max-width: 420px; }
+  .b-cap b { color: var(--text-1); }
+  .m-notes li > span:last-child { line-height: 1.75; }
+  .b-num { font-variant-numeric: tabular-nums; }
+  .b-order { display: grid; grid-template-columns: 118px repeat(4, minmax(0, 1fr)); gap: 0; font-size: 12.5px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+  .b-order > div { padding: 7px 10px; border-top: 1px solid var(--border-subtle); line-height: 1.6; }
+  .b-order > .h { background: var(--fill-muted); font-weight: 600; color: var(--text-1); border-top: 0; }
+  .b-order > .k { color: var(--text-2); font-weight: 600; }
+  .b-order .mm { color: #b35a00; font-weight: 600; }
+  .b-plan { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--text-2); }
+  .b-plan li + li { margin-top: 8px; }
+  .b-plan b { color: var(--text-1); }
+  .b-plan code, .b-cap code { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0 4px; border-radius: 4px; background: var(--fill-muted); color: var(--text-1); }
+
+  /* the Settings sheet's list as SettingsSheet.swift draws it (inset-grouped Form, iOS 26) */
+  .ph.b-top .ph-nav { background: transparent; box-shadow: none; }
+  .sx-me { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0 2px; }
+  .sx-av { position: relative; width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+           background: linear-gradient(160deg, #9aa6bb, #6f7b91); color: #fff; font-size: 34px; font-weight: 500; }
+  .sx-av .pen { position: absolute; right: -5px; bottom: -3px; width: 30px; height: 30px; border-radius: 50%; background: #e5e5ea;
+                box-shadow: 0 0 0 2px #f2f2f6; display: flex; align-items: center; justify-content: center; color: #000; }
+  .sx-av .pen svg { width: 15px; height: 15px; }
+  .sx-nm { font-size: 17px; line-height: 22px; font-weight: 600; }
+  .sx-h { padding: 27px 36px 10px; font-size: 17px; line-height: 22px; font-weight: 600; color: #bbbbc0; }
+  .sx-f + .sx-h { padding-top: 15px; }
+  .sx-gap { height: 36px; }
+  .sx-f + .sx-gap { height: 24px; }
+  .sx-f { padding: 7px 36px 0; font-size: 13px; line-height: 17px; color: #85858a; }
+  .sx-card { margin: 0 16px; background: #fff; border-radius: 26px; overflow: hidden; }
+  .sx-r { position: relative; display: flex; align-items: center; min-height: 52px; padding: 0 18px 0 20px; box-sizing: border-box; }
+  .sx-r.tall { padding-top: 14px; padding-bottom: 14px; }
+  .sx-r + .sx-r::before { content: ''; position: absolute; top: 0; left: 60px; right: 20px; height: .5px; background: #dedee1; }
+  .sx-r.bare + .sx-r.bare::before { left: 20px; }
+  .sx-ic { flex: none; width: 24px; height: 24px; margin-right: 16px; color: #000; display: flex; align-items: center; justify-content: center; }
+  .sx-ic svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-ic.red { color: #ff3b30; }
+  .sx-m { flex: 1; min-width: 0; }
+  .sx-t { font-size: 17px; line-height: 22px; color: #000; }
+  .sx-r.red .sx-t { color: #ff3b30; }
+  .sx-s { margin-top: 2px; font-size: 15px; line-height: 20px; color: #7f7f7f; }
+  .sx-v { flex: none; margin-left: 10px; font-size: 17px; line-height: 22px; color: #8a8a8d; }
+  .sx-v.amber { color: #b35a00; }
+  .sx-ch { flex: none; width: 9px; height: 15px; margin-left: 10px; fill: none; stroke: #c5c5c7; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-ud { flex: none; width: 10px; height: 16px; margin-left: 7px; fill: none; stroke: #8a8a8d; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .sx-tg { flex: none; position: relative; width: 62px; height: 28px; margin-left: 9px; border-radius: 14px; background: #e9e9eb; }
+  .sx-tg::after { content: ''; position: absolute; top: 2px; left: 2px; width: 37px; height: 24px; border-radius: 12px; background: #fff;
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 0 0 .5px rgba(0, 0, 0, .04); }
+  .sx-tg.on { background: #65c466; }
+  .sx-tg.on::after { left: auto; right: 2px; }
+  .sx-ver { padding: 19px 0 0; text-align: center; font-size: 13px; line-height: 17px; color: #85858a; }
+
+  /* board marks over the phones */
+  .ring.b-now { border-color: #8b93a1; }
+  .mk-n.b-now { background: #6b7280; }
+  .b-fold { position: absolute; left: 0; right: 0; height: 0; border-top: 2px dashed #e5484d; z-index: 8; }
+  .b-below { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, .07); z-index: 7; pointer-events: none; }
+
+  .b-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; margin-right: 12px; }
+  .b-btn { flex: none; margin-left: 10px; padding: 5px 12px; border-radius: 14px; background: #e9e9eb; color: #0a84ff; font-size: 14px; font-weight: 600; }
+  .b-blue { color: #0a84ff !important; }
+  .b-cnt { float: right; font-weight: 400; font-size: 15px; color: #8a8a8d; }
+  /* the web Settings nav, drawn */
+  .wn { position: relative; width: 320px; padding: 16px 12px 20px; background: #fff; border: 1px solid #e3e3e6; border-radius: 12px; font: 14px/1.4 Inter, sans-serif; color: #1c1c1e; box-sizing: border-box; }
+  .wn-back { color: #6b6b70; font-size: 13px; }
+  .wn-title { font-size: 20px; font-weight: 700; margin: 8px 0 10px; }
+  .wn-search { border: 1px solid #e3e3e6; border-radius: 8px; padding: 6px 10px; color: #9a9aa0; font-size: 13px; margin-bottom: 6px; }
+  .wn-g { margin-top: 12px; }
+  .wn-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #8a8a8d; padding: 0 6px 4px; }
+  .wn-add { color: #8a8a8d; }
+  .wn-r { display: flex; align-items: center; gap: 9px; padding: 6px; border-radius: 6px; }
+  .wn-ic { width: 16px; height: 16px; display: flex; color: #444; }
+  .wn-ic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .wn-t { flex: 1; }
+  .wn-m { color: #8a8a8d; font-size: 12.5px; }
+  .wn-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .wn-dot.on { background: #34c759; } .wn-dot.off { background: #b0b0b5; }
+  .wn-off { opacity: .38; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">iOS 设置照 web 的分组排：Personal → Machines → Providers</h1>
+  <p class="m-sub zh" id="sub"></p>
+
+  <div class="m-stage" id="part-1">
+    <div class="m-stage-l zh">① 今天 · web 的设置导航 · 建议（每台手机画整张列表；红虚线是一屏的底）</div>
+    <div class="b-row">
+      <div class="b-phones" id="p1"></div>
+      <div class="b-side" id="s1"></div>
+    </div>
+  </div>
+
+  <div class="m-stage" id="part-2">
+    <div class="m-stage-l zh">② 点进去的页：Profile、Machines、Providers（General 就是今天的 Sessions 页，只改标题）</div>
+    <div class="b-row">
+      <div class="b-phones" id="p2"></div>
+      <div class="b-side" id="s2"></div>
+    </div>
+  </div>
+
+  <div class="m-stage" id="part-3">
+    <div class="m-stage-l zh">③ 待定 · 要你拍板</div>
+    <div id="asks"></div>
+  </div>
+
+  <div class="m-stage" id="part-4">
+    <div class="m-stage-l zh">④ 落地（按代价排）和不变的</div>
+    <div class="cols2" id="plan"></div>
+  </div>
+</section>
+<script>
+const GL = {
+  hand: '<path d="M8.2 12.6V6.4a1.3 1.3 0 0 1 2.6 0v5.2M10.8 11.4V4.6a1.3 1.3 0 0 1 2.6 0v6.8M13.4 11.4V5.6a1.3 1.3 0 0 1 2.6 0v6.2M16 12.2V8.4a1.3 1.3 0 0 1 2.6 0v5.4c0 4-2.7 6.9-6.4 6.9-2.5 0-4.1-1.1-5.4-3.1l-2.4-3.8a1.4 1.4 0 0 1 2.3-1.6l1.5 1.9"/>',
+  orch: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="18.6" r="2.2"/><circle cx="19" cy="18.6" r="2.2"/><path d="M10.9 7.1 6.1 16.5M13.1 7.1l4.8 9.4M7.4 18.6h9.2" stroke-dasharray="1.3 2.3"/>',
+  sparkles: '<path d="M10 3.6c.6 3.7 2.5 5.6 6.1 6.2-3.6.6-5.5 2.6-6.1 6.3-.6-3.7-2.5-5.7-6.1-6.3 3.6-.6 5.5-2.5 6.1-6.2z" fill="currentColor" stroke="none"/><path d="M18 13.6c.3 1.6 1 2.4 2.6 2.7-1.6.3-2.3 1.1-2.6 2.7-.3-1.6-1-2.4-2.6-2.7 1.6-.3 2.3-1.1 2.6-2.7zM18.3 2.6c.2 1.1.7 1.6 1.8 1.8-1.1.2-1.6.7-1.8 1.8-.2-1.1-.7-1.6-1.8-1.8 1.1-.2 1.6-.7 1.8-1.8z" fill="currentColor" stroke="none"/>',
+  bubble: '<path d="M5 4.5h14a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2h-8.2L6.6 20v-3.1H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M7 8.6h10M7 12.2h7"/>',
+  align: '<path d="M3.5 5.5h17M3.5 10h12M3.5 14.5h17M3.5 19h12"/>',
+  desktop: '<rect x="2.2" y="3.4" width="19.6" height="13.6" rx="1.8" fill="currentColor" stroke="none"/><rect x="3.6" y="4.8" width="16.8" height="9.2" rx=".5" fill="#fff" stroke="none" opacity=".16"/><path d="M8.6 20.6h6.8M12 17v3.6"/>',
+  bell: '<path d="M12 3.4A5.6 5.6 0 0 0 6.4 9v3.7l-1.7 3c-.4.7.1 1.4.8 1.4h13c.7 0 1.2-.7.8-1.4l-1.7-3V9A5.6 5.6 0 0 0 12 3.4z"/><path d="M9.7 19.6a2.4 2.4 0 0 0 4.6 0"/>',
+  half: '<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4a8.6 8.6 0 0 0 0 17.2z" fill="currentColor"/>',
+  mail: '<rect x="2.8" y="5.2" width="18.4" height="13.6" rx="2.2"/><path d="m3.7 6.5 8.3 6.5 8.3-6.5"/>',
+  globe: '<circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c2.4 2.3 3.6 5.2 3.6 8.6s-1.2 6.3-3.6 8.6M12 3.4C9.6 5.7 8.4 8.6 8.4 12s1.2 6.3 3.6 8.6"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
+  key: '<circle cx="7.2" cy="12" r="3.9"/><path d="M11.1 12h9.6l-1.9 2.2M16.8 12v2.6"/>',
+  lock: '<path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8"/><path d="M18.2 3v3.6h-3.6"/><rect x="9" y="11.2" width="6" height="5" rx="1"/><path d="M10.2 11.2V9.8a1.8 1.8 0 0 1 3.6 0v1.4"/>',
+  out: '<path d="M14 4.4H7.2a2 2 0 0 0-2 2v11.2a2 2 0 0 0 2 2H14"/><path d="M10.6 12h10M17.2 8.5 20.7 12l-3.5 3.5"/>',
+  sessions: '<path d="M4.2 3.8h9.6a2 2 0 0 1 2 2v5.1a2 2 0 0 1-2 2H8.6l-3.4 2.8v-2.8h-1a2 2 0 0 1-2-2V5.8a2 2 0 0 1 2-2z"/><path d="M18.4 8.4h1.4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-.9v2.8l-3.4-2.8h-4.3a2 2 0 0 1-2-2v-.6"/>',
+  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/><circle cx="12" cy="12" r="6.6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M5.4 18.6 7 17M17 7l1.6-1.6"/>',
+  person: '<circle cx="12" cy="8" r="4"/><path d="M4.2 20.6c.9-4 4-6.2 7.8-6.2s6.9 2.2 7.8 6.2"/>',
+  cloud: '<path d="M7 18.6h10.4a4.1 4.1 0 0 0 .5-8.2 5.9 5.9 0 0 0-11.3 1.4A3.4 3.4 0 0 0 7 18.6z"/>',
+  term: '<rect x="2.8" y="4.4" width="18.4" height="15.2" rx="2.2"/><path d="m6.6 9.4 3 2.6-3 2.6M11.6 15h5"/>',
+  hdd: '<rect x="2.8" y="6" width="18.4" height="12" rx="2.2"/><path d="M2.8 13h18.4"/><circle cx="17.2" cy="15.6" r=".7" fill="currentColor"/>',
+  pencil: '<path d="M4 20l1-4.2L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.2 19 4 20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>',
+};
+const svg = (k) => `<svg viewBox="0 0 24 24">${GL[k]}</svg>`;
+const CHEV = '<svg class="sx-ch" viewBox="0 0 9 15"><path d="M1.4 1.2 7.4 7.5l-6 6.3"/></svg>';
+const UPDN = '<svg class="sx-ud" viewBox="0 0 10 16"><path d="M1.6 6 5 2.6 8.4 6M1.6 10 5 13.4 8.4 10"/></svg>';
+
+/* The words: SettingsCopy's (and the web Settings page's, byte for byte); Default permission's is the web's hint. */
+const C = {
+  perm: 'The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in.',
+  orch: 'Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused.',
+  smart: "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before.",
+  replies: "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account.",
+  recaps: 'Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation.',
+  mm: 'Where your agents run, and whose model quota they spend.',
+};
+
+/** A row: {g glyph, t title, s hint under it, v value, amber, nav chevron, pick menu, tg switch, red, id}. */
+function row(r) {
+  const trail = (r.v ? `<span class="sx-v${r.amber ? ' amber' : ''}">${r.v}</span>` : '') + (r.pick ? UPDN : '') + (r.nav ? CHEV : '')
+    + (r.tg === undefined ? '' : `<span class="sx-tg${r.tg ? ' on' : ''}"></span>`);
+  return `<div class="sx-r${r.g ? '' : ' bare'}${r.s ? ' tall' : ''}${r.red ? ' red' : ''}"${r.id ? ` id="${r.id}"` : ''}>`
+    + (r.g ? `<span class="sx-ic${r.red ? ' red' : ''}">${svg(r.g)}</span>` : '')
+    + `<div class="sx-m"><div class="sx-t">${r.t}</div>${r.s ? `<div class="sx-s">${r.s}</div>` : ''}</div>${trail}</div>`;
+}
+const card = (rows, id) => `<div class="sx-card"${id ? ` id="${id}"` : ''}>${rows.join('')}</div>`;
+const head = (t) => `<div class="sx-h">${t}</div>`;
+const gap = '<div class="sx-gap"></div>';
+const foot = (t, id) => `<div class="sx-f"${id ? ` id="${id}"` : ''}>${t}</div>`;
+
+
+const me = (p) => `<div class="sx-me" id="${p}-me"><div class="sx-av">A<span class="pen">${svg('pencil')}</span></div><div class="sx-nm">Alex</div></div>`;
+const out = (p, ver) => gap + card([row({ g: 'out', t: 'Sign out', red: true })], `${p}-out`) + (ver ? `<div class="sx-ver" id="${p}-ver">Orbit 0.1.2 (3581)</div>` : '');
+const W = {
+  mmFoot: 'Where your agents run, and whose model quota they spend.',
+  machinesFoot: 'Subscriptions signed in here are spent only by sessions on that machine.',
+  addFoot: 'Run one command on the new machine — it installs Orbit, then asks you to confirm it’s yours.',
+  poolsFoot: 'Several accounts under one name.',
+  keysFoot: 'On your account and usable from every machine — billed per token. Adding or changing a key happens on the web.',
+  tiersFoot: "Preset tiers and prices follow the catalogue. A custom endpoint's model stays out of automatic routing until it has a tier.",
+};
+
+/* Today, in SettingsHome.swift's order as of f46e0179e — the order of the owner's 11-16 TestFlight screenshot. */
+const today = me('t')
+  + gap + card([row({ g: 'desktop', t: 'Machines &amp; models', v: '1 needs you', amber: true, nav: true })], 't-mm') + foot(W.mmFoot, 't-mmf')
+  + head('Preferences') + card([
+    row({ g: 'sessions', t: 'Sessions', nav: true }),
+    row({ g: 'bell', t: 'Notifications', v: 'On', nav: true }),
+    row({ g: 'half', t: 'Appearance', v: 'System', pick: true }),
+  ], 't-prefs')
+  + head('Account') + card([
+    row({ g: 'mail', t: 'Email', v: 'alex@example.com', id: 't-email' }),
+    row({ g: 'globe', t: 'Instance', v: 'orbitd.io', id: 't-inst' }),
+    row({ g: 'link', t: 'Shared links', v: '25 active', nav: true }),
+    row({ g: 'key', t: 'Access tokens', v: '1 active', nav: true }),
+    row({ g: 'term', t: 'Terminals', v: 'None', nav: true }),
+    row({ g: 'lock', t: 'Change password', nav: true, id: 't-pw' }),
+  ], 't-acct')
+  + out('t', true);
+
+/* Proposed: the web nav's groups (settingsIndex.ts PERSONAL_PAGES, SettingsLayout.tsx), what iOS has pages for. */
+const rec = me('r')
+  + head('Personal') + card([
+    row({ g: 'gear', t: 'General', nav: true, id: 'r-gen' }),
+    row({ g: 'bell', t: 'Notifications', v: 'On', nav: true }),
+    row({ g: 'sun', t: 'Appearance', v: 'System', pick: true }),
+    row({ g: 'person', t: 'Profile', nav: true, id: 'r-prof' }),
+    row({ g: 'link', t: 'Shared links', v: '25 active', nav: true }),
+    row({ g: 'key', t: 'Access tokens', v: '1 active', nav: true }),
+    row({ g: 'term', t: 'Terminals', v: 'None', nav: true }),
+  ], 'r-personal')
+  + gap + card([row({ g: 'desktop', t: 'Machines', v: '1 needs you', amber: true, nav: true })], 'r-mach')
+  + gap + card([row({ g: 'cloud', t: 'Providers', nav: true })], 'r-prov')
+  + out('r', false);
+
+/* The web's Settings nav, drawn as a narrow window shows it (/settings at < 760 px). */
+const navRow = (ic, t, meta, dot) => `<div class="wn-r"><span class="wn-ic">${svg(ic)}</span><span class="wn-t">${t}</span>${meta ? `<span class="wn-m">${meta}</span>` : ''}${dot ? `<span class="wn-dot ${dot}"></span>` : ''}</div>`;
+const navGroup = (t, rows, add, id) => `<div class="wn-g"${id ? ` id="${id}"` : ''}><div class="wn-h">${t}${add ? '<span class="wn-add">+</span>' : ''}</div>${rows.join('')}</div>`;
+const web = `<div class="wn" id="wn">
+  <div class="wn-back">‹ Back to Orbit</div><div class="wn-title">Settings</div><div class="wn-search">Search settings</div>
+  ${navGroup('Personal', [navRow('gear', 'General'), navRow('bell', 'Notifications'), navRow('sun', 'Appearance'), navRow('person', 'Profile'),
+    `<div class="wn-off">${navRow('hdd', 'Storage')}</div>`, navRow('link', 'Shared links'), navRow('key', 'Access tokens'), navRow('term', 'Terminals')], false, 'wn-personal')}
+  <div class="wn-off" id="wn-int">${navGroup('Integrations', [navRow('globe', 'Feishu')])}</div>
+  ${navGroup('Machines', [navRow('hdd', 'studio-mac', '', 'on'), navRow('hdd', 'build-linux', '', 'on'), navRow('hdd', 'old-laptop', '', 'off')], true, 'wn-mach')}
+  ${navGroup('Providers', [navRow('cloud', 'API keys', '2'), navRow('sessions', 'Account pools', '1')], true, 'wn-prov')}
+  <div class="wn-off" id="wn-ws">${navGroup('Workspaces', [navRow('mail', 'orbit', 'studio-mac'), navRow('mail', 'site', 'build-linux')], true)}</div>
+</div>`;
+
+/* ② pages */
+const profile = gap + card([row({ t: 'Email', v: 'alex@example.com' })], 'pf-email')
+  + gap + card([row({ t: 'Change password', nav: true })], 'pf-pw');
+const attn = (t, d, btn) => `<div class="sx-r tall"><span class="b-dot"></span><div class="sx-m"><div class="sx-t">${t}</div><div class="sx-s">${d}</div></div><span class="b-btn">${btn}</span></div>`;
+const plain = (t, s, v) => `<div class="sx-r${s ? ' tall' : ''} bare"><div class="sx-m"><div class="sx-t">${t}</div>${s ? `<div class="sx-s">${s}</div>` : ''}</div>${v ? `<span class="sx-v">${v}</span>` : ''}${CHEV}</div>`;
+const machinesPage = head('Needs you') + card([attn('<b>old-laptop</b> is offline', 'Last seen 1d ago · its subscriptions are unavailable until it’s back', 'Details')], 'mp-need')
+  + head('Machines<span class="b-cnt">2 of 3 online</span>') + card([
+    plain('studio-mac', 'Online · Claude Code, Codex'), plain('build-linux', 'Online · Claude Code'), plain('old-laptop', 'Offline · last seen 1d ago'),
+  ], 'mp-list') + foot(W.machinesFoot)
+  + gap + card([`<div class="sx-r bare"><div class="sx-m"><div class="sx-t b-blue">Add Runner</div></div></div>`], 'mp-add') + foot(W.addFoot);
+const providersPage = head('Account pools') + card([plain('Team Codex', '3 accounts · 2 people', '')], 'pp-pools') + foot(W.poolsFoot)
+  + head('API keys') + card([plain('DeepSeek', 'Balance $18.20', ''), plain('Anthropic', 'sk-ant-…4f2a', '')], 'pp-keys') + foot(W.keysFoot)
+  + head('Model tiers') + card([plain('Fast', '', 'deepseek-flash'), plain('Balanced', '', 'sonnet'), plain('Strong', '', 'opus')], 'pp-tiers') + foot(W.tiersFoot);
+
+function strip(id, body, opts = {}) {
+  return sheetPhone({ title: opts.title || '', back: !!opts.back, body, height: 2600, id }).replace('class="ph"', `class="ph tall${opts.title ? '' : ' b-top'}"`);
+}
+const frame = (kind, label, html) => `<div class="frame"><div class="lbl zh"><span class="m-k${kind === '今天' || kind === 'web' ? '' : ' new'}">${kind}</span>${label}</div>${html}</div>`;
+
+document.getElementById('p1').innerHTML =
+  frame('今天', 'Machines &amp; models → Preferences → Account', strip('ph-t', today)) +
+  frame('web', '/settings 的导航（窄窗口时就是这一页）', web) +
+  frame('建议', 'Personal → Machines → Providers', strip('ph-r', rec));
+document.getElementById('p2').innerHTML =
+  frame('建议', '点 Profile', strip('ph-pf', profile, { title: 'Profile', back: true })) +
+  frame('建议', '点 Machines', strip('ph-mp', machinesPage, { title: 'Machines', back: true })) +
+  frame('建议', '点 Providers', strip('ph-pp', providersPage, { title: 'Providers', back: true }));
+
+/* ── measure, fold, marks ── */
+const SCREEN = 852;
+const M = {};
+const y0 = (ph, sel) => Math.round(at(ph, sel).y);
+for (const ph of document.querySelectorAll('.ph.tall')) {
+  const last = ph.querySelector('.ph-scroll').lastElementChild;
+  const end = Math.round(at(ph, last).y + at(ph, last).h);
+  ph.style.height = `${end > SCREEN ? end + 30 : SCREEN}px`;
+  if (end > SCREEN) ph.insertAdjacentHTML('beforeend', `<div class="b-below" style="top:${SCREEN}px"></div><div class="b-fold" style="top:${SCREEN}px"></div>`);
+  M[ph.id] = { total: end };
+}
+const t = document.getElementById('ph-t'), r = document.getElementById('ph-r');
+const wn = document.getElementById('wn');
+Object.assign(M['ph-t'], { out: y0(t, '#t-out') });
+Object.assign(M['ph-r'], { mach: y0(r, '#r-mach'), prov: y0(r, '#r-prov'), out: y0(r, '#r-out') });
+
+function mark(ph, sels, n, { pad = 4, grey = false, w = 377 } = {}) {
+  const rs = [].concat(sels).map((s) => at(ph, s));
+  const x = Math.max(ph === wn ? 6 : 16, Math.min(...rs.map((q) => q.x))), y = Math.min(...rs.map((q) => q.y));
+  const b = { x, y, w: Math.min(w, Math.max(...rs.map((q) => q.x + q.w))) - x, h: Math.max(...rs.map((q) => q.y + q.h)) - y };
+  ph.insertAdjacentHTML('beforeend', `<span class="ring${grey ? ' b-now' : ''}" style="left:${b.x - pad}px;top:${b.y - pad}px;width:${b.w + 2 * pad}px;height:${b.h + 2 * pad}px"></span>`
+    + `<span class="mk-n${grey ? ' b-now' : ''}" style="left:${b.x + b.w + pad - 13}px;top:${b.y - pad - 11}px">${n}</span>`);
+}
+mark(t, ['#t-mm', '#t-mmf'], 'A', { grey: true });
+mark(t, '#t-prefs', 'B', { grey: true });
+mark(t, ['#t-email', '#t-inst'], 'C', { grey: true, pad: 2 });
+mark(t, '#t-pw', 'D', { grey: true, pad: 2 });
+mark(t, '#t-ver', 'E', { grey: true, pad: 2 });
+mark(wn, '#wn-personal', 'a', { w: 314 });
+mark(wn, '#wn-int', 'b', { w: 314 });
+mark(wn, ['#wn-mach', '#wn-prov'], 'c', { w: 314 });
+mark(wn, '#wn-ws', 'd', { w: 314 });
+mark(r, '#r-personal', 1);
+mark(r, '#r-gen', 2, { pad: 1 });
+mark(r, '#r-prof', 3, { pad: 1 });
+mark(r, ['#r-mach', '#r-prov'], 4);
+mark(r, '#r-out', 5);
+const pf = document.getElementById('ph-pf'), mp = document.getElementById('ph-mp'), pp = document.getElementById('ph-pp');
+mark(pf, ['#pf-email', '#pf-pw'], 6);
+mark(mp, '#mp-need', 7);
+mark(pp, '#pp-pools', 8);
+
+const n = (v) => `<b class="b-num">${v.toLocaleString('en-US')}</b>`;
+const T = M['ph-t'], R = M['ph-r'];
+
+document.getElementById('sub').innerHTML = `你 11-16 的要求：「iOS 菜单的布局参考 web」。上一轮问过范围，你选了<b>只按 web 重新分组</b>（不新增 iOS 没有的页），以及 <b>web 没有的行拿掉、只留 Sign out</b>。这张板画的就是这个：今天的 iOS 列表、web 的设置导航、照 web 排过的 iOS 列表放在一排对照，第 ② 段是点进去的新页。代码已经在分支上写好（未提交），等你看过这张板再定。<br>手机按 <code>SettingsHome.swift</code> / <code>SettingsSheet.swift</code> 的结构画（393×852，不是截图），样子沿用 <code>ios-settings-order</code> 那块板的画法；账户、机器、密钥都是示例数据。pt 从屏幕顶量。灰字母标今天和 web 的差别，橙数字标改动，要你定的在 ③。`;
+
+document.getElementById('s1').innerHTML = `
+  <h4 class="zh"><span class="m-k">今天</span>和 web 哪里不一样</h4>
+  ${notes([
+    ['A', `<b>Machines &amp; models 是一行</b>，web 上是两个组：Machines（每台机器一行）、Providers（API keys、Account pools）。`],
+    ['B', `<b>Preferences 组</b>：web 没有这个组；Sessions 在 web 上叫 <b>General</b>，和 Notifications、Appearance 一起在 Personal 里。`],
+    ['C', `<b>Email、Instance 直接摊在列表上</b>：web 的 Email 在 Profile 页里，Instance 在 web 设置里没有。`],
+    ['D', `<b>Change password 是列表上一行</b>：web 是 Profile 页里的一个按钮，开对话框。`],
+    ['E', `<b>版本号</b>（和管理员才有的 Admin 行，图里没画）：web 设置里都没有；Admin 在 iOS 侧栏里本来就有入口。`],
+  ])}
+  <h4 class="zh"><span class="m-k">web</span>设置导航</h4>
+  ${notes([
+    ['a', `<b>Personal</b>：General、Notifications、Appearance、Profile、Storage、Shared links、Access tokens、Terminals。Storage（灰的）iOS 还没有这一页，先不放。`],
+    ['b', `<b>Integrations · Feishu</b>：iOS 没有这一页，先不放。`],
+    ['c', `<b>Machines、Providers</b>：web 把每台机器、两类 provider 直接列在导航里。`],
+    ['d', `<b>Workspaces</b>：iOS 设置里没有 workspace 页，先不放。`],
+  ])}
+  <h4 class="zh"><span class="m-k new">建议</span>改了什么</h4>
+  ${notes([
+    [1, `<b>Personal 一组七行</b>，名字、顺序、图标都照 web（Storage 除外）。Appearance 仍是行上的菜单。`],
+    [2, `<b>Sessions 改名 General</b>：点进去还是今天那页（五个开关、Translation、Prompt optimizer），只是标题变了；输入框上的翻译标签也打开这一页。`],
+    [3, `<b>Profile</b>：一页，放 Email 和 Change password（右边 ②）。头像和名字照旧在顶上点开改。`],
+    [4, `<b>Machines、Providers 各一行</b>，把今天的 Machines &amp; models 页拆成两页。手机上不把每台机器摊进列表（那是你上一轮没选的「完整照搬」）。Machines 行的值只数机器的「要你」，Providers 行只在有账号池起不来时显示。`],
+    [5, `<b>只剩 Sign out</b>：Instance、Admin、版本号拿掉。列表到底从 ${n(T.total)} pt 变成 ${n(R.total)} pt，Sign out 在 ${n(R.out)} pt（今天 ${n(T.out)}）。`],
+  ])}`;
+
+document.getElementById('s2').innerHTML = `
+  ${notes([
+    [6, `<b>Profile 页</b>：Email 只读，Change password 点进去还是今天那页（三个密码框）。web 的 Profile 页还有 Photo、Name——iOS 在列表顶上的头像卡里改，不重复放。`],
+    [7, `<b>Machines 页</b>：今天 Machines &amp; models 页的上半：Needs you（只放机器的：离线、没登录 CLI、正在更新）、机器列表、Add Runner。每行点进去还是机器自己的页。`],
+    [8, `<b>Providers 页</b>：下半：Needs you（只放账号池的）、Account pools、API keys、Model tiers。每行点进去不变。`],
+  ])}
+  <p class="b-cap zh">两页都是同一个视图（<code>RunnersListView</code>）只画一半，组件、文案一个字不新造。Mac 和 iPhone 侧栏里那一页 Machines &amp; models 不拆，照旧。</p>`;
+
+document.getElementById('asks').innerHTML = `
+  <div class="ask zh">
+    <h4><span class="tbd">1</span>Machines &amp; models 拆不拆</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>拆成 Machines、Providers 两行两页（板上画的）</h5>
+        <div class="ab-sub">和 web 的两个组对上。代价：从设置里看机器和密钥要点两处；「要你」分在两行上。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>保留一行 Machines &amp; models、一页</h5>
+        <div class="ab-sub">只是挪到 Personal 下面；和 iPhone 侧栏、Mac 的那一页同名同内容。和 web 的分组不完全一样。</div></div>
+    </div>
+  </div>
+  <div class="ask zh">
+    <h4><span class="tbd">2</span>Machines、Providers 两行上面要不要组标题</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>不要（板上画的）</h5>
+        <div class="ab-sub">一组只有一行，行名就是组名，标题会说两遍。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>要，和 web 一样写 Machines / Providers</h5>
+        <div class="ab-sub">和 web 一眼对得上，代价是重复的字、列表多两行高。</div></div>
+    </div>
+  </div>
+  <div class="ask zh">
+    <h4><span class="tbd">3</span>Android</h4>
+    <div class="ab">
+      <div class="ab-opt rec"><h5><span class="ab-k">A</span>跟着一起改</h5>
+        <div class="ab-sub">Android 的设置一直照 iOS 的 <code>SettingsHome</code> 排；只改 iOS 两个手机端就不一样了。另开一个任务做。</div></div>
+      <div class="ab-opt"><h5><span class="ab-k">B</span>只改 iOS</h5>
+        <div class="ab-sub">Android 暂时保持今天的顺序（Sessions、Instance 等）。</div></div>
+    </div>
+  </div>`;
+
+document.getElementById('plan').innerHTML = `
+  <div>
+    <h4 class="zh" style="margin:0 0 8px;font-size:13.5px">落地（按代价排）</h4>
+    <ol class="b-plan zh">
+      <li><b>已写好、未提交</b>：<code>SettingsHome</code> 的组/行/页换成 Personal → Machines → Providers；新 Profile 页；<code>RunnersListView</code> 加 <code>part</code>，设置里分两半画；Sessions → General；Instance、Admin、版本号拿掉。OrbitKit 全套测试在 Linux 的 swift:6.1 里跑过：5411 个，1 个失败是 main 上本来就红的 <code>RunnerPageCopyParityTests</code>（web 加了 <code>agentFixSignInBelow</code>，Swift 没跟）。</li>
+      <li><b>编译 iOS app</b>：推 probe 分支、跑 <code>client.yml</code>（macOS + iOS 模拟器，约 10–25 分钟）；SwiftUI 在 Linux 上编不了。</li>
+      <li><b>真机截图对照</b>：同一个 probe 分支在 macos-26 上用 XCUITest 拍设置列表和三页，和这张板对。</li>
+      <li><b>Android</b>（③-3 选 A 的话）：<code>SettingsScreen.kt</code> 同样改分组，另开任务。</li>
+    </ol>
+  </div>
+  <div>
+    <h4 class="zh" style="margin:0 0 8px;font-size:13.5px">不变的</h4>
+    <ul class="b-plan zh">
+      <li>头像和名字（点开改资料），「Notifications are off」卡仍在最上。</li>
+      <li>每一页本身：Notifications、Shared links、Access tokens、Terminals、改密码、机器页、账号池页，内容和写入都不动。</li>
+      <li>Sign out 的确认；iPad 上是同一个 sheet，跟着变。</li>
+      <li>Mac 的设置窗口、web 设置页不动；Admin 仍在侧栏（管理员才有）。</li>
+    </ul>
+  </div>`;
+
+finish();
+</script>
+</body>
+</html>

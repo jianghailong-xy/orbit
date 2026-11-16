@@ -328,7 +328,7 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
                       canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
-    val items = RunnerPage.attention(runner, workspaces, now, latest)
+    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null)
     val name = RunnerPage.displayName(runner)
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -424,7 +424,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     val managedWaiting = managedRow != null && managedRow.kind != "available" && runner.str("version")?.trim().isNullOrEmpty()
     // Asleep (or any managed state) is said by the banner, not as a machine away.
     val items = if (managedWaiting) emptyList()
-        else RunnerPage.attention(runner, workspaces, now, model.latestVersion).filter { managedRow == null || it.kind != "offline" }
+        else RunnerPage.attention(runner, workspaces, now, model.latestVersion, managed = managedRow != null).filter { managedRow == null || it.kind != "offline" }
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -549,6 +549,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     HorizontalDivider()
                     TextButton(onClick = { updateEngines() }, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                     RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                    // A failed line: an agent can be sent to fix it, under the report (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                    RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                            }
+                            AgentFixLine(view, "update-fix:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+                        }
+                    }
                     TextButton(onClick = { scope.launch {
                         notice.show(model.press { api.post("runners/$id/refresh-models") } ?: "Re-reading this machine’s model lists — the picker updates within a minute.")
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
@@ -572,7 +581,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(RunnerCopy.ABOUT_NAME, Modifier.weight(1f)); Text(RunnerPage.displayName(runner), color = Ink.muted, maxLines = 1); Spacer(Modifier.width(8.dp)); Chevron()
                 }
-                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion),
+                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion, managed = managedRow != null),
                     RunnerCopy.ABOUT_LAST_UPDATE to RunnerPage.lastUpdate(runner))
                 if (RunnerPage.canUpdateNow(runner, now)) { HorizontalDivider(); TextButton(onClick = { updateRunner() }) { Text(RunnerCopy.UPDATE_RUNNER_NOW) } }
                 AboutRows(RunnerCopy.ABOUT_RUNS_AS to RunnerPage.runsAsValue(runner), RunnerCopy.ABOUT_REPOS_FOLDER to runner.str("reposRoot"),
@@ -639,7 +648,7 @@ private fun RunnerHead(runner: JsonObject, now: Long, managed: ManagedRunner.Row
                     if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             }
-            RunnerPage.hostLine(runner).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+            RunnerPage.hostLine(runner, managed = managed != null).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
 }
@@ -872,10 +881,12 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
     // Leaving saves; a rotation does not leave.
     val activity = LocalActivity.current
     DisposableEffect(id) { onDispose { if (activity?.isChangingConfigurations != true) save() } }
+    // The name an empty field falls back to: Orbit Cloud for the managed runner, else its machine name.
+    val machine = RunnerPage.nameOf(runner.text("id"), runner.text("name"), null)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(runner.text("name")) }, singleLine = true,
+        OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(machine) }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(); back() }))
-        Text("Leave empty to use the machine name (${runner.text("name")}).", style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+        Text("Leave empty to use the machine name ($machine).", style = MaterialTheme.typography.bodySmall, color = Ink.muted)
     }
 }
 
@@ -1029,6 +1040,15 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                 RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+                RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                    Column(Modifier.padding(bottom = 8.dp)) {
+                        AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                            scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                        }
+                        AgentFixLine(view, "update-fix:line", ::openSession)
+                    }
+                }
             }
             Spacer(Modifier.height(48.dp))
         }

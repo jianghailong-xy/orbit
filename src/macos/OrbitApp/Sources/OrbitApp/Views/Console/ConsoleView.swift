@@ -1014,7 +1014,7 @@ struct TranscriptView: View {
 
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
         guard let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
-              let id = RunnerUpdating.footBubbleID(console.state.items) else { return nil }
+              let id = RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) else { return nil }
         return RunnerUpdatingFoot(bubbleID: id, session: session, machine: console.runnerName, runnerID: console.runnerID)
     }
 
@@ -1026,7 +1026,7 @@ struct TranscriptView: View {
 
     @ViewBuilder private var runnerUpdatingPage: some View {
         if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
-           RunnerUpdating.footBubbleID(console.state.items) == nil {
+           RunnerUpdating.footBubbleID(console.state.items, accepted: console.state.accepted) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
         }

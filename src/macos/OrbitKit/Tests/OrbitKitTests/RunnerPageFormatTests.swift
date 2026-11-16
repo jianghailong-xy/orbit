@@ -566,7 +566,7 @@ final class RunnerPageFormatTests: XCTestCase {
 
         let removal = try XCTUnwrap(RunnerPageFormat.removal(state, engine: "codex", account: "1fda3f43"))
         XCTAssertEqual(removal.refused,
-                       "This Codex account can’t be removed while 3 sessions are running on it — end them, then remove it")
+                       "This Codex account can’t be removed while 3 sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account")
         XCTAssertEqual(removal.blocking.map(\.title), ["Fix login", "Untitled session", "Old"])
         XCTAssertEqual(removal.blocking.map(\.label), ["Running", "Waiting for input", nil])
         XCTAssertEqual(removal.blocking.map(\.tone), [.ok, .warn, .muted])
@@ -574,7 +574,7 @@ final class RunnerPageFormatTests: XCTestCase {
         let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "failed", message: "in use",
                                            sessions: [RunnerAccountRemoveSession(id: "a", title: "Fix login", status: .pending)])
         XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.refused,
-                       "This Claude Code account can’t be removed while a session is running on it — end the session below, then remove it")
+                       "This Claude Code account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account")
 
         // From an older server: no list, and the machine's own words.
         let older = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(

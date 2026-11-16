@@ -142,6 +142,8 @@ public enum PromptOptimizerCopy {
     public static let optimize = "Optimize"
     public static let optimizing = "Optimizing…"
     public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
+    /// The Mac's ✦ tooltip: optimizeHelp with the keys that press it there. Android, with no Tab, says optimizeHelp.
+    public static let optimizeHelpWithKeys = optimizeHelp + " · Tab · ⌘⇧O"
     public static let cancelHelp = "Stop optimizing"
     public static let buttonIdentifier = "composer.optimize"
 
@@ -151,9 +153,23 @@ public enum PromptOptimizerCopy {
     public static let used = "Used:"
     public static let use = "Use"
     public static let editThenUse = "Edit, then use"
+    /// A phone's shorter "Edit, then use".
+    public static let edit = "Edit"
+    /// A phone's line under the gloss (as under a bilingual message): "Sent to the agent in English",
+    /// and its Show / Hide for the prompt beneath.
+    public static func sentToAgent(_ language: TranslationLanguage?) -> String {
+        TranslationCopy.sentToAgentLabel(language ?? .agentDefault)
+    }
+    public static let show = "Show"
+    public static let hide = "Hide"
+    /// A phone's "Used:" chips as one line: "Used this session's last 106 turns · session recap".
+    public static func usedLine(_ chips: [String]) -> String { "Used " + chips.joined(separator: " · ") }
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
-    public static let escDismisses = "Esc dismisses · your draft is kept"
+    /// The Mac card's keys: Tab in the box is Use (as it takes a reply suggestion), Esc dismisses.
+    public static let keysHint = "Tab uses it · Esc dismisses · your draft is kept"
+    /// The key drawn inside Use on a Mac.
+    public static let useKey = "Tab"
     /// From the gloss the card opens on to the prompt the agent receives: the prompt's own language
     /// ("Show in English"), or "Show original" for a code this client does not know.
     public static func showPrompt(_ language: TranslationLanguage?) -> String {
@@ -263,8 +279,20 @@ public struct PromptOptimizerState: Equatable, Sendable {
     /// D2: with a gloss inserted, the optimizer's agent-language prompt an unedited send carries as its
     /// translation; nil when Use inserted the prompt itself.
     private var insertedTranslation: String?
+    /// The box's text when its card was last used or dismissed: Tab has had its go at that draft, so
+    /// until it changes Tab moves focus again (Tab, Esc, Tab reaches the toolbar).
+    public private(set) var spent: String?
 
     public init() {}
+
+    /// Whether a bare Tab in the box optimizes: ✦ could take this draft, no card is open, no press is
+    /// out, and Tab has not had its go at this exact text. Otherwise Tab moves focus as it always has.
+    public func tabOptimizes(on: Bool, text: String) -> Bool {
+        switch phase {
+        case .idle, .failed: return text != spent && PromptOptimizer.showsButton(on: on, text: text)
+        case .optimizing, .suggestion: return false
+        }
+    }
 
     public var isOptimizing: Bool { if case .optimizing = phase { return true } else { return false } }
     public var suggestion: PromptOptimization? {
@@ -299,10 +327,13 @@ public struct PromptOptimizerState: Equatable, Sendable {
         return draft != current
     }
 
-    /// × / Esc: the card goes, the draft stays; so does the failure line.
-    public mutating func dismiss() {
+    /// × / Esc: the card goes, the draft stays; so does the failure line. `current`, the box's text,
+    /// is then spent for Tab; Try again dismisses without it.
+    public mutating func dismiss(current: String? = nil) {
         switch phase {
-        case .suggestion, .failed: phase = .idle
+        case .suggestion, .failed:
+            phase = .idle
+            if let current { spent = current }
         default: break
         }
         showingPrompt = false
@@ -314,6 +345,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard let s = suggestion else { return nil }
         undoDraft = current
         inserted = s.insertText
+        spent = s.insertText
         insertedTranslation = s.gloss != nil ? s.text : nil
         phase = .idle
         showingPrompt = false

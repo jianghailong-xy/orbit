@@ -113,6 +113,9 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_RESOURCES_UPDATE", RunnerPageCopy.RUNNER_RESOURCES_UPDATE),
         ("RUNNER_RESOURCES_NO_READING", RunnerPageCopy.RUNNER_RESOURCES_NO_READING),
         ("MANAGED_RUNNER_NOT_REPORTED", RunnerPageCopy.MANAGED_RUNNER_NOT_REPORTED),
+        ("MANAGED_RUNNER_LABEL", RunnerPageCopy.MANAGED_RUNNER_LABEL),
+        ("MANAGED_RUNNER_KEPT_UP_TO_DATE", RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE),
+        ("MANAGED_RUNNER_UPDATED_BY_ORBIT", RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT),
         ("RUNNER_RESOURCES_MEMORY_FULL", RunnerPageCopy.RUNNER_RESOURCES_MEMORY_FULL),
         ("RUNNER_CPU_ONE_CORE", RunnerPageCopy.RUNNER_CPU_ONE_CORE),
         ("RUNNER_MAX_CONCURRENT", RunnerPageCopy.RUNNER_MAX_CONCURRENT),
@@ -420,6 +423,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
         ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
         ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
+        ("agentFixSignInBelow", RunnerPageCopy.agentFixSignInBelow(engine: "${engine}")),
     ]
 
     // MARK: the words

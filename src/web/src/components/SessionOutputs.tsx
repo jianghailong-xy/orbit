@@ -38,6 +38,7 @@ import sql from 'highlight.js/lib/languages/sql';
 import java from 'highlight.js/lib/languages/java';
 import c from 'highlight.js/lib/languages/c';
 import cpp from 'highlight.js/lib/languages/cpp';
+import { useMachineName } from '../lib/managedRunner';
 
 // Register only the languages this repo (and common config) actually uses; anything else falls
 // back to plain text. Keeps the highlighter to a focused subset rather than all ~37 grammars.
@@ -146,6 +147,8 @@ export function SessionOutputs({
   /** Moves when something outside asks to open this session's diff (a Move result line's View changes). */
   openDiffSignal?: number;
 }) {
+  // The machine the merge runs on, as the app names it (Orbit Cloud for the managed runner).
+  const machineNameOf = useMachineName();
   const message = useToast();
   const mainCheckout = useMainCheckoutHost();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
@@ -231,6 +234,10 @@ export function SessionOutputs({
   // A merge/commit failure has recovery info (reason + manual command) worth surfacing inline.
   const failed =
     detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error' || detail.commitStatus === 'error';
+  // A merge failure (conflict or precondition error) sits inset to the row's padding
+  // (.wt-merge-inset); a failed commit's card brings its own.
+  const mergeFailShown =
+    (detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error') && detail.commitStatus !== 'error';
 
   // Git-state-driven primary action. When the runner reports `worktreeDirty`, the bar shows
   // Commit while the worktree has uncommitted changes and Merge once it's clean. Older runners
@@ -333,7 +340,10 @@ export function SessionOutputs({
           ))}
       </div>
       {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
-        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner} />}
+        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner && {
+          ...detail.assignedRunner,
+          displayName: machineNameOf({ ...detail.assignedRunner, id: detail.assignedRunnerId ?? undefined, name: detail.assignedRunner.name ?? undefined }) || null,
+        }} />}
       {recovery && !recoveryOperating && !recoveryFastForward && <MergeRepairStrip recovery={recovery}
         branch={detail.branch}
         message={detail.mergeError}
@@ -348,7 +358,7 @@ export function SessionOutputs({
         waitingForTurn={!!turnActive}
         failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
-        <div className="wt-merge wt-bar-fail">
+        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}`}>
           {detail.commitStatus === 'error' ? (
             <CommitFailure
               key={detail.commitError ?? ''}
@@ -359,20 +369,38 @@ export function SessionOutputs({
             />
           ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
-              <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-                Merge conflict — aborted, working tree left clean. Resolve in the session above, or
-                by hand:
-              </span>
-              <span className="wt-merge-or">
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
-                  {manualRebaseCmd}
-                </code>
-                <span className="wt-merge-where"> in the session’s worktree, then </span>
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
-                  {manualFfCmd}
-                </code>
-                <span className="wt-merge-where"> in the repo</span>
-              </span>
+              <div className="wt-merge-head" title={detail.mergeError ?? undefined}>
+                <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
+                Merge conflict with {mergeTargetName}
+              </div>
+              <div className="wt-merge-why">
+                The merge was aborted and nothing changed.{' '}
+                {onResolveInSession ? (
+                  <>
+                    Use <b>Resolve in session</b>, or resolve it by hand:
+                  </>
+                ) : (
+                  'Resolve it by hand:'
+                )}
+              </div>
+              <ol className="wt-merge-steps">
+                <li>
+                  <span className="wt-merge-step-n" aria-hidden="true">1</span>
+                  <span className="wt-merge-where">In the session’s worktree</span>
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
+                    {manualRebaseCmd}
+                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                  </code>
+                </li>
+                <li>
+                  <span className="wt-merge-step-n" aria-hidden="true">2</span>
+                  <span className="wt-merge-where">Then in the repo</span>
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
+                    {manualFfCmd}
+                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                  </code>
+                </li>
+              </ol>
             </div>
           ) : (
             // A precondition failure, not a conflict: no git command run here would help, and the

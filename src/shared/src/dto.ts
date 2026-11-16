@@ -1129,6 +1129,26 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
 
+/** What a runner declares when it makes a new folder in its home directory, the directory its reported reposRoot
+ *  sits in (`<home>/orbit-repos`): POST /sessions `newFolder` is then `<home>/<name>` (newFolderRoot) rather than
+ *  `<reposRoot>/<name>`. */
+export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
+
+/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+ *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
+ *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
+export const MANAGED_RUNNER_REPOS_ROOT = '/var/lib/orbit/home/orbit-repos';
+
+export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
+  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
+  if (cut < 0) return root;
+  // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+  return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
@@ -1231,7 +1251,7 @@ export interface DirProbeAnswer {
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
-  /** A new folder under the runner's reposRoot: one path segment of 1–64 characters from
+  /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
 }
@@ -1511,6 +1531,11 @@ export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
  *  docs/runner-update-drain-design.md §4): it interrupts the turns in flight, installs and restarts.
  *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
 export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
+
+/** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
+ *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
+ *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
+export const SUBAGENT_REMOTE_RESUME_V1 = 'subagent-remote-resume/v1';
 
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {
@@ -2616,6 +2641,9 @@ export interface SubagentRunCreateRequest {
   needs?: string[];
   /** The brief. Sent for a call that may run remotely: the target runner needs it, the parent's machine has it. */
   prompt?: string;
+  /** A finished remote run of this session to continue (§10.2): the new run goes to the workspace and runner that
+   *  ran it, whose runner continues its conversation. Not with `workspace` or `needs`. */
+  resumeOf?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2655,6 +2683,8 @@ export interface RemoteSubagentClaim {
   prompt: string;
   /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
   exec: AgentExecConfig;
+  /** The earlier run of this runner whose conversation this one continues, or null for a new conversation. */
+  resumeOf: string | null;
 }
 
 /** One child event the target runner relays (§10.3), numbered by the run from 1. */

@@ -92,6 +92,9 @@ export function usePromptOptimizer({
   const inFlight = useRef<AbortController | null>(null);
   // What Use replaced, while the box still holds what it put there (⌘Z and the toast's Undo).
   const undo = useRef<{ previous: string; inserted: string } | null>(null);
+  // The box's text when its card was last used or dismissed: Tab has had its go at that draft, so
+  // until it changes Tab moves focus again (Tab, Esc, Tab reaches the toolbar).
+  const spent = useRef<string | null>(null);
   const textRef = useRef(text);
   textRef.current = text;
   const targetRef = useRef(target);
@@ -104,6 +107,7 @@ export function usePromptOptimizer({
   useEffect(() => {
     cancel();
     undo.current = null;
+    spent.current = null;
     setState({ kind: 'idle' });
   }, [resetKey, cancel]);
   useEffect(() => cancel, [cancel]);
@@ -123,6 +127,9 @@ export function usePromptOptimizer({
   // draft fills or empties: it is only disabled when there is nothing it can do.
   const buttonShown = on && !disabled;
   const buttonEnabled = buttonShown && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
+  // A bare Tab in the box optimizes: ✦ could take this draft, no card is open, none is under way, and
+  // Tab has not had its go at this exact text (`spent`). Otherwise Tab moves focus as it always has.
+  const tabOptimizes = buttonEnabled && !busy && state.kind !== 'card' && text !== spent.current;
 
   const start = useCallback(() => {
     const t = targetRef.current;
@@ -157,7 +164,10 @@ export function usePromptOptimizer({
     start();
   }, [cancel, start]);
 
-  const dismiss = useCallback(() => setState({ kind: 'idle' }), []);
+  const dismiss = useCallback(() => {
+    spent.current = textRef.current;
+    setState({ kind: 'idle' });
+  }, []);
 
   const restore = useCallback(() => {
     const held = undo.current;
@@ -175,6 +185,7 @@ export function usePromptOptimizer({
       const insert = insertOf(state.result);
       const inserted = insert.text;
       undo.current = { previous: textRef.current, inserted };
+      spent.current = inserted;
       setText(inserted);
       targetRef.current?.onInserted(insert);
       setState({ kind: 'idle' });
@@ -195,7 +206,7 @@ export function usePromptOptimizer({
     [state, setText, restore, taRef],
   );
 
-  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, and Esc on the card.
+  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, Tab and Esc on the card.
    *  True when the key was the optimizer's. */
   const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (e.nativeEvent.isComposing) return false;
@@ -215,6 +226,21 @@ export function usePromptOptimizer({
       restore();
       return true;
     }
+    // Tab is the optimizer's key in the box: on a draft it optimizes, and on the card it is Use, as it
+    // takes a reply suggestion. A menu open above has already had the key; on the card's own buttons,
+    // while a press is under way, and on a spent draft, Tab moves focus.
+    if (e.key === 'Tab' && !mod && !e.shiftKey && !e.altKey) {
+      if (state.kind === 'card') {
+        e.preventDefault();
+        use(false);
+        return true;
+      }
+      if (tabOptimizes) {
+        e.preventDefault();
+        start();
+        return true;
+      }
+    }
     if (e.key === 'Escape' && (state.kind === 'card' || state.kind === 'failed')) {
       e.preventDefault();
       e.stopPropagation();
@@ -231,6 +257,7 @@ export function usePromptOptimizer({
     busy,
     buttonShown,
     buttonEnabled,
+    tabOptimizes,
     press,
     onKeyDown,
     card:
@@ -336,8 +363,11 @@ function PromptOptimizerCard({
         </div>
       )}
       <div className="composer-optimized-actions">
-        <button type="button" className="composer-optimized-use" onClick={onUse}>
+        <button type="button" className="composer-optimized-use" aria-keyshortcuts="Tab" onClick={onUse}>
           Use
+          <kbd className="composer-optimized-key" aria-hidden="true">
+            Tab
+          </kbd>
         </button>
         <button type="button" className="composer-optimized-edit" onClick={onEditUse}>
           Edit, then use
@@ -345,7 +375,9 @@ function PromptOptimizerCard({
         <button type="button" className="composer-optimized-retry" onClick={onTryAgain}>
           Try again
         </button>
-        <span className="composer-optimized-hint">Esc dismisses · your draft is kept</span>
+        <span className="composer-optimized-hint">
+          <span className="composer-optimized-tab-hint">Tab uses it · </span>Esc dismisses · your draft is kept
+        </span>
       </div>
     </div>
   );

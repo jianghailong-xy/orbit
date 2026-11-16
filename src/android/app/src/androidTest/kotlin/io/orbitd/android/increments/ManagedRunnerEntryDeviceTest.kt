@@ -24,6 +24,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
     private val coord = "34MraSessionCoord00001"
     override val ids get() = listOf(workspace, runner, laptop, managed, managedWorkspace, managedSession, project, coord)
 
+    @Volatile private var hasManagedWorkspace = true
     @Volatile private var featureOn = true
     @Volatile private var state = "NOT_PROVISIONED"
     private val mapped get() = state != "NOT_PROVISIONED"
@@ -32,7 +33,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
 
     private fun status() = """{"contractVersion":1,"enabled":true,"revision":4,"managementState":"$state",
         "desiredState":${if (state == "SLEEPING") "\"SLEEPING\"" else if (mapped) "\"RUNNING\"" else "null"},
-        "runnerId":${if (mapped) "\"$managed\"" else "null"},"workspaceId":${if (mapped) "\"$managedWorkspace\"" else "null"},"usable":${state == "READY"},
+        "runnerId":${if (mapped) "\"$managed\"" else "null"},"workspaceId":null,"usable":${state == "READY"},
         "reason":null,"initialProvider":${if (reported) "\"claude\"" else "null"},"firstSessionProvider":null,
         "actions":{"canEnsure":${!mapped},"canWake":true,"canRetry":false}}"""
     private fun machine(id: String, name: String, online: Boolean, version: String = "0.1.262", extra: String = "") = """{"id":"$id","name":"$name","displayName":"$name",
@@ -63,7 +64,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         "integration":{"line":"PROJECT_BRANCH","ref":"project/launch","upstreamRef":"main","escalationSeconds":7200},"acceptanceCriteriaItems":[]}"""
     override fun runnerJson() = machine(runner, "workstation", true)
     private fun workspaces() = listOfNotNull(workspaceJson(), """{"id":"$managedWorkspace","name":"default","runnerId":"$managed","enabled":true,
-        "position":1,"provider":"claude","createdAt":"2026-11-14T01:00:00.000Z"}""".takeIf { mapped }).joinToString(",", "[", "]")
+        "position":1,"provider":"claude","createdAt":"2026-11-14T01:00:00.000Z"}""".takeIf { mapped && hasManagedWorkspace }).joinToString(",", "[", "]")
 
     override fun answer(req: Req): MockResponse? = when {
         req.path == "auth/capabilities" -> if (featureOn) json("""{"managedRunners":{"enabled":true,"contractVersion":1}}""")
@@ -166,6 +167,18 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         }
         verify("no workspace row says Offline", !exists(hasText("Offline", substring = true), unmerged = true))
         capture("06-drawer-asleep")
+    }
+
+    @Test fun theDrawerOffersSetupForAnAsleepManagedMachineWithoutAWorkspace() = journey {
+        state = "SLEEPING"
+        hasManagedWorkspace = false
+        signIn()
+        compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
+        awaitTag("setup-machine:$managed")
+        compose.onNodeWithTag("setup-machine:$managed").performClick()
+        awaitTag("machine-setup-card")
+        awaitText(ManagedRunner.Setup.NOTICE.getValue("asleep"))
+        verify("folder name stays enabled", exists(hasTestTag("setup-new-folder-name") and isEnabled(), unmerged = true))
     }
 
     /** Once it is ready (it has reported its version and engines), its page is the ordinary one, under the banner and its state. */

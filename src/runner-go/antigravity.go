@@ -1170,6 +1170,10 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		pendingReloads = nil
 		// Model, effort, permission mode and environment are all fixed when agy starts.
 		d.retire()
+		// An account switch is recorded now rather than at the next agy: the conversation is the
+		// session's own, never an account's, so with agy retired nothing holds the account it left,
+		// which can be removed while the session is idle (moveIdleSessionToItsAccount).
+		writeSessionMeta(scratchDir, job, execDir)
 		emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 	}
 

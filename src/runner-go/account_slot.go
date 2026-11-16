@@ -96,8 +96,21 @@ type accountInUseError struct {
 	Sessions   []string
 }
 
+// Error says first how to keep the sessions, then what else frees the account. A session between
+// turns holds it too, and switching it to another account frees this one at once: its conversation
+// is carried as the switch finds it idle (moveIdleSessionToItsAccount), and a running turn's after
+// that turn. A Cursor CLI conversation that has talked moves to no account, so ending it is all
+// there is.
 func (e *accountInUseError) Error() string {
-	return fmt.Sprintf("%s account %s is in use by a session running on this machine — end that session, then remove it", e.engine, e.id)
+	one := len(e.Sessions) <= 1
+	who, keep, move, end := "a session", "to keep the session", "switch it to another account", "end it"
+	if !one {
+		who, keep, move, end = fmt.Sprintf("%d sessions", len(e.Sessions)), "to keep them", "switch each to another account", "end them"
+	}
+	if e.engine == providerCursor {
+		return fmt.Sprintf("%s account %s is in use by %s on this machine — %s, then remove the account", e.engine, e.id, who, end)
+	}
+	return fmt.Sprintf("%s account %s is in use by %s on this machine — %s, %s, or %s; then remove the account", e.engine, e.id, who, keep, move, end)
 }
 
 // accountInUseSessions is the sessions a refused removal names, or nil for any other outcome.

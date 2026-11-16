@@ -126,7 +126,7 @@ export function managedFirstSessionKeyOf<K extends { slug: string; engine: Manag
 }
 
 /**
- * The key a first session in a managed default workspace starts on while its runner has not been
+ * The key a first session on a managed runner starts on while its runner has not been
  * found ready (no `initialProvider` yet), or null: the first of the owner's own keys that its runner
  * can run (`managedFirstSessionKeyOf`) — by its report, or by the managed image's engines before it has
  * reported any. It is the key READY records when the runner has no runtime of its own signed in, as a
@@ -147,7 +147,7 @@ export async function managedFirstSessionKey(
 }
 
 /**
- * What a first session in a managed default workspace, sent with nothing named, starts on now — the
+ * What a first session on a managed runner, sent with nothing named, starts on now — the
  * status's `firstSessionProvider` (docs/managed-runner-design.md, "Server and three client interfaces"),
  * so a client offers that session exactly when this server would take it. Once the runner has been
  * READY it is `initialProvider`, which `lastProviderByWorkspace` answers for a workspace with no
@@ -183,7 +183,7 @@ export async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvide
 }
 
 /**
- * The first session of a managed runner's default workspace runs on a runtime that runner has ready,
+ * The first session on a managed runner, in whichever of its workspaces, runs on a runtime it has ready,
  * or is refused with MODEL_UNAVAILABLE before anything is created — never started on an engine it
  * does not have, which is what the provider floor (Claude) or a client echoing it would otherwise
  * pick. The default it should start on is the mapping's `initialProvider`, which
@@ -192,14 +192,14 @@ export async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvide
  * rather than refused while it has reported nothing (docs/managed-runner-design.md, "Implementation
  * record: capacity, wake and sleep").
  *
- * "First" is the workspace provider seed's own measure: no session a person started there yet (task
- * runs and spawned children do not count). Once there is one, the workspace's history decides, as
- * it does for every workspace, and this is not asked.
+ * "First" is the workspace provider seed's own measure, taken over the runner: no conversation on that
+ * runner yet (task runs and spawned children do not count). Once there is one, the workspace's history
+ * decides, as it does for every workspace, and this is not asked.
  */
 export async function assertManagedFirstSessionRuntime(
   prisma: Pick<PrismaService, 'session'>,
   args: {
-    workspaceId: string;
+    runnerId: string;
     /** The built-in runtime that will execute the session (not the provider identity). */
     runtime: string;
     /** A configured provider's key, an account pool member's or a shared pool's: the CLI's own
@@ -223,7 +223,7 @@ export async function assertManagedFirstSessionRuntime(
   const ran = await prisma.session.findFirst({
     // `kind` is the seed's own measure (workspace-provider.ts): a LANDING row is not a session a
     // person started, and its provider is the reserved `orbit` slug no engine runs.
-    where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
+    where: { assignedRunnerId: args.runnerId, taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
     select: { id: true },
   });
   if (ran) return;

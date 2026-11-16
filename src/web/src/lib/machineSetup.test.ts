@@ -1,15 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { DirProbe, RunnerEngineHealth } from '@orbit/shared';
+import { type ManagedRunnerStatus, type DirProbe, type RunnerEngineHealth } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import {
   answersDirProbe,
-  defaultFolderChoice,
   firstEngineOn,
   folderName,
   folderVerdict,
   installedLogins,
   isConnecting,
-  isOfferedFolder,
   isValidNewFolder,
   machineDraftPath,
   machineName,
@@ -17,9 +16,9 @@ import {
   makesNewFolders,
   newFolderPath,
   newFolderPick,
+  newFolderRootOf,
   newFolderVerdict,
   newWorkspaceOf,
-  registerDirToProbe,
   updatesItself,
 } from './machineSetup';
 import { showsConversation } from './paneTransition';
@@ -66,6 +65,16 @@ describe('rule 9: which machines get a Set up row', () => {
     expect(machinesToSetUp([austin, hpc], [{ id: 'w', createdAt: '', runnerId: 'hpc' }])).toEqual([austin]);
   });
 
+  it('offers the managed machine while preparing or asleep, but still excludes ordinary offline machines', () => {
+    const fixture = JSON.parse(readFileSync('../shared/src/managed-runner-states.fixture.json', 'utf8'));
+    for (const sample of fixture.states) {
+      const status = sample.status as ManagedRunnerStatus;
+      const managed = { id: status.runnerId ?? 'unmapped', online: false };
+      expect(machinesToSetUp([gone, managed], [], status)).toEqual(sample.setupState ? [managed] : []);
+      expect(machinesToSetUp([managed], [{ id: 'w', createdAt: '', runnerId: managed.id }], status)).toEqual([]);
+    }
+  });
+
   it('not one that is offline, whatever it holds', () => {
     expect(machinesToSetUp([gone], [])).toEqual([]);
   });
@@ -80,43 +89,6 @@ describe('rule 9: which machines get a Set up row', () => {
 
   it('keeps the runner list’s order', () => {
     expect(machinesToSetUp([hpc, gone, austin], [])).toEqual([hpc, austin]);
-  });
-});
-
-describe('rule 2: the folder orbit register ran in is a suggestion', () => {
-  it('is not asked about when the path alone is the answer, or when there is none', () => {
-    for (const dir of [null, undefined, '', '   ', '~', '/', '~/', '//', ' ~ ']) {
-      expect(registerDirToProbe(dir), String(dir)).toBeUndefined();
-    }
-  });
-
-  it('is asked about as it was reported, tidied', () => {
-    expect(registerDirToProbe('/home/orbit/code/app')).toBe('/home/orbit/code/app');
-    expect(registerDirToProbe(' ~/code/app/ ')).toBe('~/code/app');
-    expect(registerDirToProbe('relative/dir')).toBe('relative/dir');
-  });
-
-  it('is offered only when it is a folder that is there, and neither home nor the root', () => {
-    expect(isOfferedFolder(probe())).toBe(true);
-    expect(isOfferedFolder(probe({ isGit: false, branch: null }))).toBe(true);
-    expect(isOfferedFolder(probe({ exists: false, isDir: false }))).toBe(false);
-    expect(isOfferedFolder(probe({ isDir: false }))).toBe(false);
-    expect(isOfferedFolder(probe({ isHome: true }))).toBe(false);
-    expect(isOfferedFolder(probe({ path: '/' }))).toBe(false);
-    expect(isOfferedFolder(probe({ error: 'permission denied' }))).toBe(false);
-    expect(isOfferedFolder(null)).toBe(false);
-    expect(isOfferedFolder(undefined)).toBe(false);
-  });
-
-  it('is the default only when it is a git repository; otherwise a new folder is', () => {
-    expect(defaultFolderChoice(probe(), true)).toBe('suggested');
-    expect(defaultFolderChoice(probe({ isGit: false }), true)).toBe('new');
-    expect(defaultFolderChoice(null, true)).toBe('new');
-  });
-
-  it('on a machine that can’t make a folder, what is left', () => {
-    expect(defaultFolderChoice(probe({ isGit: false }), false)).toBe('suggested');
-    expect(defaultFolderChoice(null, false)).toBe('other');
   });
 });
 
@@ -166,7 +138,17 @@ describe('rule 3: a new folder', () => {
     }
   });
 
-  it('lands under the machine’s Repos Folder, however that was reported', () => {
+  it('goes in the machine’s home, the directory its Repos Folder sits in, on a runner that makes folders there', () => {
+    const home = ['create-workdir/v1', 'create-workdir/v2'];
+    expect(newFolderRootOf({ capabilities: home, reposRoot: '/root/orbit-repos' })).toBe('/root');
+    expect(newFolderPath(newFolderRootOf({ capabilities: home, reposRoot: '/root/orbit-repos/' }), '')).toBe('/root/');
+    // An older runner makes them only in its Repos Folder, so that is where they go there.
+    expect(newFolderRootOf({ capabilities: ['create-workdir/v1'], reposRoot: '/home/orbit/orbit-repos' })).toBe(
+      '/home/orbit/orbit-repos',
+    );
+  });
+
+  it('lands under the root it is given, however that was reported', () => {
     expect(newFolderPath('/home/orbit/orbit-repos', 'app')).toBe('/home/orbit/orbit-repos/app');
     expect(newFolderPath('/home/orbit/orbit-repos/', 'app')).toBe('/home/orbit/orbit-repos/app');
     expect(newFolderPath('C:\\Users\\orbit\\orbit-repos', 'app')).toBe('C:\\Users\\orbit\\orbit-repos\\app');
@@ -177,10 +159,10 @@ describe('rule 3: a new folder', () => {
   const at = (over: Partial<DirProbe>) =>
     probe({ path: '/home/orbit/orbit-repos/app', exists: false, isDir: false, isGit: false, branch: null, ...over });
 
-  it('nothing there yet: it starts empty, as the board says, and is made as the session starts', () => {
+  it('nothing there yet: it is made as the session starts', () => {
     expect(newFolderVerdict(at({}), machine)).toEqual({
       tone: 'ok',
-      text: 'Starts empty. Ask for a clone or a new project in your first message.',
+      text: 'New folder · created as the session starts.',
       short: 'new folder · created as the session starts',
       usable: true,
     });
@@ -191,11 +173,11 @@ describe('rule 3: a new folder', () => {
     });
   });
 
-  it('a folder there already: used with what is in it, and sent by its path like any folder', () => {
+  it('a folder there already: used with what is in it, read and sent by its path like any folder', () => {
     const there = at({ exists: true, isDir: true, isGit: true, branch: 'main' });
     expect(newFolderVerdict(there, machine)).toEqual({
-      tone: 'warn',
-      text: 'This folder already exists on orbit@austin. Sessions will use what’s in it.',
+      tone: 'ok',
+      text: 'Found · git repository · main',
       short: 'git repository · main',
       usable: true,
     });

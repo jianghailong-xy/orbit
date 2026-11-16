@@ -129,8 +129,9 @@ internal fun SessionRow(session: DirectorySession, machine: String?, onOpen: () 
 }
 
 /** iOS `SessionLiveIndicator`: what must never go silent on a row. A working session's spinner, the eye of one a watch will resume, the
- * clock of a report under review, the breathing terminal of a job in flight, an amber dot when it waits on you and a red one when it
- * failed. The calm states draw nothing: the line and the row's value say them. */
+ * clock of a report under review or a session queued for a slot, the terminal of a background process — breathing for a job in flight,
+ * still for one merely left up — an amber dot when it waits on you and a red one when it failed. The settled states draw nothing: the
+ * line and the row's value say them. */
 @Composable
 internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSummary?) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -138,9 +139,11 @@ internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSu
     when {
         session.pendingApprovals > 0 -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("session-mark-needs-you"))
         session.confirmationUnderReview != null -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp).testTag("session-mark-review"), tint = muted)
+        session.effectiveRunState == RunState.QUEUED -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp).testTag("session-mark-queued"), tint = muted)
         session.isRunning() -> RowSpinner(Modifier.testTag("session-mark-running"))
         parked && (watching != null || session.resumesOnItsOwn) -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
         session.isRunningJob(watching) -> BreathingTerminal(Modifier.testTag("session-mark-jobs"))
+        session.hasBackgroundProcess(watching) -> Icon(painterResource(R.drawable.ic_terminal), null, Modifier.size(14.dp).testTag("session-mark-services"), tint = muted)
         session.effectiveRunState == RunState.FAILED && !session.retryPending(Instant.now()) && !session.error.orEmpty().lowercase().contains("offline") ->
             Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.error, CircleShape).testTag("session-mark-failed"))
     }

@@ -304,8 +304,12 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
-- **不能续跑**：worktree 随结束删掉，没有可续的对话。`resume` 一个远程 runId 时 runner 直说它在哪个 workspace 跑过、
-  该带完整 brief 新开一个（`subagentResumeRefusal`）；父 runner 为远程运行也写 `run.json`（带 `workspace`），重启后照样这么答。
+- **续跑**：worktree 随结束删掉，对话留下。目标 runner 把结束的运行记成 `ended`（`remote-subagents/<runId>/run.json`：
+  引擎、会话 id、引擎状态目录、worktree 路径），最后一次运行后保留 7 天（`gcRemoteSubagentConversations`）。父 runner
+  为远程运行也写 `run.json`（带 `workspace`）；`resume` 它时带上 `resumeOf` 和新 prompt，不带 `workspace`/`needs`。服务端
+  （`openRemoteResume`）把新运行派回原 workspace 和原 runner，claim 里带 `resumeOf`；运行中、原 workspace 已删或换了
+  runner、目标 runner 没声明 `subagent-remote-resume/v1` 时拒绝。目标 runner 在**同一路径**重建 worktree（引擎按 cwd 找对话），
+  用原来的会话 id 和状态目录续上，prompt 前加一句说明旧 worktree 已丢弃。引擎换了、记录已过期、或同一对话正在被另一次续跑时失败并说明原因。
 - **记录的回收**：父 runner 上 `runs/<session>/subagents/` 存着续跑要的 `run.json` 和各次尝试的引擎状态。worktree GC 的同一轮
   问 `worktrees-removable`，父会话已 Completed、删除、不存在或移走时整个删掉（`gcSubagentRuns`）；`runs/<session>/` 其余内容不动。
 

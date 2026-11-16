@@ -606,9 +606,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, accountManaged?.status.runnerId));
     return m;
-  }, [runners.data]);
+  }, [runners.data, accountManaged?.status.runnerId]);
 
   // The account menu's Machines row: every machine, and how many of them are online.
   const machineList = runners.data ?? [];
@@ -623,8 +623,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // session page, where its setup card is (board rule 9). Not before the list is known: every machine
   // would read as bare until it lands.
   const bareMachines = useMemo(
-    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data) : []),
-    [runners.data, workspaces.data, workspaces.isSuccess],
+    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data, accountManaged?.status) : []),
+    [runners.data, workspaces.data, workspaces.isSuccess, accountManaged],
   );
 
   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
@@ -867,14 +867,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // so the workspace only decides where the page's back leads), or the first one; with no
   // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
   // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
-  // shows one pane, so there the page is what opens.
+  // shows one pane, so there the page is what opens. A session shared with you is drawn as the guest
+  // view, which has no project column (its owner's read fails for you), so from there the page opens too.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
+    const besideConversation = !!sessionId && !narrow && !sessionQ.isError;
     // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
-    if (sel === `project:${key}` || (!narrow && projectPageId === key)) return;
+    if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
     if (narrow) setSel(`project:${key}`);
-    if (sessionId && !narrow) {
+    if (besideConversation) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;
     }
@@ -974,8 +976,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            a.runner?.displayName ??
-            a.runner?.name ??
+            (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1088,8 +1089,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      a.runner?.displayName ??
-                      a.runner?.name ??
+                      (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1139,7 +1139,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, accountManaged?.status.runnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1270,6 +1270,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
+              popupClassName: 'tp-account-submenu',
             },
             // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
             // open, so the row picks one. With none yet it is the way to add the first.
@@ -1294,7 +1295,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
                       return {
                         key: `machine-${runner.id}`,
-                        textValue: runner.displayName || runner.name,
+                        textValue: machineName(runner, accountManaged?.status.runnerId),
                         icon: (
                           <span
                             className="tp-account-machine-dot"
@@ -1303,7 +1304,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{runner.displayName || runner.name}</span>
+                            <span>{machineName(runner, accountManaged?.status.runnerId)}</span>
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
@@ -1320,6 +1321,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       onSelect: () => navigate('/settings/machines/new'),
                     },
                   ],
+                  popupClassName: 'tp-account-submenu',
                 }
               : {
                   key: 'machines',
