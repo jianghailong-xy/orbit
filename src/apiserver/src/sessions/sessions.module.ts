@@ -8,6 +8,7 @@ import { SessionRequestService } from './session-request.service';
 import { SessionRequestsController } from './session-requests.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { ViewerStreamCaps } from './viewer-stream-caps';
 import { ViewerStreamService } from './viewer-stream.service';
 
 @Module({
@@ -36,12 +37,14 @@ import { ViewerStreamService } from './viewer-stream.service';
   // that (capability checks, the row lock, inbox fencing) is how the two would drift.
   // SessionRequestService hands a session request's outcome back to the session that asked, which is
   // a turn of that session: SessionsService again, so it lives beside it.
-  providers: [SessionsService, AutoRetryService, MergeReceiptService, SessionRequestService, SessionOwnerGuard, ViewerStreamService],
+  providers: [SessionsService, AutoRetryService, MergeReceiptService, SessionRequestService, SessionOwnerGuard, ViewerStreamService,
+    { provide: ViewerStreamCaps, useValue: new ViewerStreamCaps() }],
   // Exported so the runner door and the user door write receipts through ONE instance — a second
   // provider entry would be a second object, which is how the auto-run sweep once ran twice. The
   // request service for the same reason: the runner's reply door and turn completion hand off through
   // the one the worker uses. The viewer streams' body for the guest door and the public link, so their
-  // per-session head reads are gathered in one place (viewer-stream.service.ts).
-  exports: [SessionsService, MergeReceiptService, SessionRequestService, ViewerStreamService],
+  // per-session head reads are gathered in one place (viewer-stream.service.ts), and the caps both doors' guards count
+  // their streams against, so the per-apiserver total is one count (viewer-stream-caps.ts).
+  exports: [SessionsService, MergeReceiptService, SessionRequestService, ViewerStreamService, ViewerStreamCaps],
 })
 export class SessionsModule {}
