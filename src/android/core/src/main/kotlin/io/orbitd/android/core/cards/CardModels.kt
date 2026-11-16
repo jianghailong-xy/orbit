@@ -129,10 +129,12 @@ object CardCatalog {
                 CardFamily.QUESTION -> listOf(CardVerb.ANSWER, CardVerb.CHAT)
                 CardFamily.PLAN -> listOf(CardVerb.APPROVE_PLAN, CardVerb.KEEP_PLANNING)
                 // A task nothing would start by itself, on a card whose runner can act on the choice, is offered its start in the
-                // same press, right after the plain yes.
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") listOfNotNull(CardVerb.CREATE_TASK,
-                    CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
-                    else listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                // same press, ahead of the plain yes; on a task filed held, right after it.
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                    else if (ApprovalRules.createAndStartLeads(approval.toolName, approval.input))
+                        listOf(CardVerb.CREATE_AND_START, CardVerb.CREATE_TASK, CardVerb.CHAT)
+                    else listOfNotNull(CardVerb.CREATE_TASK,
+                        CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)

@@ -468,6 +468,13 @@ public extension Approvals {
         return batchPreview(from: input)?.needsManualStart == 1
     }
 
+    /// Whether Create and start is the card's filled answer, with Create it beside it: whenever it is
+    /// offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a hold
+    /// someone asked for, so the prominent press does not start it. Web's `createAndStartLeads`.
+    static func createAndStartLeads(toolName: String, input: JSONValue?) -> Bool {
+        offersCreateAndStart(toolName: toolName, input: input) && input?["autoRunWhenReady"]?.boolValue != false
+    }
+
     /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
     /// remember rules, none of which a create card carries.
     static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
