@@ -601,6 +601,7 @@ export function useSessionStream({
               current,
               selectedId,
               knownAcceptedBefore,
+              rows.some((row) => row.opening && turnPlacementOf(row) !== 'accepted'),
             ),
           );
           const serverQueued = rows.flatMap((row) => {
@@ -633,6 +634,11 @@ export function useSessionStream({
     // so a cursor the client can't get past is a loop, not a retry — see reseed().
     let seqAtConnect = -1;
     let stalled = 0;
+    // Set when the window is about to be filled by a cursor-less replay rather than a page: a tail
+    // page that failed (seedTail, reseed). No page said where the window's older edge is, so the
+    // first event the replay brings decides it (push). Left unset, the edge read "nothing older", and
+    // a session whose replay began mid-conversation could never be scrolled back past that point.
+    let olderEdgeUnknown = false;
     const writeCache = (): void => {
       // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
       if (newerCursorRef.current !== null) return;
@@ -665,6 +671,11 @@ export function useSessionStream({
       seedAbort.abort();
     };
     const push = (ev: RunEvent): void => {
+      if (olderEdgeUnknown && isSeq(ev.seq)) {
+        olderEdgeUnknown = false;
+        oldestSeqRef.current = ev.seq;
+        hasMoreOlderRef.current = ev.seq > 1; // seqs start at 1; a page before it answers the rest
+      }
       accRef.current = [...accRef.current, ev];
       writeCache();
       setEvents(accRef.current);
@@ -728,6 +739,7 @@ export function useSessionStream({
       } catch {
         // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
         // server-capped, so the fallback for a failed re-seed is still a bounded replay.
+        olderEdgeUnknown = true;
       }
       if (closed) return;
       // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
@@ -1156,6 +1168,7 @@ export function useSessionStream({
       }
       // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
       // replay below is the remaining path to content.
+      olderEdgeUnknown = true;
       if (!closed) setSeeding(false);
     };
     // A link to one record: the page around it — or, for a record that is not this session's, the

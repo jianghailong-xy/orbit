@@ -256,6 +256,8 @@ internal object AccountCopy {
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
+    /** Removing an added account while Default is in use. */
+    const val REMOVE_DETAIL = "Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
@@ -270,11 +272,11 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
-    /** Over the sessions a refused removal lists, when one session is running in the account; [engine] is the CLI's own name (Codex,
-     * Claude Code). */
-    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is running on it — end the session below, then remove it"
-    /** The same, when several sessions are running in it. */
-    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are running on it — end them, then remove it"
+    /** Over the sessions a refused removal lists, when one session is in the account — running or between turns, either holds it;
+     * [engine] is the CLI's own name (Codex, Claude Code). */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account"
+    /** The same, when several sessions are in it. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account"
     /** Each listed session's way to it. */
     const val IN_USE_OPEN = "Open session"
     /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
@@ -956,7 +958,8 @@ internal object RunnerPage {
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
      */
     private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        val version = runner.str("version")?.trim()?.takeIf { Regex("^[vV]?[0-9]").containsMatchIn(it) } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
         val report = runner.obj("selfUpdate")
@@ -1398,13 +1401,12 @@ internal object RunnerPage {
 
     /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
      * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
-     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+     * uses there, that Orbit uses Default again; while Default is in use, that its workspaces switch to Default. */
     fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
         val name = displayName(runner)
         val title = RunnerAccountCopy.removeTitle(line.name)
         if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
-        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
-            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        val removed = removedDefault(health) ?: return title to RunnerAccountCopy.REMOVE_DETAIL
         return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
             else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }

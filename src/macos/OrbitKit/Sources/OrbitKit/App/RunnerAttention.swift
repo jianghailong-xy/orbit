@@ -748,7 +748,9 @@ public enum RunnerAttention {
     /// that is behind installs the release itself when no turn is running.
     private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner, _ latestVersion: String?,
                                              offline: Bool) -> RunnerAttentionItem? {
-        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+              version.range(of: "^[vV]?[0-9]", options: .regularExpression) != nil,
               let latestVersion, !latestVersion.isEmpty,
               compareRunnerVersions(version, latestVersion) < 0 else { return nil }
         let command = RunnerPageCopy.RUNNER_UPGRADE_COMMAND

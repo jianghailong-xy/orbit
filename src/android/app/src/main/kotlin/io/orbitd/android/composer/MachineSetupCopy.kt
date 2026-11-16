@@ -21,17 +21,13 @@ object MachineSetupCopy {
     const val SETUP_FOLDER = "Folder"
     fun setupFolderHelp(machine: String): String =
         "Where on $machine should sessions work? They can read and change everything in it."
-    const val SETUP_REGISTER_DIR = "Where you ran orbit register"
-    const val SETUP_NEW_FOLDER = "A new folder"
     const val SETUP_NEW_FOLDER_NAME = "name"
-    const val SETUP_NEW_FOLDER_META = "Starts empty. Ask for a clone or a new project in your first message."
+    const val SETUP_FOLDER_HINT = "Uses this folder if it exists, otherwise creates it."
+    const val SETUP_NEW_FOLDER_META = "New folder · created as the session starts."
     const val SETUP_NEW_FOLDER_DONE = "new folder · created as the session starts"
     const val SETUP_NEW_FOLDER_INVALID = "Use letters, digits, dots, dashes and underscores, up to 64 characters."
-    fun setupNewFolderExists(machine: String): String =
-        "This folder already exists on $machine. Sessions will use what’s in it."
     fun setupNewFolderIsFile(machine: String): String =
         "There’s already a file with this name on $machine. Pick another name."
-    fun setupOtherFolder(machine: String): String = "Another folder on $machine"
     /** Board 03 draws it in the platform's title case; the words are the web's. */
     const val SETUP_USE_FOLDER = "Use This Folder"
     const val SETUP_CHANGE = "Change"

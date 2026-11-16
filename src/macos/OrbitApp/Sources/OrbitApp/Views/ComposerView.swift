@@ -692,7 +692,13 @@ struct ComposerView: View {
             // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
-                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                guard press.modifiers.isEmpty else { return .ignored }
+                // The optimizer's card open over a draft: Tab is its Use, the same key's same meaning.
+                if console.promptOptimizer.suggestion != nil, !showSlash {
+                    console.useOptimization(edit: false)
+                    return .handled
+                }
+                guard offeredSuggestion != nil else { return .ignored }
                 acceptSuggestion()
                 return .handled
             }
@@ -1787,13 +1793,20 @@ struct ComposerView: View {
     }
 
     #if os(iOS)
-    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG); normalize to
-    /// PNG — one of the server's inline-image types — before uploading via the shared attach path.
+    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG);
+    /// `orbitPhotoUpload` turns them into an inline image under the cap before the shared attach path.
     private func attachPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            console.attach(filename: "photo.png", mimeType: "image/png", data: png)
+            guard let photo = orbitPhotoUpload(data) else {
+                console.statusMessage = "Couldn\u{2019}t read that photo"
+                continue
+            }
+            if let reason = Attachments.rejectReason(mimeType: photo.mimeType, byteCount: photo.data.count) {
+                console.statusMessage = reason
+                continue
+            }
+            console.attach(filename: photo.filename, mimeType: photo.mimeType, data: photo.data)
         }
     }
 
@@ -1807,10 +1820,11 @@ struct ComposerView: View {
         }
     }
 
-    /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
+    /// Clipboard image → PNG (the server's inline-image type) → the shared paste path, which
+    /// shrinks one past the cap and enforces it.
     private func attachClipboardImage(_ image: UIImage) async {
         guard let png = image.orbitPNGData() else { return }
-        console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
+        await console.attachPastedImage(pngData: png)
     }
     #endif
 }

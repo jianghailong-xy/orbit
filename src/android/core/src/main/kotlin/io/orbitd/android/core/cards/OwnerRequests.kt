@@ -331,9 +331,17 @@ object OwnerRequests {
  * log, a saved state or an error (the transport redacts both request and response).
  */
 class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHandle) {
-    suspend fun list(state: String): List<OwnerRequest> =
-        Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body,
-            OwnerRequestList.serializer()).requests
+    suspend fun list(state: String): List<OwnerRequest> = listWithSchedules(state).first
+
+    /** The list, and apart from it the scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which no session
+     * files and [OwnerRequest] does not draw: they are answered at the schedule's own doors (docs/scheduled-tasks-design.md §6.4). */
+    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> {
+        val body = api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body
+        val requests = Wire.decode(body, OwnerRequestList.serializer()).requests
+        val rows = (Wire.decode(body, JsonObject.serializer())["requests"] as? JsonArray).orEmpty()
+        return requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS } to
+            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) }
+    }
 
     suspend fun get(id: String): OwnerRequest =
         Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests", id))).requireSuccess().body, OwnerRequest.serializer())

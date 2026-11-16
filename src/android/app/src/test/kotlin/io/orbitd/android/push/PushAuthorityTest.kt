@@ -313,9 +313,9 @@ class PushAuthorityTest {
         }
     }
 
-    /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and Android has no schedule
-     * page, so one naming none opens Orbit without navigating. With a session it stands while that session does; without, while its
-     * schedule exists. Without its schedule it is not a notification. */
+    /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and the schedule on the
+     * Scheduled page when it names none. With a session it stands while that session does; without, while its schedule exists.
+     * Without its schedule it is not a notification. */
     @Test fun aScheduleAlertOpensItsRunsSessionAndStandsWhileItOrItsScheduleDoes() = runBlocking {
         val run = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "finding", "sessionID" to sid)
         val bare = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "missed")
@@ -324,7 +324,9 @@ class PushAuthorityTest {
         assertFalse(run.payload.isOwnerDecision)
         assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
             run.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
-        assertNull(bare.link)
+        val scheduled = OrbitLinks.parse(bare.link!!)!!
+        assertEquals(Destination.SCHEDULED, scheduled.destination)
+        assertTrue(ObjectId.same(scheduled.id, scheduleId))
         assertNull(PushMessage.parse(fixtureData() + ("payload" to """{"title":"A","body":"B","kind":"schedule","sessionID":"$sid"}""")))
         authorityFixture { authority, server, _ ->
             var exists = true

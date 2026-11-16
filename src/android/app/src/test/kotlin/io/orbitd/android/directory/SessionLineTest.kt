@@ -81,7 +81,8 @@ class SessionLineTest {
         assertEquals(SessionLine("Running Bash…", Tone.RUNNING), line(session("RUNNING", lastToolUse = "Bash", recapText = recap, recapAt = recapAt)))
         assertEquals(SessionLine("You: and now the footer?", Tone.PREVIEW),
             line(session("AWAITING_INPUT", lastUserText = "and now the footer?", recapText = recap, recapAt = recapAt)))
-        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND),
+        // A background process it left up does not: the recap keeps the line (the owner, 2026-11-16).
+        assertEquals(SessionLine(recap, Tone.PREVIEW),
             line(session("AWAITING_INPUT", runningBgCount = 1, recapText = recap, recapAt = recapAt)))
     }
 
@@ -94,7 +95,8 @@ class SessionLineTest {
     @Test fun interruptedTurnShowsTheUnansweredMessage() {
         assertEquals(SessionLine("You: 设置按钮的底色很奇怪，请帮我 review", Tone.PREVIEW),
             line(session("INTERRUPTED", "previous reply", lastUserText = "设置按钮的底色很奇怪，请帮我 review")))
-        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", lastUserText = "run the tests", runningBgCount = 1)))
+        assertEquals(SessionLine("You: run the tests", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "run the tests", runningBgCount = 1)))
+        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", runningBgCount = 1)))
     }
 
     @Test fun fallsBackToStateWordWithoutReply() {

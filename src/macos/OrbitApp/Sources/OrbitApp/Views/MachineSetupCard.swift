@@ -289,7 +289,7 @@ private struct MachineSetupCard: View {
             return MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnecting(machine: machine)
                 : MachineSetupCopy.setupOffline(machine: machine)
         }
-        guard !probes else { return nil }
+        guard !probes || !MachineSetup.makesNewFolders(runner) else { return nil }
         return MachineSetup.updatesItself(runner)
             ? MachineSetupCopy.setupUpdating(machine: machine)
             : MachineSetupCopy.setupNeedsUpdate(machine: machine)
@@ -301,7 +301,7 @@ private struct MachineSetupCard: View {
                 .font(.orbitLabel)
                 .foregroundStyle(SetupInk.warn)
                 .fixedSize(horizontal: false, vertical: true)
-            if !offline, !probes, !MachineSetup.updatesItself(runner) { openMachine }
+            if !offline, !(probes && MachineSetup.makesNewFolders(runner)), !MachineSetup.updatesItself(runner) { openMachine }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -338,7 +338,7 @@ private struct MachineSetupCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            FolderOptions(runner: runner, disabled: offline || !probes) { setup.pick($0) }
+            FolderName(runner: runner, disabled: offline || !probes || !MachineSetup.makesNewFolders(runner)) { setup.pick($0) }
         }
     }
 
@@ -445,81 +445,43 @@ private struct MachineSetupCard: View {
     }
 }
 
-/// Step one before it has an answer: the folder `orbit register` ran in when that is a fair suggestion, a
-/// new folder, or any other, which the machine itself checks as it is typed (rules 2–4).
-private struct FolderOptions: View {
+/// Step one before it has an answer: one folder name in the machine's home (its Repos Folder on an older runner),
+/// which the machine itself checks as it is typed. A folder that is there is used; one that isn't is made.
+private struct FolderName: View {
     @Environment(AppModel.self) private var app
     let runner: Runner
     let disabled: Bool
     let onPick: (PickedFolder) -> Void
 
-    /// Untouched, the choice follows what the machine says: its answer about the register directory can
-    /// arrive a heartbeat after the card does.
-    @State private var touched: FolderChoice?
-    @State private var newName = ""
     @State private var typed = ""
-    /// What the machine said about the register directory, about where a new folder's name would go, and about
-    /// the path typed. Nil while there is no answer yet.
-    @State private var registered: DirProbeRelay.Outcome?
-    @State private var newAnswer: DirProbeRelay.Outcome?
-    @State private var typedAnswer: DirProbeRelay.Outcome?
-    /// Check again: the same path asked once more. The register directory's is asked again by itself.
+    /// What the machine said about where the name would go. Nil while there is no answer yet.
+    @State private var answer: DirProbeRelay.Outcome?
+    /// Check again: the same path asked once more.
     @State private var attempt = 0
-    @State private var newAttempt = 0
-    @State private var registerAttempt = 0
 
     private var machine: String { RunnerPageFormat.displayName(runner) }
-    private var online: Bool { AgentListLogic.isOnline(runner) }
-    private var offersNewFolder: Bool { MachineSetup.makesNewFolders(runner) }
-    private var name: String { newName.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var path: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var root: String { MachineSetup.newFolderRoot(runner) }
+    private var name: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    /// The register directory, once the machine has said it is a fair suggestion.
-    private var suggested: DirProbe? {
-        guard case .answered(let probe)? = registered, MachineSetup.isOfferedFolder(probe) else { return nil }
-        return probe
-    }
-
-    private var choice: FolderChoice {
-        touched ?? MachineSetup.defaultFolderChoice(suggested: suggested, offersNewFolder: offersNewFolder)
-    }
-
-    private var checked: DirProbe? {
-        guard case .answered(let probe)? = typedAnswer else { return nil }
+    private var found: DirProbe? {
+        guard case .answered(let probe)? = answer else { return nil }
         return probe
     }
 
     private var candidate: PickedFolder? {
-        switch choice {
-        case .suggested:
-            return suggested.map {
-                .existing(path: $0.path, note: MachineSetup.folderVerdict($0, machine: machine).short)
-            }
-        case .new:
-            guard offersNewFolder, MachineSetup.isValidNewFolder(name), case .answered(let probe)? = newAnswer else { return nil }
-            return MachineSetup.newFolderPick(probe, name: name, reposRoot: runner.reposRoot ?? "", machine: machine)
-        case .other:
-            guard let checked else { return nil }
-            let verdict = MachineSetup.folderVerdict(checked, machine: machine)
-            return verdict.usable ? .existing(path: checked.path, note: verdict.short) : nil
-        }
+        guard MachineSetup.isValidNewFolder(name), let found else { return nil }
+        return MachineSetup.newFolderPick(found, name: name, root: root, machine: machine)
     }
 
-    /// One question at a time per machine (contract §2), so a typed path replaces the register directory's.
     private struct Question: Equatable {
         let path: String?
         let attempt: Int
     }
 
-    /// Where a new folder's name would go, asked about as it is typed: a folder, or a file, may be there already.
-    private var newFolderQuestion: String? {
-        guard choice == .new, offersNewFolder, !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
-        return MachineSetup.newFolderPath(reposRoot: runner.reposRoot ?? "", name: name)
-    }
-
-    /// A question of this card's own that is still waiting for its answer.
-    private var waiting: Bool {
-        (newFolderQuestion != nil && newAnswer == nil) || (choice == .other && !disabled && !path.isEmpty && typedAnswer == nil)
+    /// The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
+    private var question: String? {
+        guard !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
+        return MachineSetup.newFolderPath(root: root, name: name)
     }
 
     var body: some View {
@@ -528,16 +490,18 @@ private struct FolderOptions: View {
             .font(.orbitLabel)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-        VStack(spacing: 0) {
-            if let suggested { suggestedRow(suggested) }
-            if offersNewFolder {
-                if suggested != nil { Divider().padding(.leading, 36) }
-                newFolderRow
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(MachineSetup.newFolderPath(root: root, name: ""))
+                    .font(.orbitMono)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                field(MachineSetupCopy.SETUP_NEW_FOLDER_NAME, text: $typed)
+                    .accessibilityLabel(MachineSetupCopy.SETUP_FOLDER)
             }
-            if suggested != nil || offersNewFolder { Divider().padding(.leading, 36) }
-            otherRow
+            line
         }
-        .background(SetupInk.options, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.top, 8)
         .disabled(disabled)
         Button(MachineSetupCopy.SETUP_USE_FOLDER) {
@@ -549,150 +513,31 @@ private struct FolderOptions: View {
         .fontWeight(.semibold)
         .disabled(candidate == nil || disabled)
         .padding(.top, 9)
-        // Offline it can't be asked, and what it last answered is still worth showing.
-        .task(id: Question(path: MachineSetup.answersDirProbe(runner) ? MachineSetup.registerDirToProbe(runner.registerDir) : nil,
-                           attempt: online ? 1 + registerAttempt : 0)) {
-            registered = nil
-            guard MachineSetup.answersDirProbe(runner), let dir = MachineSetup.registerDirToProbe(runner.registerDir) else { return }
-            let outcome = await app.probeDir(runnerID: runner.id, path: dir, ask: online)
-            if !Task.isCancelled { registered = outcome }
-        }
-        // A path asked before the machine had answered about the register directory took that question's place: it
-        // is asked again once nothing else here waits, so the suggestion still comes.
-        .onChange(of: DirProbeRelay.asksAgain(registered, online: online, otherWaiting: waiting)) { _, again in
-            if again { registerAttempt += 1 }
-        }
-        .task(id: Question(path: newFolderQuestion, attempt: newAttempt)) {
-            newAnswer = nil
-            guard let asked = newFolderQuestion else { return }
+        // As it is typed, once it has settled.
+        .task(id: Question(path: question, attempt: attempt)) {
+            answer = nil
+            guard let asked = question else { return }
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             let outcome = await app.probeDir(runnerID: runner.id, path: asked, ask: true)
-            if !Task.isCancelled { newAnswer = outcome }
-        }
-        // As it is typed, once it has settled.
-        .task(id: Question(path: choice == .other && !disabled && !path.isEmpty ? path : nil, attempt: attempt)) {
-            typedAnswer = nil
-            guard choice == .other, !disabled, !path.isEmpty else { return }
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            let outcome = await app.probeDir(runnerID: runner.id, path: path, ask: true)
-            if !Task.isCancelled { typedAnswer = outcome }
+            if !Task.isCancelled { answer = outcome }
         }
     }
 
-    private func row(_ option: FolderChoice, @ViewBuilder _ label: () -> some View) -> some View {
-        Button {
-            touched = option
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "checkmark")
-                    .font(.orbitLabel.weight(.bold))
-                    .foregroundStyle(Color.accentColor)
-                    .opacity(choice == option ? 1 : 0)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 1) { label() }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(choice == option ? .isSelected : [])
-    }
-
-    private func suggestedRow(_ probe: DirProbe) -> some View {
-        let verdict = MachineSetup.folderVerdict(probe, machine: machine)
-        return row(.suggested) {
-            Text(probe.path)
-                .font(.orbitMono)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            verdictLine(verdict.text, tone: verdict.tone)
-            Text(MachineSetupCopy.SETUP_REGISTER_DIR)
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var newFolderRow: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            row(.new) {
-                Text(MachineSetupCopy.SETUP_NEW_FOLDER).foregroundStyle(.primary)
-                // Chosen, what it says goes under its name, as the web's does, and as the name is checked.
-                if choice != .new { meta(MachineSetupCopy.SETUP_NEW_FOLDER_META) }
-            }
-            if choice == .new {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Text(MachineSetup.newFolderPath(reposRoot: runner.reposRoot ?? "", name: ""))
-                            .font(.orbitMono)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                        field(MachineSetupCopy.SETUP_NEW_FOLDER_NAME, text: Binding(get: { newName }, set: {
-                            // Typing here is a choice, which a late answer about the register directory
-                            // must not undo.
-                            touched = .new
-                            newName = $0
-                        }))
-                        .accessibilityLabel(MachineSetupCopy.SETUP_NEW_FOLDER)
-                    }
-                    newFolderLine
-                }
-                .padding(.leading, 36)
-                .padding(.trailing, 10)
-                .padding(.bottom, 8)
-            }
-        }
-    }
-
-    /// What the name says: what a new folder is while nothing is typed, then what the machine finds where it would go.
-    @ViewBuilder private var newFolderLine: some View {
+    /// What the name says: what the step does while nothing is typed, then what the machine finds where it would go.
+    @ViewBuilder private var line: some View {
         if name.isEmpty {
-            meta(MachineSetupCopy.SETUP_NEW_FOLDER_META)
+            meta(MachineSetupCopy.SETUP_FOLDER_HINT)
         } else if !MachineSetup.isValidNewFolder(name) {
             verdictLine(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, tone: .bad)
-        } else if case .answered(let probe)? = newAnswer {
-            let verdict = MachineSetup.newFolderVerdict(probe, machine: machine)
-            // Nothing there yet reads as the board draws a new folder; anything there says what it means.
-            if verdict.tone == .ok { meta(verdict.text) } else { verdictLine(verdict.text, tone: verdict.tone) }
-        } else if newAnswer != nil {
-            noAnswer { newAttempt += 1 }
+        } else if let found {
+            let verdict = MachineSetup.newFolderVerdict(found, machine: machine)
+            // Nothing there yet reads as a note; anything there says what it is.
+            if found.exists { verdictLine(verdict.text, tone: verdict.tone) } else { meta(verdict.text) }
+        } else if answer != nil {
+            noAnswer { attempt += 1 }
         } else {
             checking
-        }
-    }
-
-    private var otherRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            row(.other) {
-                Text(MachineSetupCopy.setupOtherFolder(machine: machine)).foregroundStyle(.primary)
-            }
-            if choice == .other {
-                VStack(alignment: .leading, spacing: 3) {
-                    field("/path/to/project", text: $typed)
-                        .accessibilityLabel(MachineSetupCopy.setupOtherFolder(machine: machine))
-                    typedVerdict
-                }
-                .padding(.leading, 36)
-                .padding(.trailing, 10)
-                .padding(.bottom, 8)
-            }
-        }
-    }
-
-    @ViewBuilder private var typedVerdict: some View {
-        if !path.isEmpty {
-            if let checked {
-                let verdict = MachineSetup.folderVerdict(checked, machine: machine)
-                verdictLine(verdict.text, tone: verdict.tone)
-            } else if typedAnswer != nil {
-                noAnswer { attempt += 1 }
-            } else {
-                checking
-            }
         }
     }
 

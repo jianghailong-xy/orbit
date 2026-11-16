@@ -56,7 +56,12 @@ import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.cards.OwnerRequestLinks
+import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.core.cards.OwnerRequestsApi
+import io.orbitd.android.core.schedule.ScheduleCopy
+import io.orbitd.android.schedule.ScheduledDrawerCount
+import io.orbitd.android.schedule.ScheduledPage
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
@@ -337,7 +342,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Icon(painterResource(R.drawable.ic_search), "Search sessions")
                             }
                         }
-                        listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
+                        // Scheduled (board 01 ①): account-wide, right under Tasks and nowhere in a workspace's list; away while the
+                        // server predates scheduled tasks.
+                        val scheduled = remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) }
+                        val scheduledState by scheduled.state.collectAsState()
+                        LaunchedEffect(scheduled, revision) { scheduled.load() }
+                        listOfNotNull(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
+                            Triple(ScheduleCopy.Nav.scheduled, Destination.SCHEDULED, R.drawable.ic_calendar).takeUnless { scheduledState.unsupported },
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
                             val row = @Composable {
                                 NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
@@ -349,8 +360,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     badge = when (dest) {
                                         Destination.WIKI -> ({ WikiDrawerCount(app, signedIn.handle) })
                                         Destination.PROJECTS -> ({ ProjectsDrawerCount(projects) })
+                                        Destination.SCHEDULED -> ({ ScheduledDrawerCount(scheduledState.needsYouCount) })
                                         else -> null
-                                    })
+                                    }, modifier = if (dest == Destination.SCHEDULED) Modifier.testTag("drawer:scheduled") else Modifier)
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
@@ -470,6 +482,19 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
+                                // The timeline (board 01 ②); a row's detail is the page's own bottom sheet, and a run's session is pushed
+                                // over the page, so Back returns to the schedule it ran for. Change… is a new conversation in its workspace.
+                                // A scheduled task's pending items head the page (no Waiting on you page): the account's open owner requests.
+                                Destination.SCHEDULED -> {
+                                    val requests = remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }
+                                    val requestState by requests.state.collectAsState()
+                                    LaunchedEffect(requests, revision) { requests.load(OwnerRequestStore.OPEN) }
+                                    ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
+                                        workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
+                                        openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
+                                        change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) },
+                                        waiting = requestState.scheduleItems, answered = { requests.load(OwnerRequestStore.OPEN) })
+                                }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -521,6 +546,8 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_JOB -> "Run"
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
+    // The page draws its own large "Scheduled" (board 01 ②).
+    Destination.SCHEDULED -> ""
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)

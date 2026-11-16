@@ -14,6 +14,9 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
     LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
     WIKI_ACTIVITY, WIKI_TRASH,
+    /** Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only. `id` the schedule whose detail sheet
+     * opens over the timeline, from a push or a card's Open. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
+    SCHEDULED,
     /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
      *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
     GUEST_SESSION }
@@ -171,7 +174,9 @@ object OrbitLinks {
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
-        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS)
+        mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
+            // `orbit://schedule/<id>`: a scheduled task's push that names no run session opens the Scheduled page, its detail sheet open.
+            "schedule" to Destination.SCHEDULED)
 
     /** `orbit://owner-request/<id>`, an owner request push's action: the request, by its canonical id. It names no page of its own:
      * the request's read says which conversation asked, and that conversation opens on its card ([io.orbitd.android.cards.OwnerRequestLinks]). */

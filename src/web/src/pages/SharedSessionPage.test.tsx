@@ -214,6 +214,11 @@ describe('the shared page, a page at a time', () => {
     expect(container.textContent).not.toContain(rows.OLDER_PROGRESS_1.payload.text);
   });
 
+  it('is read-only: no composer, no text box and no file picker (only an invited guest may write, in the app)', async () => {
+    await mountPage();
+    expect(container.querySelector('form, textarea, input[type="file"], .guest-composer, .guest-dock')).toBeNull();
+  });
+
   it('brings in the page before the oldest one it holds when the reader scrolls up', async () => {
     await mountPage();
     const scroller = container.querySelector('.share-scroll')!;

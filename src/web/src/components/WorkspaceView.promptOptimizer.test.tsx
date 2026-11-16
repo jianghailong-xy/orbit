@@ -280,7 +280,9 @@ const optimizeButton = (): HTMLButtonElement | null => mounted().querySelector<H
 const card = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.composer-optimized');
 const failed = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.composer-optimize-failed');
 const cardButton = (label: string): HTMLButtonElement =>
-  [...(card() ?? failed())!.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === label)!;
+  [...(card() ?? failed())!.querySelectorAll<HTMLButtonElement>('button')].find(
+    (b) => b.textContent?.replace(b.querySelector('kbd')?.textContent ?? '', '').trim() === label,
+  )!;
 
 async function typeDraft(value: string): Promise<void> {
   const ta = box();
@@ -499,12 +501,68 @@ describe('the suggestion card (frame 4)', () => {
     expect(box().value).toBe(DRAFT);
   });
 
+  it('Tab in the box is Use: the draft is replaced and Undo is offered', async () => {
+    await ready();
+    await openCard();
+    expect(cardButton('Use').querySelector('kbd')?.textContent).toBe('Tab');
+    expect(cardButton('Use').getAttribute('aria-keyshortcuts')).toBe('Tab');
+    expect(card()!.textContent).toContain('Tab uses it · Esc dismisses · your draft is kept');
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await act(async () => {
+      box().dispatchEvent(tab);
+    });
+    expect(tab.defaultPrevented).toBe(true);
+    expect(box().value).toBe(GLOSS);
+    expect(card()).toBeNull();
+    await waitForUi(() => expect(document.body.textContent).toContain('Draft replaced with the optimized prompt'));
+  });
+
+  it('Shift+Tab and a modified Tab leave the card alone', async () => {
+    await ready();
+    await openCard();
+    for (const init of [{ shiftKey: true }, { altKey: true }, { ctrlKey: true }, { metaKey: true }]) {
+      await key(box(), { key: 'Tab', ...init });
+      expect(card()).toBeTruthy();
+      expect(box().value).toBe(DRAFT);
+    }
+  });
+
+  it('Tab does nothing to the box when there is no card', async () => {
+    await ready();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await act(async () => {
+      box().dispatchEvent(tab);
+    });
+    expect(tab.defaultPrevented).toBe(false);
+    expect(box().value).toBe(DRAFT);
+  });
+
   it('Esc dismisses and keeps the draft', async () => {
     await ready();
     await openCard();
     await key(box(), { key: 'Escape' });
     expect(card()).toBeNull();
     expect(box().value).toBe(DRAFT);
+  });
+
+  it('closes once Enter sends the draft it was about', async () => {
+    await ready();
+    await openCard();
+    await key(box(), { key: 'Enter' });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalled());
+    await waitForUi(() => expect(box().value).toBe(''));
+    expect(card()).toBeNull();
+  });
+
+  it('a send while it works drops the answer that comes back', async () => {
+    let answer: (value: typeof RESULT) => void = () => {};
+    optimizeMock.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    await ready();
+    await act(async () => optimizeButton()!.click());
+    await send();
+    await waitForUi(() => expect(box().value).toBe(''));
+    await act(async () => answer(RESULT));
+    expect(card()).toBeNull();
   });
 
   it('Try again asks again', async () => {

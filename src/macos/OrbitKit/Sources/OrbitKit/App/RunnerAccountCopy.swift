@@ -9,6 +9,9 @@ public enum RunnerAccountCopy {
     /// is removed from Orbit.
     public static func runnerAccountRemoveTitle(name: String) -> String { "Remove \(name)?" }
 
+    /// Removing an added account while Default is in use.
+    public static let RUNNER_ACCOUNT_REMOVE_DETAIL = "Workspaces using it switch to Default."
+
     /// Removing Default, which only Orbit stops using; `cli` is the CLI's own name (Codex, Claude Code).
     public static func runnerDefaultRemoveDetail(runner: String, cli: String) -> String {
         "Orbit stops using it on \(runner). Its sign-in stays on the machine, and \(cli) in a terminal there "
@@ -38,16 +41,17 @@ public enum RunnerAccountCopy {
 
     public static func runnerDefaultUseAgainFailed(name: String) -> String { "Couldn’t use \(name) again" }
 
-    /// Over the sessions a refused removal lists, when one session is running in the account; `engine`
-    /// is the CLI's own name (Codex, Claude Code).
+    /// Over the sessions a refused removal lists, when one session is in the account — running or
+    /// between turns, either holds it; `engine` is the CLI's own name (Codex, Claude Code).
     public static func runnerAccountInUseOne(engine: String) -> String {
-        "This \(engine) account can’t be removed while a session is running on it — end the session below, "
-            + "then remove it"
+        "This \(engine) account can’t be removed while a session is on it — to keep the session, switch it to "
+            + "another account and send it a message, or end it below; then remove the account"
     }
 
-    /// The same, when several sessions are running in it.
+    /// The same, when several sessions are in it.
     public static func runnerAccountInUseMany(engine: String, count: Int) -> String {
-        "This \(engine) account can’t be removed while \(count) sessions are running on it — end them, then remove it"
+        "This \(engine) account can’t be removed while \(count) sessions are on it — to keep them, switch each to "
+            + "another account and send it a message, or end them; then remove the account"
     }
 
     /// Each listed session's way to it.

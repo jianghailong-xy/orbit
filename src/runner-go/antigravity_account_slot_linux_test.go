@@ -252,3 +252,41 @@ func TestAntigravityGoogleLoginCodeWithoutAnAccountFindsItsAttempt(t *testing.T)
 		t.Fatalf("the account the code belonged to is gone: %v", err)
 	}
 }
+
+// An idle session switched to another Google account records it as the reload retires agy, not at the
+// next agy: its conversation is its own, never the account's, so the account it left holds nothing of
+// it and can be removed while the session waits for its next message (2026-11-16).
+func TestAnIdleAntigravitySessionSwitchedAwayReleasesItsAccount(t *testing.T) {
+	f := startFakeAgySession(t, &ClaimedSession{SessionID: "s-switch", Provider: providerAntigravity, Agent: AgentExecConfig{PermissionMode: "dontAsk"}})
+	if err := os.WriteFile(filepath.Join(f.dir, "release"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.inbox <- RunInboxResponse{TurnID: "t1", Kind: "message", Content: "first"}
+	if got := f.completion(t); got.TurnID != "t1" || got.Status != stSucceeded {
+		t.Fatalf("t1 = %+v", got)
+	}
+	work := addAntigravityAccount(t, "Work", []byte(`{"refresh_token":"w"}`))
+	other := addAntigravityAccount(t, "Other", []byte(`{"refresh_token":"o"}`))
+	recorded := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			meta := readSessionMeta(filepath.Join(f.scratch, "meta.json"))
+			if meta != nil && meta.AntigravityGoogleDir == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the idle session records %+v, want the account %s", meta, want)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	switchTo := func(id, dir string) {
+		f.inbox <- RunInboxResponse{TurnID: id, Kind: "reload", Content: `{"provider":"antigravity"}`,
+			Env: map[string]string{antigravityAccountDirVar: dir, "AGY_FAKE_DIR": f.dir}}
+	}
+	switchTo("r1", work.Dir)
+	recorded(work.Dir)
+	switchTo("r2", other.Dir)
+	recorded(other.Dir)
+}

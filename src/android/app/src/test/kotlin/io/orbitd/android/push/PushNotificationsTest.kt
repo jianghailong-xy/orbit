@@ -92,7 +92,8 @@ class PushNotificationsTest {
     }
 
     /** The two decisions only the owner makes that are no owner item (a crossing request, a coordinator's confirmation raise) ring on
-     * the needs-you channel; a schedule alert follows the session rule: the sessions channel with its run, updates without one. */
+     * the needs-you channel; a schedule alert follows the session rule: the sessions channel with its run, updates without one,
+     * unless it names the Waiting on you item it filed, which rings on the needs-you channel. */
     @Test fun ownerDecisionsRingAsNeedsYouAndScheduleAlertsFollowTheSessionRule() {
         val session = "019a0000-0000-7000-8000-000000000002"
         val project = "019a0000-0000-7000-8000-000000000003"
@@ -104,6 +105,9 @@ class PushNotificationsTest {
             """"kind":"confirmation-raised","sessionID":"$session",$ids""" to PushNotifications.NEEDS_YOU,
             """"kind":"schedule","sessionID":"$session",$schedule""" to PushNotifications.SESSIONS,
             """"kind":"schedule",$schedule""" to PushNotifications.UPDATES,
+            // A failure or a hold that filed a Waiting on you item names it, and rings on the needs-you channel, with its run or without.
+            """"kind":"schedule","sessionID":"$session",$schedule,"ownerRequestID":"019a0000-0000-7000-8000-000000000013"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"schedule",$schedule,"ownerRequestID":"019a0000-0000-7000-8000-000000000015"""" to PushNotifications.NEEDS_YOU,
         ).forEachIndexed { index, (fields, channel) ->
             notifications.clear()
             val data = data() + ("notificationKey" to "decision-$index") +
@@ -113,7 +117,7 @@ class PushNotificationsTest {
             assertTrue(fields, notifications.show(message, data))
             val notification = manager.activeNotifications.single().notification
             assertEquals(fields, channel, notification.channelId)
-            if (channel == PushNotifications.NEEDS_YOU) assertEquals(fields, Notification.CATEGORY_REMINDER, notification.category)
+            if (channel == PushNotifications.NEEDS_YOU && message.payload.isOwnerDecision) assertEquals(fields, Notification.CATEGORY_REMINDER, notification.category)
         }
     }
 

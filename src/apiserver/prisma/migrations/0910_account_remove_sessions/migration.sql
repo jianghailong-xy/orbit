@@ -1,0 +1,13 @@
+-- 0910 — a refused account removal names the sessions in the account.
+--
+-- `runner.codex_account_remove_sessions`: the session ids a runner reports when it refuses to remove an
+-- account because sessions it is running are in it. The runner's page lists them by title, so the person
+-- who pressed Remove knows which sessions to end. Empty for every other outcome.
+--
+-- BACKWARD COMPATIBLE: a new column with a default; an older apiserver neither reads nor writes it.
+--
+-- First committed as 0870_account_remove_sessions, a number 0870_managed_runner_image_roll already held; renumbered to
+-- 0910, above 0880 (main's 0880_attachment_guest_uploader) and 0890/0900 (taken on other branches, 2026-11-16), so the
+-- ledger stays totally ordered. IF NOT EXISTS: a database that applied it under its first name runs it again under
+-- this one as a migration it has not seen, and finds the column there.
+ALTER TABLE "runner" ADD COLUMN IF NOT EXISTS "codex_account_remove_sessions" UUID[] NOT NULL DEFAULT '{}';

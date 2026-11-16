@@ -88,6 +88,7 @@ import {
   runnerAccountInUseMany,
   runnerAccountInUseOne,
   runnerAccountRemoveDetailAutomatic,
+  RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
   runnerAccountRemoveTitle,
   runnerDefaultRemoveDetail,
@@ -760,7 +761,9 @@ function EngineRow({
       // Signed in (on the key or on Google), or a check that got no answer: nothing to sign in to
       // on the row. An unanswered check keeps its action in More, like every engine's.
       if ((kind === 'in' && !envKey) || kind === 'unknown') return null;
-      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      // Signed out, it reads Sign in like every engine's row (the panel it opens names Google); on the
+      // machine's Gemini key, naming Google is what tells this sign-in from the key.
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>{envKey ? 'Sign in with Google' : 'Sign in'}</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
@@ -1019,7 +1022,7 @@ function EngineRow({
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
       {cursorHint && <div className="re-panel-hint re-login-note">{cursorHint}</div>}
       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
-      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
+      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note re-google-terms"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -1327,8 +1330,7 @@ function AccountRow({
     description: isDefault
       ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
       : !defaultRemoved
-        ? `Its sign-in is deleted from ${runnerName}. ` +
-          `Workspaces set to this account run on ${defaultName}.`
+        ? RUNNER_ACCOUNT_REMOVE_DETAIL
         : others > 0
           ? runnerAccountRemoveDetailAutomatic(runnerName)
           : runnerAccountRemoveDetailLast(runnerName, defaultName),

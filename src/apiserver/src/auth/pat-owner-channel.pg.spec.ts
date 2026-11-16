@@ -292,6 +292,7 @@ test('the owner channel refuses a personal access token door by door and field b
     },
     // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
     { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
+    { route: 'GET /sessions/:id/guests/suggestions', path: `/sessions/${sessionId}/guests/suggestions`, login: 200 },
     {
       route: 'POST /sessions/:id/guests', path: `/sessions/${sessionId}/guests`,
       body: { email: guestEmail }, login: 201,

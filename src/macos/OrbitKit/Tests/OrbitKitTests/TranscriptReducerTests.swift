@@ -1360,6 +1360,46 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(bubble?.ts, "2026-06-26T10:00:00Z")
     }
 
+    /// A send guessed idle that the server `queued` (a turn was in flight that this end's status had
+    /// not caught up with) leaves the transcript for the queued tail: "Queued" with a Cancel, not
+    /// "Sending…" until its turn comes. Web parity: the receipt's placement alone decides.
+    func testServerQueuedPlacementMovesInlineSendToQueue() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "queued")
+        XCTAssertTrue(r.state.items.isEmpty)
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.queued[0].turnId, "t1")
+        XCTAssertEqual(r.state.queued[0].queued, true)
+        XCTAssertEqual(r.state.queued[0].pending, true)
+    }
+
+    /// A first message held for its translation comes back `queued` with nothing ahead of it: that is
+    /// the translation hold, not a place in the queue, so it stays in the conversation (web parity).
+    func testTranslationHeldSendStaysInlineDespiteQueuedPlacement() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
+    /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
+    /// is drawn inline and offers no Cancel.
+    func testServerAcceptedPlacementMovesQueuedSendInline() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
     /// An optimistic image bubble (id-only, mime unknown) reconciles to the durable event, which
     /// supplies the real mime + a timestamp — without duplicating the bubble.
     func testOptimisticBubbleAdoptsDurableAttachmentsAndTs() {

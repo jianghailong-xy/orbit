@@ -502,6 +502,7 @@ import {
   serverMatchedRuntime,
 } from '../common/permission-rules';
 import {
+  mergeFencesTurn,
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
@@ -2546,6 +2547,9 @@ export class RunnerApiController {
                 ...(storableBranchSha(s.branchSha) ? { branchSha: s.branchSha } : {}),
               },
             });
+            if (s.branchMerged === true) {
+              await this.clearLandedMergeFailure(s.sessionId, runner.id, heartbeatLeaseOwner ?? undefined);
+            }
           }),
         );
       } catch {
@@ -3774,6 +3778,13 @@ export class RunnerApiController {
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the request this reports on');
     }
+    // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
+    // another account's session ids on its row, even though the page reads only the viewer's back.
+    const named = status === 'failed' ? accountInUseSessionIds(body) : [];
+    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+      where: { id: { in: named }, assignedRunnerId: runnerId },
+      select: { id: true },
+    })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
     const { count } = await this.prisma.runner.updateMany({
       where: {
         id: runnerId,
@@ -3793,7 +3804,7 @@ export class RunnerApiController {
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
         // The sessions a refusal names, which the page lists (accountRemoveSessionsOf reads only those
         // this runner runs for the viewer); a success, or any other refusal, names none.
-        codexAccountRemoveSessions: status === 'failed' ? accountInUseSessionIds(body) : [],
+        codexAccountRemoveSessions: sessionIds,
       },
     });
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
@@ -4467,6 +4478,11 @@ export class RunnerApiController {
     return response;
   }
 
+  /** The capabilities this runner last declared, for mergeFencesTurn: a plain read of its row. */
+  private async runnerCapabilitiesIn(tx: Prisma.TransactionClient, runnerId: string): Promise<string[] | undefined> {
+    return (await tx.runner.findUnique({ where: { id: runnerId }, select: { capabilities: true } }))?.capabilities;
+  }
+
   /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/takeover-leases')
@@ -4532,12 +4548,12 @@ export class RunnerApiController {
         return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
       }
       if (
-        pendingWorktreeOperationMayBeExecuting(
+        (pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
           owned[0].mergeOperationId,
           owned[0].mergeOperationOwner,
           owned[0].mergeRequestedAt,
-        ) ||
+        ) && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id))) ||
         pendingWorktreeOperationMayBeExecuting(
           owned[0].commitStatus,
           owned[0].commitOperationId,
@@ -4737,6 +4753,9 @@ export class RunnerApiController {
         FOR UPDATE
       `;
       const byId = new Map(locked.map((row) => [row.id, row]));
+      // Read only when some row's merge is pending: the common takeover reads no runner.
+      const mergeFences = locked.some((row) => row.mergeStatus === 'pending')
+        && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id));
       const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
       for (const { sessionId, expectedLeaseOwner } of asked) {
         const refused = refusedBeforeLock.get(sessionId);
@@ -4767,7 +4786,7 @@ export class RunnerApiController {
           continue;
         }
         if (
-          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          (mergeFences && pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt)) ||
           pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
         ) {
           conflict('wait for the pending worktree operation to finish');
@@ -10703,6 +10722,9 @@ export class RunnerApiController {
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
       },
     });
+    if (updated.count > 0 && dto.branchMerged === true) {
+      await this.clearLandedMergeFailure(sessionId, runner.id);
+    }
     // Only persist the patches once we've confirmed the session is still live (count > 0);
     // a no-op update means it finalized, so its committed diff must stay authoritative.
     if (updated.count > 0 && dto.changedDiff !== undefined) {
@@ -11302,6 +11324,24 @@ export class RunnerApiController {
       throw new ForbiddenException('session does not belong to this runner');
     }
     return session;
+  }
+
+  /** A merge that failed (conflict or error) and then landed anyway — the branch rebased and merged by hand, or pushed
+   * from the command line — kept its failure on the row, so every client went on drawing "Merge conflict" for a
+   * branch already in its target. Once the runner reports the branch merged, that failure is history: clear it, and
+   * the bar reads "✓ In main". A failure with a merge recovery open is left to the recovery panel. */
+  private async clearLandedMergeFailure(sessionId: string, runnerId: string, leaseOwner?: string): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        status: { in: OPEN },
+        mergeStatus: { in: ['conflict', 'error'] },
+        mergeRecovery: { equals: Prisma.AnyNull },
+        ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
+      },
+      data: { mergeStatus: null, mergeError: null },
+    });
   }
 
   /** Reconcile the runner's heuristic merged verdict with the exact source tip captured by a

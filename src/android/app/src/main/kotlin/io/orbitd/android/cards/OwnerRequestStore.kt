@@ -13,6 +13,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.schedule.ScheduleWaitingItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,9 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         val savedSecrets: List<AccountSecret> = emptyList(),
         /** The tasks a request holds up, by id, as their titles were read. */
         val taskTitles: Map<String, String> = emptyMap(),
+        /** The scheduled tasks' four kinds, pending (docs/scheduled-tasks-design.md §6.4): their cards head the Scheduled page, whole,
+         * and are answered at the schedule's own doors. There is no Waiting on you page (docs/mocks/waiting-on-you-removal). */
+        val scheduleItems: List<ScheduleWaitingItem> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
@@ -52,9 +56,10 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         filters.forEach { filter ->
             scope.launch {
                 try {
-                    val requests = api.list(filter)
+                    val (requests, scheduled) = api.listWithSchedules(filter)
                     if (!live()) return@launch
-                    mutable.update { it.copy(lists = it.lists + (filter to requests)) }
+                    mutable.update { state -> state.copy(lists = state.lists + (filter to requests),
+                        scheduleItems = if (filter == OPEN) scheduled.filter { it.state == OwnerRequests.PENDING } else state.scheduleItems) }
                     titles(requests.flatMap { it.blocksTaskIds })
                 } catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { /* The list stands as it was last read. */ }

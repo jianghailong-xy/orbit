@@ -109,6 +109,15 @@ export function usePromptOptimizer({
   useEffect(() => cancel, [cancel]);
 
   const trimmed = text.trim();
+  // A send empties the box: the card (or the press still under way) was about the draft that just went.
+  const hadDraft = useRef(trimmed !== '');
+  useEffect(() => {
+    const had = hadDraft.current;
+    hadDraft.current = trimmed !== '';
+    if (!had || trimmed !== '') return;
+    cancel();
+    setState((s) => (s.kind === 'idle' ? s : { kind: 'idle' }));
+  }, [trimmed, cancel]);
   const busy = state.kind === 'busy';
   // The button keeps its slot whenever the optimizer is on, so the toolbar never shifts as the
   // draft fills or empties: it is only disabled when there is nothing it can do.
@@ -186,7 +195,7 @@ export function usePromptOptimizer({
     [state, setText, restore, taRef],
   );
 
-  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, and Esc on the card.
+  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, Tab and Esc on the card.
    *  True when the key was the optimizer's. */
   const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (e.nativeEvent.isComposing) return false;
@@ -204,6 +213,13 @@ export function usePromptOptimizer({
       }
       e.preventDefault();
       restore();
+      return true;
+    }
+    // Tab takes the card, as it takes a reply suggestion: the same key for "use what is offered".
+    // A menu open above has already had the key; on the card's own buttons Tab still moves focus.
+    if (e.key === 'Tab' && state.kind === 'card' && !mod && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      use(false);
       return true;
     }
     if (e.key === 'Escape' && (state.kind === 'card' || state.kind === 'failed')) {
@@ -327,8 +343,11 @@ function PromptOptimizerCard({
         </div>
       )}
       <div className="composer-optimized-actions">
-        <button type="button" className="composer-optimized-use" onClick={onUse}>
+        <button type="button" className="composer-optimized-use" aria-keyshortcuts="Tab" onClick={onUse}>
           Use
+          <kbd className="composer-optimized-key" aria-hidden="true">
+            Tab
+          </kbd>
         </button>
         <button type="button" className="composer-optimized-edit" onClick={onEditUse}>
           Edit, then use
@@ -336,7 +355,9 @@ function PromptOptimizerCard({
         <button type="button" className="composer-optimized-retry" onClick={onTryAgain}>
           Try again
         </button>
-        <span className="composer-optimized-hint">Esc dismisses · your draft is kept</span>
+        <span className="composer-optimized-hint">
+          <span className="composer-optimized-tab-hint">Tab uses it · </span>Esc dismisses · your draft is kept
+        </span>
       </div>
     </div>
   );

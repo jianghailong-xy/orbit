@@ -96,9 +96,12 @@ final class SessionLineTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: interrupted, live: true),
                        .init(text: "You: 设置按钮的底色很奇怪，请帮我 review", tone: .preview))
 
-        // A process left up outranks it — that's live status, not history.
+        // A process left up never takes its place (the owner, 2026-11-16): the glyph says it.
         let bg = session(status: .awaitingInput, lastUserText: "run the tests", runningBgCount: 1)
         XCTAssertEqual(SessionLine.make(for: bg, live: true),
+                       .init(text: "You: run the tests", tone: .preview))
+        // With nothing else to say, the row says it.
+        XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, runningBgCount: 1), live: true),
                        .init(text: "Background process running…", tone: .background))
     }
 
@@ -197,9 +200,9 @@ final class SessionLineTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, lastUserText: "and now the footer?",
                                                      recapText: recap, recapAt: nil), live: true),
                        .init(text: "You: and now the footer?", tone: .preview))
-        // A background process it left up.
+        // A background process it left up does not: the recap keeps the line (the owner, 2026-11-16).
         XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, runningBgCount: 1,
                                                      recapText: recap, recapAt: nil), live: true),
-                       .init(text: "Background process running…", tone: .background))
+                       .init(text: recap, tone: .preview))
     }
 }

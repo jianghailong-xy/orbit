@@ -97,6 +97,7 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import { OrbitEventLine } from './OrbitEventLine';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -190,7 +191,14 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
-import { BILINGUAL_COLLAPSE_LINES, bilingualEnglish, bilingualLineCount, DEFAULT_AGENT_LANGUAGE } from '@orbit/shared';
+import {
+  BILINGUAL_COLLAPSE_LINES,
+  bilingualEnglish,
+  bilingualLineCount,
+  bilingualPairs,
+  DEFAULT_AGENT_LANGUAGE,
+  type BilingualPair,
+} from '@orbit/shared';
 import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
   ReplyTranslationFoot,
@@ -1001,7 +1009,16 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note)
-  && !parseSubagentFinished(node.note);
+  && !parseSubagentFinished(node.note)
+  && !orbitOnlyTurn(node);
+
+// A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
+// person attached: Orbit opened it, so it never draws as the person's bubble (OrbitEventLine).
+const orbitOnlyTurn = (node: TextNode): boolean =>
+  node.text.trim() === ''
+  && !!node.note?.trim()
+  && !node.images?.length
+  && !node.attachmentRefs?.length;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -2673,11 +2690,21 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
-      // A turn with no words and no files that still carries a note is one the control plane opened
-      // for a block this client cannot read yet (a background job's stall was one, before it had its
-      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
-      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
-        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      // Nothing typed and only Orbit's blocks in the note: no dedicated line above knew the block, and
+      // it is still nobody's message (owner rule 2026-11-16). One generic line in the agent's stream,
+      // so the next new block cannot land on the reader's side as an empty bubble.
+      if (orbitOnlyTurn(node)) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        return (
+          <OrbitEventLine
+            note={node.note!}
+            seq={seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+            queued={queued}
+          />
+        );
       }
       return <UserBubble node={node} queued={queued} />;
     }
@@ -4324,9 +4351,19 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const flipped = shownOriginal && !bilingual;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
+  // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
+  const pairs = useMemo(
+    () => (bilingual && translation?.text !== undefined ? bilingualPairs(translation.text, node.text) : null),
+    [bilingual, translation?.text, node.text],
+  );
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
-      {bilingual ? (
+      {bilingual && pairs ? (
+        <>
+          <InterleavedReply pairs={pairs} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      ) : bilingual ? (
         <>
           <AssistantBubble text={translated} seq={node.seq} />
           <div className="chat-bilingual-reply">
@@ -4347,6 +4384,57 @@ function TranslatedReply({ node }: { node: TextNode }) {
           <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
         </>
       )}
+    </div>
+  );
+}
+
+// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): each block of
+// the translation with the original's matching block right under it, smaller and grey, and no divider
+// inside a pair. An item's original sits under its own words, indented with them; a heading's under the
+// heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
+function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const original = (pair: BilingualPair) =>
+    pair.original ? (
+      <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
+        <MD breaks>{pair.original}</MD>
+      </div>
+    ) : null;
+  return (
+    <div className="chat-msg chat-assistant chat-interleaved" data-seq={seq}>
+      {pairs.map((pair, i) => {
+        const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
+        let body: ReactNode;
+        if (pair.kind === 'item') {
+          const ordered = /^\d/.test(pair.marker ?? '');
+          const item = (
+            <li>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </li>
+          );
+          body = ordered ? <ol start={parseInt(pair.marker ?? '1', 10)}>{item}</ol> : <ul>{item}</ul>;
+        } else if (pair.kind === 'quote') {
+          body = (
+            <blockquote>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </blockquote>
+          );
+        } else {
+          body = (
+            <>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </>
+          );
+        }
+        return (
+          <div key={i} className={`chat-interleaved-pair is-${pair.kind}`} style={indent}>
+            <div className="md">{body}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
