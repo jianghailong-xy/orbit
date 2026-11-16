@@ -614,12 +614,12 @@ private struct GuestConversationPage: View {
         }
     }
     #elseif os(iOS)
-    /// Photo-library picks, normalized to PNG as the owner composer does (often HEIC otherwise).
+    /// Photo-library picks, made an inline image under the cap as the owner composer does.
     private func attachPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            conversation.attachImage(filename: "photo.png", mimeType: "image/png", data: png)
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let photo = orbitPhotoUpload(data) else { continue }
+            conversation.attachImage(filename: photo.filename, mimeType: photo.mimeType, data: photo.data)
         }
     }
     #endif

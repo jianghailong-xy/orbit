@@ -1,4 +1,7 @@
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
+import OrbitKit
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -27,6 +30,30 @@ extension Image {
         self.init(uiImage: platformImage)
         #endif
     }
+}
+
+/// A photo-library pick as it goes up. A PNG, JPEG, WebP or GIF under the inline-image cap goes as
+/// it is; anything else (a HEIC camera photo, or one past the cap) is redrawn upright as a JPEG no
+/// wider than `maxPixels` on its long edge. Re-encoding a camera photo as a full-size PNG, as this
+/// used to, made a 12–48 MP shot tens of MB, which the server refused. nil when the bytes are no image.
+func orbitPhotoUpload(_ data: Data, maxPixels: Int = 2048) -> (data: Data, mimeType: String, filename: String)? {
+    if let ext = AttachmentLink.fileExtension(sniffing: data), ext != "pdf",
+       let mime = UTType(filenameExtension: ext)?.preferredMIMEType,
+       Attachments.rejectReason(mimeType: mime, byteCount: data.count) == nil {
+        return (data, mime, "photo.\(ext)")
+    }
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                    kCGImageSourceCreateThumbnailWithTransform: true,
+                                    kCGImageSourceThumbnailMaxPixelSize: maxPixels]
+    guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+    let out = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(destination, image,
+                               [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return (out as Data, "image/jpeg", "photo.jpg")
 }
 
 extension PlatformImage {
