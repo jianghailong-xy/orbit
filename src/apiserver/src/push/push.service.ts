@@ -15,7 +15,14 @@ import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
-import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
+import {
+  SESSION_ENDING_SELECT,
+  conversationIsOver,
+  coordinatorUnreachable,
+  openItemsNoLongerOwed,
+  readCoordinatorReach,
+  type SessionEnding,
+} from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
@@ -789,6 +796,24 @@ export class PushService {
   }
 
   /**
+   * Whether the owner item's project has no coordinator to turn to as the push is sent — the same
+   * reading the project page draws the card from (`readCoordinatorReach`), so the banner and the
+   * card it opens name the same cause. Without the sessions service (a test module that never
+   * wired one) it answers false, and the banner says what it always said.
+   */
+  private async coordinatorUnreachableFor(
+    ownerId: string,
+    project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null } | null,
+  ): Promise<boolean> {
+    if (!project) return false;
+    if (!this.moduleRef) return false;
+    // Loaded where it is used, as the run-notify turn above does: the sessions module imports this one.
+    const { SessionsService } = await import('../sessions/sessions.service.js');
+    const sessions = this.moduleRef.get(SessionsService, { strict: false });
+    return coordinatorUnreachable(await readCoordinatorReach(sessions, ownerId, project));
+  }
+
+  /**
    * Tell the account owner that one of the four things only they can answer is waiting
    * (`docs/project-integration-line-contract.md` §7.6 V12).
    *
@@ -827,7 +852,13 @@ export class PushService {
           ownerId: true,
           projectId: true,
           promotionId: true,
-          project: { select: { title: true, coordinatorSessionId: true } },
+          project: {
+            select: {
+              title: true,
+              coordinatorSessionId: true,
+              coordinatorSession: { select: SESSION_ENDING_SELECT },
+            },
+          },
         },
       });
       // A resolved item is not waiting on anybody: the owner answered it in another window, or the
@@ -839,6 +870,7 @@ export class PushService {
         ...item,
         projectTitle: item.project?.title ?? null,
         promotion: await this.promotionFor(item.promotionId),
+        coordinatorUnreachable: await this.coordinatorUnreachableFor(item.ownerId, item.project),
       });
       if (!alert) return;
       const { tokens, feishu } = await this.channels(item.ownerId);

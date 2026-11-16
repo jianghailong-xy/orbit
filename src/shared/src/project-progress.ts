@@ -1277,7 +1277,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   handoverNote?: string | null;
   /** "Chat about this": where the item's handling stands, and whether a message about it can reach
    *  the project's coordinator conversation. Absent from a server that predates it. */
-  chat?: OpenItemChat | null;
+  chat?: OpenItemChat | null;  /** Whether the project's coordinator can be neither asked again nor messaged right now, as the
+   *  server read it with the list. An escalated item's heading says so ("the coordinator can’t take
+   *  messages") instead of "no one acted on this", because its doors already say it. Absent from a
+   *  server that predates it, which reads as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /**

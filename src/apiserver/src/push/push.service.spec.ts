@@ -1278,3 +1278,34 @@ test('a session the owner started rings, and a session switched on rings whoever
   await askedFor.service.notifySessionSettled('s-1');
   assert.equal(askedFor.sent.length, 1);
 });
+
+test('an escalated item whose coordinator cannot be reached says so, not "no one acted on this"', async () => {
+  // 2026-11-15: the banner and the card said nobody acted while the card's own doors could not
+  // reach the coordinator. The push reads the project page's own answer (`readCoordinatorReach`).
+  const escalated = (session: Record<string, unknown>) => openItem({
+    kind: 'INTEGRATION_CONFLICT',
+    assigneeReason: 'ESCALATED',
+    title: 'Merge conflict: Add the landing receipt',
+    payload: {},
+    waitingSince: new Date('2026-09-13T10:00:00Z'),
+    escalatedAt: new Date('2026-09-13T12:56:00Z'),
+    project: { title: 'Integration line', coordinatorSessionId: 'coordinator', coordinatorSession: session },
+  });
+  const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const cases = [
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'reachable', session: live, blocked: null, title: 'Now yours — no one acted on this for 2h 56m' },
+  ];
+  for (const { what, session, blocked, title } of cases) {
+    const { service, sent } = ownerItemHarness(escalated(session));
+    (service as any).moduleRef = { get: () => ({ receiveBlockedReasonFor: async () => blocked }) };
+    await service.notifyOwnerItem('item-1');
+    assert.equal(sent.length, 1, what);
+    const payload = JSON.parse(sent[0].body);
+    assert.equal(payload.kind, 'escalated-to-you', what);
+    assert.equal(payload.aps.alert.title, title, what);
+  }
+});
