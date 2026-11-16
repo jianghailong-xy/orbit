@@ -18,6 +18,9 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
@@ -74,10 +77,14 @@ test('session guests: a guest attaches images they uploaded, and only those', {
   const url = URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const db: PrismaClient = prismaClientFor(url);
+  // The uploads' bytes, in a directory of this run's own: the default (/var/lib/orbit/files) is one a CI runner's user
+  // cannot create, which answered every upload 500 there.
+  const filesDir = mkdtempSync(path.join(tmpdir(), 'orbit-guest-images-'));
   let server: Apiserver | undefined;
   t.after(async () => {
     await server?.stop();
     await db.$disconnect().catch(() => undefined);
+    rmSync(filesDir, { recursive: true, force: true });
   });
 
   const person = async (label: string) => {
@@ -96,7 +103,7 @@ test('session guests: a guest attaches images they uploaded, and only those', {
   const jwt = new JwtService({ secret: jwtSecret });
   const loginOf = (p: { id: string; email: string }) => jwt.signAsync({ sub: p.id, email: p.email });
   const [ownerLogin, guestLogin, otherLogin, strangerLogin] = await Promise.all([owner, guest, other, stranger].map(loginOf));
-  server = await startApiserver(url, jwtSecret);
+  server = await startApiserver(url, jwtSecret, { ORBIT_FILES_BACKEND: 'local', ORBIT_FILES_DIR: filesDir });
   const api = (method: string, path: string, bearer: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body, headers);
   const ok = (reply: Reply, what: string) => {

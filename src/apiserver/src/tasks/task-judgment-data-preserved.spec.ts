@@ -3070,6 +3070,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
       // changes.
       '0910_account_remove_sessions',
+      // 0930 makes managed_runner.default_workspace_id nullable, clears it on mappings whose workspace nobody used, and
+      // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
+      // DONE fence changes.
+      '0930_managed_runner_no_default_workspace',
       // 0970_project_ruling adds the project_ruling table (owner rulings kept on their project); no preserved relation,
       // trigger, function or DONE fence changes.
       '0970_project_ruling'],

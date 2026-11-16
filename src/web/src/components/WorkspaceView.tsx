@@ -1,5 +1,7 @@
 import {
   COORDINATOR_HANDOFF_COPY,
+  managedSetupState,
+  firstSessionProvider,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -255,8 +257,7 @@ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
 import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
-import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
-import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
 import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
@@ -3856,6 +3857,7 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  const managedSetup = managedSetupState(runner.id, managed?.status);
   // While the card is up its machine is read every few seconds, and more often while it is still connecting:
   // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
   const machineConnecting = bareMachine && isConnecting(runner);
@@ -3902,20 +3904,10 @@ export function WorkspaceView({
   // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
   // deprecated alias of `lastProvider`, still served for older native builds.
   const lastWorkspaceProvider =
-    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? firstEngineOn(runner.engines) : 'claude');
+    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
   const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
   const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
-  // The managed runner's default workspace has no engine for a first session until its runner has
-  // been ready with one (`initialProvider`): before that the server refuses the session with
-  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
-  const managedDraftBlocked =
-    !selected &&
-    !!managed &&
-    !managed.display.startsNewSession &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4132,26 +4124,8 @@ export function WorkspaceView({
     () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
     [pickedEngine, pickedProvider, draftEngines, choiceSources],
   );
-  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
-  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
-  // machine as the setup card's greeting. Only while the account has never had a session.
-  const managedDraft =
-    !selected &&
-    !!managed &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
-  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
-  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
-  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-  const welcomeEngine: LoginEngine =
-    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
-  const welcomeCredential = setupCredentialOf(
-    runner,
-    welcomeEngine,
-    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
-  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -4206,11 +4180,6 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
-  };
-  // A first message from the welcome card: into the composer, to be read, changed and sent there.
-  const pickWelcomeExample = (example: string): void => {
-    setText(example);
-    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -7351,7 +7320,6 @@ export function WorkspaceView({
       !send.isPending &&
       !uploading &&
       runnerTakesWork &&
-      !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -8828,7 +8796,7 @@ export function WorkspaceView({
     // the Provider menu lists any (every row is the session's own engine's); a workspace on another
     // machine; and a check now, where this runner checks at all (`region` is null where it doesn't).
     otherProvider:
-      configEditable && !managedDraftBlocked && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
+      configEditable && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
     moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
     checkAgain: runner.region ? regionCheck.checkAgain : undefined,
     busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
@@ -9360,9 +9328,7 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedWelcome
-          ? WELCOME_PLACEHOLDER
-        : managedDraftBlocked || !runnerTakesWork
+        : !runnerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -10984,6 +10950,7 @@ export function WorkspaceView({
               <div className="msc-draft">
                 <MachineSetupCard
                   runner={runner}
+                  managed={managed}
                   onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
@@ -10996,22 +10963,6 @@ export function WorkspaceView({
                 ))}
               </div>
             </div>
-          ) : managedWelcome && managed ? (
-            <div key="welcome" className="workspace-sessions workspace-draft">
-              <div className="msc-draft">
-                <ManagedWelcomeCard
-                  managed={managed}
-                  runner={runner}
-                  engine={welcomeEngine}
-                  credential={welcomeCredential}
-                  composerText={text}
-                  startsNow={!managedDraftBlocked}
-                  onExample={pickWelcomeExample}
-                  onUseApiKey={pickApiKey}
-                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
-                />
-              </div>
-            </div>
           ) : composing ? (
             // The provider hero is centered as a hero only while it's alone: .workspace-draft is a
             // centering flex row, so once /status prints a card it would sit beside the hero instead
@@ -11020,7 +10971,7 @@ export function WorkspaceView({
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && !managedDraftBlocked && (
+              {!machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
@@ -11076,7 +11027,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+        {managed && managed.display.kind !== 'available' && !(bareMachine && managedSetup) && (
           // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
           managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
             <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
@@ -11304,7 +11255,6 @@ export function WorkspaceView({
           permissionSemanticsFor={permissionSemanticsFor}
           shownEngine={shownEngine}
           configEditable={configEditable}
-          managedDraftBlocked={managedDraftBlocked}
           modelMenuOpen={modelMenuOpen}
           setModelMenuOpen={setModelMenuOpen}
           setProviderMenuOpen={setProviderMenuOpen}
@@ -11503,7 +11453,6 @@ export interface SessionComposerProps {
   permissionSemanticsFor: (label: string) => { shortNote?: string } | null | undefined;
   shownEngine: AgentProvider;
   configEditable: boolean | undefined;
-  managedDraftBlocked: boolean | undefined;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean) => void;
   setProviderMenuOpen: (open: boolean) => void;
@@ -11579,7 +11528,6 @@ export function SessionComposer({
   permissionSemanticsFor,
   shownEngine,
   configEditable,
-  managedDraftBlocked,
   modelMenuOpen,
   setModelMenuOpen,
   setProviderMenuOpen,
@@ -12451,9 +12399,6 @@ export function SessionComposer({
             way a reference composer writes "model · effort" as one button: the model in the
             label's colour, the effort after it in the secondary one. The menu behind it
             (`modelMenuItems`) keeps each field's own rules. */}
-        {/* No model to show where a first session cannot start yet: the managed default
-            workspace before its runner was ever ready (`managedDraftBlocked`). */}
-        {!managedDraftBlocked && (
           <span className="composer-pill composer-model-pill">
             <Menu
               side="top"
@@ -12501,7 +12446,6 @@ export function SessionComposer({
               }
             />
           </span>
-        )}
         {shownPool && shownPoolAccount && (
           <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
             <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

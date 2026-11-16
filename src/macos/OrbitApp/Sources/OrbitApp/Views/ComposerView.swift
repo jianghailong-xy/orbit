@@ -328,8 +328,6 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
         if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
-        // A machine's new session page has no workspace to send to, and no question to answer.
-        if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
         if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
@@ -751,7 +749,7 @@ struct ComposerView: View {
             Spacer(minLength: 8).layoutPriority(-1)
             // No model to show where a first session cannot start yet: the managed default workspace
             // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
-            if console.managed?.blocksNewSession != true { modelMenu }
+            modelMenu
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside
