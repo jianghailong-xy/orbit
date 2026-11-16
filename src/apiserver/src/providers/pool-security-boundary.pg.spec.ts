@@ -129,8 +129,8 @@ const metered = () => minted(`sk-ant-api03-${randomUUID()}`);
 const usageAnswers = new Map<string, unknown>();
 
 /** The endpoint's body for a 5-hour window at `utilization`, resetting in two hours. */
-function fiveHour(utilization: number) {
-  return { five_hour: { utilization, resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() } };
+function fiveHour(utilization: number, resetsAt: string) {
+  return { five_hour: { utilization, resets_at: resetsAt } };
 }
 
 /** What DeepSeek's balance endpoint answers, for any key. */
@@ -208,9 +208,9 @@ interface Account {
 
 /** One of `ownerId`'s own Claude credentials — by default a subscription on api.anthropic.com, the only
  *  kind a pool admits. */
-async function account(db: PrismaClient, ownerId: string, label: string, key = subscription()): Promise<Account> {
+async function account(db: PrismaClient, ownerId: string, label: string, key = subscription(), id?: string): Promise<Account> {
   const row = await db.modelProvider.create({
-    data: { slug: `pool-security-${randomUUID()}`, label, runtime: 'claude', baseUrl: ANTHROPIC, apiKeyEnc: encryptSecret(key), ownerId },
+    data: { id, slug: `pool-security-${randomUUID()}`, label, runtime: 'claude', baseUrl: ANTHROPIC, apiKeyEnc: encryptSecret(key), ownerId },
   });
   return { row, key };
 }
@@ -645,15 +645,19 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
   names.set(aliceHome.runnerToken, "alice's runner").set(bobHome.runnerToken, "bob's runner");
 
   // Alice's two subscriptions, Personal with the most 5-hour room; Bob's one.
-  const work = await account(db, alice, 'Work');
-  const personal = await account(db, alice, 'Personal');
+  const work = await account(db, alice, 'Work', subscription(), '01a1e611-7e96-7000-8000-000000000001');
+  const personal = await account(db, alice, 'Personal', subscription(), '01a1e611-7e96-7000-8000-000000000002');
   const theirs = await account(db, bob, 'Theirs');
+  assert.equal(work.row.id.slice(0, 13), personal.row.id.slice(0, 13), 'Alice\'s fixture ids share one UUIDv7 millisecond');
   /** Every key of Alice's a pool of hers could hand out. None may reach anything of Bob's. */
   const hers = [work, personal];
   const herKeysIn = (value: unknown) => hers.filter((a) => wire(value).includes(a.key)).map((a) => a.row.label);
-  usageAnswers.set(work.key, fiveHour(45));
-  usageAnswers.set(personal.key, fiveHour(12));
-  usageAnswers.set(theirs.key, fiveHour(30));
+  // Pool selection ranks the earliest reset before the most room. These readings describe one quota
+  // cycle, so they share one reset; separate Date.now() calls would invent an ordering between them.
+  const fiveHourReset = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  usageAnswers.set(work.key, fiveHour(45, fiveHourReset));
+  usageAnswers.set(personal.key, fiveHour(12, fiveHourReset));
+  usageAnswers.set(theirs.key, fiveHour(30, fiveHourReset));
   // Every door reads the quota cache and never waits on the network, so the numbers go in first.
   await Promise.all([work, personal, theirs].map((a) => usage.refresh(a.row)));
   assert.equal(usage.snapshot(personal.row)?.fiveHour?.utilization, 12);
