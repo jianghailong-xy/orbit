@@ -25690,7 +25690,7 @@ button.project-open-item-action:disabled {
   line-height: 1.55;
   color: var(--text-2);
 }
-.project-open-item-who {
+.project-open-item-whofixes {
   margin: 0 0 10px;
   padding: 10px 12px;
   background: var(--warning-bg);

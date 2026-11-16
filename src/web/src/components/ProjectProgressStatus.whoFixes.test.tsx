@@ -19,6 +19,8 @@ import {
   ItemAsCard,
   MARK_HANDLED_SETTLED_CONSEQUENCE,
   WHO_FIXES_IT,
+  askAgainFreshClock,
+  coordinatorRowNote,
   coordinatorRowPresses,
   coordinatorRowSentence,
   readCoordinatorCause,
@@ -170,7 +172,11 @@ function seeded(
   workspaces: Array<{ id: string; enabled?: boolean; runnerId?: string | null }> = [],
 ): QueryClient {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(projectDetailsQuery(PROJECT_ID).queryKey, { id: PROJECT_ID, title: 'Checkout v2' });
+  qc.setQueryData(projectDetailsQuery(PROJECT_ID).queryKey, {
+    id: PROJECT_ID,
+    title: 'Checkout v2',
+    exceptionEscalationSeconds: 7_200,
+  } as { id: string; title: string });
   if (coordinator) qc.setQueryData(projectCoordinatorStatusQuery(PROJECT_ID).queryKey, coordinator);
   qc.setQueryData(workspacesQuery().queryKey, workspaces);
   return qc;
@@ -323,6 +329,16 @@ describe('board part 6: the heading and the coordinator row follow the live caus
     expect(coordinatorRowSentence(conflict({ assigneeReason: 'HANDED_OVER' }), {
       cause: 'HANDED_OVER', workspaceId: null, workspaceName: null,
     })).toBe('It handed this to you on purpose.');
+  });
+
+  it('Ask again’s note names the project’s own window, as the board does, and keeps the door’s sentence without it', () => {
+    const reachable = dom(conflict());
+    expect(text(coordinatorRow(reachable)?.querySelector('.project-open-item-consequence')))
+      .toBe('It goes back to the coordinator with a fresh 2h clock.');
+    const reading = { cause: 'ESCALATED' as const, workspaceId: null, workspaceName: null };
+    expect(coordinatorRowNote(conflict(), reading, null))
+      .toBe('It goes back to the coordinator with a fresh escalation clock.');
+    expect(askAgainFreshClock(5_400)).toBe('It goes back to the coordinator with a fresh 1h 30m clock.');
   });
 
   it('the reachable ESCALATED heading carries no number', () => {
