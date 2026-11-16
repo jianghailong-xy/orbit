@@ -1258,8 +1258,9 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
-    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
-    let enableWorktree = false;
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir. A workspace this
+    // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
+    let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
@@ -2022,8 +2023,9 @@ export class SessionsService {
           name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
           runnerId: target.runnerId,
           workDir: target.workDir,
-          // Isolation off, as every new workspace starts (board 04, settled item 3).
-          enableWorktree: false,
+          // Isolation off, as every new workspace starts (board 04, settled item 3) — except a clone from GitHub, whose
+          // point is landing work back to the repository, which needs each session on its own branch.
+          enableWorktree: !!target.clone,
           autoCreateWorkDir: target.autoCreateWorkDir,
           // A clone (docs/github-workspace-design.md §5.3): PENDING until the runner reports it, and its sessions with it.
           ...(target.clone ? { ...target.clone, cloneState: 'PENDING' } : {}),

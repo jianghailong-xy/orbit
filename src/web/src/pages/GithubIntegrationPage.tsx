@@ -2,7 +2,7 @@ import { ExportOutlined, GithubOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { GithubIntegration } from '@orbit/shared';
+import type { GithubIntegration, GithubWorkspace } from '@orbit/shared';
 import { api } from '../api';
 import { Alert } from '../components/ui/Alert';
 import { SettingsHeader } from '../components/settings';
@@ -28,6 +28,21 @@ const PAGE = '/settings/integrations/github';
 export function disconnectWarning(workspaceCount: number): string {
   const lead = workspaceCount === 1 ? '1 workspace keeps its folder.' : `${workspaceCount} workspaces keep their folders.`;
   return `${lead} Clones and landings that need GitHub will stop until you connect again.`;
+}
+
+/** Which credential a workspace from GitHub uses, as its clone reported it (board 02, note 3). */
+export function githubWorkspaceCredentialText(workspace: Pick<GithubWorkspace, 'credential' | 'cloneState'>): string {
+  if (workspace.credential === 'github-app') return 'Uses Orbit’s GitHub app';
+  if (workspace.credential === 'machine') return 'Uses this machine’s Git credential';
+  switch (workspace.cloneState) {
+    case 'PENDING':
+    case 'CLONING':
+      return 'Cloning';
+    case 'FAILED':
+      return 'The clone failed';
+    default:
+      return 'Credential not reported';
+  }
 }
 
 /**
@@ -189,6 +204,28 @@ export function GithubIntegrationPage() {
                 )}
               </ul>
             )}
+          </div>
+        </section>
+      )}
+
+      {(view.workspaces?.length ?? 0) > 0 && (
+        <section className="orbit-card github-card" aria-label="Workspaces from GitHub">
+          <div className="orbit-card-head">
+            <h2 className="orbit-card-title">Workspaces from GitHub</h2>
+          </div>
+          <div className="orbit-card-body">
+            <ul className="github-installations">
+              {view.workspaces!.map((workspace) => (
+                <li key={workspace.id} className="github-installation github-workspace">
+                  <span>
+                    <b>{workspace.name}</b>
+                    {workspace.machine && <> on {workspace.machine}</>}
+                  </span>
+                  <span className="github-hint">{workspace.repository}</span>
+                  <span className="github-hint">{githubWorkspaceCredentialText(workspace)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
       )}

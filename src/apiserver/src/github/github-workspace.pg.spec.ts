@@ -258,6 +258,9 @@ test('GitHub P1 on PostgreSQL: create from GitHub, the clone reconcile, the disp
       autoCreateWorkDir: false, started: false, finished: false,
     });
     assert.equal((await rows(`SELECT "status" FROM "session" WHERE "id" = $1::uuid`, [appSession]))[0].status, 'PENDING');
+    // A clone's point is landing back to the repository (P2): the workspace isolates its sessions, and this one has its branch.
+    assert.equal((await rows(`SELECT "enable_worktree" FROM "workspace" WHERE "id" = $1::uuid`, [appWorkspace]))[0].enable_worktree, true);
+    assert.ok((await rows(`SELECT "branch" FROM "session" WHERE "id" = $1::uuid`, [appSession]))[0].branch, 'the first session runs on its own branch');
     const lib = await openSession(ownerToken, cloner, { github: { repoId: LIB_REPO, folder: 'lib-two' } });
     assert.equal(lib.status, 201, lib.text);
     libWorkspace = toUuid(lib.json.workspaceId);
@@ -358,6 +361,7 @@ test('GitHub P1 on PostgreSQL: create from GitHub, the clone reconcile, the disp
     await report(cloner, [{ workspaceId: appWorkspace, state: 'CLONING' }]);
     await report(cloner, [{ workspaceId: appWorkspace, state: 'READY', credential: 'github-app' }]);
     assert.equal((await workspaceRow(appWorkspace)).cloneState, 'READY');
+    assert.equal((await rows(`SELECT "clone_credential" FROM "workspace" WHERE "id" = $1::uuid`, [appWorkspace]))[0].clone_credential, 'github-app', 'the credential the clone used is kept for Settings → GitHub');
     assert.equal(listed(await beat(cloner, `create-workdir/v1,${CLONE}`, { reposRoot: ROOT })).includes(appWorkspace), false);
     assert.equal(await claim(cloner), appSession, 'READY: claimed');
   });

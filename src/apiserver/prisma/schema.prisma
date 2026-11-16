@@ -1504,6 +1504,9 @@ model Workspace {
   cloneError           String?   @map("clone_error")
   cloneStartedAt       DateTime? @map("clone_started_at") @db.Timestamptz(3)
   cloneFinishedAt      DateTime? @map("clone_finished_at") @db.Timestamptz(3)
+  // Which credential the clone used, as the runner reported it: `machine` or `github-app`, held by
+  // `workspace_clone_credential_chk` (migration 0880). NULL until a report names one.
+  cloneCredential      String?   @map("clone_credential")
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")

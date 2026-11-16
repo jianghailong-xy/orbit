@@ -19,7 +19,7 @@ const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
 const { AdminGithubPage, githubConnectedText } = await import('./AdminGithubPage');
-const { GithubIntegrationPage, disconnectWarning } = await import('./GithubIntegrationPage');
+const { GithubIntegrationPage, disconnectWarning, githubWorkspaceCredentialText } = await import('./GithubIntegrationPage');
 const { installationText, installationSettingsUrl } = await import('../lib/githubIntegration');
 
 let admin: GithubAppSettings;
@@ -170,6 +170,26 @@ describe('Settings → Integrations → GitHub', () => {
   it('says why a connection came back refused', async () => {
     const page = await mount(<GithubIntegrationPage />, '/settings/integrations/github?github_error=GITHUB_ACCOUNT_IN_USE');
     expect(page.textContent).toContain('That GitHub account is already connected to another Orbit account.');
+  });
+
+  it('lists the workspaces from GitHub, each with the credential its clone used (board 02, note 3)', async () => {
+    integration.workspaces = [
+      { id: 'w1', name: 'orbit-web', machine: 'orbit@austin', repository: 'orbit-labs/orbit-web', cloneState: 'READY', credential: 'github-app' },
+      { id: 'w2', name: 'orbit-runner', machine: 'HPC', repository: 'orbit-labs/orbit-runner', cloneState: 'READY', credential: 'machine' },
+    ];
+    const page = await mount(<GithubIntegrationPage />, '/settings/integrations/github');
+    const card = page.querySelector('[aria-label="Workspaces from GitHub"]')!;
+    expect([...card.querySelectorAll('li')].map((row) => [...row.children].map((c) => c.textContent))).toEqual([
+      ['orbit-web on orbit@austin', 'orbit-labs/orbit-web', 'Uses Orbit’s GitHub app'],
+      ['orbit-runner on HPC', 'orbit-labs/orbit-runner', 'Uses this machine’s Git credential'],
+    ]);
+    expect(githubWorkspaceCredentialText({ credential: null, cloneState: 'CLONING' })).toBe('Cloning');
+    expect(githubWorkspaceCredentialText({ credential: null, cloneState: 'FAILED' })).toBe('The clone failed');
+  });
+
+  it('draws no workspace list for an account with none, or a server that predates it', async () => {
+    const page = await mount(<GithubIntegrationPage />, '/settings/integrations/github');
+    expect(page.querySelector('[aria-label="Workspaces from GitHub"]')).toBeNull();
   });
 
   it('offers no Connect where no administrator set GitHub up', async () => {

@@ -1,9 +1,11 @@
-import { CheckCircleFilled, DesktopOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, DesktopOutlined, GithubOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { LoginEngine } from '@orbit/shared';
 import { queuedTurnEvent } from '../lib/acceptedUserTurn';
 import type { CursorRunnerFacts } from '../lib/cursorRuntime';
+import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
 import {
   answersDirProbe,
@@ -11,6 +13,7 @@ import {
   firstEngineOn,
   folderName,
   folderVerdict,
+  homeShortPath,
   installedLogins,
   isConnecting,
   isOfferedFolder,
@@ -33,6 +36,12 @@ import {
   SETUP_CHECK_AGAIN,
   SETUP_FOLDER,
   SETUP_FOOT,
+  SETUP_FROM_GITHUB,
+  SETUP_GITHUB_DONE,
+  SETUP_NEW_TAG,
+  SETUP_USE_REPOSITORY,
+  setupGithubDonePath,
+  setupReadyClone,
   SETUP_LEAD,
   SETUP_NEW_FOLDER,
   SETUP_NEW_FOLDER_DONE,
@@ -64,6 +73,7 @@ import {
 } from '../lib/machineSetupCopy';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 import { useDirProbe } from '../lib/useDirProbe';
+import { GithubFolderOption, takeGithubReturn } from './GithubFolderOption';
 import type { HeldMessage } from '../lib/useMachineSetup';
 import { webShowsEngine } from '../lib/runnerEngines';
 import { isLoginProvider } from '../lib/workspaceDefaults';
@@ -146,9 +156,14 @@ function FolderOptions({
   const offersNewFolder = makesNewFolders(runner);
   const reposRoot = runner.reposRoot ?? '';
 
+  // From GitHub (docs/github-workspace-design.md §8): offered only where the deployment has a GitHub App.
+  const github = useQuery(githubIntegrationQuery());
+  const offersGithub = github.data?.available === true;
+  const [githubCandidate, setGithubCandidate] = useState<PickedFolder | null>(null);
+
   // Untouched, the choice follows what the machine says: its answer about the register directory can
-  // arrive a heartbeat after the card does.
-  const [touched, setTouched] = useState<FolderChoice | null>(null);
+  // arrive a heartbeat after the card does. A card come back from GitHub's sign-in opens on From GitHub.
+  const [touched, setTouched] = useState<FolderChoice | null>(() => (takeGithubReturn(runner.id) ? 'github' : null));
   const choice = touched ?? defaultFolderChoice(suggested, offersNewFolder);
   const [newName, setNewName] = useState('');
   const name = newName.trim();
@@ -187,6 +202,8 @@ function FolderOptions({
     candidate = newFolderPick(found, name, reposRoot, machine);
   } else if (choice === 'other' && checked && verdict?.usable) {
     candidate = { kind: 'existing', path: checked.path, note: verdict.short };
+  } else if (choice === 'github' && offersGithub) {
+    candidate = githubCandidate;
   }
 
   // The field's keys stay its own (a radio group takes the arrows), and Enter is the button beside it.
@@ -243,6 +260,23 @@ function FolderOptions({
             )}
           </Radio>
         )}
+        {offersGithub && github.data && (
+          <Radio value="github" className="msc-option">
+            <span className="msc-option-title">
+              <GithubOutlined aria-hidden="true" /> {SETUP_FROM_GITHUB}
+              <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+            </span>
+            {choice === 'github' && (
+              <GithubFolderOption
+                runner={runner}
+                integration={github.data}
+                disabled={disabled}
+                onCandidate={setGithubCandidate}
+                onEnter={() => githubCandidate && onPick(githubCandidate)}
+              />
+            )}
+          </Radio>
+        )}
         <Radio value="other" className="msc-option">
           <span className="msc-option-title">{setupOtherFolder(machine)}</span>
           {choice === 'other' && (
@@ -278,7 +312,7 @@ function FolderOptions({
         disabled={!candidate || disabled}
         onClick={() => candidate && onPick(candidate)}
       >
-        {SETUP_USE_FOLDER}
+        {choice === 'github' ? SETUP_USE_REPOSITORY : SETUP_USE_FOLDER}
       </Button>
     </>
   );
@@ -379,8 +413,12 @@ export function MachineSetupCard({
           {folder ? (
             <div className="msc-done-line">
               <span className="msc-step-title">{SETUP_FOLDER}</span>
-              <span className="msc-path">{folder.path}</span>
-              <span className="msc-meta">{folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.note}</span>
+              <span className="msc-path">
+                {folder.kind === 'github' ? setupGithubDonePath(folder.repository, homeShortPath(folder.path)) : folder.path}
+              </span>
+              <span className="msc-meta">
+                {folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.kind === 'github' ? SETUP_GITHUB_DONE : folder.note}
+              </span>
               <button className="msc-change" type="button" disabled={offline} onClick={() => onFolder(null)}>
                 {SETUP_CHANGE}
               </button>
@@ -437,7 +475,9 @@ export function MachineSetupCard({
 
       <div className={`msc-foot${ready ? ' ready' : ''}`}>
         {ready && folder
-          ? setupReady(folder.kind === 'new' ? folder.name : folderName(folder.path), folder.path)
+          ? folder.kind === 'github'
+            ? setupReadyClone(folder.repository, homeShortPath(folder.path), folder.name)
+            : setupReady(folder.kind === 'new' ? folder.name : folderName(folder.path), folder.path)
           : SETUP_FOOT}
       </div>
     </div>

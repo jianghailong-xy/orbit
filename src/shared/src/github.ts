@@ -53,6 +53,21 @@ export interface GithubIntegration {
   installUrl: string | null;
   /** The account's workspaces cloned from GitHub. */
   workspaceCount: number;
+  /** Those workspaces, newest first (board 02, "Workspaces from GitHub"). Absent from a server that predates it. */
+  workspaces?: GithubWorkspace[];
+}
+
+/** One of `GithubIntegration.workspaces`: a workspace cloned from GitHub and the credential its clone used. */
+export interface GithubWorkspace {
+  id: string;
+  name: string;
+  /** The machine it is on, by the name the person sees. */
+  machine: string | null;
+  /** `owner/name`. */
+  repository: string | null;
+  cloneState: string | null;
+  /** `machine` (the machine's own Git credential) or `github-app` (Orbit's GitHub App); null until reported. */
+  credential: 'machine' | 'github-app' | null;
 }
 
 /** One of `GET /integrations/github/repos`. */

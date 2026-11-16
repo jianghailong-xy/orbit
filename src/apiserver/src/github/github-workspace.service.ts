@@ -211,7 +211,11 @@ export class GithubWorkspaceService {
       } else if (report.state === 'READY') {
         count = (await this.prisma.workspace.updateMany({
           where: { ...where, cloneState: { in: ['PENDING', 'CLONING'] } },
-          data: { cloneState: 'READY', cloneFinishedAt: now, cloneError: null },
+          data: {
+            cloneState: 'READY', cloneFinishedAt: now, cloneError: null,
+            // Which credential it used (§6 step 4), for Settings → GitHub; a report that names none leaves it unknown.
+            ...(report.credential === 'machine' || report.credential === 'github-app' ? { cloneCredential: report.credential } : {}),
+          },
         })).count;
       } else {
         const said = typeof report.error === 'string' && report.error.trim() !== '' ? report.error.trim() : 'The clone failed.';

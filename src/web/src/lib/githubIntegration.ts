@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { GithubInstallation, GithubIntegration } from '@orbit/shared';
+import type { GithubBranches, GithubInstallation, GithubIntegration, GithubRepositoryPage } from '@orbit/shared';
 import { api } from '../api';
 
 /** `GET /integrations/github` (docs/github-workspace-design.md §5.2). */
@@ -8,6 +8,27 @@ export const githubIntegrationQuery = () =>
     queryKey: ['integrations', 'github'] as const,
     queryFn: () => api<GithubIntegration>('/integrations/github'),
   });
+
+/** `GET /integrations/github/repos?q=` (§5.2): the repositories the person can pick, most recently pushed first. */
+export const githubRepositoriesQuery = (q: string) =>
+  queryOptions({
+    queryKey: ['integrations', 'github', 'repos', q] as const,
+    queryFn: () => api<GithubRepositoryPage>(`/integrations/github/repos${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    staleTime: 30_000,
+  });
+
+/** `GET /integrations/github/repos/:id/branches?q=` (§5.2): asked only once Other branch is opened. */
+export const githubBranchesQuery = (repoId: number, q: string) =>
+  queryOptions({
+    queryKey: ['integrations', 'github', 'branches', repoId, q] as const,
+    queryFn: () => api<GithubBranches>(`/integrations/github/repos/${repoId}/branches${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    staleTime: 30_000,
+  });
+
+/** How many repositories the App reaches for this person, over every installation; null when GitHub wasn't asked. */
+export function repositoryCount(view: Pick<GithubIntegration, 'installations'>): number | null {
+  return view.installations === null ? null : view.installations.reduce((sum, i) => sum + i.repositoryCount, 0);
+}
 
 export const GITHUB_ROW_HINT = 'Clone your repositories into workspaces, and land work back to them.';
 export const GITHUB_NOT_SET_UP = 'Not set up on this Orbit — ask an administrator.';

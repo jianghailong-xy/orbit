@@ -3,6 +3,7 @@ import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-q
 import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
+import { cloneOf, hearClone } from './workspaceClone';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -537,6 +538,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             taskIds?: unknown;
             resync?: unknown;
             repoHealth?: unknown;
+            clone?: unknown;
           } | null;
         };
         try {
@@ -589,6 +591,19 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // The session an event is about: the envelope's, or a session event's own id from a peer
         // that leaves the envelope's empty. An approval's id is the approval's.
         const subject = ev.sessionId || (ev.type.startsWith('session.') && typeof id === 'string' ? id : '');
+        // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is
+        // heard here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what
+        // the server stored: the lists (a session's queued reason) and the open details of that workspace's sessions.
+        const clone = ev.type === 'agent.changed' && typeof id === 'string' && id ? cloneOf(ev.data?.clone) : null;
+        if (clone) {
+          if (!hearClone(id as string, clone)) return;
+          void qc.invalidateQueries({
+            predicate: ({ queryKey, state }) =>
+              queryKey[0] === 'session' &&
+              queryKey.length === 2 &&
+              (state.data as { workspace?: { id?: string } | null } | undefined)?.workspace?.id === id,
+          });
+        }
         scheduleRefresh(ev.type, subject, ev.data);
       };
       es.onerror = () => drop();

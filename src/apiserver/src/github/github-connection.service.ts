@@ -64,6 +64,29 @@ export interface GithubIntegrationView {
   installUrl: string | null;
   /** The account's live workspaces cloned from GitHub. */
   workspaceCount: number;
+  /** Those workspaces, newest first, with the credential each clone used (board 02, note 3). */
+  workspaces: GithubWorkspaceView[];
+}
+
+export interface GithubWorkspaceView {
+  id: string;
+  name: string;
+  /** The machine's name as the person sees it: its display name, else its name. */
+  machine: string | null;
+  /** `owner/name`, read from the workspace's repoUrl. */
+  repository: string | null;
+  cloneState: string | null;
+  /** `machine` | `github-app`; null until the runner reports which one the clone used. */
+  credential: string | null;
+}
+
+/** The most "Workspaces from GitHub" lists. */
+const WORKSPACES_LISTED = 200;
+
+/** `https://github.com/<owner>/<name>.git` → `owner/name`. */
+function repositoryOf(repoUrl: string | null): string | null {
+  const match = repoUrl ? /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/.exec(repoUrl) : null;
+  return match ? match[1]! : null;
 }
 
 interface Listing {
@@ -89,10 +112,20 @@ export class GithubConnectionService {
   ) {}
 
   async view(ownerId: string): Promise<GithubIntegrationView> {
-    const [app, row, workspaceCount] = await Promise.all([
+    const where = { ownerId, githubRepoId: { not: null }, deletedAt: null };
+    const [app, row, workspaceCount, workspaces] = await Promise.all([
       this.config.credentials(),
       this.prisma.githubConnection.findUnique({ where: { ownerId } }),
-      this.prisma.workspace.count({ where: { ownerId, githubRepoId: { not: null }, deletedAt: null } }),
+      this.prisma.workspace.count({ where }),
+      this.prisma.workspace.findMany({
+        where,
+        select: {
+          id: true, name: true, repoUrl: true, cloneState: true, cloneCredential: true,
+          runner: { select: { name: true, displayName: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: WORKSPACES_LISTED,
+      }),
     ]);
     const base: GithubIntegrationView = {
       available: app !== null,
@@ -103,6 +136,14 @@ export class GithubConnectionService {
       installations: null,
       installUrl: app ? `https://github.com/apps/${app.slug}/installations/new` : null,
       workspaceCount,
+      workspaces: workspaces.map((w) => ({
+        id: w.id,
+        name: w.name,
+        machine: w.runner ? (w.runner.displayName || w.runner.name) : null,
+        repository: repositoryOf(w.repoUrl),
+        cloneState: w.cloneState,
+        credential: w.cloneCredential,
+      })),
     };
     if (!app || !row) return { ...base, installations: row ? null : [] };
     try {

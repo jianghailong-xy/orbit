@@ -1,4 +1,5 @@
 import {
+  CLONE_WORKDIR_CAPABILITY,
   CREATE_WORKDIR_CAPABILITY,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
@@ -60,7 +61,7 @@ export function isOfferedFolder(probe: DirProbe | null | undefined): probe is Di
   return !!probe && !probe.error && probe.exists && probe.isDir && !probe.isHome && probe.path !== '/';
 }
 
-export type FolderChoice = 'suggested' | 'new' | 'other';
+export type FolderChoice = 'suggested' | 'new' | 'github' | 'other';
 
 /** Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder. The
  *  rest is what a machine that can't make one leaves. */
@@ -76,6 +77,21 @@ export const answersDirProbe = (runner: { capabilities?: string[] }): boolean =>
   !!runner.capabilities?.includes(DIR_PROBE_CAPABILITY);
 export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
   !!runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+/** Whether a machine clones a GitHub repository on request (docs/github-workspace-design.md §6): it declares
+ *  clone-workdir/v1 and has reported the Repos Folder the clone goes in. POST /sessions refuses either missing. */
+export const clonesRepositories = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
+  !!runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+
+/** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
+export function homeShortPath(path: string): string {
+  return path.replace(/^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root)(?=\/|$)/, '~');
+}
+
+/** The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder name. */
+export function repositoryFolder(fullName: string): string {
+  const name = fullName.split('/').pop() ?? '';
+  return isValidNewFolder(name) ? name : '';
+}
 
 /** Whether a machine too old to answer gets there by itself: not one that reports its updater off, or
  *  unable to write where it is installed. One too old to report anything still updates itself. */
@@ -153,12 +169,28 @@ export function newFolderPick(probe: DirProbe, name: string, reposRoot: string, 
 /** The folder step's answer, once the person has pressed Use this folder. */
 export type PickedFolder =
   | { kind: 'existing'; path: string; note: string }
-  | { kind: 'new'; name: string; path: string };
+  | { kind: 'new'; name: string; path: string }
+  /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3).
+   *  `ref` null is the repository's default branch, which `defaultBranch` names. */
+  | {
+      kind: 'github';
+      repoId: number;
+      repository: string;
+      private: boolean;
+      defaultBranch: string;
+      ref: string | null;
+      name: string;
+      path: string;
+    };
 
 /** What POST /sessions is told. An existing folder is sent as the runner resolved it: a typed `~` is
  *  the runner's to expand, and a workspace's workDir is not. */
 export const newWorkspaceOf = (folder: PickedFolder): NewWorkspaceRequest =>
-  folder.kind === 'new' ? { newFolder: folder.name } : { workDir: folder.path };
+  folder.kind === 'new'
+    ? { newFolder: folder.name }
+    : folder.kind === 'github'
+      ? { github: { repoId: folder.repoId, folder: folder.name, ...(folder.ref ? { ref: folder.ref } : {}) } }
+      : { workDir: folder.path };
 
 const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 

@@ -291,7 +291,7 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
     const before = await call('GET', '/api/integrations/github', { bearer: ada.bearer });
     assert.deepEqual(before.json, {
       available: true, connected: false, login: null, connectedAt: null, needsReconnect: false, installations: [],
-      installUrl: `https://github.com/apps/${github.slug}/installations/new`, workspaceCount: 0,
+      installUrl: `https://github.com/apps/${github.slug}/installations/new`, workspaceCount: 0, workspaces: [],
     });
     assert.equal((await call('GET', '/api/integrations/github/repos', { bearer: ada.bearer })).json.code, 'GITHUB_NOT_CONNECTED');
 
@@ -433,7 +433,15 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
 
   await t.test('(5) disconnecting deletes the connection and revokes its token on GitHub', async () => {
     await db.workspace.create({ data: { name: `cloned-${RUN}`, ownerId: ada.id, githubRepoId: BigInt(1000), githubInstallationId: BigInt(71), cloneState: 'READY' } });
-    assert.equal((await call('GET', '/api/integrations/github', { bearer: ada.bearer })).json.workspaceCount, 1);
+    const listed = (await call('GET', '/api/integrations/github', { bearer: ada.bearer })).json;
+    assert.equal(listed.workspaceCount, 1);
+    // Settings → GitHub's "Workspaces from GitHub" (board 02, note 3): the workspace, its repository and its credential.
+    await db.workspace.updateMany({ where: { name: `cloned-${RUN}`, ownerId: ada.id }, data: { repoUrl: 'https://github.com/octo/app.git', cloneCredential: 'github-app' } });
+    const withCredential = (await call('GET', '/api/integrations/github', { bearer: ada.bearer })).json;
+    assert.deepEqual(
+      withCredential.workspaces.map(({ name, machine, repository, cloneState, credential }: Record<string, unknown>) => ({ name, machine, repository, cloneState, credential })),
+      [{ name: `cloned-${RUN}`, machine: null, repository: 'octo/app', cloneState: 'READY', credential: 'github-app' }],
+    );
     assert.deepEqual(
       (({ connectedUsers, clonedWorkspaces }) => ({ connectedUsers, clonedWorkspaces }))((await call('GET', '/api/admin/integrations/github', { bearer: admin.bearer })).json),
       { connectedUsers: 2, clonedWorkspaces: 1 },
