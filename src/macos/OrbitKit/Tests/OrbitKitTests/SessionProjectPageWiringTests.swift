@@ -1100,6 +1100,19 @@ final class SessionProjectPageWiringTests: XCTestCase {
         // open, so the count is the sheet's before the sheet is ever presented.
         let read = try slice(console, from: ".task(id: projectSheetAddress) {", to: ".sheet(item: $projectSheet")
         XCTAssertTrue(read.contains("if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }"))
+        // The button's running dot: a member or landing session spinning, or a landing or merge in
+        // flight, polled as the page polls them so it moves with the sheet closed.
+        XCTAssertTrue(draw.contains("let running = appModel.projectRunning(projectID)"))
+        XCTAssertTrue(draw.contains("if running {\n                    Circle().fill(Color.accentColor)"))
+        for poll in ["await appModel.pollProjectSessions(address)", "await appModel.loadProjectIntegration(address)",
+                     "await appModel.loadProjectMerge(address)"] {
+            XCTAssertTrue(read.contains(poll), "the conversation keeps `\(poll)` current for the button")
+        }
+        let running = try slice(code(try appSource("AppModel.swift")),
+                                from: "func projectRunning(_ projectID: String) -> Bool {", to: "\n    }")
+        for part in ["projectSessionsLandingRunning", "projectSessionsMergeRunning", "== .spinner"] {
+            XCTAssertTrue(running.contains(part), "the dot reads `\(part)`")
+        }
         let address = try slice(console, from: "private var projectSheetAddress: SessionProjectAddress? {", to: "\n    }")
         XCTAssertTrue(address.contains("guard opensPagesOverConsole else { return nil }"), "a phone's stack only")
         XCTAssertTrue(address.contains("SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }"))

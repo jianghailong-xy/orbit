@@ -560,9 +560,33 @@ struct ConsoleView: View {
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         // The project's sessions page read as the conversation opens, so the button's count is the
-        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`). Its
+        // members, landing line and merge are then polled as the page polls them, so the button's
+        // running dot (`projectRunning`) follows them with the sheet closed.
         .task(id: projectSheetAddress) {
             if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+            guard let address = projectSheetAddress else { return }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await ViewPoll.run(appModel, every: 4, inFlight: { 4 }) {
+                        await appModel.pollProjectSessions(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectIntegration(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsLandingRunning ? 4 : nil }) {
+                        await appModel.loadProjectIntegration(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectMerge(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsMergeRunning ? 4 : nil }) {
+                        await appModel.loadProjectMerge(address)
+                    }
+                }
+            }
         }
         .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
@@ -676,21 +700,27 @@ struct ConsoleView: View {
         var id: SessionProjectAddress { address }
     }
 
-    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
-    /// sessions page up as a sheet, opening at medium height.
+    /// The project glyph and the project's session count ("⊞ 11"), led by a blue dot while a member
+    /// session, a landing or a merge runs (the folded band's own running dot); a press puts the
+    /// project's sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
+        let running = appModel.projectRunning(projectID)
         return Button {
             projectSheet = ProjectSheetTarget(
                 address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
+                if running {
+                    Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                }
                 Image(systemName: SessionProjectSheet.glyph)
                 if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityValue([count.map { "\($0) sessions" }, running ? "Running" : nil]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityIdentifier("project-sessions-button")
     }
     #endif
