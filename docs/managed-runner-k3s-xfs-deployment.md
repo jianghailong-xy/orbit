@@ -38,7 +38,7 @@ is reserved for the life of the volume, not only while the runner is awake.
 | StorageClass | `runner-data-xfs`: `fstype: xfs`, `mounter: rbd-nbd`, `reflink: enabled`, `mountOptions: ["noatime","discard"]`, `reclaimPolicy: Retain`, `allowVolumeExpansion: false`, `volumeBindingMode: Immediate`, no `mkfsOptions` |
 | Manager | namespace `orbit-managed`; ServiceAccount `orbit-mr-manager`; JSON kubeconfig on the apiserver host at `data/managed-runners/kubeconfig-orbit-ws03.json` (`/var/lib/orbit-managed-runners/kubeconfig-orbit-ws03.json` in the container), context `orbit-ws03-manager`, server `https://10.66.0.3:6443` |
 | Admission | `ValidatingWebhookConfiguration` `orbit-managed-runner-pods`, `failurePolicy: Fail`, URL `https://orbitd.io/api/managed-runner/admission`, namespace `orbit-managed`, no `caBundle` (public certificate); the k3s API server reads an admission configuration from `/etc/rancher/k3s/config.yaml.d/90-orbit-admission.yaml` and presents the webhook token from `/etc/rancher/k3s/orbit-managed/webhook-kubeconfig.json` |
-| Runner image | `docker.io/library/orbit-managed-runner@sha256:3b069dbf77e1d696b98bb3ec54165c4ac974d4b908cb8985c814a8e9758c2b0d`, built from `orbit/runner-3-k3s-fastpath` at `0c03c6a590cf718ad2e531fae801ea343fdb3465` (release `0.1.261-beta.9` plus the index fast path); the previous digest `sha256:1460cd2f…6533` remains in containerd for rollback |
+| Runner image | Since 2026-11-16, `docker.io/library/orbit-managed-runner@sha256:48eb6d0ec62f905a4af96c4857c0d39f14bf6d5416a197b68a5c97f76f245e14`, built from `main` at `dcb75cb6e6a07bcdde0249437d58dcf2e8599c5b`; before it `sha256:3b069dbf77e1d696b98bb3ec54165c4ac974d4b908cb8985c814a8e9758c2b0d`, built from `orbit/runner-3-k3s-fastpath` at `0c03c6a590cf718ad2e531fae801ea343fdb3465` (release `0.1.261-beta.9` plus the index fast path), and `sha256:1460cd2f…6533`, both kept in containerd for rollback. Later images come from the registry with each release ("From the registry, with each release", below) |
 | Profile | `data/managed-runners/profile.json` on the apiserver host (`/var/lib/orbit-managed-runners/profile.json` in the container), mode 0600 |
 
 ## Why XFS, why this CSI patch
@@ -85,8 +85,33 @@ k3s ctr images tag --local --skip-reference-check \
 
 Without the `@sha256` alias, the kubelet treats the digest reference as absent, tries Docker Hub and ends in
 `ImagePullBackOff`. The profile image must be the digest, and the runner's `ORBIT_NO_SELFUPDATE` is set, so a new
-image means: build, import and alias it, update the profile, restart the apiserver, and recreate the Pod (a routine
-delete is enough; the manager records the stop and starts the next generation).
+image meant: build, import and alias it, update the profile, restart the apiserver, and recreate the Pod (a routine
+delete is enough; the manager records the stop and starts the next generation). The image of 2026-11-16, built from
+`main` at `dcb75cb6e`, went in that way: `docker.io/library/orbit-managed-runner@sha256:48eb6d0e…5e14`, with its
+archive at `/root/orbit-managed-runner-main-dcb75cb6e.tar.gz` on the node.
+
+### From the registry, with each release
+
+From then on the image comes with the release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build host
+builds `10.66.0.1:5000/orbit-managed-runner:<commit>` whenever a release changes what the image is built from, and
+pushes it with the other images. The deploy on `10.66.0.4` sets the profile's `runner.image` to it by digest, keeps the
+profile it replaces beside it, and replaces the apiserver, which reads the profile as it starts. The apiserver's manager
+then moves each runner whose Pod runs another image onto it once that runner is idle: the drain a sleep takes, then a
+wake at once, as the next generation on the same PVC (`rollPreviousImage`). Nothing in flight is cut short; a busy runner
+moves when it is next idle. No Pod is deleted by hand, and nothing is imported on the node.
+
+The node pulls that image from the WireGuard registry, which serves plain HTTP. k3s reads its registries once, as it
+starts, from `/etc/rancher/k3s/registries.yaml`:
+
+```yaml
+mirrors:
+  "10.66.0.1:5000":
+    endpoint:
+      - "http://10.66.0.1:5000"
+```
+
+then `systemctl restart k3s`. Without it, a runner woken on a release's image ends in `ImagePullBackOff`, and its
+startup deadline fails it.
 
 The profile values that matter (full JSON in the deployed file; the webhook hash is not reproduced here):
 

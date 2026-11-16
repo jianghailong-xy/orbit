@@ -667,6 +667,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("guest-sessions/\(sessionID)/events/\(seq)")
     }
 
+    /// The bytes of an image or file a turn of the shared session carried: the owner's
+    /// `attachments/:id` answers a guest 404. Web parity: `fetchGuestAttachmentObjectUrl`.
+    public func guestAttachment(_ sessionID: String, id: String) async throws -> Data {
+        try await send(makeRequest("guest-sessions/\(sessionID)/attachments/\(id)", method: "GET",
+                                   body: Optional<Empty>.none))
+    }
+
     /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
     /// ended. Web parity: `sendGuestTurn`.
     @discardableResult

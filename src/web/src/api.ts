@@ -1828,6 +1828,12 @@ export const getGuestEventPage = (id: string, opts: { before: number; limit: num
 export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
   api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
 export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
+/** Object URL for an inline image in the guest page's transcript, read through the guest door (the owner's
+ *  `/attachments/:id` is theirs alone). Caller revokes it. */
+export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: string): Promise<string> => {
+  const res = await authedFetch(`/api${guestPath(id)}/attachments/${encodeURIComponent(attachmentId)}`);
+  return userFileUrl(await attachmentBlob(res, attachmentId));
+};
 /** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
 export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
   api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });

@@ -72,7 +72,7 @@ func (u *kimiAccountUsage) forget(id string) {
 
 // removeKimiAccount carries out one removal of added account id: its directory and record, and the
 // read of its quota with them.
-func removeKimiAccount(usage *kimiAccountUsage, id string, liveDirs map[string]bool) error {
+func removeKimiAccount(usage *kimiAccountUsage, id string, liveDirs accountDirSessions) error {
 	if err := kimiAccountKind.remove(id, liveDirs); err != nil {
 		return err
 	}

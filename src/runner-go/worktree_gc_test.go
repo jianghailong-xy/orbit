@@ -499,3 +499,55 @@ func TestGcWorktreesIsTheOnlyDeleterAndTheRunLoopKeepsCallingIt(t *testing.T) {
 		t.Error("the startup sweep is no longer gated on a reclaim that actually answered")
 	}
 }
+
+// A session that is over loses its SubAgent records and keeps the rest of its run dir; a live one, one the control
+// plane still reports as Open, and every one while the query fails keep them.
+func TestGCSubagentRunsRemovesOnlyEndedSessionsRecords(t *testing.T) {
+	f := newGCFixture(t)
+	// Run dirs are named by the session's UUID, which is what the control plane is asked about.
+	const (
+		ended = "11111111-1111-4111-8111-111111111111"
+		open  = "22222222-2222-4222-8222-222222222222"
+		live  = "33333333-3333-4333-8333-333333333333"
+	)
+	for _, id := range []string{ended, open, live} {
+		if err := os.MkdirAll(subagentDir(id, "run1"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(runDir(id), "meta.json"), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(runDir("44444444-4444-4444-8444-444444444444"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f.resumable[open] = true
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+	f.unavailable = true
+	gcSubagentRuns(f.transport, map[string]bool{live: true})
+	if !exists(subagentDir(ended, "run1")) {
+		t.Fatal("a failed query removed SubAgent records")
+	}
+
+	f.unavailable = false
+	before := f.queries.Load()
+	gcSubagentRuns(f.transport, map[string]bool{live: true})
+	if exists(filepath.Join(runDir(ended), "subagents")) {
+		t.Fatal("an ended session kept its SubAgent records")
+	}
+	if !exists(filepath.Join(runDir(ended), "meta.json")) {
+		t.Fatal("the sweep removed more than the SubAgent records")
+	}
+	if !exists(subagentDir(open, "run1")) || !exists(subagentDir(live, "run1")) {
+		t.Fatal("an open or live session lost its SubAgent records")
+	}
+	if got := f.queries.Load() - before; got != 1 {
+		t.Fatalf("queries = %d, want 1", got)
+	}
+	// Nothing left to ask about but the open one, which is asked about again.
+	gcSubagentRuns(f.transport, map[string]bool{live: true})
+	if !exists(subagentDir(open, "run1")) {
+		t.Fatal("a second sweep removed an open session's records")
+	}
+}
