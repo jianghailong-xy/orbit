@@ -1,6 +1,7 @@
 package io.orbitd.android.management
 
 import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.ClaudeRegionCopy
@@ -73,6 +74,13 @@ internal object RunnerCopy {
     /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
      * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
     const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
+    /** The account's managed runner wherever its name is shown, unless its owner renamed it: its stored name (`orbit-managed`) is
+     * the server's, not a word for anyone to read (web runnerCopy MANAGED_RUNNER_LABEL). */
+    const val MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /** A managed runner's version when it reports none that is a release (its image is `managed-<sha>`). */
+    const val MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+    const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     const val SEP = " · "
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
@@ -1022,7 +1030,7 @@ internal object RunnerPage {
     }
 
     /** Everything about this runner that needs a person, most severe first. */
-    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?): List<AttentionItem> {
+    fun attention(runner: JsonObject, workspaces: List<JsonObject>, nowMs: Long, latestVersion: String?, managed: Boolean = false): List<AttentionItem> {
         val offline = isOffline(runner, nowMs)
         val items = mutableListOf<AttentionItem>()
         if (offline) items += offlineItem(runner, nowMs)
@@ -1033,7 +1041,8 @@ internal object RunnerPage {
             items += quotaItems(runner, workspaces, nowMs)
             diskItem(runner, workspaces)?.let { items += it }
         }
-        cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
+        // Orbit rolls the managed runner's image: it is never told to update itself.
+        if (!managed) cannotSelfUpdateItem(runner, latestVersion, offline)?.let { items += it }
         if (!offline) items += engineUpdateItems(runner, nowMs)
         return items
     }
@@ -1044,22 +1053,52 @@ internal object RunnerPage {
         return items.take(2).map { it.short }.takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP)
     }
 
-    fun displayName(runner: JsonObject) = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: runner.text("name")
+    /**
+     * The name a machine is shown by everywhere: its owner's own name for it, else Orbit Cloud for the account's managed runner — told
+     * by [managedRunnerId], the managed status's runnerId (by default the one the signed-in shell last read), never by its stored
+     * name — else the name it registered with (web machineName).
+     */
+    fun displayName(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+        runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (isManaged(runner, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
 
-    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. */
-    fun listSubtitle(runner: JsonObject, nowMs: Long): String {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
+    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner). */
+    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+        displayName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL
+            else name.orEmpty()
+
+    /** Whether [runner] is the account's managed runner, by id. */
+    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean {
+        val id = runner.str("id")
+        return !id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)
+    }
+
+    /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
+    fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
+
+    /** A version beside a runner's name: `v<version>`. A managed runner shows its release when it reports one, and otherwise says
+     * Orbit keeps it up to date — never its image hash (web runnerVersionLine). */
+    fun versionLine(version: String?, managed: Boolean = false): String? {
+        val v = version?.trim()?.takeIf { it.isNotEmpty() }
+        if (managed) return if (isReleaseVersion(v)) RunnerCopy.versionTag(v!!) else RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        return v?.let(RunnerCopy::versionTag)
+    }
+
+    /** Online: `<hostname> · v<version>`; offline: `Offline · last seen 14d ago · v<version>`. A managed runner's version is [versionLine]'s. */
+    fun listSubtitle(runner: JsonObject, nowMs: Long, managed: Boolean = false): String {
+        val version = versionLine(runner.str("version"), managed)
         if (isOffline(runner, nowMs)) {
             val status = runner.str("lastHeartbeatAt")?.takeIf { it.isNotEmpty() }?.let { RunnerCopy.offlineLastSeen(ago(it, nowMs)) } ?: RunnerCopy.OFFLINE
             return listOfNotNull(status, version).joinToString(RunnerCopy.SEP)
         }
-        return hostLine(runner)
+        return hostLine(runner, managed)
     }
 
-    fun hostLine(runner: JsonObject): String {
-        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != displayName(runner) }
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() }?.let(RunnerCopy::versionTag)
-        return listOfNotNull(host, version).joinToString(RunnerCopy.SEP)
+    fun hostLine(runner: JsonObject, managed: Boolean = false): String {
+        val shown = runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() } ?: if (managed) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
+        val host = runner.str("hostname")?.trim()?.takeIf { it.isNotEmpty() && it != shown }
+        return listOfNotNull(host, versionLine(runner.str("version"), managed)).joinToString(RunnerCopy.SEP)
     }
 
     /** green online, amber while it drains, grey offline. */
@@ -1477,7 +1516,10 @@ internal object RunnerPage {
     // about
     /** `0.1.197 · Latest`; a runner behind that installs the release itself says so, and so does one a staged rollout holds
      * back. One that reports where its updates stand says which it is; an older one is judged by runsAsRoot, as before. */
-    fun versionValue(runner: JsonObject, latest: String?): String? {
+    fun versionValue(runner: JsonObject, latest: String?, managed: Boolean = false): String? {
+        // Orbit rolls the managed runner's image: its release and that Orbit updates it, or that Orbit keeps it up to date.
+        if (managed) return runner.str("version")?.trim()?.takeIf(::isReleaseVersion)?.let { it + RunnerCopy.SEP + RunnerCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT }
+            ?: RunnerCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
         val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val newest = latest?.trim()?.takeIf { it.isNotEmpty() } ?: return version
         if (compareRunnerVersions(version, newest) >= 0) return version + RunnerCopy.SEP + "Latest"

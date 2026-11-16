@@ -29,6 +29,7 @@ import {
 } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import { WIKI_HISTORY_MAINTENANCE, shortSha } from './wiki';
+import { machineName } from './machineSetup';
 
 // ── Routes ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -228,9 +229,21 @@ export const WIKI_MAINTENANCE_NOTE_SERVER =
 export const WIKI_PRIVACY_NOTE =
   'The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.';
 
-/** A workspace as the picker lists it: its name, and the runner it lives on. */
-export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: { name?: string | null; displayName?: string | null } | null }): string {
-  const runner = workspace.runner?.displayName || workspace.runner?.name || null;
+/** A workspace as the picker lists it: its name, and the runner it lives on (Orbit Cloud for the managed one). */
+export function wikiWorkspaceLabel(
+  workspace: {
+    name?: string | null;
+    runnerId?: string | null;
+    runner?: { id?: string; name?: string | null; displayName?: string | null } | null;
+  },
+  managedRunnerId: string | null = null,
+): string {
+  const runner = workspace.runner
+    ? machineName(
+        { ...workspace.runner, id: workspace.runner.id ?? workspace.runnerId ?? undefined, name: workspace.runner.name ?? undefined },
+        managedRunnerId,
+      ) || null
+    : null;
   const name = workspace.name || '—';
   return runner ? `${name} · ${runner}` : name;
 }

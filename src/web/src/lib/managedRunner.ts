@@ -5,7 +5,7 @@
 // reading OrbitKit mirrors, so Web, macOS and iOS say the same thing about the same state.
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   MANAGED_RUNNER_STATUS_POLL_SECONDS,
   firstSessionProvider,
@@ -19,6 +19,7 @@ import {
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { routeId } from './idCodec';
+import { machineName } from './machineSetup';
 import { useToast } from './toast';
 import { compatibleUuid } from './uuid';
 
@@ -88,6 +89,21 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
     managed: display && status.data ? { status: status.data, display } : null,
     settled: capabilities.isFetched && (!offered || status.isFetched),
   };
+}
+
+/**
+ * The account's managed runner's id, as a page that shows the managed runner has already read it. Reads
+ * nothing itself (the console and Settings read the status), so any place that names a machine can ask.
+ */
+export function useManagedRunnerId(): string | null {
+  const { data } = useQuery({ ...managedRunnerStatusQuery(), enabled: false });
+  return managedRunnerDisplay(data) ? (data?.runnerId ?? null) : null;
+}
+
+/** machineName with the account's managed runner said as Orbit Cloud. */
+export function useMachineName(): (runner: { id?: string; name?: string; displayName?: string | null }) => string {
+  const managedId = useManagedRunnerId();
+  return useCallback((runner) => machineName(runner, managedId), [managedId]);
 }
 
 /**

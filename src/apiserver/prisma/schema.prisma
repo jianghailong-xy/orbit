@@ -9976,6 +9976,9 @@ model Schedule {
   endedReason              ScheduleEndedReason? @map("ended_reason")
   /// The last run's note to the next, at most 2000 characters.
   note                     String?
+  /// The agent's one-sentence read-back of the schedule as it is now (at most 500 characters). A rule or zone change
+  /// that brings none clears it, and the inspector derives the When part from the rule.
+  readBack                 String?             @map("read_back")
   revision                 Int                 @default(1)
   nextDueAt                DateTime?           @map("next_due_at") @db.Timestamptz(3)
   consecutiveFailures      Int                 @default(0) @map("consecutive_failures")

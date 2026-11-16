@@ -10,7 +10,8 @@ import {
   type RunnerEngineHealth,
   newFolderRoot,
 } from '@orbit/shared';
-import { encodeId } from './idCodec';
+import { encodeId, routeId } from './idCodec';
+import { MANAGED_RUNNER_LABEL } from './runnerCopy';
 import {
   SETUP_FOUND_PREFIX,
   SETUP_NEW_FOLDER_DONE,
@@ -35,9 +36,18 @@ import { workspaceRunnerId, type OrderableWorkspace } from './workspaceOrder';
  *  machine with none has no workspace to name; `/workspaces/<runner>` redirects here (WorkspaceConsole). */
 export const machineDraftPath = (runnerId: string): string => `/runners/${encodeId(runnerId)}/new`;
 
-/** The name the app labels a machine with everywhere. */
-export const machineName = (runner: { name: string; displayName?: string | null }): string =>
-  runner.displayName || runner.name;
+/** The name the app labels a machine with everywhere: the owner's own name for it, else Orbit Cloud for
+ *  the account's managed runner (`managedRunnerId`, the managed status's runnerId — never its stored
+ *  name), else the name it registered with. */
+export const machineName = (
+  runner: { id?: string; name?: string; displayName?: string | null },
+  managedRunnerId?: string | null,
+): string =>
+  runner.displayName?.trim() || (isManagedRunner(runner, managedRunnerId) ? MANAGED_RUNNER_LABEL : (runner.name ?? ''));
+
+/** Whether `runner` is the account's managed runner, by id. */
+export const isManagedRunner = (runner: { id?: string } | null | undefined, managedRunnerId: string | null | undefined): boolean =>
+  !!runner?.id && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
 
 /** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(

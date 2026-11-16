@@ -1,5 +1,8 @@
 package io.orbitd.android.composer
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonElement
@@ -272,3 +275,12 @@ object ManagedRunner {
  * that runner by [ManagedRunner.row] (Asleep, Waking up…, never Offline). Other runners are unchanged.
  */
 val LocalManagedRunnerStatus = staticCompositionLocalOf<ManagedRunner.Status?> { null }
+
+/**
+ * The account's managed runner's id, as the last read of its status said (null with no managed UI): what names that runner Orbit Cloud
+ * wherever a machine's name is shown (RunnerPage.displayName), the web's useManagedRunnerId. Snapshot state, so a name read in
+ * composition follows it; a failed read leaves it as it was.
+ */
+object ManagedRunnerIdentity {
+    var runnerId by mutableStateOf<String?>(null)
+}

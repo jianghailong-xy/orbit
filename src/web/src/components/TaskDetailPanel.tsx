@@ -101,6 +101,7 @@ import {
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
 import { UNDER_REVIEW } from './OwnerConfirmationReview';
+import { useMachineName } from '../lib/managedRunner';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -950,6 +951,7 @@ export function TaskDetailPanel({
   );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
+  const machineNameOf = useMachineName();
   const navigate = useNavigate();
   // What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its
   // project's coordinator session, else the workspace's newest person-opened session). Under a pin it
@@ -994,7 +996,7 @@ export function TaskDetailPanel({
     pinnedProvider && !pinCredentials.some((c) => c.slug === pinnedProvider)
       ? currentProviderChoice(runEngine, pinnedProvider, pinCredentials, choiceSources)
       : null;
-  const assigneeRunnerName = assigneeRunner?.displayName || assigneeRunner?.name;
+  const assigneeRunnerName = assigneeRunner ? machineNameOf(assigneeRunner) || undefined : undefined;
   /** What "Engine default" runs a task on (§3.2, only an engine named): the runner's own sign-in, OpenCode's own configuration, the first DeepSeek key. */
   const engineDefaultLabel =
     runEngine === AgentProvider.DSH
