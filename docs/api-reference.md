@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 463 |
+| `user` | 464 |
 | `admin` | 28 |
 | `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **723** |
+| **Total** | **724** |
 
 ## Public routes
 
@@ -369,6 +369,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/sessions/:id/guests` | path `id` | `SessionGuestsController.list` |
 | `POST` | `/api/sessions/:id/guests` | body `Object`; path `id` | `SessionGuestsController.invite` |
 | `DELETE` | `/api/sessions/:id/guests/:userId` | path `id`, `userId` | `SessionGuestsController.remove` |
+| `GET` | `/api/sessions/:id/guests/suggestions` | path `id` | `SessionGuestsController.suggestions` |
 | `POST` | `/api/sessions/:id/interrupt` | body `Object`; path `id` | `SessionsController.interrupt` |
 | `GET` | `/api/sessions/:id/landing/log` | path `id`; query `check`, `claim`, `cursor`, `jobId`, `round` | `SessionsController.landingLog` |
 | `POST` | `/api/sessions/:id/merge` | body `Object`; path `id` | `SessionsController.mergeToMain` |

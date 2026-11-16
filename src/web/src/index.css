@@ -17377,6 +17377,52 @@ button.chat-jump-start:hover {
   flex: 1;
   min-width: 0;
 }
+/* The email field with its suggestions (board share-links/14): the wrapper takes the input's place in the row. */
+.share-people-email {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+.share-people-email .orbit-input {
+  width: 100%;
+}
+.share-suggestion-head {
+  padding: 4px 12px 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.share-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.share-suggestion-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.share-suggestion-name {
+  color: var(--text-1);
+}
+.share-suggestion-email {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-suggestion b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.share-suggestion-when {
+  flex: none;
+  color: var(--text-4);
+  font-size: 12px;
+}
 .share-people-error {
   padding: 0 10px 8px;
   color: var(--error);
