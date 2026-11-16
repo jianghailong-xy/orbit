@@ -6217,6 +6217,39 @@ final class ConsoleModel {
         }
     }
 
+    /// The project's coordinator status, for the owner exception card's coordinator row (board
+    /// owner-exception-who-fixes part 6) — the same read the project page's coordinator card makes.
+    /// Nil for a session that coordinates no project, and for a read that did not come back: the
+    /// card then reads the cause off the row alone (`ExceptionCards.readCoordinatorCause`).
+    func readCoordinatorStatus() async -> ProjectCoordinatorStatus? {
+        guard let projectID else { return nil }
+        return try? await api.projectCoordinatorStatus(projectID)
+    }
+
+    /// The two facts of the coordinator's workspace a LIVE status does not carry — whether it is
+    /// enabled, and the runner it is bound to — off the workspace itself.
+    func readCoordinatorWorkspace(_ workspaceID: String) async -> CoordinatorWorkspaceFacts? {
+        guard let agent = try? await api.agent(workspaceID) else { return nil }
+        return CoordinatorWorkspaceFacts(enabled: agent.enabled, runnerId: agent.runnerId)
+    }
+
+    /// Start a new coordinator from the owner exception card — the project page's replace, without
+    /// leaving the card (D1 = A): the item list is read again, and once the new coordinator can be
+    /// asked the card turns into the reachable one in place. A workspace named opens it there
+    /// (Change workspace…'s Start a new one there). Returns the refusal to say, nil when it was taken.
+    func replaceProjectCoordinator(inWorkspace workspaceID: String? = nil) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            _ = try await api.replaceProjectCoordinator(projectID, workspaceID: workspaceID)
+            await refreshRulerQuestions(force: true)
+            return nil
+        } catch {
+            let refused = "No new coordinator was started — \(APIClient.failureReason(error))."
+            statusMessage = refused
+            return refused
+        }
+    }
+
     /// Mark an exception as handled by hand, with the reason the door requires (§4.7, mock 7 方案 B).
     /// The owner's ending for an item nobody has to act on any more — and the reason is the whole of
     /// what the record gains, because nothing on the line could verify the ending for itself.
