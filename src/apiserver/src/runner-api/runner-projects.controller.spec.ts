@@ -975,6 +975,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // orchestration credential: the observation only reads, and starts no session.
     'observeIntegration',
     'recordMergeEvidence',
+    // A coordinator recording an owner ruling given in its conversation (coordinator handoff v2 §2):
+    // the acting session is the authority, checked against the project's coordinator pointer, and the
+    // quote against the turn's owner text. It records a fact and grants nothing.
+    'recordRuling',
     'removeProject',
     // The coordinator asking the owner to record the project done (`project_request_done`). It is
     // the counterpart of requestStart: the service checks readiness and files a card; only the

@@ -571,6 +571,14 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { question: 'Which first?' } }),
   },
+  'POST /runner/projects/:id/rulings': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { ruling: 'Recorded by the census.', quote: 'the census', sourceTurnId: mine.projectId },
+    }),
+  },
   'POST /runner/projects/:id/start-requests': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -874,6 +882,10 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
 /** The coordinator's doors of a project, as a field case of the coordinator's header. */
 const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => TenantRequest>> = {
   'POST /runner/projects/:id/owner-questions': (mine) => ({ params: { id: mine.projectId }, body: { question: 'Which first?' } }),
+  'POST /runner/projects/:id/rulings': (mine) => ({
+    params: { id: mine.projectId },
+    body: { ruling: 'Recorded by the census.', quote: 'the census', sourceTurnId: mine.projectId },
+  }),
   'POST /runner/projects/:id/start-requests': (mine) => ({
     params: { id: mine.projectId },
     body: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, why: 'the census' },
@@ -1622,6 +1634,13 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'owner first (project-acceptance.service.ts:868)',
   'POST /runner/projects/:id/owner-questions body forRunQuestion':
     'matches ownerId, toSessionId against the project coordinator, kind RUN_QUESTION and state OPEN before linking the request in the item transaction (project-open-item.service.ts:897)',
+  'POST /runner/projects/:id/rulings body sourceTurnId':
+    'read by (id, a session of the runner\'s owner) and then held to a conversation that coordinated the project the '
+    + 'path names; another account\'s turn answers 404 PROJECT_RULING_TURN_NOT_FOUND before anything is written '
+    + '(projects/project-ruling.ts:177; project-ruling.pg.spec.ts, another owner)',
+  'POST /runner/projects/:id/rulings body supersedes':
+    'matched by (id, the runner\'s owner, the project the path names, live) inside the write; another account\'s ruling '
+    + 'answers 409 PROJECT_RULING_SUPERSEDES_NOT_LIVE and writes nothing (projects/project-ruling.ts:216; project-ruling.pg.spec.ts)',
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
