@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>48 run failure causes</title>
+<style>
+/* Board 48: wiki run failures shown as a cause (docs/wiki-run-failure-causes-design.md). Self-contained; b48- prefix. */
+body { margin: 0; background: #f4f5f7; font-family: "Inter", "Noto Sans SC", sans-serif; color: #1f2329; }
+.b48-sheet { width: 2200px; padding: 36px 40px 48px; box-sizing: border-box; }
+.b48-sheet h1 { font-size: 30px; margin: 0 0 8px; }
+.b48-lede { font-size: 16px; color: #4e5562; max-width: 1900px; line-height: 1.6; margin: 0 0 28px; }
+section.b-part { background: #fff; border: 1px solid #e3e5e9; border-radius: 16px; padding: 26px 28px 30px; margin-bottom: 28px; }
+section.b-part > h2 { font-size: 22px; margin: 0 0 18px; }
+.b48-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.b48-cap { font-size: 14px; color: #6b7280; margin: 0 0 8px; }
+.b48-cap b { color: #1f2329; }
+/* The Runs card, drawn after the shipped web card (WikiRunsCard + wk-calls). */
+.b48-card { border: 1px solid #dee0e3; border-radius: 12px; padding: 18px 20px; background: #fff; font-size: 15px; }
+.b48-card .hd { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.b48-card .hd b { font-size: 19px; }
+.b48-card .hd span { color: #6b7280; font-size: 14px; }
+.b48-card .hd span.up { color: #1f8a3d; }
+.b48-run { display: grid; grid-template-columns: 16px 120px 1fr 80px; gap: 10px; padding: 10px 0; border-top: 1px solid #eef0f3; align-items: start; line-height: 1.5; }
+.b48-run:first-of-type { border-top: 0; }
+.b48-run .mk { width: 9px; height: 9px; border-radius: 50%; margin-top: 7px; background: #c7c7cc; }
+.b48-run .mk.r { background: #e5484d; } .b48-run .mk.a { background: #f5a623; } .b48-run .mk.g { background: #30a46c; }
+.b48-run .k { font-weight: 600; }
+.b48-run .when { color: #8a8f98; font-size: 13.5px; text-align: right; }
+.r { color: #d1242f; } .a { color: #b35a00; } .m { color: #6b7280; }
+.b48-calls { margin: 4px 0 6px 26px; border: 1px solid #e8eaee; border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+.b48-calls table { width: 100%; border-collapse: collapse; }
+.b48-calls th { background: #f6f7f9; text-align: left; font-weight: 500; color: #6b7280; padding: 7px 12px; }
+.b48-calls td { padding: 7px 12px; border-top: 1px solid #eef0f3; }
+.b48-calls td.c { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+.b48-calls td.n { text-align: right; } .b48-calls th.n { text-align: right; }
+.b48-calls tr.why td { border-top: 0; padding-top: 0; }
+.b48-raw { word-break: break-all; }
+.b48-tag { display: inline-block; font-size: 12px; border: 1px solid #dee0e3; border-radius: 6px; padding: 0 6px; margin-left: 6px; color: #4e5562; }
+/* Numbered marks and notes. */
+.b48-mk { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: #2e6aff; color: #fff; font-size: 13px; font-weight: 700; align-items: center; justify-content: center; margin-right: 6px; vertical-align: 1px; flex: none; }
+.b48-notes { margin-top: 18px; font-size: 15px; line-height: 1.7; }
+.b48-notes p { margin: 0 0 8px; display: flex; gap: 4px; }
+.b48-strike { outline: 2px dashed #e5484d; outline-offset: 3px; border-radius: 4px; }
+.b48-hl { outline: 2px dashed #2e6aff; outline-offset: 3px; border-radius: 4px; }
+table.b48-t { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.55; }
+table.b48-t th, table.b48-t td { padding: 9px 12px; border-bottom: 1px solid #e8eaee; text-align: left; vertical-align: top; }
+table.b48-t th { background: #f3f4f6; font-weight: 600; white-space: nowrap; }
+table.b48-t code { font: 12.5px/1.4 "JetBrains Mono", monospace; background: #eef0f3; border-radius: 4px; padding: 0 4px; }
+table.b48-t td.en { font-family: "Inter", sans-serif; }
+.b48-rec { color: #1f8a3d; font-weight: 600; }
+.b48-ab { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.b48-ab > div { border: 1px solid #e3e5e9; border-radius: 12px; padding: 16px 18px; font-size: 15px; line-height: 1.65; }
+.b48-ab h3 { margin: 0 0 8px; font-size: 17px; }
+.b48-ab .opt { margin: 6px 0; }
+.b48-ab .opt b { margin-right: 4px; }
+ol.b48-land { font-size: 15.5px; line-height: 1.8; margin: 0; padding-left: 22px; }
+</style>
+</head>
+<body>
+<div class="b48-sheet">
+<h1>48 · Wiki 运行失败：只显示「原因」，不显示上游原文</h1>
+<p class="b48-lede">2026-11-16 生产：vLLM 引擎死掉（EngineDeadError），它的 Anthropic 适配器连自己的错误都解析失败，pydantic 报错原样进了 Activity 的 Runs 卡。
+用户看不懂、也做不了什么，还暴露了部署内部（vLLM / pydantic 版本）。另外这类失败被错判成 <b>content</b>（内容问题），没有按 infra 重试。
+设计文档：<code>docs/wiki-run-failure-causes-design.md</code>。</p>
+
+<section class="b-part" id="part-1">
+<h2>① 今天 vs ② 建议（web Activity · Runs，iOS / macOS / Android 同一份逻辑）</h2>
+<div class="b48-cols">
+<div>
+<p class="b48-cap"><b>① 今天</b>（生产实拍内容，11-16 01:47Z）</p>
+<div class="b48-card">
+  <div class="hd"><b>Runs</b><span>System model · qwen3.8-27b-uncensored-fp8 · <span class="up">● Up</span></span></div>
+  <div class="b48-run"><i class="mk r"></i><span class="k">Maintenance</span>
+    <span class="b48-strike" id="t1"><b class="r">Failed</b> · <span class="b48-raw">extract: stream error internal_error: 2 validation errors for ChatCompletionStreamResponse model Field required [type=missing, input_value={'error': {'message': 'En...am': None, 'code': 500}}, input_type=dict] For further information visit https://errors.pydantic.dev/2.13/v/missing choices Field required [type=missing, input_value={'er…</span> · 2 calls <span class="b48-tag">git</span></span>
+    <span class="when">4h ago</span></div>
+  <div class="b48-calls"><table>
+    <tr><th>Call</th><th>State</th><th class="n">Waited</th><th class="n">Ran</th><th class="n">Tokens</th></tr>
+    <tr><td class="c">extract · d2253b14</td><td class="r">Failed</td><td class="n">1s</td><td class="n">3m 3s</td><td class="n">—</td></tr>
+    <tr class="why"><td colspan="5" class="r b48-raw"><span class="b48-strike">stream error internal_error: 2 validation errors for ChatCompletionStreamResponse model Field required [type=missing, input_value={'error': {'message': 'En...am': None, 'code': 500}}, input_type=dict] For further information visit https://errors.pydantic.dev/2.13/v/missing …</span></td></tr>
+    <tr><td class="c">extract · c27084e4</td><td class="r">Failed</td><td class="n">1s</td><td class="n">3m 3s</td><td class="n">—</td></tr>
+    <tr class="why"><td colspan="5" class="r b48-raw"><span class="b48-strike">stream error internal_error: 2 validation errors for ChatCompletionStreamResponse …</span></td></tr>
+  </table></div>
+  <div class="b48-run"><i class="mk r"></i><span class="k">Maintenance</span>
+    <span><b class="r">Failed</b> · Ended after 10 attempts: extract: the request waited past its step's limit (180 s) · 3 calls</span>
+    <span class="when">6h ago</span></div>
+</div>
+<div class="b48-notes">
+  <p><span class="b48-mk">1</span>红色 = 内容失败，但其实是模型引擎挂了；它不会按 infra 重试（近 7 天 8 次 maintenance 这样结束）。</p>
+  <p><span class="b48-mk">2</span>上游原文：pydantic 校验、文档链接、截断的 dict。飞书推送「Last error」、文档计划卡、导入、health 也是同一段原文。</p>
+</div>
+</div>
+
+<div>
+<p class="b48-cap"><b>② 建议</b>：服务端把失败归成固定「原因」，每个原因一句固定英文；步骤名保留（Orbit 自己的词）</p>
+<div class="b48-card">
+  <div class="hd"><b>Runs</b><span>System model · qwen3.8-27b-uncensored-fp8 · <span class="up">● Up</span></span></div>
+  <div class="b48-run"><i class="mk a"></i><span class="k">Maintenance</span>
+    <span class="b48-hl"><b class="a">Queued</b> · extract: The System model stopped answering. · retrying in 25s · 2 calls <span class="b48-tag">git</span></span>
+    <span class="when">4h ago</span></div>
+  <div class="b48-calls"><table>
+    <tr><th>Call</th><th>State</th><th class="n">Waited</th><th class="n">Ran</th><th class="n">Tokens</th></tr>
+    <tr><td class="c">extract · d2253b14</td><td class="r">Failed</td><td class="n">1s</td><td class="n">3m 3s</td><td class="n">—</td></tr>
+    <tr class="why"><td colspan="5" class="r"><span class="b48-hl">The System model stopped answering.</span></td></tr>
+    <tr><td class="c">extract · c27084e4</td><td class="r">Failed</td><td class="n">1s</td><td class="n">3m 3s</td><td class="n">—</td></tr>
+    <tr class="why"><td colspan="5" class="r">The System model stopped answering.</td></tr>
+  </table></div>
+  <div class="b48-run"><i class="mk r"></i><span class="k">Maintenance</span>
+    <span><b class="r">Failed</b> · Ended after 10 attempts: extract: The System model's queue was too long to wait. · 3 calls</span>
+    <span class="when">6h ago</span></div>
+</div>
+<div class="b48-notes">
+  <p><span class="b48-mk">3</span>引擎挂掉 = <code>model_unavailable</code> → 调用可重试、run 记 infra：琥珀色排队并写明为什么在等（待定 B）。用完重试次数才变红。</p>
+  <p><span class="b48-mk">4</span>失败的调用只显示一句原因。短 id（d2253b14）还在，运维拿它去库里 / worker 日志找原文（待定 A）。</p>
+  <p><span class="b48-mk">5</span>线上字段 <code>error</code> 名字不变、内容换成这句话：旧版 iOS / macOS / Android 不升级也立刻变干净。</p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="b-part" id="part-2">
+<h2>③ 原因集合（封闭，三端对齐；服务端在写入失败时分类）</h2>
+<table class="b48-t">
+<tr><th>cause</th><th>什么时候</th><th>用户看到的句子</th><th>归类</th><th>今天会显示</th></tr>
+<tr><td><code>model_unavailable</code></td><td>5xx；连接失败 / 断开 / 空闲；流在 message_stop 前关闭；未知类型的 SSE error（如 internal_error）；非 SSE 应答</td><td class="en">The System model stopped answering.</td><td>infra · 重试</td><td class="m">stream error internal_error: 2 validation errors…（今天被判 content）</td></tr>
+<tr><td><code>model_busy</code></td><td>429；overloaded_error / rate_limit_error</td><td class="en">The System model is busy.</td><td>infra · 重试</td><td class="m">HTTP 429 …</td></tr>
+<tr><td><code>model_queue_wait</code></td><td>请求排队超过该步骤上限</td><td class="en">The System model's queue was too long to wait.</td><td>infra · 重试</td><td class="m">the request waited past its step's limit (180 s)</td></tr>
+<tr><td><code>model_key_refused</code></td><td>401 / authentication_error</td><td class="en">The System model refused the key.</td><td>infra</td><td class="m">HTTP 401 …</td></tr>
+<tr><td><code>model_call_budget</code></td><td>单次调用超出预算</td><td class="en">The call ran past its 15-minute budget.</td><td>content</td><td class="m">the call ran out of its 900 s</td></tr>
+<tr><td><code>model_answer_unusable</code></td><td>答案无法解析 / 被拒（401、429 以外的 4xx）</td><td class="en">The model's answer could not be used.</td><td>content</td><td class="m">各种解析错误原文</td></tr>
+<tr><td><code>repo_unavailable</code></td><td>REPO_OP_*、REPO_NOT_READY、runner 离线</td><td class="en">The repository could not be read.</td><td>infra</td><td class="m">REPO_OP_FAILED: the snapshot of origin/main failed: …</td></tr>
+<tr><td><code>interrupted</code></td><td>LEASE_EXPIRED、WIKI_JOB_HANDED_BACK</td><td class="en">The run was interrupted.</td><td>infra</td><td class="m">LEASE_EXPIRED: …</td></tr>
+<tr><td><code>internal</code></td><td>其余一切，包括本版本没预料的错误</td><td class="en">Something went wrong on Orbit's side.</td><td>infra</td><td class="m">任意异常原文</td></tr>
+</table>
+<div class="b48-notes"><p><span class="b48-mk">6</span>上游原文仍存在 <code>wiki_model_request.error</code> / <code>wiki_job.error</code>（已去掉地址和 key），只是不再经任何读接口、推送发给客户端；合同 <code>jobs.read.never</code> 加上「upstream error text」。</p></div>
+</section>
+
+<section class="b-part" id="part-3">
+<h2>④ 决定（2026-11-16 owner 选 A1 · B1 · C1）</h2>
+<div class="b48-ab">
+<div><h3>A · 上游原文谁能看</h3>
+  <div class="opt"><b>A1</b><span class="b48-rec">推荐</span>：只留在服务端（数据库行 + worker 日志带请求 id），任何客户端都不显示。</div>
+  <div class="opt"><b>A2</b>：A1 + 部署 ADMIN（User.role）在失败调用上多一个「Technical details」展开，走现有 admin/wiki 路由，owner 读接口里永远没有。</div>
+  <div class="m">A1 最简单；A2 适合自托管、没人能进库的部署，多一个接口和三端的一个展开。</div></div>
+<div><h3>B · 正在按 infra 重试的 run</h3>
+  <div class="opt"><b>B1</b><span class="b48-rec">推荐</span>：琥珀色 Queued + 原因 + retrying in …；用完次数或内容失败才红。</div>
+  <div class="opt"><b>B2</b>：保持今天：只显示 Queued · retrying in …，不写原因。</div>
+  <div class="m">B1 让人知道「是模型挂了、会自己好」，不用点开日志。</div></div>
+<div><h3>C · 已有的旧失败行</h3>
+  <div class="opt"><b>C1</b><span class="b48-rec">推荐</span>：迁移时用同一个分类器从旧 error 回填 cause，识别不了的记 internal。</div>
+  <div class="opt"><b>C2</b>：不回填，旧行统一显示 “Something went wrong on Orbit's side.”</div>
+  <div class="m">只影响 Activity 里最近 10 个 run 和 health 的 lastFailure；C1 几十行 SQL。</div></div>
+</div>
+</section>
+
+<section class="b-part" id="part-4">
+<h2>⑤ 落地（按代价排）</h2>
+<ol class="b48-land">
+<li><b>worker 分类修正</b>：未知 SSE error 类型 → <code>model_unavailable</code>（可重试）；executor 按 cause 判 infra / content。单这一步就止住「引擎挂了却记成内容失败」。</li>
+<li><b>shared</b>：<code>WIKI_FAILURE_CAUSES</code> + 句子 + 分类器及测试；合同 <code>jobs.failureCauses</code>（Swift / Kotlin 原生钉住），fixture 失败用例改成 cause。</li>
+<li><b>读接口 + 推送</b>：jobs.read / health lastFailure / 计划 / 导入 / 飞书「Last error」都给句子；三张表加 <code>cause</code> 列，迁移回填（C1）。</li>
+<li><b>三端</b>：web <code>lib/wikiRuns.ts</code>、OrbitKit <code>WikiRunsLogic.swift</code>、Android <code>WikiRunsLogic.kt</code> 按 cause 渲染（B1），parity 测试跟上。</li>
+<li>不在范围：vLLM 引擎卡死本身，已交 HPC 任务 34ySzdtZHuKxBGyiXTCBg（可改可重启，连续 24 h 零崩溃为完成）。</li>
+</ol>
+</section>
+</div>
+</body>
+</html>
