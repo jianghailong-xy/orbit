@@ -299,9 +299,10 @@ final class SubagentTranscriptTests: XCTestCase {
 /// the iPhone read as "Waiting for your reply" (web parity: `parkedWorkLabel`, `statusLabel`, `StatusIcon`).
 final class RunningSubagentStatusTests: XCTestCase {
     private func session(_ status: RunStatus, subagents: Int?, bg: Int? = nil,
-                         lastToolUse: String? = nil, engineTurnActive: Bool? = nil) -> Session {
+                         lastToolUse: String? = nil, engineTurnActive: Bool? = nil,
+                         reply: String? = "the last reply") -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
-                pendingApprovals: nil, branch: nil, updatedAt: nil, lastAssistantText: "the last reply",
+                pendingApprovals: nil, branch: nil, updatedAt: nil, lastAssistantText: reply,
                 lastToolUse: lastToolUse, runningBgCount: bg, runningSubagentCount: subagents,
                 engineTurnActive: engineTurnActive)
     }
@@ -318,7 +319,11 @@ final class RunningSubagentStatusTests: XCTestCase {
     }
 
     func testNoAgentsKeepsTheOldReadings() {
-        let idle = session(.awaitingInput, subagents: 0, bg: 2)
+        // With no agent at work, the row reads as it did before agents. A reply outranks a background
+        // process (a14ff17757, the owner 2026-11-16), which fills a row with nothing else to say.
+        let replied = session(.awaitingInput, subagents: 0, bg: 2)
+        XCTAssertEqual(SessionLine.make(for: replied, live: true).text, "the last reply")
+        let idle = session(.awaitingInput, subagents: 0, bg: 2, reply: nil)
         XCTAssertEqual(SessionLine.make(for: idle, live: true).text, "2 background processes running…")
         XCTAssertEqual(SessionHeader.statusWord(for: session(.awaitingInput, subagents: nil)), "Waiting for your reply")
     }
