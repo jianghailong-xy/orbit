@@ -282,8 +282,8 @@ export function MachineSetupCard({
         )
       )}
 
-      <div className="msc-step" data-step="folder">
-        {folder ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">1</span>}
+      {/* The card's one question: no step number beside it. */}
+      <div className="msc-step msc-step-unnumbered" data-step="folder">
         <div>
           {folder ? (
             <div className="msc-done-line">

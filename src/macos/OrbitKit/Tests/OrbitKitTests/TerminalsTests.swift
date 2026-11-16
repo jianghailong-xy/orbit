@@ -182,7 +182,7 @@ final class TerminalsTests: XCTestCase {
     }
 
     func testSettingsHasATerminalsRowThatOpensItsPage() {
-        XCTAssertTrue(SettingsHome.rows(.account, isAdmin: false).contains(.terminals))
+        XCTAssertTrue(SettingsHome.rows(.personal).contains(.terminals))
         XCTAssertEqual(SettingsHome.title(.terminals), "Terminals")
         XCTAssertEqual(SettingsHome.page(.terminals), .terminals)
         XCTAssertEqual(SettingsPage.terminals.title, "Terminals")

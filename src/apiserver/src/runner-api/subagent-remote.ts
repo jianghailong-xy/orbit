@@ -245,6 +245,8 @@ export interface SubagentRemoteFacts {
   readonly?: boolean;
   permissionMode?: string;
   needs?: string[];
+  /** The earlier remote run whose conversation this one continues (§10.2). */
+  resumeOf?: string;
 }
 
 export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
@@ -254,6 +256,7 @@ export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
     ...(facts.readonly === true ? { readonly: true } : {}),
     ...(typeof facts.permissionMode === 'string' ? { permissionMode: facts.permissionMode } : {}),
     ...(Array.isArray(facts.needs) ? { needs: facts.needs.filter((n): n is string => typeof n === 'string') } : {}),
+    ...(typeof facts.resumeOf === 'string' ? { resumeOf: facts.resumeOf } : {}),
   };
 }
 

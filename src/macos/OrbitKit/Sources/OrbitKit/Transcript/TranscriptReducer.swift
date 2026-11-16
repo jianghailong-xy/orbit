@@ -230,6 +230,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// retaining this small tombstone prevents a delayed NOTIFY from reviving a settled/background
     /// card, or a foreground card stranded by turn/run termination. Also transient and unencoded.
     private var suppressedLiveToolIDs = Set<String>()
+    /// Set before a stream connect with no cursor fills an empty window (every tail page failed):
+    /// the server replays only its capped tail, which can start mid-conversation, and no page says
+    /// where the window's older edge is. The first durable event the replay brings decides it. Left
+    /// unset, `hasMoreOlder` stayed false and the transcript could never be scrolled back past where
+    /// the replay began (web had the same bug, 2026-11-16). Transient and unencoded.
+    private var replaySetsOlderEdge = false
 
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
@@ -305,6 +311,10 @@ public struct TranscriptReducer: Sendable, Codable {
             if ev.seq > state.maxSeq { state.maxSeq = ev.seq }
             // Low-water mark: the `before=` cursor for scroll-up history paging.
             if state.oldestSeq.map({ ev.seq < $0 }) ?? true { state.oldestSeq = ev.seq }
+            if replaySetsOlderEdge {
+                replaySetsOlderEdge = false
+                state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
+            }
         }
         // The runner reports context-window occupancy on `turn_end`; a lightweight event can also
         // refresh the gauge without ending the active turn. Guard on > 0 so an event without usage
@@ -476,7 +486,21 @@ public struct TranscriptReducer: Sendable, Codable {
     /// run status and the context gauge —
     /// because clearing those would blank live UI the re-seed cannot restore. Web's `reseed`
     /// draws the same line: it resets `events`/`seen`/`oldestSeq`/`lastSeq` and nothing else.
+    /// The window is about to be filled by a cursor-less stream replay rather than a page: let its
+    /// first durable event set the older edge (see `replaySetsOlderEdge`).
+    public mutating func expectReplayToSetOlderEdge() {
+        replaySetsOlderEdge = true
+    }
+
+    /// A restored snapshot whose window does not start at the session's first event but says nothing
+    /// older exists was written by the replay path above before it set the edge: read it as having
+    /// older history, which one page fetch settles.
+    public mutating func reopenUnsettledOlderEdge() {
+        if !state.hasMoreOlder, let oldest = state.oldestSeq, oldest > 1 { state.hasMoreOlder = true }
+    }
+
     public mutating func resetForResync() {
+        replaySetsOlderEdge = false
         // Retire any running shell before discarding its card. Otherwise a delayed notification
         // from the spent stream could be cached as an apparent output-before-tool_use after reseed.
         clearLiveToolOutputsAtBoundary()
@@ -500,6 +524,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older
     /// history remains on the server before it — the cold-open half of tail-first pagination.
     public mutating func applyTailPage(_ page: EventPage) {
+        replaySetsOlderEdge = false   // the page says where the edge is
         for ev in page.events { apply(ev) }
         // Page membership itself proves persistence. During a rolling upgrade an older API briefly
         // stored `tool_output` snapshots even though their event kind is live-only; treating those
@@ -774,9 +799,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// A message held for its translation is the exception: the server answers `queued` for it
     /// whatever is ahead of it, so that word says nothing about its place, and it stays in the
     /// conversation with its chip (web parity: `inPendingTray` leaves out `heldForTranslation`).
+    ///
+    /// `acceptedAt` stamps a bubble left in the conversation with when the server took it, which it
+    /// shows as its time until the echo brings the runner's own (web: `AcceptedUserTurn.acceptedAt`).
     public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false,
                                              translation: TurnTranslation? = nil,
-                                             placement: String? = nil) {
+                                             placement: String? = nil, acceptedAt: String? = nil) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
         // `translation`: the send's answer says the message is being translated (Settings ›
         // Translation), so its bubble wears the "Translating…" chip from the moment it is known.
@@ -787,6 +815,7 @@ public struct TranscriptReducer: Sendable, Codable {
             if placement == "accepted" {
                 var b = state.queued.remove(at: i)
                 b.queued = false
+                if b.ts == nil { b.ts = acceptedAt }
                 flushStreaming()
                 state.items.append(.user(b))
             }
@@ -808,6 +837,7 @@ public struct TranscriptReducer: Sendable, Codable {
             state.queued.append(b)
             return
         }
+        if b.ts == nil { b.ts = acceptedAt }
         state.items[i] = .user(b)
     }
 
@@ -885,6 +915,26 @@ public struct TranscriptReducer: Sendable, Codable {
     /// moving up to the head of the queue is the same row the whole way to its echo. Web parity:
     /// `reconcileAcceptedUserTurnSnapshot` beside `reconcileQueuedTurnSnapshot`.
     public mutating func reconcileQueuedTurns(_ turns: [QueuedTurnInfo], knownBefore: Set<String>) {
+        // A message drawn in the conversation that the listing now has waiting behind another turn
+        // goes to the queue first, and is matched there below like any queued row: one sent while it
+        // was held for its translation stays in the conversation, and is queued once translated if a
+        // turn is ahead of it (web parity: the snapshot re-places it, and `inPendingTray` takes it).
+        let waiting = Set(turns.filter {
+            !$0.isAccepted && $0.delivery == nil && $0.turnTranslation?.held != true
+                && !SteerDelivery.isSteerKind($0.kind)
+        }.map(\.turnId))
+        var leaving: [UserBubble] = []
+        for i in state.items.indices.reversed() {
+            guard case .user(var b) = state.items[i], b.pending, !b.steer, !b.undelivered,
+                  let id = b.turnId, waiting.contains(id) else { continue }
+            state.items.remove(at: i)
+            // The open-bubble cursors are item INDICES: close the gap, as `removeOptimisticUser` does.
+            if let o = openAssistant, o > i { openAssistant = o - 1 }
+            if let o = openThinking, o > i { openThinking = o - 1 }
+            b.queued = true
+            leaving.insert(b, at: 0)
+        }
+        state.queued += leaving
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued

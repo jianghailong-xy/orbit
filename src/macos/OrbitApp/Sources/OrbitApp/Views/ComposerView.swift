@@ -417,10 +417,10 @@ struct ComposerView: View {
     }
     #endif
 
-    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    /// The composer's translation tag: Settings › General, where Translation is.
     private func openTranslationSettings() {
         #if os(iOS)
-        app.nav.openSettings(at: .sessions)
+        app.nav.openSettings(at: .general)
         #else
         app.selectedSection = .settings
         #endif
@@ -693,9 +693,15 @@ struct ComposerView: View {
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
                 guard press.modifiers.isEmpty else { return .ignored }
-                // The optimizer's card open over a draft: Tab is its Use, the same key's same meaning.
+                // Tab is the optimizer's key in the box, as on the web: Use on its card, and on a draft
+                // it can take, Optimize. While a press is out, and on a spent draft, Tab moves focus.
                 if console.promptOptimizer.suggestion != nil, !showSlash {
                     console.useOptimization(edit: false)
+                    return .handled
+                }
+                if !showSlash,
+                   console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {
+                    console.optimizePrompt()
                     return .handled
                 }
                 guard offeredSuggestion != nil else { return .ignored }

@@ -251,7 +251,10 @@ private struct MachineSetupCard: View {
             if welcome { WelcomeHead() } else { head }
             if let notice { noticeLine(notice) }
             Divider().padding(.top, 12)
-            step(number: 1, done: setup.state.folder != nil) { folderStep }
+            // The card's one question: no step number beside it.
+            VStack(alignment: .leading, spacing: 2) { folderStep }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 11)
             Divider()
             step(number: 2, done: setup.credential.done) { engineStep }
             Divider()

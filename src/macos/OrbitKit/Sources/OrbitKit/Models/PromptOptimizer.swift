@@ -141,7 +141,7 @@ public enum PromptOptimizerCopy {
     // Composer (frames 2–3)
     public static let optimize = "Optimize"
     public static let optimizing = "Optimizing…"
-    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
+    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O"
     public static let cancelHelp = "Stop optimizing"
     public static let buttonIdentifier = "composer.optimize"
 
@@ -266,8 +266,20 @@ public struct PromptOptimizerState: Equatable, Sendable {
     /// D2: with a gloss inserted, the optimizer's agent-language prompt an unedited send carries as its
     /// translation; nil when Use inserted the prompt itself.
     private var insertedTranslation: String?
+    /// The box's text when its card was last used or dismissed: Tab has had its go at that draft, so
+    /// until it changes Tab moves focus again (Tab, Esc, Tab reaches the toolbar).
+    public private(set) var spent: String?
 
     public init() {}
+
+    /// Whether a bare Tab in the box optimizes: ✦ could take this draft, no card is open, no press is
+    /// out, and Tab has not had its go at this exact text. Otherwise Tab moves focus as it always has.
+    public func tabOptimizes(on: Bool, text: String) -> Bool {
+        switch phase {
+        case .idle, .failed: return text != spent && PromptOptimizer.showsButton(on: on, text: text)
+        case .optimizing, .suggestion: return false
+        }
+    }
 
     public var isOptimizing: Bool { if case .optimizing = phase { return true } else { return false } }
     public var suggestion: PromptOptimization? {
@@ -302,10 +314,13 @@ public struct PromptOptimizerState: Equatable, Sendable {
         return draft != current
     }
 
-    /// × / Esc: the card goes, the draft stays; so does the failure line.
-    public mutating func dismiss() {
+    /// × / Esc: the card goes, the draft stays; so does the failure line. `current`, the box's text,
+    /// is then spent for Tab; Try again dismisses without it.
+    public mutating func dismiss(current: String? = nil) {
         switch phase {
-        case .suggestion, .failed: phase = .idle
+        case .suggestion, .failed:
+            phase = .idle
+            if let current { spent = current }
         default: break
         }
         showingPrompt = false
@@ -317,6 +332,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard let s = suggestion else { return nil }
         undoDraft = current
         inserted = s.insertText
+        spent = s.insertText
         insertedTranslation = s.gloss != nil ? s.text : nil
         phase = .idle
         showingPrompt = false

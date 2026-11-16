@@ -27,7 +27,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath } from '../../lib/machineSetup';
-import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
@@ -258,6 +258,8 @@ export function MachineSettingsPage() {
   const { managed: accountManaged } = useManagedRunner();
   const managed =
     accountManaged?.status.runnerId && routeId(accountManaged.status.runnerId) === runnerId ? accountManaged : null;
+  // Asleep while it waits for a login: opening its page, where it is signed in, wakes it.
+  useWakeForSignIn(managed);
 
   const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);

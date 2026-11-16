@@ -2958,6 +2958,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure, false)
 			gcSubagentRuns(t, pool.ids())
+			gcRemoteSubagentConversations(time.Now())
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is
