@@ -417,10 +417,10 @@ struct ComposerView: View {
     }
     #endif
 
-    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    /// The composer's translation tag: Settings › General, where Translation is.
     private func openTranslationSettings() {
         #if os(iOS)
-        app.nav.openSettings(at: .sessions)
+        app.nav.openSettings(at: .general)
         #else
         app.selectedSection = .settings
         #endif

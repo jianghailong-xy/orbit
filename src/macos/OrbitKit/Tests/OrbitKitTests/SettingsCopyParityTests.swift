@@ -88,9 +88,12 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        // The Change password row opens a dialog whose title is the row's name.
+        for row in [SettingsHome.Row.general, .profile, .terminals] {
+            assertSays(index, "label: '\(SettingsHome.title(row))' },", in: Self.settingsIndex)
+        }
+        // Profile's Change password opens a dialog whose title is the page's name.
         let dialog = try web(Self.passwordDialog)
-        assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsHome.title(.changePassword))';",
+        assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsPage.changePassword.title)';",
                    in: Self.passwordDialog)
         assertSays(dialog, "title={CHANGE_PASSWORD}", in: Self.passwordDialog)
     }
@@ -276,8 +279,10 @@ final class SettingsCopyParityTests: XCTestCase {
     /// line went with the page.
     func testMachinesAndModelssSectionsSayWhatTheWebPageSays() throws {
         XCTAssertEqual(MachinesAndModels.subtitle, "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), MachinesAndModels.subtitle)
         assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(MachinesAndModels.machines)\"", in: Self.settingsNav)
+        // iOS Settings' Machines and Providers rows are the web nav's two groups, by name.
+        XCTAssertEqual(SettingsHome.title(.machines), MachinesAndModels.machines)
+        assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(SettingsHome.title(.providers))\"", in: Self.settingsNav)
         XCTAssertEqual(MachinesAndModels.machinesDetail,
                        "Subscriptions signed in here are spent only by sessions on that machine.")
         XCTAssertEqual(ProvidersOverview.apiKeys, "API keys")

@@ -39,11 +39,12 @@ class SettingsCopyParityTest {
         }
     }
 
-    /** The Sessions row and its page — each setting's name and the hint that is its footer — say what iOS's do (SettingsHome,
-     * SessionSettings), and iOS is held to the web's own Settings page by `SettingsCopyParityTests` (OrbitKit). */
+    /** The Sessions page — each setting's name and the hint that is its footer — says what iOS's General page does (SettingsHome,
+     * SessionSettings), and iOS is held to the web's own Settings page by `SettingsCopyParityTests` (OrbitKit). iOS names the
+     * row General since its list took the web nav's groups; Android's row is still Sessions. */
     @Test fun theSessionsPageSaysWhatIosSays() {
         val source = swift("SettingsHome.swift")
-        listOf(SESSIONS, DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SUGGESTED_REPLIES, SUGGESTED_REPLIES_HINT).forEach {
+        listOf(DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SUGGESTED_REPLIES, SUGGESTED_REPLIES_HINT).forEach {
             assertTrue("\"$it\" is not in SettingsHome.swift", source.contains("\"$it\""))
         }
     }

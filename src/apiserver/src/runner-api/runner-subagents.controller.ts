@@ -29,6 +29,7 @@ import {
   type SubagentRunCreateResponse,
   type SubagentRunStatus,
   type SubagentRunUpdateResponse,
+  SUBAGENT_REMOTE_RESUME_V1,
 } from '@orbit/shared';
 import { Prisma, RunStatus, type Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
@@ -209,6 +210,7 @@ export class RunnerSubagentsController {
     });
     // A retry answers with the run it opened, wherever it was placed.
     if (opened?.targetRunnerId) return this.remoteAnswer(opened);
+    if (!opened && dto.resumeOf) return this.openRemoteResume(sessionId, dto, dto.resumeOf);
     if (!opened && (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0)) {
       const parent = await this.prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ownerId: true, workspaceId: true } });
       const pick = await chooseSubagentWorkspace(this.prisma, {
@@ -335,6 +337,58 @@ export class RunnerSubagentsController {
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
   }
 
+  /**
+   * Continue a finished remote run of this session (docs/subagent-design.md §10.2): a new remote run on the workspace
+   * and runner that ran it, whose claim names it in `resumeOf`, so that runner continues its conversation. Refused
+   * while it runs, once its workspace is gone or on another runner (which does not have the conversation), and for a
+   * runner that keeps no conversation (SUBAGENT_REMOTE_RESUME_V1), which would start a new one instead.
+   */
+  private async openRemoteResume(sessionId: string, dto: SubagentRunCreateDto, resumeOf: string): Promise<SubagentRemoteRunCreateResponse> {
+    if (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0) {
+      throw new BadRequestException({
+        code: 'SUBAGENT_RESUME_PLACED',
+        message: 'A resumed SubAgent runs where it ran before: leave out workspace and needs.',
+      });
+    }
+    const original = await this.prisma.subagentRun.findFirst({
+      where: { id: resumeOf, sessionId },
+      select: { status: true, workspaceId: true, targetRunnerId: true, attempts: true },
+    });
+    if (!original?.targetRunnerId || !original.workspaceId) {
+      throw new NotFoundException({
+        code: 'SUBAGENT_RESUME_NOT_FOUND',
+        message: 'This session has no SubAgent run by that id that ran on another workspace.',
+      });
+    }
+    const refuse = (code: string, why: string) => new ConflictException({
+      code, message: `${why} Start a new SubAgent with the full brief instead.`,
+    });
+    if (original.status === 'RUNNING') {
+      throw new ConflictException({ code: 'SUBAGENT_RESUME_RUNNING', message: 'That SubAgent is still running; resume it once it has ended.' });
+    }
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: original.workspaceId },
+      select: { id: true, name: true, workDir: true, runnerId: true, runner: { select: { capabilities: true } } },
+    });
+    if (!workspace) throw refuse('SUBAGENT_RESUME_GONE', 'The workspace that SubAgent ran on is gone, and its conversation with it.');
+    if (workspace.runnerId !== original.targetRunnerId || !workspace.runner) {
+      throw refuse('SUBAGENT_RESUME_MOVED',
+        `${workspace.name} has moved to another machine since that SubAgent ran there, and its conversation stayed on the old one.`);
+    }
+    if (!workspace.runner.capabilities.includes(SUBAGENT_REMOTE_RESUME_V1)) {
+      throw refuse('SUBAGENT_RESUME_UNSUPPORTED', `${workspace.name}'s runner is too old to continue a SubAgent's conversation.`);
+    }
+    // The model it last ran on, unless the call names one: the conversation is that engine's, and a model named is
+    // run as named on the target (planRemoteSubagent), so the resume is not routed onto another engine.
+    const lastModel = attemptsOf(original.attempts).at(-1)?.model;
+    const pinned = dto.model?.trim() || !lastModel ? dto : Object.assign(new SubagentRunCreateDto(), dto, { model: lastModel });
+    return this.openRemoteSubagentRun(sessionId, pinned, {
+      kind: 'remote',
+      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir },
+      reason: `Continues the SubAgent that ran on ${workspace.name}, with its conversation`,
+    });
+  }
+
   /** A remote run as openSubagentRun answers it. */
   private remoteAnswer(row: { id: string; status: string; decision: unknown; workspaceId: string | null }): SubagentRemoteRunCreateResponse {
     const decision = row.decision as unknown as SubagentDecision;
@@ -393,6 +447,7 @@ export class RunnerSubagentsController {
         ...(dto.readonly ? { readonly: true } : {}),
         ...(dto.permissionMode ? { permissionMode: dto.permissionMode } : {}),
         ...(dto.needs?.length ? { needs: neededCapabilities(dto.needs) } : {}),
+        ...(dto.resumeOf ? { resumeOf: dto.resumeOf } : {}),
       };
       // What it runs on, judged on the target runner (§10.3); the refusals are thrown before anything is written.
       const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
@@ -483,6 +538,7 @@ export class RunnerSubagentsController {
         background: run.background,
         prompt: facts.prompt,
         exec: built.exec,
+        resumeOf: facts.resumeOf ?? null,
       };
       return { claim };
     }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
