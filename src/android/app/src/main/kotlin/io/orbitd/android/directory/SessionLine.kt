@@ -262,13 +262,17 @@ internal fun DirectorySession.isRunning(): Boolean {
     }
 }
 
-/** Whether its glyph breathes (`WorkspaceActivityLogic.isRunningJob`): parked with a background job in flight, and nothing
+/** Whether its glyph is the terminal (`SessionStatusGlyph`'s `terminal`): parked with a background process up, and nothing
  * louder — no spinner, and no watch, whose eye takes the place. */
-internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean {
+internal fun DirectorySession.hasBackgroundProcess(watching: WatchSessionSummary? = null): Boolean {
     if (pendingApprovals > 0 || confirmationUnderReview != null || effectiveRunState != RunState.AWAITING_INPUT) return false
     if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null || resumesOnItsOwn) return false
-    return (runningBgCount ?: 0) > 0 && runningBgJobCount > 0
+    return (runningBgCount ?: 0) > 0
 }
+
+/** Whether that terminal breathes (`WorkspaceActivityLogic.isRunningJob`): at least one of those processes is a job in flight. */
+internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean =
+    hasBackgroundProcess(watching) && runningBgJobCount > 0
 
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 

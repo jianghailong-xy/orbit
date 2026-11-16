@@ -1944,12 +1944,13 @@ struct StatusGlyphView: View {
 
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
-/// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
-/// the product shows — a breathing terminal for background work, and the strip's eye for a session
-/// a watch will resume. The calm states (dormant / done / queued, and processes merely left running)
-/// show nothing: the surrounding row states them in words + colour and in its VoiceOver value, so
-/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
-/// both show the exact same cue.
+/// when it needs you (approval), a red dot on failure, the strip's eye for a session a watch will
+/// resume, and the two states where something is still under way without the agent generating —
+/// the clock of a session queued for a slot, and the terminal of a background process (breathing
+/// for a job in flight, still for a process merely left up), each the glyph the web row draws.
+/// The settled states (waiting for a reply, ended, succeeded) show nothing: the surrounding row
+/// states them in words + colour and in its VoiceOver value, so the jump-back lists (the grouped
+/// session list and the drawer's Recents) stay light. Shared so both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
     /// The live watches that will resume this session (`AgentSessionRow.watching`); nil where a list
@@ -1970,9 +1971,10 @@ struct SessionLiveIndicator: View {
         // not a process). The glyph has already let a question for you or work of its own outrank it.
         case (.symbol("eye"), _):
             Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
-        // Under review (contract §5 N3): the clock the macOS row and the web glyph draw, in the
-        // quiet tone — the report is somebody else's to look at first, and nothing here is amber.
-        case (.symbol("clock"), .neutral) where session.confirmationUnderReview != nil:
+        // Under review (contract §5 N3), or queued for a slot (a full runner, the Claude region): the
+        // clock the macOS row and the web glyph draw, in the quiet tone — the session is waiting on
+        // somebody else, not on you, and nothing here is amber.
+        case (.symbol("clock"), .neutral):
             Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
@@ -1982,6 +1984,11 @@ struct SessionLiveIndicator: View {
         // value (`SessionHeader.statusWord`), which is why this carries no label of its own.
         case (.symbol, .neutral) where glyph.pulse:
             BreathingGlyph(systemImage: "terminal")
+        // A process merely left up (a dev server, a watcher): the same terminal, still. The row's line
+        // already says "Background process running", and the glyph now says it too — without motion,
+        // so a service that never exits cannot make the row look busy.
+        case (.symbol("terminal"), _):
+            Image(systemName: "terminal").font(.orbitGlyph).foregroundStyle(.secondary)
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
         case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
         default:            EmptyView()

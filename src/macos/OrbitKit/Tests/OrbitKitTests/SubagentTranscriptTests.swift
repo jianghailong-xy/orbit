@@ -319,10 +319,9 @@ final class RunningSubagentStatusTests: XCTestCase {
     }
 
     func testNoAgentsKeepsTheOldReadings() {
-        // With no agent at work, the row reads as it did before agents. A reply outranks a background
-        // process (a14ff17757, the owner 2026-11-16), which fills a row with nothing else to say.
-        let replied = session(.awaitingInput, subagents: 0, bg: 2)
-        XCTAssertEqual(SessionLine.make(for: replied, live: true).text, "the last reply")
+        // A background process never takes the line from the reply (a14ff1775, owner 2026-11-16): it
+        // only fills a row with nothing else to say.
+        XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 0, bg: 2), live: true).text, "the last reply")
         let idle = session(.awaitingInput, subagents: 0, bg: 2, reply: nil)
         XCTAssertEqual(SessionLine.make(for: idle, live: true).text, "2 background processes running…")
         XCTAssertEqual(SessionHeader.statusWord(for: session(.awaitingInput, subagents: nil)), "Waiting for your reply")
