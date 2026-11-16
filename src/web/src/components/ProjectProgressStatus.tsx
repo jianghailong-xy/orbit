@@ -1567,11 +1567,7 @@ function ItemFactRows({
           {check.outputTail.trim() !== '' ? <CheckOutputTail text={check.outputTail} /> : null}
         </>
       ) : null}
-      {facts.branchUnchanged ? (
-        <FactRow label="Branch">
-          unchanged — the task passed on its own branch; it fails only on the combined tree
-        </FactRow>
-      ) : null}
+      {facts.branchUnchanged ? <FactRow label="Branch">{branchLine(facts)}</FactRow> : null}
       {facts.failure ? (
         <>
           <FactRow label="How">{howFailed(facts.failure)}</FactRow>
@@ -1706,6 +1702,17 @@ function ItemHandlingRows({
   );
 }
 
+/** The Branch row a server older than `facts.branchLine` leaves the card to write: a task's landing. */
+export const BRANCH_UNCHANGED_LINE =
+  'unchanged — the task passed on its own branch; it fails only on the combined tree';
+
+/** What a failed check's Branch row says. The server writes it by the job the check failed in (a
+ *  task's landing, or a promotion of the project branch or of one task's branch to main), so a
+ *  promotion's card no longer claims a task passed on its own branch. */
+function branchLine(facts: OpenItemFacts): string {
+  return facts.branchLine ?? BRANCH_UNCHANGED_LINE;
+}
+
 /** The card's fact block in words, for a chat about the item: the same rows `ItemFactRows` draws,
  *  minus the check's output — a coordinator that wants it reads the item. */
 function itemFactLines(row: ProjectOpenItemRow): string[] {
@@ -1728,11 +1735,7 @@ function itemFactLines(row: ProjectOpenItemRow): string[] {
     lines.push(`Check: ${facts.check.command} · ${checkVerdict(facts.check)} after `
       + `${checkDuration(facts.check.durationMs)}`);
   }
-  if (facts.branchUnchanged) {
-    lines.push(
-      'Branch: unchanged — the task passed on its own branch; it fails only on the combined tree',
-    );
-  }
+  if (facts.branchUnchanged) lines.push(`Branch: ${branchLine(facts)}`);
   if (facts.failure) {
     lines.push(`How: ${howFailed(facts.failure)}`);
     lines.push(`Retries: ${chainStanding(facts.failure)}`);
