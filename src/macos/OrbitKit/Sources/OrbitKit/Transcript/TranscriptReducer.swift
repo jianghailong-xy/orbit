@@ -799,9 +799,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// A message held for its translation is the exception: the server answers `queued` for it
     /// whatever is ahead of it, so that word says nothing about its place, and it stays in the
     /// conversation with its chip (web parity: `inPendingTray` leaves out `heldForTranslation`).
+    ///
+    /// `acceptedAt` stamps a bubble left in the conversation with when the server took it, which it
+    /// shows as its time until the echo brings the runner's own (web: `AcceptedUserTurn.acceptedAt`).
     public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false,
                                              translation: TurnTranslation? = nil,
-                                             placement: String? = nil) {
+                                             placement: String? = nil, acceptedAt: String? = nil) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
         // `translation`: the send's answer says the message is being translated (Settings ›
         // Translation), so its bubble wears the "Translating…" chip from the moment it is known.
@@ -812,6 +815,7 @@ public struct TranscriptReducer: Sendable, Codable {
             if placement == "accepted" {
                 var b = state.queued.remove(at: i)
                 b.queued = false
+                if b.ts == nil { b.ts = acceptedAt }
                 flushStreaming()
                 state.items.append(.user(b))
             }
@@ -833,6 +837,7 @@ public struct TranscriptReducer: Sendable, Codable {
             state.queued.append(b)
             return
         }
+        if b.ts == nil { b.ts = acceptedAt }
         state.items[i] = .user(b)
     }
 
@@ -910,6 +915,26 @@ public struct TranscriptReducer: Sendable, Codable {
     /// moving up to the head of the queue is the same row the whole way to its echo. Web parity:
     /// `reconcileAcceptedUserTurnSnapshot` beside `reconcileQueuedTurnSnapshot`.
     public mutating func reconcileQueuedTurns(_ turns: [QueuedTurnInfo], knownBefore: Set<String>) {
+        // A message drawn in the conversation that the listing now has waiting behind another turn
+        // goes to the queue first, and is matched there below like any queued row: one sent while it
+        // was held for its translation stays in the conversation, and is queued once translated if a
+        // turn is ahead of it (web parity: the snapshot re-places it, and `inPendingTray` takes it).
+        let waiting = Set(turns.filter {
+            !$0.isAccepted && $0.delivery == nil && $0.turnTranslation?.held != true
+                && !SteerDelivery.isSteerKind($0.kind)
+        }.map(\.turnId))
+        var leaving: [UserBubble] = []
+        for i in state.items.indices.reversed() {
+            guard case .user(var b) = state.items[i], b.pending, !b.steer, !b.undelivered,
+                  let id = b.turnId, waiting.contains(id) else { continue }
+            state.items.remove(at: i)
+            // The open-bubble cursors are item INDICES: close the gap, as `removeOptimisticUser` does.
+            if let o = openAssistant, o > i { openAssistant = o - 1 }
+            if let o = openThinking, o > i { openThinking = o - 1 }
+            b.queued = true
+            leaving.insert(b, at: 0)
+        }
+        state.queued += leaving
         // Every row the tail drew before this listing, the accepted head's first — matched below
         // whichever of the two a turn has moved between.
         let previous = state.accepted + state.queued

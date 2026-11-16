@@ -11676,6 +11676,7 @@ export function SessionComposer({
     if (!queueOffered) setQueueOffer(false);
   }, [queueOffered]);
   const suggestionHintId = useId();
+  const optimizeHintId = useId();
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -12100,7 +12101,7 @@ export function SessionComposer({
         maxLength={MAX_PROMPT_CHARS}
         placeholder={offeredSuggestion ? '' : composerPlaceholder}
         measureKey={measureOnPlaceholder ? composerPlaceholder : undefined}
-        aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
+        aria-describedby={offeredSuggestion ? suggestionHintId : optimizer.tabOptimizes ? optimizeHintId : undefined}
         value={text}
         disabled={composerDisabled}
         // Typing exits history recall: the next Up starts fresh from this draft.
@@ -12311,6 +12312,12 @@ export function SessionComposer({
             <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
           </span>
         </div>
+      )}
+      {/* The box's description while Tab optimizes; a touch screen, with no Tab, hears nothing. */}
+      {optimizer.tabOptimizes && (
+        <span id={optimizeHintId} className="sr-only">
+          <span className="composer-suggestion-tab-hint">Press Tab to optimize this draft.</span>
+        </span>
       )}
       </div>
       <div className="composer-toolbar">
@@ -12575,7 +12582,7 @@ export function SessionComposer({
             onClick={optimizer.press}
             disabled={!optimizer.buttonEnabled}
             aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}
           >
             {optimizer.busy ? (
               <span className="composer-optimize-spin" aria-hidden="true" />

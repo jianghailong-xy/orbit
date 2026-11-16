@@ -1374,6 +1374,17 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.queued[0].pending, true)
     }
 
+    /// A send the server accepted is stamped with when it was accepted, the time its bubble shows until
+    /// the echo brings the runner's own, rather than "Sending…" (web: `acceptedAt`).
+    func testAnAcceptedSendIsStampedWithItsAcceptance() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted",
+                              acceptedAt: "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.ts, "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
+    }
+
     /// A first message held for its translation comes back `queued` with nothing ahead of it: that is
     /// the translation hold, not a place in the queue, so it stays in the conversation (web parity).
     func testTranslationHeldSendStaysInlineDespiteQueuedPlacement() {
