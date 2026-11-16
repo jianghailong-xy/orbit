@@ -106,13 +106,15 @@ class ExceptionCardUnreachableShotTest {
     }
 
     private fun show(unreachable: Boolean) {
-        val card = CardCatalog.project("s1", "p1", mapOf("project" to buildJsonObject { put("id", "p1"); put("title", "Checkout v2") },
+        val project = buildJsonObject { put("id", "p1"); put("title", "Checkout v2"); put("exceptionEscalationSeconds", 7200) }
+        val card = CardCatalog.project("s1", "p1", mapOf("project" to project,
             "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row(unreachable)) }; putJsonArray("withCoordinator") {} })).single()
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
                     ExceptionCard(card, fresh = true, result = CardActionState(), mergeCard = null, open = {}, discuss = {},
-                        review = {}, main = "main", projectName = "Checkout v2", coordinator = disabledMacMini) { _, _ -> }
+                        review = {}, main = "main", projectName = project["title"]?.jsonPrimitive?.content,
+                        escalationSeconds = project["exceptionEscalationSeconds"]?.jsonPrimitive?.longOrNull, coordinator = disabledMacMini) { _, _ -> }
                 }
             }
         } } }
@@ -164,6 +166,7 @@ class ExceptionCardUnreachableShotTest {
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").assertExists()
         compose.onNodeWithTag("$key:who:CHAT_FIRST").assertExists()
         compose.onNode(hasText("Chat about this")).assertDoesNotExist()
+        assertText("$key:who:note", "It goes back to the coordinator with a fresh 2h clock.")
         compose.onNodeWithTag("$key:MARK_HANDLED").assertExists()
         compose.onNodeWithTag("$key:CANCEL_TASK").assertExists()
         shot("reachable", "android-b.png")

@@ -49,7 +49,7 @@ import java.util.UUID
 @Composable
 internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardActionState, mergeCard: String?, open: (String) -> Unit,
     discuss: ((String) -> Unit)?, review: (String) -> Unit, main: String = RunSettings.defaultMainBranch, projectName: String? = null,
-    coordinator: CoordinatorDoors? = null, submit: (CardVerb, CardInput) -> Unit) {
+    escalationSeconds: Long? = null, coordinator: CoordinatorDoors? = null, submit: (CardVerb, CardInput) -> Unit) {
     val row = card.source
     val gone = card.status == CardPreviews.stale
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
@@ -106,7 +106,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 color = secondary)
         }
         if (whoFixes) {
-            WhoFixesBody(card, enabled, fresh, result, mergeCard, projectName, coordinator, open, discuss, main, ::pressFor,
+            WhoFixesBody(card, enabled, fresh, result, mergeCard, projectName, escalationSeconds, coordinator, open, discuss, main, ::pressFor,
                 markHandled = { asking = true }, cancel = { cancelling = true })
             if (asking) ReasonPanel("${card.key}:mark-handled", "${card.key}:reason", ExceptionCards.markHandledTitle, ExceptionCards.markHandledBody,
                 ExceptionCards.markHandledReason, ExceptionCards.markHandled, reason, { reason = it.take(ExceptionCards.markHandledMaxLength) }, enabled,
@@ -330,7 +330,7 @@ internal class ProjectCoordinatorDoors(private val api: ProjectApi, private val 
  * message can go the coordinator row offers "or Chat about this first" beside Ask again (D2); where none can, nothing.
  */
 @Composable
-private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean, result: CardActionState, mergeCard: String?, projectName: String?,
+private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean, result: CardActionState, mergeCard: String?, projectName: String?, escalationSeconds: Long?,
     doors: CoordinatorDoors?, open: (String) -> Unit, discuss: ((String) -> Unit)?, main: String, pressFor: (String) -> (() -> Unit)?,
     markHandled: () -> Unit, cancel: () -> Unit) {
     val row = card.source
@@ -419,7 +419,7 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
             }
             if (repairing) LinearProgressIndicator(Modifier.fillMaxWidth())
             repairFailed?.let { Text(it, Modifier.testTag("$key:who:repair-failed"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-            ExceptionCards.coordinatorRowNote(row, reading)?.let {
+            ExceptionCards.coordinatorRowNote(row, reading, escalationSeconds)?.let {
                 Text(it, Modifier.testTag("$key:who:note"), style = MaterialTheme.typography.bodySmall, color = secondary)
             }
         }

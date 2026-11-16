@@ -721,6 +721,23 @@ class ExceptionCardsTest {
         assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), back))
     }
 
+    /** Ask again's note names the project's escalation window, as web's `askAgainFreshClock` does; without one it keeps the standing line. */
+    @Test fun askAgainsNoteNamesTheProjectsEscalationWindow() {
+        val escalated = read(conflict())
+        assertEquals("It goes back to the coordinator with a fresh 2h clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 7200))
+        assertEquals("It goes back to the coordinator with a fresh 1h 30m clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 5400))
+        assertEquals("It goes back to the coordinator with a fresh 2h clock.",
+            ExceptionCards.coordinatorRowNote(conflict(reason = "HANDED_OVER"), read(conflict(reason = "HANDED_OVER")), 7200))
+        assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated))
+        assertEquals("It goes back to the coordinator with a fresh escalation clock.", ExceptionCards.coordinatorRowNote(conflict(), escalated, 0))
+        // The repair causes keep their own note whatever the window.
+        val disabled = part6().single { it.cause == ExceptionCards.CoordinatorCause.WORKSPACE_DISABLED }
+        assertEquals(ExceptionCards.askAgainOnceBack, ExceptionCards.coordinatorRowNote(disabled.row, disabled.reading, 7200))
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("It goes back to the coordinator with a fresh \${formatSpan(escalationSeconds * 1000)} clock."))
+        assertTrue(web.contains("exceptionEscalationSeconds"))
+    }
+
     @Test fun d2NoChatWhenUnreachableAndTheChatLinkBesideAskAgainWhenReachable() {
         for (case in part6()) {
             val kinds = ExceptionCards.coordinatorRowPresses(case.reading).map { it.kind }
