@@ -308,7 +308,9 @@ test('a managed runner on a previous image rolls onto the new one when idle', {
   await t.test('(6) failed STARTUP_TIMEOUT while its Pod pulled: taken up again once that instance reports in', async () => {
     const w = managedRunnerWorld(db);
     const { ownerId, manager, starting, pod } = await rolledOntoPullingPod(w, 'roll-failed-pull');
-    // What production's mappings were left in by a version that failed a pulling Pod at its deadline.
+    // What production's mappings were left in by a version that failed a pulling Pod at its deadline, after the
+    // previous generation's last beat.
+    w.advance(1_000);
     await db.managedRunner.update({
       where: { id: starting.id },
       data: {
