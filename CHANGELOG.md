@@ -43,7 +43,8 @@ notes' lists of migrations and security fixes.
   agent-language preference, Show original, and Show both languages, which interleaves each reply block with its
   original.
 - The prompt optimizer. An account switch, a composer button and a suggestion card rewrite a draft in the
-  agent's language, and the owner chooses whether to use it; Tab takes the rewrite on web and macOS.
+  agent's language, and the owner chooses whether to use it. On web and macOS, Tab optimizes a draft, and on the
+  suggestion card it takes the rewrite.
 - Coordinator handoff: Compact, or Start a new coordinator, from a coordinator's context gauge. The outgoing
   coordinator writes a handoff note, and its successor opens with it and takes over its waits.
 - Session Settings on every client (a web drawer, an iOS/macOS sheet, an Android page). A session's own
