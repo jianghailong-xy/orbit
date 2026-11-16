@@ -1431,6 +1431,11 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── account removal reports ────────────────────────────────────────────────────────────────────────
+  'POST /runner/codex-account-remove-result body sessionIds[]':
+    "read only, to name a refused removal's sessions, and only among sessions assigned to this runner: another account's id matches nothing and nothing is written for it (runner-api/runner-api.controller.ts:3841)",
+  'POST /runner/account-remove-result body sessionIds[]':
+    "read only, to name a refused removal's sessions, and only among sessions assigned to this runner: another account's id matches nothing and nothing is written for it (runner-api/runner-api.controller.ts:3841)",
   // ── scheduled tasks ──────────────────────────────────────────────────────────────────────────────
   'POST /runner/schedules header x-orbit-session-id':
     "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
