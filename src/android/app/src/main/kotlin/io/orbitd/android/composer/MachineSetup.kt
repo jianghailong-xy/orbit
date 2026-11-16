@@ -325,11 +325,12 @@ object MachineSetup {
         runners: List<JsonObject>?,
         workspaces: List<JsonObject>,
         nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
         return runners.mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
-            if (RunnerPage.isOffline(runner, nowMs)) return@mapNotNull null
+            if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
@@ -341,8 +342,8 @@ object MachineSetup {
     /**
      * Rule 11: the first online machine in the runner list's order, for landing or New session when the account has no workspaces.
      */
-    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis()): String? =
-        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) }?.text("id")
+    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis(), managedStatus: ManagedRunner.Status? = null): String? =
+        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) || ManagedRunner.managedSetupState(it.text("id"), managedStatus) != null }?.text("id")
 
     /**
      * What a machine's first draft stands on (`Agent.machineDraft` in OrbitKit). The composer's engine, model and account pickers

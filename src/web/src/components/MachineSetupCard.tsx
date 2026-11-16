@@ -1,8 +1,9 @@
 import { DesktopOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { LoginEngine } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, type LoginEngine } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
+import type { ManagedRunner } from '../lib/managedRunner';
 import {
   answersDirProbe,
   isConnecting,
@@ -103,15 +104,21 @@ function useSettled(value: string): string {
  * the machine checks as it is typed: a folder there is used, one that isn't is made with the workspace. The
  * workspace's name follows the folder's until it is edited. Signing in a coding CLI is not asked here: the new
  * workspace's sessions ask for it where they need it.
+ *
+ * The account's managed runner while it is being set up or asleep (docs/managed-runner-no-default-workspace.md) is
+ * not offline here: it cannot check the folder, so the name goes unchecked, and the workspace is made all the same.
  */
 export function MachineSetupCard({
   runner,
+  managed,
   onCreate,
   creating,
   createError,
   welcome,
 }: {
   runner: Runner;
+  /** The account's managed runner, read once for the whole page: how the card treats this runner if it is that one. */
+  managed?: ManagedRunner | null;
   /** Make the workspace in this folder, under this name. */
   onCreate: (folder: PickedFolder, name: string) => void;
   /** The workspace is being made: the fields and the button wait. */
@@ -122,11 +129,13 @@ export function MachineSetupCard({
   welcome?: boolean;
 }) {
   const machine = machineName(runner);
-  const offline = runner.online !== true;
+  const managedState = managedSetupState(runner.id, managed?.status);
+  const offline = !managedState && runner.online !== true;
   const probes = answersDirProbe(runner);
-  const usable = probes && makesNewFolders(runner);
+  // A managed runner that isn't up makes the folder when its first session is claimed, on any runner version.
+  const usable = !!managedState || (probes && makesNewFolders(runner));
   const disabled = offline || !usable;
-  const root = newFolderRootOf(runner);
+  const root = managedState && !runner.reposRoot?.trim() ? MANAGED_RUNNER_REPOS_ROOT : newFolderRootOf(runner);
 
   const [typed, setTyped] = useState('');
   const folder = typed.trim();
@@ -134,12 +143,14 @@ export function MachineSetupCard({
   // The name is asked about where it would go: a folder, or a file, may be there already.
   const probe = useDirProbe(
     runner.id,
-    !disabled && isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined,
+    !managedState && !disabled && isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined,
     true,
   );
   const found = settled === folder && probe.state === 'answered' ? probe.probe : null;
   const verdict = found ? newFolderVerdict(found, machine) : null;
-  const candidate = found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
+  const candidate: PickedFolder | null = managedState
+    ? isValidNewFolder(folder) ? { kind: 'new', name: folder, path: newFolderPath(root, folder) } : null
+    : found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
 
   // The workspace's name: the folder's until it is edited, and from then on what was typed, empty included.
   const [editedName, setEditedName] = useState<string | null>(null);
@@ -171,7 +182,9 @@ export function MachineSetupCard({
         </div>
       )}
 
-      {offline ? (
+      {managedState ? (
+        <div className="msc-notice">{MANAGED_RUNNER_COPY.setup.notice[managedState]}</div>
+      ) : offline ? (
         // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
         // one too old to check folders either.
         <div className="msc-notice">{isConnecting(runner) ? setupConnectingCreate(machine) : setupOfflineCreate(machine)}</div>
@@ -213,6 +226,8 @@ export function MachineSetupCard({
               <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
             ) : !isValidNewFolder(folder) ? (
               <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+            ) : managedState ? (
+              <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
             ) : verdict ? (
               // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
               found?.exists || found?.error ? (

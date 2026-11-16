@@ -95,11 +95,12 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * WHERE: the plain (workspace_id, created_at) one would walk past every task run, child and Orbit-opened
  * conversation newer than the person's (workspace-default-opened-by.pg.spec.ts measures both).
  *
- * One kind of workspace has a default before it has history: a managed runner's default workspace,
- * once its runner became READY (`managed_runner.initial_provider`, docs/managed-runner-design.md
- * "Provisioning retry wake and sleep" 3). Its first session starts there rather than on the floor
- * below, which that runner may not have; from then on its history decides, as everywhere. No other
- * workspace is affected — the floor stays Claude. A managed runner's `initial_provider` is either a
+ * One kind of workspace has a default before it has history: a workspace on a managed runner, once
+ * that runner became READY (`managed_runner.initial_provider`, docs/managed-runner-design.md
+ * "Provisioning retry wake and sleep" 3; since 0930 any workspace on it, as it has no default one,
+ * docs/managed-runner-no-default-workspace.md). Its first session starts there rather than on the
+ * floor below, which that runner may not have; from then on its history decides, as everywhere. No
+ * other workspace is affected — the floor stays Claude. A managed runner's `initial_provider` is either a
  * built-in engine's name — a runtime signed in on it, both the engine and the credential — or the slug
  * of one of its owner's own model keys, which runs on the engine the key's row names. Before its runner
  * was ever ready, such a workspace starts on the owner's own key that READY would record
@@ -122,7 +123,7 @@ export async function lastProviderByWorkspace(
     model: string | null;
     provider_builtin: boolean;
     owner_id: string | null;
-    /** A managed default workspace whose runner has not been found ready yet; its owner is managed_owner_id. */
+    /** A workspace on a managed runner not found ready yet; its owner is managed_owner_id. */
     managed_unready?: boolean;
     managed_owner_id: string | null;
   }>>(Prisma.sql`
@@ -141,7 +142,8 @@ export async function lastProviderByWorkspace(
     UNION ALL
     SELECT a.id, m.initial_provider, m.initial_provider, NULL, true, NULL, false, m.owner_id::text
     FROM a
-    JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NOT NULL
+    JOIN workspace w ON w.id = a.id
+    JOIN managed_runner m ON m.runner_id = w.runner_id AND m.initial_provider IS NOT NULL
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
@@ -150,7 +152,8 @@ export async function lastProviderByWorkspace(
     UNION ALL
     SELECT a.id, NULL, NULL, NULL, false, NULL, true, m.owner_id::text
     FROM a
-    JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NULL
+    JOIN workspace w ON w.id = a.id
+    JOIN managed_runner m ON m.runner_id = w.runner_id AND m.initial_provider IS NULL
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL

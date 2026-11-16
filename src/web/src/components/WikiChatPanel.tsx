@@ -785,7 +785,6 @@ function sharedComposerProps(
     replyTo: null,
     workspaceReadOnly: true,
     setWorkspaceId: () => undefined,
-    managedDraftBlocked: false,
     ...modelMenu,
     shownMode: toolbar.shownMode,
     onDraftMode: toolbar.onMode,

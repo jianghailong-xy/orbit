@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { DirProbe, RunnerEngineHealth } from '@orbit/shared';
+import { type ManagedRunnerStatus, type DirProbe, type RunnerEngineHealth } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import {
   answersDirProbe,
@@ -62,6 +63,16 @@ describe('rule 9: which machines get a Set up row', () => {
 
   it('an online machine with no workspace on it', () => {
     expect(machinesToSetUp([austin, hpc], [{ id: 'w', createdAt: '', runnerId: 'hpc' }])).toEqual([austin]);
+  });
+
+  it('offers the managed machine while preparing or asleep, but still excludes ordinary offline machines', () => {
+    const fixture = JSON.parse(readFileSync('../shared/src/managed-runner-states.fixture.json', 'utf8'));
+    for (const sample of fixture.states) {
+      const status = sample.status as ManagedRunnerStatus;
+      const managed = { id: status.runnerId ?? 'unmapped', online: false };
+      expect(machinesToSetUp([gone, managed], [], status)).toEqual(sample.setupState ? [managed] : []);
+      expect(machinesToSetUp([managed], [{ id: 'w', createdAt: '', runnerId: managed.id }], status)).toEqual([]);
+    }
   });
 
   it('not one that is offline, whatever it holds', () => {
