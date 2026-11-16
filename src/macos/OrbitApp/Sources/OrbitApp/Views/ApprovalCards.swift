@@ -4585,7 +4585,7 @@ private struct OwnerItemCardView: View {
     @State private var reason = ""
     /// An integration Retry or a Re-run asks for the owner's reason before anything is sent: the
     /// press puts this prompt up, Back sends nothing, and only the door taking it clears the draft.
-    @State private var askingToRetry = false
+    @State private var askingToRetry = ProcessInfo.processInfo.arguments.contains("-probe.retry") // PROBE ONLY
     @State private var retryReason = ""
     /// Whether a failed check's log is drawn whole rather than folded to its last lines.
     @State private var expandedTail = false
