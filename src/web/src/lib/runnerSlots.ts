@@ -1,4 +1,5 @@
 import { capacityHeldTitle, isCapacityHeld } from './queuedCapacity';
+import { CLONE_STARTS_WHEN_DONE } from './machineSetupCopy';
 import {
   sessionIsStarting,
   sessionRunStateOf,
@@ -233,6 +234,11 @@ export interface QueuedRunnerUpdate {
 }
 
 export const RUNNER_UPDATING_TITLE = 'Runner updating';
+
+/** A session held by its GitHub workspace's clone (queuedReason WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED). */
+export const CLONE_WAIT_TITLE = 'Waiting for the clone';
+export const CLONE_FAILED_TITLE = 'Clone failed';
+export const CLONE_FAILED_WAIT = 'This session starts once the repository is cloned. Retry the clone from the conversation’s first line.';
 /** The foot-row tag under a message the drain holds: `Queued · ` then this, underlined, to open why. */
 export const RUNNER_UPDATING_TAG = 'runner updating';
 
@@ -409,6 +415,11 @@ export function pendingSlotDescription(
       return runnerUpdatingPlain(runnerUpdatingDescription(gate!, machine));
     case 'worktree_op_pending':
       return 'A merge or commit is finishing on this session’s checkout. It starts as soon as that settles.';
+    // A GitHub workspace's clone (docs/github-workspace-design.md §6): the claim's own gate, named before capacity.
+    case 'WORKSPACE_CLONING':
+      return `${CLONE_STARTS_WHEN_DONE}.`;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_WAIT;
     // The server checked every gate and found none: nothing is contended, it simply has not been
     // picked up yet — normally one long-poll round trip. See queuedTitle for why this may not
     // collapse into the `undefined` case below.
@@ -439,6 +450,10 @@ export function queuedTitle(gate?: QueuedGate | null): string {
       return runnerUpdatingTitle(gate);
     case 'worktree_op_pending':
       return 'Waiting for a git operation';
+    case 'WORKSPACE_CLONING':
+      return CLONE_WAIT_TITLE;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_TITLE;
     case null:
       return QUEUED_LABEL;
     default:
@@ -455,6 +470,10 @@ export function queuedLabel(gate?: QueuedGate | null): string {
       return 'Runner offline';
     case 'runner_updating':
       return runnerUpdatingTitle(gate);
+    case 'WORKSPACE_CLONING':
+      return CLONE_WAIT_TITLE;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_TITLE;
     case null:
       return QUEUED_LABEL;
     default:

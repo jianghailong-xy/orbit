@@ -60,6 +60,7 @@ import {
   closeScheduleItems,
   failedCopy,
   fileScheduleItem,
+  findingCollapseId,
   findingCopy,
   heldCopy,
   onceMissedCopy,
@@ -741,7 +742,7 @@ export class ScheduleRunsService {
               opens: { sessionId },
               ownerRequestId: null,
               ...findingCopy(schedule.title, report.summary),
-              collapseId: `schedule-finding-${schedule.id}-${report.key}`,
+              collapseId: findingCollapseId(schedule.id, report.key),
             });
           }
         }

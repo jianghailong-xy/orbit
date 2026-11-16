@@ -130,6 +130,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
+  CLONE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -153,7 +154,10 @@ import {
   type AgentProviderSeed,
   type SessionOpenedBy,
 } from '../workspaces/workspace-provider';
+import { GithubConnectionService } from '../github/github-connection.service';
+import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -248,9 +252,12 @@ import {
 } from './dto';
 import {
   folderNameOf,
+  folderOfRepoName,
   freeWorkspaceName,
+  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
+  type NewWorkspaceGithubAsk,
   type NewWorkspaceTarget,
 } from './new-workspace';
 import {
@@ -352,7 +359,7 @@ import {
   resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
-import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
+import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
 import {
   MANAGED_RUNNER_DEMAND,
   NOT_MANAGED,
@@ -991,6 +998,12 @@ export class SessionsService {
      * their own over the same prisma and the same environment, which behaves the same.
      */
     @Optional() files?: FilesService,
+    /**
+     * Each account's GitHub connection (github/github-connection.service.ts): a `newWorkspace.github` asks it whether
+     * the caller can see the repository now. Absent in the specs that build this service by hand, where a GitHub
+     * workspace is refused as GitHub not being connected.
+     */
+    @Optional() private readonly githubConnections?: GithubConnectionService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1278,8 +1291,9 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
-    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
-    let enableWorktree = false;
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir. A workspace this
+    // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
+    let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
@@ -1318,9 +1332,6 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
-    // Set when the workspace is a managed runner's default workspace: that runner, whose first
-    // session is held to the runtimes it has ready (see the preflight below).
-    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -1334,7 +1345,6 @@ export class SessionsService {
           antigravityAccount: true,
           kimiAccount: true,
           cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1350,14 +1360,12 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
           kimiAccount: true, cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1365,7 +1373,6 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -1380,7 +1387,16 @@ export class SessionsService {
     // caller changes engine) — else where this project last started, derived rather than stored (see
     // workspace-provider.ts for why a workspace holds no provider of its own). Anything named is
     // resolved rather than trusted: a command-line caller typed it, and no picker checked it first.
-    const resolved = await this.startResolution(ownerId, { ...dto, anchor: opts?.anchor });
+    // A workspace made with this session has no id for workspace-provider to seed yet. Give an
+    // unnamed start on a managed runner the same initial provider as an existing empty workspace.
+    let newWorkspaceProvider: string | undefined;
+    if (newWorkspace && !dto.engine && !dto.provider && !opts?.anchor) {
+      const managed = await this.prisma.managedRunner.findUnique({
+        where: { runnerId: newWorkspace.runnerId }, select: { initialProvider: true },
+      });
+      if (managed) newWorkspaceProvider = managed.initialProvider ?? await managedFirstSessionKey(this.prisma, ownerId) ?? undefined;
+    }
+    const resolved = await this.startResolution(ownerId, { ...dto, provider: dto.provider ?? newWorkspaceProvider, anchor: opts?.anchor });
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
     const model = resolved.model ?? undefined;
@@ -1548,6 +1564,8 @@ export class SessionsService {
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
         // The region check's verdict (docs/claude-region-check-contract.md §12, below).
         region: true,
+        // Set on a managed runner, whose first session is held to the runtimes it has ready (below).
+        managedRunner: { select: { id: true } },
       },
     });
     if (runtime === AgentProvider.DSH) {
@@ -1646,12 +1664,13 @@ export class SessionsService {
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
     }
-    // A managed runner installs no engine on demand, so its default workspace's first session runs on
-    // a runtime it reported ready — the default derived above is the one it became READY with — or is
-    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
-    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+    // A managed runner installs no engine on demand, so its first session runs on a runtime it reported
+    // ready — the default derived above is the one it became READY with — or is refused MODEL_UNAVAILABLE
+    // here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3). Keyed on the runner,
+    // whichever workspace the session is in or makes (docs/managed-runner-no-default-workspace.md).
+    if (targetRunner?.managedRunner) {
       await assertManagedFirstSessionRuntime(this.prisma, {
-        workspaceId: dto.workspaceId,
+        runnerId: assignedRunnerId,
         runtime,
         bringsOwnCredentials,
         workspaceEnv,
@@ -1884,17 +1903,71 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
+    if (ask.github !== undefined) return this.githubWorkspaceFor(ownerId, runner, ask.github);
     return {
       runnerId: runner.id,
       workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
+    };
+  }
+
+  /**
+   * `newWorkspace.github` (docs/github-workspace-design.md §5.3), after readNewWorkspace's 400s and the machine's 403,
+   * refused in the design's order and reading only: 409 GITHUB_NOT_CONNECTED (none, or one GitHub no longer takes; GitHub
+   * off on this Orbit is the 409 GITHUB_NOT_CONFIGURED in its place), 403 GITHUB_REPO_FORBIDDEN (GitHub, asked now with
+   * the caller's own user token, does not show the caller this repository), 409 CLONE_UNSUPPORTED (the runner has not
+   * reported its reposRoot, or does not declare clone-workdir/v1). What is left is refused by `create` as for any other
+   * new workspace. The folder is the one asked for, else the repository's name; the URL is the repository's current
+   * one, without a credential. POST /workspaces `github` (WorkspacesService.create) is held to the same refusals.
+   */
+  async githubWorkspaceFor(
+    ownerId: string,
+    runner: { id: string; reposRoot: string | null; capabilities: string[]; capabilitiesReportedAt: Date | null },
+    ask: NewWorkspaceGithubAsk,
+  ): Promise<NewWorkspaceTarget> {
+    if (!this.githubConnections) {
+      throw new ConflictException({ code: 'GITHUB_NOT_CONNECTED', message: 'Connect GitHub in Settings → Integrations first.' });
+    }
+    const repo = await this.githubConnections.reachableRepository(ownerId, ask.repoId, { fresh: true });
+    if (!repo) {
+      throw new ForbiddenException({
+        code: 'GITHUB_REPO_FORBIDDEN',
+        message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
+      });
+    }
+    const reposRoot = runner.reposRoot?.trim();
+    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    if (!clones || !reposRoot) {
+      throw new ConflictException({
+        code: 'CLONE_UNSUPPORTED',
+        message: clones
+          ? 'This runner has not reported its Repos Folder, so it cannot clone a repository. Choose an existing folder.'
+          : 'This runner is too old to clone a repository — update it, or choose an existing folder.',
+      });
+    }
+    const name = repo.fullName.split('/').pop() ?? '';
+    const folder = ask.folder ?? folderOfRepoName(name);
+    if (!folder) {
+      throw new BadRequestException(`The repository's name ${JSON.stringify(name)} is not a folder name: send newWorkspace.github.folder`);
+    }
+    return {
+      runnerId: runner.id,
+      workDir: newFolderWorkDir(reposRoot, folder),
+      name: folder,
+      autoCreateWorkDir: false,
+      clone: {
+        repoUrl: githubRepoUrl(repo.fullName),
+        githubRepoId: BigInt(repo.id),
+        githubInstallationId: BigInt(repo.installationId),
+        cloneRef: ask.ref,
+      },
     };
   }
 
@@ -1979,9 +2052,12 @@ export class SessionsService {
           name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
           runnerId: target.runnerId,
           workDir: target.workDir,
-          // Isolation off, as every new workspace starts (board 04, settled item 3).
-          enableWorktree: false,
+          // Isolation off, as every new workspace starts (board 04, settled item 3) — except a clone from GitHub, whose
+          // point is landing work back to the repository, which needs each session on its own branch.
+          enableWorktree: !!target.clone,
           autoCreateWorkDir: target.autoCreateWorkDir,
+          // A clone (docs/github-workspace-design.md §5.3): PENDING until the runner reports it, and its sessions with it.
+          ...(target.clone ? { ...target.clone, cloneState: 'PENDING' } : {}),
         },
         select: { id: true, name: true },
       });
@@ -4470,6 +4546,10 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
+              -- named before capacity, because a slot coming free would not start this session.
+              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
+                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.

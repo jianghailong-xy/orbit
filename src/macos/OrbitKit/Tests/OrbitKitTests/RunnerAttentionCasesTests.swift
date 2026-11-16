@@ -100,7 +100,7 @@ final class RunnerAttentionCasesTests: XCTestCase {
                              title: $0.title, actionKind: $0.action?.kind.rawValue)
             }, c.expected.items, c.name)
             XCTAssertEqual(RunnerAttention.listAttentionLine(items), c.expected.listLine, c.name)
-            XCTAssertEqual(RunnerAttention.runnerListSubtitle(c.input.runner, nowMs: c.input.nowMs),
+            XCTAssertEqual(RunnerAttention.runnerListSubtitle(c.input.runner, nowMs: c.input.nowMs, managed: c.input.managed == true),
                            c.expected.subtitle, c.name)
             XCTAssertEqual(RunnerAttention.runnerDisk(c.input.workspaces), c.expected.disk, c.name)
         }

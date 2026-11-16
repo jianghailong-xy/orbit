@@ -40,7 +40,9 @@ class RunnerPageTest {
 
     private fun input(name: String) = cases.first { it.text("name") == name }["input"]!!.jsonObject
     private fun items(input: JsonObject) = RunnerPage.attention(input["runner"]!!.jsonObject, input.list("workspaces"),
-        input["nowMs"]!!.jsonPrimitive.long, input.str("latestVersion"))
+        input["nowMs"]!!.jsonPrimitive.long, input.str("latestVersion"), managed = managedIn(input))
+    /** The case's `managed`: the account's managed runner (Orbit Cloud). */
+    private fun managedIn(input: JsonObject) = (input["managed"] as? JsonPrimitive)?.booleanOrNull == true
 
     @Test fun everyCaseSaysWhatTheWebRuleSays() {
         assertTrue("the case file holds no cases", cases.size >= 60)
@@ -54,11 +56,40 @@ class RunnerPageTest {
                 listOf(it.str("kind"), it.str("tone"), it.str("short"), it.str("title"), it.str("actionKind"))
             }, found.map { listOf(it.kind, it.tone, it.short, it.title, it.action?.kind) })
             assertEquals(name, expected.str("listLine"), RunnerPage.listAttentionLine(found))
-            assertEquals(name, expected.str("subtitle"), RunnerPage.listSubtitle(input["runner"]!!.jsonObject, input["nowMs"]!!.jsonPrimitive.long))
+            assertEquals(name, expected.str("subtitle"), RunnerPage.listSubtitle(input["runner"]!!.jsonObject, input["nowMs"]!!.jsonPrimitive.long, managedIn(input)))
             val disk = expected.obj("disk")
             assertEquals(name, disk?.let { RunnerDisk(it.long("freeBytes")!!, it.long("totalBytes")!!, it.int("usedPercent")!!) },
                 RunnerPage.runnerDisk(input.list("workspaces")))
         }
+    }
+
+    /** The account's managed runner is Orbit Cloud — told by the managed status's runnerId, never by its stored name — unless its owner
+     * named it; its version line is its release or that Orbit keeps it up to date, and it is never told its updates are turned off. */
+    @Test fun theManagedRunnerIsOrbitCloudWithAReadableVersionAndNoUpdatesOffCard() {
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        fun runner(name: String, displayName: String? = null, version: String = "managed-95884b154feb3d4e2a575fb012c4185b20c282ac") = buildJsonObject {
+            put("id", id); put("name", name); displayName?.let { put("displayName", it) }; put("version", version)
+        }
+        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = id))
+        // By id, not by name: any stored name is Orbit Cloud, and orbit-managed on a runner that isn't the account's stays as it is.
+        assertEquals("Orbit Cloud", RunnerPage.displayName(runner("some-pod"), managedRunnerId = id))
+        assertEquals("orbit-managed", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = null))
+        assertEquals("orbit-managed", RunnerPage.displayName(runner("orbit-managed"), managedRunnerId = "0199a0c4-0000-7c3e-9d4f-2a6b8c0d1e99"))
+        assertEquals("Lab pod", RunnerPage.displayName(runner("orbit-managed", "Lab pod"), managedRunnerId = id))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-managed", null, managedRunnerId = id))
+        assertEquals("orbit-managed", RunnerPage.nameOf(id, "orbit-managed", " ", managedRunnerId = null))
+
+        // The head's line and About's Version: never the image hash.
+        assertEquals("Kept up to date by Orbit", RunnerPage.hostLine(runner("orbit-managed"), managed = true))
+        assertEquals("Kept up to date by Orbit", RunnerPage.versionValue(runner("orbit-managed"), "0.1.197", managed = true))
+        assertEquals("v0.1.190", RunnerPage.hostLine(runner("orbit-managed", version = "0.1.190"), managed = true))
+        assertEquals("0.1.190 · Orbit updates this machine for you.", RunnerPage.versionValue(runner("orbit-managed", version = "0.1.190"), "0.1.197", managed = true))
+        assertFalse(RunnerPage.hostLine(runner("orbit-managed"), managed = true).contains("managed-"))
+
+        // ORBIT_NO_SELFUPDATE and behind: no card on the managed runner, the card unchanged on a self-hosted one.
+        val behind = case("selfUpdate disabledByEnv and behind")
+        assertEquals(listOf("Updates are turned off"), items(behind).map { it.title })
+        assertEquals(emptyList<AttentionItem>(), items(JsonObject(behind + ("managed" to JsonPrimitive(true)))))
     }
 
     // OrbitKit RunnerSelfUpdateTests: what the case file can't carry about the selfUpdate machines.

@@ -184,3 +184,58 @@ func TestScheduleToolDescriptionsCarryTheTimerChoice(t *testing.T) {
 		}
 	}
 }
+
+// §8.1, §8.2: a change goes to schedule_update, and a change of the time is no new intent.
+func TestScheduleToolDescriptionsSteerChangesToUpdate(t *testing.T) {
+	descriptions := map[string]string{}
+	for _, tool := range toolDescriptors(false, false) {
+		name, _ := tool["name"].(string)
+		if name == "schedule_create" || name == "schedule_update" {
+			descriptions[name] = tool["description"].(string)
+			if name == "schedule_update" {
+				props := tool["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+				if _, ok := props["readBack"]; !ok {
+					t.Error("schedule_update takes no readBack")
+				}
+			}
+		}
+	}
+	create := descriptions["schedule_create"]
+	for _, want := range []string{"call schedule_update on it instead, never schedule_create", "schedule_list", "schedule_get", "outcome EXISTS"} {
+		if !strings.Contains(create, want) {
+			t.Errorf("schedule_create does not say %q", want)
+		}
+	}
+	update := descriptions["schedule_update"]
+	for _, want := range []string{"Leave intent out unless the person restates the goal", "a change of time, frequency, limits or prompt leaves intent alone", "readBack"} {
+		if !strings.Contains(update, want) {
+			t.Errorf("schedule_update does not say %q", want)
+		}
+	}
+}
+
+func TestScheduleCreateExistsLeadsWithTheScheduleToChange(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{"outcome":"EXISTS","scheduled":false,"note":"Not created: this session already created this schedule.","scheduleId":"sch1"}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1"}
+	res := s.callTool("schedule_create", map[string]interface{}{
+		"intent": "weekly instead", "title": "Check", "prompt": "check it", "accessLevel": "CHECK_ONLY",
+		"rule": map[string]interface{}{"kind": "WEEKLY", "time": "09:00", "weekdays": []string{"MON"}},
+	})
+	if res["isError"] == true || !strings.HasPrefix(resultText(res), "Not created:") {
+		t.Fatalf("an EXISTS answer must lead with what it means: %v", res)
+	}
+}
+
+func TestScheduleUpdateSendsItsReadBack(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{"outcome":"APPLIED"}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1"}
+	s.callTool("schedule_update", map[string]interface{}{
+		"scheduleId": "sch1", "rule": map[string]interface{}{"kind": "DAILY", "time": "23:46"},
+		"readBack": "Every day at 23:46 I check it.",
+	})
+	if len(calls) != 1 || calls[0].body["readBack"] != "Every day at 23:46 I check it." {
+		t.Fatalf("calls = %+v", calls)
+	}
+}

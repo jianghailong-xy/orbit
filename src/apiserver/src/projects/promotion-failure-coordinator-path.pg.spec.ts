@@ -423,7 +423,8 @@ test('a failed promotion gives the coordinator only usable named doors, and inte
       assert.doesNotMatch(message, /promotion_recheck/);
       assert.doesNotMatch(message, /supersedesTaskId/);
       assert.match(message, /promotionId/);
-      assert.match(message, /go test.*10-minute/);
+      // Since 62e302136 the next step names no one toolchain's timeout ("go test hitting its default 10-minute limit").
+      assert.doesNotMatch(message, /10-minute/, 'no example written for one toolchain');
 
       const retried = await stack.openItems.retryPromotionCheck(
         w.ownerId,

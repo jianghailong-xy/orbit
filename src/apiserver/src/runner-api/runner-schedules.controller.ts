@@ -94,7 +94,7 @@ export class RunnerSchedulesController {
   ) {
     const actor = await this.actor(runner, sessionHeader);
     const patch: SchedulePatch = {};
-    for (const key of ['intent', 'title', 'prompt', 'rule', 'timezone', 'accessLevel', 'runLimitMinutes', 'workspaceId'] as const) {
+    for (const key of ['intent', 'title', 'prompt', 'rule', 'timezone', 'accessLevel', 'runLimitMinutes', 'workspaceId', 'readBack'] as const) {
       if (dto[key] !== undefined) (patch as Record<string, unknown>)[key] = dto[key];
     }
     if (dto.endAt !== undefined) patch.endAt = dto.endAt === null ? null : new Date(dto.endAt);

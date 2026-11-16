@@ -11,7 +11,8 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { machineName } from '../../lib/machineSetup';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -145,8 +146,11 @@ type WorkspacePatch = Partial<
   >
 >;
 
-const runnerName = (runner: { name?: string; displayName?: string | null } | null | undefined): string =>
-  runner?.displayName?.trim() || runner?.name || '';
+/** A machine as the app names it: Orbit Cloud for the account's managed runner (machineName). */
+const runnerName = (
+  runner: { id?: string; name?: string; displayName?: string | null } | null | undefined,
+  managedRunnerId: string | null,
+): string => (runner ? machineName(runner, managedRunnerId) : '');
 
 /** How long the history question waits for the runner. It rides the runner's 30s heartbeat, so this
  *  is two beats plus the scan — past that the offer simply never appears. */
@@ -249,6 +253,7 @@ export function SettingsWorkspacePage() {
  * or Enter, a drawer on its Save — each with one PATCH carrying only that field.
  */
 function WorkspaceSettingsPage({ id }: { id: string }) {
+  const managedRunnerId = useManagedRunnerId();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const message = useToast();
@@ -395,7 +400,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   }
   if (!workspace) return <p className="settings-empty">This workspace doesn't exist, or isn't yours.</p>;
 
-  const machineName = runnerName(runner ?? workspace.runner);
+  const machineName = runnerName(runner ?? workspace.runner, managedRunnerId);
   const sessionCount = detail.data?.sessionCount;
   const lastActiveAt = detail.data?.lastActiveAt ?? workspace.lastActiveAt;
   const headline = [
@@ -1292,7 +1297,7 @@ function NewWorkspacePage() {
                     onClick={() => setParams({ machine: r.id })}
                   >
                     <SettingsRow
-                      title={runnerName(r)}
+                      title={runnerName(r, managed?.status.runnerId ?? null)}
                       description={managedRowOf(managed, r.id)?.label ?? (offline ? 'Offline' : 'Online')}
                       control={<RightOutlined />}
                     />
@@ -1312,7 +1317,7 @@ function NewWorkspacePage() {
         title="New workspace"
         description={
           <>
-            On {runnerName(runner)} ·{' '}
+            On {runnerName(runner, managed?.status.runnerId ?? null)} ·{' '}
             <button type="button" className="workspace-change-machine" onClick={() => setParams({})}>
               Change machine
             </button>
