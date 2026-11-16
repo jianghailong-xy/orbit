@@ -18191,6 +18191,12 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+/* The Google terms line under an Antigravity row: in line with the row's note above it, and its size. */
+.re-google-terms .rsi-hint {
+  margin-top: 7px;
+  padding-left: 38px;
+  font-size: 11.5px;
+}
 .re-dup.re-expiring {
   color: var(--warning-text, var(--warning-solid));
 }
