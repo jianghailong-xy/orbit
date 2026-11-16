@@ -249,7 +249,9 @@ crash/recovery correctness of the selected stack still requires the tests below.
 
 ## Single Pod and single writer protection
 
-The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack.
+The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack. The .3 deployment
+(2026-11-16) deviates — XFS with the local Ceph-CSI reflink patch and `rbd-nbd`, on one node — and
+[the deployment record](managed-runner-k3s-xfs-deployment.md) is its authoritative record.
 Kubernetes RWO permits multiple Pods on the same node. Kubernetes RWOP is stable from v1.29, but the
 Ceph-CSI v3.18.0 matrix still marks both RBD RWOP modes Alpha and advises against Alpha production
 use. RBD `exclusive-lock` can transfer cooperatively between clients and does not make two mounted
@@ -347,6 +349,32 @@ The required proof has two parts: no second Pod is admitted against the original
 predecessor can successfully write after takeover. Database locks, heartbeat leases, RWO, and
 exclusive-lock each cover only part of that proof. The concrete multi-node test plan below must
 establish both before claiming storage acceptance.
+
+## Implementation record: the .3 deployment (2026-11-16)
+
+The production managed-runner environment on 10.66.0.3 (`workstation`) runs the Kubernetes backend with these
+owner-approved deviations from the baseline above. [The deployment record](managed-runner-k3s-xfs-deployment.md) has the
+full values, verification and risks.
+
+- **Filesystem:** XFS with `reflink=1`, not ext4, through the local Ceph-CSI 3.18.2 patch
+  ([csi-xfs-reflink](../deploy/managed-runner/csi-xfs-reflink/README.md)). The StorageClass is `runner-data-xfs`
+  (ReadWriteOnce, Filesystem, `reflink: enabled`, `noatime,discard`, `Retain`, 100 GiB, expansion disabled).
+- **Mounter:** `rbd-nbd`, not kernel RBD. The node's 6.1 kernel cannot map this Ceph release's default `aes256k`
+  CephX keys, and `rbd-nbd` is the node's existing, working mounter. This is outside the first version's kernel-RBD
+  baseline and must be re-reviewed if the node kernel is upgraded.
+- **Topology:** one k3s v1.37.2 node, Debian 12 kernel 6.1, Ceph Tentacle 20.2.5 with two HDD OSDs on the same host and
+  a pool of `size 2 / min_size 1` — not the two-node verified topology. There is no cross-node failover.
+- **Runner size and budget:** 2 CPU / 4 GiB and a 100 GiB volume per account; 6 CPU / 48 GiB / 8 GiB ephemeral, 4 Pods,
+  4 attachments, 3 active users, 10 Ti usable and 1 Ti headroom.
+- **Eligibility:** every enabled account, as the design says; a disabled account is refused. Open sign-up accounts and
+  test accounts are not excluded by the rule.
+- **Runner image:** built from `orbit/runner-3-k3s-fastpath` at `0c03c6a5…`, which carries the checkout index fast
+  path, and pinned by digest in the profile; the patched CSI image is local and pinned by `nodeplugin.plugin.image.tag`
+  with `IfNotPresent`.
+- **Not done:** the XFS durability and power-cut drills required by D4 of the checkout storage design. The ext4
+  evidence does not transfer to XFS.
+- **Retired backend:** the Docker channel on the same host was stopped after the cutover. Its profile, a backup of its
+  one mapping row and its data volume are preserved for rollback.
 
 ## Ceph integration and compatibility
 
