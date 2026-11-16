@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>47 · New wiki… 移出抽屉和 Mac 侧栏</title>
+<title>47 · New wiki… 移出侧栏和抽屉</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #ececef; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
@@ -74,7 +74,7 @@
 <body>
 
 <section class="b-part" id="part-1">
-  <div class="b-title"><span class="b-num">1</span>New wiki… 移出抽屉和 Mac 侧栏<span class="b-sub">· 接 46 第 4 部分 ②；iPhone/iPad、Android 抽屉，Mac 侧栏；web 不变</span></div>
+  <div class="b-title"><span class="b-num">1</span>New wiki… 移出侧栏和抽屉<span class="b-sub">· 改 46 第 4 部分 ②；iPhone/iPad、Android 抽屉，Mac、web 侧栏，四端一致</span></div>
   <div class="b-row">
     <div class="b-col">
       <h3><span class="b-n">①</span>今天 <small>· New wiki… 夹在 Wiki 和 Waiting on you 之间</small></h3>
@@ -140,11 +140,11 @@
     </div>
     <div class="b-notes">
       <p class="b-note"><span class="b-m">1</span><span><span class="b-chip b-del">删</span>抽屉的 <b>New wiki…</b> 行。46 要它放在「Wiki 组」里、各个 wiki 之后、Trash 之前；iPhone/iPad 抽屉没有 Wiki 组，只有一行 Wiki，结果它成了顶层导航里的一行动作，把 Wiki 和 Waiting on you 隔开，而且一直在。建第二个 wiki 很少做，不该占这一格。</span></p>
-      <p class="b-note"><span class="b-m">2</span><span><span class="b-chip b-new">改</span>Wiki 页头的名字：今天只有一个 wiki 时是灰字标签、没有菜单——删了抽屉那行，就再没有地方能建第二个。改成<b>一个 wiki 也带 ⌄、也是菜单</b>（iOS、macOS、Android 一样）。</span></p>
+      <p class="b-note"><span class="b-m">2</span><span><span class="b-chip b-new">改</span>Wiki 页头的名字：今天只有一个 wiki 时是灰字标签、没有菜单——删了抽屉那行，就再没有地方能建第二个。改成<b>一个 wiki 也带 ⌄、也是菜单</b>（web、iOS、macOS、Android 一样）。</span></p>
       <p class="b-note"><span class="b-m">3</span><span><span class="b-chip b-keep">沿用</span>菜单里分隔线下面的 <b>New wiki…</b>（46 第 4 部分 ③），打开同一个 Create wiki 表单；下面 Manage spaces。</span></p>
       <p class="b-note"><span class="b-m">·</span><span>账号还没有 wiki 时不变：Wiki 页是 <code>Set up your first wiki</code> 卡。</span></p>
-      <p class="b-note"><span class="b-m">·</span><span><span class="b-chip b-del">删</span>同一行在 Mac 侧栏和 Android 抽屉也删：两处都没有 Wiki 组，都是 Wiki 行下面单独一行。web 侧栏有 Wiki 组（各个 wiki + Trash），照 46 不变。</span></p>
-      <p class="b-note"><span class="b-m">·</span><span>代码：<code>DrawerWorkLogic</code> 去掉 <code>.newWiki</code>；<code>CompactShell</code> 去掉那一行；Mac <code>AgentListLogic.sidebarSections</code> 去掉 <code>newWiki</code>；Android 去掉 <code>WikiDrawerNewRow</code>；两端 <code>WikiSpacePicker</code> 去掉「一个 wiki = 标签」那一支。</span></p>
+      <p class="b-note"><span class="b-m">·</span><span><span class="b-chip b-del">删</span>同一行在 Mac 侧栏和 Android 抽屉也删：两处都没有 Wiki 组，都是 Wiki 行下面单独一行。web 侧栏的 Wiki 组里那一行也删（owner 11-16 定，四端一致）：组里只剩各个 wiki。</span></p>
+      <p class="b-note"><span class="b-m">·</span><span>代码：<code>DrawerWorkLogic</code> 去掉 <code>.newWiki</code>；<code>CompactShell</code> 去掉那一行；Mac <code>AgentListLogic.sidebarSections</code> 去掉 <code>newWiki</code>；Android 去掉 <code>WikiDrawerNewRow</code>；web <code>TasksSidePanel</code> 去掉 <code>tp-wiki-new</code>；各端页头切换器（web <code>WikiHeadSpace</code>、原生 <code>WikiSpacePicker</code>）去掉「一个 wiki = 标签」那一支。</span></p>
     </div>
   </div>
 </section>
