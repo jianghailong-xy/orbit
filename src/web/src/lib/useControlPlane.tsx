@@ -364,7 +364,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       refresh({ queryKey: ['wiki'] });
     };
     // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
-    // (`terminals.changed`). The approve card and Settings → Terminals both re-read.
+    // (`terminals.changed`). The approve cards and each machine's Terminals both re-read.
     const refetchTerminals = (): void => {
       refresh({ queryKey: ['terminals'] });
     };

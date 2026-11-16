@@ -73,6 +73,8 @@ let scrolledTo: Element[] = [];
 let published: string | null = null;
 /** What GET /runners/:id/resources answers. */
 let resourcesAnswer: RunnerResourcesAnswer | null = null;
+/** What GET /terminals answers: the account's approved terminals, on any machine. */
+let terminalsAnswer: Array<Record<string, unknown>> = [];
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -127,6 +129,7 @@ afterEach(() => {
   scrolledTo = [];
   published = null;
   resourcesAnswer = null;
+  terminalsAnswer = [];
   document.body.innerHTML = '';
 });
 
@@ -149,6 +152,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
     if (path === '/runners') return [m.runner];
     if (path === `/runners/${RUNNER_ID}/resources`) return resourcesAnswer ?? { at: null, latest: null, samples: [] };
     if (path === '/workspaces') return m.workspaces;
+    if (path === '/terminals') return { terminals: terminalsAnswer };
     if (path === '/sessions/counts') {
       return counts.map((count) => ({ ...count, active: count.running, needsYou: 0 }));
     }
@@ -304,6 +308,30 @@ describe('a runner’s page, laid out as web.png', () => {
     expect($('[data-testid="machine-status"]').className).toContain('machine-pill--attention');
     expect(text($('.machine-metaline'))).toBe('vmi3129740 · v0.1.197 · Last Check-in just now');
     expect(document.body.textContent).not.toContain('Details');
+  });
+
+  it('puts this machine’s approved terminals in a Terminals section between Workspaces and About, newest first', async () => {
+    const terminal = (id: string, runnerId: string, approvedAt: string) => ({
+      id, machineName: 'wikova', runnerId, createdAt: approvedAt, approvedAt, lastUsedAt: null, expiresAt: '2026-12-31T00:00:00Z',
+    });
+    terminalsAnswer = [
+      terminal('t-old', RUNNER_ID, '2026-06-01T00:00:00Z'),
+      terminal('t-elsewhere', 'someOtherRunner', '2026-06-20T00:00:00Z'),
+      terminal('t-new', RUNNER_ID, '2026-06-10T00:00:00Z'),
+    ];
+    await mount(machine('real wikova'));
+    expect([...$('.machine-page').children].map((el) => el.className).slice(-4)).toEqual([
+      'settings-section machine-section-workspaces',
+      'settings-section machine-section-terminals',
+      'settings-section machine-section-about',
+      'settings-section machine-section-delete',
+    ]);
+    expect($$('.machine-section-terminals .settings-row').map((row) => row.dataset.settingAnchor)).toEqual([
+      'terminal-t-new',
+      'terminal-t-old',
+    ]);
+    expect(text($('.machine-section-terminals .settings-row-title'))).toBe('Approved Jun 10, 2026');
+    expect(text($('.machine-section-terminals .settings-row button'))).toBe('Revoke');
   });
 
   it('gives each item a card of its own, with the reset time in front of a quota', async () => {

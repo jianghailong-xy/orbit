@@ -391,7 +391,7 @@ private fun RunnerGone(title: String) {
     }
 }
 
-/** RunnerDetailContent: Needs Attention, Capacity, Engines, Workspaces, About, then rotate and remove. */
+/** RunnerDetailContent: Needs Attention, Capacity, Engines, Workspaces, its approved terminals, About, then rotate and remove. */
 @Composable
 private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit, openWorkspace: (String) -> Unit) {
     val model = remember(api) { RunnersModel(api) }
@@ -575,6 +575,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, record: String?, revisi
                     }) { openWorkspace(workspace.text("id")) }
                 }
             }
+            // The terminals approved on this machine, with Revoke (docs/mocks/terminals-on-machine-page); nothing while it has none.
+            MachineTerminals(api, id, notice, reread = terminals)
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
                 Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { open(OrbitRoute(Destination.RUNNER, id, recordId = "name")) }.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically) {

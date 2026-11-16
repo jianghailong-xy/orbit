@@ -126,7 +126,7 @@ final class TerminalsTests: XCTestCase {
         XCTAssertEqual(Terminals.approveTitle, "Approve a terminal?")
         XCTAssertEqual(Terminals.requestLine(request), "Terminal on dev-laptop · code 7KQ-4MZ")
         XCTAssertEqual(Terminals.approveDetail,
-                       "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals.")
+                       "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it on this machine's page in Settings.")
         XCTAssertEqual([Terminals.deny, Terminals.approve], ["Deny", "Approve"])
     }
 
@@ -148,7 +148,8 @@ final class TerminalsTests: XCTestCase {
                               ("APPROVE_TERMINAL_DETAIL", Terminals.approveDetail),
                               ("DENY", Terminals.deny), ("APPROVE", Terminals.approve),
                               ("TERMINALS_TITLE", Terminals.title), ("TERMINALS_HINT", Terminals.hint),
-                              ("NO_TERMINALS", Terminals.empty), ("REVOKE", Terminals.revoke),
+                              ("NO_TERMINALS", Terminals.empty), ("MACHINE_TERMINALS_HINT", Terminals.machineHint),
+                              ("REVOKE", Terminals.revoke),
                               ("REVOKE_TERMINAL_DETAIL", Terminals.revokeDetail)] {
             XCTAssertTrue(web.contains("\(name) = '\(value)'"), "\(name) drifted from \(value.debugDescription)")
         }
@@ -157,7 +158,7 @@ final class TerminalsTests: XCTestCase {
                          "'Never used'", "`Expires ${fullDate(terminal.expiresAt)} · ${untilLine(terminal.expiresAt, now)}`"] {
             XCTAssertTrue(web.contains(template), "the web no longer says \(template)")
         }
-        let card = try webSource("src/web/src/pages/TerminalsPage.tsx")
+        let card = try webSource("src/web/src/components/TerminalRequests.tsx")
         XCTAssertTrue(card.contains("message.success('Terminal revoked')"))
         XCTAssertEqual(Terminals.revoked, "Terminal revoked")
     }
@@ -215,6 +216,7 @@ final class TerminalsTests: XCTestCase {
             let url = dir.appendingPathComponent(path)
             if let text = try? String(contentsOf: url, encoding: .utf8) {
                 return text.replacingOccurrences(of: "=\\s*\\n\\s*'", with: "= '", options: .regularExpression)
+                    .replacingOccurrences(of: "\\'", with: "'")
             }
             dir = dir.deletingLastPathComponent()
         }

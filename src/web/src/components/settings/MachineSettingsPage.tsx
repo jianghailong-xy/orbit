@@ -1,5 +1,5 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
-import { TerminalRequestsSection } from '../TerminalRequests';
+import { MachineTerminalsSection, TerminalRequestsSection } from '../TerminalRequests';
 import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
@@ -200,7 +200,7 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
  * /settings/machines/:id — one machine, in Settings' single column (docs/mocks/settings-redesign,
  * board-3), most-handled first: its name with a status pill and a ⋯ holding the machine's actions, what
  * needs a person, then Engines, Capacity, the workspaces on it (listed and linked only: a workspace's
- * settings have one home, its own page), abandoned checkouts when there are any, About, and Delete.
+ * settings have one home, its own page), abandoned checkouts when there are any, its approved terminals when it has any, About, and Delete.
  *
  * What was RunnerDetailPage's machine half; the rules and copy are runnerAttention's and runnerCopy's.
  */
@@ -1037,6 +1037,10 @@ export function MachineSettingsPage() {
       {/* What worktree GC may never remove: finished sessions' checkouts that still hold uncommitted
           work. Renders nothing while there are none. */}
       <AbandonedCheckouts runnerId={runner.id} canDiscard={runner.capabilities?.includes('abandoned-checkout-v1') === true} />
+
+      {/* The terminals approved on this machine, with Revoke (docs/mocks/terminals-on-machine-page). Renders nothing
+          while there are none. */}
+      <MachineTerminalsSection runnerId={runner.id} />
 
       <SettingsSection title={RUNNER_ABOUT} className="machine-section-about">
         <SettingsCard>

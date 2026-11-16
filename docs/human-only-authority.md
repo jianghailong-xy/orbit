@@ -111,8 +111,8 @@ channel all stay refused 403 `TERMINAL_ROUTE_NOT_ALLOWED` before anything is rea
 `terminal.approval.decided` with `credential_kind = TERMINAL` whose payload names the session, the approval,
 the answer, the terminal, its runner and the machine name. The credential is minted only by the owner's tap
 in the app, never by a token or a runner; it is bound to one machine, kept in the OS keychain (or a `0600`
-file under `ORBIT_HOME`, never the environment), ends 30 days after the tap, and is listed in Settings →
-Terminals with Revoke.
+file under `ORBIT_HOME`, never the environment), ends 30 days after the tap, and is listed on its machine's page in Settings, under
+Terminals, with Revoke.
 
 **Accepted risk (owner-accepted, D7 = B):** an agent running as the same OS user can read the stored
 credential and call the approval route itself, approving its own requests on that machine's sessions. It is

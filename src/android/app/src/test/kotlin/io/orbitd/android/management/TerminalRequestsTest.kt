@@ -85,7 +85,7 @@ class TerminalRequestsTest {
         tag(first, "title").assertTextEquals("Approve a terminal?")
         tag(first, "line").assertTextEquals("Terminal on dev-laptop · code 7KQ-4MZ")
         tag(first, "detail").assertTextEquals("It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. " +
-            "You can revoke it in Settings → Terminals.")
+            "You can revoke it on this machine's page in Settings.")
         tag(first, "asked").assertTextEquals("Asked 3m ago")
         compose.onNode(hasText("Waiting on you") and hasAnyAncestor(hasTestTag(card(first))), useUnmergedTree = true).assertExists()
         // Under Needs you's own header, above the machines.
