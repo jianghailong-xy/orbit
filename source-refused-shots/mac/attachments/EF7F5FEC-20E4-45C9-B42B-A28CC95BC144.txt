@@ -1,0 +1,6 @@
+mac-1: in view after 0 move(s) at (392.0, 288.0, 560.0, 32.0)
+mac-2: in view after 0 move(s) at (392.0, 288.0, 560.0, 32.0)
+mac-3: in view after 0 move(s) at (419.0, 341.0, 514.0, 29.0)
+mac-3b: in view after 0 move(s) at (779.5, 337.0, 75.0, 15.0)
+mac-4: in view after 0 move(s) at (392.0, 448.0, 130.0, 20.0)
+mac-11b: never between 60.0 and 700.0; last frame (30.0, 908.0, 159.0, 16.0)

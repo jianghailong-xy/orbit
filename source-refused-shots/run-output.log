@@ -1,0 +1,79 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 5034, after 3s)
+==> mac
+Test Case '-[GithubMacProbeUITests.GithubShotTests testMacGithubStates]' started.
+Test Case '-[GithubMacProbeUITests.GithubShotTests testMacGithubStates]' passed (378.108 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 378.108 (378.111) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 378.108 (378.113) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 378.108 (378.116) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 34171, after 2s)
+==> ios
+Test Case '-[GithubProbeUITests.GithubShotTests testIPhoneGithubStates]' started.
+Test Case '-[GithubProbeUITests.GithubShotTests testIPhoneGithubStates]' passed (242.281 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 242.281 (242.289) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 242.281 (242.292) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 242.281 (242.299) seconds
+** TEST SUCCEEDED **
+.sr-probe/run.sh: line 83: 34171 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.sr-probe/shots/ios:
+total 11264
+drwxr-xr-x  35 runner  staff    1120 Nov 16 10:01 .
+drwxr-xr-x   5 runner  staff     160 Nov 16 10:01 ..
+drwxr-xr-x  31 runner  staff     992 Nov 16 10:01 attachments
+-rw-r--r--@  1 runner  staff     500 Nov 16 10:00 GithubShotTeststestIPhoneGithubStates-notes.txt
+-rw-r--r--   1 runner  staff  724200 Nov 16 09:56 ios-1-from-github-connect.png
+-rw-r--r--   1 runner  staff  140827 Nov 16 09:59 ios-10-created.png
+-rw-r--r--   1 runner  staff  258827 Nov 16 09:59 ios-11-settings-github.png
+-rw-r--r--   1 runner  staff  258827 Nov 16 09:59 ios-11b-settings-github-workspaces.png
+-rw-r--r--   1 runner  staff  841972 Nov 16 09:57 ios-2-repo-picker.png
+-rw-r--r--   1 runner  staff  711230 Nov 16 09:57 ios-3-repo-picked.png
+-rw-r--r--   1 runner  staff  740334 Nov 16 09:57 ios-3b-other-branch.png
+-rw-r--r--   1 runner  staff  347737 Nov 16 09:57 ios-4-ready.png
+-rw-r--r--   1 runner  staff  123471 Nov 16 09:57 ios-5-cloning.png
+-rw-r--r--   1 runner  staff  130805 Nov 16 09:58 ios-6-failed-git.png
+-rw-r--r--   1 runner  staff  131500 Nov 16 09:58 ios-7-failed-app-removed.png
+-rw-r--r--   1 runner  staff  124041 Nov 16 09:58 ios-8-failed-sign-in.png
+-rw-r--r--   1 runner  staff  123319 Nov 16 09:59 ios-9-failed-no-reason.png
+-rw-r--r--   1 runner  staff     635 Nov 16 10:01 not-served.txt
+-rw-r--r--   1 runner  staff   41468 Nov 16 10:00 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 16 09:48 requests.log.out
+-rw-r--r--@  1 runner  staff   19488 Nov 16 09:56 tree-ios-1-from-github-connect.txt
+-rw-r--r--@  1 runner  staff   18178 Nov 16 09:59 tree-ios-10-created.txt
+-rw-r--r--@  1 runner  staff   29479 Nov 16 09:59 tree-ios-11-settings-github.txt
+-rw-r--r--@  1 runner  staff   29479 Nov 16 10:00 tree-ios-11b-settings-github-workspaces.txt
+-rw-r--r--@  1 runner  staff   24016 Nov 16 09:57 tree-ios-2-repo-picker.txt
+-rw-r--r--@  1 runner  staff   19832 Nov 16 09:57 tree-ios-3-repo-picked.txt
+-rw-r--r--@  1 runner  staff   20140 Nov 16 09:57 tree-ios-3b-other-branch.txt
+-rw-r--r--@  1 runner  staff   17346 Nov 16 09:57 tree-ios-4-ready.txt
+-rw-r--r--@  1 runner  staff   18259 Nov 16 09:57 tree-ios-5-cloning.txt
+-rw-r--r--@  1 runner  staff   17614 Nov 16 09:58 tree-ios-6-failed-git.txt
+-rw-r--r--@  1 runner  staff   17885 Nov 16 09:58 tree-ios-7-failed-app-removed.txt
+-rw-r--r--@  1 runner  staff   17568 Nov 16 09:58 tree-ios-8-failed-sign-in.txt
+-rw-r--r--@  1 runner  staff   17568 Nov 16 09:59 tree-ios-9-failed-no-reason.txt
+-rw-r--r--   1 runner  staff     874 Nov 16 10:01 writes.txt
+-rw-r--r--   1 runner  staff  728834 Nov 16 10:01 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.sr-probe/shots/mac:
+total 4528
+drwxr-xr-x  21 runner  staff     672 Nov 16 10:01 .
+drwxr-xr-x   5 runner  staff     160 Nov 16 10:01 ..
+drwxr-xr-x  31 runner  staff     992 Nov 16 09:48 attachments
+-rw-r--r--   1 runner  staff  174503 Nov 16 09:48 mac-1-from-github-connect.png
+-rw-r--r--   1 runner  staff   63534 Nov 16 09:48 mac-10-created.png
+-rw-r--r--   1 runner  staff   74192 Nov 16 09:48 mac-11-settings-github.png
+-rw-r--r--   1 runner  staff   74186 Nov 16 09:48 mac-11b-settings-github-workspaces.png
+-rw-r--r--   1 runner  staff  208762 Nov 16 09:48 mac-2-repo-picker.png
+-rw-r--r--   1 runner  staff  177603 Nov 16 09:48 mac-3-repo-picked.png
+-rw-r--r--   1 runner  staff  186123 Nov 16 09:48 mac-3b-other-branch.png
+-rw-r--r--   1 runner  staff  113651 Nov 16 09:48 mac-4-ready.png
+-rw-r--r--   1 runner  staff   58179 Nov 16 09:48 mac-5-cloning.png
+-rw-r--r--   1 runner  staff   60718 Nov 16 09:48 mac-6-failed-git.png
+-rw-r--r--   1 runner  staff   61403 Nov 16 09:48 mac-7-failed-app-removed.png
+-rw-r--r--   1 runner  staff   59161 Nov 16 09:48 mac-8-failed-sign-in.png
+-rw-r--r--   1 runner  staff   58970 Nov 16 09:48 mac-9-failed-no-reason.png
+-rw-r--r--   1 runner  staff     670 Nov 16 10:01 not-served.txt
+-rw-r--r--   1 runner  staff   40083 Nov 16 09:48 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 16 09:35 requests.log.out
+-rw-r--r--   1 runner  staff     874 Nov 16 10:01 writes.txt
+-rw-r--r--   1 runner  staff  871943 Nov 16 09:48 xcodebuild-mac.log
