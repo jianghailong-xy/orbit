@@ -6,6 +6,7 @@ import { HELP_CATEGORIES, type HelpArticleMeta, type HelpMatch } from '@orbit/sh
 import { useHelpDrawer } from '../../lib/helpDrawer';
 import { forThisPage, getStartedArticles, highlightPieces, routeLabel } from '../../lib/help/drawerArticles';
 import { articleMeta } from '../../lib/help/helpContent';
+import { useHelpVote } from '../../lib/help/helpFeedback';
 import { helpArticleQuery, helpIndexQuery, helpSearchQuery } from '../../lib/help/helpQueries';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
 import { useVisibleHelpErrors } from '../../lib/help/useVisibleHelpErrors';
@@ -174,6 +175,7 @@ function DrawerArticle({ slug }: { slug: string }) {
   const help = useHelpDrawer();
   const article = useQuery(helpArticleQuery(slug));
   const { links } = useHelpAccount();
+  const { vote, choose } = useHelpVote('article', slug);
   if (article.isPending) {
     return (
       <div className="help-pane" data-help-pane="article" data-help-slug={slug}>
@@ -197,10 +199,10 @@ function DrawerArticle({ slug }: { slug: string }) {
       <HelpMarkdown body={a.body} account={links} />
       <div className="help-helpful" role="group" aria-label="Did this help?">
         <span>Did this help?</span>
-        <button type="button" className="help-helpful-button" data-answer="yes">
+        <button type="button" className="help-helpful-button" data-answer="yes" aria-pressed={vote === 'yes'} onClick={() => choose('yes')}>
           Yes
         </button>
-        <button type="button" className="help-helpful-button" data-answer="no">
+        <button type="button" className="help-helpful-button" data-answer="no" aria-pressed={vote === 'no'} onClick={() => choose('no')}>
           No
         </button>
         <button type="button" className="help-drawer-link help-ask-instead" onClick={() => help.openHelp({ tab: 'ask' })}>

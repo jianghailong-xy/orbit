@@ -3065,7 +3065,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // one of the preserved relations, and no trigger, function or DONE fence changes.
       '0860_schedule_check_only_asks',
       // 0870 creates `help_ask_admin_request` only; no existing table, trigger or DONE fence is touched.
-      '0870_help_ask_admin_request'],
+      '0870_help_ask_admin_request',
+      // 0880 creates `help_feedback` only; no existing table, trigger or DONE fence is touched.
+      '0880_help_feedback'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

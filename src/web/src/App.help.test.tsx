@@ -83,12 +83,15 @@ let container: HTMLDivElement;
 let root: Root | null = null;
 let requests: Array<{ url: string; auth: string | null }> = [];
 let sentTo: string[] = [];
+/** Every POST /api/help/feedback body, in order. */
+let votes: unknown[] = [];
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
   requests = [];
   sentTo = [];
+  votes = [];
   account = NEW_ACCOUNT;
   sessionAlive = true;
   vi.stubGlobal(
@@ -97,6 +100,10 @@ beforeEach(() => {
       const auth = (init?.headers as Record<string, string> | undefined)?.authorization ?? null;
       requests.push({ url, auth });
       const signedIn = auth !== null && sessionAlive;
+      if (url === '/api/help/feedback' && init?.method === 'POST' && signedIn) {
+        votes.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
       const answer: [number, unknown] =
         auth !== null && !sessionAlive
           ? [401, { statusCode: 401, message: 'Unauthorized' }]
@@ -234,8 +241,27 @@ describe('an article page', () => {
     // The code block, with its Copy.
     expect(body().querySelector('pre')?.textContent).toContain('orbit status');
     expect(body().querySelector('.help-md-copy')?.textContent).toBe('Copy');
-    // Did this help?, rendered (the answer is wired by a later task).
+    // Did this help?, rendered; signed out a press is shown and not sent (there is no one to count once).
     expect([...container.querySelectorAll('.help-feedback button')].map((b) => b.textContent)).toEqual(['Yes', 'No']);
+    await act(async () => container.querySelector<HTMLButtonElement>('.help-feedback [data-answer="no"]')!.click());
+    expect(container.querySelector('.help-feedback [data-answer="no"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(requests.map((r) => r.url)).not.toContain('/api/help/feedback');
+  });
+
+  it('signed in, Did this help? sends the article\'s Yes / No to POST /api/help/feedback', async () => {
+    signIn();
+    await visit('/help/machines-and-engines/machine-offline');
+    const press = async (answer: 'yes' | 'no') => {
+      await act(async () => container.querySelector<HTMLButtonElement>(`.help-feedback [data-answer="${answer}"]`)!.click());
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    };
+    await press('yes');
+    await press('no');
+    expect(votes).toEqual([
+      { kind: 'article', id: 'machine-offline', helpful: true },
+      { kind: 'article', id: 'machine-offline', helpful: false },
+    ]);
+    expect([...container.querySelectorAll('.help-feedback button')].map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
   });
 
   it('hides the iPhone-only passage on the web', async () => {

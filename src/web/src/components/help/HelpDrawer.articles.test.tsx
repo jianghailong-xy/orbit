@@ -89,6 +89,8 @@ const SEARCH: HelpSearchResult = {
 
 let runners: unknown[] = [];
 let requests: string[] = [];
+/** Every POST /api/help/feedback body, in order. */
+let votes: unknown[] = [];
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -96,11 +98,16 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
   requests = [];
+  votes = [];
   runners = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       requests.push(url);
+      if (url === '/api/help/feedback' && init?.method === 'POST') {
+        votes.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
       const answer: [number, unknown] =
         url === '/api/help'
           ? [200, INDEX]
@@ -290,6 +297,30 @@ describe('reading an article in the drawer', () => {
     expect(reading.querySelector('a.help-md-action')).toBeNull();
     const helpful = reading.querySelector<HTMLElement>('[aria-label="Did this help?"]')!;
     expect([...helpful.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Yes', 'No', 'Ask instead']);
+  });
+
+  it('Did this help? sends the article\'s Yes / No, and only that; the last press is the one pressed', async () => {
+    localStorage.setItem('orbit_token', 'tok');
+    await readOffline('/tasks');
+    const helpful = drawer().querySelector<HTMLElement>('.help-reading [aria-label="Did this help?"]')!;
+    const yes = helpful.querySelector<HTMLButtonElement>('[data-answer="yes"]')!;
+    const no = helpful.querySelector<HTMLButtonElement>('[data-answer="no"]')!;
+    await click(no);
+    expect(votes).toEqual([{ kind: 'article', id: 'machine-offline', helpful: false }]);
+    expect(no.getAttribute('aria-pressed')).toBe('true');
+    await click(yes);
+    expect(votes).toEqual([
+      { kind: 'article', id: 'machine-offline', helpful: false },
+      { kind: 'article', id: 'machine-offline', helpful: true },
+    ]);
+    expect([yes, no].map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false']);
+  });
+
+  it('signed out, Did this help? is pressed and nothing is sent', async () => {
+    await readOffline('/tasks');
+    await click(drawer().querySelector<HTMLElement>('.help-reading [data-answer="yes"]')!);
+    expect(drawer().querySelector('.help-reading [data-answer="yes"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(votes).toEqual([]);
   });
 
   it('an orbit:/ link is a button to the account’s own machine', async () => {

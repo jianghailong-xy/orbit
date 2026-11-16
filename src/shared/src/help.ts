@@ -205,6 +205,35 @@ export interface HelpAskAdminResult {
   at: string;
 }
 
+// ── Did this help? / Did this answer it? (board 03 decision 3: counts only, no text) ─────────────────────────────
+
+/** What a Yes / No is about: an article (by its slug) or one Ask answer (by `<Ask session id>:<seq>`). */
+export const HELP_FEEDBACK_KINDS = ['article', 'answer'] as const;
+export type HelpFeedbackKind = (typeof HELP_FEEDBACK_KINDS)[number];
+
+/** POST /api/help/feedback: one person's Yes / No on one item. A second vote on the same item replaces the first. */
+export interface HelpFeedbackBody {
+  kind: HelpFeedbackKind;
+  id: string;
+  helpful: boolean;
+}
+
+/** One article's counts on Admin → Help feedback. */
+export interface HelpFeedbackArticle {
+  slug: string;
+  /** The article's title, or null for a slug the library no longer has. */
+  title: string | null;
+  category: HelpCategorySlug | null;
+  yes: number;
+  no: number;
+}
+
+/** GET /api/admin/help-feedback: per-article counts, most No first, and the Ask answers' totals. Nothing else. */
+export interface HelpFeedbackSummary {
+  articles: HelpFeedbackArticle[];
+  answers: { yes: number; no: number };
+}
+
 /** The engine's name as the picker shows it. */
 export function helpAskEngineLabel(engine: string): string {
   switch (engine) {

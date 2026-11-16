@@ -29,6 +29,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
+import { AdminHelpFeedbackPage } from './pages/AdminHelpFeedbackPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
@@ -295,6 +296,7 @@ export function App() {
             <Route path="sign-in" element={<AdminSignInPage />} />
             <Route path="email" element={<AdminEmailPage />} />
             <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="help-feedback" element={<AdminHelpFeedbackPage />} />
           </Route>
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />

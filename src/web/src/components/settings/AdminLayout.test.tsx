@@ -10,10 +10,10 @@ import { resetSettingsReturn } from '../../lib/settingsReturn';
 
 /**
  * Admin drawn as Settings is (owner's choice A, docs/mocks/admin-settings-style): it takes over the window, no
- * app sidebar, a nav of its pages in three groups — Accounts (Users with its count, Sign-in), Server (Email),
+ * app sidebar, a nav of its pages in three groups — Accounts (Users with its count, Sign-in), Server (Email, Help feedback),
  * Integrations (Feishu bots) — each setting's On / Off as a dot, and Back to Orbit and Esc return to the page Admin
  * was opened from, across pages inside it. The addresses stay /admin, /admin/sign-in, /admin/email and
- * /admin/integrations.
+ * /admin/integrations; Help feedback is /admin/help-feedback.
  *
  * Mounted through the real App routes under the real BrowserRouter; the pages are reduced to a line saying which
  * one answered.
@@ -46,6 +46,7 @@ vi.mock('../../pages/AdminEmailPage', async (original) => ({
   ...(await original<typeof import('../../pages/AdminEmailPage')>()),
   AdminEmailPage: () => <p data-page="email">email</p>,
 }));
+vi.mock('../../pages/AdminHelpFeedbackPage', () => ({ AdminHelpFeedbackPage: () => <p data-page="help-feedback">help feedback</p> }));
 vi.mock('../../pages/AdminIntegrationsPage', async (original) => ({
   ...(await original<typeof import('../../pages/AdminIntegrationsPage')>()),
   AdminIntegrationsPage: () => <p data-page="integrations">integrations</p>,
@@ -167,7 +168,13 @@ describe('the Admin window', () => {
           { label: 'Sign-in', href: '/admin/sign-in', meta: null, dot: 'Off' },
         ],
       },
-      { title: 'Server', rows: [{ label: 'Email', href: '/admin/email', meta: null, dot: 'On' }] },
+      {
+        title: 'Server',
+        rows: [
+          { label: 'Email', href: '/admin/email', meta: null, dot: 'On' },
+          { label: 'Help feedback', href: '/admin/help-feedback', meta: null, dot: null },
+        ],
+      },
       { title: 'Integrations', rows: [{ label: 'Feishu bots', href: '/admin/integrations', meta: null, dot: 'On' }] },
     ]);
     expect(page()).toBe('users');
@@ -180,6 +187,7 @@ describe('the Admin window', () => {
       ['Sign-in', '/admin/sign-in', 'sign-in'],
       ['Email', '/admin/email', 'email'],
       ['Feishu bots', '/admin/integrations', 'integrations'],
+      ['Help feedback', '/admin/help-feedback', 'help-feedback'],
       ['Users', '/admin', 'users'],
     ] as const) {
       await click([...nav().querySelectorAll('a.settings-nav-row')].find((a) => a.textContent?.includes(label)));

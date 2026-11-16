@@ -4,6 +4,7 @@ import { HELP_CATEGORIES } from '@orbit/shared';
 import { HelpMarkdown } from '../../components/help/HelpMarkdown';
 import { Spinner } from '../../components/ui/Spinner';
 import { articleMeta, forPlatform, tableOfContents } from '../../lib/help/helpContent';
+import { useHelpVote } from '../../lib/help/helpFeedback';
 import { helpArticlePath, helpArticleQuery } from '../../lib/help/helpQueries';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
 import { useDocumentTitle } from './useDocumentTitle';
@@ -11,13 +12,14 @@ import { useDocumentTitle } from './useDocumentTitle';
 /**
  * /help/:category/:slug (docs/mocks/help-center board 01 §4): one article, readable signed out — breadcrumb,
  * title, read time, updated date and platforms, the body as the web reads it (HelpMarkdown), "On this page" on
- * the right, and Did this help? (its answer is recorded by a later task). An address naming the wrong category
+ * the right, and Did this help? (recorded with POST /api/help/feedback when signed in). An address naming the wrong category
  * moves to the article's own.
  */
 export function HelpArticlePage() {
   const { category = '', slug = '' } = useParams();
   const article = useQuery(helpArticleQuery(slug));
   const { links } = useHelpAccount();
+  const { vote, choose } = useHelpVote('article', slug);
   useDocumentTitle(article.data?.title);
   if (article.isPending) {
     return (
@@ -53,10 +55,10 @@ export function HelpArticlePage() {
         <HelpMarkdown body={a.body} account={links} />
         <div className="help-feedback" role="group" aria-label="Did this help?">
           <span>Did this help?</span>
-          <button type="button" className="help-feedback-button" data-answer="yes">
+          <button type="button" className="help-feedback-button" data-answer="yes" aria-pressed={vote === 'yes'} onClick={() => choose('yes')}>
             Yes
           </button>
-          <button type="button" className="help-feedback-button" data-answer="no">
+          <button type="button" className="help-feedback-button" data-answer="no" aria-pressed={vote === 'no'} onClick={() => choose('no')}>
             No
           </button>
         </div>

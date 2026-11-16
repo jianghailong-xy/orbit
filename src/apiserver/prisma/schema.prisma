@@ -334,6 +334,7 @@ model User {
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
   helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0870)
   helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0870)
+  helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0880)
   terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
   terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
@@ -10027,4 +10028,21 @@ model HelpAskAdminRequest {
   @@index([adminId])
   @@index([taskId])
   @@map("help_ask_admin_request")
+}
+
+/// Did this help? / Did this answer it? (migration 0880; docs/mocks/help-center board 03, decision 3): one person's
+/// Yes / No on one article (`kind` article, `itemId` its slug) or one Ask answer (`kind` answer, `itemId`
+/// `<Ask session id>:<seq>`). One vote per person per item, the last one standing. No text column, by decision:
+/// Admin → Help feedback shows counts only. Written only by help/help-feedback.ts#record.
+model HelpFeedback {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  itemId    String   @map("item_id")
+  helpful   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, kind, itemId])
+  @@index([kind, itemId])
+  @@map("help_feedback")
 }

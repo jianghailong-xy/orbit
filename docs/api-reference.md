@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 34 |
-| `user` | 466 |
-| `admin` | 28 |
+| `user` | 467 |
+| `admin` | 29 |
 | `runner` | 198 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **730** |
+| **Total** | **732** |
 
 ## Public routes
 
@@ -143,6 +143,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/help/ask/:id/stuck` | path `id` | `HelpAskController.stuck` |
 | `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
 | `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
+| `POST` | `/api/help/feedback` | body `HelpFeedbackDto` | `HelpFeedbackController.record` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |
 | `PATCH` | `/api/integrations/feishu` | body `ChangeFeishuAppDto` | `FeishuController.change` |
@@ -569,6 +570,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/admin/email` | — | `AdminEmailController.get` |
 | `PUT` | `/api/admin/email` | body `UpdateEmailSettingsDto` | `AdminEmailController.update` |
 | `POST` | `/api/admin/email/test` | — | `AdminEmailController.test` |
+| `GET` | `/api/admin/help-feedback` | — | `AdminHelpFeedbackController.summary` |
 | `GET` | `/api/admin/integrations/feishu` | — | `FeishuAdminController.settings` |
 | `PUT` | `/api/admin/integrations/feishu` | body `SetFeishuAdminDto` | `FeishuAdminController.setAllowed` |
 | `POST` | `/api/admin/managed-runners/:id/volume-switch` | body `ManagedRunnerVolumeSwitchDto`; path `id` | `ManagedRunnerAdminController.switchVolume` |

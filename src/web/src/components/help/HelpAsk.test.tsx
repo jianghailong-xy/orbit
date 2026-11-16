@@ -69,6 +69,8 @@ const STUCK: HelpAskStuck = {
 };
 let stuck: HelpAskStuck = STUCK;
 let posts: Array<{ url: string; body: unknown }> = [];
+/** Did this answer it?'s POST /api/help/feedback bodies, kept apart from `posts`. */
+let votes: unknown[] = [];
 let container: HTMLDivElement;
 let root: Root | null = null;
 
@@ -78,6 +80,7 @@ beforeEach(() => {
   // Signed in, as the drawer always is: link buttons resolve for the reader's account.
   localStorage.setItem('orbit_token', 'tok');
   posts = [];
+  votes = [];
   stuck = STUCK;
   streamed.events = [];
   streamed.idle = true;
@@ -89,6 +92,10 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/help/feedback' && init?.method === 'POST') {
+        votes.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
       if (init?.method === 'POST') posts.push({ url, body: JSON.parse(String(init.body)) });
       const answer: [number, unknown] =
         url === '/api/help'
@@ -313,7 +320,12 @@ describe('an answer (board 02 ②)', () => {
     expect(open.dataset.orbitLink).toBe('orbit:/settings/machines/r-build');
 
     expect(pane().querySelector('[data-help-still-stuck]')).toBeNull();
+    expect(votes).toEqual([]);
+    await click(button('Yes')!);
+    // The answer's Yes / No, by the Ask and the question's turn, and nothing of either's words.
+    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:1', helpful: true }]);
     await click(button('No')!);
+    expect(votes).toEqual([{ kind: 'answer', id: 's-ask:1', helpful: true }, { kind: 'answer', id: 's-ask:1', helpful: false }]);
     expect(pane().querySelector('[data-help-still-stuck]')).not.toBeNull();
 
     await click([...pane().querySelectorAll<HTMLElement>('.help-ask-answer-body .help-ask-cite')][2]);

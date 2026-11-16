@@ -10,6 +10,7 @@ import Markdown from '../Markdown';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { useHelpDrawer } from '../../lib/helpDrawer';
 import { forThisPage, getStartedArticles, routeLabel } from '../../lib/help/drawerArticles';
+import { askAnswerId, useHelpVote } from '../../lib/help/helpFeedback';
 import { helpArticlePath, helpIndexQuery } from '../../lib/help/helpQueries';
 import { resolveOrbitLink } from '../../lib/help/helpContent';
 import {
@@ -419,6 +420,7 @@ export function AskConversation({
         {exchanges.map((ex, i) => (
           <Exchange
             key={ex.seq}
+            sessionId={sessionId}
             exchange={ex}
             streaming={i === exchanges.length - 1 && working ? stream.streamingText : ''}
             working={i === exchanges.length - 1 && working}
@@ -442,6 +444,7 @@ export function AskConversation({
 }
 
 function Exchange({
+  sessionId,
   exchange,
   streaming,
   working,
@@ -449,6 +452,7 @@ function Exchange({
   onOpenArticle,
   stillStuck,
 }: {
+  sessionId: string;
   exchange: AskExchange;
   streaming: string;
   working: boolean;
@@ -458,7 +462,7 @@ function Exchange({
   stillStuck: ReactNode;
 }) {
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [verdict, setVerdict] = useState<'yes' | 'no' | null>(null);
+  const { vote: verdict, choose: setVerdict } = useHelpVote('answer', askAnswerId(sessionId, exchange.seq));
   const text = working && streaming ? streaming : exchange.answer;
   const parsed = useMemo(() => parseAnswer(text), [text]);
   const line = toolLine(exchange.tools);

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ApiOutlined, LeftOutlined, LoginOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApiOutlined, LeftOutlined, LoginOutlined, MailOutlined, QuestionCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../../api';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
@@ -106,6 +106,7 @@ function AdminNav() {
         </NavGroup>
         <NavGroup title="Server">
           <NavRow to="/admin/email" icon={<MailOutlined />} label="Email" trailing={<OnDot on={email.data?.on} />} />
+          <NavRow to="/admin/help-feedback" icon={<QuestionCircleOutlined />} label="Help feedback" />
         </NavGroup>
         <NavGroup title="Integrations">
           <NavRow to="/admin/integrations" icon={<ApiOutlined />} label="Feishu bots" trailing={<OnDot on={feishu.data?.allowed} />} />
