@@ -94,8 +94,11 @@ function failureOf(row: CoordinatorHandoffRow): { failureCode: CoordinatorHandof
   return { failureCode: code, failureReason: coordinatorHandoffFailureSentence(code) };
 }
 
+/** A handoff recorded before `kind` was added moved watches only, so a wait without one reads as WATCH. */
 function movedWaitsOf(row: CoordinatorHandoffRow): CoordinatorPendingWait[] {
-  return Array.isArray(row.movedWaits) ? (row.movedWaits as CoordinatorPendingWait[]) : [];
+  if (!Array.isArray(row.movedWaits)) return [];
+  return (row.movedWaits as Array<Omit<CoordinatorPendingWait, 'kind'> & { kind?: CoordinatorPendingWait['kind'] }>)
+    .map((wait) => ({ ...wait, kind: wait.kind ?? 'WATCH' }));
 }
 
 /** What every handoff endpoint answers. */

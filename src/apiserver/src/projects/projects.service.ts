@@ -5002,23 +5002,66 @@ export class ProjectsService {
                 FOR UPDATE)
             RETURNING "id", "state"`;
           movedWatches = moved.map((row) => row.id);
+          // Then the outgoing coordinator's scheduled wakeups and its wakeup loop (design v2 §1), still in
+          // this transaction: a wakeup filed onto a completed session is dropped, and a loop's ticks would
+          // stop. The loop first and its PENDING tick after it — the order the wakeup worker takes them in
+          // (settleLoopTick: session, loop, tick) — each FOR UPDATE in id order in one statement. Only
+          // `session_id` changes, so a loop keeps its schedule, and its tick its due time. A wakeup already
+          // DELIVERED stays with the turn it was filed onto. Their new session FK check takes the candidate
+          // Session FOR KEY SHARE, already held.
+          const movedLoops = await tx.$queryRaw<Array<{ id: string }>>`
+            UPDATE "session_wakeup_loop" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_wakeup_loop"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'ACTIVE'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id"`;
+          const movedWakeups = await tx.$queryRaw<Array<{ id: string; loop_id: string | null }>>`
+            UPDATE "session_scheduled_wakeup" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_scheduled_wakeup"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'PENDING'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id", "loop_id"`;
           // The handoff this replacement completes, in the same transaction as the swap (rank 46,
           // after the watches): COMPLETED with its successor and the waits that moved, labelled as the
           // preview read them before the swap. A compare-and-set on HANDING_OVER — the one state a
           // replacement is run from — so a handoff that is not that any more rolls the swap back.
           if (handoff) {
-            const labels = new Map(handoff.waits.map((wait) => [wait.id, wait.label]));
+            const preview = new Map(handoff.waits.map((wait) => [`${wait.kind}:${wait.id}`, wait]));
             // Oldest first, as the preview lists them (RETURNING has no order); one created since
             // the preview, last.
-            const rank = new Map(handoff.waits.map((wait, index) => [wait.id, index]));
-            const ordered = [...moved].sort((a, b) =>
-              (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER)
-              || a.id.localeCompare(b.id));
-            const movedWaits: CoordinatorPendingWait[] = ordered.map((row) => ({
-              id: row.id,
-              label: labels.get(row.id) ?? pendingWaitLabel(null, []),
-              paused: row.state === 'PAUSED',
-            }));
+            const rank = new Map(handoff.waits.map((wait, index) => [`${wait.kind}:${wait.id}`, index]));
+            const rows: CoordinatorPendingWait[] = [
+              ...moved.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WATCH',
+                label: preview.get(`WATCH:${row.id}`)?.label ?? pendingWaitLabel(null, []),
+                paused: row.state === 'PAUSED',
+              })),
+              ...movedLoops.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'LOOP',
+                label: preview.get(`LOOP:${row.id}`)?.label ?? 'Wakeup loop',
+                paused: false,
+              })),
+              // A loop's tick moves with its loop and is listed as the loop.
+              ...movedWakeups.filter((row) => row.loop_id === null).map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WAKEUP',
+                label: preview.get(`WAKEUP:${row.id}`)?.label ?? 'Scheduled wakeup',
+                paused: false,
+              })),
+              // SubAgent runs and bg_run jobs move no row: their wakes are forwarded when they end
+              // (runner-api/handoff-wake-forward.ts), so the preview's list of them is what moved.
+              ...handoff.waits.filter((wait) => wait.kind === 'SUBAGENT' || wait.kind === 'JOB'),
+            ];
+            const key = (wait: CoordinatorPendingWait) => `${wait.kind}:${wait.id}`;
+            const movedWaits = rows.sort((a, b) =>
+              (rank.get(key(a)) ?? Number.MAX_SAFE_INTEGER) - (rank.get(key(b)) ?? Number.MAX_SAFE_INTEGER)
+              || key(a).localeCompare(key(b)));
             const completed = await tx.coordinatorHandoff.updateMany({
               where: { id: handoff.id, fromSessionId: project.coordinatorSessionId, state: 'HANDING_OVER' },
               data: {
@@ -5105,10 +5148,17 @@ export class ProjectsService {
   }
 
   /**
-   * The waits a replacement would move (see the swap in `coordinator`): every live watch — ACTIVE or
-   * PAUSED — whose observer is this project's current coordinator, oldest first, as
-   * `{ id, label, paused }` for the confirm dialog. Empty when the project has no coordinator or it is
-   * waiting on nothing.
+   * The pending work a replacement hands over (see the swap in `coordinator`), oldest first, each with its
+   * kind, for the confirm dialog (docs/coordinator-handoff-v2-design.md §1):
+   *
+   *   WATCH    — every live watch, ACTIVE or PAUSED, whose observer is this project's current coordinator;
+   *   SUBAGENT — its running `delegate` runs that owe it a wake, labelled by their description;
+   *   JOB      — the `bg_run` jobs it has running (`Session.runningBgJobs`), labelled by the description the
+   *              job was started with, else its command;
+   *   WAKEUP   — its pending one-shot `schedule_wakeup`, labelled by its reason;
+   *   LOOP     — its running wakeup loop, labelled by its reason, else its prompt.
+   *
+   * Empty when the project has no coordinator or it is waiting on nothing.
    */
   async coordinatorPendingWaits(ownerId: string, id: string): Promise<CoordinatorPendingWait[]> {
     const project = await this.prisma.project.findFirst({
@@ -5116,33 +5166,92 @@ export class ProjectsService {
       select: { coordinatorSessionId: true },
     });
     if (!project) throw new NotFoundException('project not found');
-    if (!project.coordinatorSessionId) return [];
-    const watches = await this.prisma.watch.findMany({
-      where: { ownerId, observerSessionId: project.coordinatorSessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        state: true,
-        predicate: true,
-        targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
-      },
-    });
-    if (watches.length === 0) return [];
+    const sessionId = project.coordinatorSessionId;
+    if (!sessionId) return [];
+    const [watches, runs, coordinator, wakeups, loops] = await Promise.all([
+      this.prisma.watch.findMany({
+        where: { ownerId, observerSessionId: sessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          state: true,
+          predicate: true,
+          createdAt: true,
+          targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
+        },
+      }),
+      this.prisma.subagentRun.findMany({
+        where: { ownerId, sessionId, status: 'RUNNING', wakeOwed: true, wakeFiledAt: null },
+        select: { id: true, description: true, createdAt: true },
+      }),
+      this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { runningBgJobs: true } }),
+      this.prisma.sessionScheduledWakeup.findMany({
+        where: { sessionId, loopId: null, state: 'PENDING' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+      this.prisma.sessionWakeupLoop.findMany({
+        where: { sessionId, state: 'ACTIVE' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+    ]);
+    const jobIds = coordinator?.runningBgJobs ?? [];
     const ids = (kind: string) => [...new Set(watches.flatMap((w) =>
       w.targets.filter((t) => t.targetKind === kind).map((t) => t.targetResourceId)))];
-    const [tasks, sessions] = await Promise.all([
+    const [tasks, sessions, jobCalls] = await Promise.all([
       this.prisma.task.findMany({ where: { id: { in: ids('TASK') }, ownerId }, select: { id: true, title: true } }),
       this.prisma.session.findMany({
         where: { id: { in: ids('SESSION') }, ownerId },
         select: { id: true, title: true },
       }),
+      // The launch the runner recorded for each job (runner-go background_job.go: a Bash tool_use whose id is
+      // the job's), which carries the description bg_run was given.
+      jobIds.length === 0 ? [] : this.prisma.toolCall.findMany({
+        where: { sessionId, toolUseId: { in: jobIds } },
+        select: { toolUseId: true, input: true, startedAt: true },
+      }),
     ]);
     const titles = new Map<string, string>([...tasks, ...sessions].map((row) => [row.id, row.title ?? 'Untitled']));
-    return watches.map((w) => ({
-      id: w.id,
-      label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
-      paused: w.state === 'PAUSED',
-    }));
+    const launches = new Map(jobCalls.map((call) => [call.toolUseId, call]));
+    const text = (...values: Array<unknown>) =>
+      values.map((value) => (typeof value === 'string' ? value.trim() : '')).find((value) => value !== '') ?? null;
+    const dated: Array<{ at: number; wait: CoordinatorPendingWait }> = [
+      ...watches.map((w) => ({
+        at: w.createdAt.getTime(),
+        wait: {
+          id: w.id,
+          kind: 'WATCH' as const,
+          label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
+          paused: w.state === 'PAUSED',
+        },
+      })),
+      ...runs.map((run) => ({
+        at: run.createdAt.getTime(),
+        wait: { id: run.id, kind: 'SUBAGENT' as const, label: text(run.description) ?? 'SubAgent run', paused: false },
+      })),
+      ...jobIds.map((jobId) => {
+        const launch = launches.get(jobId);
+        const input = (launch?.input ?? {}) as { description?: unknown; command?: unknown };
+        return {
+          at: launch?.startedAt?.getTime() ?? Number.MAX_SAFE_INTEGER,
+          wait: { id: jobId, kind: 'JOB' as const, label: text(input.description, input.command) ?? jobId, paused: false },
+        };
+      }),
+      ...wakeups.map((wakeup) => ({
+        at: wakeup.createdAt.getTime(),
+        wait: {
+          id: wakeup.id,
+          kind: 'WAKEUP' as const,
+          label: text(wakeup.reason, wakeup.prompt) ?? 'Scheduled wakeup',
+          paused: false,
+        },
+      })),
+      ...loops.map((loop) => ({
+        at: loop.createdAt.getTime(),
+        wait: { id: loop.id, kind: 'LOOP' as const, label: text(loop.reason, loop.prompt) ?? 'Wakeup loop', paused: false },
+      })),
+    ];
+    // Stable: watches keep the (created_at, id) order they were read in.
+    return dated.sort((a, b) => a.at - b.at).map((entry) => entry.wait);
   }
 
   /**

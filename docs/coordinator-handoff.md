@@ -21,6 +21,14 @@
      task_list win over the note;
    - every live wait (ACTIVE **and PAUSED**, a PAUSED one staying paused) moves to the successor, in
      the swap transaction;
+   - after the watches, in the same transaction, the outgoing coordinator's pending `schedule_wakeup`
+     and its running wakeup loop (with the loop's tick) move to the successor; only `session_id`
+     changes, so a loop keeps its schedule;
+   - its running `delegate` runs and `bg_run` jobs keep running where they are. When one ends, its
+     wake goes to the successor instead of being dropped, following the chain if that one was handed
+     over too, and says "Started by the previous coordinator: <description>". A coordinator that
+     ended any other way still drops it. A wake that arrives between the outgoing coordinator's
+     completion and the swap (handoff still `HANDING_OVER`) is answered 503 and asked again;
    - the handoff becomes `COMPLETED`, also in that transaction.
 3. **The turn fails, times out, or the owner stops it.** The state becomes `FAILED` with a reason.
    Nothing else changes: the old coordinator stays current and no wait moves.
@@ -34,7 +42,7 @@ All are owner-authenticated and take a public project id. Each POST answers `Coo
 
 | Route | Board action | Allowed from | Effect |
 |---|---|---|---|
-| `GET /projects/:id/coordinator/pending-waits` | confirm dialog's "N pending waits move over" | any | `CoordinatorPendingWait[]` (`{ id, label, paused }`), oldest first; `[]` hides the row |
+| `GET /projects/:id/coordinator/pending-waits` | confirm dialog's "N pending waits move over" | any | `CoordinatorPendingWait[]` (`{ id, kind, label, paused }`), oldest first; `[]` hides the row. `kind` is `WATCH`, `SUBAGENT` (a running run owing a wake), `JOB` (a running `bg_run` job, labelled by its description), `WAKEUP` or `LOOP` |
 | `POST /projects/:id/coordinator/handoff` | **Hand over** | open coordinator, no live handoff | queues the note turn → `WRITING`. A live handoff is answered as it stands; a `FAILED` one is retried |
 | `POST /projects/:id/coordinator/handoff/skip` | **Skip the note** / **Hand over without a note** | `WRITING`, `FAILED`, or no handoff | the replacement right away with no note → `COMPLETED` |
 | `POST /projects/:id/coordinator/handoff/cancel` | **Cancel handover** / **Keep this coordinator** | `WRITING`, `FAILED` | `CANCELLED`; the note turn is withdrawn if queued, stopped if running; nothing else changes |
@@ -68,7 +76,7 @@ the outgoing session, and for the successor once there is one.
 | `handoffFromSessionId` | the previous coordinator; the note card links to it |
 | `note` | the note text, or null when it was skipped |
 | `handedOverAt` | "Handoff from the previous coordinator · 3:42 PM" |
-| `movedWaits` | `CoordinatorPendingWait[]` that moved here ("2 waits moved here") |
+| `movedWaits` | `CoordinatorPendingWait[]` that moved here ("2 waits moved here"), every kind; one recorded before `kind` existed reads as `WATCH` |
 
 ## Board 02 states → API
 

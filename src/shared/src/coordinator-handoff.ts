@@ -68,14 +68,30 @@ export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHan
   REPLACE_FAILED: 'the new coordinator could not be opened.',
 };
 
-/** One wait the outgoing coordinator set (a `task_await` or a watch), as the confirm dialog and the
- *  successor's "N waits moved here" list name it. A PAUSED watch moves too and stays paused. */
+/**
+ * What kind of pending work a `CoordinatorPendingWait` is (docs/coordinator-handoff-v2-design.md §1):
+ *
+ *   WATCH     — a `task_await` or a watch; it moves to the successor in the swap.
+ *   SUBAGENT  — a running `delegate` run owing its coordinator a wake; it keeps running where it is, and its
+ *               wake goes to the successor ("Started by the previous coordinator: …").
+ *   JOB       — a running `bg_run` job; the same as a SubAgent run.
+ *   WAKEUP    — the pending `schedule_wakeup`; it moves in the swap and keeps its due time.
+ *   LOOP      — the running wakeup loop; it moves in the swap and keeps its schedule.
+ */
+export type CoordinatorPendingWaitKind = 'WATCH' | 'SUBAGENT' | 'JOB' | 'WAKEUP' | 'LOOP';
+
+/** One piece of pending work the outgoing coordinator has, as the confirm dialog and the successor's "N waits
+ *  moved here" list name it. A PAUSED watch moves too and stays paused. */
 export interface CoordinatorPendingWait {
-  /** The watch's id. */
+  /** The watch's, run's, wakeup's or loop's id; a bg_run job's `bgj_…` id. */
   id: string;
-  /** e.g. `Waiting for "Fix login redirect" to be DONE`. */
+  /** Added with v2: what kind of work it is. A client that predates it ignores it; a handoff recorded
+   *  before it was added reads as WATCH. */
+  kind: CoordinatorPendingWaitKind;
+  /** e.g. `Waiting for "Fix login redirect" to be DONE`, or a run's or job's description such as
+   *  "Deploy 55a189aa3 to production". */
   label: string;
-  /** True for a PAUSED watch: it moves and stays paused. */
+  /** True for a PAUSED watch: it moves and stays paused. False for every other kind. */
   paused: boolean;
 }
 

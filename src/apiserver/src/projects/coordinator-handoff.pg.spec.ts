@@ -236,8 +236,8 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
   assert.equal(inn.coordinatorHandoffReceived?.handoffFromSessionId, f.outgoing);
   assert.equal(inn.coordinatorHandoffReceived?.note, NOTE);
   assert.deepEqual(inn.coordinatorHandoffReceived?.movedWaits, [
-    { id: active, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
-    { id: paused, label: 'Waiting for "Payment retries" to finish its turn', paused: true },
+    { id: active, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: paused, kind: 'WATCH', label: 'Waiting for "Payment retries" to finish its turn', paused: true },
   ]);
   assert.ok(s.published.includes(successor!), 'the successor is told it received a handoff');
 
@@ -490,7 +490,7 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
   await watch(f, f.bystander, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_DONE' });
   const s = services(f);
   assert.deepEqual(await s.projects.coordinatorPendingWaits(f.ownerId, f.projectId), [
-    { id: active, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
-    { id: paused, label: 'Waiting for "Payment retries" to finish its turn', paused: true },
+    { id: active, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: paused, kind: 'WATCH', label: 'Waiting for "Payment retries" to finish its turn', paused: true },
   ]);
 });

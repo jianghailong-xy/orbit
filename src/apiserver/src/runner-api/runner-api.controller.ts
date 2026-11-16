@@ -314,6 +314,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { forwardedDescription, handoffSuccessorOf } from './handoff-wake-forward';
 import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
@@ -6476,7 +6477,9 @@ export class RunnerApiController {
    *
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
-   * 200 because there is nothing for the runner to try again.
+   * 200 because there is nothing for the runner to try again — unless it ended by a COMPLETED coordinator
+   * handoff: then the wake is filed onto the last successor of the handoff chain, its description saying the
+   * previous coordinator started the job (handoff-wake-forward.ts).
    *
    * A job's exit is written into the turn the session is running, when it is running one this runtime
    * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
@@ -6503,38 +6506,63 @@ export class RunnerApiController {
     const receivedAt = new Date();
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
-    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
-    let merged = false;
     try {
-      const turn = await this.sessions.createTurn(
-        runner.ownerId,
-        sessionId,
-        { clientTurnId, content: '', intent: 'NEXT_TURN' },
-        {
-          steerIfLive: dto.trigger === 'exit',
-          coalesce: async (tx, session, route) => {
-            if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
-              throw new StaleBackgroundWake(dto.jobId, dto.trigger);
-            }
-            const queued = await undeliveredWakeTurn(tx, sessionId, route);
-            merged = queued !== null;
-            const filedOn = queued?.clientTurnId ?? clientTurnId;
-            await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
-            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
-            return queued;
-          },
-        },
-      );
-      return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
+      return await this.fileBackgroundWakeOn(runner.ownerId, sessionId, dto, receivedAt);
     } catch (e) {
       // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output or a stall
       // its job's exit already reported (StaleBackgroundWake).
+      if (e instanceof StaleBackgroundWake) return { outcome: 'DROPPED' };
+      if (!(e instanceof SessionNotSendable || e instanceof NotFoundException)) throw e;
+    }
+    // The session has ended. One that ended by a COMPLETED coordinator handoff forwards the wake to its last
+    // successor, naming that the previous coordinator started the job (docs/coordinator-handoff-v2-design.md
+    // §1); a handoff still HANDING_OVER answers 503 (HandoffInFlight), which the runner asks again for. A
+    // session that ended any other way drops it.
+    const successor = await handoffSuccessorOf(this.prisma, sessionId);
+    if (!successor) return { outcome: 'DROPPED' };
+    try {
+      return await this.fileBackgroundWakeOn(runner.ownerId, successor, {
+        ...dto,
+        description: forwardedDescription(dto.description, dto.command),
+      }, receivedAt);
+    } catch (e) {
       if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
         return { outcome: 'DROPPED' };
       }
       throw e;
     }
+  }
+
+  /** File one background job's wake as a turn of `sessionId`: its own session, or the successor a handoff forwards it to. */
+  private async fileBackgroundWakeOn(
+    ownerId: string,
+    sessionId: string,
+    dto: BackgroundWakeDto,
+    receivedAt: Date,
+  ): Promise<BackgroundWakeReceipt> {
+    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
+    let merged = false;
+    const turn = await this.sessions!.createTurn(
+      ownerId,
+      sessionId,
+      { clientTurnId, content: '', intent: 'NEXT_TURN' },
+      {
+        steerIfLive: dto.trigger === 'exit',
+        coalesce: async (tx, session, route) => {
+          if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+          if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+            throw new StaleBackgroundWake(dto.jobId, dto.trigger);
+          }
+          const queued = await undeliveredWakeTurn(tx, sessionId, route);
+          merged = queued !== null;
+          const filedOn = queued?.clientTurnId ?? clientTurnId;
+          await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
+          if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
+          return queued;
+        },
+      },
+    );
+    return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
   }
 
   /**
