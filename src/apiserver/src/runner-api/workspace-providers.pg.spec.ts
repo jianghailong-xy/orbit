@@ -7,6 +7,9 @@
  *   3. An account at or above the routing quota limit is unusable, with its utilization.
  *   4. The workspace's default (the pair its sessions start on) is marked, and says when it is the unusable one.
  *   5. Without `workspace` the answer is listUsable's, unchanged; an unknown or someone else's workspace is refused.
+ *   6. On a runner whose Claude region verdict is blocked, every Anthropic-bound credential on claude (its own sign-in,
+ *      an Anthropic-preset or anthropic.com key, a Claude pool) is unusable with routing's reason, and routing picks
+ *      none of them; a DeepSeek key on Claude Code and Codex stay usable (claude-region-check-contract §8, ⑥).
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/workspace-providers.pg.spec.ts
  *
@@ -20,15 +23,18 @@ import { HttpException } from '@nestjs/common';
 import { Prisma, SessionDispatchOrigin, RunStatus, type PrismaClient, type Runner } from '@prisma/client';
 import { Client } from 'pg';
 
+import { CLAUDE_REGION_V1 } from '@orbit/shared';
+
 import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { encryptSecret } from '../providers/provider-crypto';
 import { ProvidersService } from '../providers/providers.service';
 import { RunnerProvidersController } from './runner-providers.controller';
-import { subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
+import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
 import { subagentRouteInput } from './subagent-route';
 import type { WorkspaceProviderView } from './workspace-providers';
 
@@ -182,6 +188,75 @@ test('provider_list with workspace: what that workspace runner can run, judged a
       subagentRunnableModels(input),
     );
     assert.equal(answer.default.reason, subagentCandidateRefusal(input, 'claude', 'claude'));
+  });
+
+  await t.test('on a region-blocked runner every Anthropic-bound credential on claude is out; DeepSeek and Codex stay', async () => {
+    const blockedOwner = await account();
+    const now = new Date().toISOString();
+    const hpc = (await prisma.runner.create({
+      data: {
+        id: randomUUID(), name: 'HPC', ownerId: blockedOwner, tokenHash: sha256(`workspace-providers-${randomUUID()}`),
+        status: 'ONLINE', lastHeartbeatAt: new Date(),
+        capabilities: [CLAUDE_REGION_V1], capabilitiesReportedAt: new Date(),
+        region: { verdict: 'blocked', country: 'CN', regionCode: null, name: 'mainland China', viaProxy: false,
+          decidedAt: now, checkedAt: now, blockedChecks: 2 },
+        engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'yes' }],
+        modelCatalog: {
+          claude: [
+            { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
+            { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
+          ],
+          codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
+        },
+      },
+    })) as Runner;
+    const hpcWorkspace = randomUUID();
+    await prisma.workspace.create({
+      data: { id: hpcWorkspace, ownerId: blockedOwner, runnerId: hpc.id, name: 'orbit-hpc', enabled: true, workDir: '/work/orbit' },
+    });
+    const tag = hpcWorkspace.slice(0, 8);
+    const [anthropicPreset, anthropicEndpoint, deepseek, member] = await Promise.all([
+      { slug: `anthropic-${tag}`, label: 'Anthropic', presetSlug: 'anthropic', followsPreset: true, baseUrl: 'https://api.anthropic.com' },
+      { slug: `proxy-${tag}`, label: 'Anthropic endpoint', baseUrl: 'https://API.Anthropic.com./v1',
+        models: [{ value: 'claude-sonnet-5-5', label: 'Sonnet' }] },
+      { slug: `deepseek-${tag}`, label: 'DeepSeek', presetSlug: 'deepseek', followsPreset: true, baseUrl: 'https://api.deepseek.com/anthropic' },
+      { slug: `member-${tag}`, label: 'Subscription', baseUrl: 'https://api.anthropic.com', models: [],
+        apiKeyEnc: encryptSecret(`sk-ant-oat01-${tag}`) },
+    ].map((row, position) => prisma.modelProvider.create({
+      data: { runtime: 'claude', apiKeyEnc: 'x', ownerId: blockedOwner, position, ...row },
+    })));
+    const pool = await prisma.providerPool.create({ data: { slug: `team-${tag}`, label: 'Team', ownerId: blockedOwner, engine: 'claude' } });
+    await prisma.providerPoolMember.create({ data: { poolId: pool.id, providerId: member.id, ownerId: blockedOwner } });
+
+    const REFUSED = 'claude can’t use Anthropic on HPC';
+    const anthropicBound = ['claude', anthropicPreset.slug, anthropicEndpoint.slug, member.slug, pool.slug];
+    const answer = (await door.list({ id: randomUUID(), ownerId: blockedOwner } as never, 'orbit-hpc')) as WorkspaceProviderView;
+    const on = (provider: string, engine = 'claude') => {
+      const found = answer.pairs.find((entry) => entry.provider === provider && entry.engine === engine);
+      assert.ok(found, `${provider} on ${engine} is listed`);
+      return [found.usable, found.reason];
+    };
+    for (const provider of anthropicBound) assert.deepEqual(on(provider), [false, REFUSED], provider);
+    assert.deepEqual(on(deepseek.slug), [true, undefined], 'a DeepSeek key on Claude Code is not Anthropic-bound');
+    assert.deepEqual(on('codex', 'codex'), [true, undefined], 'another engine is not gated');
+
+    // Routing on that runner — what a local or remote delegate there picks — removes the same with the same reason.
+    const input = await subagentRouteInput(prisma, {
+      ownerId: blockedOwner, workspaceId: hpcWorkspace, runnerId: hpc.id,
+      dto: { toolUseId: 'toolu_01Region', type: 'general', definitionSource: 'builtin' },
+      parent: { engine: 'claude', provider: 'claude', model: '', effort: null },
+      runnerLabel: 'HPC',
+    });
+    const route = routeSubagent(input);
+    t.diagnostic(`picked ${route.provider}/${route.engine}/${route.model}; removed ${JSON.stringify(route.candidates)}`);
+    for (const provider of anthropicBound) {
+      assert.deepEqual(route.candidates.filter((c) => c.provider === provider && c.engine === 'claude').map((c) => [c.model, c.reason]),
+        [[null, REFUSED]], `${provider} is removed whole`);
+      assert.equal(subagentCandidateRefusal(input, provider, 'claude'), REFUSED);
+    }
+    assert.ok(route.provider !== null && !anthropicBound.includes(route.provider), `routing picks no Anthropic credential: ${route.provider}`);
+    assert.equal(subagentCandidateRefusal(input, deepseek.slug, 'claude'), null);
+    assert.equal(subagentCandidateRefusal(input, 'codex', 'codex'), null);
   });
 
   await t.test('without workspace the list is listUsable, unchanged', async () => {

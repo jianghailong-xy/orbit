@@ -2,7 +2,9 @@ import {
   AgentProvider,
   PermissionMode,
   autoAvailable,
+  credentialIsAnthropicBound,
   runnerCatalogRow,
+  type AnthropicBoundCredential,
   type PlanUsage,
   type RunnerModelCatalog,
   type RunnerModelInfo,
@@ -449,6 +451,8 @@ export interface SubagentProvider {
   /** Inside usableProviderScope: a shared provider is for admins only. */
   inScope: boolean;
   engines: readonly SubagentProviderEngine[];
+  /** The credential it spends, as far as the Claude region check asks (credentialIsAnthropicBound, contract §8). */
+  credential: AnthropicBoundCredential;
   /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
   account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean } | null;
   /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
@@ -676,6 +680,10 @@ function engineVerdict(
   const report = input.engines?.[engine];
   // A runner that reported nothing is not judged on it; one that reported others lacks this one.
   if (input.engines && !report?.installed) return { reason: `${engine} is not installed on ${where}` };
+  // Only Claude Code is gated, and only on a credential that talks to Anthropic: a sign-in, a pool or a key (§8, ⑥).
+  if (engine === AgentProvider.CLAUDE && report?.regionBlocked && credentialIsAnthropicBound(provider.credential)) {
+    return { reason: `${engine} can’t use Anthropic on ${where}` };
+  }
   if (provider.pool) {
     // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
     const best = bestPoolMember(provider.pool.members);
@@ -685,7 +693,6 @@ function engineVerdict(
   const quota = provider.account?.quota;
   if (provider.billing === 'subscription') {
     if (report?.signedOut) return { reason: `${engine} is signed out on ${where}` };
-    if (report?.regionBlocked) return { reason: `${engine} can’t use Anthropic on ${where}` };
     if (quota && quota.utilization >= ENGINE_QUOTA_LIMIT) {
       return { reason: `The account is at ${quota.utilization}% of its ${quota.window} quota` };
     }
