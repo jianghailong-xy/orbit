@@ -137,7 +137,12 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
   Codex 池的子进程拿一张只给它铸的网关 token（`mintSubagentPoolLoginToken`，迁移 0800：`pool_login_token.account_id` / `key_id`），
   网关按 token 上的账号或 key 发请求，而不是父会话行上的；这种 token 只在 codex 网关有效，网关也不给父会话记换号提示。
   别人的池（包括别人共享、没把本人加进去的池）不是候选，按名字点它也会被拒。
-  换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
+  换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度 / 容量 / 登录失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
+- **登录失败**（2026-11-16 追加；`isAuthErrorText` 的 `Failed to authenticate`，例如 `OAuth session expired and could not be
+  refreshed`，以及开头是 `Not logged in` / `OAuth session expired` 的原话；Cloudflare 拦截、断连不算）：和额度失败同一条路，
+  同档下一个候选、最多换 2 次、每次记进 `attempts`（结果 `AUTH_FAILED`），Why 追加 `Moved to <model> after <model>'s login failed`。
+  runner 在 `subagentLimitFailure` 里同样认这些原话（`isSubagentLoginFailure`，和服务端的 `isLoginFailureText` 保持一致）。
+  **调用方点名了模型**（`decision.tierSource = named-model`）时不换：回 `SUBAGENT_NAMED_MODEL_NOT_MOVED`，失败原样交回父 Agent。
 - **开跑时选中项起不来**（例如账号池里没有能跑的账号、凭证缺失）：按排序取同档下一个，被跳过的记进 `candidates` 并带原因，
   Why 里计入被去掉的数目。
 - **活本身失败**：不升档、不重跑，交回父 Agent，结果里写明。父 Agent 决定加档再派，还是自己做。
@@ -300,6 +305,18 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 ### 10.3 路由、显示、生命周期
 
 - 路由（§4）的候选池按**目标 runner** 的引擎、登录、额度算；`decision` 记 `workspaceId` 和选中它的理由。
+  实现（2026-11-16，`planRemoteSubagent`）：
+  - **点名模型**（`delegate(model=…)`）：在目标 runner 上找提供它的 Provider × 引擎，过 §4.2 的 1–4 条（屏蔽、范围、
+    装没装、登录没登录、额度、暂停），第一个能起的就用它；一个都没有，开跑前立刻回 `SUBAGENT_TARGET_CANNOT_RUN`，
+    写明每个提供者被去掉的原因，并列出这个 workspace 能跑的模型（按 Provider 和引擎）。**不会换成别的模型。**
+  - **没点名**：先看目标 workspace 自己的默认引擎在目标 runner 上能不能用（同样过 §4.2 的 1–4 条，登录看
+    `engines[].auth` 和 `engineState` 的 `signedOut`，含 `loginExpiresAt`）。能用就照旧跑默认引擎和模型
+    （`tierSource: not-routed`，`policyVersion: subagent-remote-v2`）；不能用就按 `routeSubagent` 在目标 runner 的报告上选，
+    跳过的默认引擎和原因写进 `reasons`（`Skipped <workspace>'s default <provider>: <reason>`）和 `candidates`。
+    一个能用的都没有，回 `NO_SUBAGENT_PROVIDER`，列出每个 Provider 的原因；不会退回父会话的模型。
+  - 定义文件里的 `model` 在父会话那台机器上读，跨 workspace 时不参与选择。
+  - 领取（claim）按开跑时记下的候选建 `exec`；记的是默认引擎的，按默认引擎重建。
+  - 目标 runner 上的跑没有 §4.3 的换候选回路：开跑前已经跳过没登录的引擎，跑起来再撞上登录失败或额度，失败交回父 Agent。
 - 事件由目标 runner 发给服务端，服务端以父会话的 `sessionId`、`parentToolUseId` = `delegate` 调用写进父会话的事件流；
   只有被派到的那台 runner 能为这次运行写事件（按 `subagent_run` 的 `target_runner_id` 鉴权）。
 - 块头多一项：`general · M · Claude Sonnet 5.5 · on orbit-macos`；Why 里写 workspace 是怎么选出来的。
@@ -313,6 +330,6 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 （`parentToolUseId` = `delegate` 调用，子 id 加 run id 前缀）后存进 `subagent_relay_event`；父会话的 runner 从
 `GET /runner/sessions/:id/subagents/:runId/events?after=` 读出，再由它编号写进父会话的事件流。其余门：
 目标 runner 的 heartbeat 带 `remoteSubagentRuns`（待领取）和 `stopSubagentRunIds`（父会话已停止或结束）；
-`POST /runner/subagent-runs/:runId/claim` 交回目标 workspace 自己默认引擎和模型的 `exec`；`PATCH /runner/subagent-runs/:runId`
+`POST /runner/subagent-runs/:runId/claim` 交回开跑时选定的候选（默认是目标 workspace 自己的默认引擎和模型）的 `exec`；`PATCH /runner/subagent-runs/:runId`
 报结束；父会话 runner 用 `POST /runner/sessions/:id/subagents/:runId/stop` 停它；审批卡由目标 runner 以父会话 id +
 `subagentRunId` 提交。目标 runner 掉线由唤醒 sweep 记 `INTERRUPTED`。代码：`apiserver/src/runner-api/subagent-remote.ts`。

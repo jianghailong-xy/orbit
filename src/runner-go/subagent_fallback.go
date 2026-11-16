@@ -11,7 +11,7 @@ import (
 )
 
 // subagentMaxMoves is how many times one delegate call moves to another candidate after its child failed on a
-// usage limit or capacity (docs/subagent-design.md §4.3). The server holds the same bound (SUBAGENT_MAX_MOVES).
+// usage limit, capacity or a failed login (docs/subagent-design.md §4.3). The server holds the same bound (SUBAGENT_MAX_MOVES).
 const subagentMaxMoves = 2
 
 // subagentUsageLimitMarkers are @orbit/shared USAGE_LIMIT_ERROR_MARKERS: the providers' own words for a spent
@@ -38,10 +38,29 @@ func isUsageLimitText(text string) bool {
 	return false
 }
 
-// subagentLimitFailure is a child's end as §4.3 moves it, with the engine's own words for it: a spent quota —
-// which Claude Code reports as its whole reply with a "success" result — or a model at capacity
+// subagentLoginFailureOpenings are how a sign-in failure may open when the engine does not wrap it in
+// "Failed to authenticate". Keep them identical to LOGIN_FAILURE_OPENINGS in apiserver subagent-run.ts.
+var subagentLoginFailureOpenings = []string{"not logged in", "oauth session expired"}
+
+// isSubagentLoginFailure is isLoginFailureText in apiserver subagent-run.ts: the runtime's "Failed to authenticate"
+// (isAuthError, which leaves out a dropped connection), or a text that opens as one of subagentLoginFailureOpenings.
+func isSubagentLoginFailure(text string) bool {
+	if isAuthError(text) {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimLeft(text, " \t\r\n"))
+	for _, opening := range subagentLoginFailureOpenings {
+		if strings.HasPrefix(lower, opening) {
+			return true
+		}
+	}
+	return false
+}
+
+// subagentLimitFailure is a child's end as §4.3 moves it, with the engine's own words for it: a spent quota or a
+// failed login — which Claude Code reports as its whole reply with a "success" result — or a model at capacity
 // (isCodexCapacityError), which only a failed end is read for. False for a run that ended any other way, whose
-// end is its result.
+// end is its result. The server decides whether a failed login moves (not when the caller named the model).
 func subagentLimitFailure(res ExecResult, err error) (string, bool) {
 	var texts []string
 	if err != nil {
@@ -49,7 +68,7 @@ func subagentLimitFailure(res ExecResult, err error) (string, bool) {
 	}
 	texts = append(texts, res.Result, res.ErrorMsg)
 	for _, text := range texts {
-		if isUsageLimitText(text) {
+		if isUsageLimitText(text) || isSubagentLoginFailure(text) {
 			return strings.TrimSpace(text), true
 		}
 	}

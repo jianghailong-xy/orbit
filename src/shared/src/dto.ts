@@ -2490,8 +2490,10 @@ export interface SubagentCandidateTarget {
   note?: string;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
-export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
+ *  or the run's end. */
+export type SubagentAttemptOutcome =
+  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -2512,7 +2514,7 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
 export interface SubagentFallbackRequest {
-  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;

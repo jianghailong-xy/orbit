@@ -200,7 +200,8 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"description": "How hard the work is: S mechanical, M a well-specified change, L cross-module or unknown cause, XL design-level.",
 			},
 			"sizeReason": str("One sentence on why that size."),
-			"model":      str("A model id to run on, skipping Orbit's choice."),
+			"model": str("A model id to run on, skipping Orbit's choice. With workspace or needs it runs on that workspace's" +
+				" runner, or the call is refused at once with what that workspace can run; it is never swapped for another model."),
 			"background": map[string]interface{}{
 				"type":        "boolean",
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
@@ -840,7 +841,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	}
 	var res ExecResult
 	var err error
-	// A child that fails on a usage limit or capacity is started again, with the same prompt, on the next
+	// A child that fails on a usage limit, capacity or a failed login is started again, with the same prompt, on the next
 	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
 	limit, limitNote := "", ""
 	scratch := dir
@@ -861,7 +862,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 			break
 		}
 		if attempt > subagentMaxMoves {
-			limitNote = fmt.Sprintf("It hit a usage limit or capacity on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
+			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
 			break
 		}
 		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
