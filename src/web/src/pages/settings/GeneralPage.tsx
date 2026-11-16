@@ -106,7 +106,7 @@ export function GeneralSettingsPage() {
               />
             }
           />
-          {/* Absent means OFF (board docs/mocks/prompt-optimizer, frame 1). Without the server's
+          {/* Absent means ON; only an explicit false turns it off (owner's decision of 2026-11-16). Without the server's
               DeepSeek key it is drawn disabled with frame 1b's notice, whatever the preference says. */}
           <SettingsRow
             anchor={S.promptOptimizer.anchor}
@@ -115,7 +115,7 @@ export function GeneralSettingsPage() {
             control={
               <Switch
                 aria-label="Prompt optimizer"
-                checked={!optimizerUnavailable && prefs.promptOptimizer === true}
+                checked={!optimizerUnavailable && prefs.promptOptimizer !== false}
                 disabled={optimizerUnavailable}
                 onCheckedChange={(v) => save.mutate({ promptOptimizer: v })}
                 loading={save.isPending}

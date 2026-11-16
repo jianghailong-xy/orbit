@@ -43,7 +43,7 @@ val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {}
  * the change. */
 val LocalTranslation = compositionLocalOf { AccountTranslation() }
 val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
-/** Settings › Prompt optimizer (`preferences.promptOptimizer`, absent = off, and the server's `promptOptimizerAvailable`), read with the
+/** Settings › Prompt optimizer (`preferences.promptOptimizer`, absent = on, and the server's `promptOptimizerAvailable`), read with the
  * theme from the same `users/me`: whether the composer offers ✦ Optimize (docs/prompt-optimizer-design.md, iOS `PromptOptimizer.isOn`).
  * Settings' switch sets it the moment the server has taken the change. */
 val LocalPromptOptimizer = compositionLocalOf { false }

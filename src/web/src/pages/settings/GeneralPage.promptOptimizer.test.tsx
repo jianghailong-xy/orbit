@@ -8,7 +8,8 @@ import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
 
 /**
  * Settings › General › Prompt optimizer (docs/mocks/prompt-optimizer/01-board.png, frames 1 and 1b):
- * one switch for the account under Suggested replies, absent = off. A server without a DeepSeek key
+ * one switch for the account under Suggested replies, absent = on
+ * (owner's decision of 2026-11-16) and only an explicit false turns it off. A server without a DeepSeek key
  * draws it disabled with the frame 1b notice.
  */
 
@@ -115,26 +116,26 @@ describe('Settings › General › Prompt optimizer', () => {
     expect(text).not.toContain(NOTICE);
   });
 
-  it('is off for an account that never said otherwise', async () => {
+  it('is on for an account that never said otherwise', async () => {
     await mount(me({}));
-    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('true');
   });
 
-  it('turning it on and off saves promptOptimizer', async () => {
+  it('turning it off and on saves promptOptimizer', async () => {
     await mount(me({}));
     await act(async () => optimizerSwitch().click());
     await settle();
-    expect(patches()).toEqual([{ promptOptimizer: true }]);
-    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('true');
+    expect(patches()).toEqual([{ promptOptimizer: false }]);
+    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('false');
     await act(async () => optimizerSwitch().click());
     await settle();
-    expect(patches()).toEqual([{ promptOptimizer: true }, { promptOptimizer: false }]);
-    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('false');
+    expect(patches()).toEqual([{ promptOptimizer: false }, { promptOptimizer: true }]);
+    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('true');
   });
 
-  it('reads it on when the account saved it on', async () => {
-    await mount(me({ promptOptimizer: true }));
-    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('true');
+  it('reads it off when the account saved it off', async () => {
+    await mount(me({ promptOptimizer: false }));
+    expect(optimizerSwitch().getAttribute('aria-checked')).toBe('false');
   });
 
   for (const [label, available] of [
