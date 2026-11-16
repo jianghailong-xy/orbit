@@ -1800,6 +1800,13 @@ export const getSharedEventsAfter = (
     `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
   );
 
+/** The shared conversation's stream (docs/session-viewer-stream-design.md §3): what it adds after
+ *  `sinceSeq`, clipped like the rest, then the reply as it is written and its header as it changes. */
+export const sharedStreamUrl = (token: string, opts: { sinceSeq: number; sessionId?: string }): string => {
+  const since = opts.sinceSeq > 0 ? `sinceSeq=${opts.sinceSeq}&` : '';
+  return `/api/shared/${encodeURIComponent(token)}${sharedConversation(opts.sessionId)}/stream?${since}maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
