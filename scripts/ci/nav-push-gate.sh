@@ -79,11 +79,14 @@ fi
 # Print the declaration of \`var <name>\` in the SwiftUI layer, from its header line through the
 # line that closes its brace. A stack projection reads \`nav.\` in that body; a stored property
 # cannot. Searched by name across the layer rather than in AppModel.swift alone so a projection
-# declared in an extension still reads as one.
+# declared in an extension still reads as one. A `private` or `fileprivate` var of the same name
+# (a view's own helper, such as MainView's selectedProjectID) is never what `$model.<name>` binds,
+# so it is skipped rather than read as the declaration whenever grep happens to reach its file first.
 declaration_of() {
   local name=$1 decl file line
   decl=$(grep -rnE "^[[:space:]]*(@[A-Za-z]+[[:space:]]+)*(private|fileprivate|internal|public|static|nonisolated|lazy)*[[:space:]]*var[[:space:]]+${name}\b" \
-           "${sources[@]}" --include='*.swift' | head -n 1 || true)
+           "${sources[@]}" --include='*.swift' \
+           | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(@[A-Za-z]+[[:space:]]+)*(fileprivate|private)\b' | head -n 1 || true)
   [ -n "$decl" ] || return 0
   file=${decl%%:*}
   line=$(printf '%s' "${decl#*:}" | cut -d: -f1)
