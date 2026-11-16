@@ -1,5 +1,5 @@
 /**
- * The session's Agent Tools report (docs/orbit-agent-contract.md §2.7, migration 0770), end to end against a real
+ * The session's Agent Tools report (docs/orbit-agent-contract.md §2.7, migration 0940), end to end against a real
  * PostgreSQL through the runner door's own event handler and the session service's own readers:
  *
  *   1. A batch carrying `agent_tools` system events stores the newest report whole in session.agent_tools, and the

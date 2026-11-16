@@ -1952,7 +1952,7 @@ model Session {
   // reason, the Orbit tools it lists by family and why one is short, the contract/catalogue/primer
   // versions, the switches it was spawned with, how Orbit's instructions reached it, and the
   // playbooks skill. The newest `agent_tools` system event the runner sent, kept by the event
-  // ingest; null until one arrives, and for engines that report no MCP connection (migration 0770).
+  // ingest; null until one arrives, and for engines that report no MCP connection (migration 0940).
   agentTools           Json?     @map("agent_tools")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the

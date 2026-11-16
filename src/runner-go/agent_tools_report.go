@@ -14,7 +14,7 @@ import (
 // how Orbit's runtime instructions reached it, and whether it took the playbooks skill (contract §2.7).
 //
 // The runner sends it as one system event, `{"subtype": "agent_tools", "agentTools": <report>}`, which the
-// control plane keeps as the session's agentTools (migration 0770) and the clients draw in Agent tools.
+// control plane keeps as the session's agentTools (migration 0940) and the clients draw in Agent tools.
 // It is sent when the engine says something new about it and not otherwise: Claude Code names its MCP
 // servers in the init frame it writes at the start of every turn, and an unchanged report is not sent again.
 //

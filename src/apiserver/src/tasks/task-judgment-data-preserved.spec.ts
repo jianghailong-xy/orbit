@@ -3006,10 +3006,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
       // relations, no trigger or DONE fence changes, and no row is written.
       '0760_runner_attention_fixes',
-      // 0770 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
+      // 0770 widens main_checkout_request_action_chk to allow 'discard' (docs/main-checkout-git-contract.md), added NOT
+      // VALID and then validated; `main_checkout_request` is none of the preserved relations, no trigger, function or
+      // DONE fence changes, and no row is written.
+      '0770_main_checkout_discard',
+      // 0940 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
       // ingest), taking the lock in short tries inside one DO block as 0478 does; catalog-only, no preserved rows,
-      // triggers or DONE fence change, and no row is written.
-      '0770_session_agent_tools'],
+      // triggers or DONE fence change, and no row is written. Written as 0770 on the project line, it was renumbered
+      // after main took 0770 and every number to 0930, so no number is used twice.
+      '0940_session_agent_tools'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

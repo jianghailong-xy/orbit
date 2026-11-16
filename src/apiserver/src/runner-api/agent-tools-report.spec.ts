@@ -5,7 +5,7 @@ import { isNoiseSystemEvent } from '../common/system-noise';
 import { latestAgentToolsReport } from './agent-tools-report';
 
 /**
- * The session's Agent Tools report (docs/orbit-agent-contract.md §2.7, migration 0770): the runner sends it as a
+ * The session's Agent Tools report (docs/orbit-agent-contract.md §2.7, migration 0940): the runner sends it as a
  * `system` event with subtype `agent_tools`, and the ingest keeps the newest one of a batch whole, as
  * Session.agentTools. Nothing else in the batch touches it.
  */
