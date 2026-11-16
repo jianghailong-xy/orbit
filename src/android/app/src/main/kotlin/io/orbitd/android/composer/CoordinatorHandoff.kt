@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.core.cards.CoordinatorCleanStart
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.SessionHandle
@@ -33,6 +34,8 @@ import java.util.Locale
  * `src/shared/src/coordinator-handoff.ts`, which CoordinatorHandoffCopyParityTest reads them against.
  */
 internal object CoordinatorHandoffCopy {
+    const val OPEN_PREVIOUS = CoordinatorCleanStart.openPrevious
+    fun historyBefore(decisions: Int, merges: Int) = CoordinatorCleanStart.historyBefore(decisions, merges)
     // Board 03, the context dialog's action rows.
     const val COMPACT = "Compact"
     const val COMPACT_DETAIL = "Summarize earlier turns and keep going here."
@@ -316,7 +319,7 @@ internal fun HandedOverBanner(successor: String?, open: (String) -> Unit) {
 
 /** Board 02 ③: the note the successor opened with, its link to the previous coordinator, and the waits that moved here. */
 @Composable
-internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) {
+internal fun HandoffNoteCard(received: ReceivedHandoff, history: CoordinatorCleanStart.Counts = CoordinatorCleanStart.Counts(0, 0), open: (String) -> Unit) {
     var waitsOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("handoff-note-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))) {
@@ -332,6 +335,11 @@ internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) 
                     pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary)); append(title.removePrefix("Handoff from ")); pop()
                     time?.let { append(" · $it") }
                 }, style = MaterialTheme.typography.bodyMedium)
+            }
+            CoordinatorHandoffCopy.historyBefore(history.decisions, history.merges)?.let { line ->
+                Text("$line · ${CoordinatorHandoffCopy.OPEN_PREVIOUS}",
+                    Modifier.clickable { open(received.from) }.padding(horizontal = 12.dp, vertical = 4.dp).testTag("handoff-history"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             HorizontalDivider()
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
