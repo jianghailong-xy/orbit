@@ -4566,6 +4566,10 @@ final class ConsoleModel {
     /// whoever answered it, and the review sheet has to tell them apart: its own press leaves it a
     /// moment later, and an answer from another end does not.
     private(set) var questionsAnsweredHere: Set<String> = []
+    /// The exception cards a press HERE ended, by item id, with the receipt each one drew ("Sent
+    /// back to the coordinator"): what the iPhone's settled-items fold counts and names (board
+    /// owner-card-ios-text, D1 = A). The card keeps its own receipt; this is the transcript's copy.
+    var ownerItemReceipts: [String: String] = [:]
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -6119,6 +6123,17 @@ final class ConsoleModel {
     /// The same for one delivered exception card, from the same read.
     func ownerItemStanding(_ itemID: String) -> OwnerItemStanding {
         ExceptionCards.standing(items: openItems, itemId: itemID)
+    }
+
+    /// Where one exception card stands for the iPhone's settled-items fold: open, ended (with the
+    /// receipt a press here drew), or not read yet.
+    func settledFoldStanding(_ itemID: String) -> SettledExceptionFold.Standing {
+        if let receipt = ownerItemReceipts[itemID] { return .settled(receipt: receipt) }
+        switch ownerItemStanding(itemID) {
+        case .open: return .open
+        case .gone: return .settled(receipt: nil)
+        case .unread: return .other
+        }
     }
 
     /// The candidate one delivered merge card is about, or nil when the read no longer publishes
