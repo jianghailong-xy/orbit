@@ -560,8 +560,10 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
     const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;
     t.after(async () => { await prisma.project.deleteMany({ where: { id: projectId } }); });
+    // A COMPLETED handoff names its successor (coordinator_handoff_successor_chk).
+    const successorId = await parentSession({ runnerId: machineId });
     const handoff = await prisma.coordinatorHandoff.create({
-      data: { ownerId, projectId, fromSessionId: sessionId, state: 'COMPLETED' },
+      data: { ownerId, projectId, fromSessionId: sessionId, toSessionId: successorId, state: 'COMPLETED' },
     });
     const kept = await gateway.caller(token!);
     assert.ok(kept && typeof kept === 'object', 'a handed-over parent still serves the SubAgent it left running');
@@ -569,7 +571,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'DONE', endedAt: new Date() } });
     assert.equal(await gateway.caller(token!), null, 'and stops once the run has ended');
     await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'RUNNING', endedAt: null } });
-    await prisma.coordinatorHandoff.update({ where: { id: handoff.id }, data: { state: 'FAILED', failureCode: 'TURN_FAILED' } });
+    await prisma.coordinatorHandoff.update({ where: { id: handoff.id }, data: { state: 'FAILED', failureCode: 'TURN_FAILED', toSessionId: null } });
     assert.equal(await gateway.caller(token!), null, 'a handoff that did not complete keeps nothing');
     await prisma.coordinatorHandoff.delete({ where: { id: handoff.id } });
     const attempts = (await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).attempts as unknown as Array<Record<string, unknown>>;
