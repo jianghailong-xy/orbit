@@ -31,7 +31,7 @@ struct ScheduledMacPage: View {
         let now = Date()
         let groups = scheduled.timeline(now: now)
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
-            && scheduled.workspaceFilter == nil
+            && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header(scheduled)
@@ -89,7 +89,7 @@ struct ScheduledMacPage: View {
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(Color.accentColor)
             Spacer()
-            Text("\(scheduled.shownSchedules.count)")
+            Text("\(scheduled.shownSchedules.count + scheduled.shownWaitingTasks.count)")
                 .font(.largeTitle.weight(.regular))
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("scheduled-count")
@@ -162,7 +162,16 @@ struct ScheduledMacPage: View {
                             Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
                                 .fixedSize()
                         }
-                        if !row.time.isEmpty {
+                        if let reading = row.reading {
+                            // A condition's row (condition-triggers board ④ ②): "6.9% · 1 min ago" where a timed row
+                            // has its time, how far from firing and whether the probe is still alive.
+                            (Text(reading.value).font(.orbitLabel.weight(.semibold)).foregroundColor(.primary)
+                             + Text(reading.age.map { "\(SC.separator)\($0)" } ?? "").font(.orbitLabel)
+                                .foregroundColor(.secondary))
+                                .monospacedDigit()
+                                .fixedSize()
+                                .accessibilityIdentifier("schedule-row-reading")
+                        } else if !row.time.isEmpty {
                             Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
                                 .fixedSize()
                         }
