@@ -3963,7 +3963,7 @@ export class RunnerApiController {
   private async releaseClaudeAccountSwap(runnerId: string, sessionIds?: readonly string[]): Promise<void> {
     const held = sessionIds ?? (await this.prisma.session.findMany({
       where: {
-        assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true,
+        assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true, sessionKind: 'CONVERSATION',
         status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] },
       },
       select: { id: true },
@@ -5376,10 +5376,6 @@ export class RunnerApiController {
     // A link call's request id, which every resend of the call keeps: a fetch sent again under the id of one that
     // handed a turn out is answered with that turn (dequeueTurn).
     const resend = link?.requestId ? { leaseOwner: link.leaseOwner, requestId: link.requestId } : undefined;
-    // Set as default for Claude Code (claude-account-swap.ts): while a swap is pending, a session on either of its
-    // accounts is handed no new turn — it would start in the folder that is about to change. What waits is delivered
-    // once the swap ends: each such session is hinted then.
-    if (await claudeSwapHolds(this.prisma, runner.id, sessionId)) return { turnId: '', seq: 0, kind: 'message' };
     // It answers at once: a hint says when there is something to fetch.
     const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend);
     return turn ?? { turnId: '', seq: 0, kind: 'message' };
@@ -5574,6 +5570,8 @@ export class RunnerApiController {
           taskId: string | null;
           /** The runner dispatch pause (queue/dispatch-pause.ts), read with the lock. */
           dispatchPaused?: boolean;
+          /** A Set as default swap of Claude accounts is pending on this runner (claude-account-swap.ts). */
+          claudeSwapPending?: boolean;
           /** The newest link fetch that handed a turn out, and that turn (migration 0448). */
           inboxRequestId?: string | null;
           inboxRequestTurnId?: string | null;
@@ -5584,6 +5582,8 @@ export class RunnerApiController {
                "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin", engine
                , "task_id" AS "taskId", ${DISPATCH_PAUSED} AS "dispatchPaused"
                , "inbox_request_id" AS "inboxRequestId", "inbox_request_turn_id" AS "inboxRequestTurnId"
+               , EXISTS (SELECT 1 FROM "runner" r WHERE r.id = "session"."assigned_runner_id"
+                          AND r."claude_account_swap_status" = 'pending') AS "claudeSwapPending"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -5611,6 +5611,10 @@ export class RunnerApiController {
       if (active.length === 0) {
         throw new ConflictException('inbox lease generation is missing or retired');
       }
+      // Set as default for Claude Code (claude-account-swap.ts): while a swap is pending, a session on either of its
+      // accounts is handed no turn — it would start in the folder that is about to change. What waits stays queued and
+      // is delivered once the swap ends, when each such session is hinted.
+      if (owned[0].claudeSwapPending && await claudeSwapHolds(tx, runnerId, sessionId)) return null;
       // A link poller of the process that holds this session's inbox lease, polling under the
       // generation the running turn was leased to, says it is not running that turn: the answer that
       // carried it was lost on its way (a connection that dropped, a gateway that never relayed it).

@@ -5,7 +5,7 @@
  * one in ~/.claude. The relay is the account removal's: one request per runner on its row
  * (`runner.claude_account_swap_*`, migration 1000), handed over on every heartbeat while `pending`, answered by
  * POST /runner/claude-account-swap-result. While it is pending, no session on either account is handed new work —
- * its claim and its inbox hold it (claudeSwapHeldPending, claudeSwapHolds) — and when it is done, everything Orbit
+ * its claim and its inbox hold it (claudeSwapHoldsSession, claudeSwapHolds) — and when it is done, everything Orbit
  * keys by the two account ids is swapped in one transaction (swapClaudeAccountRecords), so each record follows its
  * account into the account's new folder.
  */
@@ -148,23 +148,15 @@ const SWAP_SESSION_SELECT = {
 } satisfies Prisma.SessionSelect;
 
 /**
- * The PENDING sessions of this runner that a pending swap holds back from a claim: those on either of its accounts.
- * Empty while no swap is pending, which costs one read of the runner's row.
+ * Whether a pending swap on the session's runner holds it back from a claim: it is on either of the swap's accounts.
+ * Read off rows the caller already has (QueueService.pausedPendingSessions).
  */
-export async function claudeSwapHeldPending(prisma: Prisma.TransactionClient, runnerId: string): Promise<string[]> {
-  const runner = await prisma.runner.findUnique({
-    where: { id: runnerId },
-    select: { claudeAccountSwapStatus: true, claudeAccountSwapAccount: true, engines: true },
-  });
+export function claudeSwapHoldsSession(
+  session: SwapSession,
+  runner: { engines: unknown; claudeAccountSwapStatus: string | null; claudeAccountSwapAccount: string | null },
+): boolean {
   const swap = pendingSwapOf(runner);
-  if (!swap) return [];
-  const pending = await prisma.session.findMany({
-    where: { assignedRunnerId: runnerId, status: 'PENDING', provider: 'claude', providerBuiltin: true },
-    select: SWAP_SESSION_SELECT,
-  });
-  return pending
-    .filter((session) => swappedAccount(claudeAccountOf(session, runner!.engines), swap.added) !== null)
-    .map((session) => session.id);
+  return !!swap && swappedAccount(claudeAccountOf(session, runner.engines), swap.added) !== null;
 }
 
 /** Whether a pending swap holds this session's next turn: it is on either account of the swap. */

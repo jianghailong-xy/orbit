@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { claudeSwapHeldPending } from '../runners/claude-account-swap';
+import { claudeSwapHoldsSession } from '../runners/claude-account-swap';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
@@ -251,6 +251,8 @@ export class QueueService {
           // blocked, or waiting with a region sentence already (claudeRegionHold). Keys and pools are read above.
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { region: { path: ['verdict'], equals: 'blocked' } } },
           { provider: AgentProvider.CLAUDE, providerBuiltin: true, error: { startsWith: CLAUDE_REGION_ERROR_PREFIX } },
+          // Claude Code on its own sign-in, on a runner where a Set as default swap is pending (claude-account-swap.ts).
+          { provider: AgentProvider.CLAUDE, providerBuiltin: true, assignedRunner: { claudeAccountSwapStatus: 'pending' } },
         ],
       },
       select: {
@@ -268,6 +270,8 @@ export class QueueService {
             engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
             // What the region check holds a session on, and the name its sentence gives the machine.
             name: true, displayName: true, region: true,
+            // The Set as default swap pending there, if one is, and the account it makes the Default.
+            claudeAccountSwapStatus: true, claudeAccountSwapAccount: true,
           },
         },
       },
@@ -276,6 +280,13 @@ export class QueueService {
     const poolPauses = new Map<string, Date | null>();
     for (const session of pending) {
       const runner = session.assignedRunner;
+      // A pending Set as default for Claude Code holds back the sessions on either of its accounts: a claim now would
+      // start one in the folder that is about to change. It writes no notice; the swap ends within minutes, and a
+      // session it held is woken then.
+      if (runner && claudeSwapHoldsSession(session, runner)) {
+        blocked.push(session.id);
+        continue;
+      }
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const slug = session.provider;
       // The engine it runs on: its own, else — for a row an older replica wrote — the old rules'.
@@ -396,12 +407,7 @@ export class QueueService {
     // Cursor CLI: the route keeps it in the request's declaration only when the runner's persisted
     // heartbeat declares it too (RunnerApiController.claim); the statement below asks the heartbeat again.
     const supportsCursor = runner.supportedProviders?.includes(AgentProvider.CURSOR) ?? false;
-    // A pending Set as default for Claude Code holds back the sessions on either of its accounts too
-    // (claude-account-swap.ts): a claim now would start one in the folder that is about to change.
-    const paused = [
-      ...await this.pausedPendingSessions(runner.id, runner.dshUnavailable),
-      ...await claudeSwapHeldPending(this.prisma, runner.id),
-    ];
+    const paused = await this.pausedPendingSessions(runner.id, runner.dshUnavailable);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
