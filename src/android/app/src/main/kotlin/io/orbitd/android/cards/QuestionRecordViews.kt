@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.realtime.RunEvent
-import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.LocalOrbitColors
@@ -185,7 +184,6 @@ internal fun ToldFold(tag: String, event: RunEvent, heading: String = OwnerAnswe
                     RoundedCornerShape(6.dp)).padding(8.dp).testTag("$tag:words"), fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall)
             }
-            event.fields.text("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
         }
     }
 }

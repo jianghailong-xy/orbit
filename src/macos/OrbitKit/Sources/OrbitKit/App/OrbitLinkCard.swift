@@ -93,7 +93,7 @@ public enum OrbitLinkCopy {
         return "\(number(ready)) \(noun) ready, but nothing is running."
     }
 
-    /// "2 runs" — a task's runs, and `never run` for a task nothing has run (`ReferencedTaskNote`).
+    /// "2 runs" — a task's runs, and `never run` for a task nothing has run.
     public static func runs(_ count: Int) -> String {
         if count == 0 { return neverRun }
         return count == 1 ? "1 run" : "\(number(count)) runs"

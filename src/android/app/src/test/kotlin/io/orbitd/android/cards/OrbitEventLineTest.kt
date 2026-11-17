@@ -131,16 +131,25 @@ class OrbitEventLineTest {
         }
     }
 
-    @Test fun typedWordsKeepTheirRowWithTheAttachedLine() {
+    @Test fun typedWordsKeepTheirRowWithoutTheAppendedNote() {
         val event = turn("Ship it", future)
         show(event)
         compose.onAllNodesWithTag("orbit-event", useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("You") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
         compose.onAllNodes(hasText("Ship it") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(1)
-        compose.onAllNodes(hasText("Orbit attached: context", substring = true), useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodes(hasText("Orbit attached", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("<orbit-future-thing>", substring = true), useUnmergedTree = true).assertCountEquals(0)
         assertTrue(SteerDelivery.readersOwn(event))
         assertTrue(StickySummary.isAnchor(event))
         shot("07-typed")
+    }
+
+    @Test fun aWakeCardKeepsItsContentWithoutTheLeftoverNoteOrFold() {
+        val note = "$job\n\n$future"
+        show(turn("", note))
+        compose.onNodeWithTag("background-wake", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("<orbit-future-thing>", substring = true, useUnmergedTree = true).assertCountEquals(0)
     }
 
     private fun shot(name: String) {

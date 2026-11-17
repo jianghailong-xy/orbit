@@ -158,11 +158,7 @@ const TAG_LABEL: Record<string, string> = {
   'orbit-session-reply': 'session reply',
 };
 
-/** Blocks describeNote leaves unnamed, so a note holding only them draws no line (owner, 2026-11-14):
- *  a coordinator's standing role and the background-jobs inventory are Orbit's routine, and a
- *  `#`-reference's task or list is already a link in the bubble's own words. The fold still opens to
- *  them beside any other block. The runner's note after a Feishu member's or a guest's message
- *  (runner-go external_sender.go) only repeats the bubble's "From <name>" head, so it draws no line either. */
+/** Routine blocks describeNote leaves unnamed when naming a generic Orbit event. */
 const UNNAMED_TAGS: ReadonlySet<string> = new Set([
   'orbit_project_coordinator_context',
   'orbit-external-sender',
@@ -171,11 +167,8 @@ const UNNAMED_TAGS: ReadonlySet<string> = new Set([
   'background-jobs',
 ]);
 
-/** The wiki context block, whose line says how much it holds rather than only what it is. Exported
- *  because the entries inside it are read by a second parser (`lib/wikiContext`), and two spellings
- *  of one tag is how the row list and the line that names it come to disagree about what a note
- *  holds. */
-export const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
+/** The wiki context block, named with the count recorded in its opening tag. */
+const WIKI_CONTEXT_TAG = 'orbit_wiki_context';
 
 /** The wiki chat's blocks (wiki contract `chat.notes`), whose line is read off their opening tag's attributes. */
 const WIKI_CHAT_TAGS: ReadonlySet<string> = new Set(Object.values(WIKI_CHAT_NOTE_TAGS));
@@ -200,16 +193,14 @@ function countNames(names: string[]): string {
  *
  * The wiki context says how many notes rode along, off the count the block itself carries
  * (`<orbit_wiki_context entries="3">`, wiki-push.ts) — "Wiki context · 3 entries". Counted here
- * rather than by reading the block's lines, which is what the expanded list is for: this line is
- * the one that has to be right while the block is still folded shut.
+ * rather than by reading the block's lines, so the event can be named without parsing its entries.
  *
  * A wiki chat's blocks are named the same way, off their opening tag's attributes
  * (`wikiChatNoteLabel`, wiki contract `chat.notes`): "Wiki selection · 3.1 §3 · 1 sentence · 2 sources".
  * One whose tag lacks what its line needs is named generically, as any block this does not know. The
  * chat's own words to its agent (`<orbit_wiki_chat>`, on its first message) are not named: they are
  * not something the owner attached, so the line lists the page and the selection the composer showed
- * (board 42 ①, C15), and a first message sent with neither names nothing. The fold still opens to
- * every block the agent read.
+ * and a first message sent with neither names nothing.
  */
 export function describeNote(note: string): string {
   const names: string[] = [];
