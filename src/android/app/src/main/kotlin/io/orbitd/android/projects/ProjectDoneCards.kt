@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -13,14 +15,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
+import io.orbitd.android.cards.CardPreviewView
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.taskprojects.canWrite
@@ -39,22 +45,28 @@ import java.time.Instant
 // Every word is `ProjectDone`'s; every number is the server's (`derivedDone.counts`), and nothing here counts anything itself.
 
 /** "Is this project done?" — the coordinator's call, Done when, what Orbit can't prove, what Orbit checked and the two answers —
- * or, once the project is recorded done, its receipt. The whole card wherever it is drawn, never a preview that opens a review.
+ * or, once the project is recorded done, its receipt. Whole on the project page; in a coordinator conversation a preview opens it in
+ * a review sheet ([review]: no heading of its own, the answers pinned under what scrolls).
  * `request` is the coordinator's open DONE_REQUEST row (null for a card nobody asked for: Orbit then fills in the gaps); `record`
  * is what a press here recorded before the reads caught up; the press is dead until a seal has been read (`sealRead`). */
 @Composable
 internal fun ProjectDoneCard(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, record: JsonObject?,
     sealRead: Boolean, now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit,
     onNotYet: (suspend (String) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, actions: CriteriaActions? = null,
-    trailing: @Composable () -> Unit = {}) {
-    if (ProjectDone.recorded(doc, record)) ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
-    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions, trailing)
+    review: Boolean = false, trailing: @Composable () -> Unit = {}) {
+    if (ProjectDone.recorded(doc, record)) {
+        // Recorded while its review was open: the receipt takes the review's place (iOS `ProjectDoneCard`).
+        if (review) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing) }
+        else ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
+    } else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions,
+        review, trailing)
 }
 
 @Composable
 private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, sealRead: Boolean,
     now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String) -> Boolean)?,
-    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit) {
+    doneCheck: JsonObject?, actions: CriteriaActions?, review: Boolean, trailing: @Composable () -> Unit) {
     val counts = ProjectDone.counts(doc)
     val nonCode = DoneFollowUps.nonCode(doc)
     val main = ProjectDone.mainBranch(doc)
@@ -68,8 +80,9 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
     val scope = rememberCoroutineScope()
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // In a review the sheet's own bar carries the heading, and the answers are pinned under what scrolls (iOS `ApprovalReviewLayout`).
+    val body: @Composable ColumnScope.() -> Unit = {
+        if (!review) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("✓", Modifier.clearAndSetSemantics {}, color = accent, style = MaterialTheme.typography.titleMedium)
             Text(ProjectDone.heading, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = accent)
             trailing()
@@ -113,6 +126,10 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth().testTag("$tag-note"), enabled = !sending,
                 placeholder = { Text(ProjectDone.missingBeforeDone) }, minLines = 2, maxLines = 5)
             Text(ProjectDone.notYetHint, style = MaterialTheme.typography.labelMedium, color = muted)
+        }
+    }
+    val answers: @Composable ColumnScope.() -> Unit = {
+        if (notYetOpen && onNotYet != null) {
             Button(onClick = {
                 val text = ProjectDone.declineNote(note) ?: return@Button
                 if (sending) return@Button
@@ -133,6 +150,11 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 enabled = !recording) { Text(ProjectDone.notYet) }
         }
     }
+    if (review) Column(Modifier.fillMaxSize().testTag(tag)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = body)
+        HorizontalDivider()
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = answers)
+    } else Column(Modifier.fillMaxWidth().testTag(tag), verticalArrangement = Arrangement.spacedBy(10.dp)) { body(); answers() }
 }
 
 /** What Orbit can't prove: each gap under the criterion it names, why Orbit cannot prove it, and what the coordinator checked
@@ -260,8 +282,9 @@ internal fun DoneOrdinal(text: String) = Box(Modifier.defaultMinSize(18.dp, 18.d
  * with until the read catches up — and a read after the press that still says the project is not DONE means it was reopened since,
  * and the press no longer stands. A refusal stays on the card in the door's words. */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId: String, projectId: String, detail: JsonObject,
-    reads: Map<String, JsonElement>, fresh: Boolean, open: ((String) -> Unit)? = null) {
+    reads: Map<String, JsonElement>, fresh: Boolean, open: ((String) -> Unit)? = null, reviewing: Boolean = false, review: (Boolean) -> Unit = {}) {
     val doc = reads["project"] as? JsonObject
     val openItems = reads["openItems"] as? JsonObject
     val confirmation = reads["acceptanceConfirmation"] as? JsonObject
@@ -301,22 +324,37 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
             confirm = { criterion, body -> after { api.confirmCriterion(projectId, criterion, body) } },
             upload = { name, mime, bytes -> api.uploadImage(name, mime, bytes) }, image = { api.attachmentBytes(it) })
     } }
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
-        color = if (slot is ProjectDone.Slot.Done && !ProjectDone.recorded(doc, record)) MaterialTheme.colorScheme.surfaceVariant
-            else LocalOrbitColors.current.success.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp)) {
-            when (slot) {
-                is ProjectDone.Slot.Done -> ProjectDoneCard(doc, live, confirmation?.obj("confirmation")?.text("confirmedAt"), ProjectDone.openItemsCount(openItems),
-                    ProjectDone.runningCount(doc), record, sealRead = live?.obj("doneRequest") != null || (confirmation?.obj("currentVersion")?.text("digest") != null && doneCheck != null),
-                    now = Instant.now(), enabled = fresh, error = error, tag = tag, doneCheck = doneCheck,
-                    onRecord = {
-                        val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
-                        if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
-                    },
-                    onNotYet = notYet, actions = actions,
-                    onReopen = { if (write(ProjectDone.notReopened) { api.setStatus(projectId, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; readsAtRecord = null } })
-                ProjectDone.Slot.None -> Unit
+    @Composable fun card(inReview: Boolean) = ProjectDoneCard(doc, live, confirmation?.obj("confirmation")?.text("confirmedAt"),
+        ProjectDone.openItemsCount(openItems),
+        ProjectDone.runningCount(doc), record, sealRead = live?.obj("doneRequest") != null || (confirmation?.obj("currentVersion")?.text("digest") != null && doneCheck != null),
+        now = Instant.now(), enabled = fresh, error = error, tag = tag, doneCheck = doneCheck,
+        onRecord = {
+            val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
+            if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
+        },
+        onNotYet = notYet, actions = actions,
+        onReopen = { if (write(ProjectDone.notReopened) { api.setStatus(projectId, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; readsAtRecord = null } }, review = inReview)
+    val asking = slot is ProjectDone.Slot.Done && !ProjectDone.recorded(doc, record)
+    // In the conversation the question is a preview — its heading, the project and its tally — that opens the whole card in a review
+    // sheet, its answers pinned at the sheet's foot (the owner, 2026-11-17; iOS `ProjectDoneCardView`). The receipt is short and stays
+    // whole where it arrived: it is the answer left in the conversation.
+    if (asking) CardPreviewView(tag, CardPreview(ProjectDone.heading,
+        "${doc.text("title").orEmpty()} · ${ProjectDone.cardTally(ProjectDone.counts(doc), ProjectDone.mainBranch(doc), DoneFollowUps.nonCode(doc),
+            DoneFollowUps.waitingConfirmation(doc))}", PreviewTone.BLUE)) { review(true) }
+    else Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+        color = LocalOrbitColors.current.success.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.padding(16.dp)) { card(inReview = false) }
+    }
+    if (reviewing) ModalBottomSheet(onDismissRequest = { review(false) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = { BottomSheetDefaults.DragHandle() }) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight().imePadding().testTag("$tag:review")) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (asking) ProjectDone.heading else ProjectDone.thisProjectIsDone, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                IconButton(onClick = { review(false) }, Modifier.testTag("$tag:close")) { Icon(painterResource(R.drawable.ic_close), CardPreviews.close) }
             }
+            HorizontalDivider()
+            card(inReview = true)
         }
     }
     actions?.let { CriteriaDialogs(it) }

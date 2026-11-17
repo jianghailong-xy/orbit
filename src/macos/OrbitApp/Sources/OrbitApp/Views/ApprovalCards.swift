@@ -3082,10 +3082,10 @@ private struct StartProjectCardView: View {
 /// card with the new request in it. What it draws is `ProjectDoneCard`, which the project page's
 /// own Review and Record as done… open too.
 ///
-/// Drawn whole where it arrived, not as a preview that opens a review: the card is the question
-/// and its receipt is the answer left in the conversation (mock ⑤ ①–③, the browser's
-/// `SessionProjectSettlementCard`), so neither hides behind a press. Clearing the review target
-/// is what puts `ApprovalReviewLayout` on its whole-card path.
+/// In the conversation the question is a small preview — its heading, the project and its tally —
+/// and a press opens the whole card in the review sheet, its answers pinned at the sheet's foot
+/// (the owner, 2026-11-17: six criteria drawn whole took screens of the transcript). The receipt
+/// is short and stays whole where it arrived: it is the answer left in the conversation.
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var model
@@ -3137,7 +3137,6 @@ private struct ProjectDoneCardView: View {
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() },
                 followUps: followUps)
-                .environment(\.approvalReviewTarget, nil)
                 .task(id: row?.itemId) {
                     guard row == nil else { return }
                     await rereadCheck()

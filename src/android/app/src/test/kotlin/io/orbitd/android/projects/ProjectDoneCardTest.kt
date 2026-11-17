@@ -161,8 +161,8 @@ class ProjectDoneCardTest {
         assertFalse("no conversation asks why it is not done any more", texts().any { it.contains("Why is this project not done?") })
         // Done when's criteria, open at once up to a dozen (web `DONE_WHEN_OPEN_UP_TO`), each row's state on its own.
         compose.onAllNodesWithTag("done-criteria").assertCountEquals(0)
-        compose.onNodeWithTag("done-row:1-state", useUnmergedTree = true).assertTextEquals("met · Landed on main")
-        compose.onNodeWithTag("done-row:2-state", useUnmergedTree = true).assertTextEquals("met · nothing to land")
+        compose.onNodeWithTag("done-row:1-state", useUnmergedTree = true).assertTextEquals("Met · Landed on main")
+        compose.onNodeWithTag("done-row:2-state", useUnmergedTree = true).assertTextEquals("Met · nothing to land")
         compose.onNodeWithTag("done-record").performScrollTo().performClick()
         compose.waitForIdle(); assertEquals(1, recorded)
     }
