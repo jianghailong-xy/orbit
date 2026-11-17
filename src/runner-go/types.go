@@ -122,6 +122,47 @@ type HeartbeatRequest struct {
 	// CloneReports is where each clone the control plane asked for stands (clone_workdir.go). Omitted when there
 	// is none.
 	CloneReports []CloneReport `json:"cloneReports,omitempty"`
+	// ConditionSamples are the condition probes' readings since the last answered beat (condition_probe.go), oldest
+	// first per condition. Only a runner that declares condition-probe/v1 sends them; omitted when there are none.
+	ConditionSamples []ConditionSample `json:"conditionSamples,omitempty"`
+}
+
+// ConditionProbe is one condition whose probe this runner runs (docs/condition-triggers-design.md §4.2), as the
+// heartbeat answer lists it.
+type ConditionProbe struct {
+	// ID is the condition's id.
+	ID string `json:"id"`
+	// Command is the shell command, verbatim as the owner approved it.
+	Command string `json:"command"`
+	// CommandHash is the approved command's hash: the SHA-256 of its exact text, lowercase hex. A command that does
+	// not match it is not run.
+	CommandHash     string `json:"commandHash"`
+	TimeoutSeconds  int    `json:"timeoutSeconds"`
+	IntervalSeconds int    `json:"intervalSeconds"`
+	// WorkDir is the workspace's directory, where the command runs.
+	WorkDir string `json:"workDir"`
+	// Env is the workspace's environment, layered over the runner's as a session's is.
+	Env map[string]string `json:"env,omitempty"`
+}
+
+// ConditionSample outcomes.
+const (
+	conditionOutcomeValue   = "VALUE"
+	conditionOutcomeExit    = "EXIT"
+	conditionOutcomeTimeout = "TIMEOUT"
+	conditionOutcomeError   = "ERROR"
+)
+
+// ConditionSample is one reading of a probe (docs/condition-triggers-design.md §3). Value is the number on the last
+// non-empty line of stdout (VALUE); ExitCode is set whenever the command exited (VALUE, EXIT). StderrTail is the end
+// of stderr, at most 500 bytes; on ERROR it says, in words, why the probe could not run.
+type ConditionSample struct {
+	ConditionID string    `json:"conditionId"`
+	At          time.Time `json:"at"`
+	Outcome     string    `json:"outcome"`
+	Value       *float64  `json:"value,omitempty"`
+	ExitCode    *int      `json:"exitCode,omitempty"`
+	StderrTail  string    `json:"stderrTail,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -452,6 +493,10 @@ type HeartbeatResponse struct {
 	// this runner's that is PENDING or CLONING. A POINTER because only a present list states anything: absent (an
 	// older control plane, or an answer that reconciled nothing) stops nothing.
 	CloneRequests *[]CloneRequest `json:"cloneRequests,omitempty"`
+	// The conditions whose probes this runner runs (condition_probe.go), to a runner that declares condition-probe/v1.
+	// A POINTER because only a present list states anything: absent stops nothing, and a probe left out of a present
+	// list (empty included) stops.
+	ConditionProbes *[]ConditionProbe `json:"conditionProbes,omitempty"`
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`

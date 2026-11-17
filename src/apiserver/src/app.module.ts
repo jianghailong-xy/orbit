@@ -53,6 +53,7 @@ import { TerminalsModule } from './terminals/terminals.module';
 import { ScheduleRunsModule } from './schedules/schedule-runs.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
+import { ConditionsModule } from './conditions/conditions.module';
 
 @Module({
   imports: [
@@ -120,6 +121,8 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     ScheduleRunsModule,
     // Its REST doors: read, control, and the owner's press on a card (schedules/schedules.controller.ts).
     ScheduleDoorsModule,
+    // Conditions (docs/condition-triggers-design.md): the silence worker and the owner's read.
+    ConditionsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.
