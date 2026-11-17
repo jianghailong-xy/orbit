@@ -20,6 +20,7 @@ import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.se
 import { isScheduleItemKind } from '../schedules/schedule-attention';
 import { OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import { isConditionItemKind } from '../conditions/condition-attention';
 import { answerStillWaiting } from '../conditions/condition-still-waiting';
 import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
@@ -424,7 +425,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   async complete(
     ownerId: string,
     id: string,
-    given: { option?: number; text?: string },
+    given: { option?: number; text?: string; sendAsWritten?: boolean },
     client: OwnerRequestClient | null = null,
   ): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
@@ -454,8 +455,13 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'DECISION' && option === undefined && !text) {
       throw new BadRequestException('a decision needs an option or some text');
     }
+    // Settings › Translation: the owner's words reach the asking session in the agent language, or the answer is
+    // refused whole (422 TRANSLATION_FAILED) before anything is written. The option goes by index either way.
+    const translation = text
+      ? await ownerWordsForAgent(text, await translationLanguages(this.prisma, ownerId), given.sendAsWritten)
+      : null;
     const answer = option !== undefined || text
-      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}) }
+      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}), ...(translation ? { translation } : {}) }
       : null;
     return this.settle(ownerId, id, 'DONE', {
       resolvedByUserId: ownerId,
@@ -558,12 +564,26 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
-  async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
+  async decline(
+    ownerId: string,
+    id: string,
+    reason: string,
+    client: OwnerRequestClient | null = null,
+    sendAsWritten?: boolean,
+  ): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
     const request = await this.get(ownerId, id);
     this.refuseAnsweredElsewhere(request.kind);
-    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
+    // Settings › Translation: the reason reaches the asking session in the agent language, kept in `answer` beside
+    // the owner's own words in resolution_note, or the decline is refused whole (422 TRANSLATION_FAILED).
+    const translation = await ownerWordsForAgent(note, await translationLanguages(this.prisma, ownerId), sendAsWritten);
+    return this.settle(ownerId, id, 'DECLINED', {
+      resolvedByUserId: ownerId,
+      resolvedClient: client,
+      resolutionNote: note,
+      ...(translation ? { answer: json({ translation }) } : {}),
+    });
   }
 
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */

@@ -34,6 +34,7 @@ import {
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
 import { EVIDENCE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import {
   RESTART_TASK_ACTION,
   unansweredUndecidableRevision,
@@ -84,6 +85,9 @@ export interface DecideCompletionEvidence {
   evidenceRevision: string;
   decision: EvidenceDecisionValue;
   note?: string;
+  /** The account owner's press only: deliver a SEND_BACK's note untranslated, the "Send as written" of a note
+   *  refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean;
 }
 
 export interface CompletionCriterionSnapshotInput {
@@ -808,6 +812,13 @@ export class TaskCompletionEvidenceService {
     const note = decisionNote(input.decision, input.note);
     const ownerInTheApp = principal !== undefined
       && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
+    // Settings › Translation, before anything is written: a SEND_BACK the account owner typed in the app reaches the
+    // run in the agent language, or the decision is refused whole (422 TRANSLATION_FAILED). A session's note is an
+    // agent's own words and goes as written. The row keeps the owner's words; the translation rides the turn.
+    const langs = input.decision === 'SEND_BACK' && actor.type === CreatorType.USER && ownerInTheApp
+      ? await translationLanguages(this.prisma, ownerId)
+      : null;
+    const noteForAgent = await ownerWordsForAgent(note, langs, input.sendAsWritten);
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // The same Task mutex submission takes. It is what makes check 1 a compare-and-set: a
@@ -972,7 +983,8 @@ export class TaskCompletionEvidenceService {
     // goes on submit; a fault is logged and never reported as a failed decision, the note staying
     // readable on the revision in `list`.
     if (committed.decision.decision === 'SEND_BACK') {
-      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId)
+      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id, ownerInTheApp ? null : input.decidingSessionId,
+        noteForAgent && langs ? { note: noteForAgent.text, from: langs.owner } : undefined)
         .catch((error) => this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
           + `${error instanceof Error ? error.message : error}`));
     }

@@ -375,6 +375,20 @@ export const TRANSLATED_ORBIT_CARDS = [
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
 
 /**
+ * Words the owner typed on an owner card (an answer to a coordinator's question, an owner request's done text or
+ * decline reason, a done request's "Not yet…" note, an owner-confirmation answer), as they were delivered to the
+ * agent: translated from the owner's language into the agent's (`lang`). Stored beside the owner's own words, which
+ * stay what every card shows; absent when translation was off, or the owner pressed Send as written.
+ *
+ * Every door that takes such words takes `sendAsWritten: true` to deliver them untranslated, and refuses them whole
+ * with a 422 TRANSLATION_FAILED, recording nothing, when they cannot be translated — as an approval answer is.
+ */
+export interface OwnerWordsTranslation {
+  lang: TranslationLanguage;
+  text: string;
+}
+
+/**
  * "Show both languages" (board 02-bilingual.png, frame 3 option B), for a reply whose blocks do not
  * pair (bilingualPairs answers null) and so is drawn whole: its original (in the account's agent
  * language, English by default) is drawn in full when it runs to at most BILINGUAL_COLLAPSE_LINES

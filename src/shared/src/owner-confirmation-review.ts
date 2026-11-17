@@ -5,7 +5,7 @@
  * the readings the session rows and turn cards carry.
  */
 
-import type { OwnerCardTranslation } from './translation';
+import type { OwnerCardTranslation, OwnerWordsTranslation } from './translation';
 
 /**
  * One line of a review. criterionKey / whyNotProven / coordinatorChecked / evidenceRefs are
@@ -143,6 +143,8 @@ export interface OwnerConfirmationAnswer {
   /** OWNER: the owner chose it on the card. NOT_SHOWN: the client did not know about reviews, so
    *  the recommended option was recorded for them (Q3). */
   source: 'OWNER' | 'NOT_SHOWN';
+  /** `text` as the reviewer was told it, in the agent language, when Settings › Translation translated it. */
+  translation?: OwnerWordsTranslation;
 }
 
 /**

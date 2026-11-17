@@ -53,6 +53,7 @@ import {
   type CardFields,
 } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import {
   AskedQuestion,
   CoordinatorQuestion,
@@ -1400,7 +1401,7 @@ export class ProjectOpenItemService {
     ownerId: string,
     projectId: string,
     itemId: string,
-    given: { option?: number; text?: string },
+    given: { option?: number; text?: string; sendAsWritten?: boolean },
   ): Promise<OpenItemAnswered> {
     const item = await this.prisma.projectOpenItem.findFirst({
       where: { id: itemId, projectId, ownerId, kind: 'COORDINATOR_QUESTION' },
@@ -1424,9 +1425,15 @@ export class ProjectOpenItemService {
       && (!Number.isInteger(option) || option < 0 || option >= (question.options?.length ?? 0))) {
       throw new BadRequestException('option must name one of the options this question offered');
     }
+    // Settings › Translation: the owner's words reach the coordinator in the agent language, or the answer is
+    // refused whole (422 TRANSLATION_FAILED) before anything is written. The option goes by index either way.
+    const translation = text
+      ? await ownerWordsForAgent(text, await translationLanguages(this.prisma, ownerId), given.sendAsWritten)
+      : null;
     const answer: OwnerAnswer = {
       ...(option !== undefined ? { option } : {}),
       ...(text ? { text } : {}),
+      ...(translation ? { translation } : {}),
       answeredByUserId: ownerId,
     };
     await withTransactionRetry(this.prisma, async tx => {
@@ -1493,6 +1500,9 @@ export class ProjectOpenItemService {
     const refusal = refuseProjectStatusWrite('DONE', actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
     const note = normalizedDoneRequestDeclineNote(given);
+    // Settings › Translation: the note reaches the coordinator in the agent language, or the press is refused whole
+    // (422 TRANSLATION_FAILED) before anything is written.
+    const translation = await ownerWordsForAgent(note, await translationLanguages(this.prisma, ownerId), given.sendAsWritten);
     await withTransactionRetry(this.prisma, async (tx) => {
       // Rank 40: the same first lock as requestDone and recordProjectDone.
       const [project] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -1543,7 +1553,7 @@ export class ProjectOpenItemService {
           resolvedAt: at,
           resolvedBy: 'USER',
           resolvedByUserId: ownerId,
-          answer: { note } as unknown as Prisma.InputJsonValue,
+          answer: { note, ...(translation ? { translation } : {}) } as unknown as Prisma.InputJsonValue,
           resolutionNote: note,
         },
       });
@@ -2930,9 +2940,11 @@ export class ProjectOpenItemService {
     // so this remains an item/session key while the transcript layer correctly marks the turn as an
     // Orbit-authored answer rather than as a sender-typed message.
     const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    // The note as the coordinator reads it: its translation into the agent language when one was made.
+    const translated = (item.answer as { translation?: { text?: unknown } }).translation?.text;
     const content = doneRequestDeclineMessage(
       item.payload as unknown as DoneRequest,
-      note,
+      typeof translated === 'string' && translated ? translated : note,
       item.resolvedAt,
     );
     try {

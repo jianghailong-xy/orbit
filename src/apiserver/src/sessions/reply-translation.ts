@@ -5,6 +5,7 @@ import {
   TRANSLATION_FAILED_CODE,
   type ApprovalTranslation,
   type NormalizedRunEvent,
+  type OwnerWordsTranslation,
   type QuestionAnswers,
   type ReplyTranslation,
   type TranslatedQuestion,
@@ -371,6 +372,27 @@ export function decisionNotTranslated(): UnprocessableEntityException {
 }
 
 /**
+ * Words the owner typed, as an agent is to read them (OwnerWordsTranslation): translated from the owner's language
+ * into the agent's when translation is on (`langs`) and they did not ask to send as written. Null when there is
+ * nothing to translate — translation off, Send as written, or no words — and the words go as they are. Throws
+ * decisionNotTranslated when the translation fails: the door that called this refuses the answer whole and records
+ * nothing, which is why every such door calls it before its first write.
+ */
+export async function ownerWordsForAgent(
+  text: string | null | undefined,
+  langs: TranslationLanguages | null,
+  sendAsWritten?: boolean,
+): Promise<OwnerWordsTranslation | null> {
+  if (!langs || sendAsWritten === true || !text?.trim()) return null;
+  try {
+    return { lang: langs.agent, text: await translate(text, langs.owner, langs.agent) };
+  } catch (error) {
+    if (error instanceof TranslationFailed) throw decisionNotTranslated();
+    throw error;
+  }
+}
+
+/**
  * A decision as the engine reads it: every question and option the owner answered with in their language
  * mapped back to the card's original words, and their own words (a typed answer, `message`) translated from the
  * owner's language into the agent's when translation is on (`langs`) and they did not ask to send as written. Throws
@@ -383,16 +405,7 @@ export async function agentDecision(
   dto: { message?: string; answers?: QuestionAnswers; sendAsWritten?: boolean },
   langs: TranslationLanguages | null,
 ): Promise<{ message?: string; answers?: QuestionAnswers }> {
-  const freeText = langs && dto.sendAsWritten !== true ? langs : null;
-  const toAgent = async (text: string): Promise<string> => {
-    if (!freeText || !text.trim()) return text;
-    try {
-      return await translate(text, freeText.owner, freeText.agent);
-    } catch (error) {
-      if (error instanceof TranslationFailed) throw decisionNotTranslated();
-      throw error;
-    }
-  };
+  const toAgent = async (text: string): Promise<string> => (await ownerWordsForAgent(text, langs, dto.sendAsWritten))?.text ?? text;
   const message = dto.message === undefined ? undefined : await toAgent(dto.message);
   if (!dto.answers || typeof dto.answers !== 'object') return { message, answers: dto.answers };
   const questions = (input as { questions?: CardQuestion[] } | null)?.questions;
