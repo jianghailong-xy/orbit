@@ -286,9 +286,14 @@ func TestClaudeAccountSwapThatFailsReportsWhyAndReleasesHeldTurns(t *testing.T) 
 	idleDef := startSwapPoolSession(t, p, "0b000000-0000-4000-8000-000000000001", "", false)
 	busyAcct := startSwapPoolSession(t, p, "0b000000-0000-4000-8000-000000000002", f.acct.dir, true)
 	results := newSwapResults()
+	// The swap pauses inside its oauthAccount step until the test has seen the turn held: a failure
+	// rolls back and releases within milliseconds, faster than waitHeld's window.
+	reached, proceed := make(chan struct{}), make(chan struct{})
 	relay, _ := newTestSwapRelay(t, p, f, results, func(s *claudeLoginSwap) {
 		s.after = func(step string) error {
 			if step == claudeSwapStepOAuthAccount {
+				close(reached)
+				<-proceed
 				return context.DeadlineExceeded
 			}
 			return nil
@@ -296,7 +301,19 @@ func TestClaudeAccountSwapThatFailsReportsWhyAndReleasesHeldTurns(t *testing.T) 
 	})
 	relay.handle(ClaudeAccountSwapCommand{Account: filepath.Base(f.acct.dir), Attempt: "a1"})
 	results.next(t, "pending")
-	held := waitHeld(t, p, busyAcct.live)
+	held := make(chan bool, 1)
+	go func() { held <- p.waitActive(busyAcct.live, context.Background(), context.Background()) }()
+	select {
+	case <-reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the swap never reached its oauthAccount step")
+	}
+	select {
+	case <-held:
+		t.Fatalf("a turn of %s started during the swap", busyAcct.id)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(proceed)
 	failed := results.next(t, "failed")
 	if failed.Message != "Rolled back: context deadline exceeded — both logins are as they were." {
 		t.Fatalf("failed = %+v", failed)
