@@ -77,6 +77,7 @@ function samples(): Sample[] {
       hints,
       release,
       connectionId: 'conn-1',
+      browser: true,
     }),
     sample(pb.LimitsSchema, limits),
     sample(pb.SessionStateSchema, sessionState),
