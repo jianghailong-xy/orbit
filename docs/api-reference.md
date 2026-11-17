@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 478 |
 | `admin` | 31 |
-| `runner` | 200 |
+| `runner` | 201 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **750** |
+| **Total** | **751** |
 
 ## Public routes
 
@@ -623,6 +623,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
 | `POST` | `/api/runner/codex-rate-limit-reset-result` | body `Object` | `RunnerApiController.codexRateLimitResetResult` |
+| `GET` | `/api/runner/conditions/:id` | path `id` | `RunnerConditionsController.get` |
 | `POST` | `/api/runner/criterion-checks/report` | body `ReportCriterionCheckDto` | `RunnerCriterionConfirmationController.report` |
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
