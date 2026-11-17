@@ -162,6 +162,14 @@ internal class RunnersModel(private val api: ManagementApi) {
             return null
         } finally { regionChecking = regionChecking - id }
     }
+    /** After Update Now went through: read again until the runner reports the restart (its next heartbeat), for up to 30 s. */
+    suspend fun awaitUpdateNowAnswer(id: String) {
+        repeat((RunnerUpdateNow.ANSWER_WAIT_MS / RunnerUpdateNow.ANSWER_POLL_MS).toInt()) {
+            if (RunnerUpdateNow.answered(runner(id))) return
+            delay(RunnerUpdateNow.ANSWER_POLL_MS)
+            load()
+        }
+    }
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners
@@ -466,7 +474,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }, change = card.phase == "postponed")
                     if (updateNow) RunnerUpdateNowButton(RunnerPage.displayName(runner), updateVersion.orEmpty(), { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
                         model.press { api.post(RunnerUpdateNow.path(id).joinToString("/"), RunnerUpdateNow.request()) }
-                            .also { if (it == null) notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())) }
+                            .also { if (it == null) { notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())); scope.launch { model.awaitUpdateNowAnswer(id) } } }
                     })
                     else if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
                         Text(RunnerUpdateLater.UPDATE_NOW)

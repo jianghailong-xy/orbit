@@ -60,6 +60,13 @@ internal object RunnerUpdateNow {
             report.str("phase") in setOf("available", "draining", "postponed")
     }
 
+    /** The press is one timestamp the runner's next heartbeat takes, and its report (phase `restarting`) the answer: once taken, the
+     *  runners are read again this often, for up to [ANSWER_WAIT_MS], so the Update card turns to Restarting without a pull. */
+    const val ANSWER_POLL_MS = 2_000L
+    const val ANSWER_WAIT_MS = 30_000L
+    /** Whether the runner has answered an Update Now: it no longer reports a release waiting, or is gone. */
+    fun answered(runner: JsonObject?): Boolean = runner == null || !offered(runner)
+
     /** The release it would install now. */
     fun version(runner: JsonObject): String = runner.obj("selfUpdate")?.str("targetVersion").orEmpty()
 
