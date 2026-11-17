@@ -72,7 +72,6 @@ import io.orbitd.android.composer.rememberManagedOffered
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.LocalManagedRunnerStatus
 import io.orbitd.android.composer.ManagedRunner
-import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
@@ -355,7 +354,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
-                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { if (ObjectId.same(it.id, ManagedRunnerIdentity.runnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
                                     if (!workspace.enabled) "Disabled" else if (runner?.online == false)
                                         ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                     sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
@@ -396,7 +395,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 // keyboard — back, title and the page's buttons come back when the keyboard goes.
                 val machineName = if (route.destination == Destination.DRAFT && route.workspaceId == null && route.id != null) {
                     data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), route.id) }?.let(RunnerPage::displayName)
-                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName) }
+                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) }
                 } else null
                 if (!PageBar.folds(route)) TopAppBar(modifier = Modifier.testTag("app-bar"),
                     title = {
@@ -528,7 +527,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
-    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName) })
+    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) })
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

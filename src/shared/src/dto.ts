@@ -1711,6 +1711,20 @@ export interface RunnerRegion {
   blockedChecks: number;
 }
 
+/** How a row of GET /runners and GET /runners/:id names its machine. Every client labels the account's
+ *  managed runner Orbit Cloud unless its owner named it; `managed` says which row that is, so no client
+ *  shows its stored name while GET /managed-runner is still on its way. Absent from an older server, whose
+ *  clients fall back to comparing the id with the managed status's runnerId. */
+export interface RunnerRowIdentity {
+  id: string;
+  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  name: string;
+  /** The name its owner gave it, which wins over both. */
+  displayName: string | null;
+  /** True on the account's managed runner (it has a ManagedRunner mapping), false on every other. */
+  managed?: boolean;
+}
+
 /** `region` on GET /runners and GET /runners/:id (contract §6). null for a runner that does not
  *  declare claude-region/v1, and for one no check has decided yet. */
 export interface RunnerRegionView {

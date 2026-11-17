@@ -51,7 +51,7 @@ internal enum class WaitingTab(val label: String, val filter: String, val empty:
 
 /** A runner by the name the owner knows it by. */
 internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
-    runners.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName) } ?: "this runner"
+    runners.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) } ?: "this runner"
 }
 
 /** The inbox as the shell opens it: from the drawer, or from a push's action naming the request in [route]'s id. A coordinator's
