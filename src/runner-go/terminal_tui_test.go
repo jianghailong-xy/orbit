@@ -584,3 +584,16 @@ func (l *lockedBuffer) String() string {
 	defer l.mu.Unlock()
 	return l.b.String()
 }
+
+func TestTerminalScheduledCheckRemembersExactCommand(t *testing.T) {
+	command := `python3 -c "print(open('watched.txt').read())"`
+	card := tuiApproval{ToolName: "Bash", Input: map[string]any{"command": command, "orbitScheduleCheckOnly": true}}
+	rules := card.rememberRules()
+	if len(rules) != 1 || rules[0]["ruleContent"] != command || rememberLabel(rules) != command {
+		t.Fatalf("exact command rules/label: %v / %q", rules, rememberLabel(rules))
+	}
+	delete(card.Input, "orbitScheduleCheckOnly")
+	if got := card.rememberRules(); len(got) != 1 || got[0]["ruleContent"] != "python3:*" {
+		t.Fatalf("ordinary command rules changed: %v", got)
+	}
+}

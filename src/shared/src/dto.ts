@@ -1711,6 +1711,20 @@ export interface RunnerRegion {
   blockedChecks: number;
 }
 
+/** How a row of GET /runners and GET /runners/:id names its machine. Every client labels the account's
+ *  managed runner Orbit Cloud unless its owner named it; `managed` says which row that is, so no client
+ *  shows its stored name while GET /managed-runner is still on its way. Absent from an older server, whose
+ *  clients fall back to comparing the id with the managed status's runnerId. */
+export interface RunnerRowIdentity {
+  id: string;
+  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  name: string;
+  /** The name its owner gave it, which wins over both. */
+  displayName: string | null;
+  /** True on the account's managed runner (it has a ManagedRunner mapping), false on every other. */
+  managed?: boolean;
+}
+
 /** `region` on GET /runners and GET /runners/:id (contract §6). null for a runner that does not
  *  declare claude-region/v1, and for one no check has decided yet. */
 export interface RunnerRegionView {
@@ -2604,7 +2618,7 @@ export interface SubagentDecision {
   readonly?: boolean;
 }
 
-/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the owner's account. */
 export interface SubagentWorkspaceChoice {
   /** The workspace's id, as the runner has it (a UUID). */
   id: string;
@@ -2728,7 +2742,7 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
-  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  /** A workspace to run on, by name (§10.1 row 1): any workspace of the owner's account, in its own repository. */
   workspace?: string;
   /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
   needs?: string[];
@@ -2879,6 +2893,9 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** An Ask (migration 0850, help.ts): start this session read-only, in a scratch folder holding the help article
+   *  library, never in workDir. Only to a runner that declares HELP_ASK_V1. Absent for every other session. */
+  helpAsk?: import('./help').HelpAskMarker;
   /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */

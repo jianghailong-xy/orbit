@@ -11,7 +11,7 @@ import {
   deriveSessionRunState,
   deriveSessionState,
 } from '@orbit/shared';
-import type { SharedEvent, SharedSession, SharedSessionNow } from '../api';
+import { sharedStreamUrl, type SharedEvent, type SharedSession, type SharedSessionNow } from '../api';
 import { Transcript } from '../components/Transcript';
 import { encodeId } from '../lib/idCodec';
 import { TASK_START_OPEN_TASK } from '../lib/taskStartCard';
@@ -96,6 +96,8 @@ let requests: string[];
 let current: rows.SessionRow;
 let added: SharedEvent[];
 let followAnswer: (after: number, limit: number) => unknown;
+/** What `/stream` answers; null is a server from before the stream, whose answer is the share's 404. */
+let streamReply: ((url: string, init?: RequestInit) => Response | Promise<Response>) | null;
 
 /** What `/events?after=` answers (sessions.service.ts `getSharedEventsAfter`): the header as
  *  `current` stands now, and the events of `added` past the seq asked for, `limit` at a time with
@@ -137,10 +139,12 @@ beforeEach(() => {
   current = rows.T6_RUN;
   added = [];
   followAnswer = followed;
+  streamReply = null;
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: RequestInit) => {
       requests.push(url);
+      if (streamReply && new URL(url, window.location.origin).pathname === `${SHARE}/stream`) return streamReply(url, init);
       return share(url);
     }),
   );
@@ -431,6 +435,237 @@ describe('a conversation still going', () => {
     expect(pill()).toBe('Running');
     await elapse(4_000);
     expect(followReads()).toEqual([after(208), after(209)]);
+  });
+
+  describe('over its stream', () => {
+    /** One stream the page opened: the URL it asked, and the server's end of it. */
+    interface Wire {
+      url: string;
+      send: (frame: unknown) => Promise<void>;
+      end: () => Promise<void>;
+      closed: () => boolean;
+    }
+    let wires: Wire[];
+    const encoder = new TextEncoder();
+    const streamAt = (since: number) => `${SHARE}/stream?sinceSeq=${since}&maxPayload=2048`;
+
+    /** The stream as viewer-stream.service.ts serves it: `data: <json>` messages, until the server
+     *  ends it or the page closes it. */
+    function openWire(url: string, init?: RequestInit): Response {
+      let controller!: ReadableStreamDefaultController<Uint8Array>;
+      let closed = false;
+      const body = new ReadableStream<Uint8Array>({
+        start: (c) => {
+          controller = c;
+        },
+      });
+      init?.signal?.addEventListener('abort', () => {
+        closed = true;
+        controller.error(new DOMException('aborted', 'AbortError'));
+      });
+      wires.push({
+        url,
+        send: async (frame) => {
+          await act(async () => {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+          });
+          await settle();
+        },
+        end: async () => {
+          closed = true;
+          await act(async () => controller.close());
+          await settle();
+        },
+        closed: () => closed,
+      });
+      return { ok: true, status: 200, statusText: 'OK', body } as Response;
+    }
+
+    beforeEach(() => {
+      wires = [];
+      streamReply = openWire;
+      // The reconnect's jitter at its longest wait: 1 s, 2 s, 4 s…
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const reply = (seq: number, text: string): SharedEvent => ({
+      seq,
+      type: 'assistant',
+      payload: { text },
+      turnId: 'turn-1',
+      ts: '2026-11-16T12:00:00.000Z',
+    });
+    const headOf = (row: rows.SessionRow) => {
+      const { events: _e, hasMore: _h, ...head } = served(row, [], false);
+      return head;
+    };
+
+    it('streams a conversation inside a project or task link from its own route', () => {
+      expect(sharedStreamUrl(TOKEN, { sinceSeq: 208, sessionId: 'abc' })).toBe(
+        `${SHARE}/sessions/abc/stream?sinceSeq=208&maxPayload=2048`,
+      );
+      expect(sharedStreamUrl(TOKEN, { sinceSeq: 0 })).toBe(`${SHARE}/stream?maxPayload=2048`);
+    });
+
+    it('opens the stream from the newest seq on the page, and asks nothing by polling', async () => {
+      await mountRunning();
+      expect(wires.map((w) => w.url)).toEqual([streamAt(208)]);
+      await elapse(60_000);
+      expect(followReads()).toEqual([]);
+    });
+
+    it('draws the reply as it is typed, then the reply itself in its place', async () => {
+      await mountRunning();
+      const [wire] = wires;
+      await wire.send({ seq: 0, type: 'text_delta', payload: { text: 'The build is ' } });
+      expect(container.textContent).toContain('The build is');
+      await wire.send({ seq: 0, type: 'text_delta', payload: { text: 'green on every' } });
+      // The draft is drawn at most every 90 ms, as the owner's is (StreamingMessage).
+      await elapse(90);
+      expect(container.textContent).toContain('The build is green on every');
+
+      await wire.send(reply(209, 'The build is green on every platform.'));
+      const text = container.textContent!;
+      expect(text).toContain('The build is green on every platform.');
+      // The draft gave way to the reply: the words are on the page once.
+      expect(text.split('The build is green on every')).toHaveLength(2);
+      // Below what was there.
+      expect(text.indexOf('The build is green')).toBeGreaterThan(text.indexOf(rows.REFERENCES_REPLY.payload.text.slice(0, 8)));
+    });
+
+    it('merges durable events by seq, each once', async () => {
+      await mountRunning();
+      const [wire] = wires;
+      await wire.send(reply(210, 'Second answer.'));
+      await wire.send(reply(209, 'First answer.'));
+      await wire.send(reply(210, 'Second answer.'));
+      await wire.send(reply(205, 'An event the page already holds.'));
+      const text = container.textContent!;
+      expect(text.indexOf('First answer.')).toBeGreaterThan(-1);
+      expect(text.indexOf('First answer.')).toBeLessThan(text.indexOf('Second answer.'));
+      expect(text.split('Second answer.')).toHaveLength(2);
+      expect(text).not.toContain('An event the page already holds.');
+    });
+
+    it('redraws the status pill from head frames', async () => {
+      await mountRunning();
+      expect(pill()).toBe('Running');
+      await wires[0].send({ seq: 0, type: 'head', payload: headOf({ ...rows.THIS_RUN, status: 'SUCCEEDED' }) });
+      expect(pill()).toBe('Succeeded');
+      expect(followReads()).toEqual([]);
+    });
+
+    it('opens a dropped stream again from the newest seq, after 1 s, then 2 s', async () => {
+      await mountRunning();
+      await wires[0].send(reply(209, 'First answer.'));
+      await wires[0].end();
+      await elapse(999);
+      expect(wires).toHaveLength(1);
+      await elapse(1);
+      expect(wires.map((w) => w.url)).toEqual([streamAt(208), streamAt(209)]);
+
+      // Dropped again before it said anything: the wait doubles.
+      await wires[1].end();
+      await elapse(1_999);
+      expect(wires).toHaveLength(2);
+      await elapse(1);
+      expect(wires.map((w) => w.url)).toEqual([streamAt(208), streamAt(209), streamAt(209)]);
+      expect(followReads()).toEqual([]);
+    });
+
+    it('closes the stream while the tab is hidden, and opens it again from where it was on return', async () => {
+      let hidden = false;
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      try {
+        await mountRunning();
+        await wires[0].send(reply(209, 'First answer.'));
+        hidden = true;
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await settle();
+        expect(wires[0].closed()).toBe(true);
+        await elapse(10 * 60_000);
+        expect(wires).toHaveLength(1);
+        expect(followReads()).toEqual([]);
+
+        hidden = false;
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+        await settle();
+        expect(wires.map((w) => w.url)).toEqual([streamAt(208), streamAt(209)]);
+        await wires[1].send(reply(210, 'Second answer.'));
+        expect(container.textContent).toContain('Second answer.');
+      } finally {
+        delete (document as { hidden?: boolean }).hidden;
+      }
+    });
+
+    it('shows the link-gone state when the stream says the link is gone', async () => {
+      await mountRunning();
+      await wires[0].send({ type: 'gone' });
+      expect(container.textContent).toContain('This shared link isn’t available');
+      await elapse(10 * 60_000);
+      expect(wires).toHaveLength(1);
+      expect(followReads()).toEqual([]);
+    });
+
+    it('falls back to polling when the stream is refused with a 429', async () => {
+      streamReply = () => ({ ok: false, status: 429, statusText: 'Too Many Requests', json: async () => ({}) }) as Response;
+      await mountRunning();
+      added = [at(rows.OLDER_PROGRESS_1, 209)];
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208), after(209)]);
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(1);
+    });
+
+    it('falls back to polling when reopening a dropped stream is refused with a 429', async () => {
+      await mountRunning();
+      await wires[0].end();
+      streamReply = () => ({ ok: false, status: 429, statusText: 'Too Many Requests', json: async () => ({}) }) as Response;
+      await elapse(1_000);
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(2);
+      added = [at(rows.OLDER_PROGRESS_1, 209)];
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+      await elapse(60_000);
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(2);
+    });
+
+    it('falls back to polling against a server from before the stream (404)', async () => {
+      streamReply = () => notFound();
+      await mountRunning();
+      added = [at(rows.OLDER_PROGRESS_1, 209)];
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+      expect(container.textContent).not.toContain('This shared link isn’t available');
+      expect(requests.filter((url) => url.includes('/stream'))).toHaveLength(1);
+    });
+
+    it('falls back to polling when the network will not carry the stream', async () => {
+      streamReply = () => Promise.reject(new TypeError('Failed to fetch'));
+      await mountRunning();
+      await elapse(4_000);
+      expect(followReads()).toEqual([after(208)]);
+    });
+
+    it('catches up a gap too long to replay a page at a time, then opens the stream from its end', async () => {
+      await mountRunning();
+      added = [at(rows.OLDER_PROGRESS_1, 209), at(rows.OLDER_PROGRESS_2, 210)];
+      await wires[0].send({ seq: 0, type: 'resync' });
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+      expect(wires.map((w) => w.url)).toEqual([streamAt(208), streamAt(210)]);
+    });
   });
 });
 

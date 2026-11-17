@@ -231,6 +231,9 @@ public enum Approvals {
             || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return [] }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue else { return [] }
+            if input["orbitScheduleCheckOnly"]?.boolValue == true {
+                return cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : [PermissionRule(toolName: "Bash", ruleContent: cmd)]
+            }
             return bashCommandRules(cmd)
         }
         return [PermissionRule(toolName: toolName)]

@@ -613,6 +613,9 @@ export function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
       a.input && typeof a.input === 'object'
         ? (a.input as { command?: unknown }).command
         : undefined;
+    if ((a.input as { orbitScheduleCheckOnly?: boolean })?.orbitScheduleCheckOnly === true) {
+      return typeof cmd === 'string' && cmd.trim() ? [{ toolName: 'Bash', ruleContent: cmd }] : [];
+    }
     return typeof cmd === 'string' ? bashCommandRules(cmd) : [];
   }
   return [{ toolName: a.toolName }];

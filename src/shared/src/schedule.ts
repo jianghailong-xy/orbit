@@ -16,7 +16,7 @@
 export const SCHEDULE_STATES = ['ACTIVE', 'PAUSED', 'HELD', 'ENDED'] as const;
 export type ScheduleState = (typeof SCHEDULE_STATES)[number];
 
-export const SCHEDULE_ACCESS_LEVELS = ['CHECK_ONLY', 'OPEN_PR'] as const;
+export const SCHEDULE_ACCESS_LEVELS = ['CHECK_ONLY', 'OPEN_PR', 'LAND'] as const;
 export type ScheduleAccessLevel = (typeof SCHEDULE_ACCESS_LEVELS)[number];
 
 export const SCHEDULE_CHANGED_BY = ['USER', 'SESSION', 'RUN'] as const;
@@ -36,14 +36,14 @@ export type ScheduleRunState = (typeof SCHEDULE_RUN_STATES)[number];
 /** §7.2, plus OVER_BUDGET, which S2d adds for a MISSED run. */
 export const SCHEDULE_FAILURE_REASONS = [
   'RUNNER_UNAVAILABLE', 'QUOTA', 'ENGINE_CRASHED_BEFORE_START', 'REPORTED_FAILED', 'NO_REPORT', 'ENGINE_CRASHED',
-  'APPROVAL_TIMEOUT', 'RUN_LIMIT', 'CANCELLED_BY_OWNER', 'OVER_BUDGET',
+  'APPROVAL_TIMEOUT', 'RUN_LIMIT', 'CANCELLED_BY_OWNER', 'OVER_BUDGET', 'LANDING_FAILED',
 ] as const;
 export type ScheduleFailureReason = (typeof SCHEDULE_FAILURE_REASONS)[number];
 
 /** §6.1. */
 export const SCHEDULE_HELD_REASONS = [
   'WORKSPACE_NOT_OWNED', 'WORKSPACE_DELETED', 'WORKSPACE_DISABLED', 'AGENT_MISSING', 'AGENT_DISABLED',
-  'OUTSIDE_ENVELOPE', 'ACCESS_NOT_ENFORCEABLE', 'MODE_WIDER_THAN_ACCOUNT_DEFAULT', 'NO_REPOSITORY', 'SESSION_REFUSED',
+  'OUTSIDE_ENVELOPE', 'ACCESS_NOT_ENFORCEABLE', 'MODE_WIDER_THAN_ACCOUNT_DEFAULT', 'NO_REPOSITORY', 'SESSION_REFUSED', 'WORKTREE_DISABLED',
 ] as const;
 export type ScheduleHeldReason = (typeof SCHEDULE_HELD_REASONS)[number];
 
@@ -144,7 +144,13 @@ export const SCHEDULE_COPY = {
       detail: "edits in its own worktree and opens a PR. It can't merge or deploy.",
       brief: "edits in its own worktree and opens a PR. It can't merge or deploy.",
     },
+    LAND: {
+      label: 'Edit and land on main',
+      detail: "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.",
+      brief: "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.",
+    },
   },
+  landing: { landed: 'Landed on main: {sha}.', failed: 'Could not land on main: {reason}' },
   costs: {
     upTo: 'Up to {runs}, {minutes} min each',
     upToLower: 'up to {runs}, {minutes} min each',
@@ -194,6 +200,7 @@ export const SCHEDULE_COPY = {
     RUN_LIMIT: 'ran past its run limit',
     CANCELLED_BY_OWNER: 'was stopped by you',
     OVER_BUDGET: 'was over what you allowed this week',
+    LANDING_FAILED: 'could not land on main',
   },
   /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
   runReasonTexts: {
@@ -202,6 +209,7 @@ export const SCHEDULE_COPY = {
   /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
   failureReasonsWithSummary: {
     REPORTED_FAILED: 'reported a failure: {summary}',
+    LANDING_FAILED: 'could not land on main: {summary}',
   },
   /** Why a schedule is held, as a clause; `until` is what has to change before Resume. */
   heldReasons: {
@@ -224,6 +232,7 @@ export const SCHEDULE_COPY = {
     },
     NO_REPOSITORY: { clause: 'the workspace {workspace} has no repository', until: 'it has one' },
     SESSION_REFUSED: { clause: "its run's session could not be opened", until: 'that is fixed' },
+    WORKTREE_DISABLED: { clause: 'the workspace {workspace} has worktrees disabled', until: 'worktrees are enabled' },
   },
   heldWhere: ' in workspace {workspace}',
   /** Why a schedule is held, as the few words the phone's row line has room for ("agent disabled"). */
@@ -238,6 +247,7 @@ export const SCHEDULE_COPY = {
     MODE_WIDER_THAN_ACCOUNT_DEFAULT: 'wider than your default mode',
     NO_REPOSITORY: 'no repository',
     SESSION_REFUSED: 'session refused',
+    WORKTREE_DISABLED: 'worktrees disabled',
   },
   endedReasons: {
     DELETED: 'deleted',
@@ -300,6 +310,7 @@ export const SCHEDULE_COPY = {
     fields: {
       title: 'Name',
       prompt: 'Prompt',
+      readBack: 'Read-back',
       intent: 'What was asked',
       rule: 'Time',
       timezone: 'Time zone',
@@ -342,6 +353,7 @@ export const SCHEDULE_COPY = {
     noticeAbout: "You'll hear about new {findings} and failures only.",
   },
   envelopeCard: {
+    landTitle: 'Let {title} land on main?',
     titles: {
       ACCESS_LEVEL: 'Let {title} open PRs?',
       RUNS_PER_WEEK: 'Let {title} run more often?',
@@ -1086,7 +1098,7 @@ export function schedulePhoneRowLine(
     parts.push(short ?? C.tags.held);
   } else {
     if (schedule.workspaceName) parts.push(schedule.workspaceName);
-    if (schedule.accessLevel === 'OPEN_PR') parts.push(C.access.OPEN_PR.label);
+    if (schedule.accessLevel !== 'CHECK_ONLY') parts.push(C.access[schedule.accessLevel].label);
     if (schedule.state === 'PAUSED' && opts.pausedAt && opts.timezone) {
       parts.push(scheduleFill(C.row.pausedOn, { date: scheduleDateText(opts.pausedAt, opts.timezone) }));
     }
@@ -1231,7 +1243,7 @@ export function scheduleTimeline(input: {
 // The envelope card: Now / Asked
 // ---------------------------------------------------------------------------------------------------------------
 
-const ACCESS_ORDER: Record<ScheduleAccessLevel, number> = { CHECK_ONLY: 0, OPEN_PR: 1 };
+const ACCESS_ORDER: Record<ScheduleAccessLevel, number> = { CHECK_ONLY: 0, OPEN_PR: 1, LAND: 2 };
 
 /** The parts of `after` wider than `before`, in the card's order (schedule-envelope.ts widenedParts). */
 export function scheduleWidenedParts(before: ScheduleEnvelope, after: ScheduleEnvelope): ScheduleEnvelopePart[] {
@@ -1298,9 +1310,9 @@ export function scheduleEnvelopeSides(input: {
 }
 
 /** "Let Codex stable check open PRs?" */
-export function scheduleEnvelopeTitle(title: string, widens: readonly ScheduleEnvelopePart[], workspaceName?: string): string {
+export function scheduleEnvelopeTitle(title: string, widens: readonly ScheduleEnvelopePart[], workspaceName?: string, accessLevel?: ScheduleAccessLevel): string {
   const part = headPart(widens) ?? 'RUNS_PER_WEEK';
-  return scheduleFill(C.envelopeCard.titles[part], { title, ...(workspaceName ? { workspace: workspaceName } : {}) });
+  return scheduleFill(part === 'ACCESS_LEVEL' && accessLevel === 'LAND' ? C.envelopeCard.landTitle : C.envelopeCard.titles[part], { title, ...(workspaceName ? { workspace: workspaceName } : {}) });
 }
 
 /** The card's decline button: "Keep check only", "Keep weekly", else "Keep as it is". */

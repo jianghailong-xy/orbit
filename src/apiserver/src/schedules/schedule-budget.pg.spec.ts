@@ -78,6 +78,7 @@ before(async () => {
   const quiet = new Proxy({}, { get: () => () => undefined });
   const real = new SessionsScheduleRunPort(new SessionsService(db as never, quiet as never, quiet as never));
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: (input) => real.open(input),
     interrupt: async () => undefined,
     complete: async (_owner, sessionId) => void (await db.session.update({ where: { id: sessionId }, data: { completedAt: clockNow } })),

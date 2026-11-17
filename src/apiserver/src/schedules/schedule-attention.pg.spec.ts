@@ -97,6 +97,7 @@ before(async () => {
   sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: (input) => real.open(input),
     interrupt: async () => undefined,
     complete: async (_owner, sessionId) => {
@@ -438,7 +439,10 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
   });
   assert.equal(dispatched.workspaceId, w.workspaceId, 'the next run is a session of the same workspace');
   const allowed = dispatchAllowedTools(dispatched.provider ?? 'claude', ALWAYS_ALLOWED_TOOLS, dispatched.workspace!.permissionRules);
-  assert.ok(allowed.includes('Bash(curl:*)'), `the next run's session is dispatched with the rule: ${allowed.join(', ')}`);
+  const [rule] = dispatched.workspace!.permissionRules;
+  assert.equal(rule.ruleContent, card.input && (card.input as { command: string }).command);
+  assert.equal(rule.fromScheduleRun, true);
+  assert.ok(!allowed.includes('Bash(curl:*)'), 'scheduled grants are matched literally at the approval door');
 });
 
 /** The runner's approval door with spies where a card is announced: the session's stream and the push. */
@@ -470,7 +474,7 @@ async function heldByRunner(w: World, sessionId: string, engine = 'claude') {
   });
 }
 
-test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command; Always allow reaches the next claim, Bash rules only', { skip }, async () => {
+test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command; Always allow remembers the exact command across runs', { skip }, async () => {
   alerts = [];
   at('2026-11-14T00:00:00Z');
   const w = await world('s2e-check-only');
@@ -486,7 +490,8 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   advance(MINUTE);
 
   // A shell command: the ordinary card, announced and pushed, and the run's Waiting on you item.
-  const bash = await ask('Bash', { command: 'npm test' });
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  const bash = await ask('Bash', { command });
   assert.equal(bash.status, 'PENDING');
   assert.deepEqual(door.published.map((p) => p.type), ['approval_request']);
   assert.deepEqual(door.pushed, [{ sessionId, toolName: 'Bash' }]);
@@ -494,6 +499,10 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   const [item] = await pendingItems(schedule.id);
   assert.equal(item.kind, 'SCHEDULE_APPROVAL');
   assert.equal(item.approvalId, bash.id);
+  assert.ok(item.why.includes(command), 'the card says the exact command');
+  assert.ok(!item.why.includes('python3:*'));
+  const [shown] = await sessionsService.listApprovals(w.ownerId, sessionId);
+  assert.equal((shown.input as { orbitScheduleCheckOnly?: boolean }).orbitScheduleCheckOnly, true);
   assert.match(item.why, / in .+: later runs won't ask for this\.$/, 'the item says Always allow is a workspace rule');
   assert.equal(alertsOf(schedule.id).filter((a) => a.kind === 'AWAITING_APPROVAL').length, 1);
 
@@ -527,7 +536,8 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
       { workspaceId: w.workspaceId, toolName: 'mcp__orbit__bg_run', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python:*' },
-      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'npm test:*' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: command },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python3:*', fromScheduleRun: true },
     ],
   });
   // H5: Always allow on this card writes only this card's command's rule. Anything else is refused by name, and the
@@ -547,15 +557,17 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   assert.equal((await db.approval.findUniqueOrThrow({ where: { id: bash.id } })).status, 'PENDING', 'a refused answer decides nothing');
   await sessionsService.decideApproval(w.ownerId, sessionId, bash.id, {
     behavior: 'allow',
-    rememberRules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
+    rememberRules: [{ toolName: 'Bash', ruleContent: 'python3:*' }],
   });
   // H1: the rule is now marked as a scheduled card's (an interactive session had written the same row first); the
   // interactive python:* is not.
   const marked = await db.workspacePermissionRule.findMany({ where: { workspaceId: w.workspaceId, toolName: 'Bash' } });
   assert.deepEqual(
     marked.map((r) => [r.ruleContent, r.fromScheduleRun]).sort(),
-    [['', false], ['npm test:*', true], ['python:*', false]],
+    [['', false], [command, true], ['python:*', false], ['python3:*', true]].sort(),
   );
+  const decision = await door.controller.pollApproval({ id: w.runnerId } as never, sessionId, bash.id);
+  assert.equal(decision.rememberRules, undefined, 'literal data never becomes an engine permission pattern');
   assert.equal(await runs.reconcileRun(run.id), 'RUNNING');
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
 
@@ -564,12 +576,21 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   const next = await nextRun(schedule.id);
   const lists = await claimLists(next.sessionId);
   assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
-  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
     'the run\'s allow list and the rule a scheduled card wrote; not python:*, Edit, bg_run, the whole shell or mcp__orbit__*');
   for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
     assert.ok(lists.denied.includes(tool), `${tool} is denied`);
   }
   assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
+  await heldByRunner(w, next.sessionId);
+  const repeated = await door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, next.sessionId,
+    { toolName: 'Bash', input: { command }, toolUseId: `tu-${randomUUID()}` });
+  assert.equal(repeated.status, 'ALLOWED', 'the same command on the next run passes with no card');
+  assert.equal(door.published.length, 1, 'no new card for the same command');
+  const different = await door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, next.sessionId,
+    { toolName: 'Bash', input: { command: `python3 -c "open('watched.txt', 'w').write('changed')"` }, toolUseId: `tu-${randomUUID()}` });
+  assert.equal(different.status, 'PENDING', 'a different python3 command still asks, even with an old marked prefix');
+  assert.equal(door.published.length, 2);
 });
 
 /** What both claim paths hand the runner for a session claimed by a runner with these capabilities. */

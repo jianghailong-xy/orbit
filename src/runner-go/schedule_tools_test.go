@@ -227,7 +227,7 @@ func TestScheduleToolDescriptionsSteerChangesToUpdate(t *testing.T) {
 		}
 	}
 	update := descriptions["schedule_update"]
-	for _, want := range []string{"Leave intent out unless the person restates the goal", "a change of time, frequency, limits or prompt leaves intent alone", "readBack"} {
+	for _, want := range []string{"Leave intent out unless the person restates the goal", "a change of time, frequency, limits or prompt leaves intent alone", "Whenever you change when or how often the schedule runs (rule or timezone)", "pass a fresh readBack: one sentence saying when it runs and what it checks after the change"} {
 		if !strings.Contains(update, want) {
 			t.Errorf("schedule_update does not say %q", want)
 		}
@@ -257,5 +257,24 @@ func TestScheduleUpdateSendsItsReadBack(t *testing.T) {
 	})
 	if len(calls) != 1 || calls[0].body["readBack"] != "Every day at 23:46 I check it." {
 		t.Fatalf("calls = %+v", calls)
+	}
+}
+
+func TestScheduleAccessSchemaOffersLandWithItsLandingContract(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		name, _ := tool["name"].(string)
+		if name != "schedule_create" && name != "schedule_update" {
+			continue
+		}
+		props := tool["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		access := props["accessLevel"].(map[string]interface{})
+		if got := access["enum"].([]string); strings.Join(got, ",") != "CHECK_ONLY,OPEN_PR,LAND" {
+			t.Errorf("%s access levels: %v", name, got)
+		}
+		for _, phrase := range []string{"LAND never opens a PR", "normal merge check", "cannot release or deploy", "owner to allow it"} {
+			if !strings.Contains(access["description"].(string), phrase) {
+				t.Errorf("%s access description missing %q", name, phrase)
+			}
+		}
 	}
 }

@@ -116,19 +116,23 @@ struct FoldedBandBar: View {
             if let branch {
                 switch branch {
                 case .landed(let words):
-                    // The merge slot's own chip (`WTChip`).
+                    // The merge slot's own chip (`WTChip`). The one mark that gives way: a long
+                    // target ("Merged → scratch/…") is cut at its tail rather than widening the pill.
                     Text(words).font(.orbitLabel.weight(.semibold)).foregroundStyle(.green)
+                        .truncationMode(.tail)
                 case .merging:
                     Text(FoldedBand.merging).font(.orbitLabel).foregroundStyle(.secondary)
                 case .changes(let added, let deleted):
                     // The branch bar's own count (`WorktreeBar.statView`).
                     (Text("+\(added)").foregroundStyle(.green) + Text(" −\(deleted)").foregroundStyle(.red))
                         .font(.orbitMono)
+                        .fixedSize()
                 }
             }
         }
+        // Not `.fixedSize()` on the row: a pill wider than the screen widened the band under it,
+        // and the whole conversation slid sideways and stayed there while the band was folded.
         .lineLimit(1)
-        .fixedSize()
     }
 
     /// A card's glyph — the one its own line leads with — and its count.
@@ -141,6 +145,7 @@ struct FoldedBandBar: View {
                 .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
         }
         .foregroundStyle(.secondary)
+        .fixedSize()
     }
 
     /// The Agents line's own reading (`AgentsBandRow`).

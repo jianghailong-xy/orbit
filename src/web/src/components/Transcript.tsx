@@ -980,6 +980,8 @@ export interface UnreadSteer {
   /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
   delivery?: string;
   withdrawable?: boolean;
+  /** Settings › Translation: `text` is the English delivered; `original` is what the reader wrote. */
+  translation?: TurnTranslation;
 }
 
 // The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
@@ -1042,6 +1044,13 @@ function transcriptOf(events: RunEvent[], turnImages?: Record<string, TurnImage[
 /** The reader's steers these events leave unread, in the order they were sent. */
 export function unreadSteersOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): UnreadSteer[] {
   return transcriptOf(events, turnImages).unread;
+}
+
+/** One row for a run of legacy per-file "diff withheld while a removal scan ran" notices. */
+function legacyWithheldMessage(count: number): string {
+  return count === 1
+    ? 'Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.'
+    : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
 function buildTranscript(
@@ -1298,9 +1307,20 @@ function buildTranscript(
   // The `turnHead` the turn now open is drawn from — the message that opened it, until its
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
+  let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    const legacy =
+      ev.type === 'system' &&
+      p.subtype === 'secret_patch_withheld' &&
+      typeof p.path === 'string' &&
+      [
+        "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+        "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.",
+      ].some((template) => p.notice === `${p.path}: ${template}`);
+    if (!legacy || legacyWithheld?.turn !== ev.turnId) legacyWithheld = undefined;
+
     // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
     // continuation. Other transcript events are a hard boundary for the pending log.
     if (ev.type !== 'system' && ev.type !== 'tool_use' && ev.type !== 'tool_result') lastStderr = undefined;
@@ -1640,12 +1660,21 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
+          if (legacyWithheld) {
+            legacyWithheld.count++;
+            legacyWithheld.node.message = legacyWithheldMessage(legacyWithheld.count);
+            break;
+          }
           const notice: NoticeNode = {
             kind: 'notice',
             seq: ev.seq,
             message: String(p.notice),
             ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
           };
+          if (legacy) {
+            notice.message = legacyWithheldMessage(1);
+            legacyWithheld = { node: notice, count: 1, turn: ev.turnId };
+          }
           if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
           into(parent).push(notice);
           break;
@@ -1692,6 +1721,7 @@ function buildTranscript(
     attachmentRefs: node.attachmentRefs,
     delivery: node.delivery,
     withdrawable: node.withdrawable,
+    ...(node.translation ? { translation: node.translation } : {}),
   }));
   return { nodes: roots, unread };
 }

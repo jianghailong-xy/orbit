@@ -22,7 +22,9 @@ data class DirectoryWorkspace(val id: String, val name: String, val runnerId: St
     val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
-    val displayName: String? = null, val lastHeartbeatAt: String? = null)
+    val displayName: String? = null, val lastHeartbeatAt: String? = null,
+    /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
+    val managed: Boolean? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable

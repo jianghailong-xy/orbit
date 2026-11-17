@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -356,7 +357,7 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 		mu.Unlock()
 	}
 	work := make(chan os.DirEntry)
-	for i := 0; i < secretTaintScanWorkers; i++ {
+	for i := 0; i < min(secretTaintScanWorkers, runtime.NumCPU()); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -378,7 +379,7 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 }
 
 // secretTaintScanWorkers is how many checkouts a removal scan reads at once.
-const secretTaintScanWorkers = 4
+const secretTaintScanWorkers = 8
 
 // taintCheckout records what one session checkout, named name under worktreesDir, holds of r's values: its own
 // history and what is not committed yet.
@@ -392,7 +393,7 @@ func taintCheckout(dir, name string, r *integrationOutputRedactor) error {
 	}
 	var failed error
 	base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(name))
-	if err := recordSecretTaint(dir, "HEAD", r, base); err != nil {
+	if err := recordCheckoutSecretHistory(dir, base, r); err != nil {
 		failed = err
 	}
 	// What is not committed yet: a file held back from a commit stays in the working tree, and the next
@@ -407,6 +408,36 @@ func taintCheckout(dir, name string, r *integrationOutputRedactor) error {
 	return failed
 }
 
+func recordCheckoutSecretHistory(dir, base string, r *integrationOutputRedactor) error {
+	tip, err := checkoutSecretHistoryTip(dir, base)
+	if err != nil || tip == "" {
+		return err
+	}
+	// Remote-tracking origin refs describe objects already published, including
+	// scratch checkouts with no orbit-base. IntegrationJobCommand.RemoteName can
+	// select another remote (ordinary merges push origin), but sending an already
+	// public object elsewhere does not newly disclose its value. As with base,
+	// leave those objects out only here; push guards retain destination exclusions.
+	return recordSecretTaint(dir, tip, r, base, "--remotes=origin")
+}
+
+// No cache of index stats can prove untracked files unchanged. Skip only the
+// history proven empty by HEAD == base, and always scan index/working tree again.
+// Resolve the tip once so a concurrent HEAD change cannot change this proof.
+func checkoutSecretHistoryTip(dir, base string) (string, error) {
+	tip, err := git(dir, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		if taintObjectMissing(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if tip == base {
+		return "", nil
+	}
+	return tip, nil
+}
+
 // uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage with content
 // other than HEAD's (secretScanCandidates) and whose content holds one of r's values, with the blob id
 // `git hash-object` gives its content: the id a `git add` of it makes. Staged blobs that differ from HEAD are taken too.
@@ -415,11 +446,17 @@ func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secr
 		return nil, nil
 	}
 	var hits []secretTaintObject
-	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
 	names, err := secretScanCandidates(dir)
 	if err != nil {
 		return hits, err
 	}
+	// Candidates include differences between HEAD and the index too. With no
+	// candidates there are no staged blobs to read; still query git every time
+	// rather than reusing index metadata that says nothing about untracked files.
+	if len(names) == 0 {
+		return nil, nil
+	}
+	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
 	for _, name := range names {
 		path := filepath.Join(dir, name)
 		info, err := os.Lstat(path)
@@ -457,7 +494,7 @@ func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secr
 }
 
 // secretScanCandidates is every path of dir whose working-tree file may differ from HEAD's blob at that path: what
-// `git status` reports (changed against the index or HEAD, untracked and not ignored), and every entry flagged
+// git reports (changed against the index or HEAD, untracked and not ignored), and every entry flagged
 // assume-unchanged or skip-worktree, which status does not look at.
 //
 // A path left out has, as git's own stat check (racily clean entries included) finds, the same content as its blob in
@@ -466,14 +503,11 @@ func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secr
 // this one reads. So reading the file again cannot find anything the record does not already get, and the 300 checkouts
 // of a busy runner are no longer read file by file, docs and screenshots included, at every removal.
 //
-// The flags that could make status trust a stale answer are off: no fsmonitor, no untracked cache, and no optional
-// lock, so a session working in the checkout is not disturbed.
+// Use plumbing for working-tree differences: unlike status it need not refresh
+// stat-dirty entries just to present a clean answer. A conservative extra candidate
+// is fine: we read it ourselves. Staged differences and untracked paths are separate
+// queries. No fsmonitor, untracked cache or optional index writes are trusted.
 func secretScanCandidates(dir string) ([]string, error) {
-	out, err := gitNulOutput(dir, "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
-		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--ignore-submodules=all")
-	if err != nil {
-		return nil, err
-	}
 	seen := map[string]bool{}
 	var names []string
 	add := func(name string) {
@@ -482,10 +516,18 @@ func secretScanCandidates(dir string) ([]string, error) {
 			names = append(names, name)
 		}
 	}
-	for _, entry := range strings.Split(string(out), "\x00") {
-		// "XY path"; --no-renames leaves no second path to follow an entry.
-		if len(entry) > 3 && entry[2] == ' ' {
-			add(entry[3:])
+	for _, args := range [][]string{
+		{"diff-files", "--name-only", "-z", "--no-renames", "--ignore-submodules=all"},
+		// No explicit HEAD: diff --cached also handles an unborn checkout.
+		{"diff", "--cached", "--name-only", "-z", "--no-renames", "--ignore-submodules=all"},
+		{"ls-files", "--others", "--exclude-standard", "-z"},
+	} {
+		out, err := gitNulOutput(dir, append([]string{"-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"}, args...)...)
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range strings.Split(string(out), "\x00") {
+			add(name)
 		}
 	}
 	flagged, err := gitNulOutput(dir, "ls-files", "-z", "-v")
@@ -623,16 +665,6 @@ var secretTaintPending struct {
 	sync.Mutex
 	list    []*integrationOutputRedactor
 	running map[*integrationOutputRedactor]bool
-	// ended is closed, and replaced, whenever a scan ends (waitPendingTaintScans).
-	ended chan struct{}
-}
-
-// pendingTaintScanEndedLocked wakes everyone waiting for a scan to end. secretTaintPending is held.
-func pendingTaintScanEndedLocked() {
-	if secretTaintPending.ended != nil {
-		close(secretTaintPending.ended)
-		secretTaintPending.ended = nil
-	}
 }
 
 // pendingTaintScanRunningLocked reports whether a pending matcher's scan is running. secretTaintPending is held.
@@ -643,30 +675,6 @@ func pendingTaintScanRunningLocked() bool {
 		}
 	}
 	return false
-}
-
-// waitPendingTaintScans waits, at most d, until no removal scan is running, and reports whether none is. A matcher
-// whose scan failed stays pending all the same: this waits for scans, not for the record.
-func waitPendingTaintScans(d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	for {
-		secretTaintPending.Lock()
-		if !pendingTaintScanRunningLocked() {
-			secretTaintPending.Unlock()
-			return true
-		}
-		if secretTaintPending.ended == nil {
-			secretTaintPending.ended = make(chan struct{})
-		}
-		ended := secretTaintPending.ended
-		secretTaintPending.Unlock()
-		select {
-		case <-ended:
-		case <-timer.C:
-			return false
-		}
-	}
 }
 
 // pendingTaintMatchers is every matcher still pending, its scan running or failed.
@@ -699,7 +707,6 @@ func recordPendingTaint(r *integrationOutputRedactor) error {
 	secretTaintPending.Lock()
 	defer secretTaintPending.Unlock()
 	delete(secretTaintPending.running, r)
-	defer pendingTaintScanEndedLocked()
 	if err != nil {
 		return err
 	}

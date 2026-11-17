@@ -33,8 +33,8 @@ public enum RunnerPageFormat {
     }
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
-    /// managed runner (`ManagedRunnerIdentity`, the managed status's runnerId — never its stored name
-    /// `orbit-managed`), else the machine's own name.
+    /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
+    /// never its stored name `orbit-managed`), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }
@@ -43,7 +43,7 @@ public enum RunnerPageFormat {
     public static func displayName(_ runner: Runner, managedRunnerID: String?) -> String {
         let alias = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !alias.isEmpty { return alias }
-        return isManaged(runner.id, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+        return isManaged(runner, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
     /// The name a machine falls back to with no alias: Orbit Cloud for the managed runner, else its own.
@@ -51,9 +51,15 @@ public enum RunnerPageFormat {
         isManaged(runner) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
-    /// Whether `runner` is the account's managed runner, by id.
+    /// Whether `runner` is the account's managed runner: its row says so (`managed`), or its id is the
+    /// managed status's runnerId (an older server, which sends no flag).
     public static func isManaged(_ runner: Runner) -> Bool {
-        isManaged(runner.id, managedRunnerID: ManagedRunnerIdentity.runnerID)
+        isManaged(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `isManaged` against a given managed runner id, kept pure for tests.
+    public static func isManaged(_ runner: Runner, managedRunnerID: String?) -> Bool {
+        runner.managed == true || isManaged(runner.id, managedRunnerID: managedRunnerID)
     }
 
     public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {

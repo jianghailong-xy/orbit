@@ -2686,9 +2686,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
-		settleSessionCheckout(job, execDir)
-		reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
+		var execDir string
+		if job.HelpAsk != nil {
+			// An Ask runs in no workspace and no repository: a scratch folder of help articles (help_ask.go).
+			execDir = prepareHelpAskDir(cfg.ServerURL, job)
+		} else {
+			execDir = pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
+			settleSessionCheckout(job, execDir)
+			reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
+		}
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {

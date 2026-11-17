@@ -32,6 +32,7 @@ import io.orbitd.android.attachments.importGuestImage
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.guests.GuestConversation
+import io.orbitd.android.core.guests.guestStream
 import io.orbitd.android.core.guests.GuestCopy
 import io.orbitd.android.core.guests.GuestImage
 import io.orbitd.android.core.guests.GuestSession
@@ -64,11 +65,13 @@ fun GuestSessionPage(app: OrbitApplication, handle: SessionHandle, route: OrbitR
     val auth by app.session.state.collectAsState()
     val myName = (auth as? AuthState.SignedIn)?.user?.name
     val scope = rememberCoroutineScope()
-    val model = remember(handle, id, myName) { GuestConversation(app.session, handle, id, myName, scope, initial) }
+    val model = remember(handle, id, myName) { GuestConversation(app.session, handle, id, myName, scope, initial,
+        stream = app.session.guestStream(handle)) }
     val view by model.state.collectAsState()
     var retry by remember(model) { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    // Followed only while the app is on screen (web: not while the tab is hidden); back on screen, it reads at once.
+    // Followed only while the app is on screen (web: not while the tab is hidden): the guest stream is closed when the page leaves
+    // STARTED and opened again from the newest seq read on return (polling, when it cannot be opened).
     LaunchedEffect(model, lifecycle, retry) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { model.follow() } }
     PageBar.Bind(route, title = if (view.loaded) SharedWithMe.firstLine(view.title) else null,
         subtitle = if (view.loaded) GuestCopy.sharedBy(view.ownerName) else null)
@@ -110,7 +113,8 @@ private fun GuestConversationView(model: GuestConversation) {
         snapshotFlow { list.isScrollInProgress }.distinctUntilChanged()
             .collect { scrolling -> if (!scrolling) pinned = !list.canScrollForward }
     }
-    LaunchedEffect(rows.lastOrNull()?.key, rows.size) { if (pinned && rows.isNotEmpty()) list.scrollToItem(rows.size) }
+    val tail = rows.size + view.thinkingDrafts.size + view.textDrafts.size
+    LaunchedEffect(rows.lastOrNull()?.key, tail, view.textDrafts, view.thinkingDrafts) { if (pinned && tail > 0) list.scrollToItem(tail) }
     val full = remember(model) { FullEvents { model.full(it) } }
     Column(Modifier.fillMaxSize()) {
         GuestHead(view.state.word, view.state.tone)
@@ -124,6 +128,9 @@ private fun GuestConversationView(model: GuestConversation) {
                 }
                 // A guest page names nothing outside the conversation: its links are drawn as their words.
                 items(rows, key = { it.key }) { row -> TranscriptRowView(row, full, null, {}) }
+                // The reply as the stream types it out, drawn as the owner's reader draws its live drafts.
+                items(view.thinkingDrafts.entries.toList(), key = { "thinking:${it.key}" }) { LiveMessage("Thinking", it.key, it.value) {} }
+                items(view.textDrafts.entries.toList(), key = { "assistant:${it.key}" }) { LiveMessage("Assistant", it.key, it.value) {} }
             }
         }
         GuestComposer(model, owner)
