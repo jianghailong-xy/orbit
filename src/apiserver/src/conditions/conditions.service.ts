@@ -9,6 +9,8 @@
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   CONDITION_SAMPLE_OUTCOMES,
+  CONDITION_STILL_WAITING_DAYS,
+  CONDITION_STILL_WAITING_KIND,
   type ConditionCompareOp,
   type ConditionProbe,
   type ConditionSampleOutcome,
@@ -31,6 +33,13 @@ import {
   type ConditionAlert,
   type ConditionNotifier,
 } from './condition-attention';
+import {
+  fileStillWaitingItem,
+  stillWaitingCopy,
+  stillWaitingDue,
+  stillWaitingKey,
+  stillWaitingSince,
+} from './condition-still-waiting';
 import {
   evaluateSample,
   evaluateSilence,
@@ -353,7 +362,7 @@ export class ConditionsService {
    * asleep, else RUNNER_OFFLINE); and samples older than 30 days go. Safe to run on every replica at once: each
    * condition is decided under its row lock.
    */
-  async sweep(): Promise<{ unknown: number; pruned: number }> {
+  async sweep(): Promise<{ unknown: number; pruned: number; asked: number }> {
     const now = this.clock();
     const candidates = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id" FROM "condition"
@@ -381,7 +390,55 @@ export class ConditionsService {
     const pruned = await this.prisma.$executeRaw`
       DELETE FROM "condition_sample" WHERE "at" < ${now}::timestamptz - ${CONDITION_SAMPLE_KEEP_DAYS} * interval '1 day'
     `;
-    return { unknown, pruned };
+    const asked = await this.askStillWaiting(now);
+    return { unknown, pruned, asked };
+  }
+
+  /**
+   * The 30-day question (§6.2, condition-still-waiting.ts): each task's condition that has not fired 30 days after it
+   * was created, or after the last Keep waiting, asks the owner once. The ASKED_STILL_WAITING event and the item are
+   * written together under the condition's row lock, and the item's key makes a second replica's pass file nothing.
+   */
+  async askStillWaiting(now: Date = this.clock()): Promise<number> {
+    const candidates = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT c."id" FROM "condition" c
+       WHERE c."task_id" IS NOT NULL AND c."state" <> 'ENDED' AND c."fired_at" IS NULL
+         AND COALESCE(c."keep_waiting_since", c."created_at") <= ${now}::timestamptz - ${CONDITION_STILL_WAITING_DAYS} * interval '1 day'
+         AND NOT EXISTS (
+           SELECT 1 FROM "owner_request" r
+            WHERE r."condition_id" = c."id" AND r."kind" = ${CONDITION_STILL_WAITING_KIND} AND r."state" = 'PENDING'
+         )
+       ORDER BY c."id"
+       LIMIT 200
+    `;
+    const alerts: ConditionAlert[] = [];
+    for (const { id } of candidates) {
+      const alert = await withTransactionRetry(this.prisma, async (tx) => {
+        const condition = await this.lock(tx, id);
+        if (!condition || !stillWaitingDue(condition, now)) return null;
+        const home = await this.homeSession(tx, condition);
+        // Nowhere to show it: a condition always comes from a conversation's card, so this is a row written by hand.
+        if (!home) return null;
+        const key = stillWaitingKey(condition.id, stillWaitingSince(condition));
+        const copy = stillWaitingCopy(condition.text);
+        const ownerRequestId = await fileStillWaitingItem(tx, {
+          ownerId: condition.ownerId, askedBySessionId: home, conditionId: condition.id,
+          workspaceId: condition.workspaceId, key, title: copy.title, why: copy.why,
+        });
+        // Asked before in this span, and answered or dismissed: once is once.
+        if (!ownerRequestId) return null;
+        await tx.conditionEvent.create({
+          data: { conditionId: condition.id, at: now, kind: 'ASKED_STILL_WAITING', value: condition.lastValue },
+        });
+        return {
+          ownerId: condition.ownerId, conditionId: condition.id, sessionId: home, ownerRequestId,
+          title: copy.title, body: copy.body, collapseId: key,
+        } satisfies ConditionAlert;
+      }, loggedRetry(this.log, 'conditions.askStillWaiting'));
+      if (alert) alerts.push(alert);
+    }
+    await this.send(alerts);
+    return alerts.length;
   }
 
   /** The owner's read: state, the newest samples and the events. Another account's condition is a 404. */
