@@ -1,4 +1,5 @@
 import type { EvidenceTranslation, OwnerCardTranslation } from '@orbit/shared';
+import { cardTranslationSettled } from './card-translation-wait';
 import { mapBounded, queueTranslation } from './reply-translation';
 import { translate } from './translation';
 import type { TranslationLanguages } from './turn-translation';
@@ -179,6 +180,8 @@ export function queueOwnerCardTranslation(store: OwnerCardStore, langs: Translat
       await translateOwnerCardNow(store, langs);
     } finally {
       queued.delete(key);
+      // A push or Feishu card waiting for this translation (decision 3A) reads the card again now.
+      cardTranslationSettled(store.key, langs.owner);
     }
   });
   return true;

@@ -12,6 +12,7 @@ import {
   type TranslationEventPayload,
 } from '@orbit/shared';
 import { AsyncWorkQueue } from '../common/async-work-queue';
+import { cardTranslationSettled } from './card-translation-wait';
 import { translate, TranslationFailed } from './translation';
 import type { TranslationLanguages } from './turn-translation';
 
@@ -333,7 +334,9 @@ export function translateApprovalCard(
   toolName?: string | null,
 ): void {
   if (!langs || !cardHasText(input, toolName)) return;
-  track(queue.run(() => translateCardNow(deps, sessionId, approvalId, langs)));
+  // The Feishu card waiting for this translation (decision 3A) reads the approval again once it was tried.
+  track(queue.run(() => translateCardNow(deps, sessionId, approvalId, langs)
+    .finally(() => cardTranslationSettled(`approval:${approvalId}`, langs.owner))));
 }
 
 export async function translateCardNow(
