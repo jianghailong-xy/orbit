@@ -70,10 +70,19 @@ import { APISERVER_PROCESS_QUIET_AFTER_MS, markRunnersChanged, RUNNER_BEATS } fr
 const EVENT_CHANNEL = 'orbit_event';
 /** For notifyWaiters. Named for what it first carried, turns for the inbox long polls that are gone. */
 const WAITERS_CHANNEL = 'orbit_inbox';
+/** For publishViewerRevoked: a viewer's access may have ended (docs/session-viewer-stream-design.md §5). */
+const VIEWER_CHANNEL = 'orbit_viewer';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 /** How often a runner change that could not be marked is reported (markRunnerChanged): once a minute, never per mark. */
 const UNMARKED_REPORT_MS = 60_000;
+
+/**
+ * Whose viewer streams a committed write may have ended (docs/session-viewer-stream-design.md §5): every stream of a
+ * session (it went to the Trash or was deleted), one guest's streams of a session (removed, or left), or every stream
+ * opened through a link (turned off, or changed). A stream it names rechecks its access and, if that is gone, ends.
+ */
+export type ViewerRevocation = { sessionId: string; guestId?: string } | { linkId: string };
 
 /**
  * Cap on the mid-turn text one session holds for a client that connects while it is streaming (see
@@ -376,6 +385,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
+  /** publishViewerRevoked's signals, this replica's own and those the NOTIFY bridge carried in. */
+  private readonly viewerRevocations$ = new Subject<ViewerRevocation>();
   /** sessionId → what reached this replica for the session behind its read-back in flight (readBackInOrder). */
   private readonly heldBehindReadBack = new Map<string, Array<{ event: NormalizedRunEvent } | ReadBack>>();
   /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
@@ -457,6 +468,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
       await client.query(`LISTEN ${WAITERS_CHANNEL}`);
       await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
+      await client.query(`LISTEN ${VIEWER_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
       const lostAt = this.listenerLostAt;
@@ -550,7 +562,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string; u?: 1; x?: number;
+      a?: string; ts?: string; u?: 1; x?: number; v?: ViewerRevocation;
     };
     try {
       m = JSON.parse(payload);
@@ -562,6 +574,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === WAITERS_CHANNEL) {
       this.waiters.emit(m.r);
+      return;
+    }
+    if (channel === VIEWER_CHANNEL) {
+      if (m.v) this.viewerRevocations$.next(m.v);
       return;
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
@@ -755,6 +771,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   notifyWaiters(key: string): void {
     this.waiters.emit(key); // same replica
     this.notifyRaw(WAITERS_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
+  }
+
+  /**
+   * A write that may end viewers' access has committed: tell every replica's viewer streams it names
+   * (ViewerStreamService), this one's at once and the others' over NOTIFY. Best effort: a signal that is lost is
+   * caught by the streams' own recheck at their next ping.
+   */
+  publishViewerRevoked(revocation: ViewerRevocation): void {
+    this.viewerRevocations$.next(revocation);
+    this.notifyRaw(VIEWER_CHANNEL, JSON.stringify({ i: this.instanceId, r: 'viewer', v: revocation }));
+  }
+
+  /** Every publishViewerRevoked, from this replica and the others. */
+  viewerRevocations(): Observable<ViewerRevocation> {
+    return this.viewerRevocations$.asObservable();
   }
 
   /** Park until notifyWaiters(key) on any replica, or the timeout elapses. */
@@ -1002,6 +1033,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     });
+  }
+
+  /**
+   * A session's `session_updated` signals — a rename, a row change — which streamForRun keeps out of the transcript
+   * stream (isLifecycleType). The viewer streams re-read their head on them (sessions/viewer-stream.service.ts); the
+   * hub alone carries them, from this replica and over NOTIFY from the others.
+   */
+  sessionUpdatesForRun(runId: string): Observable<NormalizedRunEvent> {
+    return this.hub.asObservable().pipe(
+      filter((m) => m.runId === runId && m.event.type === RunEventType.SESSION_UPDATED),
+      map((m) => m.event),
+    );
   }
 
   /**

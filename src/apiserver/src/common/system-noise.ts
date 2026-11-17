@@ -101,8 +101,19 @@ export const NON_REPLAYABLE_EVENT_TYPES: readonly string[] = [
   TOMBSTONE_EVENT_TYPE,
 ];
 
-/** SQL predicate for a row that may cross a persisted transcript replay/page boundary. */
+/**
+ * The durable-event predicate: whether an event may cross a persisted transcript replay/page boundary. One
+ * definition, two spellings — `replayableEventSql` for the read paths that filter in the query, and
+ * `isReplayableEvent` for the streams that filter event by event (sessions/viewer-stream.ts). Both are built from
+ * the same two parts, NON_REPLAYABLE_EVENT_TYPES and the noise test (`notNoiseSql` / `isNoiseSystemEvent`), so a
+ * type added to the list leaves both at once. viewer-stream.pg.spec.ts holds the two to the same rows.
+ */
 export const replayableEventSql = Prisma.sql`
   ${notNoiseSql}
   AND type NOT IN (${Prisma.join(NON_REPLAYABLE_EVENT_TYPES)})
 `;
+
+/** `replayableEventSql`, spelled in JS: an event the paged reads would return. */
+export function isReplayableEvent(e: { type: string; payload?: unknown }): boolean {
+  return !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e);
+}
