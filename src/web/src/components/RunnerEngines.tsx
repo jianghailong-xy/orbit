@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   AgentProvider,
@@ -14,6 +14,7 @@ import {
   type PlanUsageSnapshot,
   type RunnerAccountRemoveSession,
   type RunnerAccountRemoveState,
+  type RunnerClaudeAccountSwapState,
   type RunnerEngineAccount,
   type ReportedEngine,
   type RunnerEngineHealth,
@@ -96,6 +97,20 @@ import {
   runnerDefaultRemoveDetail,
   runnerDefaultRemovedLine,
   runnerDefaultUseAgainFailed,
+  RUNNER_ACCOUNT_SET_DEFAULT,
+  RUNNER_ACCOUNT_SET_DEFAULT_BUSY,
+  RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM,
+  RUNNER_ACCOUNT_SET_DEFAULT_HINT,
+  RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE,
+  RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED,
+  RUNNER_ACCOUNT_SET_DEFAULT_UPDATE,
+  RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL,
+  runnerAccountSetDefaultDetail,
+  runnerAccountSetDefaultFailed,
+  runnerAccountSetDefaultTitle,
+  runnerAccountSettingDefault,
+  runnerAccountSettingDefaultMany,
+  runnerAccountSettingDefaultOne,
 } from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
@@ -329,6 +344,10 @@ export function tildePath(path: string): string {
   return path.replace(/^(?:\/root|\/home\/[^/]+|\/Users\/[^/]+)(?=\/|$)/, '~');
 }
 
+/** What a runner declares when it can make an added Claude Code account the Default: the swap itself, and
+ *  moving a session into its account's new folder (RunnersService.setDefaultAccount asks for both). */
+const CLAUDE_ACCOUNT_SWAP_CAPABILITIES = ['claude-account-swap/v1', 'claude-account-move/v1'];
+
 /** Whether this account is on its way out: asked to be removed, and still listed until the re-probe
  *  that follows the machine's "done" drops it, a beat later. */
 function beingRemoved(runner: Runner, engine: RowEngine, account: string): boolean {
@@ -484,8 +503,12 @@ function QuotaCell({ kind, quota, next, signIn = true }: { kind: RowKind; quota:
 
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
-function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
+function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onSetDefault, setDefaultBlocked, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
   onRename?: () => void;
+  /** Set as default, on an added Claude Code account only. */
+  onSetDefault?: () => void;
+  /** Why Set as default can't be chosen now, said where its hint is; null when it can. */
+  setDefaultBlocked?: string | null;
   onSignIn?: () => void;
   /** What that item is called: "Re-sign in" for a login that is in, "Sign in" for one the check
    *  couldn't answer. */
@@ -518,6 +541,20 @@ function RunnerAccountMenu({ onRename, onSignIn, signInLabel, onRemove, offline,
       ] : [
         { key: 'pause', icon: <PauseOutlined aria-hidden />, label: 'Pause account…', disabled: controls.pending, onSelect: controls.choose },
       ] : []),
+      ...(onSetDefault ? [{
+        key: 'set-default',
+        icon: <StarOutlined aria-hidden />,
+        label: (
+          <span className="re-menu-label">
+            <span>{RUNNER_ACCOUNT_SET_DEFAULT}</span>
+            <span className="re-menu-hint">{setDefaultBlocked ?? RUNNER_ACCOUNT_SET_DEFAULT_HINT}</span>
+          </span>
+        ),
+        textValue: RUNNER_ACCOUNT_SET_DEFAULT,
+        title: setDefaultBlocked ?? undefined,
+        disabled: !!setDefaultBlocked,
+        onSelect: onSetDefault,
+      }] : []),
       ...(onRemove ? [
         { type: 'separator' as const, key: 'divider' },
         { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: (offline && !removesInOrbit) || removing, onSelect: onRemove },
@@ -1302,6 +1339,7 @@ function AccountRow({
   const kind = envKey ? 'in' : accountKindOf(account);
   const [editing, setEditing] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [confirmingDefault, setConfirmingDefault] = useState(false);
   const isDefault = account.id === 'default';
   const panel = accountPanel(engine, account.id);
   // What became of the last removal asked for here, if it was this account's of this engine's: the
@@ -1329,6 +1367,28 @@ function AccountRow({
     },
     onError: (e: Error) => message.error("Couldn't remove the account", e.message),
   });
+  // Set as default (Claude Code, added accounts): the runner swaps this login with the one in ~/.claude,
+  // after any turn in progress on either account ends. One swap per runner at a time.
+  const swap = engine === 'claude' ? runner.claudeAccountSwap : null;
+  const swapping = swap?.status === 'pending';
+  const swapMine = swap?.account === account.id ? swap : null;
+  const setDefault = useMutation({
+    mutationFn: () =>
+      api<RunnerClaudeAccountSwapState>(
+        `/runners/${runner.id}/accounts/${engine}/${account.id}/set-default`,
+        { method: 'POST' },
+      ),
+    onSettled: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error(runnerAccountSetDefaultFailed(accountNameOf(account)), e.message),
+  });
+  const canSetDefault = engine === 'claude' && !isDefault;
+  const setDefaultBlocked = !runner.online
+    ? RUNNER_ACCOUNT_SET_DEFAULT_OFFLINE
+    : !CLAUDE_ACCOUNT_SWAP_CAPABILITIES.every((c) => runner.capabilities?.includes(c))
+      ? RUNNER_ACCOUNT_SET_DEFAULT_UPDATE
+      : swapping || setDefault.isPending
+        ? RUNNER_ACCOUNT_SET_DEFAULT_BUSY
+        : null;
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
   const now = usePauseClock(account.pausedUntil);
@@ -1360,6 +1420,26 @@ function AccountRow({
       setConfirmingRemove(false);
     },
   };
+  const defaultAccount = runner.engines?.find((entry) => entry.engine === engine)?.accounts?.find((entry) => entry.id === 'default');
+  const setDefaultQuestion = {
+    title: runnerAccountSetDefaultTitle(accountNameOf(account)),
+    description: runnerAccountSetDefaultDetail(
+      accountNameOf(account),
+      defaultAccount ? tildePath(accountDir(defaultAccount)) : '~/.claude',
+      defaultName,
+      tildePath(accountDir(account)),
+      runnerName,
+    ),
+    popupClassName: 're-confirm',
+    confirmText: RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM,
+    onConfirm: () => {
+      setDefault.mutate();
+      setConfirmingDefault(false);
+    },
+  };
+  // The sessions with a turn in progress the swap waits on, and any terminal Claude Code on either folder.
+  const swapWaiting = swapMine?.status === 'pending' ? swapMine.waitingOn.length : 0;
+  const swapForeign = swapMine?.status === 'pending' ? swapMine.foreignProcesses.length : 0;
   const menuAnchor = useRef<HTMLSpanElement>(null);
   const more = useRef<HTMLButtonElement>(null);
   const menu = (
@@ -1371,6 +1451,8 @@ function AccountRow({
       onRename={() => setEditing(true)}
       onSignIn={(kind === 'in' || kind === 'unknown') && !envKey && !regionBlocked ? toggle : undefined}
       signInLabel={kind === 'unknown' ? 'Sign in' : undefined}
+      onSetDefault={canSetDefault ? () => setConfirmingDefault(true) : undefined}
+      setDefaultBlocked={setDefaultBlocked}
       onRemove={removable ? () => setConfirmingRemove(true) : undefined}
       pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
         name: accountNameOf(account), until: account.pausedUntil,
@@ -1436,6 +1518,16 @@ function AccountRow({
               onCancel={() => setConfirmingRemove(false)}
               returnFocus={more}
             />
+            {canSetDefault && (
+              <Popconfirm
+                {...setDefaultQuestion}
+                anchor={menuAnchor}
+                open={confirmingDefault}
+                onOpenChange={(open) => { if (!open) setConfirmingDefault(false); }}
+                onCancel={() => setConfirmingDefault(false)}
+                returnFocus={more}
+              />
+            )}
           </>
         ) : menu}
       </div>
@@ -1483,6 +1575,27 @@ function AccountRow({
               ? runnerAccountMovingOne(engineNameOf(engine))
               : runnerAccountMovingMany(engineNameOf(engine), moving)}
           </span>
+        </div>
+      )}
+      {/* Becoming the Default: said under the account, as a removal's move is, until the swap is done. */}
+      {swapMine?.status === 'pending' && (
+        <div className="re-dup re-swapping">
+          <span>
+            {swapWaiting === 0
+              ? runnerAccountSettingDefault(accountNameOf(account))
+              : swapWaiting === 1
+                ? runnerAccountSettingDefaultOne(accountNameOf(account))
+                : runnerAccountSettingDefaultMany(accountNameOf(account), swapWaiting)}
+            {swapForeign > 0 && ` ${RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL}`}
+          </span>
+        </div>
+      )}
+      {/* The machine could not swap the logins, and put both back: its reason, as a refused removal's. */}
+      {swapMine?.status === 'failed' && (
+        <div className="re-panel bad re-swap-failed">
+          <div className="re-panel-row">{runnerAccountSetDefaultFailed(accountNameOf(account))}</div>
+          {swapMine.message && <div className="re-panel-row">{swapMine.message}</div>}
+          <div className="re-panel-hint">{RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED}</div>
         </div>
       )}
       {(refused || blocking.length > 0) && (

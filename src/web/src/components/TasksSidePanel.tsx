@@ -43,6 +43,7 @@ import type {
   PlanUsage,
   RunnerAntigravityState,
   RunnerAccountRemoveState,
+  RunnerClaudeAccountSwapState,
   RunnerEngineHealth,
   RunnerEngineUpdateDismissals,
   RunnerAgentFix,
@@ -309,6 +310,9 @@ export interface Runner {
   /** The account removal in flight on this runner: which engine's store, which slot, and — when the
    *  machine refused — what it said. */
   accountRemove?: RunnerAccountRemoveState | null;
+  /** The Set as default this runner has in flight or last finished (Claude Code only): which added
+   *  account is becoming the Default, what it waits on, and — when it failed — why. */
+  claudeAccountSwap?: RunnerClaudeAccountSwapState | null;
   /** Where Claude's connection to Anthropic last came out, with the effective verdict
    *  (docs/claude-region-check-contract.md §6). null/undefined for a runner that does not check, one
    *  no check has decided yet, or an older control plane: never gated, drawn as before. */
