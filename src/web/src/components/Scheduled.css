@@ -84,6 +84,30 @@
 .sched-examples button::after { content: '\201D'; color: var(--text-4); }
 .sched-error { color: var(--error); font-size: 13px; margin-top: 6px; }
 
+/* ---- Conditions (docs/mocks/condition-triggers ④ ⑥): a gauge in place of the circle, the reading in place of a time ---- */
+.sched-group[data-group='CONDITION'] > h2 { color: var(--text-1); }
+.sched-gauge { width: 20px; height: 20px; flex: none; margin-top: 1px; display: grid; place-items: center; color: var(--brand); }
+.sched-gauge .sched-icon { width: 18px; height: 18px; }
+.sched-gauge[data-gauge='cant-read'] { color: var(--warning-solid); }
+.sched-row-reading { color: var(--text-3); }
+.sched-row-reading b { color: var(--text-1); font-weight: 600; }
+.cond-reading { display: flex; gap: 8px; align-items: baseline; }
+.cond-reading .sched-big { font-size: 22px; }
+.cond-bar { position: relative; margin: 10px 0 4px; padding-bottom: 16px; }
+.cond-bar-track { position: relative; display: block; height: 8px; border-radius: 999px; background: var(--fill-muted); }
+.cond-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--brand); }
+.cond-bar-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--text-4); }
+.cond-bar-mark.is-fire { background: var(--error); }
+.cond-bar-labels { position: absolute; left: 0; right: 0; top: 12px; height: 14px; font-size: 11px; color: var(--text-3); }
+.cond-bar-labels > span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.cond-bar-labels > .is-fire { color: var(--error); }
+.cond-bar-labels > .is-rearm { transform: translateX(-100%); padding-right: 4px; }
+.sched-who[data-who='CONDITION'] { background: var(--fill-muted); color: var(--text-2); }
+.sched-strip.is-condition .sched-icon { color: var(--brand); }
+.sched-card-facts dd .sched-command { margin: 4px 0 2px; }
+.tdp-start-when { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-2); margin-top: 6px; }
+.tdp-start-when .sched-icon { color: var(--brand); }
+
 /* ---- The inspector ---- */
 .sched-inspector {
   width: 400px; flex: none; border-left: 1px solid var(--border); background: var(--bg-subtle); overflow: auto; padding: 22px 22px 30px;

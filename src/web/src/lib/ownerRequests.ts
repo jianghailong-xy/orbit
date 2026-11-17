@@ -1,4 +1,5 @@
 import { SCHEDULE_COPY } from '@orbit/shared';
+import { CONDITION_COPY } from './conditions';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { openProjectsQuery, ownerRequestsQuery } from './queries';
@@ -15,9 +16,12 @@ import { formatSpan, sameResourceId } from './watches';
 export type OwnerRequestKind =
   | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
   // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
-  | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN';
+  | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN'
+  // A condition's items (apiserver conditions/condition-attention.ts): it cannot be read, or a task's condition has
+  // not held in 30 days.
+  | 'CONDITION_UNKNOWN' | 'CONDITION_STILL_WAITING';
 /** The kinds a session files, answered on the request's own doors. */
-export type AgentRequestKind = Exclude<OwnerRequestKind, `SCHEDULE_${string}`>;
+export type AgentRequestKind = Exclude<OwnerRequestKind, `SCHEDULE_${string}` | `CONDITION_${string}`>;
 export type OwnerRequestState = 'PENDING' | 'DONE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
 export type OwnerRequestListFilter = 'open' | 'done' | 'declined' | 'all';
 
@@ -86,6 +90,8 @@ export interface OwnerRequest {
   scheduleRunId?: string | null;
   approvalId?: string | null;
   scheduleChangeRequestId?: string | null;
+  /** CONDITION_*: the condition the item is about, which names its schedule or task. */
+  conditionId?: string | null;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -112,6 +118,8 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
   SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
   SCHEDULE_WIDEN: SCHEDULE_COPY.waiting.kinds.schedule,
+  CONDITION_UNKNOWN: CONDITION_COPY.waitingKind,
+  CONDITION_STILL_WAITING: CONDITION_COPY.waitingKind,
 };
 
 const DEVICES: Readonly<Record<string, string>> = {
