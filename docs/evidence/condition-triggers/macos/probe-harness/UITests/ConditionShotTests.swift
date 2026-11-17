@@ -44,7 +44,7 @@ final class ConditionShotTests: ProbeCase {
         tree(app, "inspector")
         shot("mac-6b-inspector")
         let ready = containing(app, "Ready again · 82.9%")
-        bring(app, ready, between: 120, and: 700, missingIsAbove: false, "inspector-history")
+        bring(app, ready, between: 120, and: 560, missingIsAbove: false, "inspector-history")
         expect(app, ["HISTORY", "Ready again · 82.9%", "Fired · 90.4% for 10 min", "Run of ", "Created"],
                "inspector-history")
         tree(app, "inspector-history")

@@ -160,9 +160,13 @@ class ProbeCase: XCTestCase {
             start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: below ? -140 : 140)),
                         withVelocity: .slow, thenHoldForDuration: 0.6)
             #else
+            // A scroll unit moves a pane about a third of a point on the CI Mac (session-recap-native's probe): step by
+            // the distance still to go, never so far as to jump past the band.
+            let distance = element.exists ? (below ? element.frame.maxY - bottom : top - element.frame.minY) : 600
+            let delta = Swift.max(40, Swift.min(900, distance * 2.5))
             let pane = window.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5))
             pane.hover()
-            window.scroll(byDeltaX: 0, deltaY: below ? -120 : 120)
+            pane.scroll(byDeltaX: 0, deltaY: below ? -delta : delta)
             #endif
             settle(1)
         }
