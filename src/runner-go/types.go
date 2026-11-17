@@ -1416,9 +1416,12 @@ type ClaimedSession struct {
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
-	WorkDir          string `json:"workDir,omitempty"`
-	SessionUUID      string `json:"sessionUuid"`
-	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
+	WorkDir string `json:"workDir,omitempty"`
+	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
+	// never in WorkDir. Sent only to a runner that declares helpAskCapabilityV1.
+	HelpAsk          *HelpAskMarker `json:"helpAsk,omitempty"`
+	SessionUUID      string         `json:"sessionUuid"`
+	RuntimeSessionID string         `json:"runtimeSessionId,omitempty"`
 	// LeaseOwner is the runner process identity observed when the server built this claim.
 	// A fresh process CAS-takes it over before it may activate an inbox generation.
 	LeaseOwner string `json:"leaseOwner,omitempty"`

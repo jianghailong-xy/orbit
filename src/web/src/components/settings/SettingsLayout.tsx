@@ -58,6 +58,8 @@ import { useMediaQuery } from '../../lib/useMediaQuery';
 import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
+import { HelpDrawer } from '../HelpDrawer';
+
 import type { Runner } from '../TasksSidePanel';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
@@ -165,6 +167,7 @@ export function SettingsLayout() {
             </div>
           </main>
         )}
+        <HelpDrawer />
       </div>
     </ControlPlaneProvider>
   );
