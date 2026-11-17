@@ -68,10 +68,12 @@ test('gateway/nginx.conf includes the routes for several apiservers by globs, wh
     `include ${MOUNT}/server/*.conf;`,
     // The run events' stream: a release handing over (the case below).
     `include ${HANDOVER}/apiserver*.conf;`,
-    // Inside the /api/events and /api/ locations: the first apiserver with the others behind it, then a release
-    // handing over.
+    // Inside the /api/events location: the first apiserver with the others behind it, then a release handing over.
     `include ${MOUNT}/first/*.conf;`,
     `include ${HANDOVER}/apiserver*.conf;`,
+    // The managed runner browser's viewer: a release handing over, and no upstream, so no max_fails (nginx.conf).
+    `include ${HANDOVER}/apiserver*.conf;`,
+    // Inside the /api/ location, as in /api/events.
     `include ${MOUNT}/first/*.conf;`,
     `include ${HANDOVER}/apiserver*.conf;`,
     // The web app.
@@ -88,6 +90,7 @@ test('a release hands each route to the apiserver or web over by the variable it
   const routes = [
     [/^\s*location ~ \^\/api\/runs\/\[\^\/\]\+\/events\$ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location = \/api\/events \{/m, 'apiserver', 'apiserver:3000'],
+    [/^\s*location ~ \^\/api\/runners\/\[\^\/\]\+\/browser\/vnc\$ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location \/api\/ \{/m, 'apiserver', 'apiserver:3000'],
     [/^\s*location \/ \{/m, 'web', 'orbit-web:80'],
   ];

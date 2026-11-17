@@ -28,6 +28,8 @@ const (
 	linkStreamMaxData    = 32 << 10
 	linkStreamMax        = 2
 	linkStreamDialWait   = 5 * time.Second
+	// linkStreamDialRetry is how long the runner waits before it dials the VNC socket again.
+	linkStreamDialRetry = 100 * time.Millisecond
 	// linkStreamRetry is how long the sender waits before it tries again a connection busy with another frame.
 	linkStreamRetry = time.Millisecond
 )
@@ -44,13 +46,30 @@ func linkVNCSocket() string {
 	return filepath.Join(machineHome(), "browser", "vnc.sock")
 }
 
+// linkStreamViewer is one viewer arriving: the browser starts for it if it is not running (the owner's Open browser,
+// browser_supervisor.go), and counts it as an open viewer, so that it does not stop for idleness while the stream is
+// open, until closed is called.
+func linkStreamViewer() (closed func(), err error) {
+	b := runnerBrowser()
+	if b == nil {
+		return func() {}, nil
+	}
+	if err := b.Open(); err != nil {
+		return nil, err
+	}
+	return b.ViewerOpened(), nil
+}
+
 // linkStreams is the open streams of one link.
 type linkStreams struct {
 	w *linkWork
-	// declared, offered and socket are what a stream needs, as functions so tests can set them.
+	// declared, offered, socket and viewer are what a stream needs, as functions so tests can set them.
 	declared func() bool
 	offered  func() bool
 	socket   func() string
+	viewer   func() (closed func(), err error)
+	// dialWait is how long a stream tries to reach the VNC socket.
+	dialWait time.Duration
 
 	mu   sync.Mutex
 	open map[string]*linkStream
@@ -58,7 +77,7 @@ type linkStreams struct {
 
 func newLinkStreams(w *linkWork) *linkStreams {
 	return &linkStreams{w: w, declared: linkStreamsDeclared, offered: w.browserOffered, socket: linkVNCSocket,
-		open: map[string]*linkStream{}}
+		viewer: linkStreamViewer, dialWait: linkStreamDialWait, open: map[string]*linkStream{}}
 }
 
 // linkStream is one open stream: its connection, its socket, and the room each direction has.
@@ -159,9 +178,19 @@ func (s *linkStreams) onOpen(conn *linkWorkConn, open *linkpb.StreamOpen) {
 	go st.run()
 }
 
-// run dials the socket, says the stream is open, and bridges it until it ends.
+// run starts the browser if it is not running, dials its socket, says the stream is open, and bridges it until it
+// ends.
 func (st *linkStream) run() {
-	sock, err := net.DialTimeout("unix", st.s.socket(), linkStreamDialWait)
+	closed, err := st.s.viewer()
+	if err != nil {
+		st.end(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_UNAVAILABLE, err.Error(), true)
+		return
+	}
+	go func() {
+		<-st.done
+		closed()
+	}()
+	sock, err := st.dial()
 	if err != nil {
 		st.end(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_UNAVAILABLE, "the browser's VNC socket does not answer", true)
 		return
@@ -187,6 +216,23 @@ func (st *linkStream) run() {
 		}
 	}()
 	st.readSocket()
+}
+
+// dial connects to the VNC socket, trying again for dialWait: a browser that has just started may not have
+// made its socket yet (x11vnc makes it a moment after it starts).
+func (st *linkStream) dial() (net.Conn, error) {
+	deadline := time.Now().Add(st.s.dialWait)
+	for {
+		sock, err := net.DialTimeout("unix", st.s.socket(), st.s.dialWait)
+		if err == nil || time.Now().After(deadline) {
+			return sock, err
+		}
+		select {
+		case <-st.done:
+			return nil, err
+		case <-time.After(linkStreamDialRetry):
+		}
+	}
 }
 
 // readSocket sends the socket's bytes as far as the window allows.

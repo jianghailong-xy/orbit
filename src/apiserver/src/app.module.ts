@@ -44,6 +44,7 @@ import { RunnerAttentionFixModule } from './runners/runner-attention-fix.module'
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerBrowserGateModule } from './managed-runners/managed-runner-browser-gate';
+import { BrowserViewerModule } from './managed-runners/browser-viewer';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
@@ -107,6 +108,8 @@ import { ConditionsModule } from './conditions/conditions.module';
     // The browser switch over it (docs/runner-browser-design.md §2).
     ManagedRunnerBrowserGateModule,
     ManagedRunnerModule,
+    // The browser's viewer, a WebSocket that listens only while that switch is on (managed-runners/browser-viewer.ts).
+    BrowserViewerModule,
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,
     FeishuActionsModule,

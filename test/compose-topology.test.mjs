@@ -869,7 +869,7 @@ test('(p) NATS is named to the apiserver and the link gateway alone, and stores 
 // hints and turn prefix requests and reads live streams and the answers to its requests, and its processes ask and
 // answer each other on api.> (2026-10-28, the top of this file); the gateway reads runners' hints and requests, publishes
 // live streams, answers a request once, and relays the browser's byte streams on vnc.> (docs/runner-browser-design.md §4,
-// 2026-11-17). No trace or debug logging, here or in the service's command (p). Changing
+// 2026-11-17), which the apiserver sends on vnc.*.down and reads on vnc.*.up (the viewer route, 2026-11-18). No trace or debug logging, here or in the service's command (p). Changing
 // any of it is a new decision, made here.
 test('(q) the runner link\'s NATS configuration is exactly the one task B4 added: two nkey users, each allowed only what it does', () => {
   const conf = readFileSync(path.join(repo, NATS_CONF), 'utf8');
@@ -882,8 +882,8 @@ test('(q) the runner link\'s NATS configuration is exactly the one task B4 added
     '{',
     'nkey: $RUNNER_LINK_NATS_APISERVER_KEY',
     'permissions: {',
-    'publish: { allow: ["rnr.>", "api.>"] }',
-    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>"] }',
+    'publish: { allow: ["rnr.>", "api.>", "vnc.*.down"] }',
+    'subscribe: { allow: ["ses.*.live", "_INBOX.>", "api.>", "vnc.*.up"] }',
     'allow_responses: true',
     '}',
     '}',

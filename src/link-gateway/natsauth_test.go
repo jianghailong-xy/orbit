@@ -126,6 +126,39 @@ func TestNATSAuthorizationOnARealServer(t *testing.T) {
 	}
 	_ = streamMsgs.Unsubscribe()
 
+	// And the apiserver's side of them (src/apiserver/src/managed-runners/browser-viewer.ts): it sends on .down, which the
+	// gateway reads, and reads .up, which the gateway writes; it may neither read what it sends nor write what it reads.
+	down, err := gateway.client.SubscribeSync("vnc." + stream + ".down")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, err := api.client.SubscribeSync("vnc." + stream + ".up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	flush(t, gateway, api)
+	if err := api.client.Publish("vnc."+stream+".down", []byte("viewer bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := down.NextMsg(5 * time.Second); err != nil || string(m.Data) != "viewer bytes" {
+		t.Fatalf("the apiserver's stream bytes did not reach the gateway: %v (apiserver errors %v)", err, api.errs)
+	}
+	if err := gateway.client.Publish("vnc."+stream+".up", []byte("runner bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := up.NextMsg(5 * time.Second); err != nil || string(m.Data) != "runner bytes" {
+		t.Fatalf("the gateway's stream bytes did not reach the apiserver: %v (apiserver errors %v)", err, api.errs)
+	}
+	_ = down.Unsubscribe()
+	_ = up.Unsubscribe()
+	api.denied(t, "subscription", "vnc."+stream+".down", func() error {
+		_, err := api.client.SubscribeSync("vnc." + stream + ".down")
+		return err
+	})
+	api.denied(t, "publish", "vnc."+stream+".up", func() error {
+		return api.client.Publish("vnc."+stream+".up", []byte("forged"))
+	})
+
 	// Two apiserver processes: one says what it holds on api.held and answers a request on its own subject, once; the
 	// other hears it and asks.
 	const instance = "0190a0b0-0000-7000-8000-0000000000f1"

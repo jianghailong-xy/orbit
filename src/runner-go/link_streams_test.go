@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -49,9 +50,19 @@ func listenVNC(t *testing.T) *vncStandIn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	v := &vncStandIn{path: filepath.Join(dir, "vnc.sock"), conns: make(chan net.Conn, 8)}
-	if v.ln, err = net.Listen("unix", v.path); err != nil {
+	v, err := listenVNCAt(t, filepath.Join(dir, "vnc.sock"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	return v
+}
+
+// listenVNCAt listens on path; it may be called off the test's goroutine.
+func listenVNCAt(t *testing.T, path string) (*vncStandIn, error) {
+	v := &vncStandIn{path: path, conns: make(chan net.Conn, 8)}
+	var err error
+	if v.ln, err = net.Listen("unix", v.path); err != nil {
+		return nil, err
 	}
 	t.Cleanup(func() { _ = v.ln.Close() })
 	go func() {
@@ -64,7 +75,7 @@ func listenVNC(t *testing.T) *vncStandIn {
 			v.conns <- c
 		}
 	}()
-	return v
+	return v, nil
 }
 
 func (v *vncStandIn) accepted(t *testing.T) net.Conn {
@@ -297,11 +308,83 @@ func TestALinkStreamIsOpenedOnlyWhenEverythingAllowsIt(t *testing.T) {
 	t.Run("no VNC server", func(t *testing.T) {
 		asManagedRunner(t)
 		r := newLinkStreamRig(t, true, filepath.Join(filepath.Dir(vnc.path), "absent.sock"))
+		r.m.work.streams.dialWait = 300 * time.Millisecond
 		r.open(streamOne, linkpb.StreamKind_STREAM_KIND_VNC)
 		if code := r.closed(t, streamOne); code != linkpb.StreamCloseCode_STREAM_CLOSE_CODE_UNAVAILABLE {
 			t.Fatalf("closed %v", code)
 		}
 	})
+}
+
+// A viewer's stream starts the browser when it is not running, counts as an open viewer until it ends, and waits for
+// the VNC socket the browser makes a moment after it starts. A browser that cannot start is answered UNAVAILABLE, with
+// the reason.
+func TestALinkStreamStartsTheBrowserForItsViewer(t *testing.T) {
+	asManagedRunner(t)
+	// A short directory: a Unix socket's path is limited to about a hundred bytes.
+	dir, err := os.MkdirTemp("", "vnc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "vnc.sock")
+	r := newLinkStreamRig(t, true, path)
+	var mu sync.Mutex
+	started, open := 0, 0
+	var vnc *vncStandIn
+	r.m.work.streams.viewer = func() (func(), error) {
+		mu.Lock()
+		defer mu.Unlock()
+		started++
+		open++
+		// The socket appears only after the browser was asked to start, a little later.
+		time.AfterFunc(300*time.Millisecond, func() {
+			mu.Lock()
+			defer mu.Unlock()
+			var err error
+			if vnc, err = listenVNCAt(t, path); err != nil {
+				t.Error(err)
+			}
+		})
+		return func() {
+			mu.Lock()
+			defer mu.Unlock()
+			open--
+		}, nil
+	}
+
+	r.open(streamOne, linkpb.StreamKind_STREAM_KIND_VNC)
+	if f := r.next(t).GetStreamOpened(); f.GetStreamId() != streamOne {
+		t.Fatalf("got %v, want StreamOpened", f)
+	}
+	mu.Lock()
+	if started != 1 || open != 1 {
+		t.Fatalf("browser asked to start %d times, %d viewers open; want 1 and 1", started, open)
+	}
+	got := vnc
+	mu.Unlock()
+	sock := got.accepted(t)
+
+	r.conn.send(&linkpb.Frame{Body: &linkpb.Frame_StreamClose{StreamClose: &linkpb.StreamClose{StreamId: streamOne, Code: linkpb.StreamCloseCode_STREAM_CLOSE_CODE_NORMAL}}})
+	_ = sock.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, err := sock.Read(make([]byte, 1)); err != io.EOF {
+		t.Fatalf("the socket after the gateway's close: %v", err)
+	}
+	linkWaitFor(t, 5*time.Second, "the viewer to be counted out", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return open == 0
+	})
+
+	r.m.work.streams.viewer = func() (func(), error) {
+		return nil, errors.New("The browser could not start: chromium: not found")
+	}
+	r.open(streamTwo, linkpb.StreamKind_STREAM_KIND_VNC)
+	f := r.next(t).GetStreamClose()
+	if f.GetStreamId() != streamTwo || f.GetCode() != linkpb.StreamCloseCode_STREAM_CLOSE_CODE_UNAVAILABLE ||
+		f.GetMessage() != "The browser could not start: chromium: not found" {
+		t.Fatalf("got %v, want UNAVAILABLE with the reason", f)
+	}
 }
 
 // A stream at full credit both ways does not hold up the runner's heartbeats: the VNC server writes without pause and
