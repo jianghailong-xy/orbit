@@ -17,6 +17,7 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import {
+  CONDITION_KEEPS_AWAKE_LINE,
   startWhenWaitingLine,
   type ConditionState,
   type TaskStartWhenInput,
@@ -230,9 +231,16 @@ export type StartWhenCardLines = {
   command: string;
   today: string;
   ifNever: string;
+  /** Under the check line, for a workspace on Orbit Cloud (§4.2, §6.2): "Keeps this cloud workspace awake while it
+   *  waits."; null otherwise. */
+  awake: string | null;
 };
 
-export function startWhenCardLines(sw: TaskStartWhenInput, runnerName: string | null): StartWhenCardLines {
+export function startWhenCardLines(
+  sw: TaskStartWhenInput,
+  runnerName: string | null,
+  keepsWorkspaceAwake = false,
+): StartWhenCardLines {
   const interval = intervalText(sw.intervalSeconds ?? 300);
   const where = runnerName ? ` on ${runnerName}` : '';
   const reading = sw.compare.op === 'EXIT_ZERO'
@@ -247,6 +255,7 @@ export function startWhenCardLines(sw: TaskStartWhenInput, runnerName: string | 
       ? `${reading}. It already holds, so the task starts as soon as it is created.`
       : `${reading}. Not yet.`,
     ifNever: 'Asks you after 30 days of waiting',
+    awake: keepsWorkspaceAwake ? CONDITION_KEEPS_AWAKE_LINE : null,
   };
 }
 

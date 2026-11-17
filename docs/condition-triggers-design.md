@@ -20,6 +20,11 @@ Owner decision of 2026-11-17, after the design was written:
 - a `WHEN` condition may **fire again every N while it still holds** (`repeatSeconds`, §3, §5.1): a guard whose fix
   failed leaves the service unhealthy, the condition never re-arms, and without a repeat nothing would fire again.
   Optional, `WHEN` rules only, at least 15 minutes; each repeat is a run like any other, counted in the weekly budget.
+- a condition on an **Orbit Cloud workspace keeps it awake** while the condition is active (§4.2): its schedule is
+  `ACTIVE`, or its task is OPEN and waiting. The managed runner is not put to sleep, and one asleep is woken, so its
+  probe keeps running. Pausing, ending or deleting the schedule, and the task starting or being cancelled, release it to
+  sleep by the ordinary idle rule. Both create cards say so (§6.1, §6.2). The owner chose this over a probe that wakes a
+  sleeping runner on a slower cadence.
 
 ## 1. Why
 
@@ -124,8 +129,19 @@ The runner runs; the server decides. This is the split the Watch contract uses f
   reports samples in the next `HeartbeatRequest` (`conditionSamples`).
 - The server stores the samples and moves the state (§5). The runner never decides that a condition fired, so a
   runner that died is seen as silence, not as "below the line".
-- A managed runner that is asleep is not woken by a probe. Its condition reads UNKNOWN with the reason
-  `RUNNER_ASLEEP`, shown on the row and not notified.
+- On an Orbit Cloud workspace (a managed runner), an **active condition keeps the workspace awake** (owner,
+  2026-11-17). Active means not ENDED, with its owner object live: a `WHEN` schedule that is `ACTIVE`, or a `startWhen`
+  task that is OPEN and has not started. Such a condition is demand for the runner
+  ([managed-runner-design.md](./managed-runner-design.md), "Provisioning retry wake and sleep" 5 to 8): the manager
+  does not start a drain while one exists and calls off one under way, the instance's acceptance of a drain is refused,
+  and a runner asleep when the condition is created, or when its schedule is resumed, is woken (the demand hook, and
+  the sweep that finds sleeping runners with work). Pausing, ending or deleting the schedule, a `HELD` schedule, the task
+  starting or being cancelled, and the condition ending each remove the demand; the runner then sleeps by the ordinary
+  idle rule. A self-managed runner, or the managed-runner switch off, is untouched: nothing here reads or writes a
+  managed runner. The runner's probe loop is unchanged.
+- `RUNNER_ASLEEP` is only the reason a silent condition shows while its woken runner is still coming up (waiting for
+  capacity, starting); it is shown on the row and not notified. A runner that cannot come back by itself (FAILED,
+  fenced, deleted, its account disabled) takes the ordinary can't-read path of §5.3, `RUNNER_OFFLINE`.
 
 ## 5. Evaluation
 
@@ -189,6 +205,9 @@ With a repeat, **When** carries one more line in words: "And again every 2 hours
 inspector's *Condition* block carries the same sentence. A repeat is not part of the envelope: the weekly budget
 already bounds the runs it can start, so changing it, shorter or longer, applies at once and is recorded as a revision.
 
+On an Orbit Cloud workspace, **When** carries one more line under the check line: "Keeps this cloud workspace awake
+while it waits." (§4.2). The condition's read says so as `keepsWorkspaceAwake`.
+
 A run started by a condition gets the firing in its run block: the reading, since when, and the recent samples. A
 repeat's block also says that it is a repeat, when the condition first fired, and how many runs it has started since.
 The run's report key is its own choice, as today (`above-90@2026-11-21`).
@@ -196,8 +215,9 @@ The run's report key is its own choice, as today (`above-90@2026-11-21`).
 ### 6.2 A task's startWhen (P3: A)
 
 `task_create` accepts `startWhen` in place of `runAt`. The confirmation card gains **Starts when**, **Today** and
-**If never**. The task is OPEN while it waits and reads "Waiting for: 3 or more OSDs are in" wherever a task shows
-why it has not started.
+**If never**. On an Orbit Cloud workspace, **Starts when** carries one more line under the check line: "Keeps this
+cloud workspace awake while it waits." (§4.2). The task is OPEN while it waits and reads "Waiting for: 3 or more OSDs
+are in" wherever a task shows why it has not started.
 
 The task's run begins by checking the condition again itself: the reading may have gone back since it fired. If it
 no longer holds, the run says so and ends, and the owner decides whether to wait again.
@@ -236,7 +256,8 @@ Board: `docs/mocks/condition-triggers/01-board.png`, iOS as the reference.
   Where a timed row shows its time, these show the newest reading and its age. A gauge replaces the circle.
   UNKNOWN rows are in **Needs you**.
 - **Inspector:** a *Condition* block (reading, firing line, re-arm line), *How it checks* (interval, runner,
-  command, when it was approved), and FIRED / READY_AGAIN lines in the history.
+  command, when it was approved, and, when the condition's read says `keepsWorkspaceAwake`, "Keeps this cloud workspace
+  awake while it waits."), and FIRED / READY_AGAIN lines in the history.
 - **Tasks:** the waiting line on the task; nothing else.
 - **Sessions:** the two create cards; on a run's session, the header names the firing instead of a planned time.
 - **Waiting on you:** can't-read cards, the 30-day question, and a run's proposal.

@@ -18,9 +18,18 @@ export type ConditionSampleOutcome = (typeof CONDITION_SAMPLE_OUTCOMES)[number];
 export const CONDITION_EVENT_KINDS = ['FIRED', 'READY_AGAIN', 'CANT_READ', 'READ_AGAIN', 'ASKED_STILL_WAITING'] as const;
 export type ConditionEventKind = (typeof CONDITION_EVENT_KINDS)[number];
 
-/** Why a condition is UNKNOWN (§5.3, §4.2). RUNNER_ASLEEP is shown and never notified. */
+/**
+ * Why a condition is UNKNOWN (§5.3, §4.2). RUNNER_ASLEEP is shown and never notified: its workspace's Orbit Cloud runner
+ * was woken for it and is still coming up (waiting for capacity, starting).
+ */
 export const CONDITION_UNKNOWN_REASONS = ['TIMEOUT', 'ERROR', 'RUNNER_OFFLINE', 'RUNNER_ASLEEP'] as const;
 export type ConditionUnknownReason = (typeof CONDITION_UNKNOWN_REASONS)[number];
+
+/**
+ * The line a condition on an Orbit Cloud workspace adds under its check line (§4.2, owner 2026-11-17): on the schedule
+ * create card, the task create card and the inspector's How it checks block.
+ */
+export const CONDITION_KEEPS_AWAKE_LINE = 'Keeps this cloud workspace awake while it waits.';
 
 /** The Waiting on you kind a condition that cannot be read files (§5.3). */
 export const CONDITION_WAITING_KIND = 'CONDITION_UNKNOWN';
@@ -103,6 +112,9 @@ export interface ConditionView {
   scheduleId: string | null;
   createdAt: string;
   endedAt: string | null;
+  /** Its workspace is on an Orbit Cloud (managed) runner, kept awake while the condition is active (§4.2): the
+   *  inspector's How it checks block then carries CONDITION_KEEPS_AWAKE_LINE. */
+  keepsWorkspaceAwake: boolean;
   /** Newest first. */
   samples: ConditionSampleView[];
   /** Newest first. */

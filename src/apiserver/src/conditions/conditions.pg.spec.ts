@@ -9,7 +9,8 @@
  *   three-failures-unknown   three failed checks in a row are UNKNOWN: one CANT_READ, one Waiting on you item with the
  *                            last reading, its age and why, one push; a sample that reads again closes the item;
  *   silence-unknown          three intervals with no sample are UNKNOWN (RUNNER_OFFLINE, notified once); a managed runner
- *                            asleep is RUNNER_ASLEEP, shown and not notified;
+ *                            asleep, which its active condition wakes, is RUNNER_ASLEEP while it comes up, shown and not
+ *                            notified (managed-runner-condition.pg.spec.ts covers the states);
  *   unknown-restarts-hold    UNKNOWN never fires and clears trueSince: the hold starts over from the sample that reads again;
  *   heartbeat-stores-samples a heartbeat from the runner that serves the condition's workspace is handed its probe (only
  *                            with condition-probe/v1) and its conditionSamples are stored and evaluated;
@@ -79,7 +80,8 @@ before(async () => {
   await verifyCoordinatorPgIdentity(pg);
   db = prismaClientFor(URL!);
   const prisma = db as unknown as PrismaService;
-  conditions = new ConditionsService(prisma, { notify: async (alert) => void alerts.push(alert) }, clock);
+  // The managed-runner switch on, as a server with Orbit Cloud runs it: RUNNER_ASLEEP is read only then.
+  conditions = new ConditionsService(prisma, { notify: async (alert) => void alerts.push(alert) }, clock, { enabled: true, problem: null });
   // The hook C3 and C4 implement; here it only records that the firing transaction called it.
   conditions.registerFireHook({ onFired: async (_tx, firing) => void fired.push(firing) });
 
@@ -398,7 +400,8 @@ test('silence-unknown', { skip }, async () => {
   assert.equal((await stateOf(never.id)).state, 'UNKNOWN');
   assert.match((await itemsOf(never.id))[0].why, /It has not been read yet\./);
 
-  // A managed runner asleep: RUNNER_ASLEEP, shown on the condition, neither filed nor pushed.
+  // A managed runner asleep, woken by its condition and still coming up: RUNNER_ASLEEP, shown on the condition, neither
+  // filed nor pushed.
   const sleepy = await world('asleep');
   await db.managedRunner.create({
     data: {

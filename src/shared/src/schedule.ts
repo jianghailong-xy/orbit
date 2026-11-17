@@ -9,7 +9,7 @@
  * their text is in web/capture/*.mjs and 02-agent-first.html. Placeholders are `{name}`, filled by scheduleFill.
  */
 
-import type { ConditionCompareOp, ConditionState } from './condition';
+import { CONDITION_KEEPS_AWAKE_LINE, type ConditionCompareOp, type ConditionState } from './condition';
 
 // ---------------------------------------------------------------------------------------------------------------
 // Closed sets (schema.prisma, schedule-envelope.ts, schedule-attention.ts, schedule-runs.service.ts)
@@ -471,6 +471,8 @@ export const SCHEDULE_CONDITION_COPY = {
   repeatUnits: { hour: 'hour', hours: '{count} hours', minute: 'minute', minutes: '{count} minutes' },
   checked: 'Checked every {interval} on {runner}, no model.',
   checkedNoRunner: 'Checked every {interval}, no model.',
+  /** Under the check line, when the workspace is on Orbit Cloud (§4.2): it stays awake while the condition waits. */
+  keepsAwake: CONDITION_KEEPS_AWAKE_LINE,
   seconds: '{count} s',
   minutes: '{count} min',
   hours: '{count} h',
@@ -963,6 +965,9 @@ export interface ScheduleWhenLines {
   command: string;
   /** "And again every 2 hours while it stays that way."; null for a condition with no repeat. */
   repeat: string | null;
+  /** "Keeps this cloud workspace awake while it waits." under the check line, for a workspace on Orbit Cloud; null
+   *  otherwise. */
+  awake: string | null;
 }
 
 /** "2 hours", "hour", "90 minutes": a repeat's interval as the sentence says it. */
@@ -981,7 +986,11 @@ export function scheduleRepeatText(repeatSeconds: number | null | undefined): st
   return scheduleFill(CC.repeat, { interval: repeatIntervalText(repeatSeconds) });
 }
 
-export function scheduleWhenLines(condition: ScheduleWhenCondition, runner: string | null): ScheduleWhenLines {
+export function scheduleWhenLines(
+  condition: ScheduleWhenCondition,
+  runner: string | null,
+  keepsWorkspaceAwake = false,
+): ScheduleWhenLines {
   const text = condition.holdSeconds > 0
     ? scheduleFill(CC.held, { condition: condition.text, duration: scheduleDurationText(condition.holdSeconds) })
     : condition.text;
@@ -996,7 +1005,13 @@ export function scheduleWhenLines(condition: ScheduleWhenCondition, runner: stri
   const checked = runner
     ? scheduleFill(CC.checked, { interval, runner })
     : scheduleFill(CC.checkedNoRunner, { interval });
-  return { text, detail: `${rearm} ${checked}`, command: condition.command, repeat: scheduleRepeatText(condition.repeatSeconds) };
+  return {
+    text,
+    detail: `${rearm} ${checked}`,
+    command: condition.command,
+    repeat: scheduleRepeatText(condition.repeatSeconds),
+    awake: keepsWorkspaceAwake ? CC.keepsAwake : null,
+  };
 }
 
 /** "7 runs a week", "1 run a week". */

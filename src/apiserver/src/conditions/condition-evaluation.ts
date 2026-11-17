@@ -220,8 +220,8 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
 
 /**
  * The clock's part: a condition with no sample for three intervals since its newest one (or since it was approved,
- * when it has none) is UNKNOWN, `RUNNER_ASLEEP` when its runner is a managed one that is asleep, else
- * `RUNNER_OFFLINE`. One already UNKNOWN or ENDED is left as it is.
+ * when it has none) is UNKNOWN, `RUNNER_ASLEEP` when its runner is an Orbit Cloud one still coming up (woken for it, and
+ * waiting for capacity or starting), else `RUNNER_OFFLINE`. One already UNKNOWN or ENDED is left as it is.
  */
 export function evaluateSilence(
   rules: Pick<ConditionRules, 'intervalSeconds'>,

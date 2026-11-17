@@ -21,6 +21,9 @@ import type { Condition, Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
+import { cloudWorkspaceIds } from '../managed-runners/managed-runner-work';
 import { stringEnv } from '../sessions/session-settings';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -240,7 +243,31 @@ export class ConditionsService {
     private readonly prisma: PrismaService,
     @Optional() @Inject(CONDITION_NOTIFIER) private readonly notifier?: ConditionNotifier,
     @Optional() @Inject('CONDITION_CLOCK') private readonly clock: () => Date = () => new Date(),
+    /** The managed-runner switch: off (or absent), nothing here reads or writes a managed runner. */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly gate?: ManagedRunnerGate,
+    /** Wakes an Orbit Cloud runner a new or resumed condition needs (§4.2). Absent, the manager's sweep finds it. */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly demand?: ManagedRunnerDemand,
   ) {}
+
+  /**
+   * After a commit that created or brought back a condition in `workspaceId`: an active condition is demand for its
+   * workspace's Orbit Cloud runner (docs/condition-triggers-design.md §4.2), so one asleep is asked to wake now rather
+   * than at the manager's next sweep. Off, or a runner with no mapping, does nothing. Never throws.
+   */
+  async wakeWorkspaceRunner(workspaceId: string | null | undefined): Promise<void> {
+    if (!this.gate?.enabled || !this.demand || !workspaceId) return;
+    try {
+      const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { runnerId: true } });
+      if (workspace?.runnerId) await this.demand.requested(workspace.runnerId, 'condition');
+    } catch (error) {
+      this.log.warn(`runner of workspace ${workspaceId} not woken for its condition: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** The workspaces of `workspaceIds` on an Orbit Cloud runner: a condition there keeps it awake (§4.2, §6). */
+  async keepsAwake(workspaceIds: Iterable<string>, db: Pick<PrismaService, 'workspace'> = this.prisma): Promise<Set<string>> {
+    return cloudWorkspaceIds(db, this.gate, workspaceIds);
+  }
 
   /** C3 and C4 register here. In C1 nothing does: a firing writes its event and state and starts nothing. */
   registerFireHook(hook: ConditionFireHook): void {
@@ -358,8 +385,8 @@ export class ConditionsService {
   }
 
   /**
-   * The clock's part: every live condition silent for three intervals goes UNKNOWN (RUNNER_ASLEEP for a managed runner
-   * asleep, else RUNNER_OFFLINE); and samples older than 30 days go. Safe to run on every replica at once: each
+   * The clock's part: every live condition silent for three intervals goes UNKNOWN (RUNNER_ASLEEP for an Orbit Cloud
+   * runner still coming up, else RUNNER_OFFLINE); and samples older than 30 days go. Safe to run on every replica at once: each
    * condition is decided under its row lock.
    */
   async sweep(): Promise<{ unknown: number; pruned: number; asked: number }> {
@@ -479,6 +506,7 @@ export class ConditionsService {
       scheduleId: c.scheduleId,
       createdAt: c.createdAt.toISOString(),
       endedAt: iso(c.endedAt),
+      keepsWorkspaceAwake: (await this.keepsAwake([c.workspaceId])).has(c.workspaceId),
       samples: c.samples.map((s) => ({
         at: s.at.toISOString(), outcome: s.outcome, value: s.value, exitCode: s.exitCode, stderrTail: s.stderrTail,
       })),
@@ -491,10 +519,21 @@ export class ConditionsService {
     return locked.length ? tx.condition.findUnique({ where: { id } }) : null;
   }
 
+  /**
+   * Whether the condition's runner is an Orbit Cloud one that is coming back by itself and is not up yet (§4.2): asleep,
+   * draining, or woken and waiting for capacity or starting. An active condition is demand for it, so it is coming up,
+   * and the silence is RUNNER_ASLEEP, shown and not notified. One that cannot come back by itself — FAILED, fenced,
+   * being deleted, its owner disabled — is not, and neither is a self-managed runner: RUNNER_OFFLINE, the ordinary
+   * can't-read path (§5.3). Off, nothing is read.
+   */
   private async runnerAsleep(tx: Prisma.TransactionClient, condition: Condition): Promise<boolean> {
+    if (!this.gate?.enabled) return false;
     const rows = await tx.$queryRaw<Array<{ asleep: boolean }>>`
-      SELECT (m."desired_state" = 'SLEEPING' OR m."management_state" = 'SLEEPING') AS "asleep"
+      SELECT (m."desired_state" <> 'DELETED'
+              AND m."management_state" IN ('REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING', 'DRAINING', 'SLEEPING')
+              AND u."disabled_at" IS NULL) AS "asleep"
         FROM "workspace" w JOIN "managed_runner" m ON m."runner_id" = w."runner_id"
+        JOIN "user" u ON u."id" = m."owner_id"
        WHERE w."id" = ${condition.workspaceId}::uuid
     `;
     return rows[0]?.asleep === true;

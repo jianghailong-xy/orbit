@@ -71,6 +71,7 @@ import {
 } from './schedule-time';
 import { closeUnknownItems } from '../conditions/condition-attention';
 import { assertConditionRoom, createConditionRow } from '../conditions/conditions.service';
+import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
 import { scheduleStartCheck } from './schedule-start-check';
@@ -406,6 +407,12 @@ export class SchedulesService {
      * after a commit that creates, changes, pauses or ends one brings that reconcile at once (link-heartbeat.ts).
      */
     @Optional() @Inject(RealtimeService) private readonly realtime?: Pick<RealtimeService, 'markRunnerChanged'>,
+    /**
+     * An ACTIVE WHEN schedule's condition is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md
+     * §4.2): a create, a resume or a change that leaves it ACTIVE asks a sleeping one to wake. The hook does nothing with
+     * the switch off or for a runner with no mapping; absent, the manager's sweep finds it.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {
     this.clock = clock ?? (() => new Date());
   }
@@ -416,14 +423,20 @@ export class SchedulesService {
 
   /**
    * After a commit that touched a WHEN schedule: its condition's probe was handed out, changed or withdrawn, so its
-   * runner is marked changed. Best effort: a mark that fails leaves it to the next full reconcile, at most five
+   * runner is marked changed; and an ACTIVE one's Orbit Cloud runner is asked to wake. Best effort: a mark that fails leaves it to the next full reconcile, at most five
    * minutes away.
    */
   private async markConditionRunner(schedule: Schedule | null | undefined): Promise<void> {
-    if (!schedule || !this.realtime || (schedule.rule as { kind?: string } | null)?.kind !== 'WHEN') return;
+    if (!schedule || (schedule.rule as { kind?: string } | null)?.kind !== 'WHEN') return;
+    const wake = schedule.state === 'ACTIVE' && !!this.managedDemand;
+    if (!this.realtime && !wake) return;
     try {
       const workspace = await this.prisma.workspace.findUnique({ where: { id: schedule.workspaceId }, select: { runnerId: true } });
-      if (workspace?.runnerId) this.realtime.markRunnerChanged(workspace.runnerId);
+      if (workspace?.runnerId) {
+        this.realtime?.markRunnerChanged(workspace.runnerId);
+        // Paused, held or ended, nothing is asked: the condition no longer holds the runner, which sleeps by the idle rule.
+        if (wake) await this.managedDemand!.requested(workspace.runnerId, 'condition');
+      }
     } catch (error) {
       this.logger.warn(`runner of schedule ${schedule.id} not marked: ${error instanceof Error ? error.message : String(error)}`);
     }

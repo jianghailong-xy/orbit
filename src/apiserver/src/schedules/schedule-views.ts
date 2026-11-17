@@ -24,6 +24,7 @@ import {
 } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, ScheduleRevision, ScheduleRun } from '@prisma/client';
 
+import { cloudWorkspaceIds } from '../managed-runners/managed-runner-work';
 import { runReasonText } from './schedule-attention';
 import type { Envelope, EnvelopePart } from './schedule-envelope';
 import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
@@ -118,6 +119,8 @@ export interface ScheduleCardContext {
   schedules: Map<string, Pick<Schedule, 'id' | 'title' | 'timezone' | 'rule' | 'workspaceId'>>;
   /** The runner of each workspace a WHEN rule's card names; absent, the card leaves the runner out. */
   runners?: Map<string, string>;
+  /** The workspaces a WHEN rule's card names that are on Orbit Cloud: the card says the condition keeps it awake. */
+  cloud?: Set<string>;
   now: Date;
 }
 
@@ -175,8 +178,11 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
             ...when,
             // The When line of the condition-triggers board ③: the condition, its re-arm and how it is checked, and
             // the command verbatim, which is what Create approves.
+            // And, on Orbit Cloud, that it keeps the workspace awake while it waits (§4.2).
             text: scheduleWhenLines(rule.condition, ctx.runners?.get(asked.workspaceId) ?? null).text,
-            condition: scheduleWhenLines(rule.condition, ctx.runners?.get(asked.workspaceId) ?? null),
+            condition: scheduleWhenLines(
+              rule.condition, ctx.runners?.get(asked.workspaceId) ?? null, ctx.cloud?.has(asked.workspaceId) ?? false,
+            ),
           }
         : { ...when, text: scheduleCreateWhen({ when: when as never }, ctx.now, p.timezone ?? 'UTC').text, condition: null },
       ...lines,
@@ -212,7 +218,13 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
 export type ScheduleCardView = ReturnType<typeof scheduleCardView>;
 
 /** Cards for a set of requests, with what they name read in two queries. */
-export async function scheduleCardViews(tx: Tx, ownerId: string, requests: ScheduleChangeRequest[], now: Date) {
+export async function scheduleCardViews(
+  tx: Tx,
+  ownerId: string,
+  requests: ScheduleChangeRequest[],
+  now: Date,
+  gate?: { enabled: boolean } | null,
+) {
   const scheduleIds = requests.map((r) => r.scheduleId).filter((id): id is string => id !== null);
   const schedules = scheduleIds.length
     ? await tx.schedule.findMany({
@@ -226,16 +238,14 @@ export async function scheduleCardViews(tx: Tx, ownerId: string, requests: Sched
     const before = r.envelopeBefore as unknown as Envelope | null;
     if (before) workspaceIds.push(before.workspaceId);
   }
+  const whenWorkspaceIds = requests.filter((r) => (r.proposed as { rule?: { kind?: string } } | null)?.rule?.kind === 'WHEN')
+    .map((r) => (r.envelopeAsked as unknown as Envelope).workspaceId);
   const ctx: ScheduleCardContext = {
     workspaces: await workspaceNames(tx, ownerId, workspaceIds),
     engines: await sessionEngines(tx, ownerId, requests.map((r) => r.askedBySessionId).filter((id): id is string => !!id)),
     schedules: new Map(schedules.map((s) => [s.id, s])),
-    runners: await workspaceRunnerNames(
-      tx,
-      ownerId,
-      requests.filter((r) => (r.proposed as { rule?: { kind?: string } } | null)?.rule?.kind === 'WHEN')
-        .map((r) => (r.envelopeAsked as unknown as Envelope).workspaceId),
-    ),
+    runners: await workspaceRunnerNames(tx, ownerId, whenWorkspaceIds),
+    cloud: await cloudWorkspaceIds(tx, gate, whenWorkspaceIds),
     now,
   };
   return requests.map((r) => scheduleCardView(r, ctx));

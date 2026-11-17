@@ -4421,6 +4421,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.openItems?.resolveByFact([dto.supersedesTaskId]);
       await this.fuse?.afterSupersession(task.projectId, dto.supersedesTaskId);
     }
+    // A startWhen is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md §4.2): one asleep
+    // is woken now, so its probe runs. Nothing for a self-managed runner or with the switch off.
+    if (dto.startWhen) await this.conditions.wakeWorkspaceRunner(task.assigneeId);
     return task;
   }
 
@@ -4945,6 +4948,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pausedLists = new Set(lists.filter((l) => l.paused).map((l) => l.id));
     const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
     const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
+    // The workspaces on Orbit Cloud a startWhen keeps awake while it waits (docs/condition-triggers-design.md §6.2).
+    const awake = items.some((i) => i.startWhen)
+      ? await this.conditions.keepsAwake(items.filter((i) => i.startWhen && i.assigneeId).map((i) => i.assigneeId!))
+      : new Set<string>();
     const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
 
     let startingNow = 0;
@@ -5078,7 +5085,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ref: item.ref ?? null,
         // The card's Starts when, Today and If never (docs/mocks/condition-triggers frame 2), on an item with one.
         ...(item.startWhen
-          ? { startWhen: startWhenCardLines(item.startWhen, item.assigneeId ? nameOf.get(item.assigneeId) ?? null : null) }
+          ? {
+              startWhen: startWhenCardLines(
+                item.startWhen,
+                item.assigneeId ? nameOf.get(item.assigneeId) ?? null : null,
+                !!item.assigneeId && awake.has(item.assigneeId),
+              ),
+            }
           : {}),
       })),
       // The card shows a window, not the whole batch: fifty rows is not something a person reads
@@ -5679,6 +5692,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // remaining set is closed is the producer's question to answer from the rows, not this
     // caller's to guess from the shape of its own write.
     await this.deliverSettledProjects(created.map((task) => task.projectId));
+    // Each startWhen's Orbit Cloud runner, woken now, as the single create does.
+    const waking = new Set(items.flatMap((item) => (item.startWhen && item.assigneeId ? [item.assigneeId] : [])));
+    for (const workspaceId of waking) await this.conditions.wakeWorkspaceRunner(workspaceId);
     return created;
   }
 
