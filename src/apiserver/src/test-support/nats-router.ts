@@ -12,7 +12,7 @@ export class NatsRouter {
   /** Every message published, in order: its subject and payload. */
   readonly published: Array<{ subject: string; data: Buffer }> = [];
   connections = 0;
-  private readonly clients = new Set<RouterClient>();
+  private readonly peers = new Set<RouterClient>();
   private readonly server = net.createServer((socket) => this.serve(socket));
 
   async listen(): Promise<number> {
@@ -21,15 +21,15 @@ export class NatsRouter {
   }
 
   async stop(): Promise<void> {
-    for (const client of this.clients) client.socket.destroy();
+    for (const peer of this.peers) peer.socket.destroy();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
 
   private serve(socket: net.Socket): void {
     this.connections += 1;
-    const client = new RouterClient(socket);
-    this.clients.add(client);
-    socket.on('close', () => this.clients.delete(client));
+    const peer = new RouterClient(socket);
+    this.peers.add(peer);
+    socket.on('close', () => this.peers.delete(peer));
     socket.on('error', () => undefined);
     socket.write(`INFO ${JSON.stringify({
       server_id: 'NATS-ROUTER', server_name: 'nats-router', version: '2.15.1', proto: 1, go: 'go1.27.3',
@@ -53,14 +53,14 @@ export class NatsRouter {
           const fixed = verb === 'HPUB' ? 3 : 2;
           const reply = args.length > fixed ? args[1] : undefined;
           pending = pending.subarray(end + 2 + total + 2);
-          this.route(client, args[0], reply, body.subarray(0, headerBytes), body.subarray(headerBytes));
+          this.route(peer, args[0], reply, body.subarray(0, headerBytes), body.subarray(headerBytes));
           continue;
         }
         pending = pending.subarray(end + 2);
         if (verb === 'CONNECT') {
           try {
             const options = JSON.parse(line.slice(space + 1)) as { headers?: boolean; no_responders?: boolean };
-            client.noResponders = options.headers === true && options.no_responders === true;
+            peer.noResponders = options.headers === true && options.no_responders === true;
           } catch {
             // A CONNECT this router cannot read: no "no responders" answers for it.
           }
@@ -68,11 +68,11 @@ export class NatsRouter {
           socket.write('PONG\r\n');
         } else if (verb === 'SUB') {
           // SUB <subject> [queue] <sid>
-          client.subs.set(args[args.length - 1], { subject: args[0], left: Infinity, count: 0 });
+          peer.subs.set(args[args.length - 1], { subject: args[0], left: Infinity, count: 0 });
         } else if (verb === 'UNSUB') {
-          const sub = client.subs.get(args[0]);
+          const sub = peer.subs.get(args[0]);
           if (sub && args[1] !== undefined) sub.left = Number(args[1]) - sub.count;
-          if (!sub || args[1] === undefined || sub.left <= 0) client.subs.delete(args[0]);
+          if (!sub || args[1] === undefined || sub.left <= 0) peer.subs.delete(args[0]);
         }
       }
     });
@@ -81,13 +81,13 @@ export class NatsRouter {
   private route(from: RouterClient, subject: string, reply: string | undefined, headers: Buffer, payload: Buffer): void {
     this.published.push({ subject, data: Buffer.from(payload) });
     let delivered = 0;
-    for (const client of this.clients) {
-      for (const [sid, sub] of client.subs) {
+    for (const peer of this.peers) {
+      for (const [sid, sub] of peer.subs) {
         if (!matches(sub.subject, subject)) continue;
-        client.send(subject, sid, reply, headers, payload);
+        peer.send(subject, sid, reply, headers, payload);
         delivered += 1;
         sub.count += 1;
-        if (--sub.left <= 0) client.subs.delete(sid);
+        if (--sub.left <= 0) peer.subs.delete(sid);
       }
     }
     if (delivered === 0 && reply && from.noResponders) {
