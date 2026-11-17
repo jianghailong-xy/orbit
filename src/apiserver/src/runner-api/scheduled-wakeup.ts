@@ -283,9 +283,12 @@ export async function markScheduledWakeupDelivered(
   tx: Prisma.TransactionClient,
   wakeupId: string,
   clientTurnId: string,
+  sessionId: string,
 ): Promise<void> {
+  // Scoped to the session it is being filed on: a coordinator handoff's swap moves a waiting wakeup to the
+  // successor, and one read before that move must not be settled on the session it left.
   const { count } = await tx.sessionScheduledWakeup.updateMany({
-    where: { id: wakeupId, state: 'PENDING' },
+    where: { id: wakeupId, sessionId, state: 'PENDING' },
     data: { state: 'DELIVERED', clientTurnId, settledAt: new Date() },
   });
   if (count !== 1) throw new ScheduledWakeupSettled(`scheduled wakeup ${wakeupId} is no longer waiting`);
@@ -324,9 +327,11 @@ export function tickStanding(session: TickSession, now: Date): 'ENDED' | 'FAILED
 }
 
 /** A due wakeup whose session had ended: it wakes nobody. False when something else settled it first. */
-export async function dropScheduledWakeup(prisma: PrismaService, wakeupId: string): Promise<boolean> {
+export async function dropScheduledWakeup(prisma: PrismaService, wakeupId: string, sessionId: string): Promise<boolean> {
+  // Scoped to the session that was found ended: a handoff's swap may have moved the wakeup to the successor
+  // since it was read, and there it is still owed.
   const { count } = await prisma.sessionScheduledWakeup.updateMany({
-    where: { id: wakeupId, state: 'PENDING' },
+    where: { id: wakeupId, sessionId, state: 'PENDING' },
     data: { state: 'DROPPED', settledAt: new Date() },
   });
   return count === 1;

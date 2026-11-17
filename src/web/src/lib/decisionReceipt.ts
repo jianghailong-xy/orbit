@@ -29,23 +29,57 @@ import type {
  *             decision was made now, and not drawn at all is what this used to do — a record that
  *             vanishes on a long conversation is a record the reader cannot find.
  *   `null`    a stamp nothing can parse. The head claims "older than everything here", which is a
- *             claim about a moment, and there is none: not drawn.
+ *             claim about a moment, and there is none: not drawn. And, given the conversation's
+ *             `createdAt`, a RECORD stamped before the conversation was created (handoff v2 §4):
+ *             a coordinator conversation starts clean rather than with the project's whole history
+ *             at its head. So `'head'` is only for a record newer than the conversation and older
+ *             than its oldest loaded page. Open items are not records and pass no `createdAt`: an
+ *             open question asked before the handoff still needs an answer, so it is drawn.
  */
 export type ReceiptPlacement = number | 'head';
 
-/** Where the receipt for `decidedAt` is drawn among the events loaded right now, or null. */
+/**
+ * Where the receipt for `decidedAt` is drawn among the events loaded right now, or null. A record
+ * passes the conversation's `createdAt`; one stamped before it is not drawn. An unreadable
+ * `createdAt` (or none) leaves the rule as it was.
+ */
 export function decisionReceiptAnchor(
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   decidedAt: string,
+  createdAt?: string | null,
 ): ReceiptPlacement | null {
   const at = Date.parse(decidedAt);
   if (Number.isNaN(at)) return null;
+  if (beforeConversation(decidedAt, createdAt)) return null;
   let anchor: number | null = null;
   for (const event of events) {
     const ts = event.ts === undefined ? Number.NaN : Date.parse(event.ts);
     if (ts <= at && (anchor === null || event.seq > anchor)) anchor = event.seq;
   }
   return anchor ?? 'head';
+}
+
+/** Whether `stamp` is before the conversation's `createdAt`, both read; false when either is not. */
+function beforeConversation(stamp: string, createdAt: string | null | undefined): boolean {
+  if (!createdAt) return false;
+  const at = Date.parse(stamp);
+  const created = Date.parse(createdAt);
+  return !Number.isNaN(at) && !Number.isNaN(created) && at < created;
+}
+
+/**
+ * How many of the project's decisions and merges are stamped before this conversation was created —
+ * the records it does not draw — for the successor's note card line (board 3: "12 decisions and 3
+ * merges before this conversation"). A stamp nothing can read is counted nowhere.
+ */
+export function recordsBeforeConversation(
+  createdAt: string | null | undefined,
+  decisions: ReadonlyArray<string | null | undefined>,
+  merges: ReadonlyArray<string | null | undefined>,
+): { decisions: number; merges: number } {
+  const count = (stamps: ReadonlyArray<string | null | undefined>) =>
+    stamps.filter((stamp) => !!stamp && beforeConversation(stamp, createdAt)).length;
+  return { decisions: count(decisions), merges: count(merges) };
 }
 
 /** One answer the read says belongs in this conversation, and where in its flow it goes. */
@@ -76,9 +110,10 @@ export function criteriaDecisionReceiptRows(
   queue: PendingCriteriaDecisionQueue | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
   replies: Readonly<Record<string, CriteriaDecisionReply | null | undefined>> = {},
+  createdAt?: string | null,
 ): CriteriaDecisionReceiptRow[] {
   return (queue?.settled ?? []).flatMap((settled) => {
-    const placement = decisionReceiptAnchor(events, settled.decidedAt);
+    const placement = decisionReceiptAnchor(events, settled.decidedAt, createdAt);
     return placement === null
       ? []
       : [{ settled, reply: replies[settled.intentId] ?? null, placement }];

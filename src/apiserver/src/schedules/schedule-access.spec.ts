@@ -16,6 +16,8 @@ import {
   CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS,
   CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS,
   checkOnlyRuleRefusal,
+  checkOnlyCommandRules,
+  checkOnlyRuleCoversApproval,
   CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
   CHECK_ONLY_CLAUDE_DENIED_BUILTINS,
   CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
@@ -94,61 +96,41 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
   assert.ok(!allowed.includes('Edit'));
 });
 
-test('of the workspace\'s rules a CHECK_ONLY run on Claude Code carries only narrow Bash rules a scheduled card wrote', () => {
+test('a scheduled check never exports stored grants as engine patterns, including old prefixes', () => {
   const rules = [
-    { toolName: 'Bash', ruleContent: 'npm test:*', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: 'psql:*', fromScheduleRun: true },
-    // A person's interactive sessions wrote these: wider than any scheduled card asked for.
-    { toolName: 'Bash', ruleContent: 'python:*', fromScheduleRun: false },
-    { toolName: 'Bash', ruleContent: 'git:*' },
-    { toolName: 'Bash', ruleContent: 'env:*', fromScheduleRun: false },
-    // Never carried, whoever wrote them.
+    { toolName: 'Bash', ruleContent: 'python3:*', fromScheduleRun: true },
+    { toolName: 'Bash', ruleContent: 'python3 -c "print(1)"', fromScheduleRun: true },
+    { toolName: 'Bash', ruleContent: 'git:*', fromScheduleRun: false },
     { toolName: 'Edit', ruleContent: '', fromScheduleRun: true },
-    { toolName: 'mcp__orbit__bg_run', ruleContent: '', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: '', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: '*', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: ':*', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: '/usr/local/bin/orbit task update:*', fromScheduleRun: true },
   ];
-  const base = ['mcp__orbit__*', ...rules.map((r) => (r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName))];
-  const carried = scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS).filter(
-    (t) => !CHECK_ONLY_CLAUDE_ALLOWED_TOOLS.includes(t),
-  );
-  assert.deepEqual(carried, ['Bash(npm test:*)', 'Bash(psql:*)', 'Bash(/usr/local/bin/orbit task update:*)']);
-  // A rule for the Orbit CLI is carried, and the deny list still wins over it (measured, record §9).
-  assert.ok(scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS).includes('Bash(*/orbit *)'));
-  // Only a rule the claim itself put on the list: one its normalization dropped is not carried here either.
-  assert.deepEqual(
-    scheduleRunAllowedTools(['mcp__orbit__*'], 'CHECK_ONLY', 'claude', [{ toolName: 'Bash', ruleContent: 'ls:*', fromScheduleRun: true }], ASKS),
-    [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
-  );
-  // No duplicate when the workspace repeats an allowed tool.
-  const twice = scheduleRunAllowedTools(['WebFetch', 'Bash(ls -la:*)'], 'CHECK_ONLY', 'claude', [
-    { toolName: 'Bash', ruleContent: 'ls -la:*', fromScheduleRun: true },
-    { toolName: 'Bash', ruleContent: 'ls -la:*', fromScheduleRun: true },
-  ], ASKS);
-  assert.equal(twice.filter((t) => t === 'WebFetch').length, 1);
-  assert.equal(twice.filter((t) => t === 'Bash(ls -la:*)').length, 1);
+  const base = ['mcp__orbit__*', ...rules.map((r) => `Bash(${r.ruleContent})`)];
+  assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
 });
 
-test('Always allow on a scheduled check\'s card may write only that card\'s command\'s rules', () => {
-  const card = { toolName: 'Bash', input: { command: 'cd db && psql -c "select 1"' } };
-  assert.equal(checkOnlyRuleRefusal(card, [{ toolName: 'Bash', ruleContent: 'psql:*' }]), null);
-  assert.equal(checkOnlyRuleRefusal(card, [{ toolName: 'Bash', ruleContent: 'cd db:*' }, { toolName: 'Bash', ruleContent: 'psql:*' }]), null);
+test('Always allow on a scheduled check stores the exact command; old client prefixes convey intent only', () => {
+  const command = 'cd db && python3 -c "print(open(\'watched.txt\').read())"';
+  const card = { toolName: 'Bash', input: { command } };
+  assert.deepEqual(checkOnlyCommandRules(card), [{ toolName: 'Bash', ruleContent: command }]);
+  assert.equal(checkOnlyRuleRefusal(card, [{ toolName: 'Bash', ruleContent: command }]), null);
+  assert.equal(checkOnlyRuleRefusal(card, [{ toolName: 'Bash', ruleContent: 'python3:*' }]), null);
   for (const rule of [
-    { toolName: 'Bash', ruleContent: 'python:*' },
     { toolName: 'Bash', ruleContent: '' },
     { toolName: 'Bash', ruleContent: '*' },
-    { toolName: 'Bash', ruleContent: 'psql -c:*' },
+    { toolName: 'Bash', ruleContent: 'psql:*' },
     { toolName: 'Edit', ruleContent: '' },
-    { toolName: 'mcp__orbit__bg_run', ruleContent: '' },
-    { toolName: 'mcp__docs__write', ruleContent: '' },
-  ]) {
-    assert.match(checkOnlyRuleRefusal(card, [{ toolName: 'Bash', ruleContent: 'psql:*' }, rule]) ?? '', /covers only this card's command \(Bash\(cd db:\*\), Bash\(psql:\*\)\)/, JSON.stringify(rule));
+  ]) assert.match(checkOnlyRuleRefusal(card, [rule]) ?? '', /only this exact command/);
+});
+
+test('scheduled grants match literal command strings, with no prefix, glob or syntax normalization', () => {
+  for (const command of ['python3 -c "print(open(\'watched.txt\').read())"', 'printf "%s" "*"', 'echo :*', 'echo a,b', 'echo x\necho y', ' '+ 'x'.repeat(250) + ' ']) {
+    const card = { toolName: 'Bash', input: { command } };
+    const rules = checkOnlyCommandRules(card).map((r) => ({ ...r, fromScheduleRun: true }));
+    assert.equal(checkOnlyRuleCoversApproval(card, rules), true, command);
+    assert.equal(checkOnlyRuleCoversApproval({ toolName: 'Bash', input: { command: command + ' --different' } }, rules), false);
+    assert.equal(checkOnlyRuleCoversApproval(card, rules.map((r) => ({ ...r, fromScheduleRun: false }))), false);
+    assert.equal(checkOnlyRuleCoversApproval(card, [{ toolName: 'Bash', ruleContent: 'python3:*', fromScheduleRun: true }]), false);
+    assert.equal(checkOnlyRuleCoversApproval({ ...card, input: { command, env: { PATH: '/other' } } }, rules), false);
   }
-  // A command wrapped in a shell gives no rule at all, and a card for another tool gives none either.
-  assert.ok(checkOnlyRuleRefusal({ toolName: 'Bash', input: { command: "bash -c 'touch x'" } }, [{ toolName: 'Bash', ruleContent: 'bash:*' }]));
-  assert.ok(checkOnlyRuleRefusal({ toolName: 'Edit', input: { file_path: 'x' } }, [{ toolName: 'Edit', ruleContent: '' }]));
 });
 
 test('a run is held to the level it started with; the schedule\'s only for a run started before it was recorded', () => {
@@ -294,9 +276,9 @@ test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; 
   for (const tool of ['Bash', 'Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'ToolSearch']) {
     assert.ok(!CHECK_ONLY_CLAUDE_DENIED_BUILTINS.includes(tool), `${tool} is a check's`);
   }
-  // A runner that advertises it: Default, the carried rule, and the full deny list (EnterPlanMode, every other Orbit tool).
+  // A runner that advertises it: Default, server-matched grants, and the full deny list (EnterPlanMode, every other Orbit tool).
   assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, 'CHECK_ONLY', 'claude', ASKS), PermissionMode.DEFAULT);
-  assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)']);
+  assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
   const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS);
   for (const tool of ['EnterPlanMode', 'mcp__orbit__delegate', 'mcp__orbit__bg_run', 'EnterWorktree', 'CronCreate']) {
     assert.ok(denied.includes(tool), tool);

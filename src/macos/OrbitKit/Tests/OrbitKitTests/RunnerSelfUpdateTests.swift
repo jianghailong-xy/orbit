@@ -386,6 +386,36 @@ final class RunnerSelfUpdateTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.displayName(lab), "lab")
     }
 
+    /// GET /runners says `managed` on the managed runner's row, so it is Orbit Cloud with no managed status
+    /// read yet (or one that failed) — never its stored name `orbit-managed`, even for a moment; the owner's
+    /// alias still wins, and a row marked `false` keeps its own name.
+    func testTheRowsManagedFlagMakesItOrbitCloudWithNoManagedStatus() throws {
+        var fields = try XCTUnwrap(try caseInput("selfUpdate disabledByEnv and behind")["runner"] as? [String: Any])
+        fields["id"] = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e31"
+        fields["name"] = "orbit-managed"
+        fields["managed"] = true
+        let flagged = try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject: fields))
+        fields["displayName"] = "Team cloud"
+        let renamed = try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject: fields))
+        fields["displayName"] = nil
+        fields["name"] = "build-box"
+        fields["managed"] = false
+        let other = try JSONDecoder().decode(Runner.self, from: JSONSerialization.data(withJSONObject: fields))
+        defer { ManagedRunnerIdentity.runnerID = nil }
+        ManagedRunnerIdentity.runnerID = nil
+        XCTAssertEqual(flagged.managed, true)
+        XCTAssertTrue(RunnerPageFormat.isManaged(flagged))
+        XCTAssertEqual(RunnerPageFormat.displayName(flagged), "Orbit Cloud")
+        XCTAssertEqual(RunnerPageFormat.displayName(flagged, managedRunnerID: nil), "Orbit Cloud")
+        XCTAssertEqual(RunnerPageFormat.defaultName(flagged), "Orbit Cloud")
+        XCTAssertFalse(RunnerPageFormat.hostLine(flagged).contains("orbit-managed"), RunnerPageFormat.hostLine(flagged))
+        XCTAssertFalse(RunnerAttention.runnerAttention(runner: flagged, workspaces: [], nowMs: 1_790_640_900_000,
+                                                       latestVersion: "0.1.197").contains { $0.kind == .cannotSelfUpdate })
+        XCTAssertEqual(RunnerPageFormat.displayName(renamed), "Team cloud")
+        XCTAssertFalse(RunnerPageFormat.isManaged(other))
+        XCTAssertEqual(RunnerPageFormat.displayName(other), "build-box")
+    }
+
     /// The managed runner's version line is its release or "Kept up to date by Orbit", never `managed-<sha>`,
     /// in the head, About and the list; any other runner's stays as reported.
     func testTheManagedRunnersVersionLineIsAReleaseOrKeptUpToDateNeverItsHash() throws {

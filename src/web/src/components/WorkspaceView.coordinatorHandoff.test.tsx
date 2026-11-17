@@ -110,6 +110,8 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
   let root: Root | null = null;
   let client: QueryClient | null = null;
   let detail: Record<string, unknown> = session();
+  /** What GET …/coordinator/pending-waits answers: by default two waits from a server without `kind`. */
+  let pendingWaits: Record<string, unknown>[] = [];
 
   const mounted = (): HTMLDivElement => {
     if (!container) throw new Error('WorkspaceView is not mounted');
@@ -159,6 +161,8 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await settle();
   };
   /** Opens the Context popover and returns its action rows by title. */
+  /** The confirm dialog's wait lines, one per wait. */
+  const waitLines = (dialog: Element) => [...dialog.querySelectorAll('.handoff-facts li:nth-child(2) .sub')].map((n) => n.textContent);
   const contextActions = async () => {
     await click(mounted().querySelector('.composer-usage'));
     await waitFor(() => expect(document.querySelector('.cu-pop')).not.toBeNull());
@@ -180,6 +184,10 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     vi.mocked(sendTurn).mockResolvedValue({ turnId: 'turn-compact', placement: 'NEXT_TURN', delivery: 'QUEUED' } as never);
     vi.mocked(getSession).mockReset();
     vi.mocked(getSession).mockImplementation(async () => detail as never);
+    pendingWaits = [
+      { id: 'w1', label: 'Fix login redirect reaching Done', paused: false },
+      { id: 'w2', label: 'Session “Payment retries” finishing its turn', paused: true },
+    ];
     apiMock.mockReset();
     apiMock.mockImplementation(((p: string, init?: { method?: string }) => {
       const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -187,10 +195,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         return reply({ id: 'user-1', email: 'r@example.com', name: 'R', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
       }
       if (p.endsWith('/coordinator/pending-waits')) {
-        return reply([
-          { id: 'w1', label: 'Fix login redirect reaching Done', paused: false },
-          { id: 'w2', label: 'Session “Payment retries” finishing its turn', paused: true },
-        ]);
+        return reply(pendingWaits);
       }
       if (p.includes('/coordinator/handoff') && init?.method === 'POST') {
         return reply({ projectId: PROJECT, sessionId: SESSION, state: 'WRITING', startedAt: new Date().toISOString(),
@@ -294,11 +299,36 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       'This coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.',
     );
     await waitFor(() => expect(dialog.textContent).toContain('2 pending waits move over'));
-    expect(dialog.textContent).toContain('Fix login redirect reaching Done · Session “Payment retries” finishing its turn (paused)');
+    // Waits without a kind (an older server) read as watches: the label alone, one line each.
+    expect(waitLines(dialog)).toEqual(['Fix login redirect reaching Done', 'Session “Payment retries” finishing its turn (paused)']);
     await click(button('Hand over'));
     await waitFor(() =>
       expect(apiMock.mock.calls.some(([p, init]) => p === `/projects/${PROJECT}/coordinator/handoff` && (init as { method?: string })?.method === 'POST')).toBe(true),
     );
+  });
+
+  it('names each pending wait\'s kind after its label in the confirm dialog, a watch by its label alone', async () => {
+    pendingWaits = [
+      { id: 'w1', kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+      { id: 'r1', kind: 'SUBAGENT', label: 'Deploy 55a189aa3 to production', paused: false },
+      { id: 'sw1', kind: 'WAKEUP', label: 'Check the deploy', paused: false },
+      { id: 'bgj_1', kind: 'JOB', label: 'pnpm test', paused: false },
+      { id: 'l1', kind: 'LOOP', label: 'Babysit CI', paused: false },
+    ];
+    detail = session({ projectId: PROJECT, projectMembership: coordinator });
+    await mount();
+    const rows = await contextActions();
+    await click(rows[1]);
+    await waitFor(() => expect(document.querySelector('.handoff-confirm')).not.toBeNull());
+    const dialog = document.querySelector('.handoff-confirm')!;
+    await waitFor(() => expect(dialog.textContent).toContain('5 pending waits move over'));
+    expect(waitLines(dialog)).toEqual([
+      'Waiting for "Fix login redirect" to be DONE',
+      'Deploy 55a189aa3 to production · SubAgent',
+      'Check the deploy · Scheduled wakeup',
+      'pnpm test · Background job',
+      'Babysit CI · Wakeup loop',
+    ]);
   });
 
   it('words the confirm for a running turn as running after it', async () => {
@@ -411,7 +441,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       projectMembership: coordinator,
       coordinatorHandoffReceived: {
         handoffFromSessionId: PREVIOUS,
-        note: 'Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don’t merge Payment retries before Friday’s release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.',
+        note: 'Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nRulings not yet recorded\n- Don’t merge Payment retries before Friday’s release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.',
         handedOverAt: '2026-11-14T07:42:00Z',
         movedWaits: [
           { id: 'w1', label: 'Fix login redirect reaching Done', paused: false },
@@ -423,11 +453,45 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('.handoff-card')).not.toBeNull());
     const card = mounted().querySelector('.handoff-card')!;
     expect(card.querySelector('.handoff-card-h')?.textContent).toMatch(/^Handoff from the previous coordinator · /);
-    expect([...card.querySelectorAll('h5')].map((h) => h.textContent)).toEqual(['Where things stand', 'Agreed with the owner', 'Waiting on', 'Next']);
+    expect([...card.querySelectorAll('h5')].map((h) => h.textContent)).toEqual(['Where things stand', 'Rulings not yet recorded', 'Waiting on', 'Next']);
     expect(card.querySelector('li')?.textContent).toBe('4 of 6 tasks done; Fix login redirect in review.');
     expect(mounted().querySelector('.handoff-chip')?.textContent).toBe('2 waits moved here');
+    // Moved waits without a kind (recorded before kinds) read as before: the label alone.
+    await click(mounted().querySelector('.handoff-chip'));
+    await waitFor(() => expect(document.querySelector('.handoff-chip-list')).not.toBeNull());
+    expect([...document.querySelectorAll('.handoff-chip-list li')].map((li) => li.textContent)).toEqual([
+      'Fix login redirect reaching Done',
+      'Session “Payment retries” finishing its turn',
+    ]);
     await click(card.querySelector('.handoff-card-h a'));
     await waitFor(() => expect(pathname).toBe(`/sessions/${PREVIOUS}`));
+  });
+
+  it('02-3: names each moved wait\'s kind after its label in the successor\'s moved-here list', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoffReceived: {
+        handoffFromSessionId: PREVIOUS,
+        note: null,
+        handedOverAt: '2026-11-14T07:42:00Z',
+        movedWaits: [
+          { id: 'w1', kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: true },
+          { id: 'r1', kind: 'SUBAGENT', label: 'Deploy 55a189aa3 to production', paused: false },
+          { id: 'sw1', kind: 'WAKEUP', label: 'Check the deploy', paused: false },
+        ],
+      },
+    });
+    await mount();
+    await waitFor(() => expect(mounted().querySelector('.handoff-chip')).not.toBeNull());
+    expect(mounted().querySelector('.handoff-chip')?.textContent).toBe('3 waits moved here');
+    await click(mounted().querySelector('.handoff-chip'));
+    await waitFor(() => expect(document.querySelector('.handoff-chip-list')).not.toBeNull());
+    expect([...document.querySelectorAll('.handoff-chip-list li')].map((li) => li.textContent)).toEqual([
+      'Waiting for "Fix login redirect" to be DONE (paused)',
+      'Deploy 55a189aa3 to production · SubAgent',
+      'Check the deploy · Scheduled wakeup',
+    ]);
   });
 
   it('02-4: puts the handed-over banner with Open it in place of the composer', async () => {

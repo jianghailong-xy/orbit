@@ -66,6 +66,7 @@
   "mcp__orbit__project_merge_evidence",
   "mcp__orbit__project_request_done",
   "mcp__orbit__project_request_start",
+  "mcp__orbit__project_ruling_record",
   "mcp__orbit__project_update",
   "mcp__orbit__provider_create",
   "mcp__orbit__provider_delete",

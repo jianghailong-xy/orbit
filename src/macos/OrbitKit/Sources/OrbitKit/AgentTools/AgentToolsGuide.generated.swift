@@ -685,6 +685,7 @@ let agentToolsGuideJSON = #"""
         "project_integration_get",
         "project_request_done",
         "project_request_start",
+        "project_ruling_record",
         "project_update"
       ]
     },

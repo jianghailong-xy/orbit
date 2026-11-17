@@ -227,7 +227,7 @@ func TestScheduleToolDescriptionsSteerChangesToUpdate(t *testing.T) {
 		}
 	}
 	update := descriptions["schedule_update"]
-	for _, want := range []string{"Leave intent out unless the person restates the goal", "a change of time, frequency, limits or prompt leaves intent alone", "readBack"} {
+	for _, want := range []string{"Leave intent out unless the person restates the goal", "a change of time, frequency, limits or prompt leaves intent alone", "Whenever you change when or how often the schedule runs (rule or timezone)", "pass a fresh readBack: one sentence saying when it runs and what it checks after the change"} {
 		if !strings.Contains(update, want) {
 			t.Errorf("schedule_update does not say %q", want)
 		}

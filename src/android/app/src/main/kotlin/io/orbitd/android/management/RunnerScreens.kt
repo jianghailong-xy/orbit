@@ -328,7 +328,7 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
                       canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
-    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null)
+    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null || RunnerPage.isManaged(runner))
     val name = RunnerPage.displayName(runner)
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -424,7 +424,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     val managedWaiting = managedRow != null && managedRow.kind != "available" && runner.str("version")?.trim().isNullOrEmpty()
     // Asleep (or any managed state) is said by the banner, not as a machine away.
     val items = if (managedWaiting) emptyList()
-        else RunnerPage.attention(runner, workspaces, now, model.latestVersion, managed = managedRow != null).filter { managedRow == null || it.kind != "offline" }
+        else RunnerPage.attention(runner, workspaces, now, model.latestVersion, managed = managedRow != null || RunnerPage.isManaged(runner)).filter { managedRow == null || it.kind != "offline" }
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -582,7 +582,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(RunnerCopy.ABOUT_NAME, Modifier.weight(1f)); Text(RunnerPage.displayName(runner), color = Ink.muted, maxLines = 1); Spacer(Modifier.width(8.dp)); Chevron()
                 }
-                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion, managed = managedRow != null),
+                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion, managed = managedRow != null || RunnerPage.isManaged(runner)),
                     RunnerCopy.ABOUT_LAST_UPDATE to RunnerPage.lastUpdate(runner))
                 if (RunnerPage.canUpdateNow(runner, now)) { HorizontalDivider(); TextButton(onClick = { updateRunner() }) { Text(RunnerCopy.UPDATE_RUNNER_NOW) } }
                 AboutRows(RunnerCopy.ABOUT_RUNS_AS to RunnerPage.runsAsValue(runner), RunnerCopy.ABOUT_REPOS_FOLDER to runner.str("reposRoot"),
@@ -649,7 +649,7 @@ private fun RunnerHead(runner: JsonObject, now: Long, managed: ManagedRunner.Row
                     if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
             }
-            RunnerPage.hostLine(runner, managed = managed != null).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+            RunnerPage.hostLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
 }
@@ -883,7 +883,7 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
     val activity = LocalActivity.current
     DisposableEffect(id) { onDispose { if (activity?.isChangingConfigurations != true) save() } }
     // The name an empty field falls back to: Orbit Cloud for the managed runner, else its machine name.
-    val machine = RunnerPage.nameOf(runner.text("id"), runner.text("name"), null)
+    val machine = RunnerPage.nameOf(runner.text("id"), runner.text("name"), null, managed = runner.bool("managed"))
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(machine) }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(); back() }))

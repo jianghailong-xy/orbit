@@ -421,7 +421,7 @@ import {
   type ChatAbout,
   type CoordinatorChatSubject,
 } from '../lib/coordinatorChat';
-import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { criteriaDecisionReceiptRows, decisionReceiptAnchor, recordsBeforeConversation } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
   DECISION_SEND_BACK_LABEL,
@@ -5144,6 +5144,10 @@ export function WorkspaceView({
     void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(selectedTaskId).queryKey });
   }, [qc, selectedTaskId, selectedRunMoment]);
 
+  // When this conversation was created: a record stamped before it is not drawn in it (handoff v2
+  // §4), so a new coordinator starts clean rather than with the project's whole history at its head.
+  // Open items take no part in this — an open question asked before it still needs an answer.
+  const conversationCreatedAt = selectedSession?.createdAt ?? null;
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
   // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`,
   // `AcceptanceConfirmationReceipt`). Memoized because `Transcript` is: a fresh array on every
@@ -5152,7 +5156,7 @@ export function WorkspaceView({
   // window and the ones that do are ordered by it (`TranscriptInsert`).
   const decisionReceipts = useMemo(
     () => [
-      ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
+      ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies, conversationCreatedAt)
         .map((row) => ({
           anchor: row.placement,
           moment: row.settled.decidedAt,
@@ -5160,7 +5164,7 @@ export function WorkspaceView({
           element: <CriteriaDecisionReceipt settled={row.settled} reply={row.reply} />,
         })),
       ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
-        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5171,7 +5175,7 @@ export function WorkspaceView({
             }];
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
-        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt, conversationCreatedAt);
         const view = ownerConfirmation.data;
         return anchor === null || !view
           ? []
@@ -5194,7 +5198,7 @@ export function WorkspaceView({
       // became, at the moment it was sent back (contract §8 B6).
       ...reviewerReturnsIn(ownerConfirmation.data, selectedId).flatMap((returned) => {
         const at = returned.review.returned?.recordedAt;
-        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at) : null;
+        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at, conversationCreatedAt) : null;
         return anchor === null || !at || !ownerConfirmation.data
           ? []
           : [{
@@ -5213,7 +5217,7 @@ export function WorkspaceView({
       // the window rather than at the bottom of it.
       ...[acceptanceConfirmation.data?.confirmation].flatMap((confirmation) => {
         if (!confirmation) return [];
-        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5239,7 +5243,7 @@ export function WorkspaceView({
         // A candidate with no `merged` is not a record: no moment, so nothing to place.
         const mergedAt = promotionRecordMoment(promotion);
         if (mergedAt === null) return [];
-        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5253,6 +5257,7 @@ export function WorkspaceView({
     [
       acceptanceConfirmation.data,
       confirmedChanges.data,
+      conversationCreatedAt,
       criteriaDecisions.data,
       criteriaReplies,
       mergedPromotions.data,
@@ -5405,7 +5410,7 @@ export function WorkspaceView({
     // fallback are both `promotionRecordMoment`'s).
     const blockedAt = promotionRecordMoment(current);
     if (blockedAt === null) return [];
-    const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
+    const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt, conversationCreatedAt);
     if (anchor === null) return [];
     return [{
       anchor,
@@ -5425,6 +5430,7 @@ export function WorkspaceView({
     }];
   }, [
     chatAboutThis,
+    conversationCreatedAt,
     coordinatedProjectId,
     currentPromotion.data,
     currentPromotion.dataUpdatedAt,
@@ -5452,7 +5458,7 @@ export function WorkspaceView({
   const questionRecords = useMemo(
     () =>
       coordinatedProjectId
-        ? closedQuestionRows(openItems.data, transcriptEvents)
+        ? closedQuestionRows(openItems.data, transcriptEvents, conversationCreatedAt)
             .filter(({ record }) => !handedOver.has(answeredItemKey(record.itemId)))
             .map(({ record, placement }) => ({
               anchor: placement,
@@ -5461,7 +5467,7 @@ export function WorkspaceView({
               element: <AnsweredQuestionCard record={record} />,
             }))
         : [],
-    [coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
+    [conversationCreatedAt, coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
   );
 
   // What this session has asked the owner to do, where it asked. Its Chat about this arms the
@@ -7449,6 +7455,28 @@ export function WorkspaceView({
   const coordinatorHandoff: SessionCoordinatorHandoff | null = handoffRow?.coordinatorHandoff ?? null;
   const coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null =
     handoffRow?.coordinatorHandoffReceived ?? null;
+  // What the successor does not draw — the decisions and merges stamped before it was created —
+  // counted on its note card, which links to where they are (handoff v2 §4, board 3).
+  const handoffHistory = useMemo(
+    () => recordsBeforeConversation(
+      conversationCreatedAt,
+      [
+        ...(openItems.data?.closedQuestions ?? []).map((record) => record.resolvedAt),
+        ...(criteriaDecisions.data?.settled ?? []).map((settled) => settled.decidedAt),
+        ...(pendingDecisions.data?.decided ?? []).map((decided) => decided.decidedAt),
+        acceptanceConfirmation.data?.confirmation?.confirmedAt,
+      ],
+      (mergedPromotions.data ?? []).map(promotionRecordMoment),
+    ),
+    [
+      acceptanceConfirmation.data,
+      conversationCreatedAt,
+      criteriaDecisions.data,
+      mergedPromotions.data,
+      openItems.data,
+      pendingDecisions.data,
+    ],
+  );
   const handingOver = coordinatorHandoff?.state === 'WRITING' || coordinatorHandoff?.state === 'HANDING_OVER';
   const coordinatorHandedOver = coordinatorHandoff?.state === 'COMPLETED';
   const turnRunning = !!handoffRow && isGenerating(handoffRow, sessionRunStateOf(handoffRow));
@@ -10672,6 +10700,7 @@ export function WorkspaceView({
               {selected && !selectedTrashed && coordinatorHandoffReceived && !hasMoreOlder && placeholder !== 'skeleton' && (
                 <CoordinatorHandoffReceivedCard
                   received={coordinatorHandoffReceived}
+                  history={handoffHistory}
                   onOpenPrevious={() => navigate(sessionPath(coordinatorHandoffReceived.handoffFromSessionId))}
                 />
               )}
