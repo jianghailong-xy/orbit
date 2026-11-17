@@ -30,6 +30,10 @@ final class OwnerRequestsModel {
     /// A runner's name for "Delivered to Runner HPC", from the app's runner snapshot.
     var runnerName: (String) -> String = { _ in "this runner" }
 
+    /// Called after every read of the waiting terminals, whether or not the list moved: the app's
+    /// one-time notice takes its stock on the first read and speaks on the ones after it (iOS).
+    var onTerminalRequestsRead: (() -> Void)?
+
     private let api: APIClient
     private let store: OwnerRequestSnoozes
 
@@ -85,6 +89,7 @@ final class OwnerRequestsModel {
         } catch {
             // The next tick reads again; what was drawn stays.
         }
+        onTerminalRequestsRead?()
     }
 
     /// Approve or Deny a terminal: the card leaves at once, and the list is read again either way.
@@ -96,6 +101,7 @@ final class OwnerRequestsModel {
             try await api.denyTerminalRequest(request.id)
         }
         terminalRequests.removeAll { $0.id == request.id }
+        onTerminalRequestsRead?()
     }
 
     func taskTitle(_ id: String) -> String { taskTitles[PublicID.storageKey(id)] ?? "Task" }

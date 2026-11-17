@@ -333,6 +333,9 @@ final class AppModel {
     /// next look takes them as they stand — at launch, and on coming back to the foreground: what was
     /// already waiting then is the lists' to show, not news.
     private var needsYouSeen: Set<String>?
+    /// The terminal requests already announced, by id (iOS): one toast per request, and the first
+    /// look after launch or a return to the foreground only takes stock. Nil until that look.
+    private var terminalsSeen: Set<String>?
     /// The terminal request a push or the needs-you line opened, lit on Machines & models' Needs you
     /// section for two seconds (board `docs/mocks/waiting-on-you-removal/02` ③④).
     private(set) var terminalRequestToLight: String?
@@ -628,6 +631,11 @@ final class AppModel {
             return names[id] ?? names.first { PublicID.storageKey($0.key) == PublicID.storageKey(id) }?.value
                 ?? "this runner"
         }
+        #if os(iOS)
+        // A terminal that has just started waiting is announced once, as a toast (the owner,
+        // 2026-11-16). The Mac's session list keeps its resident "Needs you" line instead.
+        ownerRequestsModel.onTerminalRequestsRead = { [weak self] in self?.noticeNewlyWaitingTerminals() }
+        #endif
         ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
@@ -1198,9 +1206,10 @@ final class AppModel {
             if terminalRequestToLight == lit { terminalRequestToLight = nil }
         }
         #if os(iOS)
-        // Settings is a sheet on the phone: raise it and put Machines & models on its stack.
+        // Settings is a sheet on the phone: raise it and put Machines on its stack, where the
+        // pending terminals are (the Machines half of the old Machines & models page).
         settingsPresented = true
-        nav.settingsPath = [.settingsPage(.machinesAndModels)]
+        nav.settingsPath = [.settingsPage(.machines)]
         #else
         selectedSection = .runners
         #endif
@@ -2450,15 +2459,36 @@ final class AppModel {
         for notice in NeedsYouLogic.newlyWaiting(needsYouSessions, seen: seen, excluding: focusedConsoleSessionID) {
             showNeedsYouToast(notice)
         }
-        // A notice whose conversation stopped waiting has nothing left to say.
-        needsYouToasts.removeAll { !keys.contains($0.id) }
+        // A notice whose conversation stopped waiting has nothing left to say. A terminal's is the
+        // other look's (`noticeNewlyWaitingTerminals`).
+        needsYouToasts.removeAll { $0.terminal == nil && !keys.contains($0.id) }
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
         #endif
     }
 
     #if os(iOS)
+    /// The same look at the terminals asking to be approved (the owner, 2026-11-16: a request is a
+    /// one-time toast too). Called after every read of them: the first look only takes stock, and a
+    /// request is noticed once, by its own id, so a later read that still holds it says nothing.
+    private func noticeNewlyWaitingTerminals() {
+        guard openListAnswered, let ownerRequests else { return }
+        let live = Terminals.liveRequests(ownerRequests.terminalRequests)
+        let ids = Set(live.map(\.id))
+        defer { terminalsSeen = ids }
+        guard let seen = terminalsSeen else { return }
+        for notice in Terminals.newNotices(live, seen: seen) {
+            showNeedsYouToast(notice)
+        }
+        // A request answered, denied or expired has nothing left to say.
+        needsYouToasts.removeAll { $0.terminal != nil && !ids.contains($0.id) }
+        if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
+    }
+
     /// Back in the foreground: what waits now is taken as it stands, not announced.
-    func retakeNeedsYouStock() { needsYouSeen = nil }
+    func retakeNeedsYouStock() {
+        needsYouSeen = nil
+        terminalsSeen = nil
+    }
 
     private func showNeedsYouToast(_ notice: NeedsYouToast) {
         guard needsYouToasts.count < Self.needsYouToastLimit else {
@@ -2478,13 +2508,18 @@ final class AppModel {
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
 
-    /// A press on a notice: the conversation it names, at the card it waits on.
+    /// A press on a notice: the conversation it names, at the card it waits on — or, for a terminal
+    /// asking to be approved, that machine's pending section on the machine page.
     func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
         dismissNeedsYouToast(notice.id)
+        if let request = notice.terminal {
+            return openTerminalRequests(request.id)
+        }
+        guard let target = notice.target else { return }
         if let item = notice.ownerItem {
-            openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+            openNeedsYouItem(target, item, projectInColumn: projectInColumn)
         } else {
-            openNeedsYouSession(notice.target)
+            openNeedsYouSession(target)
         }
     }
     #endif

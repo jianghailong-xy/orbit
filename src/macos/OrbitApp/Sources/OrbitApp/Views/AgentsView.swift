@@ -451,10 +451,10 @@ struct AgentPanes: View {
             // The Mac has no capsule, so the waiting terminals are a Needs you section at the top
             // of the list, in the capsule's own words and mark (board ③, choice 6 A).
             if let terminal = app.terminalNeedsYou(now: terminalNow) {
-                Section {
+                TitledListSection {
                     TerminalNeedsYouRow(line: terminal) { app.openTerminalNeedsYou(terminal) }
-                } header: {
-                    sectionHeaderBand { Text(MachinesAndModels.needsYou).textCase(nil) }
+                } title: {
+                    Text(MachinesAndModels.needsYou).textCase(nil)
                 }
             }
             #endif

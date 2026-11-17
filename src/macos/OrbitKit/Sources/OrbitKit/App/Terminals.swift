@@ -34,6 +34,24 @@ public enum Terminals {
         count == 1 ? "Approve a terminal" : "Approve \(count) terminals"
     }
 
+    /// What a toast over a newly waiting terminal says (the owner, 2026-11-16: the resident needs-you
+    /// bar is gone, so each request is announced once, as a toast): "Approve a terminal", over the
+    /// machine and the code it shows — the same words the approve card and the Mac list's line use.
+    public static let toastTitle = "Approve a terminal"
+
+    /// The notices for the requests that have started waiting since `seen` (the ids of the last look),
+    /// oldest first — at most one per request, so answering one and reading again never repeats a
+    /// request that is still in the list. Expired requests are not announced: they wait on nobody.
+    public static func newNotices(_ requests: [TerminalRequest], seen: Set<String>,
+                                  now: Date = Date()) -> [NeedsYouToast] {
+        liveRequests(requests, now: now)
+            .filter { !seen.contains($0.id) }
+            .map { request in
+                NeedsYouToast(id: request.id, target: nil, title: toastTitle,
+                              line: needsYouDetail([request]), ownerItem: nil, terminal: request)
+            }
+    }
+
     /// The needs-you line's second line: one request names its machine and code
     /// ("dev-laptop · code 7KQ-4MZ"); several on one machine count ("dev-laptop · 2 waiting");
     /// several machines are named, oldest first ("dev-laptop, build-box").

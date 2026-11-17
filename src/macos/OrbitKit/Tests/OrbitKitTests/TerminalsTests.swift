@@ -231,10 +231,13 @@ final class TerminalsTests: XCTestCase {
         XCTAssertTrue(section.contains("TerminalRequestCards(model: ownerRequests, requests: terminals, lit: lit, onSaid: onSaid)"))
         let block = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/TerminalRequestsView.swift")
         XCTAssertTrue(block.contains("RunnerSectionHeader(Terminals.toApprove, trailing: Terminals.requestLasts)"))
-        let bar = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift")
-        XCTAssertTrue(bar.contains("model.terminalNeedsYou(now: terminalNow)"))
-        XCTAssertTrue(bar.contains("model.openTerminalNeedsYou(terminal)"))
-        XCTAssertTrue(app.contains("nav.settingsPath = [.settingsPage(.machinesAndModels)]"))
+        // The Mac's session list keeps its resident "Needs you" line — the phone has the one-time
+        // notice instead, because there is no session list there to put a line on.
+        let list = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
+        XCTAssertTrue(list.contains("if let terminal = app.terminalNeedsYou(now: terminalNow)"))
+        XCTAssertTrue(list.contains("TerminalNeedsYouRow(line: terminal) { app.openTerminalNeedsYou(terminal) }"))
+        XCTAssertTrue(app.contains("nav.settingsPath = [.settingsPage(.machines)]"),
+                      "the phone raises Settings on the Machines page, where its pending terminals are")
         XCTAssertTrue(app.contains("case .openTerminalRequests(let requestID):"))
         let links = try webSource("src/macos/OrbitKit/Sources/OrbitKit/App/DeepLink.swift")
         XCTAssertTrue(links.contains("case \"terminal-login\": return id.map(Route.terminalLogin)"))
@@ -266,6 +269,62 @@ final class TerminalsTests: XCTestCase {
         let sameMachine = TerminalRequest(id: "34req3", userCode: "BBBB-2222", machineName: "dev-laptop", runnerId: "run1",
                                           createdAt: "2026-11-12T10:04:00.000Z", expiresAt: "2026-11-12T10:14:00.000Z")
         XCTAssertEqual(Terminals.needsYouDetail([request, sameMachine]), "dev-laptop · 2 waiting")
+    }
+
+    /// A new request is announced once, as a toast (the owner, 2026-11-16: the resident needs-you bar
+    /// is gone). One notice per request, keyed by its own id, so a read that still holds an answered
+    /// request says nothing again; the words are the approve card's, and a press knows which machine.
+    func testATerminalRequestIsNoticedOnceAsAToast() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:05:00.000Z"))
+        let other = TerminalRequest(id: "34req2", userCode: "AAAA-1111", machineName: "build-box", runnerId: "run2",
+                                    createdAt: "2026-11-12T10:02:00.000Z", expiresAt: "2026-11-12T10:12:00.000Z")
+        let fresh = Terminals.newNotices([other, request], seen: [], now: now)
+        XCTAssertEqual(fresh.map(\.id), ["34req1", "34req2"], "one notice each, oldest first")
+        let notice = try XCTUnwrap(fresh.first)
+        XCTAssertEqual(notice.title, "Approve a terminal")
+        XCTAssertEqual(notice.line, "dev-laptop · code 7KQ-4MZ")
+        XCTAssertEqual(notice.glyph, .terminal)
+        XCTAssertEqual(notice.terminal?.id, "34req1", "the press goes to this machine's section")
+        XCTAssertNil(notice.target, "a terminal is no conversation")
+
+        // The same request, read again, is not announced again — however many times it is read.
+        let seen = Set([request.id])
+        XCTAssertEqual(Terminals.newNotices([request, other], seen: seen, now: now).map(\.id), ["34req2"])
+        XCTAssertTrue(Terminals.newNotices([request], seen: seen, now: now).isEmpty, "once per request id")
+
+        // A request past its deadline waits on nobody, so it is never announced.
+        let after = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:11:00.000Z"))
+        XCTAssertTrue(Terminals.newNotices([request], seen: [], now: after).isEmpty)
+
+        // Two on one machine are two notices, each naming the machine and its own code.
+        let sameMachine = TerminalRequest(id: "34req3", userCode: "BBBB-2222", machineName: "dev-laptop", runnerId: "run1",
+                                          createdAt: "2026-11-12T10:04:00.000Z", expiresAt: "2026-11-12T10:14:00.000Z")
+        XCTAssertEqual(Terminals.newNotices([request, sameMachine], seen: [], now: now).map(\.line),
+                       ["dev-laptop · code 7KQ-4MZ", "dev-laptop · code BBBB-2222"])
+    }
+
+    /// OrbitApp does not build on Linux, so the notice's wiring is read out of its source: the store's
+    /// change is noticed, the first look only takes stock, a request answered or expired takes its
+    /// notice with it, and a press opens that machine's pending section on the machine page.
+    func testTheTerminalNoticeIsWiredToTheMachinePage() throws {
+        let app = try webSource("src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift")
+        XCTAssertTrue(app.contains("ownerRequestsModel.onTerminalRequestsRead = { [weak self] in self?.noticeNewlyWaitingTerminals() }"))
+        let notice = try slice(app, from: "private func noticeNewlyWaitingTerminals() {", to: "\n    }\n")
+        XCTAssertTrue(notice.contains("guard let seen = terminalsSeen else { return }"), "the first look only takes stock")
+        XCTAssertTrue(notice.contains("Terminals.newNotices(live, seen: seen)"))
+        XCTAssertTrue(notice.contains("needsYouToasts.removeAll { $0.terminal != nil && !ids.contains($0.id) }"),
+                      "answered or expired, the notice goes")
+        XCTAssertTrue(app.contains("terminalsSeen = nil"))
+        let press = try slice(app, from: "func openNeedsYouToast(", to: "\n    }\n")
+        XCTAssertTrue(press.contains("if let request = notice.terminal {\n            return openTerminalRequests(request.id)"),
+                      "a terminal's notice lands on that machine's pending section")
+        let model = try webSource("src/macos/OrbitApp/Sources/OrbitApp/OwnerRequestsModel.swift")
+        XCTAssertTrue(model.contains("var onTerminalRequestsRead: (() -> Void)?"))
+        XCTAssertTrue(model.contains("onTerminalRequestsRead?()"),
+                      "every read of the waiting terminals is noticed, the first one only taking stock")
+        let card = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouToast.swift")
+        XCTAssertTrue(card.contains("case .terminal: return \"terminal\""), "the notice draws the terminal's mark")
+        XCTAssertTrue(card.contains("notice.terminal != nil ? Terminals.needsYouHint"))
     }
 
     /// A request folds at its own deadline, not at the next read; one machine's page draws its own.
@@ -314,6 +373,14 @@ final class TerminalsTests: XCTestCase {
                 XCTAssertFalse(source.contains(symbol), "\(path) still has \(symbol)")
             }
         }
+    }
+
+    /// From the first `start` through the next `end` after it, in a source read above.
+    private func slice(_ text: String, from start: String, to end: String) throws -> String {
+        let lower = try XCTUnwrap(text.range(of: start), "no `\(start)`")
+        let upper = try XCTUnwrap(text.range(of: end, range: lower.upperBound..<text.endIndex),
+                                  "no `\(end)` after `\(start)`")
+        return String(text[lower.lowerBound..<upper.upperBound])
     }
 
     private func webSource(_ path: String) throws -> String {
