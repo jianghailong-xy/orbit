@@ -332,6 +332,9 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
+  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0890)
+  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0890)
+  helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0900)
   terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
   terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
@@ -2058,6 +2061,13 @@ model Session {
   // next completion of that process is measured from (runner-api/running-totals.ts). Null until a
   // completion reporting running totals is booked (migration 0478).
   engineUsageTotals    Json?     @map("engine_usage_totals")
+  // The session's Agent Tools report (docs/orbit-agent-contract.md §2.7): what its engine was given
+  // from Orbit and took, in the engine's own words — the MCP connection's status and the engine's
+  // reason, the Orbit tools it lists by family and why one is short, the contract/catalogue/primer
+  // versions, the switches it was spawned with, how Orbit's instructions reached it, and the
+  // playbooks skill. The newest `agent_tools` system event the runner sent, kept by the event
+  // ingest; null until one arrives, and for engines that report no MCP connection (migration 0940).
+  agentTools           Json?     @map("agent_tools")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
   // turn_end event that already carries it for the clients' context gauge. A long-lived session
@@ -2268,6 +2278,13 @@ model Session {
   /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
   /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
   wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
+  /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
+  /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
+  /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
+  /// runner, and may call only the runner doors of help/help-ask-reads.ts.
+  helpAsk                  Json?     @map("help_ask")
+  /// Still stuck → Ask your admin (migration 0890): this Ask sent to an admin, at most once.
+  helpAskAdminRequest      HelpAskAdminRequest?
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -3699,6 +3716,7 @@ model Project {
   @@index([coordinatorWorkspaceId])
   @@map("project")
   coordinatorHandoffs CoordinatorHandoff[]
+  rulings             ProjectRuling[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -6311,6 +6329,8 @@ model Task {
   /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
   /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
   /// 0120 used for (decision, project).
+  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0890), when it is one.
+  helpAskAdminRequests HelpAskAdminRequest[]
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
 }
@@ -7694,6 +7714,30 @@ model CoordinatorHandoff {
   @@index([toSessionId])
   @@index([projectId])
   @@map("coordinator_handoff")
+}
+
+/// An owner ruling kept on its project (docs/coordinator-handoff-v2-design.md §2, migration 0970):
+/// the ruling in one sentence, the owner's own words, and where they were said — an answered
+/// coordinator question (ASK_OWNER, written by the answer) or a coordinator turn (TURN, recorded by
+/// `project_ruling_record`). A later ruling supersedes an earlier one; the old row is kept.
+model ProjectRuling {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  ownerId             String   @map("owner_id") @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  project             Project  @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_ruling_project_fkey")
+  ruling              String
+  quote               String
+  /// ASK_OWNER | TURN (a CHECK).
+  sourceKind          String   @map("source_kind")
+  /// The answered open item (ASK_OWNER) or the conversation turn (TURN). No foreign key.
+  sourceId            String   @map("source_id") @db.Uuid
+  /// The coordinator that recorded it; null for an automatic ruling. No foreign key.
+  recordedBySessionId String?  @map("recorded_by_session_id") @db.Uuid
+  supersededById      String?  @map("superseded_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_ruling")
 }
 
 model KeyGatewayToken {
@@ -10086,4 +10130,44 @@ model ScheduleChangeRequest {
 
   @@index([ownerId, state, createdAt], map: "schedule_change_request_owner_state_idx")
   @@map("schedule_change_request")
+}
+
+/// Still stuck → Ask your admin (migration 0890; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
+/// its person sent to an admin, keyed by the Ask so it is sent at most once, and the ordinary task in the admin's own
+/// task list that carries it. /help → Your questions reads it to say "With your admin". Written only by
+/// help/help-ask.ts#askAdmin. Its own table because 0850's trigger keeps `session.help_ask` as its INSERT wrote it.
+model HelpAskAdminRequest {
+  sessionId String   @id @map("session_id") @db.Uuid
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// The asker: the tenant this row is read under.
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation("HelpAskAdminRequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  adminId   String   @map("admin_id") @db.Uuid
+  admin     User     @relation("HelpAskAdminRequestAdmin", fields: [adminId], references: [id], onDelete: Cascade)
+  /// The admin's task; null once the admin deleted it (the question was still sent).
+  taskId    String?  @map("task_id") @db.Uuid
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@index([adminId])
+  @@index([taskId])
+  @@map("help_ask_admin_request")
+}
+
+/// Did this help? / Did this answer it? (migration 0900; docs/mocks/help-center board 03, decision 3): one person's
+/// Yes / No on one article (`kind` article, `itemId` its slug) or one Ask answer (`kind` answer, `itemId`
+/// `<Ask session id>:<seq>`). One vote per person per item, the last one standing. No text column, by decision:
+/// Admin → Help feedback shows counts only. Written only by help/help-feedback.ts#record.
+model HelpFeedback {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  itemId    String   @map("item_id")
+  helpful   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, kind, itemId])
+  @@index([kind, itemId])
+  @@map("help_feedback")
 }

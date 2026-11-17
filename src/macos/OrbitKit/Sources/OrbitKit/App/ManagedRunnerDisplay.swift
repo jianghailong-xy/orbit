@@ -208,6 +208,8 @@ public struct ManagedRunnerRow: Equatable, Sendable {
     public let acceptsWork: Bool
     /// Asleep or going to sleep, and a message would wake it.
     public let asleep: Bool
+    /// The managed runner's id, as the row was matched on: what a page names Orbit Cloud by.
+    public let runnerID: String
 }
 
 /// A managed runner as one console sees it: only the console of the managed runner's own
@@ -370,7 +372,8 @@ public enum ManagedRunnerLogic {
             tone: tone == .progress && !display.moving ? .idle : tone,
             detail: display.kind == .sleeping && display.acceptsWork ? ManagedRunnerCopy.Asleep.row : nil,
             acceptsWork: display.acceptsWork,
-            asleep: (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork)
+            asleep: (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork,
+            runnerID: runnerID)
     }
 
     /// Set up asks first on an account that already has a runner or a workspace (D3): a workspace

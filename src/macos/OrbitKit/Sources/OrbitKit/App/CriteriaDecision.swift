@@ -1051,7 +1051,7 @@ public enum CriteriaDecisions {
     /// that never saw the question still shows what was decided. Web draws the same receipts in the
     /// same place, from the same array (`criteriaDecisionReceiptRows`).
     ///
-    /// An answer older than everything this console holds is still drawn: as a ROW it carries the
+    /// An answer since conversation creation but older than everything loaded is still drawn: it carries the
     /// moment the door recorded (`decidedAt`), and `TranscriptRows.build` resolves that against the
     /// rows loaded at render time — inside the window it sits where the decision happened, above it
     /// it leads at the head (`ReceiptAnchor.Placement`). Nothing is captured here but the answer.
@@ -1447,7 +1447,7 @@ public enum AcceptanceConfirmations {
     /// The record this conversation draws, or nothing: a confirmation on record — current or
     /// superseded by an edit, both of which happened. A moment older than every loaded row is not
     /// dropped here: the record carries its own `confirmedAt`, and `TranscriptRows.build` puts it at
-    /// the head of the window when that moment is above it (`ReceiptAnchor.Placement`).
+    /// the head of the window when that moment is since conversation creation but above it (`ReceiptAnchor.Placement`).
     ///
     /// Drawn from the READ and not from the window that pressed. A press kept as this window's own
     /// state lasted exactly as long as the console did: the record of it was gone on the next open,

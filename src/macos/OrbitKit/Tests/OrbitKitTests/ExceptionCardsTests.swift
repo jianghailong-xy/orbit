@@ -63,6 +63,7 @@ final class ExceptionCardsTests: XCTestCase {
         return String(source[range])
     }
 
+    @discardableResult
     private func require(_ source: String, _ needle: String) throws -> String {
         guard source.contains(needle) else { throw ParityError.notInWeb(needle) }
         return needle
@@ -105,6 +106,12 @@ final class ExceptionCardsTests: XCTestCase {
         var facts: OpenItemFacts?
         /// The server's reading that the coordinator can be neither asked nor messaged now.
         var coordinatorUnreachable = false
+        /// The landing the item is about (`OPEN_LANDING`).
+        var landingSessionId: String?
+        /// The coordinator's words when it handed the item over on purpose.
+        var handoverNote: String?
+        /// "Chat about this": where a message about it would go, or why it cannot.
+        var chat: ProjectOpenItemRow.Chat?
 
         func build() -> ProjectOpenItemRow {
             ProjectOpenItemRow(itemId: itemId, kind: kind, title: title, detailLine: detailLine,
@@ -112,10 +119,12 @@ final class ExceptionCardsTests: XCTestCase {
                                assigneeReason: assigneeReason, escalateAt: escalateAt,
                                escalatedAt: escalatedAt, taskId: taskId, sessionId: sessionId,
                                promotionId: promotionId,
-                               fuseEpisodeId: fuseEpisodeId, delivery: delivery, actions: actions,
+                               fuseEpisodeId: fuseEpisodeId, delivery: delivery,
+                               landingSessionId: landingSessionId, actions: actions,
                                requiredAction: requiredAction, primaryAction: primaryAction,
                                handledBy: handledBy, question: question, facts: facts,
-                               coordinatorUnreachable: coordinatorUnreachable)
+                               coordinatorUnreachable: coordinatorUnreachable,
+                               handoverNote: handoverNote, chat: chat)
         }
     }
 
@@ -201,18 +210,22 @@ final class ExceptionCardsTests: XCTestCase {
     /// same one.
     func testTheEscalationHeadingsAreTheBrowsersSentences() throws {
         let web = try webSource()
+        // Board owner-exception-who-fixes, D3 = A: the reachable heading carries no number — the
+        // card's one clock is the total wait at its top right, and the coordinator's time is in
+        // Details.
         XCTAssertEqual(ExceptionCards.heading(row { $0.assigneeReason = .escalated }, now: now),
-                       try require(web, "Now yours — no one acted on this for ")
-                       + ExceptionCards.waitedBeforeEscalation(row()))
+                       try declaration(web, "ESCALATED_REACHABLE_HEADING"))
+        XCTAssertNil(ExceptionCards.escalatedReachableHeading.rangeOfCharacter(from: .decimalDigits))
         XCTAssertEqual(ExceptionCards.heading(row { $0.assigneeReason = .coordinatorEnded }, now: now),
-                       try require(web, "Now yours — the coordinator conversation ended"))
+                       try declaration(web, "COORDINATOR_ENDED_HEADING"))
         XCTAssertEqual(ExceptionCards.heading(row { $0.assigneeReason = .chainLimit }, now: now),
                        try require(web, "Now yours — the 3rd failure in this chain"))
         XCTAssertEqual(ExceptionCards.heading(row { $0.assigneeReason = .handedOver }, now: now),
-                       try require(web, "Now yours — the coordinator handed it over"))
+                       try declaration(web, "HANDED_OVER_HEADING"))
+        // …and no wait in it either: the clock is the card's, top right.
         XCTAssertEqual(ExceptionCards.heading(row { $0.assigneeReason = .noCoordinator }, now: now),
-                       try require(web, "Now yours — this project has no coordinator (waiting ")
-                       + ExceptionCards.waited(row(), now: now) + ")")
+                       try declaration(web, "NO_COORDINATOR_HEADING"))
+        XCTAssertEqual(ExceptionCards.noCoordinatorHeading, "Now yours — this project has no coordinator")
         // The browser's own fallback for a row whose escalated instant it does not have.
         try require(web, "'a while'")
         XCTAssertEqual(ExceptionCards.waitedBeforeEscalation(row { $0.escalatedAt = nil }), "a while")
@@ -283,7 +296,7 @@ final class ExceptionCardsTests: XCTestCase {
 
         let escalated = row()
         XCTAssertEqual(ExceptionCards.headingLine(escalated, now: now),
-                       "Now yours — no one acted on this for 2h")
+                       "Now yours — the coordinator didn’t get to it")
         XCTAssertEqual(ExceptionCards.subject(escalated, now: now), escalated.title)
     }
 
@@ -300,7 +313,7 @@ final class ExceptionCardsTests: XCTestCase {
                        try require(web, "Now yours — the coordinator can’t take messages"))
         XCTAssertEqual(ExceptionCards.heading(unreachable, now: now),
                        ExceptionCards.escalatedUnreachableHeading)
-        XCTAssertEqual(ExceptionCards.heading(row(), now: now), "Now yours — no one acted on this for 2h")
+        XCTAssertEqual(ExceptionCards.heading(row(), now: now), "Now yours — the coordinator didn’t get to it")
 
         let decoded = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
             {"itemId":"i","kind":"INTEGRATION_CONFLICT","title":"Merge conflict: t","assignee":"OWNER",
@@ -403,7 +416,7 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertTrue(ExceptionCards.askable(decoded))
         XCTAssertNil(decoded.question)
         XCTAssertEqual(ExceptionCards.heading(decoded, now: now),
-                       "Now yours — no one acted on this for 2h")
+                       "Now yours — the coordinator didn’t get to it")
     }
 
     /// An action or a reason this build has never heard of is decoded rather than failing the read
@@ -983,5 +996,511 @@ final class ExceptionCardsTests: XCTestCase {
         {"itemId":"01a0bb0b","state":"RESOLVED","resolution":"HANDLED"}
         """.utf8))
         XCTAssertEqual(resolved.resolution, "HANDLED")
+    }
+
+    // MARK: - "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A)
+
+    /// Board ②'s escalated merge conflict, the web test's `conflict()`: 3h 1m waiting, 2h 56m of it
+    /// with the coordinator, nine files, a landing, a coordinator that can be asked again.
+    private static let files = [
+        "src/webhooks/sender.ts", "src/webhooks/sender.test.ts", "src/webhooks/retry-policy.ts",
+        "src/queue/backoff.ts", "src/queue/backoff.test.ts", "src/config/defaults.ts",
+        "docs/webhooks.md", "package.json", "package-lock.json",
+    ]
+
+    private func conflict(_ overrides: (inout Fixture) -> Void = { _ in }) -> ProjectOpenItemRow {
+        row {
+            $0.kind = .integrationConflict
+            $0.title = "Merge conflict: Retry failed webhook deliveries"
+            $0.detailLine = "9 files conflict with project/35aK2xQm"
+            $0.assigneeReason = .escalated
+            $0.waitingSince = "2026-09-21T08:59:00Z"
+            $0.escalatedAt = "2026-09-21T11:55:00Z"
+            $0.landingSessionId = "35aLanding00000000001"
+            $0.actions = [.askCoordinatorAgain, .openTaskSession, .openLanding, .cancelTask]
+            $0.facts = OpenItemFacts(
+                task: .init(id: "35aTask00000000000001", title: "Retry failed webhook deliveries"),
+                targetRef: "refs/heads/project/35aK2xQm8LrT0vHcE1pZq",
+                targetSha: "9f3c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5",
+                files: Self.files)
+            $0.chat = .init(sessionId: "35aCoord0000000000001", stage: "WITH_OWNER", refusal: nil)
+            $0.coordinatorUnreachable = false
+            overrides(&$0)
+        }
+    }
+
+    /// The web test's `UNREACHABLE`: no Ask again, the server's reading, and a chat that cannot go.
+    private func unreachable(_ overrides: (inout Fixture) -> Void = { _ in }) -> ProjectOpenItemRow {
+        conflict {
+            $0.actions = [.openTaskSession, .openLanding, .cancelTask]
+            $0.coordinatorUnreachable = true
+            $0.chat = .init(sessionId: "35aCoord0000000000001", stage: "WITH_OWNER",
+                            refusal: "COORDINATOR_UNAVAILABLE")
+            overrides(&$0)
+        }
+    }
+
+    /// The web test's `status()`: the coordinator status the project page reads.
+    private func status(_ state: ProjectCoordinationState, refusalDetail: String? = nil,
+                        completed: Bool = false) -> ProjectCoordinatorStatus {
+        let never = state == .neverOpened
+        return ProjectCoordinatorStatus(
+            projectId: "35aK2xQm8LrT0vHcE1pZq", state: state,
+            coordination: .init(
+                sessionId: never ? nil : "35aCoord0000000000001",
+                session: state == .live
+                    ? .init(id: "35aCoord0000000000001", title: "Coordinator",
+                            lifecycleState: completed ? .completed : .open)
+                    : nil,
+                workspaceId: never ? nil : "35aWorkspace0000000001",
+                workspaceName: never ? nil : "mac-mini"),
+            openability: .init(canOpen: state != .unavailable,
+                               refusalCode: state == .unavailable ? "COORDINATOR_UNAVAILABLE" : nil,
+                               refusalDetail: refusalDetail))
+    }
+
+    /// One row of board part 6 — the web test's `PART_6` — read the way the card reads it: the
+    /// heading, the coordinator row's sentence, its presses in order, and which one is primary.
+    private func assertPart6(_ cause: CoordinatorCause, row: ProjectOpenItemRow,
+                             status: ProjectCoordinatorStatus?,
+                             workspace: CoordinatorWorkspaceFacts? = nil,
+                             heading: String, sentence: String, presses: [String], leads: String?,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(ExceptionCards.whoFixesIt(row), "drawn as the Who fixes it? card", file: file, line: line)
+        let reading = ExceptionCards.readCoordinatorCause(row, status: status, workspace: workspace)
+        XCTAssertEqual(reading.cause, cause, file: file, line: line)
+        XCTAssertEqual(ExceptionCards.whoFixesHeading(reading.cause), heading, file: file, line: line)
+        XCTAssertEqual(ExceptionCards.coordinatorRowSentence(row, reading), sentence, file: file, line: line)
+        let drawn = ExceptionCards.coordinatorRowPresses(reading)
+        XCTAssertEqual(drawn.map(\.label), presses, file: file, line: line)
+        XCTAssertEqual(drawn.first { $0.tier == .primary }?.label, leads, file: file, line: line)
+    }
+
+    func testPart6WorkspaceDisabled() {
+        assertPart6(.workspaceDisabled, row: unreachable(), status: status(.live),
+                    workspace: CoordinatorWorkspaceFacts(enabled: false, runnerId: "r1"),
+                    heading: "Now yours — the coordinator can’t take messages",
+                    sentence: "Its workspace mac-mini is disabled, so it can’t take messages.",
+                    presses: ["Enable mac-mini", "Change workspace…"], leads: "Enable mac-mini")
+        // UNAVAILABLE's own refusal detail reads the same.
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable(), status: status(.unavailable, refusalDetail: "WORKSPACE_DISABLED")).cause,
+                       .workspaceDisabled)
+        // Change workspace… is the link beside the fix, not a second button.
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(
+            CoordinatorReading(cause: .workspaceDisabled, workspaceId: "w", workspaceName: "mac-mini")).last,
+                       .changeWorkspace(.link))
+    }
+
+    func testPart6WorkspaceTrashed() {
+        assertPart6(.workspaceTrashed, row: unreachable(),
+                    status: status(.unavailable, refusalDetail: "WORKSPACE_TRASHED"),
+                    heading: "Now yours — the coordinator can’t take messages",
+                    sentence: "Its workspace mac-mini is in Trash, so it can’t take messages.",
+                    presses: ["Restore mac-mini", "Change workspace…"], leads: "Restore mac-mini")
+    }
+
+    func testPart6WorkspaceUnbound() {
+        assertPart6(.workspaceUnbound, row: unreachable(),
+                    status: status(.unavailable, refusalDetail: "WORKSPACE_UNBOUND"),
+                    heading: "Now yours — the coordinator can’t take messages",
+                    sentence: "Its workspace mac-mini isn’t bound to a runner.",
+                    presses: ["Bind mac-mini to a runner", "Change workspace…"],
+                    leads: "Bind mac-mini to a runner")
+        // A LIVE coordinator whose workspace lost its runner reads the same, off the workspace.
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable(), status: status(.live),
+            workspace: CoordinatorWorkspaceFacts(enabled: true, runnerId: nil)).cause, .workspaceUnbound)
+    }
+
+    func testPart6RunnerDown() {
+        assertPart6(.runnerDown, row: unreachable(), status: status(.live),
+                    workspace: CoordinatorWorkspaceFacts(enabled: true, runnerId: "r1"),
+                    heading: "Now yours — the coordinator can’t take messages",
+                    sentence: "Its runner is offline. Ask again comes back here as soon as it is.",
+                    presses: ["Change workspace…"], leads: nil)
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(CoordinatorReading(cause: .runnerDown)),
+                       [.changeWorkspace(.secondary)])
+        XCTAssertNil(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: .runnerDown)),
+                     "a run that is only down has no note: the sentence already says Ask again comes back")
+    }
+
+    func testPart6CoordinatorEnded() {
+        assertPart6(.coordinatorEnded, row: unreachable { $0.assigneeReason = .coordinatorEnded },
+                    status: status(.live, completed: true),
+                    heading: "Now yours — the coordinator conversation ended",
+                    sentence: "Its conversation was completed.",
+                    presses: ["Start a new coordinator"], leads: "Start a new coordinator")
+        // TRASHED, and an UNAVAILABLE that is not about the workspace, are the same ending.
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(unreachable(), status: status(.trashed)).cause,
+                       .coordinatorEnded)
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(unreachable(), status: status(.unavailable)).cause,
+                       .coordinatorEnded)
+    }
+
+    func testPart6NoCoordinator() {
+        assertPart6(.noCoordinator,
+                    row: unreachable {
+                        $0.assigneeReason = .noCoordinator
+                        $0.chat = .init(sessionId: nil, stage: "WITH_OWNER", refusal: "NO_COORDINATOR")
+                    },
+                    status: status(.neverOpened),
+                    heading: "Now yours — this project has no coordinator",
+                    sentence: "This project isn’t coordinated.",
+                    presses: ["Set up a coordinator…"], leads: "Set up a coordinator…")
+    }
+
+    func testPart6Escalated() {
+        assertPart6(.escalated, row: conflict(), status: nil,
+                    heading: "Now yours — the coordinator didn’t get to it",
+                    sentence: "Reachable. It had this for 2h 56m and didn’t get to it.",
+                    presses: ["Ask the coordinator again", "or Chat about this first"],
+                    leads: "Ask the coordinator again")
+    }
+
+    func testPart6HandedOver() {
+        assertPart6(.handedOver,
+                    row: conflict {
+                        $0.assigneeReason = .handedOver
+                        $0.handoverNote = "The conflict is in your retry policy"
+                    },
+                    status: nil,
+                    heading: "Now yours — the coordinator handed it over",
+                    sentence: "“The conflict is in your retry policy” — it handed this to you on purpose.",
+                    presses: ["Ask the coordinator again", "or Chat about this first"], leads: nil)
+        // With no note it still says it was on purpose.
+        XCTAssertEqual(ExceptionCards.coordinatorRowSentence(conflict { $0.assigneeReason = .handedOver },
+                                                             CoordinatorReading(cause: .handedOver)),
+                       "It handed this to you on purpose.")
+    }
+
+    /// The workspace's name is drawn in bold inside the sentence; a sentence without a name is
+    /// drawn whole, and never claims a workspace it has not read.
+    func testTheWorkspaceNameIsBoldAndNeverClaimedUnread() throws {
+        let reading = CoordinatorReading(cause: .workspaceDisabled, workspaceId: "w", workspaceName: "mac-mini")
+        let said = ExceptionCards.coordinatorRowSentence(conflict(), reading)
+        let parts = try XCTUnwrap(ExceptionCards.boldWorkspace(said, name: reading.workspaceName))
+        XCTAssertEqual(parts.before, "Its workspace ")
+        XCTAssertEqual(parts.name, "mac-mini")
+        XCTAssertEqual(parts.after, " is disabled, so it can’t take messages.")
+        XCTAssertEqual(parts.before + parts.name + parts.after, said)
+
+        let noName = CoordinatorReading(cause: .workspaceDisabled)
+        XCTAssertEqual(ExceptionCards.coordinatorRowSentence(conflict(), noName),
+                       "Its workspace is disabled, so it can’t take messages.")
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(noName), [.changeWorkspace(.secondary)])
+        XCTAssertNil(ExceptionCards.boldWorkspace("Its workspace is disabled.", name: nil))
+    }
+
+    /// Without a status read yet, the row alone decides (the web's same three answers).
+    func testWithoutAStatusTheRowDecides() {
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(unreachable()).cause, .runnerDown)
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable { $0.assigneeReason = .coordinatorEnded }).cause, .coordinatorEnded)
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable { $0.coordinatorUnreachable = false }).cause, .coordinatorEnded)
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable { $0.assigneeReason = .noCoordinator }).cause, .noCoordinator)
+        XCTAssertEqual(ExceptionCards.readCoordinatorCause(
+            unreachable { $0.chat = .init(refusal: "NO_COORDINATOR") }).cause, .noCoordinator)
+    }
+
+    /// Which items the card draws: the owner's escalations, hand-overs and ended or missing
+    /// coordinators of the five kinds — not a chain's 3rd failure, an item that was always the
+    /// owner's, the coordinator's own, or a silent landing claim.
+    func testWhichItemsAreDrawnAsWhoFixesIt() {
+        for kind: ProjectOpenItemKind in [.integrationConflict, .integrationCheckFailed, .integrationError,
+                                          .taskFailed, .deliveryReview] {
+            XCTAssertTrue(ExceptionCards.whoFixesIt(conflict { $0.kind = kind }), kind.rawValue)
+        }
+        XCTAssertFalse(ExceptionCards.whoFixesIt(conflict { $0.assigneeReason = .chainLimit }))
+        XCTAssertFalse(ExceptionCards.whoFixesIt(conflict { $0.assigneeReason = .defaultReason }))
+        XCTAssertFalse(ExceptionCards.whoFixesIt(conflict { $0.assignee = .coordinator }))
+        XCTAssertFalse(ExceptionCards.whoFixesIt(conflict { $0.kind = .landingLeaseExpired }))
+        XCTAssertFalse(ExceptionCards.whoFixesIt(conflict { $0.kind = .fusePaused }))
+    }
+
+    // MARK: D1–D4 = A
+
+    /// D1: a repair press repairs the coordinator only — Ask again is not drawn until it is back,
+    /// and the note says what to press then. Once the server reads it askable the same card is the
+    /// reachable one, whatever the status read said.
+    func testD1ARepairOnlyRepairsTheCoordinator() {
+        let disabled = ExceptionCards.readCoordinatorCause(
+            unreachable(), status: status(.live), workspace: CoordinatorWorkspaceFacts(enabled: false))
+        XCTAssertFalse(ExceptionCards.coordinatorRowPresses(disabled).contains(.askAgain(.primary)))
+        XCTAssertFalse(ExceptionCards.coordinatorRowPresses(disabled).contains(.askAgain(.secondary)))
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(unreachable(), disabled), ExceptionCards.askAgainOnceBack)
+        for cause: CoordinatorCause in [.workspaceTrashed, .workspaceUnbound, .coordinatorEnded, .noCoordinator] {
+            XCTAssertEqual(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: cause)),
+                           ExceptionCards.askAgainOnceBack, cause.rawValue)
+        }
+        let back = ExceptionCards.readCoordinatorCause(
+            conflict(), status: status(.live), workspace: CoordinatorWorkspaceFacts(enabled: false))
+        XCTAssertEqual(back.cause, .escalated)
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(back).first, .askAgain(.primary))
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), back),
+                       ExceptionCards.actionConsequence(conflict(), .askCoordinatorAgain))
+    }
+
+    /// D2: no chat at all where the coordinator cannot be reached; "or Chat about this first" as a
+    /// link beside Ask again where it can.
+    func testD2ChatOnlyWhereAMessageCanGo() {
+        for cause: CoordinatorCause in [.workspaceDisabled, .workspaceTrashed, .workspaceUnbound, .runnerDown,
+                                        .coordinatorEnded, .noCoordinator] {
+            XCTAssertFalse(ExceptionCards.coordinatorRowPresses(
+                CoordinatorReading(cause: cause, workspaceName: "mac-mini")).contains(.chatFirst), cause.rawValue)
+        }
+        let reachable = ExceptionCards.coordinatorRowPresses(CoordinatorReading(cause: .escalated))
+        XCTAssertEqual(reachable, [.askAgain(.primary), .chatFirst])
+        XCTAssertEqual(reachable.map(\.label), ["Ask the coordinator again", "or Chat about this first"])
+        XCTAssertEqual(CoordinatorRowPress.chatFirst.tier, .link)
+    }
+
+    /// The Branch row in Details says what the server wrote for the job the check failed in: a
+    /// task's landing keeps the task's sentence; a promotion of the project branch, or of one task's
+    /// branch, says that branch did not move and nothing reached main, and never that it passed alone.
+    func testTheBranchRowIsTheServersSentenceForTheJobTheCheckFailedIn() throws {
+        let project = "unchanged — the project branch did not move, and nothing reached main"
+        let candidate = "unchanged — this task’s branch did not move, and nothing on it reached main"
+        func branch(_ line: String?, unchanged: Bool = true, task: Bool = false) throws -> String? {
+            let item = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"01a0bb0c","kind":"INTEGRATION_CHECK_FAILED",
+             "title":"Checks failed on the combined tree: merging the project branch into main",
+             "detailLine":"", "assignee":"OWNER","assigneeReason":"ESCALATED",
+             "waitingSince":"2026-09-21T08:59:00Z","escalatedAt":"2026-09-21T11:55:00Z",
+             "taskId":\(task ? "\"35aTask00000000000001\"" : "null"),"sessionId":null,
+             "promotionId":\(task ? "null" : "\"35aPromo0000000000001\""),"fuseEpisodeId":null,
+             "delivery":{"state":"NOT_REQUIRED","sessionId":null,"at":null},
+             "actions":["ASK_COORDINATOR_AGAIN"],"question":null,
+             "facts":{"task":null,"targetRef":null,"targetSha":null,"files":[],"nothingLanded":false,
+                      "check":{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":null,
+                               "timedOut":true,"durationMs":14400000,"outputTail":""},
+                      "branchUnchanged":\(unchanged)\(line.map { ",\"branchLine\":\"\($0)\"" } ?? ""),
+                      "errorCode":null,"failure":null}}
+            """.utf8))
+            return ExceptionCards.detailRows(item, projectName: "Checkout v2")
+                .first { $0.label == ExceptionCards.branchLabel }?.value
+        }
+        XCTAssertEqual(try branch(project), project)
+        XCTAssertEqual(try branch(candidate), candidate)
+        XCTAssertFalse(try XCTUnwrap(branch(project)).contains("passed on its own branch"))
+        XCTAssertEqual(try branch(ExceptionCards.branchUnchanged, task: true),
+                       "unchanged — the task passed on its own branch; it fails only on the combined tree")
+        // A server older than `branchLine` leaves the task's sentence; no flag, no row.
+        XCTAssertEqual(try branch(nil), ExceptionCards.branchUnchanged)
+        XCTAssertNil(try branch(nil, unchanged: false))
+    }
+
+    /// D3: one clock — the total wait from `waitingSince` — and no number in the heading; how long
+    /// the coordinator had it is in Details as "Came to you".
+    func testD3OneClock() {
+        let item = conflict()
+        XCTAssertEqual(ExceptionCards.whoFixesClock(item, now: now), "waiting 3h 1m")
+        for cause in CoordinatorCause.allCases {
+            XCTAssertNil(ExceptionCards.whoFixesHeading(cause).rangeOfCharacter(from: .decimalDigits),
+                         cause.rawValue)
+        }
+        let came = ExceptionCards.detailRows(item, projectName: "Checkout v2")
+            .first { $0.label == ExceptionCards.cameToYouLabel }
+        XCTAssertEqual(came?.value, "after 2h 56m with the coordinator")
+        XCTAssertNil(ExceptionCards.cameToYouLine(conflict { $0.escalatedAt = nil }))
+    }
+
+    /// D4: a hand-over leads with "You · Fix it myself" (primary) and Ask again drops to the second
+    /// weight; an escalation still leads with Ask again, and Fix it myself is bordered.
+    func testD4AHandOverLeadsWithYou() {
+        let handed = CoordinatorReading(cause: .handedOver)
+        XCTAssertTrue(ExceptionCards.youLead(handed))
+        XCTAssertTrue(ExceptionCards.fixItMyselfLeads(handed))
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(handed).first, .askAgain(.secondary))
+
+        let escalated = CoordinatorReading(cause: .escalated)
+        XCTAssertFalse(ExceptionCards.youLead(escalated))
+        XCTAssertFalse(ExceptionCards.fixItMyselfLeads(escalated))
+        XCTAssertEqual(ExceptionCards.coordinatorRowPresses(escalated).first, .askAgain(.primary))
+
+        // A run that is only down leaves nothing primary in the coordinator row, so Fix it myself
+        // leads — while the row order stays the coordinator's first.
+        let down = CoordinatorReading(cause: .runnerDown)
+        XCTAssertTrue(ExceptionCards.fixItMyselfLeads(down))
+        XCTAssertFalse(ExceptionCards.youLead(down))
+        for cause: CoordinatorCause in [.workspaceDisabled, .coordinatorEnded, .noCoordinator] {
+            XCTAssertFalse(ExceptionCards.fixItMyselfLeads(CoordinatorReading(cause: cause)), cause.rawValue)
+        }
+    }
+
+    // MARK: the card around them
+
+    func testTheSublineAndTheYouRowsConsequence() {
+        XCTAssertEqual(ExceptionCards.whoFixesSubline(conflict(), projectName: "Checkout v2"),
+                       "Merge conflict · Retry failed webhook deliveries → Checkout v2")
+        XCTAssertEqual(ExceptionCards.whoFixesSubline(conflict(), projectName: nil),
+                       "Merge conflict · Retry failed webhook deliveries")
+        XCTAssertEqual(ExceptionCards.whoFixesSubline(conflict { $0.facts = nil }, projectName: "Checkout v2"),
+                       "Merge conflict")
+        XCTAssertEqual(ExceptionCards.fixItMyselfConsequence(conflict()),
+                       "Opens the task session. Fix the conflict there and push to the task branch.")
+        XCTAssertEqual(ExceptionCards.fixItMyselfConsequence(conflict { $0.kind = .integrationCheckFailed }),
+                       "Opens the task session. Fix the check there and push to the task branch.")
+        XCTAssertEqual(ExceptionCards.fixItMyselfConsequence(conflict { $0.kind = .taskFailed }),
+                       "Opens the task session.")
+        // The You row's other doors are the server's own, minus the ones this card places itself.
+        XCTAssertTrue(ExceptionCards.youDoors(conflict()).isEmpty,
+                      "Ask again, the task session, the landing and Cancel task each have their own place")
+        let failed = conflict { $0.kind = .taskFailed; $0.actions = [.openTaskSession, .retry, .cancelTask] }
+        XCTAssertEqual(ExceptionCards.youDoors(failed).map(\.action), [.retry])
+        XCTAssertEqual(ExceptionCards.youDoors(failed).map(\.tier), [.secondary])
+    }
+
+    /// The green line replaces "After a fix", and only where a fix pushed to a task branch closes
+    /// the item: an integration item with a task, not a candidate's check.
+    func testClosesByItselfOnlyOnAnIntegrationItemWithATaskBranch() {
+        for kind: ProjectOpenItemKind in [.integrationConflict, .integrationCheckFailed, .integrationError] {
+            XCTAssertTrue(ExceptionCards.closesByItself(conflict { $0.kind = kind }), kind.rawValue)
+        }
+        XCTAssertFalse(ExceptionCards.closesByItself(conflict { $0.kind = .taskFailed }))
+        XCTAssertFalse(ExceptionCards.closesByItself(conflict { $0.kind = .deliveryReview }))
+        XCTAssertFalse(ExceptionCards.closesByItself(conflict {
+            $0.kind = .integrationCheckFailed; $0.taskId = nil; $0.promotionId = "35aPromo0000000000001"
+        }))
+        XCTAssertFalse(ExceptionCards.closesByItself(conflict { $0.taskId = nil }))
+        XCTAssertFalse(ExceptionCards.detailRows(conflict(), projectName: "Checkout v2")
+            .contains { $0.label == ExceptionCards.afterAFixLabel })
+    }
+
+    /// Details: folded to "Details · 9 files · Open landing"; opened, Into names the project's branch
+    /// with its long id cut short, five files and "and 4 more", and no Task row (it is the subline).
+    func testDetailsCapTheFilesAndFoldTheFacts() throws {
+        let item = conflict()
+        XCTAssertEqual(ExceptionCards.detailsSummary(item, landing: true), "Details · 9 files · Open landing")
+        XCTAssertEqual(ExceptionCards.detailsSummary(item, landing: false), "Details · 9 files")
+        XCTAssertEqual(ExceptionCards.detailsSummary(conflict { $0.facts = OpenItemFacts(files: ["a"]) },
+                                                     landing: false), "Details · 1 file")
+        let rows = ExceptionCards.detailRows(item, projectName: "Checkout v2")
+        XCTAssertFalse(rows.contains { $0.label == ExceptionCards.taskLabel })
+        let into = try XCTUnwrap(rows.first { $0.label == ExceptionCards.intoLabel })
+        XCTAssertEqual(into.value, "Checkout v2’s branch project/35aK2xQm… at 9f3c2e1")
+        let files = try XCTUnwrap(rows.first { $0.label == "Files (9)" })
+        XCTAssertEqual(files.value,
+                       "src/webhooks/sender.ts · src/webhooks/sender.test.ts · src/webhooks/retry-policy.ts · "
+                       + "src/queue/backoff.ts · src/queue/backoff.test.ts and 4 more")
+        XCTAssertFalse(files.value.contains("src/config/defaults.ts"))
+        XCTAssertEqual(files.runs.first?.face, .mono)
+        // Five or fewer: no "and N more".
+        let five = ExceptionCards.detailRows(conflict {
+            $0.facts = OpenItemFacts(files: Array(Self.files.prefix(5)))
+        }, projectName: nil)
+        XCTAssertEqual(five.first { $0.label == "Files (5)" }?.value.contains("more"), false)
+        XCTAssertEqual(ExceptionCards.detailRef("refs/heads/main"), "main")
+    }
+
+    /// The row carries the coordinator's hand-over note and the chat's reach off the wire.
+    func testTheRowDecodesTheHandOverNoteAndTheChat() throws {
+        let decoded = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"i","kind":"INTEGRATION_CONFLICT","title":"t","assignee":"OWNER",
+             "assigneeReason":"HANDED_OVER","waitingSince":"2026-09-19T19:01:41.497Z","actions":[],
+             "handoverNote":"The conflict is in your retry policy",
+             "chat":{"sessionId":null,"stage":"WITH_OWNER","refusal":"NO_COORDINATOR"}}
+            """.utf8))
+        XCTAssertEqual(decoded.handoverNote, "The conflict is in your retry policy")
+        XCTAssertEqual(decoded.chat?.refusal, "NO_COORDINATOR")
+        XCTAssertNil(decoded.chat?.sessionId)
+        let older = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"i","kind":"INTEGRATION_CONFLICT","title":"t","waitingSince":"2026-09-19T19:01:41.497Z"}
+            """.utf8))
+        XCTAssertNil(older.handoverNote)
+        XCTAssertNil(older.chat)
+    }
+
+    // MARK: the words are the browser's
+
+    private func coordinatorWorkspaceSource() throws -> String {
+        try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/coordinatorWorkspace.ts"),
+                   encoding: .utf8)
+    }
+
+    func testTheWhoFixesItWordsAreTheBrowsers() throws {
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.whoFixesItLabel, try declaration(web, "WHO_FIXES_IT"))
+        XCTAssertEqual(ExceptionCards.whoFixesCoordinator, try declaration(web, "WHO_FIXES_COORDINATOR"))
+        XCTAssertEqual(ExceptionCards.whoFixesYou, try declaration(web, "WHO_FIXES_YOU"))
+        XCTAssertEqual(ExceptionCards.fixItMyself, try declaration(web, "FIX_IT_MYSELF"))
+        XCTAssertEqual(ExceptionCards.startNewCoordinator, try declaration(web, "START_NEW_COORDINATOR"))
+        XCTAssertEqual(ExceptionCards.setUpCoordinator, try declaration(web, "SET_UP_COORDINATOR"))
+        XCTAssertEqual(ExceptionCards.chatFirstLink, try declaration(web, "CHAT_FIRST_LINK"))
+        XCTAssertEqual(ExceptionCards.askAgainOnceBack, try declaration(web, "ASK_AGAIN_ONCE_BACK"))
+        XCTAssertEqual(ExceptionCards.runnerDownSentence, try declaration(web, "RUNNER_DOWN_SENTENCE"))
+        XCTAssertEqual(ExceptionCards.coordinatorEndedSentence, try declaration(web, "COORDINATOR_ENDED_SENTENCE"))
+        XCTAssertEqual(ExceptionCards.noCoordinatorSentence, try declaration(web, "NO_COORDINATOR_SENTENCE"))
+        XCTAssertEqual(ExceptionCards.handedOverSentence, try declaration(web, "HANDED_OVER_SENTENCE"))
+        XCTAssertEqual(ExceptionCards.closesByItselfLine, try declaration(web, "CLOSES_BY_ITSELF"))
+        XCTAssertEqual(ExceptionCards.alreadySettled, try declaration(web, "ALREADY_SETTLED"))
+        XCTAssertEqual(ExceptionCards.markHandledSettledConsequence,
+                       try declaration(web, "MARK_HANDLED_SETTLED_CONSEQUENCE"))
+        XCTAssertEqual(ExceptionCards.detailsLabel, try declaration(web, "DETAILS_LABEL"))
+        XCTAssertEqual(ExceptionCards.openLandingDetail, try declaration(web, "OPEN_LANDING_DETAIL"))
+        try require(web, "const DETAIL_FILES_SHOWN = \(ExceptionCards.detailFilesShown);")
+        // The headings, by name.
+        XCTAssertEqual(ExceptionCards.escalatedUnreachableHeading,
+                       try declaration(web, "ESCALATED_UNREACHABLE_HEADING"))
+        XCTAssertEqual(ExceptionCards.escalatedReachableHeading, try declaration(web, "ESCALATED_REACHABLE_HEADING"))
+        XCTAssertEqual(ExceptionCards.coordinatorEndedHeading, try declaration(web, "COORDINATOR_ENDED_HEADING"))
+        XCTAssertEqual(ExceptionCards.handedOverHeading, try declaration(web, "HANDED_OVER_HEADING"))
+        XCTAssertEqual(ExceptionCards.noCoordinatorHeading, try declaration(web, "NO_COORDINATOR_HEADING"))
+        // The two maps, entry by entry.
+        for (kind, word) in ExceptionCards.whoFixesKind {
+            try require(web, "\(kind.rawValue): '\(word)',")
+        }
+        try require(web, "INTEGRATION_CONFLICT: '\(ExceptionCards.fixItMyselfConflict)',")
+        try require(web, "INTEGRATION_CHECK_FAILED: '\(ExceptionCards.fixItMyselfCheck)',")
+        try require(web, "DEFAULT: '\(ExceptionCards.fixItMyselfDefault)',")
+        // The composed sentences, in the browser's own templates.
+        try require(web, "`${its} is disabled, so it can’t take messages.`")
+        try require(web, "`${its} is in Trash, so it can’t take messages.`")
+        try require(web, "`${its} isn’t bound to a runner.`")
+        try require(web, "`Its workspace ${reading.workspaceName}`")
+        try require(web, "`Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it.`")
+        try require(web, "`after ${waitedBeforeEscalation(row)} with the coordinator`")
+        try require(web, "`waiting ${formatSpan(waitedMs(row, now))}`")
+        try require(web, "`${kind} · ${task} → ${projectName}`")
+        try require(web, "label=\"\(ExceptionCards.cameToYouLabel)\"")
+        try require(web, "` and ${facts.files.length - DETAIL_FILES_SHOWN} more`")
+        try require(web, "`${folded.projectName}’s branch `")
+        try require(web, "`${name.slice(0, 16)}…`")
+        // COORDINATOR_FIX_LABEL, in `lib/coordinatorWorkspace.ts`.
+        let workspace = try coordinatorWorkspaceSource()
+        try require(workspace, "export const COORDINATOR_FIX_LABEL")
+        try require(workspace, "WORKSPACE_DISABLED: (workspace: string) => `Enable ${workspace}`,")
+        try require(workspace, "WORKSPACE_TRASHED: (workspace: string) => `Restore ${workspace}`,")
+        try require(workspace, "WORKSPACE_UNBOUND: (workspace: string) => `Bind ${workspace} to a runner`,")
+        XCTAssertEqual(ExceptionCards.coordinatorFixLabel(.workspaceDisabled, workspace: "w"), "Enable w")
+        XCTAssertEqual(ExceptionCards.coordinatorFixLabel(.workspaceTrashed, workspace: "w"), "Restore w")
+        XCTAssertEqual(ExceptionCards.coordinatorFixLabel(.workspaceUnbound, workspace: "w"), "Bind w to a runner")
+        XCTAssertNil(ExceptionCards.coordinatorFixLabel(.runnerDown, workspace: "w"))
+        try require(workspace, "button: '\(CoordinatorChangeCopy.button)'")
+    }
+
+    /// Ask again's note names the project's escalation window, as the browser's
+    /// `askAgainFreshClock` does; without a window it keeps the plain consequence.
+    func testAskAgainsNoteNamesTheProjectsWindow() throws {
+        let escalated = CoordinatorReading(cause: .escalated)
+        let handed = CoordinatorReading(cause: .handedOver)
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: 7_200),
+                       "It goes back to the coordinator with a fresh 2h clock.")
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), handed, escalationSeconds: 5_400),
+                       "It goes back to the coordinator with a fresh 1h 30m clock.")
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: nil),
+                       ExceptionCards.actionConsequence(conflict(), .askCoordinatorAgain))
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(conflict(), escalated, escalationSeconds: 0),
+                       ExceptionCards.actionConsequence(conflict(), .askCoordinatorAgain))
+        // The window does not reach the other causes' notes.
+        XCTAssertEqual(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: .coordinatorEnded),
+                                                         escalationSeconds: 7_200),
+                       ExceptionCards.askAgainOnceBack)
+        XCTAssertNil(ExceptionCards.coordinatorRowNote(unreachable(), CoordinatorReading(cause: .runnerDown),
+                                                       escalationSeconds: 7_200))
+        let web = try webSource()
+        try require(web, "`It goes back to the coordinator with a fresh ${formatSpan(escalationSeconds * 1000)} clock.`")
     }
 }

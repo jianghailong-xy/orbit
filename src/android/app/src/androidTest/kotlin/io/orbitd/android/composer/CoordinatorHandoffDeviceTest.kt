@@ -213,7 +213,7 @@ class CoordinatorHandoffDeviceTest {
         val title = if (id == ordinary) "Payment retries" else "Checkout redesign"
         val member = if (id == ordinary || completed) "null" else membership
         val received = if (id != successor) "null" else """{"handoffFromSessionId":"$coordinator",
-            "note":"Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
+            "note":"Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nRulings not yet recorded\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
             "handedOverAt":"${at(-120)}","movedWaits":[{"id":"w1","label":"Waiting for “Fix login redirect” to be Done","paused":false},
             {"id":"w2","label":"Session “Payment retries” finishing its turn","paused":false}]}"""
         return """{"id":"$id","title":"$title","status":"$status","runState":"$status","runStatus":"$status",

@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 34 |
-| `user` | 471 |
-| `admin` | 30 |
-| `runner` | 198 |
+| `public` | 37 |
+| `user` | 477 |
+| `admin` | 31 |
+| `runner` | 200 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **737** |
+| **Total** | **749** |
 
 ## Public routes
 
@@ -70,6 +70,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
+| `GET` | `/api/help` | — | `HelpController.index` |
+| `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
+| `GET` | `/api/help/search` | query `q` | `HelpController.search` |
 | `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
@@ -141,6 +144,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/guest-sessions/:id/turns` | body `Object`; path `id` | `GuestSessionsController.turn` |
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |
+| `POST` | `/api/help/ask` | body `Object` | `HelpAskController.create` |
+| `POST` | `/api/help/ask/:id/admin` | body `Object`; path `id` | `HelpAskController.askAdmin` |
+| `GET` | `/api/help/ask/:id/stuck` | path `id` | `HelpAskController.stuck` |
+| `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
+| `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
+| `POST` | `/api/help/feedback` | body `HelpFeedbackDto` | `HelpFeedbackController.record` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |
 | `PATCH` | `/api/integrations/feishu` | body `ChangeFeishuAppDto` | `FeishuController.change` |
@@ -574,6 +583,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/admin/email` | — | `AdminEmailController.get` |
 | `PUT` | `/api/admin/email` | body `UpdateEmailSettingsDto` | `AdminEmailController.update` |
 | `POST` | `/api/admin/email/test` | — | `AdminEmailController.test` |
+| `GET` | `/api/admin/help-feedback` | — | `AdminHelpFeedbackController.summary` |
 | `GET` | `/api/admin/integrations/feishu` | — | `FeishuAdminController.settings` |
 | `PUT` | `/api/admin/integrations/feishu` | body `SetFeishuAdminDto` | `FeishuAdminController.setAllowed` |
 | `GET` | `/api/admin/integrations/github` | — | `GithubAdminController.settings` |
@@ -619,6 +629,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
+| `GET` | `/api/runner/help-ask/:read` | path `read` | `RunnerHelpAskController.read` |
 | `POST` | `/api/runner/install-result` | body `Object` | `RunnerApiController.installResult` |
 | `POST` | `/api/runner/integration-jobs/:jobId/output` | body `Object`; path `jobId` | `RunnerApiController.integrationJobOutput` |
 | `POST` | `/api/runner/integration-jobs/:jobId/progress` | body `Object`; path `jobId` | `RunnerApiController.integrationJobProgress` |
@@ -655,6 +666,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/projects/:id/owner-questions` | body `AskOwnerDto`; path `id` | `RunnerProjectsController.askOwner` |
 | `POST` | `/api/runner/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `RunnerProjectsController.retryPromotionCheck` |
 | `POST` | `/api/runner/projects/:id/promotions/request` | body `RequestPromotionDto`; path `id` | `RunnerProjectsController.requestPromotion` |
+| `POST` | `/api/runner/projects/:id/rulings` | body `RecordProjectRulingDto`; path `id` | `RunnerProjectsController.recordRuling` |
 | `POST` | `/api/runner/projects/:id/start-requests` | body `RequestProjectStartDto`; path `id` | `RunnerProjectsController.requestStart` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/retry` | body `RetryIntegrationDto`; path `id`, `taskId` | `RunnerProjectsController.retryIntegration` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/skip-merge-check` | body `SkipMergeCheckDto`; path `id`, `taskId` | `RunnerProjectsController.skipIntegrationMergeCheck` |

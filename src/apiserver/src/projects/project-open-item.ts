@@ -2651,6 +2651,7 @@ export function openItemFacts(
   kind: string,
   payload: unknown,
   task: { id: string; title: string } | null,
+  mainBranch: string | null = null,
 ): OpenItemFacts | null {
   if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
       && kind !== DELIVERY_REVIEW_KIND && kind !== 'LANDING_LEASE_EXPIRED') {
@@ -2672,6 +2673,7 @@ export function openItemFacts(
     nothingLanded: row.nothingLanded === true,
     check: checkResult(row.check),
     branchUnchanged: row.branchUnchanged === true,
+    branchLine: row.branchUnchanged === true ? branchLineOf(row, mainBranch ?? 'main') : null,
     errorCode: filled(row.errorCode),
     failure: kind === 'TASK_FAILED'
       ? {
@@ -2690,6 +2692,23 @@ export function openItemFacts(
         }
       : null,
   };
+}
+
+/** A failed LAND_TASK check's Branch row, and the one any payload that names no promotion keeps. */
+export const TASK_BRANCH_UNCHANGED_LINE =
+  'unchanged — the task passed on its own branch; it fails only on the combined tree';
+
+/**
+ * What a failed check's Branch row says, by the job it failed in. A task's landing checks the task
+ * branch merged onto the project's line, so the task had passed alone. A promotion checks the project
+ * branch (or, on a MAIN line, one task's branch) merged with main: the payload records no run of that
+ * branch on its own, only that the job moved nothing, so that is all these two sentences say.
+ */
+function branchLineOf(row: IntegrationItemPayload, main: string): string {
+  if (row.jobKind !== 'CHECK_PROMOTION' && row.jobKind !== 'LAND_PROMOTION') return TASK_BRANCH_UNCHANGED_LINE;
+  return taskBranchSourceOf(row)
+    ? `unchanged — this task’s branch did not move, and nothing on it reached ${main}`
+    : `unchanged — the project branch did not move, and nothing reached ${main}`;
 }
 
 function filled(value: unknown): string | null {

@@ -475,17 +475,19 @@ export interface ClosedQuestionRow {
 }
 
 /** The records an open coordinator conversation draws: every ended question the read carries, at
- *  the moment it ended. A stamp nothing can place is not drawn in the wrong place. Oldest first —
+ *  the moment it ended — except one that ended before the conversation was created (`createdAt`,
+ *  handoff v2 §4). A stamp nothing can place is not drawn in the wrong place. Oldest first —
  *  the read is newest first — because two answered between the same two messages are drawn after
  *  the same row, in this order, and read top-down in the order they happened. */
 export function closedQuestionRows(
   items: ProjectOpenItemsView | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
+  createdAt?: string | null,
 ): ClosedQuestionRow[] {
   return [...(items?.closedQuestions ?? [])]
     .sort((a, b) => Date.parse(a.resolvedAt) - Date.parse(b.resolvedAt))
     .flatMap((record) => {
-      const placement = decisionReceiptAnchor(events, record.resolvedAt);
+      const placement = decisionReceiptAnchor(events, record.resolvedAt, createdAt);
       return placement === null ? [] : [{ record, placement }];
     });
 }

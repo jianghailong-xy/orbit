@@ -95,8 +95,8 @@ class WorkspaceWriteCardTest {
         })
         assertNull("a write that leaves the variables alone says nothing of them", read.env)
         assertEquals(listOf(
-            WorkspaceWriteField("Working directory", "/srv/other"), WorkspaceWriteField("System prompt", "Answer in French."),
-            WorkspaceWriteField("Appended system prompt", "And briefly."), WorkspaceWriteField("Runner", "gpu-2"),
+            WorkspaceWriteField("Working directory", "/srv/other"), WorkspaceWriteField("Base instructions", "Answer in French."),
+            WorkspaceWriteField("Runtime instructions", "And briefly."), WorkspaceWriteField("Runner", "gpu-2"),
             WorkspaceWriteField("Worktree", "Sessions run in the shared folder"), WorkspaceWriteField("Name", "renamed"),
             WorkspaceWriteField("Description", "builds at night"), WorkspaceWriteField("Merge target", "develop")), read.fields)
     }
@@ -108,7 +108,7 @@ class WorkspaceWriteCardTest {
         })
         assertEquals(emptyList<WorkspaceWriteVariable>(), cleared.env)
         assertEquals(listOf("A", "B"), cleared.envRemoved)
-        assertEquals(listOf(WorkspaceWriteField("System prompt", "Cleared")), cleared.fields)
+        assertEquals(listOf(WorkspaceWriteField("Base instructions", "Cleared")), cleared.fields)
         val made = WorkspaceWriteCards.read(WorkspaceWriteCards.createTool, create)
         assertTrue(made.isCreate)
         assertEquals("hpc", made.host)
@@ -124,7 +124,7 @@ class WorkspaceWriteCardTest {
         val web = File(root, "src/web/src/components/ApprovalPanel.tsx").readText().replace(join, "")
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/OrbitAskPreview.swift").readText().replace(join, "")
         listOf(CardVerb.SAVE_CHANGES.label, CardVerb.CREATE_WORKSPACE.label, WorkspaceWriteCards.variables, WorkspaceWriteCards.noVariables,
-            WorkspaceWriteCards.removed, WorkspaceWriteCards.note, "Working directory", "System prompt", "Appended system prompt", "Runner", "Worktree",
+            WorkspaceWriteCards.removed, WorkspaceWriteCards.note, "Working directory", "Base instructions", "Runtime instructions", "Runner", "Worktree",
             "Each session gets its own git worktree", "Sessions run in the shared folder", "Name", "Description", "Merge target", "Cleared").forEach { words ->
             assertTrue("the web says \"$words\"", web.contains(words))
             assertTrue("iOS says \"$words\"", swift.contains(words))

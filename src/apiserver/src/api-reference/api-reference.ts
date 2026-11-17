@@ -60,6 +60,8 @@ const GUARD_CALLERS: Record<string, Caller> = {
   RunnerLinkGatewayCallGuard: 'link gateway',
   PublicSurfaceGuard: 'public',
   SharedStreamGuard: 'public',
+  // The help doors: open signed out; a credential sent along only says whether the reader is an admin.
+  HelpReaderGuard: 'public',
 };
 
 const REQUEST_METHODS: Record<number, string> = {

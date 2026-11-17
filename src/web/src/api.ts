@@ -63,6 +63,7 @@ import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
+import type { AgentToolsReport } from './lib/agentTools';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -249,6 +250,17 @@ export function scheduleProactiveRefresh(): void {
 // a browser tab left open for a month is exactly the client nothing else can see.
 declare const __APP_VERSION__: string;
 
+/** The pages a signed-out visitor may stay on: a dead session found under one is not sent to /login. */
+export function readSignedOut(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/s/') ||
+    pathname === '/help' ||
+    pathname.startsWith('/help/')
+  );
+}
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -277,9 +289,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
-    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
+    // The privacy policy, a shared link (/s/…) and the help center (/help…) are read signed out as well: a
+    // stored session found dead under one (the theme's read of the account) is cleared, and the reader stays.
+    if (!readSignedOut(location.pathname)) location.href = '/login';
   }
   return res;
 }
@@ -2044,6 +2056,9 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
+   *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
+  agentTools?: AgentToolsReport | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
   // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
