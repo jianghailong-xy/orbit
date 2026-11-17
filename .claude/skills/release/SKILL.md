@@ -31,6 +31,77 @@ with the package, so the two cannot drift.
   `versionCode` is the same commit count as the iOS build number. Every Android phone on an older
   version is offered the new one, beta or stable.
 
+## Who runs it
+
+A release is mostly reading commits for its notes and then waiting 30 to 60 minutes on `release.yml`, which needs
+no expensive model. On one, such as an Opus, Fable or GPT-6.x Sol model, the session keeps only the decisions and
+hands the work to a cheaper model with Orbit's `delegate` (`model: "deepseek-v4-flash"`). If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash or mini model from the list the refusal prints. On an
+inexpensive model, follow [How to use](#how-to-use) yourself.
+
+The session decides, and no SubAgent does:
+
+- **The version.** `release.sh next` prints it; confirm it with the owner unless they named one.
+- **What reaches `main`.** A SubAgent never pushes to `main` and never tags anything but `origin/main`'s tip. The
+  session lands the release commit on `main` itself (its usual merge, such as Orbit's `session_merge`).
+- **The notes.** They become the GitHub Release body. Read the file before the release commit is merged, and fix
+  anything the SubAgent claimed without evidence (tests it did not see run, a server version it did not check).
+
+Then:
+
+1. **Prepare**, in the foreground (a few minutes): `delegate({ description: "Prepare release <version>", size: "S",
+   prompt: <the prepare brief> })`. It runs in this session's working directory, which must be a branch based on
+   `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
+2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
+   background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
+3. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, and any job that
+   failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
+   session's decision (see Notes).
+
+The prepare brief: fill in `<version>` and `<previous tag>` (the newest `v*` tag, `git describe --tags --abbrev=0
+--match 'v*' origin/main`).
+
+```text
+Prepare Orbit client release <version> in the current working directory, a git branch based on origin/main. Read
+.claude/skills/release/SKILL.md first. Answer in English. Stop and report at the first step that fails; do not
+improvise around a guard. Never push, never tag, never touch main.
+
+1. `git fetch origin` and `git status --porcelain` must print nothing. `git merge-base --is-ancestor origin/main HEAD`
+   must succeed and `git rev-list --count origin/main..HEAD` must print 0; otherwise stop.
+2. `.claude/skills/release/release.sh bump <version>`. It commits package.json, the lockfile and
+   release-notes/<version>.md.
+3. Fill in every section of release-notes/<version>.md, following docs/release-notes-template.md and the previous
+   release's notes (release-notes/ of <previous tag>) for tone and length. Base it on
+   `git log --no-merges --format='%h %s%n%b' <previous tag>..origin/main` and
+   `git diff --stat <previous tag> origin/main -- src/apiserver/prisma/migrations/`: group what users see per client,
+   name each migration and whether it is additive, and say the runner served at /dl is built from this tag. State
+   only what the commits say; for "Artifacts and verification" name only checks a commit message records, and say
+   plainly where it records none. No TODO may remain.
+4. `git add release-notes/<version>.md && git commit --amend --no-edit`, so the release is one commit.
+5. Hand back: the commit hash, `git show --stat HEAD`, and the notes file in full.
+```
+
+The tag brief: fill in `<version>`.
+
+```text
+Tag and watch Orbit client release <version>. Read .claude/skills/release/SKILL.md first. Answer in English. Stop
+and report at the first step that fails; do not retry, re-run, delete a tag or push anything but this tag.
+
+1. W=/tmp/orbit-release-<version>. `git fetch origin --tags` and `git worktree add --detach "$W" origin/main`.
+   `node -p "require('$W/package.json').version"` must print <version>, and `$W/release-notes/<version>.md` must
+   exist; otherwise stop.
+2. `cd "$W" && .claude/skills/release/release.sh <version>`. It must end having pushed tag v<version>.
+3. Find the run: `gh run list --workflow release.yml -L 5 --json databaseId,headBranch,event,url` and take the one
+   whose headBranch is v<version>. Wait for it with `gh run watch <id> --exit-status` in steps of under 10 minutes
+   (`timeout 540 gh run watch <id>`; repeat while `gh run view <id> --json status -q .status` is not completed).
+4. `gh run view <id> --json jobs -q '.jobs[] | "\(.name) \(.conclusion)"'`, and
+   `gh release view v<version> --json assets -q '.assets[].name'`. For each failed job, its last 40 log lines
+   (`gh run view <id> --log-failed`).
+5. `git worktree remove --force "$W"`.
+6. Hand back: the tag and its commit, the run URL, each job's conclusion, the release's assets, and the failed jobs'
+   lines.
+```
+
 ## How to use
 
 1. **Pick the version.** `release.sh next` prints the one tag to cut next, resolved from the **package
