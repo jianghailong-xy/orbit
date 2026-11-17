@@ -205,13 +205,17 @@ swap. A result for an attempt that is not current is dropped.
   were equal to before, so nothing rotated. The swapped window lasted 0.3 s and 1.0 s. `1e84046c`
   had one live `claude` process during the run. That was safe only because both tokens had about
   110 minutes left and the window was about a second. The runner must not rely on this (§2.1).
-- **macOS: not yet run.** The orbit-macos runner (Mac mini) has been offline since
-  2026-11-16 23:34Z, and no other darwin runner exists. Its last heartbeat reported Claude
-  auth "no" for the machine's login. Whether a `security` rewrite of the two items raises a
-  Keychain dialog is therefore still **unproven**. The prepared probe/swap script reads with
+- **macOS: not yet measured. See the Mac task, "Mac: measure the Keychain login swap and complete
+  the contract".** The orbit-macos runner (Mac mini) has been offline since 2026-11-16 23:34Z, and
+  no other darwin runner exists. Its last heartbeat reported Claude auth "no" for the machine's
+  login. Whether a `security` rewrite of the two items raises a Keychain dialog is therefore still
+  **unproven**. The probe/swap script is
+  [`claude-default-swap-mac.py`](claude-default-swap-mac.py):
+  `python3 -I claude-default-swap-mac.py <added dir> --probe-only` reads only, and without
+  `--probe-only` it swaps Default with `<added dir>`, verifies, and swaps back. It reads with
   `security find-generic-password -w` and writes with `security -i add-generic-password -U … -X`,
   each under a 30 s timeout (a blocked call means a dialog). It rolls back from the backup on any
-  failure. Expected outcome: no dialog, because Claude Code creates these items through
+  failure and exits 0 only when both logins equal the original state. Expected outcome: no dialog, because Claude Code creates these items through
   `/usr/bin/security` itself, so `security` is on each item's ACL and `-U` keeps that ACL. The
   runner's `keychainCredentials` comment does warn of a one-time prompt on first read. This must
   be measured before the runner and server work continue.
