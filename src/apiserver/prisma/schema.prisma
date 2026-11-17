@@ -395,6 +395,8 @@ model User {
   /// Scheduled tasks (migration 0790) and the changes to them waiting on this owner.
   schedules             Schedule[]
   scheduleChangeRequests ScheduleChangeRequest[]
+  /// Conditions (migration 1030, docs/condition-triggers-design.md §3).
+  conditions            Condition[]
 }
 
 /// A long-lived opaque refresh token a client swaps for a fresh short-lived access JWT via
@@ -6158,6 +6160,8 @@ model Task {
   /// Files the task carries as INPUT to its work (design mocks, specs). Copied into each run's
   /// session at dispatch; cascade-deleted with the task.
   attachments  Attachment[]
+  /// Its startWhen condition (migration 1030), when it has one.
+  conditions   Condition[]
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
@@ -7978,6 +7982,8 @@ model OwnerRequest {
   scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
   approvalId              String?   @map("approval_id") @db.Uuid
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
+  /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
+  conditionId             String?   @map("condition_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -10022,6 +10028,8 @@ model Schedule {
   runs                     ScheduleRun[]
   findings                 ScheduleFinding[]
   changeRequests           ScheduleChangeRequest[]
+  /// Its WHEN rule's condition (migration 1030), when it has one.
+  conditions               Condition[]
 
   @@index([ownerId, state], map: "schedule_owner_state_idx")
   @@map("schedule")
@@ -10118,4 +10126,136 @@ model ScheduleChangeRequest {
 
   @@index([ownerId, state, createdAt], map: "schedule_change_request_owner_state_idx")
   @@map("schedule_change_request")
+}
+
+/// Conditions: work that starts when something outside Orbit becomes true (migration 1030,
+/// docs/condition-triggers-design.md §3, §5; conditions/).
+
+enum ConditionState {
+  WAITING
+  HOLDING
+  FIRED
+  UNKNOWN
+  ENDED
+
+  @@map("condition_state")
+}
+
+enum ConditionCompareOp {
+  GT
+  GTE
+  LT
+  LTE
+  EQ
+  EXIT_ZERO
+
+  @@map("condition_compare_op")
+}
+
+enum ConditionSampleOutcome {
+  VALUE
+  EXIT
+  TIMEOUT
+  ERROR
+
+  @@map("condition_sample_outcome")
+}
+
+enum ConditionEventKind {
+  FIRED
+  READY_AGAIN
+  CANT_READ
+  READ_AGAIN
+  ASKED_STILL_WAITING
+
+  @@map("condition_event_kind")
+}
+
+/// One probe and the comparison its readings are held to, attached to exactly one task or schedule. The runner runs
+/// the probe; the server moves `state` (conditions/condition-evaluation.ts). `workspaceId` is the workspace whose
+/// runner runs it, a history reference like Schedule's. The CHECKs (timeout 1..60, interval at least 60, exactly one
+/// of task or schedule, a value for every op but EXIT_ZERO) and the limit of 20 not ENDED per account
+/// (conditions.service.ts createCondition) live outside this file.
+model Condition {
+  id                   String                  @id @default(uuid(7)) @db.Uuid
+  ownerId              String                  @map("owner_id") @db.Uuid
+  owner                User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  probeCommand         String                  @map("probe_command")
+  probeTimeoutSeconds  Int                     @default(20) @map("probe_timeout_seconds")
+  compareOp            ConditionCompareOp      @map("compare_op")
+  compareValue         Float?                  @map("compare_value")
+  holdSeconds          Int                     @default(0) @map("hold_seconds")
+  rearmOp              ConditionCompareOp?     @map("rearm_op")
+  rearmValue           Float?                  @map("rearm_value")
+  intervalSeconds      Int                     @default(300) @map("interval_seconds")
+  /// The condition in words, written by the agent: "3 or more OSDs are in".
+  text                 String
+  unit                 String?
+  state                ConditionState          @default(WAITING)
+  /// False from FIRED until the re-arm comparison holds: what UNKNOWN goes back to.
+  armed                Boolean                 @default(true)
+  lastSampleAt         DateTime?               @map("last_sample_at") @db.Timestamptz(3)
+  lastValue            Float?                  @map("last_value")
+  lastOutcome          ConditionSampleOutcome? @map("last_outcome")
+  /// When the newest sample that read was taken: the age a can't-read card shows.
+  lastReadAt           DateTime?               @map("last_read_at") @db.Timestamptz(3)
+  trueSince            DateTime?               @map("true_since") @db.Timestamptz(3)
+  unknownSince         DateTime?               @map("unknown_since") @db.Timestamptz(3)
+  /// TIMEOUT | ERROR | RUNNER_OFFLINE | RUNNER_ASLEEP, while UNKNOWN.
+  unknownReason        String?                 @map("unknown_reason")
+  failedChecks         Int                     @default(0) @map("failed_checks")
+  firedAt              DateTime?               @map("fired_at") @db.Timestamptz(3)
+  approvedCommandHash  String                  @map("approved_command_hash")
+  approvedAt           DateTime                @map("approved_at") @db.Timestamptz(3)
+  taskId               String?                 @map("task_id") @db.Uuid
+  task                 Task?                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  scheduleId           String?                 @map("schedule_id") @db.Uuid
+  schedule             Schedule?               @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  /// The conversation it was created from, where its Waiting on you item is shown. History, no FK.
+  createdFromSessionId String?                 @map("created_from_session_id") @db.Uuid
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt              DateTime?               @map("ended_at") @db.Timestamptz(3)
+  samples              ConditionSample[]
+  events               ConditionEvent[]
+
+  @@unique([taskId], map: "condition_task_key")
+  @@unique([scheduleId], map: "condition_schedule_key")
+  @@index([ownerId, state], map: "condition_owner_state_idx")
+  @@index([workspaceId], map: "condition_workspace_idx")
+  @@map("condition")
+}
+
+/// One reading the runner reported. Kept 30 days, and the latest 1000 per condition (conditions.service.ts).
+model ConditionSample {
+  id          String                 @id @default(uuid(7)) @db.Uuid
+  conditionId String                 @map("condition_id") @db.Uuid
+  condition   Condition              @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime               @db.Timestamptz(3)
+  outcome     ConditionSampleOutcome
+  value       Float?
+  exitCode    Int?                   @map("exit_code")
+  stderrTail  String?                @map("stderr_tail")
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([conditionId, at], map: "condition_sample_condition_at_key")
+  /// What the 30-day prune reads.
+  @@index([at], map: "condition_sample_at_idx")
+  @@map("condition_sample")
+}
+
+/// What a condition's history shows.
+model ConditionEvent {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  conditionId String             @map("condition_id") @db.Uuid
+  condition   Condition          @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime           @db.Timestamptz(3)
+  kind        ConditionEventKind
+  value       Float?
+  runId       String?            @map("run_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([conditionId, at(sort: Desc)], map: "condition_event_condition_at_idx")
+  @@map("condition_event")
 }
