@@ -387,7 +387,7 @@ describe('where the records are drawn from', () => {
   it('the coordinator’s conversation draws each from the read, where it ended', () => {
     const view = source('components/WorkspaceView.tsx');
     expect(view, 'the records are not read off the open items').toContain(
-      'closedQuestionRows(openItems.data, transcriptEvents)',
+      'closedQuestionRows(openItems.data, transcriptEvents, conversationCreatedAt)',
     );
     expect(view, 'the row is not drawn as the record card').toContain('element: <AnsweredQuestionCard');
     // An answer a turn hands to the coordinator is that turn's card (OwnerAnswerLine), drawn once.

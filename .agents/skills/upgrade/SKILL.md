@@ -9,6 +9,15 @@ Orbit uses `docker-compose.yml` with `postgres`, `apiserver`, `wiki-worker`, `we
 
 Database migrations are not a separate step: the apiserver container runs `prisma migrate deploy` during startup.
 
+## Who runs it
+
+An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. On one, such as an
+Opus, Fable or GPT-6.x Sol model, hand the run to DeepSeek V4.1 Flash with Orbit's `delegate` (`model:
+"deepseek-flash"`, Orbit's id for it; `background: true`) instead of running it yourself. If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash model from the list the refusal prints. Settle every choice
+before handing it off (the checkout, the exact command and flags), since the SubAgent cannot ask anyone; have it stop
+at the first failure without retrying or rolling back, and end the turn: Orbit wakes this session with the result.
+
 ## Workflow
 
 1. Run in the installed checkout, the one the deployment runs from, and never from a worktree (see "Where to run it" below). Check the current branch, worktree status, and Compose availability. On `main` the helper runs `git pull --ff-only` before building, so the deploy is origin's main and not a stale checkout; it never overwrites or discards local changes and stops if a fast-forward is impossible.

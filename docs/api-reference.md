@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 35 |
 | `user` | 476 |
 | `admin` | 31 |
-| `runner` | 199 |
+| `runner` | 200 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **745** |
+| **Total** | **746** |
 
 ## Public routes
 
@@ -663,6 +663,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/projects/:id/owner-questions` | body `AskOwnerDto`; path `id` | `RunnerProjectsController.askOwner` |
 | `POST` | `/api/runner/projects/:id/promotions/:promotionId/integration/retry` | body `RetryIntegrationDto`; path `id`, `promotionId` | `RunnerProjectsController.retryPromotionCheck` |
 | `POST` | `/api/runner/projects/:id/promotions/request` | body `RequestPromotionDto`; path `id` | `RunnerProjectsController.requestPromotion` |
+| `POST` | `/api/runner/projects/:id/rulings` | body `RecordProjectRulingDto`; path `id` | `RunnerProjectsController.recordRuling` |
 | `POST` | `/api/runner/projects/:id/start-requests` | body `RequestProjectStartDto`; path `id` | `RunnerProjectsController.requestStart` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/retry` | body `RetryIntegrationDto`; path `id`, `taskId` | `RunnerProjectsController.retryIntegration` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/skip-merge-check` | body `SkipMergeCheckDto`; path `id`, `taskId` | `RunnerProjectsController.skipIntegrationMergeCheck` |

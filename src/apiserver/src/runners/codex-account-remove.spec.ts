@@ -43,7 +43,7 @@ function matches(row: Row, where: Row): boolean {
 
 function harness(
   row: Row = {},
-  sessions: Array<{ id: string; assignedRunnerId: string }> = [],
+  sessions: Array<{ id: string; assignedRunnerId: string; codexAccount?: string | null }> = [],
   /** SessionsService.moveOffRemovedAccount, when the controller is built with one: the ids that cannot leave. */
   moveOff?: (runnerId: string, engine: string, account: string, ids: string[]) => Promise<string[]>,
 ) {
@@ -79,8 +79,10 @@ function harness(
     runner: runnerModel,
     // The sessions a removal report's ids are looked up among: only those assigned to the reporting runner are kept.
     session: {
-      findMany: async ({ where }: { where: { id: { in: string[] }; assignedRunnerId: string } }) =>
-        sessions.filter((s) => where.id.in.includes(s.id) && s.assignedRunnerId === where.assignedRunnerId).map((s) => ({ id: s.id })),
+      findMany: async ({ where, select }: { where: { id: { in: string[] }; assignedRunnerId: string }; select?: Row }) =>
+        sessions
+          .filter((s) => where.id.in.includes(s.id) && s.assignedRunnerId === where.assignedRunnerId)
+          .map((s) => ({ id: s.id, ...(select?.codexAccount ? { codexAccount: s.codexAccount ?? null } : {}) })),
     },
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },
@@ -268,6 +270,25 @@ test('sessions in the account move to another, and the removal waits for them in
   assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
   assert.deepEqual(h.runner.codexAccountRemoveSessions, []);
   assert.equal(accountRemoveStateOf(h.runner as never).moving, undefined);
+});
+
+test('while it waits, the removal tells the runner where each moved session went, so one with no engine is carried now', async () => {
+  const toDefault = '019fc086-c7c7-7c92-8215-778ad8a6280a';
+  const toOther = '019fc086-c7c7-7c92-8215-778ad8a6280b';
+  // Still on the account in its row (it could not move), and a session of another runner: neither is named.
+  const stillHere = '019fc086-c7c7-7c92-8215-778ad8a6280c';
+  const h = harness({}, [
+    { id: toDefault, assignedRunnerId: RUNNER_ID, codexAccount: 'default' },
+    { id: toOther, assignedRunnerId: RUNNER_ID, codexAccount: OTHER_SLOT },
+    { id: stillHere, assignedRunnerId: RUNNER_ID, codexAccount: SLOT },
+  ], async () => []);
+  await h.remove(SLOT);
+  assert.equal((await h.beat())?.moves, undefined, 'nothing to say before any session moved');
+  await h.report({ engine: 'codex', account: SLOT, status: 'failed', message: 'in use', attempt: attemptOf(h.runner), sessionIds: [toDefault, toOther, stillHere] });
+  assert.deepEqual((await h.beat())?.moves, [
+    { sessionId: toDefault, account: 'default' },
+    { sessionId: toOther, account: OTHER_SLOT },
+  ]);
 });
 
 test('only sessions that cannot leave the account refuse its removal, and they are the ones listed', async () => {

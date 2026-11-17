@@ -310,6 +310,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
     /// nothing registered one, and from an older server.
     public var registerDir: String? = nil
+    /// True on the account's managed runner, which every screen calls Orbit Cloud (@orbit/shared
+    /// `RunnerRowIdentity.managed`), false on every other. Nil from an older server, where
+    /// `ManagedRunnerIdentity` (the managed status's runnerId) still says which runner it is.
+    public var managed: Bool? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?

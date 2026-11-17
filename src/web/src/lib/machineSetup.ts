@@ -37,17 +37,20 @@ import { workspaceRunnerId, type OrderableWorkspace } from './workspaceOrder';
 export const machineDraftPath = (runnerId: string): string => `/runners/${encodeId(runnerId)}/new`;
 
 /** The name the app labels a machine with everywhere: the owner's own name for it, else Orbit Cloud for
- *  the account's managed runner (`managedRunnerId`, the managed status's runnerId — never its stored
- *  name), else the name it registered with. */
+ *  the account's managed runner (isManagedRunner — never its stored name), else the name it registered with. */
 export const machineName = (
-  runner: { id?: string; name?: string; displayName?: string | null },
+  runner: { id?: string; name?: string; displayName?: string | null; managed?: boolean },
   managedRunnerId?: string | null,
 ): string =>
   runner.displayName?.trim() || (isManagedRunner(runner, managedRunnerId) ? MANAGED_RUNNER_LABEL : (runner.name ?? ''));
 
-/** Whether `runner` is the account's managed runner, by id. */
-export const isManagedRunner = (runner: { id?: string } | null | undefined, managedRunnerId: string | null | undefined): boolean =>
-  !!runner?.id && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+/** Whether `runner` is the account's managed runner: its runner row says so (`managed`, RunnerRowIdentity),
+ *  or — for an older server's row, or a runner nested in another answer — its id is `managedRunnerId`. */
+export const isManagedRunner = (
+  runner: { id?: string; managed?: boolean } | null | undefined,
+  managedRunnerId: string | null | undefined,
+): boolean =>
+  runner?.managed === true || (!!runner?.id && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId));
 
 /** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(

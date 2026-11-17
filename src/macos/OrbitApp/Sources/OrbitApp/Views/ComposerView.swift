@@ -3006,7 +3006,7 @@ private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
                 .keyboardShortcut(.defaultAction)
             Button(CoordinatorHandoffCopy.cancel, role: .cancel) {}
         } message: {
-            Text(CoordinatorContextCopy.phoneConfirmBody(waits: waits?.count ?? 0, running: actions.running))
+            Text(CoordinatorContextCopy.phoneConfirmMessage(waits: waits ?? [], running: actions.running))
         }
         #endif
     }

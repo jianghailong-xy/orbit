@@ -1019,6 +1019,17 @@ type AccountRemoveCommand struct {
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
 	// request it answers.
 	Attempt string `json:"attempt,omitempty"`
+	// While the removal waits on sessions it moved to another account: each one's new account, so a
+	// session with no engine running, which would take that move only at its next claim, is carried
+	// there now (carryColdSessionsOff). Absent from an older control plane.
+	Moves []AccountRemoveMove `json:"moves,omitempty"`
+}
+
+// AccountRemoveMove is one session of a removal under way and the account the control plane moved it
+// to: "default", or the id of a slot this runner added.
+type AccountRemoveMove struct {
+	SessionID string `json:"sessionId"`
+	Account   string `json:"account"`
 }
 
 // AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's

@@ -408,12 +408,14 @@ export function MachineSettingsPage() {
     return <p className="settings-empty">This machine doesn't exist, or isn't yours.</p>;
   }
 
+  // Whether this is the account's managed runner: its row says so, or (an older server) the managed status.
+  const isManaged = !!managed || runner.managed === true;
   // The managed runner is Orbit Cloud, unless its owner named it (machineName).
   const shownName = machineName(runner, managed ? runnerId : null);
   const nowMs = Date.now();
   // The managed runner's state is its shared label and notice: its heartbeat's "offline" card is not repeated.
   const managedRow = managedRowOf(managed, runnerId);
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion, managed: !!managed }).filter(
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion, managed: isManaged }).filter(
     (item) => !(managedRow && item.kind === 'offline'),
   );
 
@@ -465,7 +467,7 @@ export function MachineSettingsPage() {
   const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
   const versionNote = (() => {
     // Orbit rolls the managed runner's image: nothing here is for its owner to do.
-    if (managed) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
+    if (isManaged) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
@@ -492,7 +494,7 @@ export function MachineSettingsPage() {
   const lastUpdate = (() => {
     const report = runner.selfUpdate;
     // A managed runner never installs a release into itself: Orbit replaces its image.
-    if (!report || managed) return null;
+    if (!report || isManaged) return null;
     const versions =
       report.lastUpdatedFrom && report.lastUpdatedTo
         ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
@@ -723,7 +725,7 @@ export function MachineSettingsPage() {
       : RUNNER_OFFLINE;
   const metaline = [
     runner.hostname || null,
-    runnerVersionLine(version, !!managed),
+    runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
 
@@ -1083,7 +1085,7 @@ export function MachineSettingsPage() {
             title={RUNNER_ABOUT_VERSION}
             control={
               <span className="machine-about-value">
-                {managed && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
+                {isManaged && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
                 {versionNote && <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>}
               </span>
             }
