@@ -1066,6 +1066,12 @@ export interface OpenItemFacts {
   check: IntegrationCheckResult | null;
   /** Whether the task's own branch passed — the check failed only combined with it. */
   branchUnchanged: boolean;
+  /** The Branch row's sentence, written by the server because it depends on the job the check failed
+   *  in: a task's landing (the task passed on its own branch), or a promotion of the project branch or
+   *  of one task's branch to main (that branch did not move and nothing reached main). Null when
+   *  `branchUnchanged` is false; absent from a server older than the field, where a card keeps the
+   *  task's sentence. */
+  branchLine?: string | null;
   /** The code an integration job ended with (INTEGRATION_ERROR). */
   errorCode: string | null;
   /** Why an attempt failed, and where its chain stands (TASK_FAILED). */

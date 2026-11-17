@@ -354,7 +354,10 @@ export async function remoteSubagentExec(
     && !isWiderThanParent({ mode: parentMode, engine: parentEngine }, args.facts.permissionMode, provider)
     ? args.facts.permissionMode
     : null;
-  const childMode = (args.facts.readonly ? PermissionMode.PLAN : asked ?? parentMode) as PermissionMode;
+  // A read-only Claude child keeps the parent's mode, its edit tools withheld; any other engine reads in Plan.
+  const childMode = (args.facts.readonly
+    ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
+    : asked ?? parentMode) as PermissionMode;
   const effort = normalizeEffortForRuntimeModel(
     provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
   );

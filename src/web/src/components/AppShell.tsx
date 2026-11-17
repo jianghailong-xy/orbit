@@ -4,6 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { SessionSearch } from './SessionSearch';
+import { HelpDrawer } from './HelpDrawer';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 import { LazyBoundary } from './ErrorBoundary';
 import { isTaskHome, useTaskLinksOpenInPlace, useTaskOverPage } from '../lib/taskInPlace';
@@ -53,6 +54,8 @@ export function AppShell() {
           from every route, including the task list and settings pages. */}
       <SessionSearch />
       <Outlet />
+      {/* Help, docked at the right: a column that narrows the page (lib/helpDrawer). */}
+      <HelpDrawer />
       {overPage && (
         <LazyBoundary fallback={null}>
           <LazyTaskOverPagePanel taskId={overPage} />

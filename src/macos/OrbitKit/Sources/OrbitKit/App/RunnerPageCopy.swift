@@ -97,6 +97,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_ENGINES_FOOTER =
         "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends "
         + "that subscription, nothing to paste."
+    /// A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min.
+    public static let RUNNER_ENGINES_MANAGED_FOOTER =
+        "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends "
+        + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
 
     public static let RUNNER_ENGINE_RENEW = "Renew"
@@ -144,6 +148,13 @@ public enum RunnerPageCopy {
         "installs when the runner has been idle for \(minutes) min"
     }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
+    /// A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the
+    /// owner renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read.
+    public static let MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
+    public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /// About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to.
+    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =

@@ -49,6 +49,10 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    #if os(macOS)
+    /// Agent Tools, from the window toolbar (docs/mocks/agent-tools board ⑤).
+    @State private var showAgentTools = false
+    #endif
     /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
     /// or the Mac toolbar.
     @State private var settingsSession: Session?
@@ -560,9 +564,34 @@ struct ConsoleView: View {
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         // The project's sessions page read as the conversation opens, so the button's count is the
-        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
-        .task(id: projectSheetAddress) {
-            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`). Its
+        // members, landing line and merge are then polled as the page polls them, so the button's
+        // spinner (`projectActive`) follows them with the sheet closed. While the sheet is open the
+        // page polls them itself, so these stop, and read again when it closes.
+        .task(id: projectButtonReadAddress) {
+            if let address = projectButtonReadAddress { await appModel.loadProjectSessions(address) }
+            guard let address = projectButtonReadAddress else { return }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await ViewPoll.run(appModel, every: 4, inFlight: { 4 }) {
+                        await appModel.pollProjectSessions(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectIntegration(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsLandingRunning ? 4 : nil }) {
+                        await appModel.loadProjectIntegration(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectMerge(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsMergeRunning ? 4 : nil }) {
+                        await appModel.loadProjectMerge(address)
+                    }
+                }
+            }
         }
         .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
@@ -620,6 +649,29 @@ struct ConsoleView: View {
                     .help("Session settings: labels, public link, environment, notifications and info")
                 }
             }
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what the agent here can reach in Orbit and what
+            // it was told, read-only. None on a landing session (LS6), which runs no engine.
+            ToolbarItem(placement: .primaryAction) {
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showAgentTools = true } label: {
+                        Label(AgentToolsCopy.title, systemImage: "puzzlepiece.extension")
+                    }
+                    .help(AgentToolsCopy.sessionLead)
+                }
+            }
+        }
+        .sheet(isPresented: $showAgentTools) {
+            let session = appModel.session(id: sessionID)
+            ConsoleAgentToolsSheet(
+                worktree: registry.peek(sessionID)?.worktree,
+                engine: session?.engine,
+                // The mode the server resolves for the session: its own, else the account's default.
+                permissionMode: AgentDefaults.resolvePermissionMode(
+                    session: session?.permissionMode,
+                    accountDefault: appModel.user?.preferences?.defaultPermissionMode).rawValue,
+                // Settings' reading of the switch: absent is on.
+                orchestrationOn: appModel.user?.preferences?.enableOrchestration ?? true,
+                onDone: { showAgentTools = false })
         }
         #endif
         // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
@@ -670,27 +722,41 @@ struct ConsoleView: View {
         return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
     }
 
+    /// What the conversation reads for its project sessions button: the sheet's address, while the
+    /// sheet is closed. Open, the page in it reads the same things.
+    private var projectButtonReadAddress: SessionProjectAddress? {
+        projectSheet == nil ? projectSheetAddress : nil
+    }
+
     /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
     private struct ProjectSheetTarget: Identifiable {
         let address: SessionProjectAddress
         var id: SessionProjectAddress { address }
     }
 
-    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
-    /// sessions page up as a sheet, opening at medium height.
+    /// The project glyph and the project's session count ("⊞ 11"); while anything the sheet shows is
+    /// active the glyph gives its place to the session rows' spinner, in the accent (owner
+    /// 2026-11-17, docs/mocks/project-sessions-button-running, option C). A press puts the
+    /// project's sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
+        let active = appModel.projectActive(projectID)
         return Button {
             projectSheet = ProjectSheetTarget(
                 address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: SessionProjectSheet.glyph)
+                if active {
+                    SpinnerGlyph(color: .accentColor).frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: SessionProjectSheet.glyph)
+                }
                 if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityValue([count.map { "\($0) sessions" }, active ? "Active" : nil]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityIdentifier("project-sessions-button")
     }
     #endif
@@ -813,6 +879,27 @@ struct ConsoleView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The console's Agent Tools sheet. The sheet holds values only; this reads the one that moves: the session's
+/// report, off the detail (GET /sessions/:id) the worktree bar keeps current while the session runs, read once
+/// more as the sheet opens, since a settled session's bar does not poll and its runner may have reported since.
+private struct ConsoleAgentToolsSheet: View {
+    let worktree: WorktreeModel?
+    let engine: String?
+    let permissionMode: String
+    let orchestrationOn: Bool
+    let onDone: () -> Void
+
+    var body: some View {
+        AgentToolsSheet(
+            mode: .session(report: worktree?.detail?.agentTools, engine: engine, permissionMode: permissionMode,
+                           orchestrationOn: orchestrationOn, now: Date()),
+            onDone: onDone)
+            .task { await worktree?.loadDetail() }
+    }
+}
+#endif
 
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
@@ -1428,6 +1515,7 @@ struct TranscriptView: View {
                              running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
+                             conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
@@ -1515,7 +1603,10 @@ struct TranscriptView: View {
             CreatedWorkspaceLineView(line: line, console: console)
         case .handoffReceived(let received):
             // The note this coordinator opened with, linking back to the one that wrote it.
-            CoordinatorHandoffNoteCardView(received: received) {
+            CoordinatorHandoffNoteCardView(
+                received: received,
+                counts: console.coordinatorHistoryCounts(
+                    createdAt: app.session(id: console.sessionID)?.createdAt)) {
                 app.route(to: .session(received.handoffFromSessionId))
             }
         case .loadOlder:

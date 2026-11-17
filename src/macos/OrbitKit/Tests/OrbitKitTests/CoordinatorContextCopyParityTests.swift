@@ -58,6 +58,7 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
             ("noteCardTitle", CoordinatorHandoffCopy.noteCardTitle),
             ("handedOver", CoordinatorHandoffCopy.handedOver),
             ("openIt", CoordinatorHandoffCopy.openIt),
+            ("openPrevious", CoordinatorHandoffCopy.openPrevious),
             ("tryAgain", CoordinatorHandoffCopy.tryAgain),
             ("handOverWithoutNote", CoordinatorHandoffCopy.handOverWithoutNote),
             ("keepThisCoordinator", CoordinatorHandoffCopy.keepThisCoordinator),
@@ -74,8 +75,24 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
         assertSays(ts, "count === 1 ? '\(CoordinatorHandoffCopy.waitsMovedHere(1))' : "
                    + "`\(CoordinatorHandoffCopy.waitsMovedHere(7).replacingOccurrences(of: "7", with: "${count}"))`",
                    in: Self.shared)
+        assertSays(ts, "decisions === 0 && merges === 0 ? null", in: Self.shared)
+        assertSays(ts, "`${decisions} ${decisions === 1 ? 'decision' : 'decisions'} and "
+                   + "${merges} ${merges === 1 ? 'merge' : 'merges'} before this conversation`",
+                   in: Self.shared)
         // A refused press: web's toast title is this line's lead (double-quoted for its apostrophe).
         assertSays(ts, "refused: \"\(CoordinatorHandoffCopy.refused)\",", in: Self.shared)
+    }
+
+    /// The words naming a wait's kind are `COORDINATOR_PENDING_WAIT_KIND_LABELS`, and the line around them
+    /// is `coordinatorPendingWaitLine`'s.
+    func testThePendingWaitKindsAreTheShared() throws {
+        let ts = try source(Self.shared)
+        for kind in CoordinatorPendingWaitKind.allCases {
+            let words = CoordinatorHandoffCopy.waitKind(kind).map { "'\($0)'" } ?? "null"
+            assertSays(ts, "\(kind.rawValue): \(words),", in: Self.shared)
+        }
+        assertSays(ts, "return `${wait.label}${wait.paused ? '\(CoordinatorHandoffCopy.pausedSuffix)' : ''}${kind ? ` · ${kind}` : ''}`;",
+                   in: Self.shared)
     }
 
     /// Board 03 iOS 2's confirm body is the shared one, which Android's confirm says too: the same

@@ -11,6 +11,7 @@
  */
 import {
   scheduleCostsText,
+  SCHEDULE_COPY,
   scheduleCreateNotice,
   scheduleCreateWhen,
   scheduleMayText,
@@ -32,6 +33,18 @@ export { scheduleMayText };
 /** "Daily 10:00", "Weekdays at 09:00", "Mondays 10:00", "Mon, Thu 10:00", "Once": the cards' short form. */
 export function scheduleRuleText(rule: ScheduleRule): string {
   return sharedRuleText(rule as SharedRule, 'short');
+}
+
+/**
+ * The inspector's "What it does" (§9.2): the agent's current read-back, or the current When with the first
+ * sentence of the run instructions. Do not try to strip timing from free-form read-backs or the person's intent.
+ */
+export function scheduleReadBack(s: Pick<Schedule, 'readBack' | 'rule' | 'timezone' | 'title' | 'prompt'>): string {
+  if (s.readBack) return s.readBack;
+  const rule = s.rule as unknown as ScheduleRule;
+  const when = rule.kind === 'ONCE' ? [scheduleRuleText(rule), rule.at.replace('T', ' ')] : [sharedRuleText(rule as SharedRule, 'long')];
+  const what = s.prompt.trim().split(/(?<=[.!?])\s+|\r?\n/, 1)[0] || s.title;
+  return [...when, s.timezone, what].join(SCHEDULE_COPY.separator);
 }
 
 interface WorkspaceRef {

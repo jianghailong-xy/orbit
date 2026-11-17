@@ -32,6 +32,9 @@ public struct CreateAgentRequest: Encodable, Sendable {
     /// Instead of `workDir`, with `runnerId`: one folder name the server joins to the runner's new-folder root,
     /// made as the workspace's first session starts (docs/first-workspace-contract.md).
     public let newFolder: String?
+    /// Instead of either, with `runnerId`: a GitHub repository cloned into the runner's Repos Folder before the
+    /// workspace's first session starts (docs/github-workspace-design.md, board 04).
+    public let github: NewWorkspaceRequest.GithubClone?
 
     public init(name: String, description: String? = nil,
                 model: String? = nil,
@@ -41,7 +44,8 @@ public struct CreateAgentRequest: Encodable, Sendable {
                 maxTurns: Int? = nil, maxBudgetUsd: Double? = nil,
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
-                enabled: Bool? = nil, autoInitGit: Bool? = nil, newFolder: String? = nil) {
+                enabled: Bool? = nil, autoInitGit: Bool? = nil, newFolder: String? = nil,
+                github: NewWorkspaceRequest.GithubClone? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -61,6 +65,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
         self.enabled = enabled
         self.autoInitGit = autoInitGit
         self.newFolder = newFolder
+        self.github = github
     }
 }
 

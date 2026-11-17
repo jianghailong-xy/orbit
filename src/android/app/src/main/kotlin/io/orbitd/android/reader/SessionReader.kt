@@ -54,6 +54,10 @@ import io.orbitd.android.composer.HandedOverBanner
 import io.orbitd.android.composer.HandoffNoteCard
 import io.orbitd.android.composer.HandoffStatus
 import io.orbitd.android.composer.CreatedWorkspaceLineView
+import io.orbitd.android.composer.CloneHeard
+import io.orbitd.android.composer.CloneState
+import io.orbitd.android.composer.ManagementGithub
+import io.orbitd.android.composer.WorkspaceClone
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
@@ -613,6 +617,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val session = state.session
             val detail = session?.snapshot?.detail
             var renamedWorkspaceName by remember(handle, route.id) { mutableStateOf<String?>(null) }
+            // When the detail the created line draws from was read: a clone frame heard before it is older news than its cloneState.
+            val madeReadAt = remember(worktreeState.detail ?: detail) { System.currentTimeMillis() }
+            val github = remember(handle) { ManagementGithub(io.orbitd.android.management.ManagementApi(app.session, handle, app.processScope)) }
             val createdWorkspaceLine = remember(detail, worktreeState.detail, data.effectiveRunnerRows, data.effectiveWorkspaceRows, renamedWorkspaceName) {
                 val source = worktreeState.detail ?: detail ?: return@remember null
                 CreatedWorkspaceLine.fromSession(source, data.effectiveRunnerRows, data.effectiveWorkspaceRows)?.let { line ->
@@ -679,11 +686,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
-                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
+                        HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
+                            detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
+                            // A workspace cloned from GitHub: where its clone stands, from the detail (read at `madeReadAt`) and the stream.
+                            val heardClones by app.clones.all.collectAsState()
+                            val clone = createdWorkspaceLine.cloneState?.let { stored ->
+                                WorkspaceClone.now(stored, heardClones[WorkspaceClone.keyOf(createdWorkspaceLine.workspaceId)], madeReadAt)
+                            }
                             CreatedWorkspaceLineView(
+                                clone = clone,
+                                github = github,
+                                onRetry = {
+                                    github.retryClone(createdWorkspaceLine.workspaceId)
+                                    app.clones.hear(createdWorkspaceLine.workspaceId, CloneHeard(CloneState.PENDING))
+                                    app.realtime.refreshSession()
+                                    worktree.loadDetail()
+                                },
                                 line = createdWorkspaceLine,
                                 settingsEnabled = data.workspaces.any { ObjectId.same(it.id, createdWorkspaceLine.workspaceId) } ||
                                     data.effectiveWorkspaceRows.any { ObjectId.same(it.string("id"), createdWorkspaceLine.workspaceId) },

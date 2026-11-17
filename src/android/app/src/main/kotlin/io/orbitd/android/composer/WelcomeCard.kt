@@ -107,6 +107,7 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
         val status = runCatching { ManagedRunner.status(api.get("managed-runner")) }.getOrNull()
         shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
         loaded = true
+        if (status != null) ManagedRunnerIdentity.runnerId = shown?.status?.runnerId
     }
 
     suspend fun retry() = act("Couldn't retry the managed runner") { status ->
@@ -123,6 +124,7 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
         try {
             val status = ManagedRunner.status(call(current))
             shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
+            if (status != null) ManagedRunnerIdentity.runnerId = shown?.status?.runnerId
         } catch (cancel: CancellationException) { throw cancel }
         catch (e: Exception) {
             // The server's own sentence where it gave one (a 403 for a disabled account says why), else what went wrong.
@@ -137,7 +139,10 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
 @Composable
 internal fun rememberManagedRunner(api: ManagementApi, ask: Boolean): ManagedRunnerReader {
     val reader = remember(api) { ManagedRunnerReader(api) }
-    val offered = rememberManagedOffered(api, ask) == true
+    val offeredRead = rememberManagedOffered(api, ask)
+    val offered = offeredRead == true
+    // No managed runners on this server (or for this account): no machine is Orbit Cloud, whatever an earlier read said.
+    LaunchedEffect(offeredRead) { if (offeredRead == false) ManagedRunnerIdentity.runnerId = null }
     LaunchedEffect(reader, ask && offered) { if (ask && offered) reader.read() }
     return reader
 }

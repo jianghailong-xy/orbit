@@ -310,6 +310,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
     /// nothing registered one, and from an older server.
     public var registerDir: String? = nil
+    /// True on the account's managed runner, which every screen calls Orbit Cloud (@orbit/shared
+    /// `RunnerRowIdentity.managed`), false on every other. Nil from an older server, where
+    /// `ManagedRunnerIdentity` (the managed status's runnerId) still says which runner it is.
+    public var managed: Bool? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
@@ -699,6 +703,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
     /// Read off the session list; absent from older servers, which reads as none.
     public let runningSubagentCount: Int?
+    /// What the newest of those is doing, as its launch call described it ("Deploy dacad7403 to
+    /// production"): the row says "Agent: <this>…". Nil when none is running, when the call said
+    /// nothing, and from older servers — the row then keeps "Running Agent…".
+    public let runningSubagentTitle: String?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -906,6 +914,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
+        runningSubagentTitle = try values.decodeIfPresent(String.self, forKey: .runningSubagentTitle)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
@@ -950,6 +959,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
+                runningSubagentTitle: String? = nil,
                 engineTurnActive: Bool? = nil,
                 activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
@@ -1032,6 +1042,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
+        self.runningSubagentTitle = runningSubagentTitle
         self.engineTurnActive = engineTurnActive
         self.activity = activity
         self.error = error
@@ -1207,6 +1218,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// the conversation that made it reads (`CreatedWorkspaceLine`).
     public var workDir: String? = nil
     public var deletedAt: String? = nil
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+    /// stands. All nil for one that is not.
+    public var repoUrl: String? = nil
+    public var cloneState: String? = nil
+    public var cloneError: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -1973,6 +1989,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// The landing a code session's work fed (§2.9 LS1's derived field), or nil for a conversation
     /// that produced no landing work.
     public let sourceLanding: SessionSourceLanding?
+    /// What the session's engine was given from Orbit and took, in the engine's own words (contract
+    /// §2.7) — what the Agent Tools sheet draws. Nil until its runner sends one, from an older server,
+    /// and for a value this build cannot read, which never costs the rest of the detail.
+    public let agentTools: AgentToolsReport?
 
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
@@ -2032,6 +2052,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
         sourceLanding = try? values.decodeIfPresent(SessionSourceLanding.self,
                                                     forKey: .sourceLanding)
+        agentTools = try? values.decodeIfPresent(AgentToolsReport.self, forKey: .agentTools)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -2055,7 +2076,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
                 retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil,
                 sessionKind: String? = nil, landing: SessionLandingView? = nil,
-                sourceLanding: SessionSourceLanding? = nil) {
+                sourceLanding: SessionSourceLanding? = nil, agentTools: AgentToolsReport? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -2095,6 +2116,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.sessionKind = sessionKind
         self.landing = landing
         self.sourceLanding = sourceLanding
+        self.agentTools = agentTools
     }
 }
 

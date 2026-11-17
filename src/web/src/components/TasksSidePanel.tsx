@@ -15,6 +15,7 @@ import {
   MenuUnfoldOutlined,
   MoreOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -58,7 +59,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -103,6 +104,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
+import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -287,6 +289,9 @@ export interface Runner {
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
   // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
   registerDir?: string | null;
+  // The account's managed runner, labelled Orbit Cloud (RunnerRowIdentity). Absent from an older server,
+  // where the managed status's runnerId says which runner it is.
+  managed?: boolean;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
@@ -371,6 +376,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -593,6 +599,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
   // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
   const { managed: accountManaged } = useManagedRunner();
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -601,9 +609,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, managedRunnerId));
     return m;
-  }, [runners.data]);
+  }, [runners.data, managedRunnerId]);
 
   // The account menu's Machines row: every machine, and how many of them are online.
   const machineList = runners.data ?? [];
@@ -962,8 +970,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            a.runner?.displayName ??
-            a.runner?.name ??
+            (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1068,8 +1075,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      a.runner?.displayName ??
-                      a.runner?.name ??
+                      (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1119,7 +1125,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, managedRunnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1275,7 +1281,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
                       return {
                         key: `machine-${runner.id}`,
-                        textValue: runner.displayName || runner.name,
+                        textValue: machineName(runner, managedRunnerId),
                         icon: (
                           <span
                             className="tp-account-machine-dot"
@@ -1284,7 +1290,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{runner.displayName || runner.name}</span>
+                            <span>{machineName(runner, managedRunnerId)}</span>
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
@@ -1319,6 +1325,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               icon: <SettingOutlined />,
               label: 'Settings',
               onSelect: () => navigate('/settings'),
+            },
+            // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
+            {
+              key: 'help',
+              icon: <QuestionCircleOutlined />,
+              label: 'Help center',
+              onSelect: () => navigate(HELP_PATH),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1360,6 +1373,25 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
+        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
+        <Tooltip
+          side="top"
+          content={
+            <>
+              Help<kbd className="tp-help-key">?</kbd>
+            </>
+          }
+        >
+          <button
+            type="button"
+            className={`tp-help${help.open ? ' is-open' : ''}`}
+            aria-label="Help"
+            aria-pressed={help.open}
+            onClick={help.toggleHelp}
+          >
+            <QuestionCircleOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       <div

@@ -104,7 +104,7 @@ func TestManagedRunnerRefusesTheClaimOfASessionRefusedAtReclaim(t *testing.T) {
 	job := runnerStopJob(t, "sess-refused-reclaim")
 	withManagedInstance(t, "4", testManagedPodUID)
 	recordVolumeSyncs(t)
-	reason := "the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: its HEAD is empty" + repositoryDamagedAdvice
+	reason := "the Git repository at /home/orbit/orbit-repos/default cannot be read: its HEAD is empty" + repositoryDamagedAdvice
 	job.SourceRefusal = &SourcePinRefusal{Code: repositoryDamagedRefusal, Detail: map[string]interface{}{"reason": reason}}
 	api := newRunnerStopControlPlane()
 	api.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "carry on"})

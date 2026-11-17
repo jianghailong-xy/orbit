@@ -404,7 +404,7 @@ fun OwnerRequestSnoozed(request: OwnerRequest, until: Long, now: Instant = Insta
 
 /** A runner by the name the owner knows it by. */
 internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
-    runners.firstOrNull { ObjectId.same(it.id, id) }?.let { it.displayName ?: it.name } ?: "this runner"
+    runners.firstOrNull { ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) } ?: "this runner"
 }
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. The request a link opened [sessionId]'s

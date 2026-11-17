@@ -2,6 +2,7 @@ import { runningSubagentCards } from '../sessions/abandoned-approvals';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
+import { fitCollapseId } from './collapse-id';
 import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { recordRunNotify } from '../sessions/run-notify';
@@ -191,7 +192,7 @@ export class PushService {
   ): Promise<boolean> {
     if (!feishu || !this.feishu) return Promise.resolve(false);
     return this.feishu.post(feishu, {
-      collapseKey: input.collapseId ?? `${input.kind}-${randomUUID()}`,
+      collapseKey: input.collapseId ? fitCollapseId(input.collapseId) : `${input.kind}-${randomUUID()}`,
       kind: 'other',
       sessionId: input.sessionId ?? null,
       openUrl: orbitUrl(input),
@@ -1574,8 +1575,9 @@ export class PushService {
     body: string,
     pushType: 'alert' | 'background',
     priority: '10' | '5',
-    collapseId?: string,
+    rawCollapseId?: string,
   ): Promise<number> {
+    const collapseId = rawCollapseId === undefined ? undefined : fitCollapseId(rawCollapseId);
     const data = fcmData(body, pushType, randomUUID(), new Date().toISOString(), collapseId);
     const results = await Promise.all(tokens.map(async (t) => {
       const where = { id: t.id, token: t.token, userId: t.userId, updatedAt: t.updatedAt,
@@ -1651,7 +1653,7 @@ export class PushService {
         'apns-topic': this.bundleId,
         'apns-push-type': pushType,
         'apns-priority': priority,
-        // APNs caps this at 64 bytes; every id built here is well inside it.
+        // APNs caps this at 64 bytes; deliver() has already fitted it (fitCollapseId).
         ...(collapseId ? { 'apns-collapse-id': collapseId } : {}),
         'content-type': 'application/json',
       });

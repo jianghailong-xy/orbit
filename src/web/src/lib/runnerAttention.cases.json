@@ -4188,5 +4188,159 @@
       "subtitle": "aivps-sg · v0.1.256",
       "disk": null
     }
+  },
+  {
+    "name": "Orbit Cloud (managed) on a release with ORBIT_NO_SELFUPDATE and behind: Orbit rolls its image, so no Updates are turned off",
+    "input": {
+      "runner": {
+        "name": "orbit-managed",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set",
+          "installDir": "/Users/lab/.orbit/bin"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "Orbit Cloud (managed) on a managed-<sha> image: its version line says Orbit keeps it up to date, never the hash",
+    "input": {
+      "runner": {
+        "name": "orbit-managed",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "Kept up to date by Orbit",
+      "disk": null
+    }
+  },
+  {
+    "name": "Orbit Cloud (managed) asleep on a managed-<sha> image: offline since, and kept up to date by Orbit",
+    "input": {
+      "runner": {
+        "name": "orbit-managed",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197",
+      "managed": true
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · Kept up to date by Orbit",
+      "disk": null
+    }
   }
 ]

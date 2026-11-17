@@ -78,6 +78,7 @@ private struct SettingsPageView: View {
         case .general:        SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .profile:        ProfileSettingsPage()
+        case .github:         GithubSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
         case .terminals:      TerminalsSettingsPage()
@@ -159,6 +160,7 @@ struct SettingsHomeView: View {
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
         .task { await model.terminals?.load() }
+        .task { await model.loadGithub() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -239,7 +241,7 @@ struct SettingsHomeView: View {
                     }
                 } label: { label }
             }
-        case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals:
+        case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -274,6 +276,8 @@ struct SettingsHomeView: View {
             return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
         case .terminals:
             return model.terminals?.count.map { Terminals.settingsValue(count: $0) }
+        case .github:
+            return SettingsHome.githubValue(model.github)
         default:
             return nil
         }

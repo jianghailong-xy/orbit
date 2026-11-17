@@ -1,9 +1,29 @@
-# Orbit operation catalogue v1.6.0
+# Orbit operation catalogue v1.8.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `2407f8d3f094fdbb36e97f2183e95a9f2b84d3857e407c33c5749a72461f46b2`.
+> Content hash: `2f703b34e73f52e2723ac0a03768537736fa7b570fff9c371e5428b57b126710`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
+
+## Reading it a piece at a time
+
+`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger than any engine shows a model at once. An agent that wants one operation asks for less: `--summary` (one row per command, and the commands not offered here grouped under why), `--family NAME` (one family, each command with its absolute argv, approval, success evidence and a minimal example) or `--id ID` (one operation in full, both surfaces' examples included). The `guide` MCP tool and `orbit guide [TOPIC] --json` arrange the same rows by what a person asks for: without a topic they answer the objects and the intent routes, and with one its recipe. Guide 1.1.0 has these topics (a `?` marks an optional step):
+
+| Topic | Routes | Steps | Intent |
+| --- | --- | --- | --- |
+| `task-create` | R1.1 | `task_list`? → `task_create` → `task_get`? | Record one piece of work the user wants kept, followed up or done later. |
+| `task-batch` | R1.2 | `task_create_batch`? → `task_create_batch` → `task_list`? | Keep a plan that is already worked out: several tasks with their order and parts, in one call. |
+| `project-create` | R1.3 | `project_create` → `task_create_batch`? | Record a whole body of work with its own goal and acceptance, coordinated from this conversation. |
+| `task-start` | R1.4, R1.5 | `task_start` → `task_create`? → `task_await`? | Run work now: recorded work on its assignee, or new work created and started on one card. |
+| `task-schedule` | R1.6 | `task_create` → `task_update`? | Have the server start work once, at a set time. |
+| `delegate` | R1.7 | `session_create` → `session_await`? | Hand work that should run now to another agent as its own conversation. |
+| `inspect` | R1.8 | `project_get`? → `task_get` → `task_list`? → `session_get`? | Read the state of a project, a task or a session before deciding anything. |
+| `wait` | R1.9 | `task_await` → `session_await`? → `watch_create`? | Wait for Orbit work to finish without holding the turn open. |
+| `wiki` | R1.10 | `wiki_search` → `wiki_get`? → `wiki_propose`? → `wiki_note`? | Find what is already known about a file or a pattern, and keep what you learned. |
+| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
+| `task-list` | R1.12 | `tasklist_list`? → `tasklist_create` → `tasklist_update`? | Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions. |
+| `agent` | R1.13 | `agent_list` → `agent_update`? → `agent_create`? | Choose where work runs and under which identity, or change an agent's defaults. |
+| `finish-task` | — | `task_get` → `task_progress_report` → `bg_run`? → `task_evidence_submit` → `task_comment`? | Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by. |
 
 | Operation | Object | Risk | Writes | Approval | Destructive | Idempotency | Plan | MCP | CLI | Intent |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,6 +45,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `file_list` | file | low | no | none | no | read | runs | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | refused | always | session — `orbit file pin` | Keep a file so it survives the turn. |
 | `file_upload` | file | medium | yes | none | no | none | refused | always | session — `orbit file upload` | Upload a file as an attachment this session's reply can carry. |
+| `guide` | catalog | low | no | none | no | read | runs | always | always — `orbit guide` | Find which operation answers a request, and the shortest way to call it here. |
 | `integration_abandon` | project | high | yes | none | yes | none | refused | always | absent | Abandon a running landing job. |
 | `integration_observe` | project | medium | yes | none | no | none | refused | always | absent | Ask for the project's integration line to be observed again. |
 | `integration_request_promotion` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-promotion` | Ask the account owner to promote an integration branch. |
@@ -48,6 +69,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `project_merge_evidence` | merge_receipt | medium | yes | none | no | none | refused | always | always — `orbit project merge-evidence` | Record what a target branch was observed to contain, as a project's merge evidence. |
 | `project_request_done` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-done` | Ask the account owner to settle a project as done. |
 | `project_request_start` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-start` | Ask the account owner to start a project. |
+| `project_ruling_record` | project | medium | yes | none | no | none | runs | always | absent | Record an owner ruling given in this conversation as a project record. |
 | `project_send` | project | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit project send` | Send one message to a project's coordinator. |
 | `project_update` | project | high | yes | card (`orbit_project_update_integration`) | no | none | refused | always | always — `orbit project update` | Change a project's goal, criteria, instructions or integration. |
 | `provider_create` | provider | high | yes | card (`orbit_provider_create`) | no | none | refused | always | always — `orbit provider create` | Add a credential provider. |
@@ -137,6 +159,7 @@ Plan reads, waits and asks the owner, and refuses every other write. These are t
 | `ask_owner` | runs | puts a question to the owner; a question is not work |
 | `bg_run` | own_gate | the background-job gate (background_gate.go) decides in every mode: Plan refuses the job, with what to do instead |
 | `notify` | runs | puts a line in front of the owner; a message is not work |
+| `project_ruling_record` | runs | records what the owner already said; a record of a ruling is not work |
 | `request_owner_action` | runs | asks the owner for an action that is theirs to take; a question is not work |
 | `schedule_create` | runs | puts a create card in front of the owner; nothing is scheduled until they press Create |
 | `schedule_end` | runs | ends a schedule whose goal is reached; it changes no code, and the owner can undo it |
@@ -171,6 +194,7 @@ An operation missing from one surface is a declared decision, not drift: the cat
 | `open_item_hand_over` | CLI | hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server |
 | `open_item_resolve` | CLI | closes an item as the project's coordinator session: a terminal outside one is refused by the server |
 | `permission_prompt` | CLI | runtime approval bridge, called by the engine mid-turn |
+| `project_ruling_record` | CLI | records as the project's coordinator session, from one of its turns: a terminal outside one is refused by the server |
 | `request_owner_action` | CLI | files as the calling session and answers it with a turn: a terminal outside one is refused by the server |
 | `schedule_create` | CLI | proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither |
 | `schedule_delete` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |

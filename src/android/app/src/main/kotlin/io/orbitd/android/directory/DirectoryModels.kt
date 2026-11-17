@@ -22,7 +22,9 @@ data class DirectoryWorkspace(val id: String, val name: String, val runnerId: St
     val enabled: Boolean = true, val position: Int? = null, val createdAt: String? = null, val repoUrl: String? = null)
 @Serializable
 data class DirectoryRunner(val id: String, val name: String, val status: String? = null, val online: Boolean? = null,
-    val displayName: String? = null, val lastHeartbeatAt: String? = null)
+    val displayName: String? = null, val lastHeartbeatAt: String? = null,
+    /** True on the account's managed runner (Orbit Cloud); null from an older server (RunnerPage.isManaged). */
+    val managed: Boolean? = null)
 @Serializable
 data class Folder(val id: String, val workspaceId: String, val name: String)
 @Serializable
@@ -68,6 +70,8 @@ data class DirectorySession(
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    /** What the newest running sub-agent is doing, as its launch call described it; null when none is or it said nothing. */
+    val runningSubagentTitle: String? = null,
     /** What a parked session is still doing (`TURN`, `BACKGROUND_JOB`, `WAITING`), as the server decides it; null when none and
      *  from an older server. See [resumesOnItsOwn]. */
     val activity: String? = null,

@@ -72,7 +72,7 @@ al.OWN_SERVER_DIRS = al.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.OWN_SERVER_DIRS = wl.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.EMAIL = ml.EMAIL = 't02-{}@lab.invalid'
 wl.NAME_RE = re.compile(r't02-([a-z0-9]+)@lab\.invalid')
-wl.PROBE_ROOT = '/var/lib/orbit/home/t02-probe'
+wl.PROBE_ROOT = '/home/orbit/t02-probe'
 al.CONTEXT = SERVER / 't02-context.json'
 OWNER = 'ann'
 # single-writer.py's payload, storage view and credentials act on this owner's mapping.
@@ -498,7 +498,7 @@ def account_data(ctx, step):
     step.check(f'probe p1 written on {NODES[1]} (8 MiB random, {al.PROBE_ROWS} SQLite rows in WAL mode with synchronous=FULL, a Git commit), integrity_check ok',
                probe['data']['integrityCheck'] == 'ok' and probe['data']['rows'] >= al.PROBE_ROWS, probe['data']['rows'])
     snap = al.pod_snapshot(OWNER)
-    step.check('/var/lib/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
+    step.check('/home/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
                snap['mount'])
     ctx.setdefault('snapshots', {})['onFirst'] = snap
     return {'session': result, 'probe': probe, 'snapshot': snap}
@@ -548,7 +548,7 @@ def migrate_move(ctx, step):
     step.check(f'probe p1 on {NODES[2]}: the same random bytes, SQLite rows and Git commit, integrity_check ok', probe['allSame'], probe['same'])
     snap = al.pod_snapshot(OWNER, al.transcript_prefix(snap_before))
     al.compare_snapshots(step, OWNER, snap_before, snap, f'on {NODES[2]}', ctx['sessions'][OWNER]['s1Uuid'])
-    step.check('/var/lib/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
+    step.check('/home/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
                snap['mount'])
     nodes['firstAgain'] = cordon(1, 'uncordon')  # both schedulable from here on; the runner stays where it runs
     ctx['identity'][OWNER] = after
@@ -592,8 +592,8 @@ def contender(name, pod, node, claim, labelled=False):
     return {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': name, 'namespace': NAMESPACE},
             'spec': {'restartPolicy': 'Never', 'nodeName': node,
                      'containers': [{'name': 'second-writer', 'image': ENV['PROBE_IMAGE'],
-                                     'command': ['sh', '-c', 'echo second > /var/lib/orbit/second-pod.txt; sleep 3600'],
-                                     'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}]}],
+                                     'command': ['sh', '-c', 'echo second > /home/orbit/second-pod.txt; sleep 3600'],
+                                     'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}]}],
                      'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': claim}}]}}
 
 
@@ -1032,7 +1032,7 @@ def takeover_data(ctx, step):
     snap_before = ctx['snapshots']['beforeFailure']
     snap = al.pod_snapshot(OWNER, al.transcript_prefix(snap_before))
     al.compare_snapshots(step, OWNER, snap_before, snap, 'after the takeover', ctx['sessions'][OWNER]['s1Uuid'])
-    step.check('/var/lib/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
+    step.check('/home/orbit is an RBD device, ext4', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd') and snap['mount'][0]['fstype'] == 'ext4',
                snap['mount'])
     step.check('the volume names the new generation and its Pod', (snap['managedInstance'] or {}).get('generation') == m['generation']
                and (snap['managedInstance'] or {}).get('podUid') == m['pod_uid'], snap['managedInstance'])

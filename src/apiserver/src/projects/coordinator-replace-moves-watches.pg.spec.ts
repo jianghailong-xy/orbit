@@ -274,9 +274,9 @@ test('(d) the pending-waits read lists the coordinator\'s live watches, as id + 
   const { projects } = service(f.db, f);
 
   assert.deepEqual(await projects.coordinatorPendingWaits(f.ownerId, f.projectId), [
-    { id: onTask, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
-    { id: onSession, label: 'Waiting for "a bystander" to finish its turn', paused: false },
-    { id: paused, label: 'Waiting for "Fix login redirect" to fail', paused: true },
+    { id: onTask, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: onSession, kind: 'WATCH', label: 'Waiting for "a bystander" to finish its turn', paused: false },
+    { id: paused, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to fail', paused: true },
   ]);
 
   // After the replacement, the same read asks about the successor — which now holds them.

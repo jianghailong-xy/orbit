@@ -1,5 +1,7 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
 import { MachineTerminalsSection, TerminalRequestsSection } from '../TerminalRequests';
+import { HelpLearnMore } from '../help/HelpLearnMore';
+import { HELP_ERROR_ATTR } from '../../lib/help/drawerArticles';
 import { ENGINE_UPDATE_FIX_TARGET, agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
@@ -25,7 +27,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
-import { machineDraftPath } from '../../lib/machineSetup';
+import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
@@ -55,11 +57,13 @@ import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import {
   KEEP_FREE_TIERS,
   compareRunnerVersions,
+  isReleaseVersion,
   keepFreeLabel,
   latestRunnerVersion,
   runnerAttention,
   runnerCanUpdateNow,
   runnerDisk,
+  runnerVersionLine,
   type AttentionItem,
   type AttentionKind,
 } from '../../lib/runnerAttention';
@@ -78,8 +82,11 @@ import {
   RUNNER_COPY_COMMAND,
   RUNNER_ENGINES,
   RUNNER_RESOURCES,
+  MANAGED_RUNNER_KEPT_UP_TO_DATE,
   MANAGED_RUNNER_NOT_REPORTED,
+  MANAGED_RUNNER_UPDATED_BY_ORBIT,
   RUNNER_ENGINES_FOOTER,
+  RUNNER_ENGINES_MANAGED_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
@@ -117,7 +124,6 @@ import {
   runnerMaxBelowRunning,
   runnerUpdatedFromTo,
   runnerVersionUpdatingTo,
-  runnerVersionTag,
   runnerWorkspaceRunning,
 } from '../../lib/runnerCopy';
 import { runnerQuietMinutes, runnerUpdateCard } from '../../lib/runnerUpdateCard';
@@ -403,11 +409,14 @@ export function MachineSettingsPage() {
     return <p className="settings-empty">This machine doesn't exist, or isn't yours.</p>;
   }
 
-  const shownName = runner.displayName || runner.name;
+  // Whether this is the account's managed runner: its row says so, or (an older server) the managed status.
+  const isManaged = !!managed || runner.managed === true;
+  // The managed runner is Orbit Cloud, unless its owner named it (machineName).
+  const shownName = machineName(runner, managed ? runnerId : null);
   const nowMs = Date.now();
   // The managed runner's state is its shared label and notice: its heartbeat's "offline" card is not repeated.
   const managedRow = managedRowOf(managed, runnerId);
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion }).filter(
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion, managed: isManaged }).filter(
     (item) => !(managedRow && item.kind === 'offline'),
   );
 
@@ -458,6 +467,8 @@ export function MachineSettingsPage() {
   // start): no version, no readings, no engines. Once it reports, the page is the ordinary one.
   const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
   const versionNote = (() => {
+    // Orbit rolls the managed runner's image: nothing here is for its owner to do.
+    if (isManaged) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
@@ -483,7 +494,8 @@ export function MachineSettingsPage() {
   // The last update it installed into itself, for a runner that reports it: when, and its versions.
   const lastUpdate = (() => {
     const report = runner.selfUpdate;
-    if (!report) return null;
+    // A managed runner never installs a release into itself: Orbit replaces its image.
+    if (!report || isManaged) return null;
     const versions =
       report.lastUpdatedFrom && report.lastUpdatedTo
         ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
@@ -714,7 +726,7 @@ export function MachineSettingsPage() {
       : RUNNER_OFFLINE;
   const metaline = [
     runner.hostname || null,
-    version ? runnerVersionTag(version) : null,
+    runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
 
@@ -829,13 +841,24 @@ export function MachineSettingsPage() {
               ? <AgentFixButton view={fixView} target={fixTarget} runnerId={runner.id} />
               : null;
             const action = attentionAction(item, fixButton);
+            // The offline card names its error, so the help drawer puts the article about it first, and opens it.
+            const offline = item.kind === 'offline';
             return (
-              <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+              <div
+                key={`${item.kind}:${index}`}
+                className={`rd-attention-card ${item.tone}`}
+                {...(offline ? { [HELP_ERROR_ATTR]: 'runner.offline' } : {})}
+              >
                 <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
                 <div className="rd-attention-main">
                   <div className="rd-attention-title">{item.title}</div>
                   <div className="rd-attention-detail">{attentionDetail(item)}</div>
                   {action && <div className="rd-attention-action">{action}</div>}
+                  {offline && (
+                    <div className="rd-attention-learn">
+                      <HelpLearnMore slug="machine-offline" />
+                    </div>
+                  )}
                   <AgentFixLine view={fixView} />
                 </div>
               </div>
@@ -929,7 +952,7 @@ export function MachineSettingsPage() {
           />
         </div>
         {runner.engines && (
-          <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
+          <div className="rd-hint">{!runner.online ? RUNNER_ENGINES_OFFLINE_FOOTER : managed ? RUNNER_ENGINES_MANAGED_FOOTER : RUNNER_ENGINES_FOOTER}</div>
         )}
       </SettingsSection>
       </>
@@ -1069,7 +1092,7 @@ export function MachineSettingsPage() {
             title={RUNNER_ABOUT_VERSION}
             control={
               <span className="machine-about-value">
-                {version ?? '—'}
+                {isManaged && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
                 {versionNote && <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>}
               </span>
             }
@@ -1186,11 +1209,11 @@ export function MachineSettingsPage() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing) renameMut.mutate(renameVal.trim());
           }}
-          placeholder={runner.name}
+          placeholder={machineName({ ...runner, displayName: null }, managed ? runnerId : null)}
           maxLength={60}
         />
         <div style={{ marginTop: 8, color: 'var(--text-3)', fontSize: 12 }}>
-          Leave empty to use the machine name ({runner.name}).
+          Leave empty to use the machine name ({machineName({ ...runner, displayName: null }, managed ? runnerId : null)}).
         </div>
       </Dialog>
 

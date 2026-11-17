@@ -32,10 +32,39 @@ public enum RunnerPageFormat {
         isOffline(runner, now: now) ? .offline : .online
     }
 
-    /// The name the list and the page head show: the alias, else the machine's own name.
+    /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
+    /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
+    /// never its stored name `orbit-managed`), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
+        displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `displayName` against a given managed runner id: what the default form reads, kept pure for tests.
+    public static func displayName(_ runner: Runner, managedRunnerID: String?) -> String {
         let alias = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return alias.isEmpty ? runner.name : alias
+        if !alias.isEmpty { return alias }
+        return isManaged(runner, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+    }
+
+    /// The name a machine falls back to with no alias: Orbit Cloud for the managed runner, else its own.
+    public static func defaultName(_ runner: Runner) -> String {
+        isManaged(runner) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+    }
+
+    /// Whether `runner` is the account's managed runner: its row says so (`managed`), or its id is the
+    /// managed status's runnerId (an older server, which sends no flag).
+    public static func isManaged(_ runner: Runner) -> Bool {
+        isManaged(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `isManaged` against a given managed runner id, kept pure for tests.
+    public static func isManaged(_ runner: Runner, managedRunnerID: String?) -> Bool {
+        runner.managed == true || isManaged(runner.id, managedRunnerID: managedRunnerID)
+    }
+
+    public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {
+        guard let runnerID, let managedRunnerID, !runnerID.isEmpty, !managedRunnerID.isEmpty else { return false }
+        return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
@@ -85,12 +114,14 @@ public enum RunnerPageFormat {
 
     /// `vmi3129740 · v0.1.197` — the list's second line for a machine that is up, whether or not
     /// this one is: a hostname empty or the same as the name shown is left out.
-    public static func hostLine(_ runner: Runner) -> String {
-        let shown = displayName(runner)
+    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or "Kept up to date
+    /// by Orbit", never `managed-<sha>`.
+    public static func hostLine(_ runner: Runner, managed: Bool? = nil) -> String {
+        let orbitCloud = managed ?? isManaged(runner)
+        let shown = displayName(runner, managedRunnerID: orbitCloud ? runner.id : nil)
         let host = (runner.hostname?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty || $0 == shown ? nil : $0 }
-        let version = (runner.version?.trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap { $0.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: $0) }
+        let version = RunnerAttention.runnerVersionLine(runner.version, managed: orbitCloud)
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
@@ -181,6 +212,7 @@ public enum RunnerPageFormat {
     /// (board iOS 2 ②) — its version is the one Orbit pins, not the latest every 30 minutes.
     public static func enginesFooter(_ runner: Runner, fleet: [Runner]? = nil, offline: Bool) -> String {
         if offline { return RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER }
+        if isManaged(runner) { return RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER }
         return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
@@ -688,11 +720,15 @@ public enum RunnerPageFormat {
         public let pending: Bool
         public let refused: String?
         public let blocking: [BlockingSession]
+        /// Under way and waiting on the sessions it moved to another account to leave this one (web
+        /// `runnerAccountMovingOne`/`Many`); nil otherwise.
+        public let moving: String?
 
-        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = []) {
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = [], moving: String? = nil) {
             self.pending = pending
             self.refused = refused
             self.blocking = blocking
+            self.moving = moving
         }
     }
 
@@ -733,7 +769,15 @@ public enum RunnerPageFormat {
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
-        return AccountRemoval(pending: state.status == "pending", refused: refused, blocking: blocking)
+        let pending = state.status == "pending"
+        let count = pending ? (state.moving ?? 0) : 0
+        let moving: String?
+        switch count {
+        case ..<1: moving = nil
+        case 1: moving = RunnerAccountCopy.runnerAccountMovingOne(engine: engineName(engine))
+        default: moving = RunnerAccountCopy.runnerAccountMovingMany(engine: engineName(engine), count: count)
+        }
+        return AccountRemoval(pending: pending, refused: refused, blocking: blocking, moving: moving)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
@@ -886,7 +930,9 @@ public enum RunnerPageFormat {
 
     /// Whether a newer release than this runner's own is out — the case About This Runner's Update
     /// Runner Now is there for. False when either version isn't known, so nothing is offered on a guess.
-    public static func isBehindLatest(_ runner: Runner, latest: String?) -> Bool {
+    /// Never for the account's managed runner: Orbit rolls its image, so there is no release for it to catch up with.
+    public static func isBehindLatest(_ runner: Runner, latest: String?, managed: Bool? = nil) -> Bool {
+        if managed ?? isManaged(runner) { return false }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
               let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return false
@@ -899,14 +945,22 @@ public enum RunnerPageFormat {
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
     /// Attention's to say, and here is just its version. A runner that reports where its updates stand
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
-    public static func versionValue(_ runner: Runner, latest: String?) -> String? {
+    ///
+    /// The account's managed runner (Orbit Cloud) says only that Orbit updates it: its release with that
+    /// note, or "Kept up to date by Orbit" for an image that reports no release — never `managed-<sha>`.
+    public static func versionValue(_ runner: Runner, latest: String?, managed: Bool? = nil) -> String? {
+        if managed ?? isManaged(runner) {
+            guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  RunnerAttention.isReleaseVersion(version) else { return RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE }
+            return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT
+        }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {
             return nil
         }
         guard let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return version
         }
-        if !isBehindLatest(runner, latest: latest) {
+        if !isBehindLatest(runner, latest: latest, managed: false) {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
         // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.

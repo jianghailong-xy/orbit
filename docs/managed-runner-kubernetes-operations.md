@@ -272,7 +272,7 @@ and to prove that a backup restores.
    and the PV held by the attacher's finalizer (seen in the lab; the attachment had never attached, so its finalizer could
    be removed by hand).
 3. **Check it in a Pod** of the runner image, as the runner's user (10001), read-only root, no service account token, the
-   claim mounted at `/var/lib/orbit` as the runner sees it: SQLite `integrity_check`, `git fsck`, the checksums. It runs no
+   claim mounted at `/home/orbit` as the runner sees it: SQLite `integrity_check`, `git fsck`, the checksums. It runs no
    runner: never start `orbit run` on a restored copy while the account's runner exists, because the copy carries its
    credential.
 4. **Afterwards** delete the check Pod. The restored claim, its PV and image stay until someone deletes them on purpose
@@ -577,7 +577,7 @@ ext4 allocates delayed blocks only at writeback.
 - The engine's transcript is not fsynced either (T08x). A turn answered 20 s before a cut was missing from the
   account's transcript on the volume after the failover. The session went on from the lines written before it, and the
   turn was not in the conversation the engine resumed. Orbit's server kept the turn's events. The other account, whose
-  volume was synced (`sync -f /var/lib/orbit` in the runner container) just before the cut, kept its last turn.
+  volume was synced (`sync -f /home/orbit` in the runner container) just before the cut, kept its last turn.
 
 The measurements above are ext4. **XFS on the .3 deployment has not been put through the same power-cut drills**;
 SQLite, Git and the runner's syncfs behavior are ext4-proven, not yet XFS-proven. See
@@ -634,7 +634,7 @@ checkouts below its floor as any runner does
   deployment ([checkout storage design](session-checkout-storage-design.md#8-decisions-for-the-owner)), and the XFS
   durability/power-cut drills are still outstanding (see the deployment record). On an ext4 deployment (the lab
   baseline) the runner instead says
-  `checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /var/lib/orbit/home/.orbit/worktrees cannot clone
+  `checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /home/orbit/.orbit/worktrees cannot clone
   files, so git writes out every session checkout`, and every checkout is written out in full. A repository's
   `.orbit/checkout-exclude` makes checkouts smaller on either filesystem
   ([the format](runner-troubleshooting.md#f-a-sessions-checkout-lacks-some-paths)).

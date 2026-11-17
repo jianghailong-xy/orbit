@@ -584,18 +584,22 @@ public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
     /// oldest first. Empty otherwise, and from an older server that sends none; one entry this build
     /// can't read is dropped rather than failing the runner.
     public let sessions: [RunnerAccountRemoveSession]
+    /// With `pending`: how many sessions the removal moved to another account and waits on to leave
+    /// it. Nil while it waits on none, and from an older server.
+    public let moving: Int?
 
     public init(engine: String?, account: String?, status: String?, message: String?,
-                sessions: [RunnerAccountRemoveSession] = []) {
+                sessions: [RunnerAccountRemoveSession] = [], moving: Int? = nil) {
         self.engine = engine
         self.account = account
         self.status = status
         self.message = message
         self.sessions = sessions
+        self.moving = moving
     }
 
     private enum CodingKeys: String, CodingKey {
-        case engine, account, status, message, sessions
+        case engine, account, status, message, sessions, moving
     }
 
     public init(from decoder: Decoder) throws {
@@ -606,6 +610,7 @@ public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
         message = try c.decodeIfPresent(String.self, forKey: .message)
         sessions = ((try? c.decodeIfPresent([LossyDecodable<RunnerAccountRemoveSession>].self, forKey: .sessions)) ?? [])
             .compactMap(\.value)
+        moving = try? c.decodeIfPresent(Int.self, forKey: .moving)
     }
 }
 

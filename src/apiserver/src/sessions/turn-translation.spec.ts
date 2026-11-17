@@ -5,7 +5,7 @@ import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, translationAvailable } from './translation';
-import { translationLanguages } from './turn-translation';
+import { isSlashCommand, translationLanguages } from './turn-translation';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
@@ -468,6 +468,31 @@ test('skipTranslation (the prompt optimizer\'s English): the send is not held, c
   assert.equal(h.wakes.queue, 1);
   await h.service.translationsSettled();
   assert.equal(bodies.length, 0);
+});
+
+test('a slash command goes as written: not held, no translation, DeepSeek not asked', async () => {
+  for (const [i, command] of ['/compact', '/review 修一下登录跳转', '/plugin:cmd'].entries()) {
+    const bodies = stubDeepSeek([ENGLISH]);
+    const h = harness();
+    const answer = await h.service.createTurn(
+      OWNER_ID, SESSION_ID, { clientTurnId: `slash-${i}`, content: command, intent: 'NEXT_TURN' }, { translate: true },
+    );
+    assert.equal(answer.translation, undefined, command);
+    assert.equal(h.turns[0].status, 'PENDING', command);
+    assert.equal(h.turns[0].content, command);
+    assert.equal(h.turns[0].translationState, null, command);
+    await h.service.translationsSettled();
+    assert.equal(bodies.length, 0, command);
+  }
+});
+
+test('text that only starts with a slash (a path, a comment) is still translated', () => {
+  assert.equal(isSlashCommand('/compact'), true);
+  assert.equal(isSlashCommand('  /review the fix'), true);
+  assert.equal(isSlashCommand('/tmp/foo 删掉吧'), false);
+  assert.equal(isSlashCommand('// TODO 看一下'), false);
+  assert.equal(isSlashCommand('/'), false);
+  assert.equal(isSlashCommand('请运行 /compact'), false);
 });
 
 // ── "Resolve in session" with translation on ─────────────────────────────────────────────────────

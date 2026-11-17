@@ -31,6 +31,9 @@ public enum DshRuntime {
     /// living on the machine: Harness has none.
     public static let enginePageFooter =
         "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    /// The same page on a hosted runner, whose Harness is fixed in Orbit's image and moves with each Orbit release.
+    public static let managedEnginePageFooter =
+        "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     /// The permission modes Harness enforces (shared `DSH_PERMISSION_MODES`, measured in P4). The
     /// server rejects a session configured with any other.
     public static let permissionModes: [PermissionMode] = [.default, .auto, .dontAsk]

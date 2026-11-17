@@ -437,7 +437,7 @@ test('a run may change and end its own schedule inside the envelope; its widen i
 test('a run\'s session may not change, end or control another schedule, nor create one, nor use the controls on its own', { skip }, async () => {
   const w = await world('run-scope');
   const mine = await createdThroughCard(w);
-  const other = await createdThroughCard(w, { title: 'Other check' });
+  const other = await createdThroughCard(w, { title: 'Other check', intent: 'Check the other thing every day' });
   const run = await runSession(w, mine.id);
   const before = await db.schedule.findUniqueOrThrow({ where: { id: other.id } });
   await refusedWith(tools.update(w.runner, run.sessionId, other.id, { title: 'mine now' } as never), 'SCHEDULE_RUN_SESSION_SCOPE');
@@ -679,7 +679,9 @@ test('two accounts: another account\'s ids name nothing on every door and every 
 test('presses at once: Allow with Decline, and Allow with Allow, apply exactly one outcome', { skip }, async () => {
   const w = await world('race');
   for (const pair of [['allow', 'decline'], ['allow', 'allow']] as const) {
-    const pending = await tools.create(w.runner, w.sessionId, { ...CREATE, timezone: 'UTC' } as never);
+    // A schedule of its own per pair: the same session asking again for one it created is answered EXISTS.
+    const own = { title: `Race ${pair.join('+')}`, intent: `Race ${pair.join('+')}` };
+    const pending = await tools.create(w.runner, w.sessionId, { ...CREATE, ...own, timezone: 'UTC' } as never);
     const id = (pending as { card: { id: string } }).card.id;
     const before = await db.schedule.count({ where: { ownerId: w.ownerId } });
     const press = (verb: 'allow' | 'decline') =>
@@ -811,7 +813,7 @@ test('GET /api/schedules carries the timeline: runs under way and the last day\'
   const a = await world('timeline-a');
   const b = await world('timeline-b');
   const sa = await createdThroughCard(a);
-  const paused = await createdThroughCard(a, { title: 'Paused one' });
+  const paused = await createdThroughCard(a, { title: 'Paused one', intent: 'Check the paused one every day' });
   await rest.pause(a.user, paused.id, NO_SESSION);
   const sb = await createdThroughCard(b);
   const hour = 60 * 60_000;
@@ -880,4 +882,126 @@ test('a run\'s session\'s schedule-cards name its run however old; another sessi
   assert.equal((await rest.sessionCards(w.user, w.sessionId)).run, null, 'an ordinary session serves no run');
   const b = await world('run-of-session-b');
   await assert.rejects(rest.sessionCards(b.user, sessionId), /session not found/);
+});
+
+// -----------------------------------------------------------------------------------------------------------------
+// Changing a schedule the session made (§8.1, §8.2, §9.2): no second card, the intent stays, the read-back follows
+// -----------------------------------------------------------------------------------------------------------------
+
+test('schedule_create for a schedule this session already created names it instead of raising a second card', { skip }, async () => {
+  const w = await world('dup-create');
+  const s = await createdThroughCard(w);
+  const creates = () => db.scheduleChangeRequest.count({ where: { ownerId: w.ownerId, kind: 'CREATE' } });
+  assert.equal(await creates(), 1);
+
+  // "Make it weekly instead: Mondays at 09:00", filed as a create: same title, the correction as its intent.
+  const again = await tools.create(w.runner, w.sessionId, {
+    ...CREATE,
+    intent: 'Make the check weekly instead: Mondays at 09:00',
+    rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] },
+    timezone: 'Asia/Shanghai',
+  } as never);
+  assert.equal(again.outcome, 'EXISTS');
+  const exists = again as unknown as { scheduled: boolean; note: string; scheduleId: string; schedule: { id: string } };
+  assert.equal(exists.scheduled, false);
+  assert.equal(exists.scheduleId, s.id);
+  assert.equal(exists.schedule.id, s.id);
+  assert.match(exists.note, /^Not created: .*schedule_update/);
+  assert.equal(await creates(), 1, 'no second create card');
+  assert.equal(await db.scheduleChangeRequest.count({ where: { ownerId: w.ownerId, state: 'PENDING' } }), 0);
+
+  // The same words under another title are the same schedule too.
+  const sameIntent = await tools.create(w.runner, w.sessionId, { ...CREATE, title: 'Codex check (weekly)', timezone: 'UTC' } as never);
+  assert.equal(sameIntent.outcome, 'EXISTS');
+  assert.equal(await creates(), 1);
+
+  // A different schedule from the same session, and the same one from another session, still get their card.
+  const other = await tools.create(w.runner, w.sessionId, { ...CREATE, title: 'Kimi stable check', intent: 'Check Kimi every day', timezone: 'UTC' } as never);
+  assert.equal(other.outcome, 'PENDING');
+  const elsewhere = await makeSession(w.ownerId, w.workspaceId, PermissionMode.DEFAULT, w.runner.id);
+  assert.equal((await tools.create(w.runner, elsewhere, { ...CREATE, timezone: 'UTC' } as never)).outcome, 'PENDING');
+
+  // Once it has ended, asking again is a new schedule.
+  await rest.remove(w.user, s.id, NO_SESSION);
+  assert.equal((await tools.create(w.runner, w.sessionId, { ...CREATE, timezone: 'UTC' } as never)).outcome, 'PENDING');
+});
+
+test('schedule_update: a correction of the time does not overwrite what was asked; a restated goal does', { skip }, async () => {
+  const w = await world('intent-kept');
+  const s = await createdThroughCard(w);
+  const weekly = await tools.update(w.runner, w.sessionId, s.id, {
+    rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] },
+    intent: "That's more often than I need. Make it weekly instead: Mondays at 09:00.",
+  } as never);
+  assert.equal(weekly.outcome, 'APPLIED');
+  const applied = weekly as unknown as { intentKept: boolean; note: string; record: { changed: string[] } };
+  assert.equal(applied.intentKept, true);
+  assert.match(applied.note, /intent\) was left as it was/);
+  assert.deepEqual(applied.record.changed.filter((k) => k !== 'envelope'), ['rule']);
+  let row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.deepEqual(row.rule, { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] });
+  assert.equal(row.intent, CREATE.intent, 'what was asked is the original goal');
+
+  // Inside what the weekly change left allowed (one run a week), so it applies at once too.
+  const back = await tools.update(w.runner, w.sessionId, s.id, {
+    rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['TUE'] },
+    timezone: 'Asia/Shanghai',
+    runLimitMinutes: 20,
+    intent: 'On second thought, Monday is a bad day. Move it to Tuesdays at 10:00 Beijing time.',
+  } as never);
+  assert.equal(back.outcome, 'APPLIED');
+  row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.equal(row.intent, CREATE.intent);
+  assert.equal((await rest.get(w.user, s.id)).schedule.intent, CREATE.intent, 'the inspector\'s What was asked');
+
+  // A restated goal comes with what the runs now do, and is written.
+  const restated = 'Watch the stable Kimi CLI instead, and tell me only when its version line changes';
+  const goal = await tools.update(w.runner, w.sessionId, s.id, { intent: restated, prompt: 'Check the Kimi CLI release page.' } as never);
+  assert.equal(goal.outcome, 'APPLIED');
+  assert.equal((goal as { intentKept?: boolean }).intentKept, undefined);
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).intent, restated);
+});
+
+test('a timing change without readBack keeps what the check does and reads the current timing', { skip }, async () => {
+  const w = await world('read-back');
+  const at0900 = 'Every day at 09:00 Beijing time, check X and tell me only when Y changes.';
+  const what = 'Check X and tell me only when Y changes.';
+  const s = await createdThroughCard(w, {
+    rule: { kind: 'DAILY', time: '09:00' }, readBack: at0900,
+    prompt: `${what} Read watched.txt to find Y.`,
+  });
+  assert.equal((await rest.get(w.user, s.id)).readBack, at0900);
+
+  // A rule change that brings no read-back: the read derives When from the rule as it is now.
+  const moved = await tools.update(w.runner, w.sessionId, s.id, { rule: { kind: 'DAILY', time: '23:46' } } as never);
+  assert.equal(moved.outcome, 'APPLIED');
+  const derived = (await rest.get(w.user, s.id)).readBack;
+  assert.match(derived, /^Every day at 23:46/);
+  assert.ok(derived.includes(what), `the read-back lost what the check does: ${derived}`);
+  assert.ok(!derived.includes('09:00'), `the read-back still names the old time: ${derived}`);
+  assert.equal((moved as { readBack: string }).readBack, derived, 'the update answers with the same read-back');
+  const movedRevision = (moved as { record: { revision: number } }).record.revision;
+
+  // One the agent writes with the change is kept as the latest.
+  const at2346 = 'Every day at 23:46 Beijing time I check X, and tell you only when Y changes.';
+  const reworded = await tools.update(w.runner, w.sessionId, s.id, { readBack: at2346 } as never);
+  assert.equal(reworded.outcome, 'UNCHANGED', 'a read-back alone is no revision');
+  assert.equal((await rest.get(w.user, s.id)).readBack, at2346);
+
+  // A timezone-only change also keeps what the check does.
+  await tools.update(w.runner, w.sessionId, s.id, { timezone: 'Europe/London' } as never);
+  const rezoned = (await rest.get(w.user, s.id)).readBack;
+  assert.equal(rezoned, `Every day at 23:46 · Europe/London · ${what}`);
+
+  const weekly = 'Every Monday at 08:00 London time I check X, and tell you only when Y changes.';
+  await tools.update(w.runner, w.sessionId, s.id, { rule: { kind: 'WEEKLY', time: '08:00', weekdays: ['MON'] }, readBack: weekly } as never);
+  assert.equal((await rest.get(w.user, s.id)).readBack, weekly);
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).readBack, weekly);
+  await refusedWith(tools.update(w.runner, w.sessionId, s.id, { readBack: 'x'.repeat(501) } as never), 'SCHEDULE_FIELD_INVALID');
+
+  // Undo moves the rule back, and the read-back moves with it.
+  const latest = await db.scheduleRevision.findFirstOrThrow({ where: { scheduleId: s.id }, orderBy: { revision: 'desc' } });
+  assert.ok(latest.revision > movedRevision);
+  assert.equal((await rest.undo(w.user, s.id, { revision: latest.revision }, NO_SESSION)).outcome, 'APPLIED');
+  assert.match((await rest.get(w.user, s.id)).readBack, /^Every day at 23:46/);
 });

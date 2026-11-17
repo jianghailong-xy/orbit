@@ -118,6 +118,7 @@ func init() {
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
@@ -127,6 +128,7 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
 		subagentRemoteResumeCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
@@ -468,6 +470,16 @@ func (t *Transport) register(b RegisterRequest) (*RegisterResponse, error) {
 
 func (t *Transport) deregister() error {
 	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
+}
+
+// gitCredential is POST /runner/git-credential: Orbit's GitHub App token for one workspace's repository
+// (github_credential.go). Never logged.
+func (t *Transport) gitCredential(ctx context.Context, request RunnerGitCredentialRequest) (*RunnerGitCredentialAnswer, error) {
+	var answer RunnerGitCredentialAnswer
+	if err := t.do(ctx, "POST", "/runner/git-credential", request, &answer, orbitGitCredentialTimeout); err != nil {
+		return nil, err
+	}
+	return &answer, nil
 }
 
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
@@ -2114,6 +2126,19 @@ func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.R
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
 		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// recordProjectRuling records an owner ruling on the project (`project_ruling_record`, coordinator
+// handoff v2 §2). The session header is the authority: the server checks it against the project's
+// coordinator pointer and the quote against the named turn's owner text.
+func (t *Transport) recordProjectRuling(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/rulings",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

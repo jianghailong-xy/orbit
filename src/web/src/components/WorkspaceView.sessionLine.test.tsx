@@ -566,6 +566,26 @@ describe('statusLabel over a session parked on a watch', () => {
     expect(statusLabel({ ...parked, runningBgCount: 1 }, 'Watching 1 target')).toBe('Watching 1 target');
   });
 
+  it("names what a running agent is doing when the server knows its title", () => {
+    const one = { ...parked, runningSubagentCount: 1, runningSubagentTitle: 'Deploy dacad7403 to production' };
+    expect(sessionLine(one, true)).toEqual({ text: 'Agent: Deploy dacad7403 to production…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents · Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // The generating branch says the same.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: null }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // No title (an older server, an undescribed call): the label it always said.
+    expect(sessionLine({ ...one, runningSubagentTitle: '  ' }, true)).toEqual({ text: 'Running Agent…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentTitle: null, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents…',
+      tone: 'running',
+    });
+  });
+
   it('never hides work of its own or a question for the reader behind the wait', () => {
     // A sub-workspace is this workspace still working; a self-driven turn and an approval outrank
     // the wait for the same reason they outrank everything else the word could say.

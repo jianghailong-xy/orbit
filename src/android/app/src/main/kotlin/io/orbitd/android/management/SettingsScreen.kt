@@ -34,6 +34,7 @@ import io.orbitd.android.R
 import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.composer.ManagementGithub
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
 import kotlinx.coroutines.CancellationException
@@ -57,6 +58,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision, open)
+        "github" -> GithubSettingsPage(remember(api) { ManagementGithub(api) }, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
         // The account-wide Terminals page is gone (docs/mocks/terminals-on-machine-page): each machine's page lists its own, so an old
         // route to it opens Machines & models.
@@ -90,7 +92,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     } ?: MachinesAndModels.TITLE
     "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS
     "sessions" -> GENERAL; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "terminals" -> MachinesAndModels.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "terminals" -> MachinesAndModels.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -255,6 +257,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsLink(SETTINGS_PROFILE, R.drawable.ic_person) { page("account") }
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
+        }
+        // Integrations → GitHub, between Personal and Machines as the web's settings nav groups it (docs/github-workspace-design.md §8).
+        SettingsGroup(GithubCopy.INTEGRATIONS, footer = GithubCopy.GITHUB_ROW_HINT) {
+            SettingsLink(GithubCopy.TITLE, R.drawable.ic_github) { page("github") }
         }
         // No header over either: each group's one row says its name (SettingsHome.header). What needs a person is said in amber.
         val now = System.currentTimeMillis()

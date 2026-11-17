@@ -951,3 +951,55 @@ describe('ProjectAcceptanceCard on where met work landed, by the project’s mai
     expect(rows.onBranch).not.toContain('main');
   });
 });
+
+describe('ProjectAcceptanceCard lists the owner rulings under the criteria', () => {
+  const ruling = (id: string, sourceKind: 'ASK_OWNER' | 'TURN', text: string, quote: string) => ({
+    id, projectId: PROJECT, ruling: text, quote, sourceKind, sourceId: `s-${id}`,
+    recordedBySessionId: sourceKind === 'TURN' ? 'coordinator' : null, supersededById: null,
+    createdAt: '2026-11-16T10:00:00.000Z',
+  });
+
+  it('draws each live ruling with the owner’s words and where they were said, after the criteria', () => {
+    const qc = client();
+    seed(qc, FIVE, {
+      rulings: [
+        ruling('r1', 'ASK_OWNER', 'Ship the Android build first? — Android first', 'Android first, iOS can wait a week.'),
+        ruling('r2', 'TURN', 'Payment retries is not merged before Friday’s release.', 'don’t merge Payment retries before Friday’s release'),
+      ],
+    });
+    const html = paint(qc);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const section = doc.querySelector('section.acceptance-rulings');
+    expect(section).not.toBeNull();
+    expect(section!.querySelector('h4')!.textContent).toBe('Owner rulings');
+    const rows = [...section!.querySelectorAll('li.acceptance-ruling')];
+    expect(rows.map((row) => row.querySelector('.acceptance-ruling-text')!.textContent)).toEqual([
+      'Ship the Android build first? — Android first',
+      'Payment retries is not merged before Friday’s release.',
+    ]);
+    expect(rows.map((row) => row.querySelector('q')!.textContent)).toEqual([
+      'Android first, iOS can wait a week.',
+      'don’t merge Payment retries before Friday’s release',
+    ]);
+    expect(rows.map((row) => row.querySelector('.acceptance-ruling-meta')!.textContent)).toEqual([
+      'From an answered question · Nov 16',
+      'From the coordinator conversation · Nov 16',
+    ]);
+    // Under the criteria: the list comes after the last criterion in the card.
+    expect(html.indexOf('acceptance-rulings')).toBeGreaterThan(html.indexOf('The context gauge reports a real window'));
+  });
+
+  it('draws the rulings under a project with no criteria too', () => {
+    const qc = client();
+    seed(qc, [], { rulings: [ruling('r1', 'TURN', 'No weekend deploys.', 'Never deploy on a weekend')] });
+    expect(paint(qc)).toContain('No weekend deploys.');
+  });
+
+  it('draws nothing when there are no rulings', () => {
+    const qc = client();
+    seed(qc, FIVE, { rulings: [] });
+    expect(paint(qc)).not.toContain('Owner rulings');
+    seed(qc, FIVE);
+    expect(paint(qc)).not.toContain('Owner rulings');
+  });
+});

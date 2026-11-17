@@ -186,7 +186,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
       )).rows[0].id as string;
     const api = await workspace('api', 0, '/srv/api');
     const web = await workspace('web', 1, '/srv/web');
-    const decoy = await workspace('Default', null, '/var/lib/orbit/home/orbit-repos/default');
+    const decoy = await workspace('Default', null, '/home/orbit/orbit-repos/default');
     return { ...user, runnerId, api, web, decoy };
   }
 

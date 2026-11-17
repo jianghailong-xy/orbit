@@ -1,3 +1,4 @@
+import { GithubModule } from '../github/github.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
 import { SessionTagsModule } from '../session-tags/session-tags.module';
@@ -28,7 +29,13 @@ import { SessionsService } from './sessions.service';
   // instantiate TasksModule and PushModule too, so a hand-built harness that wanted the judgment
   // wiring fails on a ConfigService that only AppModule's global ConfigModule provides. The
   // dispatcher is resolved lazily instead; see `MergeReceiptService`'s constructor.
-  imports: [SessionTagsModule, forwardRef(() => CoordinatorJudgmentModule)],
+  imports: [
+    SessionTagsModule,
+    forwardRef(() => CoordinatorJudgmentModule),
+    // A `newWorkspace.github` asks the caller's GitHub connection whether it can see the repository
+    // (docs/github-workspace-design.md §5.3). GithubModule imports nothing of this one.
+    GithubModule,
+  ],
   controllers: [SessionsController, SessionRequestsController],
   // AutoRetryService lives here rather than beside the reaper so it can depend on
   // SessionsService directly — re-sending a message is exactly resume(), and reimplementing

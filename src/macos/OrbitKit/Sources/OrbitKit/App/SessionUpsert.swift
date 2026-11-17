@@ -249,6 +249,7 @@ public extension Session {
                 runningBgJobCount: runningBgJobCount,
                 // The same: the list's count, which no event carries.
                 runningSubagentCount: runningSubagentCount,
+                runningSubagentTitle: runningSubagentTitle,
                 engineTurnActive: engineTurnActive,
                 // The list's, which no event carries either.
                 activity: activity,

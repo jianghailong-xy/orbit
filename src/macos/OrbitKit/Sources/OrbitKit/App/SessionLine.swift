@@ -63,7 +63,7 @@ public struct SessionLine: Equatable, Sendable {
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
             if let n = s.runningSubagentCount, n > 0 {
-                return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
             }
             // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
@@ -86,7 +86,7 @@ public struct SessionLine: Equatable, Sendable {
         // working, so it outranks the wait it is parked on and anything it left running (web's
         // `parkedWorkLabel`, subagent first). Its turn has ended, so this is where it surfaces.
         if live, let n = s.runningSubagentCount, n > 0 {
-            return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+            return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the strip's own
@@ -217,6 +217,16 @@ public struct SessionLine: Equatable, Sendable {
     /// word web's `subagentRunningLabel`.
     static func subagentRunningLabel(_ n: Int) -> String {
         n > 1 ? "Running \(n) agents" : "Running Agent"
+    }
+
+    /// The row's words for the same, naming what the newest one is doing when the server knows
+    /// (`runningSubagentTitle`): "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for
+    /// several, the bare label without a title. The row only — the header and the glyph keep the
+    /// short label. Word for word web's `subagentRunningLine`.
+    static func subagentRunningLine(_ n: Int, title: String?) -> String {
+        let t = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if t.isEmpty { return "\(subagentRunningLabel(n))…" }
+        return n > 1 ? "\(subagentRunningLabel(n)) · \(t)…" : "Agent: \(t)…"
     }
 
     /// "Background process running" / "N background processes running".

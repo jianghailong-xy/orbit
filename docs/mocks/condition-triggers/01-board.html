@@ -1,0 +1,449 @@
+<!-- DESIGN MOCK (2026-11-17). Work that starts when an external condition holds: a Task's "Starts when" (once) and
+     a scheduled task's "When" rule (every crossing). Owner agreed 2026-11-17: one condition concept on both, a fired
+     condition proposes first, a polling probe before inbound events. Styles are the scheduled-tasks board's.
+     Demo data throughout. Render: see README.md -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>条件触发：满足外部条件时开始的工作</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
+          --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"Inter","Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1400px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 440px); gap:30px 30px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.65; } .note b { color:var(--t1); }
+  code { font:12px "JetBrains Mono","DejaVu Sans Mono",monospace; }
+
+  /* ---- phone, 430 pt ---- */
+  .ph { width:430px; background:var(--grp); border-radius:22px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06);
+        font-size:15px; position:relative; padding-bottom:16px; }
+  .ph.white { background:#fff; }
+  .nav { display:flex; align-items:center; padding:12px 16px 6px; gap:8px; min-height:44px; }
+  .nav .back { color:var(--brand); font-size:16px; white-space:nowrap; }
+  .nav .tt { flex:1; text-align:center; font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav .act { color:var(--brand); font-size:16px; font-weight:600; white-space:nowrap; }
+  .big { font-size:30px; font-weight:700; padding:2px 18px 10px; }
+  .gh { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:14px 32px 6px; }
+  .gf { font-size:12.5px; color:var(--t2); padding:6px 32px 0; line-height:1.45; }
+  .grp { background:#fff; border-radius:12px; margin:0 16px; }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 14px; min-height:44px; border-top:1px solid var(--sep); }
+  .row:first-child { border-top:0; }
+  .row .l { flex:1; min-width:0; }
+  .row .v { color:var(--t2); white-space:nowrap; }
+  .row .chev { color:var(--t3); font-size:18px; }
+  .sub { color:var(--t2); font-size:13px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .t1 { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; border-radius:999px; padding:2px 8px; white-space:nowrap; flex:none; }
+  .p-ok { background:var(--grey-bg); color:#55555e; } .p-new { background:var(--green-bg); color:#17683b; }
+  .p-fail { background:var(--red-bg); color:#b3261e; } .p-held { background:var(--amber-bg); color:var(--amber); }
+  .p-run { background:var(--brand-bg); color:#2546b8; } .p-pause { background:var(--grey-bg); color:var(--t2); }
+  .p-mute { background:transparent; color:var(--t2); border:1px dashed #cfcfd5; }
+  .ico { width:15px; height:15px; flex:none; }
+  .seg { display:flex; background:#e3e3e8; border-radius:9px; padding:2px; margin:0; }
+  .seg span { flex:1; text-align:center; font-size:13.5px; padding:5px 0; border-radius:7px; color:var(--t1); }
+  .seg span.on { background:#fff; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  .radio { width:20px; height:20px; border-radius:50%; border:1.6px solid #c7c7cc; flex:none; }
+  .radio.on { border:6px solid var(--brand); }
+  .tog { width:46px; height:28px; border-radius:14px; background:#34c759; position:relative; flex:none; }
+  .tog::after { content:''; position:absolute; right:2px; top:2px; width:24px; height:24px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .tog.off { background:#e3e3e8; } .tog.off::after { right:auto; left:2px; }
+  .text { padding:11px 14px; font-size:15px; line-height:1.45; min-height:96px; }
+
+  /* hero card on the detail page */
+  .hero { background:#fff; border-radius:12px; margin:4px 16px 0; padding:14px 16px; }
+  .hero .k { color:var(--t2); font-size:12.5px; }
+  .hero .n { font-size:22px; font-weight:700; margin:1px 0 2px; }
+  .hero .z { color:var(--t2); font-size:13px; }
+  .acts { display:flex; gap:8px; margin:12px 16px 0; }
+  .btn { flex:1; text-align:center; background:#fff; border-radius:10px; padding:9px 0; font-weight:600; color:var(--brand); font-size:14.5px; }
+  .btn.pri { background:var(--brand); color:#fff; }
+  .last { display:flex; gap:10px; align-items:flex-start; }
+  .last .b { flex:1; min-width:0; }
+  .banner { margin:6px 16px 0; border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.45; }
+  .banner.held { background:var(--amber-bg); color:#6b4200; }
+  .banner.fail { background:var(--red-bg); color:#8c1d15; }
+  .banner b { display:block; margin-bottom:2px; }
+  .banner .go { color:var(--brand); font-weight:600; margin-top:6px; display:block; }
+
+  /* chat */
+  .bub { margin:8px 16px 0 70px; background:var(--brand); color:#fff; border-radius:18px 18px 4px 18px; padding:9px 13px; font-size:14.5px; line-height:1.45; }
+  .ans { margin:10px 18px 0; font-size:14.5px; line-height:1.5; }
+  .card { background:#fff; border:1px solid var(--sep); border-radius:14px; margin:10px 16px 0; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .card .hd { display:flex; align-items:center; gap:8px; padding:11px 14px 4px; font-weight:700; }
+  .card .kv { display:grid; grid-template-columns:86px 1fr; gap:4px 10px; padding:6px 14px 10px; font-size:13.5px; }
+  .card .kv .k { color:var(--t2); }
+  .card .ft { display:flex; border-top:1px solid var(--sep); }
+  .card .ft span { flex:1; text-align:center; padding:10px 0; font-weight:600; color:var(--brand); }
+  .card .ft span + span { border-left:1px solid var(--sep); }
+  .card .ft span.pri { background:var(--brand); color:#fff; }
+  .runhd { background:#fff; border-bottom:1px solid var(--sep); padding:10px 16px; font-size:13.5px; display:flex; gap:8px; align-items:center; }
+  .report { background:#fff; border:1px solid var(--sep); border-left:3px solid var(--green); border-radius:10px; margin:10px 16px 0; padding:10px 12px; font-size:13.5px; line-height:1.5; }
+  .report .h { font-weight:700; display:flex; gap:6px; align-items:center; }
+  .report a { color:var(--brand); text-decoration:none; }
+  .push { background:rgba(250,250,252,.97); border-radius:18px; margin:12px 10px 4px; padding:11px 13px; box-shadow:0 4px 18px rgba(0,0,0,.12); font-size:13.5px; line-height:1.4; }
+  .push .a { display:flex; gap:7px; align-items:center; color:var(--t2); font-size:12px; margin-bottom:3px; }
+  .push .a i { width:18px; height:18px; border-radius:5px; background:var(--brand); display:inline-block; }
+  .push b { display:block; }
+  .push .tm { margin-left:auto; }
+
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:2; }
+
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; margin-top:30px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+</style>
+<style>
+  .drawer { background:#f7f7f9; }
+  .dr-brand { font-size:20px; font-weight:700; padding:16px 20px 10px; display:flex; align-items:center; gap:8px; }
+  .dr-row { display:flex; align-items:center; gap:12px; padding:10px 14px; margin:0 8px; border-radius:10px; font-size:16px; }
+  .dr-row.on { background:rgba(62,105,246,.14); font-weight:600; }
+  .dr-row .ic { width:24px; text-align:center; color:var(--t1); }
+  .dr-row.on .ic { color:var(--brand); }
+  .dr-row .cnt { margin-left:auto; color:#f08a00; font-weight:600; font-size:14px; }
+  .dr-h { font-size:13px; color:var(--t2); font-weight:600; padding:16px 22px 6px; }
+  .dr-sep { height:1px; background:var(--sep); margin:10px 20px; }
+  .rev { background:#fafafc; }
+  .undo { color:var(--brand); font-weight:600; font-size:14px; }
+  .bar { display:flex; gap:8px; margin:14px 16px 0; }
+  .bar .btn { padding:9px 0; }
+  .line { display:flex; gap:8px; align-items:center; margin:10px 16px 0; padding:9px 12px; border-radius:10px; background:var(--grp); font-size:13.5px; color:#55555e; }
+  .line b { color:var(--t1); }
+  .line .r { margin-left:auto; display:flex; gap:12px; color:var(--brand); font-weight:600; white-space:nowrap; }
+  .card.widen { border-color:#f1c27d; }
+  .card.widen .hd { color:#7a4500; }
+  .card .nt { padding:0 14px 10px; font-size:12.5px; color:var(--t2); }
+  .sheethd { display:flex; align-items:center; padding:14px 16px 8px; }
+  .sheethd .tt { font-size:17px; font-weight:700; flex:1; }
+  .wcard { background:#fff; border:1px solid #f3d9a4; border-radius:12px; margin:10px 16px 0; overflow:hidden; }
+  .wcard .wh { background:#fff6e6; color:#a35f00; font-size:12.5px; font-weight:600; padding:6px 12px; display:flex; }
+  .wcard .wh span { margin-left:auto; font-weight:400; color:#b98a3e; }
+  .wcard .wb { padding:10px 12px 12px; font-size:13.5px; line-height:1.45; }
+  .wcard .wt { font-weight:700; font-size:14.5px; margin-bottom:3px; }
+  .wcard .ws { display:flex; gap:8px; margin-top:10px; }
+  .wcard .ws span { font-size:13.5px; font-weight:600; border-radius:8px; padding:6px 12px; background:var(--grp); color:var(--brand); }
+  .wcard .ws span.pri { background:var(--brand); color:#fff; }
+  .card, .wcard { overflow:visible !important; }
+  .card .ft span.pri { border-radius:0 0 13px 0; }
+  .wcard .wh { border-radius:11px 11px 0 0; }
+  .xl::after { left:-26px; right:auto; top:0; }
+  .crumb { color:var(--brand); font-size:13px; padding:0 18px; }
+  .empty { text-align:center; padding:56px 26px 10px; }
+  .empty .ei { width:56px; height:56px; border-radius:16px; background:var(--brand-bg); color:var(--brand); display:grid; place-items:center; margin:0 auto 14px; }
+  .empty h3 { margin:0 0 6px; font-size:19px; }
+  .empty p { color:#55555e; margin:0 0 18px; font-size:14.5px; }
+  .ex { background:#fff; border-radius:12px; text-align:left; }
+  .ex div { padding:11px 14px; border-top:1px solid var(--sep); font-size:14px; }
+  .ex div:first-child { border-top:0; }
+  .rt { color:var(--brand); font-size:30px; font-weight:700; padding:2px 18px 0; display:flex; align-items:baseline; }
+  .rt .n { margin-left:auto; color:var(--t3); font-weight:600; }
+  .rtools { display:flex; gap:8px; padding:6px 18px 0; font-size:13px; color:var(--t2); align-items:center; }
+  .rtools .chip { border:1px solid #dcdce1; border-radius:999px; padding:2px 10px; color:var(--t1); background:#fff; }
+  .rsec { padding:14px 18px 0; }
+  .rsec h4 { margin:0; font-size:17px; font-weight:700; padding-bottom:4px; border-bottom:1px solid var(--sep); display:flex; gap:8px; align-items:baseline; }
+  .rsec h4 small { color:var(--t2); font-weight:400; font-size:13px; }
+  .rsec.red h4 { color:var(--red); } .rsec.dim h4 { color:var(--t2); }
+  .rr { display:flex; gap:11px; padding-top:9px; }
+  .rr .bd { flex:1; min-width:0; border-bottom:1px solid var(--sep); padding-bottom:9px; display:flex; gap:8px; }
+  .rr .tx { flex:1; min-width:0; }
+  .rr .t { font-size:15.5px; line-height:21px; }
+  .rr .s { font-size:12.5px; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rr .tm { font-size:13px; color:var(--t2); white-space:nowrap; }
+  .rr .tg { font-size:12px; font-weight:600; white-space:nowrap; padding-top:2px; }
+  .rr.past .t { color:var(--t2); } .rr.draft .t { color:var(--t2); font-style:italic; }
+  .rc { width:22px; height:22px; border-radius:50%; border:1.7px solid #c7c7cc; flex:none; display:grid; place-items:center; color:#fff; font:700 12px/1 sans-serif; }
+  .rc.ok { background:#c0c0c6; border-color:#c0c0c6; } .rc.new { background:var(--green); border-color:var(--green); }
+  .rc.fail { background:var(--red); border-color:var(--red); } .rc.held { border-color:#e08a00; color:#e08a00; }
+  .rc.run { border-color:var(--brand); border-right-color:transparent; } .rc.draft { border-style:dashed; border-color:var(--brand); }
+  .radd { display:flex; gap:11px; align-items:center; padding:14px 18px 0; color:var(--t3); font-size:15.5px; }
+  .radd .pl { width:22px; height:22px; border-radius:50%; background:var(--brand); color:#fff; display:grid; place-items:center; font-weight:700; flex:none; }
+  .radd .in { flex:1; border-bottom:1px solid var(--sep); padding-bottom:8px; }
+  .radd .ws { border:1px solid #dcdce1; border-radius:999px; padding:1px 9px; font-size:12px; color:var(--t2); }
+  .sheet-ph { position:relative; }
+  .dimbg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  .bsheet { position:absolute; left:0; right:0; bottom:0; top:96px; background:var(--grp); border-radius:14px 14px 0 0; box-shadow:0 -4px 20px rgba(0,0,0,.15); overflow:visible; }
+  .bsheet .grab { width:38px; height:5px; border-radius:3px; background:#c7c7cc; margin:7px auto 0; }
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.6V8l2.3 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="warn" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.2 8.2 2 2 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="cal" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 1.6v2.6M10.5 1.6v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+
+<style>
+  .rb { padding:2px 14px 8px; font-size:14px; line-height:1.5; }
+  .card .ttl { padding:0 14px 2px; font-weight:600; font-size:15px; }
+  .ft3 span { font-size:14px; }
+  .sec { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:14px 32px 6px; }
+  .box { background:#fff; border-radius:12px; margin:0 16px; padding:11px 14px; font-size:14px; line-height:1.5; }
+  .box .m { color:var(--t2); font-size:12.5px; margin-top:3px; }
+  .hrow { display:flex; gap:10px; align-items:flex-start; padding:10px 14px; border-top:1px solid var(--sep); font-size:14px; }
+  .hrow:first-child { border-top:0; } .hrow .b { flex:1; min-width:0; } .hrow .m { color:var(--t2); font-size:12.5px; }
+  .who { font-size:11.5px; font-weight:600; border-radius:999px; padding:2px 7px; background:var(--grey-bg); color:#55555e; white-space:nowrap; }
+  .who.run { background:var(--brand-bg); color:#2546b8; } .who.you { background:var(--green-bg); color:#17683b; }
+  .sheet td b { white-space:nowrap; }
+</style>
+<style>
+  .ct-part { margin:0 -40px; padding:0 40px 34px; } #part-1 { margin-top:-36px; padding-top:36px; }
+  .ct-sym { width:22px; height:22px; flex:none; color:var(--brand); }
+  .ct-sym.amber { color:#e08a00; } .ct-sym.grey { color:#b4b4ba; }
+  .ct-now { color:var(--t1); font-weight:600; }
+  .ct-q { background:#fff; border:1px solid var(--sep); border-radius:14px; margin:10px 16px 0; padding:11px 14px; font-size:14px; line-height:1.45; }
+  .ct-q .o { display:flex; gap:10px; align-items:flex-start; padding:8px 0 0; }
+  .ct-q .o small { display:block; color:var(--t2); font-size:12.5px; }
+  .ct-mem { margin:10px 16px 0; padding:8px 12px; border-radius:10px; background:var(--grp); font-size:13px; color:#55555e; display:flex; gap:8px; }
+  .ct-gap { margin:12px 16px 0; border:1.5px dashed #d93838; border-radius:12px; padding:10px 12px; font-size:13px; color:#8c1d15; line-height:1.5; background:#fff8f7; }
+  .ct-cmd { display:block; margin-top:3px; padding:5px 8px; border-radius:7px; background:var(--grp); font:11px/1.45 "JetBrains Mono","DejaVu Sans Mono",monospace; overflow-wrap:anywhere; }
+  .ct-bar { height:8px; border-radius:4px; background:#e9e9ee; position:relative; margin:10px 0 4px; }
+  .ct-bar i { position:absolute; left:0; top:0; bottom:0; border-radius:4px; background:var(--brand); }
+  .ct-bar u { position:absolute; top:-4px; bottom:-4px; width:2px; background:#d93838; }
+  .ct-bar s { position:absolute; top:-4px; bottom:-4px; width:2px; background:#b4b4ba; }
+  .ct-scale { display:flex; font-size:11.5px; color:var(--t2); position:relative; height:16px; }
+  .ct-scale span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+  .ct-prop { background:#fff; border:1px solid #f1c27d; border-radius:14px; margin:10px 16px 0; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .ct-prop .hd { display:flex; gap:8px; align-items:center; padding:11px 14px 4px; font-weight:700; color:#7a4500; }
+  .ct-prop .bd { padding:0 14px 10px; font-size:13.5px; line-height:1.5; }
+  .ct-prop .ft { display:flex; border-top:1px solid var(--sep); }
+  .ct-prop .ft span { flex:1; text-align:center; padding:10px 0; font-weight:600; color:var(--brand); }
+  .ct-prop .ft span.pri { background:var(--brand); color:#fff; border-radius:0 0 13px 0; }
+  .ct-three { display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:30px; align-items:start; }
+  .ct-three .sheet { margin-top:0; }
+  .ct-ok { background:#eef8f1; border:1px solid #bfe3cc; border-radius:10px; padding:12px 16px; font-size:13px; line-height:1.7; }
+  .ct-ok b { color:#17683b; }
+  ol.ct-steps { margin:0; padding-left:20px; font-size:13px; line-height:1.75; } ol.ct-steps b { color:var(--t1); }
+  .rec { color:#17683b; font-weight:600; }
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="gauge" viewBox="0 0 22 22"><path d="M3.6 15.5a8 8 0 1 1 14.8 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M11 12.5 15 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="11" cy="12.6" r="1.5" fill="currentColor"/></symbol>
+</svg>
+
+<section class="ct-part" id="part-1">
+<h1>条件触发：满足外部条件时开始的工作</h1>
+<p class="lede">依据 <code>docs/condition-triggers-design.md</code>。起因是 HPC 上的一次会话：要把 <code>kubernetes</code> 池改成 3 副本，但集群只有 2 个 OSD，你选了“等第三个 OSD”。这个“等”今天没有地方放。已定（2026-11-17）：<b>一个“条件”概念，挂在两处</b>：Task 的 <b>Starts when</b>（只触发一次）和定时任务的 <b>When</b> 规则（每次越线触发一次）；触发后<b>先提方案、你批准再动手</b>；第一版用 <b>runner 上的轮询探针</b>，外部事件推送放后面。界面文案英文，注释中文；数值、时间都是演示数据。</p>
+
+<div class="grid">
+
+<!-- 1 -->
+<div>
+  <div class="fh"><span class="tag" style="background:#e9e9ee;color:#55555e">今天</span> ① 条件只能记进 Agent 的私有备忘</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Ceph pool query</span><span class="act"> </span></div>
+    <div class="bub">kubernetes 的 pool 设置为 3 副本</div>
+    <div class="ans">Can't do that as asked: this cluster has only <b>2 OSDs</b>, both on <code>workstation</code>. With size 3 the third copy has nowhere to go, and the pool would stay degraded.</div>
+    <div class="ct-q x" data-n="1"><b>How do you want to proceed?</b>
+      <div class="o"><span class="radio on"></span><span>Hold until 3rd OSD<small>Leave size at 2. Once a third OSD is added, set size 3.</small></span></div>
+      <div class="o"><span class="radio"></span><span>Set size 3 now<small>The pool stays undersized until an OSD is added.</small></span></div>
+    </div>
+    <div class="ans">Holding, no changes made. I'll note this as pending so it isn't lost.</div>
+    <div class="ct-mem x" data-n="2"><span>✎</span><span>Wrote memory <code>kubernetes-pool-3-replicas-pending.md</code></span></div>
+    <div class="ans" style="color:#55555e">Separately, <code>mon.workstation</code> is at <b>5% avail</b> on its root disk.</div>
+    <div class="ct-gap x" data-n="3">Nothing checks whether a third OSD arrived. Nothing watches the mon disk. Neither appears anywhere in Orbit.</div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> 你的选择本身就是一个条件：“OSD ≥ 3 时，把 size 改成 3”。<b>2</b> Agent 能做的只有写一条私有备忘：没人去求值，你在 Orbit 里看不到，只有以后同一工作区的会话碰巧想起来才会再出现。<b>3</b> 同一次会话里还有第二个条件（mon 磁盘只剩 5%），只是顺口一提。现有四样都接不住：<code>runAt</code> 只认时间；依赖只认别的 Task；Watch 只读 Orbit 自己的记录；定时任务最密一天一次，而且每次都要起一个模型会话。</p>
+</div>
+
+<!-- 2 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ② 一次性：Task 上的 Starts when</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Ceph pool query</span><span class="act"> </span></div>
+    <div class="ct-q" style="color:#55555e"><span style="font-size:12.5px">You chose</span><br><b style="color:var(--t1)">Hold until 3rd OSD</b></div>
+    <div class="ans x" data-n="1">Holding, no changes made. I can pick this up by itself when the third OSD is in; closing this chat won't stop it.</div>
+    <div class="card">
+      <div class="hd"><svg class="ico" style="color:var(--brand);width:18px;height:18px"><use href="#gauge"/></svg>Create task that starts on a condition?</div>
+      <div class="ttl">Set kubernetes pool to 3 copies</div>
+      <div class="rb x" data-n="2">When a third OSD is in, I check the cluster again and propose setting <code>kubernetes</code> to size 3. Nothing changes until you approve.</div>
+      <div class="kv">
+        <span class="k">Starts when</span><span class="x" data-n="3"><b>3 or more OSDs are in</b><br><span style="color:var(--t2)">Once. Checked every 5 min on workstation-gpu, no model.</span><code class="ct-cmd">ceph osd stat -f json | jq .num_in_osds</code></span>
+        <span class="k">Today</span><span class="x" data-n="4"><b>2</b> OSDs in. Not yet.</span>
+        <span class="k">Runs in</span><span>HPC · Claude agent</span>
+        <span class="k">May</span><span class="x" data-n="5"><b>Propose first</b> · shows the change and waits for you</span>
+        <span class="k">Costs</span><span>1 run, 30 min at most</span>
+        <span class="k">If never</span><span class="x" data-n="6">Asks you after 30 days of waiting</span>
+      </div>
+      <div class="nt">You'll hear when it starts, and if the cluster can't be read.</div>
+      <div class="ft"><span>Not now</span><span class="pri">Create</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> 你在提问卡上选了“等”，Agent 接着就提这张卡，不再写备忘。<b>2</b> 读回一句目标。<b>3</b> <b>Starts when</b> 和 <code>runAt</code> 是同级的触发方式：成立一次就启动，然后清空。探针命令原样显示在卡上，因为它之后会无人值守地跑；它只读，不经过模型，所以轮询不花钱。<b>4</b> Agent 先把探针跑一遍，卡上写今天的读数。<b>5</b> 条件成立只代表“可以开始了”，任务启动后先复查（条件可能又变回去），再把要执行的命令提给你批准。<b>6</b> 一直不成立的条件不会悄悄烂掉。</p>
+</div>
+
+<!-- 3 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ③ 常驻：定时任务的 When 规则</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Ceph capacity</span><span class="act"> </span></div>
+    <div class="bub">ceph 容量高于 90% 的时候告诉我，并且看看能清什么。</div>
+    <div class="ans">I checked just now: raw used is <b>6.9%</b> (2.0 of 29.1 TiB), so there is nothing to do today. I can keep an eye on it; closing this chat won't stop it.</div>
+    <div class="card">
+      <div class="hd"><svg class="ico" style="color:var(--brand);width:18px;height:18px"><use href="#gauge"/></svg>Create scheduled task?</div>
+      <div class="ttl">Ceph capacity guard</div>
+      <div class="rb">Whenever Ceph's raw use goes above 90%, I look at what is using the space and propose what to clear. I tell you each time it crosses.</div>
+      <div class="kv">
+        <span class="k">When</span><span class="x" data-n="1"><b>Raw used above 90%</b> for 10 min<br><span style="color:var(--t2)">Fires again only after it drops below 85%. Checked every 5 min on workstation-gpu, no model.</span><code class="ct-cmd">ceph df -f json | jq .stats.total_used_raw_ratio</code></span>
+        <span class="k">Today</span><span><b>6.9%</b>. Nothing to report.</span>
+        <span class="k">Runs in</span><span>HPC · Claude agent</span>
+        <span class="k">May</span><span class="x" data-n="2"><b>Check only</b> · reports and proposes</span>
+        <span class="k">Costs</span><span class="x" data-n="3">Up to <b>3 runs a week</b>, 30 min each</span>
+      </div>
+      <div class="nt">You'll hear when it crosses 90%, and if Ceph can't be read.</div>
+      <div class="ft"><span>Not now</span><span class="pri">Create</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note">和现有创建卡是同一张，只有 <b>When</b> 一行不同：原来是“Daily 10:00”，这里是一个条件。<b>1</b> 三条防抖规则都读成人话：<b>越线才触发</b>（不是每次采样高于 90% 都触发）、<b>持续 10 分钟</b>才算、<b>回落到 85% 以下才重新待命</b>。<b>2</b> 权限仍是现有的两级，没有新增“可以直接动集群”的级别。<b>3</b> 预算仍然数“每周最多起几次会话”：探针不计入，因为它不起模型。条件抖动得再厉害，一周也最多起 3 次。</p>
+</div>
+
+</div>
+</section>
+
+<section class="ct-part" id="part-2">
+<div class="grid">
+
+<!-- 4 -->
+<div>
+  <div class="fh"><span class="tag">改</span> ④ Scheduled 页：多一组“等条件”</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">☰</span><span class="tt"></span><span class="act">⋯</span></div>
+    <div class="rt">Scheduled<span class="n">9</span></div>
+    <div class="rtools"><span class="chip">All workspaces ▾</span></div>
+    <div class="rsec red"><h4>Needs you <small>1</small></h4>
+      <div class="rr"><svg class="ct-sym amber"><use href="#gauge"/></svg><div class="bd"><div class="tx"><div class="t">Mon disk guard</div><div class="s">When root disk below 5% · HPC</div></div><span class="tg x xl" data-n="3" style="color:#b86e00">Can't read</span></div></div>
+    </div>
+    <div class="rsec x" data-n="1"><h4>Waiting for a condition <small>2</small></h4>
+      <div class="rr"><svg class="ct-sym"><use href="#gauge"/></svg><div class="bd"><div class="tx"><div class="t">Ceph capacity guard</div><div class="s">↻ When raw used above 90% · HPC</div></div><span class="tm x xl" data-n="2"><span class="ct-now">6.9%</span> · 1 min ago</span></div></div>
+      <div class="rr"><svg class="ct-sym"><use href="#gauge"/></svg><div class="bd"><div class="tx"><div class="t">Set kubernetes pool to 3 copies</div><div class="s">Task · once, when 3 OSDs are in · HPC</div></div><span class="tm"><span class="ct-now">2 in</span> · 3 min ago</span></div></div>
+    </div>
+    <div class="rsec"><h4>Today <small>Tue, Nov 17</small></h4>
+      <div class="rr"><span class="rc ok">✓</span><div class="bd"><div class="tx"><div class="t" style="color:var(--t2)">Codex stable check</div><div class="s">↻ Daily 10:00 · apiserver · no change</div></div><span class="tm">10:00</span></div></div>
+      <div class="rr"><span class="rc"></span><div class="bd"><div class="tx"><div class="t">Release notes draft</div><div class="s">↻ Tuesdays 17:00 · Orbit baseline</div></div><span class="tm">17:00</span></div></div>
+    </div>
+    <div class="rsec"><h4>Tomorrow <small>Wed, Nov 18</small></h4>
+      <div class="rr"><span class="rc"></span><div class="bd"><div class="tx"><div class="t">Nightly pg spec sweep</div><div class="s">↻ Daily 02:00 · apiserver</div></div><span class="tm">02:00</span></div></div>
+    </div>
+    <div class="radd"><span class="pl">+</span><span class="in">Describe a scheduled task…</span><span class="ws">HPC</span></div>
+    <div style="height:8px"></div>
+  </div>
+  <p class="note">时间线按日期分组，而条件没有日期，所以单独一组，排在“今天”上面。<b>1</b> 这一组里既有常驻的定时任务（↻），也有带 Starts when 的 Task；后者同时照常出现在 Tasks 里，状态是 Open，带一行“Waiting for: 3 or more OSDs are in”。<b>2</b> 右边原来放时间的位置，放<b>最近一次读数和它的新旧</b>：一眼能看出离触发还有多远、探针是不是还活着。<b>3</b> 读不到数的进 Needs you，橙色，见 ⑥。圆圈换成仪表图标，和按时间的任务区分开。</p>
+</div>
+
+<!-- 5 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑤ 触发：先提方案，你批准再动手</div>
+  <div class="ph white">
+    <div class="push x" data-n="1"><div class="a"><i></i>ORBIT<span class="tm">03:12</span></div><b>Ceph capacity guard: raw used 90.4%</b>Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you.</div>
+    <div class="nav" style="border-top:1px solid var(--sep);margin-top:8px"><span class="back">‹ Ceph capacity guard</span><span class="tt"></span></div>
+    <div class="big" style="font-size:22px">Run of Nov 21</div>
+    <div class="runhd x" data-n="2" style="border-top:1px solid var(--sep)"><svg class="ico" style="color:var(--brand);width:17px;height:17px"><use href="#gauge"/></svg><span>Fired 03:12 · 90.4% for 10 min · Check only</span></div>
+    <div class="ans">Raw use went from 84% to 90.4% since Nov 19. Almost all of the growth is in <code>kubernetes</code>: 14 RBD snapshots older than 7 days hold 1.1 TiB. Deleting them brings raw use to about 83%.</div>
+    <div class="report"><div class="h"><svg class="ico" style="color:var(--green)"><use href="#check"/></svg>Reported: Changed · above-90@Nov 21</div>Raw used 90.4%. Cause: old snapshots in kubernetes.</div>
+    <div class="ct-prop x" data-n="3">
+      <div class="hd"><svg class="ico"><use href="#warn"/></svg>Delete 14 snapshots in kubernetes?</div>
+      <div class="bd">Older than 7 days, 1.1 TiB in all. This can't be undone.<code class="ct-cmd">rbd snap purge --older-than 7d kubernetes/…  (14 images)</code><span style="color:var(--t2);font-size:12.5px;display:block;margin-top:6px">If nobody answers, nothing is deleted. The guard fires again only after use drops below 85%.</span></div>
+      <div class="ft"><span>Not now</span><span class="pri">Approve</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> 条件越线才通知，一次；之后一直高于 90% 也不会反复吵。<b>2</b> 这是一次普通的定时任务执行：独立的新会话、有报告、判重的 key，头部写的是“因为什么触发”而不是“计划几点”。<b>3</b> 已定的第 2 点：<b>先诊断、再提方案</b>，要动集群的那一步是一张审批卡，同时进 Waiting on you。没人回答就什么都不删。② 里的一次性 Task 触发后也是这个顺序：复查条件、提出 <code>ceph osd pool set kubernetes size 3</code>、等你批准、执行、交证据。</p>
+</div>
+
+<!-- 6 -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑥ 读不到 ≠ 没事；详情里看得到离触发线多远</div>
+  <div class="ph" style="padding-top:4px">
+    <div class="sheethd"><span class="tt">Waiting on you</span><span class="undo">Done</span></div>
+    <div class="wcard">
+      <div class="wh">Condition<span>Today 11:40</span></div>
+      <div class="wb x" data-n="1"><b>Mon disk guard can't read the disk</b><br>The check failed 3 times in a row: <code>df</code> timed out after 20 s. Last reading <b>5%</b> avail, 16 min ago. The runner is online.
+        <div class="bar" style="margin:10px 0 0"><span class="btn" style="background:var(--grp)">Pause</span><span class="btn pri">Look into it</span></div>
+      </div>
+    </div>
+    <div class="sec" style="padding-top:22px">Ceph capacity guard · Condition</div>
+    <div class="box x" data-n="2">
+      <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:22px;font-weight:700">6.9%</span><span style="color:var(--t2);font-size:13px">raw used · checked 1 min ago</span></div>
+      <div class="ct-bar"><i style="width:6.9%"></i><s style="left:85%"></s><u style="left:90%"></u></div>
+      <div class="ct-scale"><span style="left:82%">85%</span><span style="left:93%;color:#d93838">90%</span></div>
+      <div class="m" style="margin-top:8px">Fires above 90% for 10 min. Ready again below 85%.</div>
+    </div>
+    <div class="sec">How it checks</div>
+    <div class="box x" data-n="3">Every 5 min on workstation-gpu, without a model.<code class="ct-cmd">ceph df -f json | jq .stats.total_used_raw_ratio</code><div class="m">Read-only. Approved by you on Nov 17.</div></div>
+    <div class="sec">History</div>
+    <div class="grp">
+      <div class="hrow"><div class="b">Ready again · 82.9%<div class="m">Nov 22 09:40</div></div><span class="who">Condition</span></div>
+      <div class="hrow"><div class="b">Fired · 90.4% for 10 min<div class="m">Nov 21 03:12 · Run of Nov 21</div></div><span class="who run">Run</span></div>
+      <div class="hrow"><div class="b">Created · Check only · up to 3 runs a week<div class="m">Nov 17</div></div><span class="who you">You</span></div>
+    </div>
+  </div>
+  <p class="note"><b>1</b> 探针有三种结果：成立、不成立、<b>不知道</b>。连续读不到（命令超时、报错、runner 掉线）不当作“没事”，会通知你一次，并带上最后一次读数。runner 只上报采样，<b>是否触发由服务端判定</b>，所以 runner 死了也看得出来。<b>2</b> 详情面板里多一块 Condition：当前读数、触发线、重新待命线。<b>3</b> 探针命令和它是哪天被你批准的。改命令等于改信封，要再按一次 Allow。历史里“触发”和“重新待命”各记一行。</p>
+</div>
+
+</div>
+</section>
+
+<section class="ct-part" id="part-3">
+<div class="ct-three">
+
+<div class="sheet">
+  <h2>模型：一个条件，挂两处</h2>
+  <table>
+    <tr><th style="width:92px">部分</th><th>内容</th><th style="width:150px">谁定</th></tr>
+    <tr><td><b>探针</b></td><td>一条只读命令，在工作区的 runner 上跑，输出一个数或一个退出码。不经过模型</td><td>Agent 写，你在卡上批准原文</td></tr>
+    <tr><td><b>比较</b></td><td>高于 / 低于 / 等于某值；可选“持续 N 分钟”和“回落到 X 才重新待命”</td><td>Agent 写，卡上读成一句话</td></tr>
+    <tr><td><b>间隔</b></td><td>默认 5 分钟，最短 1 分钟；单次探针 20 秒超时</td><td>Agent</td></tr>
+    <tr><td><b>判定</b></td><td>runner 随心跳上报采样，服务端判定越线、去抖、待命、未知</td><td>服务端</td></tr>
+  </table>
+  <table style="margin-top:14px">
+    <tr><th style="width:92px"></th><th>Task · Starts when</th><th>定时任务 · When 规则</th></tr>
+    <tr><td><b>例子</b></td><td>OSD ≥ 3 时把池改成 3 副本</td><td>Ceph 高于 90% 时处理</td></tr>
+    <tr><td><b>触发</b></td><td>一次，然后清空（同 <code>runAt</code>）</td><td>每次越线一次执行</td></tr>
+    <tr><td><b>产物</b></td><td>交付物：证据、验收、完成</td><td>报告：有新发现才通知</td></tr>
+    <tr><td><b>预算</b></td><td>1 次执行</td><td>每周最多几次（现有信封）</td></tr>
+    <tr><td><b>不成立时</b></td><td>30 天后问你一次</td><td>一直等；读数始终可见</td></tr>
+  </table>
+  <p class="note" style="margin-top:12px">不改的：Watch 仍然只读 Orbit 自己的记录，谓词里没有 shell，服务端不执行命令。条件不是第五种依赖状态；它和 <code>runAt</code> 一样只是“什么时候启动”。</p>
+</div>
+
+<div>
+  <div class="ct-ok"><b>已定（2026-11-17）</b><br>
+    <b>1</b> 一个条件概念，同时挂在 Task 和定时任务上。<br>
+    <b>2</b> 第一版触发后先提方案，你批准再动手；不做无人值守的直接执行。<br>
+    <b>3</b> 先做轮询探针；外部事件推送（Alertmanager、Ceph health）放后面。
+  </div>
+  <div class="ct-ok" style="margin-top:20px"><b>已定（2026-11-17，P1–P4 都按 A；文档 §4.1、§9、§6.2、§5.3）</b><br>
+    <b>P1 探针能跑什么</b>：A 卡上批准的那一条命令原文，声明只读，用工作区已有的权限跑；B 只能从内置的几种探针里选。<br>
+    <b>P2 放在哪</b>：A Scheduled 页里多一组 “Waiting for a condition”（④）；B 单独一页。<br>
+    <b>P3 一次性条件一直不成立</b>：A 30 天后问你一次“还等吗”；B 一直等。<br>
+    <b>P4 探针失败几次算“读不到”</b>：A 连续 3 次通知一次；B 第一次失败就通知。
+  </div>
+</div>
+
+<div class="sheet">
+  <h2>落地（按代价排）</h2>
+  <ol class="ct-steps">
+    <li><b>Runner 探针</b>：按间隔执行已批准的命令，带超时，随心跳上报采样。</li>
+    <li><b>服务端条件</b>：模型、越线 / 持续 / 重新待命 / 未知的判定，采样历史。</li>
+    <li><b>定时任务 When 规则</b>：和 Daily / Weekly 同级；执行、发现、信封、预算全部复用。</li>
+    <li><b>Task Starts when</b>：和 <code>runAt</code> 同级，走同一趟派发扫描；30 天提醒。</li>
+    <li><b>Agent 工具</b>：<code>schedule_create</code> 和 <code>task_create</code> 接受条件；创建前先跑一遍探针作为 Today。</li>
+    <li><b>客户端</b>：创建卡的 When / Starts when 行、Scheduled 页的分组和读数、详情里的 Condition 块。先 iOS，再 Web、macOS、Android。</li>
+    <li><b>之后</b>：外部事件入口；是否开放“信封内直接执行”。</li>
+  </ol>
+  <p class="note" style="margin-top:10px">1–3 做完，Ceph 90% 的例子就能用；4 做完，“等第三个 OSD”的例子就能用。</p>
+</div>
+
+</div>
+</section>

@@ -96,8 +96,12 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 	return []map[string]interface{}{
 		{
 			"name": "schedule_create",
-			"description": "Propose a scheduled task: work Orbit runs by itself at each slot, in a new session of this " +
-				"session's workspace, on its engine, until it is paused, ended or deleted. " + scheduleTimerChoice + " " +
+			"description": "Propose a scheduled task, a new one: work Orbit runs by itself at each slot, in a new session of this " +
+				"session's workspace, on its engine, until it is paused, ended or deleted. To change a schedule that " +
+				"already exists (\"make it weekly instead\", \"move it to 09:00\", \"change the one we have\"), call " +
+				"schedule_update on it instead, never schedule_create: find its scheduleId with schedule_list or " +
+				"schedule_get. A schedule_create for one this session already created (same workspace, same title or " +
+				"intent) raises no card and answers outcome EXISTS with that schedule's id. " + scheduleTimerChoice + " " +
 				"This call does NOT create it. It puts a create card in front of the person (title, your read-back, When, " +
 				"Runs in, May, Costs, Today) and returns at once with outcome PENDING. The schedule exists only when they " +
 				"press Create, so tell them the card is waiting, never that it is scheduled. First, when you can, do the " +
@@ -135,13 +139,18 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"limit) applies at once: the answer is outcome APPLIED with the record of the change, which the person can " +
 				"undo. A change that grows the envelope (another workspace, OPEN_PR, more runs a week, a longer run limit) " +
 				"applies nothing. It puts a card showing Now and Asked in front of the person and returns outcome PENDING, " +
-				"and the schedule runs as before until they allow it. Change intent only when the person restates the goal. " +
+				"and the schedule runs as before until they allow it. Leave intent out unless the person restates the goal " +
+				"(what to watch, what counts as news): a change of time, frequency, limits or prompt leaves intent alone, " +
+				"and a correction such as \"weekly is too rare, make it daily again\" is never the new intent. An intent " +
+				"sent with only a change of when or how much it runs is not written. Whenever you change when or how often the schedule runs (rule or timezone), " +
+				"pass a fresh readBack: one sentence saying when it runs and what it checks after the change. " +
 				"A scheduled run may change only the schedule it serves: rewrite its prompt, run less often, or go back up to " +
 				"what was allowed. A run's request to widen goes to the person's Waiting on you, and the run goes on with the " +
 				"access it has.",
 			"inputSchema": obj(map[string]interface{}{
 				"scheduleId":      id,
-				"intent":          str("The person's restated goal, verbatim."),
+				"intent":          str("Only when the person restates the goal: their new goal, verbatim. Never a correction of the time, frequency or limits."),
+				"readBack":        str("The schedule read back as it is after this change, one first-person sentence of at most 500 characters, like schedule_create's: \"Every Monday at 09:00 Beijing time I check ...\". Pass it whenever the rule or timezone changes; say both when it runs and what it checks."),
 				"title":           str("A new title."),
 				"prompt":          str("New instructions for every run."),
 				"rule":            rule,
@@ -177,8 +186,10 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{
-			"name":        "schedule_run_now",
-			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. It does not count against its runs a week.",
+			"name": "schedule_run_now",
+			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. Every run started now " +
+				"counts toward its runs a week: once the runs started in the past 7 days reach that number, a run now from an agent " +
+				"session is refused with SCHEDULE_OVER_BUDGET, and only the person can still start one, from the app.",
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{
@@ -235,14 +246,15 @@ func (s *mcpServer) callScheduleTool(name string, args map[string]interface{}) (
 	return toolResult(scheduleToolText(name, raw), false), true
 }
 
-// scheduleToolText leads a PENDING answer with what it means, so a card is never reported as done.
+// scheduleToolText leads a PENDING answer with what it means, so a card is never reported as done, and an EXISTS
+// answer with the schedule to change instead.
 func scheduleToolText(name string, raw json.RawMessage) string {
 	var head struct {
 		Outcome string `json:"outcome"`
 		Note    string `json:"note"`
 	}
 	_ = json.Unmarshal(raw, &head)
-	if head.Outcome == "PENDING" && head.Note != "" {
+	if (head.Outcome == "PENDING" || head.Outcome == "EXISTS") && head.Note != "" {
 		return head.Note + "\n" + prettyJSON(raw)
 	}
 	return prettyJSON(raw)
@@ -251,7 +263,7 @@ func scheduleToolText(name string, raw json.RawMessage) string {
 // scheduleBodyFields are the fields each write sends, as given.
 var scheduleBodyFields = map[string][]string{
 	"schedule_create":     {"intent", "title", "readBack", "findings", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "baseline"},
-	"schedule_update":     {"intent", "title", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "workspaceId"},
+	"schedule_update":     {"intent", "title", "readBack", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "workspaceId"},
 	scheduleRunReportTool: {"outcome", "key", "summary", "links", "note"},
 }
 

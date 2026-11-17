@@ -60,6 +60,7 @@ import {
   closeScheduleItems,
   failedCopy,
   fileScheduleItem,
+  findingCollapseId,
   findingCopy,
   heldCopy,
   onceMissedCopy,
@@ -71,7 +72,13 @@ import {
   type ScheduleNotifier,
 } from './schedule-attention';
 import { scheduledRunTurn } from './schedule-run-block';
-import { scheduleOverBudget, scheduleStartCheck, type StartPlan } from './schedule-start-check';
+import {
+  scheduleBudgetStarts,
+  scheduleOverBudget,
+  scheduleOverBudgetMessage,
+  scheduleStartCheck,
+  type StartPlan,
+} from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
 import {
   SCHEDULE_CLOCK,
@@ -741,7 +748,7 @@ export class ScheduleRunsService {
               opens: { sessionId },
               ownerRequestId: null,
               ...findingCopy(schedule.title, report.summary),
-              collapseId: `schedule-finding-${schedule.id}-${report.key}`,
+              collapseId: findingCollapseId(schedule.id, report.key),
             });
           }
         }
@@ -780,12 +787,15 @@ export class ScheduleRunsService {
         // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
         // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
         // The run it would write is planned at now.
-        if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
-          throw refusal(
-            'CONFLICT',
-            'SCHEDULE_OVER_BUDGET',
-            `This schedule has already started ${schedule.envelopeRunsPerWeek} runs in the past 7 days, as many as its owner allowed; only the owner can run it now.`,
-          );
+        if (actor.kind !== 'OWNER') {
+          const started = await scheduleBudgetStarts(tx, schedule, now);
+          if (started >= schedule.envelopeRunsPerWeek) {
+            throw refusal(
+              'CONFLICT',
+              'SCHEDULE_OVER_BUDGET',
+              scheduleOverBudgetMessage(started, schedule.envelopeRunsPerWeek),
+            );
+          }
         }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
@@ -1191,7 +1201,7 @@ export class ScheduleRunsService {
             title: schedule.title,
             deadline: new Date(card.createdAt.getTime() + SCHEDULE_APPROVAL_TIMEOUT_MS),
             nextAt: schedule.nextDueAt,
-            pattern: approvalPattern(card.toolName, card.input),
+            pattern: approvalPattern(card.toolName, card.input, (run.accessLevel ?? schedule.accessLevel) === 'CHECK_ONLY'),
             workspaceName: workspace?.name ?? '',
             now,
             timezone: schedule.timezone,

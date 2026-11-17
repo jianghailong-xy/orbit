@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { PushService } from './push.service';
+import { fitCollapseId } from './collapse-id';
+import { findingCollapseId } from '../schedules/schedule-attention';
 
 const configValues: Record<string, string> = {
   APNS_KEY_ID: 'test', APNS_TEAM_ID: 'test', APNS_KEY: Buffer.from('test-only').toString('base64'),
@@ -135,4 +137,37 @@ test('APNs production host, transport arguments and collapse identity remain unc
     kind: 'finished', sessionID: 'session' });
   assert.equal(await (h.service as any).deliver([{ ...ios, environment: 'production' }], body, 'alert', '10', 'settled-session'), 1);
   assert.deepEqual(h.apns[0], ['api.push.apple.com', 'apns-token', body, 'apns-auth', 'alert', '10', 'settled-session']);
+});
+
+test('a schedule finding with a 200-character key reaches APNs with a collapse id of at most 64 bytes, the same for the same key', async () => {
+  const h = harness('both');
+  const scheduleId = '0196a6b2-7c1e-7f00-8a00-0123456789ab';
+  const key = 'x1-walkthrough version: 2 — '.padEnd(200, 'a: b ');
+  assert.equal(key.length, 200);
+  const alert = (k: string) => ({ kind: 'FINDING', ownerId: 'owner', scheduleId, opens: { sessionId: 'session' },
+    ownerRequestId: null, title: 'x1 walkthrough version check', body: 'Changed', collapseId: findingCollapseId(scheduleId, k) });
+  await h.service.notifySchedule(alert(key));
+  await h.service.notifySchedule(alert(key));
+  await h.service.notifySchedule(alert(`${key.slice(0, 199)}b`));
+  const ids = h.apns.map((args) => args[6] as string);
+  assert.equal(ids.length, 3);
+  for (const id of ids) assert.ok(Buffer.byteLength(id, 'utf8') <= 64, id);
+  assert.equal(ids[0], ids[1]);
+  assert.notEqual(ids[0], ids[2]);
+  // Android collapses on the same id.
+  assert.deepEqual(h.fcm.map((args) => args[1].notificationKey), ids);
+});
+
+test('the transport fits any collapse id over 64 bytes, stably, and leaves one within it untouched', async () => {
+  const h = harness('ios');
+  const body = JSON.stringify({ aps: { alert: { title: 'Orbit', body: 'x' } }, kind: 'schedule' });
+  const long = `schedule-finding-0196a6b2-7c1e-7f00-8a00-0123456789ab-${'é: '.repeat(40)}`;
+  const exact = 'a'.repeat(64);
+  for (const id of [long, long, exact]) await (h.service as any).deliver([ios], body, 'alert', '10', id);
+  const sent = h.apns.map((args) => args[6] as string);
+  assert.equal(Buffer.byteLength(sent[0], 'utf8'), 64);
+  assert.equal(sent[0], sent[1]);
+  assert.equal(sent[0], fitCollapseId(long));
+  assert.equal(sent[2], exact);
+  assert.equal(fitCollapseId('settled-session'), 'settled-session');
 });

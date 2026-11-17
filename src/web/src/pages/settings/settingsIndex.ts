@@ -24,7 +24,10 @@ export const PERSONAL_PAGES = [
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
-export const INTEGRATION_PAGES = [{ path: '/settings/integrations/feishu', label: 'Feishu' }] as const;
+export const INTEGRATION_PAGES = [
+  { path: '/settings/integrations/feishu', label: 'Feishu' },
+  { path: '/settings/integrations/github', label: 'GitHub' },
+] as const;
 
 const setting = <K extends string>(
   anchor: K,

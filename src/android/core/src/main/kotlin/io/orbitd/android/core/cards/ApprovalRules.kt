@@ -21,6 +21,8 @@ object ApprovalRules {
     private val commandKeywords = setOf("if", "then", "elif", "else", "while", "until", "do", "time", "coproc")
     fun remember(tool: String, input: JsonObject): List<PermissionRule> = when {
         tool.isBlank() || tool in asks -> emptyList()
+        tool == "Bash" && input.flag("orbitScheduleCheckOnly") -> input.text("command")?.takeIf { it.isNotBlank() }
+            ?.let { listOf(PermissionRule("Bash", it)) }.orEmpty()
         tool == "Bash" -> bash(input.text("command") ?: "")
         else -> listOf(PermissionRule(tool))
     }
