@@ -1129,9 +1129,11 @@ struct TranscriptView: View {
     /// The transcript itself: one flat `ForEach` over the pre-assembled rows, with the row-level
     /// preferences that must sit on the outermost row view.
     private var rowsList: some View {
+        // One build of the rows, and the settled-items folds among them (D1 = A).
         let folded = foldedRows
+        let rows = folded.rows
         return List {
-            ForEach(folded.rows) { row in
+            ForEach(rows) { row in
                 transcriptRow(row, folds: folded.folds)
                     // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
                     // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
