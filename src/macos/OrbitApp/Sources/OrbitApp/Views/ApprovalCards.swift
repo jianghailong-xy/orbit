@@ -403,12 +403,13 @@ struct ToolApprovalCard: View {
             // criteria is folded at the ceiling the owner-confirmation card already folds a
             // run's report at. Before this the whole of both fields was the card, and on a phone
             // the buttons sat three screens below the header.
-            ApprovalHeader(symbol: create.isProject ? "folder.badge.plus" : "checklist",
+            ApprovalHeader(symbol: create.isProject ? "folder.badge.plus"
+                               : create.startWhen != nil ? "gauge.with.dots.needle.33percent" : "checklist",
                            // A project has no count to lead with, so it keeps its name up here —
                            // the same split web draws.
                            title: create.isProject
                                ? "Create project “\(create.title)”?"
-                               : Approvals.createHeading,
+                               : create.startWhen != nil ? ConditionCopy.createTaskTitle : Approvals.createHeading,
                            tone: .orange, badge: create.isProject ? "new project" : "new task")
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(create.impactRows) { BatchImpactRowView(row: $0) }
@@ -419,6 +420,11 @@ struct ToolApprovalCard: View {
                 if !create.titleLine.isEmpty {
                     Text(create.titleLine).font(.orbitProse)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // A task that starts on a condition (condition-triggers board frame 2): what it waits for, how it
+                // is checked and the command, what it reads today, and what happens if it never holds.
+                if let startWhen = create.startWhen {
+                    StartWhenLinesView(lines: startWhen).padding(.vertical, 4)
                 }
                 descriptionFold(create)
                 criteriaBlock(create)

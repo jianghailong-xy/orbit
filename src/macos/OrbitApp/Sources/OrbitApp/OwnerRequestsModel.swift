@@ -23,6 +23,9 @@ final class OwnerRequestsModel {
     /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their cards
     /// head the Open tab and count with the rest (docs/scheduled-tasks-design.md §6.4).
     private(set) var scheduleItems: [ScheduleWaitingItem] = []
+    /// A condition's two kinds, pending: the can't-read card and the 30-day question (docs/condition-triggers-design.md
+    /// §5.3, §6.2). They head the Open tab with the schedule's and count with the rest.
+    private(set) var conditionItems: [ConditionWaitingItem] = []
     /// Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and
     /// count with the rest. Each waits ten minutes at most.
     private(set) var terminalRequests: [TerminalRequest] = []
@@ -61,7 +64,7 @@ final class OwnerRequestsModel {
 
     var waitingCount: Int {
         OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
-            + scheduleItems.count
+            + scheduleItems.count + conditionItems.count
     }
 
     /// The Open tab: pending requests and open questions, newest first.
@@ -84,6 +87,7 @@ final class OwnerRequestsModel {
             let openList = try await api.ownerRequests(state: "open")
             assignIfChanged(\.open, openList.requests)
             assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
+            assignIfChanged(\.conditionItems, openList.conditionItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             if tab != .open { await loadTab(tab) }
             await loadQuestions()
@@ -171,6 +175,17 @@ final class OwnerRequestsModel {
     }
 
     // MARK: the doors
+
+    /// The 30-day question answered: Keep waiting (0) or Stop (1). The server's refusal in its own words, or nil.
+    func answerCondition(_ item: ConditionWaitingItem, option: Int) async -> String? {
+        do {
+            try await api.answerConditionItem(item.id, option: option)
+            assignIfChanged(\.conditionItems, conditionItems.filter { $0.id != item.id })
+            return nil
+        } catch {
+            return ScheduledModel.refusal(error)
+        }
+    }
 
     func complete(_ request: OwnerRequest, _ body: OwnerRequestDoneBody) async throws {
         adopt(try await api.completeOwnerRequest(request.id, body))

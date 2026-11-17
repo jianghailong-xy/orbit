@@ -9,6 +9,7 @@
  *     what one session put up — its cards and the records of the changes it made.
  */
 import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import type { ScheduleWaitingTask } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequestKind, ScheduleChangeRequestState, ScheduleState } from '@prisma/client';
 
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
@@ -118,7 +119,52 @@ export class ScheduleReadsService {
     return {
       schedules: schedules.map((s) => ({ ...s, pausedAt: timeline.pausedAt.get(s.id) ?? null })),
       runs: timeline.runs,
+      waitingTasks: await this.waitingTasks(ownerId, filter.workspaceId),
     };
+  }
+
+  /**
+   * The OPEN tasks waiting for their startWhen condition (docs/condition-triggers-design.md §9): the page's "Waiting
+   * for a condition" group lists them beside the WHEN schedules, with the newest reading and its age. Not fired and
+   * not ended: a fired condition has started its task, or will within the minute.
+   */
+  private async waitingTasks(ownerId: string, workspaceId?: string): Promise<ScheduleWaitingTask[]> {
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        ownerId,
+        status: 'OPEN',
+        startWhenCondition: { state: { not: 'ENDED' }, firedAt: null },
+        ...(workspaceId ? { assigneeId: workspaceId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+      select: {
+        id: true,
+        title: true,
+        assigneeId: true,
+        startWhenCondition: {
+          select: { id: true, text: true, unit: true, state: true, lastValue: true, lastSampleAt: true, workspaceId: true },
+        },
+      },
+    });
+    const names = await workspaceNames(this.prisma, ownerId, tasks.map((t) => t.startWhenCondition!.workspaceId));
+    return tasks.map((t) => {
+      const c = t.startWhenCondition!;
+      return {
+        id: t.id,
+        title: t.title,
+        workspaceId: c.workspaceId,
+        workspaceName: names.get(c.workspaceId) ?? null,
+        condition: {
+          id: c.id,
+          text: c.text,
+          unit: c.unit,
+          state: c.state,
+          lastValue: c.lastValue,
+          lastSampleAt: c.lastSampleAt?.toISOString() ?? null,
+        },
+      };
+    });
   }
 
   /** The list's timeline part; `rows` are already the caller's own, so every read below is scoped by them. */

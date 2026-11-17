@@ -209,10 +209,14 @@ public struct OwnerRequestList: Decodable, Sendable {
     /// The scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which `OwnerRequest` does not
     /// read: they are answered at the schedule's own doors, and drawn by `ScheduleWaitingCards`.
     public let scheduleItems: [ScheduleWaitingItem]
+    /// A condition's two kinds (CONDITION_UNKNOWN, CONDITION_STILL_WAITING), drawn by `ConditionWaitingCardView`.
+    public let conditionItems: [ConditionWaitingItem]
 
-    public init(requests: [OwnerRequest], scheduleItems: [ScheduleWaitingItem] = []) {
+    public init(requests: [OwnerRequest], scheduleItems: [ScheduleWaitingItem] = [],
+                conditionItems: [ConditionWaitingItem] = []) {
         self.requests = requests
         self.scheduleItems = scheduleItems
+        self.conditionItems = conditionItems
     }
 
     private enum CodingKeys: String, CodingKey { case requests }
@@ -225,6 +229,8 @@ public struct OwnerRequestList: Decodable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         requests = try c.decode([Lenient].self, forKey: .requests).compactMap(\.value)
         scheduleItems = ((try? c.decode([ScheduleLenient<ScheduleWaitingItem>].self, forKey: .requests)) ?? [])
+            .compactMap(\.value)
+        conditionItems = ((try? c.decode([ScheduleLenient<ConditionWaitingItem>].self, forKey: .requests)) ?? [])
             .compactMap(\.value)
     }
 }

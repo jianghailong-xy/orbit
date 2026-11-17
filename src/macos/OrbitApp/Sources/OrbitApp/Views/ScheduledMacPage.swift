@@ -55,7 +55,8 @@ struct ScheduledMacPage: View {
                     tools(scheduled)
                     ForEach(groups) { group in
                         groupHeader(group)
-                        ForEach(ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: true)) { row in
+                        ForEach(ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: true,
+                                                          openTask: { id in model.route(to: .task(id)) })) { row in
                             rowView(row, selected: row.scheduleID.map {
                                 PublicID.storageKey($0) == scheduled.inspectedID.map(PublicID.storageKey)
                             } ?? false)

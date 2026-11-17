@@ -741,6 +741,7 @@ struct OwnerRequestInboxView: View {
                         let entries = model.openEntries
                         if model.tab == .open
                             ? entries.isEmpty && model.terminalRequests.isEmpty && model.scheduleItems.isEmpty
+                                && model.conditionItems.isEmpty
                             : rows.isEmpty {
                             Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
                         }
@@ -750,6 +751,14 @@ struct OwnerRequestInboxView: View {
                                 TerminalApproveCard(model: model, request: request)
                                     .padding(.horizontal, 16).padding(.vertical, 8)
                                 Divider()
+                            }
+                        }
+                        // A condition's items, whole: the can't-read card and the 30-day question
+                        // (condition-triggers board ⑥ ①).
+                        if model.tab == .open {
+                            ForEach(model.conditionItems) { item in
+                                ConditionWaitingCardView(item: item)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
                             }
                         }
                         // A scheduled task's items, whole: each answers at its own door (Waiting on you, board 01 ⑥).
