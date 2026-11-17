@@ -199,6 +199,8 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
+				// Claude's own alert, which reaches the engine's sign-in rather than the person (bgGuardPushNotificationReason).
+				{"matcher": "PushNotification", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
 				{"matcher": "Monitor|" + claudeToolName("bg_run"), "hooks": guard},
 				// A SubAgent's questions and plans (subagentAsksNobodyReason); no verdict in any other session.
