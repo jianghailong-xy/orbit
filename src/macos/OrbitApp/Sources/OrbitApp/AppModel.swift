@@ -333,6 +333,9 @@ final class AppModel {
     /// next look takes them as they stand — at launch, and on coming back to the foreground: what was
     /// already waiting then is the lists' to show, not news.
     private var needsYouSeen: Set<String>?
+    /// The terminal request a push or the needs-you line opened, lit on Machines & models' Needs you
+    /// section for two seconds (board `docs/mocks/waiting-on-you-removal/02` ③④).
+    private(set) var terminalRequestToLight: String?
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -1176,6 +1179,42 @@ final class AppModel {
         // A run's session is in no list, so its own record is read as a link's is: the console's state band and
         // its toolbar read that record.
         refreshUnlistedSession(sessionID, adoptingAgent: false)
+    }
+
+    /// `orbit://terminal-login/<id>`, a terminal's push, and the needs-you line: Settings › Machines
+    /// & models, on its Needs you section, with `requestID`'s card lit for a moment — or the oldest
+    /// waiting one when the door names none. The requests are read first when the account's lists do
+    /// not hold any yet, so a cold tap still finds the card.
+    func openTerminalRequests(_ requestID: String?) {
+        terminalRequestToLight = requestID
+        Task { @MainActor [weak self] in
+            guard let self, let ownerRequests else { return }
+            await ownerRequests.loadTerminalRequests()
+            if terminalRequestToLight == nil {
+                terminalRequestToLight = Terminals.liveRequests(ownerRequests.terminalRequests).first?.id
+            }
+            let lit = terminalRequestToLight
+            try? await Task.sleep(for: .seconds(2))
+            if terminalRequestToLight == lit { terminalRequestToLight = nil }
+        }
+        #if os(iOS)
+        // Settings is a sheet on the phone: raise it and put Machines & models on its stack.
+        settingsPresented = true
+        nav.settingsPath = [.settingsPage(.machinesAndModels)]
+        #else
+        selectedSection = .runners
+        #endif
+    }
+
+    /// The needs-you notice for waiting terminals (docs/mocks/waiting-on-you-removal/02 ③), said once
+    /// per request id: the owner's one-time toast replaced the resident bar (2026-11-15).
+    func terminalNeedsYou(now: Date = Date()) -> TerminalNeedsYou? {
+        TerminalNeedsYou.banner(ownerRequests?.terminalRequests ?? [], now: now)
+    }
+
+    /// The needs-you line's press: the oldest waiting terminal's card, in Machines & models.
+    func openTerminalNeedsYou(_ line: TerminalNeedsYou) {
+        openTerminalRequests(line.oldest.id)
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key"/"Answer", a reminder's tap: the
@@ -3878,6 +3917,9 @@ final class AppModel {
     /// needs-you banner, ⌘N, ⌘1…⌘9) call their entry point directly instead: a `Route` carries
     /// neither an origin nor an agent, and a frame pushed for a drawer row has to say both.
     func route(to route: Route) {
+        // A terminal's push or link opens Settings › Machines & models on its Needs you section,
+        // which is neither a section of its own nor a page the stack can reach by being selected.
+        if case .terminalLogin(let id) = route { return openTerminalRequests(id) }
         // A link or a notification goes somewhere, and Settings would cover it — and while Settings
         // is up a push lands on its stack, not on the route's.
         settingsPresented = false
@@ -3912,6 +3954,8 @@ final class AppModel {
             selectedTaskID = nil
         case .runner(let id):  selectedRunnerID = id
         case .watch(let id):   openWatch(id)
+        // Handled above, before Settings is put away: it opens the sheet rather than a section.
+        case .terminalLogin:   break
         }
     }
 
@@ -4203,10 +4247,10 @@ final class AppModel {
             openOwnerRequest(id)
         case .snoozeOwnerRequest(let id):
             ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
-        case .openTerminalRequests:
-            // The inbox it opened is gone; the machine page's Needs you section that takes its place
-            // is the macOS + iOS task's (docs/mocks/waiting-on-you-removal/02). Until then: read again.
-            Task { await ownerRequests?.loadTerminalRequests() }
+        case .openTerminalRequests(let requestID):
+            // Machines & models' Needs you section is where the card lives now (board
+            // docs/mocks/waiting-on-you-removal/02 ④); the push's own id lights that card.
+            openTerminalRequests(requestID)
         case let .openSchedule(scheduleID, sessionID):
             // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
             if let sessionID {

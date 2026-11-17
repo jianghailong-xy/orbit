@@ -15,6 +15,68 @@ public enum Terminals {
         "Terminal on \(request.machineName) · code \(request.userCode)"
     }
 
+    // MARK: Where a waiting terminal is drawn
+    // (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html)
+
+    /// The machine page's section of approve cards, and its note.
+    public static let toApprove = "Terminals to approve"
+    public static let requestLasts = "A request lasts 10 minutes"
+    /// The session list's section over its line.
+    public static let needsYou = "Needs you"
+    /// What a press says once the server recorded it (board ② choice 3).
+    public static let approvedToast = "Terminal approved"
+    public static let deniedToast = "Terminal denied"
+    /// What a screen reader hears for the needs-you line, and what a press goes to.
+    public static let needsYouHint = "Opens the terminals waiting on you"
+
+    /// "Approve a terminal", or "Approve 2 terminals" (board ③ choice 5).
+    public static func approveNeedsYou(count: Int) -> String {
+        count == 1 ? "Approve a terminal" : "Approve \(count) terminals"
+    }
+
+    /// The needs-you line's second line: one request names its machine and code
+    /// ("dev-laptop · code 7KQ-4MZ"); several on one machine count ("dev-laptop · 2 waiting");
+    /// several machines are named, oldest first ("dev-laptop, build-box").
+    public static func needsYouDetail(_ requests: [TerminalRequest]) -> String {
+        guard let first = requests.first else { return "" }
+        if requests.count == 1 { return "\(first.machineName) · code \(first.userCode)" }
+        var machines: [String] = []
+        for request in requests where !machines.contains(request.machineName) {
+            machines.append(request.machineName)
+        }
+        return machines.count == 1 ? "\(machines[0]) · \(requests.count) waiting"
+                                   : machines.joined(separator: ", ")
+    }
+
+    /// The requests still answerable at `now`, oldest first: the server's own rule
+    /// (`expiresAt > now`), so a card folds at its deadline rather than at the next read
+    /// (board ② choice 4). The server's 404 stays the fallback.
+    public static func liveRequests(_ requests: [TerminalRequest], now: Date = Date()) -> [TerminalRequest] {
+        requests
+            .filter { request in
+                guard let expires = RelativeTime.parse(request.expiresAt) else { return true }
+                return expires > now
+            }
+            .sorted { a, b in
+                let left = RelativeTime.parse(a.createdAt) ?? .distantPast
+                let right = RelativeTime.parse(b.createdAt) ?? .distantPast
+                return left == right ? a.id < b.id : left < right
+            }
+    }
+
+    /// The requests on one machine.
+    public static func requests(_ requests: [TerminalRequest], on runnerID: String) -> [TerminalRequest] {
+        requests.filter { PublicID.toPublic($0.runnerId) == PublicID.toPublic(runnerID) }
+    }
+
+    /// When the earliest live request stops being answerable, so a surface can redraw on time.
+    public static func nextDeadline(_ requests: [TerminalRequest], after now: Date = Date()) -> Date? {
+        liveRequests(requests, now: now)
+            .compactMap { RelativeTime.parse($0.expiresAt) }
+            .filter { $0 > now }
+            .min()
+    }
+
     // MARK: Settings → Terminals
 
     public static let title = "Terminals"
@@ -54,5 +116,40 @@ public enum Terminals {
     /// "2 signed in" — Settings' row value.
     public static func settingsValue(count: Int) -> String {
         count > 0 ? "\(count) signed in" : "None"
+    }
+}
+
+/// The needs-you bar's line for waiting terminals (board ③), and what a press opens: the oldest
+/// request leads, because a request lives ten minutes, and Machines & models lights that card.
+public struct TerminalNeedsYou: Equatable, Sendable {
+    /// How many terminals are asking.
+    public let count: Int
+    /// The request that has waited longest — the card a press lights.
+    public let oldest: TerminalRequest
+    /// "Approve a terminal", or "Approve 2 terminals".
+    public let text: String
+    /// "dev-laptop · code 7KQ-4MZ", or where several wait.
+    public let detail: String
+    /// Since when the oldest has waited, the ISO instant the age is read from.
+    public let since: String
+
+    /// The terminal is the mark the bar draws.
+    public var glyph: NeedsYouGlyph { .terminal }
+
+    public init(count: Int, oldest: TerminalRequest, text: String, detail: String, since: String) {
+        self.count = count
+        self.oldest = oldest
+        self.text = text
+        self.detail = detail
+        self.since = since
+    }
+
+    /// The live line for `requests`, or nil when nothing waits.
+    public static func banner(_ requests: [TerminalRequest], now: Date = Date()) -> TerminalNeedsYou? {
+        let live = Terminals.liveRequests(requests, now: now)
+        guard let oldest = live.first else { return nil }
+        return TerminalNeedsYou(count: live.count, oldest: oldest,
+                                text: Terminals.approveNeedsYou(count: live.count),
+                                detail: Terminals.needsYouDetail(live), since: oldest.createdAt)
     }
 }

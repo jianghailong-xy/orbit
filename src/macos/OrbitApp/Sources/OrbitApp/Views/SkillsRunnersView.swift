@@ -99,6 +99,8 @@ struct RunnersListView: View {
     var part: Part = .all
     @State private var addingRunner = false
     @State private var pendingRemoval: Runner?
+    /// The clock the waiting terminals are filtered against, so a card folds at its deadline.
+    @State private var terminalNow = Date()
 
     var body: some View {
         @Bindable var model = model
@@ -110,6 +112,7 @@ struct RunnersListView: View {
             let managed = runners.loadState.hasLoaded
                 ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count)
                 : nil
+            let terminals = Terminals.liveRequests(lists.terminalRequests, now: terminalNow)
             // Runners' stack projection — the record on top — and only where there is a detail
             // column to select into.
             List(selection: rowNavigation == .selection ? $model.selectedRunnerID : nil) {
@@ -121,12 +124,14 @@ struct RunnersListView: View {
                     }
                 }
                 #endif
-                if lists.settled {
+                if !terminals.isEmpty || lists.settled {
                     // The managed runner's heartbeat "offline" is not said of it: its shared state is.
-                    let attention = lists.attention.filter { !isManagedOffline($0) && shows($0) }
-                    if !attention.isEmpty {
-                        MachinesAndModelsNeedsYouSection(items: attention, opensPools: opensPools,
-                                                      open: openAttention)
+                    let attention = lists.settled ? lists.attention.filter { !isManagedOffline($0) && shows($0) } : []
+                    if !attention.isEmpty || !terminals.isEmpty {
+                        MachinesAndModelsNeedsYouSection(
+                            items: attention, terminals: terminals, ownerRequests: model.ownerRequests,
+                            lit: model.terminalRequestToLight, onSaid: { model.showToast($0) },
+                            opensPools: opensPools, open: openAttention)
                     }
                 }
                 if part != .providers {
@@ -164,6 +169,11 @@ struct RunnersListView: View {
             .modifier(RunnerListEditing(runners: runners, addingRunner: $addingRunner,
                                         pendingRemoval: $pendingRemoval))
             .navigationTitle(title)
+            #if os(iOS)
+            // The board's phone page under Settings' back button: a centred title, and the Needs
+            // you section — the first thing on the page — fully visible under it.
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             // Each list is its own read, so they are asked for side by side. A machine checks in every
             // 30s: the machines are read again while the page is up, so where each one stands — its row,
             // and what needs you — moves with it, as a machine's own page does. No event reports a
@@ -181,6 +191,8 @@ struct RunnersListView: View {
             .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
                 for id in MachinesAndModelsLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
             }
+            // The terminals asking to be approved: read every 20 s, and again at their deadline.
+            .modifier(TerminalRequestsCurrent(now: $terminalNow))
         } else {
             ProgressView()
         }
@@ -645,6 +657,9 @@ struct RunnerDetailContent: View {
                     ManagedRunnerBanner(display: managedDisplay, runnerID: runner.id)
                 }
             }
+            // The terminals asking to be approved on this machine (board ①): its own cards under
+            // the title, drawn from the same read as Machines & models' Needs you section.
+            TerminalRequestsSection(runnerID: runner.id, onSaid: show)
             // A managed runner that has not reported yet has no release, readings or engines to show:
             // no Update card, and one quiet line where Resources and Engines would be.
             if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {

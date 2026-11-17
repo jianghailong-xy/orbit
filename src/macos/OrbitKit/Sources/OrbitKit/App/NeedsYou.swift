@@ -65,6 +65,8 @@ public enum NeedsYouGlyph: Equatable, Sendable {
     case warning
     case pause
     case hand
+    /// A terminal asking to be approved (docs/mocks/waiting-on-you-removal/02 ③).
+    case terminal
 
     init(_ kind: OwnerItemKind) {
         switch kind {
