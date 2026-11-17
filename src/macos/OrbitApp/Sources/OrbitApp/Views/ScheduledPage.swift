@@ -20,7 +20,7 @@ struct ScheduleCircleGlyph: View {
             // A condition's row (condition-triggers board ④ ③): a gauge in place of the circle, amber when it
             // cannot be read, faint when paused.
             Image(systemName: "gauge.with.dots.needle.33percent")
-                .font(.system(size: size * 0.82, weight: .medium))
+                .font(.title3.weight(.medium))
                 .foregroundStyle(view.circle == .held ? Color.orange
                                  : view.circle == .paused ? Color.secondary.opacity(0.5) : Color.accentColor)
                 .frame(width: size, height: size)
