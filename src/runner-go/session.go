@@ -1173,6 +1173,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
 	// the parent a wake, which the server delivers in the session's new home (subagent.go).
 	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
+	// A coordinator handing over ends here leaving its SubAgents and jobs running (session_keep_work.go). What an
+	// earlier run of this session was told is not this run's: it is cleared as this one starts.
+	clearSessionKeepsWork(sessionID)
+	bg.endKeepsWork = func() bool { return sessionKeepsWork(sessionID) }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers

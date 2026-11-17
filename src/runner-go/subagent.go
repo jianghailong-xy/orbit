@@ -1029,7 +1029,10 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// to a run stopped because its session ended: there is nobody left to wake.
 	// A run stopped because the session moved owes one too: the session goes on in its new home.
 	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
-	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver
+	// And a run its session left running when the coordinator handed over: its parent's engine has gone, and the
+	// server forwards the wake to the successor (session_keep_work.go).
+	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver ||
+		(s.keptPastEnd.Load() && stopReason == "")
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
