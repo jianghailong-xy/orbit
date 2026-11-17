@@ -579,7 +579,7 @@ public struct ProjectClosedQuestion: Codable, Equatable, Sendable, Identifiable 
     }
 
     public let itemId: String
-    public let question: CoordinatorQuestion
+    public var question: CoordinatorQuestion
     public let askedAt: String
     /// `ANSWERED` or `WITHDRAWN`.
     public let resolution: String

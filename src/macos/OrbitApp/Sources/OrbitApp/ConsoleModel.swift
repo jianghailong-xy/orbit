@@ -5051,17 +5051,26 @@ final class ConsoleModel {
     /// "Not yet…": the coordinator's request is ended with the owner's note, which reaches this
     /// conversation's agent with the card's facts; the card gives way to why the project is not done.
     /// Says whether the note went.
-    func declineDoneRequest(note: String) async -> Bool {
+    func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {
         guard let projectID, let row = doneRequestRow else { return false }
         do {
-            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)
+            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
+                                                 sendAsWritten: sendAsWritten)
+            doneDeclineRefusedUntranslated = false
         } catch {
-            statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
+            if !doneDeclineRefusedUntranslated {
+                statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            }
             return false
         }
         await refreshRulerQuestions(force: true)
         return true
     }
+
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
+    var doneDeclineRefusedUntranslated = false
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.
@@ -5681,10 +5690,15 @@ final class ConsoleModel {
     /// the outcomes worth explaining, and the re-read below is what explains them. The receipt the
     /// answer leaves comes back with that read, so what is drawn is the record rather than a guess.
     func decideOwnerConfirmation(_ waiting: OwnerConfirmationWaiting, _ decision: OwnerDecision,
-                                 note: String? = nil, review: OwnerDecisionReview? = nil) async {
+                                 note: String? = nil, review: OwnerDecisionReview? = nil,
+                                 sendAsWritten: Bool = false) async {
         guard let taskID,
-              let request = OwnerConfirmations.request(waiting: waiting, decision: decision,
+              let drafted = OwnerConfirmations.request(waiting: waiting, decision: decision,
                                                        note: note, review: review) else { return }
+        let request = OwnerDecisionRequest(decision: drafted.decision, requestId: drafted.requestId,
+                                           note: drafted.note, reviewRecordId: drafted.reviewRecordId,
+                                           answers: drafted.answers, sendAsWritten: sendAsWritten)
+        ownerDecisionsRefusedUntranslated[waiting.requestId] = nil
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
             if decision == .confirm {
@@ -5699,13 +5713,30 @@ final class ConsoleModel {
                                ? OwnerConfirmations.confirmedHeading
                                : OwnerConfirmations.sentBackHeading)
         } catch {
-            // A refusal for staleness is said as such: the card stays and re-derives, and the
-            // sentence tells the reader which refusal the press met rather than "it failed".
-            let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
-            statusMessage = "\(title) — \(APIClient.failureReason(error))."
+            if OwnerCardTranslations.refused(error) {
+                // The owner's words could not be translated, so nothing was recorded: the card offers
+                // Retry and Send as written with the same answer.
+                ownerDecisionsRefusedUntranslated[waiting.requestId] =
+                    RefusedOwnerDecision(waiting: waiting, decision: decision, note: note, review: review)
+            } else {
+                // A refusal for staleness is said as such: the card stays and re-derives, and the
+                // sentence tells the reader which refusal the press met rather than "it failed".
+                let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
+                statusMessage = "\(title) — \(APIClient.failureReason(error))."
+            }
         }
         await refreshOwnerConfirmation(force: true)
     }
+
+    /// An owner-confirmation answer refused with 422 TRANSLATION_FAILED, by the report it answers:
+    /// what to send again on Retry or Send as written.
+    struct RefusedOwnerDecision {
+        let waiting: OwnerConfirmationWaiting
+        let decision: OwnerDecision
+        let note: String?
+        let review: OwnerDecisionReview?
+    }
+    var ownerDecisionsRefusedUntranslated: [String: RefusedOwnerDecision] = [:]
 
     /// Reopen task, from a receipt whose late review found problems (contract §9 L4): the task
     /// panel's own write (`TaskReopen.request`), not a door of its own. The read that follows is
@@ -5796,9 +5827,14 @@ final class ConsoleModel {
     /// Not dropped optimistically, for the reason `decideCriteria` gives: the door's refusals are
     /// the outcomes worth explaining, and the re-read below is what explains them.
     func decideEvidence(_ row: EvidenceDecisionRow, _ decision: EvidenceDecisionAnswer,
-                        note: String? = nil) async {
-        guard let request = EvidenceDecisions.request(row: row, decision: decision, note: note,
+                        note: String? = nil, sendAsWritten: Bool = false) async {
+        guard let drafted = EvidenceDecisions.request(row: row, decision: decision, note: note,
                                                       decidingSessionID: sessionID) else { return }
+        let request = EvidenceDecisionRequest(decidingSessionId: drafted.decidingSessionId,
+                                              evidenceRevision: drafted.evidenceRevision,
+                                              decision: drafted.decision, note: drafted.note,
+                                              sendAsWritten: sendAsWritten)
+        evidenceNotesRefusedUntranslated[row.id] = nil
         do {
             _ = try await api.decideEvidence(taskID: row.taskId, request)
             if decision == .confirm {
@@ -5810,10 +5846,20 @@ final class ConsoleModel {
             // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
             // again, unlike the in-memory line it replaces.
         } catch {
-            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
+            if OwnerCardTranslations.refused(error), let note {
+                // The reason could not be translated, so it was not sent: the card offers Retry and
+                // Send as written with it.
+                evidenceNotesRefusedUntranslated[row.id] = note
+            } else {
+                statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
+            }
         }
         await refreshRulerQuestions(force: true)
     }
+
+    /// A send-back's reason refused with 422 TRANSLATION_FAILED, by evidence row: the evidence card
+    /// shows "Couldn't translate, so it wasn't sent · Retry · Send as written" with it.
+    var evidenceNotesRefusedUntranslated: [String: String] = [:]
 
     /// Restart the task from a card offering it (`EvidenceRestart`): one Run press, named at the
     /// gesture. Nil is a start; otherwise the refusal, for the card to show. The read is asked again
@@ -6143,23 +6189,36 @@ final class ConsoleModel {
     /// with the server's copy of the same record, so nothing stands empty between the press and
     /// the read. A refusal leaves the card standing and says which refusal it met.
     func answerQuestion(_ row: ProjectOpenItemRow, chosen: CoordinatorQuestionChoice?,
-                        text: String) async -> OwnerAnswerReceipt? {
+                        text: String, sendAsWritten: Bool = false) async -> OwnerAnswerReceipt? {
         guard let projectID, let question = row.question,
-              let request = CoordinatorQuestions.request(question: question, chosen: chosen, text: text)
+              let drafted = CoordinatorQuestions.request(question: question, chosen: chosen, text: text)
         else { return nil }
+        let request = OwnerAnswerRequest(option: drafted.option, text: drafted.text, sendAsWritten: sendAsWritten)
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            answersRefusedUntranslated.remove(row.itemId)
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
+            // Words that could not be translated were not sent (decision 2A): the card offers Retry and
+            // Send as written in place of a failure line.
+            if OwnerCardTranslations.refused(error) {
+                answersRefusedUntranslated.insert(row.itemId)
+                return nil
+            }
+            answersRefusedUntranslated.remove(row.itemId)
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
+
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
+    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
+    var answersRefusedUntranslated: Set<String> = []
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and

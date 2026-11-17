@@ -169,6 +169,13 @@ public extension ProjectClosedQuestion {
         return question.translated(t)
     }
 
+    /// The whole record as drawn, its question in the owner's language.
+    func shown(owner: TranslationLanguage?, showOriginal: Bool) -> ProjectClosedQuestion {
+        var r = self
+        r.question = shownQuestion(owner: owner, showOriginal: showOriginal)
+        return r
+    }
+
     func translationFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
         OwnerCardTranslations.foot(translates: shownQuestion(owner: owner, showOriginal: false) != question,
                                    showOriginal: showOriginal)
@@ -343,6 +350,21 @@ public extension ProjectCrossing {
         return c
     }
 
+    func translationFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        OwnerCardTranslations.foot(translates: shown(owner: owner, showOriginal: false) != self,
+                                   showOriginal: showOriginal)
+    }
+}
+
+public extension CrossingBatch {
+    /// The batch as drawn: each crossing's title and reason in the owner's language. An answer still
+    /// names each row by its id and crossing key.
+    func shown(owner: TranslationLanguage?, showOriginal: Bool) -> CrossingBatch {
+        CrossingBatch(id: id, kind: kind, rows: rows.map { $0.shown(owner: owner, showOriginal: showOriginal) },
+                      out: out)
+    }
+
+    /// The batch card's one foot, flipping every row together.
     func translationFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
         OwnerCardTranslations.foot(translates: shown(owner: owner, showOriginal: false) != self,
                                    showOriginal: showOriginal)
