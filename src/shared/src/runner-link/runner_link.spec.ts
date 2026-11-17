@@ -148,6 +148,15 @@ function samples(): Sample[] {
       thinking: 'The user wants',
       throughLiveSeq: 8n,
     }),
+    sample(pb.StreamOpenSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', kind: pb.StreamKind.VNC }),
+    sample(pb.StreamOpenedSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1' }),
+    sample(pb.StreamDataSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', data: json('RFB 003.008\n') }),
+    sample(pb.StreamCreditSchema, { streamId: '0190a0b0-0000-7000-8000-0000000000e1', bytes: 12 }),
+    sample(pb.StreamCloseSchema, {
+      streamId: '0190a0b0-0000-7000-8000-0000000000e1',
+      code: pb.StreamCloseCode.NORMAL,
+      message: 'the viewer left',
+    }),
   ];
 
   // One Frame per member of its body, each wrapping the first sample of that member's type.
