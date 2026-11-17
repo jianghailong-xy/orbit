@@ -233,13 +233,17 @@ struct SessionMessageCardView: View {
 /// Lays its one view out no wider than that view's own single-line width, nor than it is offered:
 /// a bubble that hugs short words and wraps long ones at the column, even when what it holds would
 /// take every point it is offered.
-private extension View {
-    func hugWidth() -> some View { HugWidthLayout { self } }
+/// `hugs: false` passes the offer through untouched.
+extension View {
+    func hugWidth(_ hugs: Bool = true) -> some View { HugWidthLayout(hugs: hugs) { self } }
 }
 
-private struct HugWidthLayout: Layout {
+struct HugWidthLayout: Layout {
+    var hugs = true
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let view = subviews.first else { return .zero }
+        guard hugs else { return view.sizeThatFits(proposal) }
         let ideal = view.sizeThatFits(.unspecified).width
         let width = min(ideal, proposal.width ?? ideal)
         return view.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))

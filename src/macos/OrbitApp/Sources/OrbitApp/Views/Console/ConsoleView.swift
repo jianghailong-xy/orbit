@@ -1614,7 +1614,12 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+            // Live while the turn may still be at work (docs/mocks/session-compact-steps: a call in
+            // flight sits under the line until it answers; once the turn is over it joins the line).
+            // `.pending` counts: a window whose pages carry no `status` event stays there, and reading
+            // it as over folded a running call into "ran 2 shell commands" while its row still spun.
+            StepsRowView(items: items, live: [.running, .pending].contains(console.sessionStatus),
+                         fullPayload: console.fullPayload)
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
