@@ -2893,6 +2893,9 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** An Ask (migration 0850, help.ts): start this session read-only, in a scratch folder holding the help article
+   *  library, never in workDir. Only to a runner that declares HELP_ASK_V1. Absent for every other session. */
+  helpAsk?: import('./help').HelpAskMarker;
   /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */

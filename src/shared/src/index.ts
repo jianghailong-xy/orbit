@@ -58,6 +58,7 @@ export * from './wikiChat';
 export * from './feishu';
 export * from './github';
 export * from './translation';
+export * from './help';
 export * from './prompt-optimizer';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
