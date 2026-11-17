@@ -631,6 +631,8 @@ struct RunnerDetailContent: View {
     @State private var fixPressing = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
+    /// The approved terminal whose Revoke is up: its own row asks, so only that one's question is ever open.
+    @State private var pendingRevokeTerminal: Terminal?
     @State private var notice: String?
 
     var body: some View {
@@ -678,6 +680,7 @@ struct RunnerDetailContent: View {
                 enginesSection(offline: offline, now: now)
             }
             workspacesSection(workspaces)
+            terminalsSection(now: now)
             aboutSection(now: now)
             rotateSection
             removeSection
@@ -701,6 +704,9 @@ struct RunnerDetailContent: View {
             await runners.loadReleaseVersion()
             await runners.loadSessionCounts()
         }
+        // The machine's approved terminals: read when the page opens, and again when the server says
+        // they changed (`terminals.changed`) — an approval or a revoke lands on this section at once.
+        .task { await model.terminals?.load() }
         // A machine checks in every 30s: read it again while its page is up, so the page moves with it
         // — while the app can be seen (`ViewPoll`).
         .task(id: runner.id) {
@@ -1092,6 +1098,71 @@ struct RunnerDetailContent: View {
             if !workspaces.isEmpty {
                 Text(MachineSetupCopy.RUNNER_WORKSPACES_TAP)
             }
+        }
+    }
+
+    /// This machine's approved terminals (docs/mocks/terminals-on-machine-page/01-board.html ②③): the account's
+    /// live terminals filtered to it, newest approval first, each with Revoke, which asks first in main's words.
+    /// Nothing at all while it has none.
+    @ViewBuilder private func terminalsSection(now: Date) -> some View {
+        let terminals = Terminals.machineTerminals(model.terminals?.terminals ?? [], on: runner.id)
+        if !terminals.isEmpty {
+            Section {
+                ForEach(terminals) { terminal in
+                    terminalRow(terminal, now: now)
+                }
+            } header: {
+                VStack(alignment: .leading, spacing: 4) {
+                    RunnerSectionHeader(Terminals.title)
+                    Text(Terminals.machineHint)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(Color.secondary)
+                        .textCase(nil)
+                }
+            }
+        }
+    }
+
+    /// One approved terminal: when it was approved, last used · expires, and Revoke. No machine name —
+    /// the page is the machine.
+    private func terminalRow(_ terminal: Terminal, now: Date) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Terminals.approvedLine(terminal))
+                Text(Terminals.usedAndExpiresLine(terminal, now: now))
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(Color.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button(Terminals.revoke, role: .destructive) { pendingRevokeTerminal = terminal }
+                .controlSize(.small)
+                .disabled(model.terminals?.revokingID == terminal.id)
+                .orbitConfirmation(Terminals.revokeTitle(terminal),
+                                   isPresented: revokeTerminalAsked(terminal)) {
+                    Button(Terminals.revoke, role: .destructive) { Task { await revokeTerminal(terminal) } }
+                    Button(SharePanelCopy.cancel, role: .cancel) {}
+                } message: {
+                    Text(Terminals.revokeDetail)
+                }
+                .accessibilityIdentifier("terminal-revoke-\(terminal.id)")
+        }
+        .padding(.vertical, 2)
+        .opacity(model.terminals?.revokingID == terminal.id ? 0.5 : 1)
+    }
+
+    private func revokeTerminalAsked(_ terminal: Terminal) -> Binding<Bool> {
+        Binding(get: { pendingRevokeTerminal?.id == terminal.id },
+                set: { if !$0 { pendingRevokeTerminal = nil } })
+    }
+
+    /// Revoke it, and say what came of it in the page's notice — exactly as main's Settings page did.
+    private func revokeTerminal(_ terminal: Terminal) async {
+        guard let terminals = model.terminals else { return }
+        if let reason = await terminals.revoke(terminal) {
+            show(Terminals.notRevoked(reason))
+        } else {
+            show(Terminals.revoked)
         }
     }
 

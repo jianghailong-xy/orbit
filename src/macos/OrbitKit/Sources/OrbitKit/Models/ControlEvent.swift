@@ -45,7 +45,7 @@ public enum ControlEventType: String, Codable, Sendable {
     case wikiChanged = "wiki.changed"
     /// The owner's terminals changed — a terminal asked to be approved, a request was decided or collected, or a
     /// terminal was revoked. USER-scoped; `data` names the request or terminal and nothing else: a nudge to re-read
-    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals).
+    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (each machine page's Terminals).
     case terminalsChanged = "terminals.changed"
     /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
     /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a

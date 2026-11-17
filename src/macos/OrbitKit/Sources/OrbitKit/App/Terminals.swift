@@ -1,7 +1,7 @@
 import Foundation
 
-/// The approve-terminal card and Settings → Terminals on iOS and macOS — web's `lib/terminals.ts`, word for word
-/// (`TerminalsCopyParityTests` reads the words back out of it).
+/// The approve-terminal card and the machine page's Terminals on iOS and macOS — web's `lib/terminals.ts`,
+/// word for word (`TerminalsTests` reads the words back out of it).
 public enum Terminals {
     // MARK: The approve card (board 2, marker 7)
 
@@ -95,12 +95,9 @@ public enum Terminals {
             .min()
     }
 
-    // MARK: Settings → Terminals
+    // MARK: The machine page's Terminals (docs/mocks/terminals-on-machine-page/01-board.html ②③)
 
     public static let title = "Terminals"
-    public static let hint = "Terminals where you typed orbit and approved it. Each one can start sessions on its machine and answer their approval cards until it expires."
-    public static let empty = "No terminals are signed in."
-    /// The machine page's Terminals section (docs/mocks/terminals-on-machine-page/01-board.html ②).
     public static let machineHint = "Terminals on this machine where you typed orbit and approved it. Each one can start sessions here and answer their approval cards until it expires."
     public static let revoke = "Revoke"
     public static let revokeDetail = "It stops working at once. Typing orbit there asks you to approve it again."
@@ -113,6 +110,18 @@ public enum Terminals {
 
     /// "Couldn't revoke the terminal: the connection dropped".
     public static func notRevoked(_ reason: String) -> String { "\(couldNotRevoke): \(reason)" }
+
+    /// `runnerID`'s live terminals, newest approval first (board ②) — the machine page's own list,
+    /// as web's `machineTerminals` and Android's `Terminals.on`.
+    public static func machineTerminals(_ terminals: [Terminal], on runnerID: String) -> [Terminal] {
+        terminals
+            .filter { PublicID.toPublic($0.runnerId) == PublicID.toPublic(runnerID) }
+            .sorted { a, b in
+                let left = RelativeTime.parse(a.approvedAt) ?? .distantPast
+                let right = RelativeTime.parse(b.approvedAt) ?? .distantPast
+                return left == right ? a.id > b.id : left > right
+            }
+    }
 
     /// "Approved Nov 12, 2026"
     public static func approvedLine(_ terminal: Terminal) -> String {
@@ -131,9 +140,9 @@ public enum Terminals {
         return AccessTokensList.untilLine(terminal.expiresAt, now: now).map { "Expires \(day) · \($0)" } ?? "Expires \(day)"
     }
 
-    /// "2 signed in" — Settings' row value.
-    public static func settingsValue(count: Int) -> String {
-        count > 0 ? "\(count) signed in" : "None"
+    /// "Last used 3m ago · Expires Dec 12, 2026 · in 30 days": the row's second line (board ③).
+    public static func usedAndExpiresLine(_ terminal: Terminal, now: Date) -> String {
+        "\(lastUsedLine(terminal, now: now)) · \(expiresLine(terminal, now: now))"
     }
 }
 

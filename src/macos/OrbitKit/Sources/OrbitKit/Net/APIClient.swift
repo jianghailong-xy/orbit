@@ -726,7 +726,7 @@ public final class APIClient: @unchecked Sendable {
         try await delete("access-tokens/\(id)")
     }
 
-    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+    // MARK: terminals — the approve card and the machine page's Terminals (docs/terminal-session-design.md)
 
     /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
     public func terminalRequests() async throws -> [TerminalRequest] {

@@ -88,8 +88,8 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        // Terminals has no web Settings row any more: the web lists them on each machine's page
-        // (docs/mocks/terminals-on-machine-page, 67ad0e41d); the Apple row follows in the Mac task.
+        // Terminals has no row on the web or the Apple clients: an approved terminal lives on its
+        // machine's page (docs/mocks/terminals-on-machine-page).
         for row in [SettingsHome.Row.general, .profile] {
             assertSays(index, "label: '\(SettingsHome.title(row))' },", in: Self.settingsIndex)
         }

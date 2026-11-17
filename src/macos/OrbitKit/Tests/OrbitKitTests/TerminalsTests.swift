@@ -44,7 +44,7 @@ private final class TerminalDoorRecorder: @unchecked Sendable {
     }
 }
 
-/// The approve-terminal card and Settings → Terminals (docs/terminal-session-design.md): the server's doors as the
+/// The approve-terminal card and the machine page's Terminals (docs/terminal-session-design.md): the server's doors as the
 /// app calls them, the words — the web's `lib/terminals.ts`, read back out of it — and where a row and an event go.
 final class TerminalsTests: XCTestCase {
 
@@ -136,9 +136,11 @@ final class TerminalsTests: XCTestCase {
         XCTAssertEqual(Terminals.lastUsedLine(terminal(), now: now), "Last used 3m ago")
         XCTAssertEqual(Terminals.lastUsedLine(terminal(lastUsedAt: nil), now: now), "Never used")
         XCTAssertEqual(Terminals.expiresLine(terminal(), now: now), "Expires Dec 10, 2026 · in 28 days")
+        XCTAssertEqual(Terminals.usedAndExpiresLine(terminal(), now: now),
+                       "Last used 3m ago · Expires Dec 10, 2026 · in 28 days")
+        XCTAssertEqual(Terminals.usedAndExpiresLine(terminal(lastUsedAt: nil), now: now),
+                       "Never used · Expires Dec 10, 2026 · in 28 days")
         XCTAssertEqual(Terminals.revokeTitle(terminal()), "Revoke the terminal on dev-laptop?")
-        XCTAssertEqual(Terminals.settingsValue(count: 2), "2 signed in")
-        XCTAssertEqual(Terminals.settingsValue(count: 0), "None")
     }
 
     /// The web declares every word once in `lib/terminals.ts`; this end says them byte for byte.
@@ -147,8 +149,8 @@ final class TerminalsTests: XCTestCase {
         for (name, value) in [("APPROVE_TERMINAL_TITLE", Terminals.approveTitle),
                               ("APPROVE_TERMINAL_DETAIL", Terminals.approveDetail),
                               ("DENY", Terminals.deny), ("APPROVE", Terminals.approve),
-                              ("TERMINALS_TITLE", Terminals.title), ("TERMINALS_HINT", Terminals.hint),
-                              ("NO_TERMINALS", Terminals.empty), ("MACHINE_TERMINALS_HINT", Terminals.machineHint),
+                              ("TERMINALS_TITLE", Terminals.title),
+                              ("MACHINE_TERMINALS_HINT", Terminals.machineHint),
                               ("REVOKE", Terminals.revoke),
                               ("REVOKE_TERMINAL_DETAIL", Terminals.revokeDetail)] {
             XCTAssertTrue(web.contains("\(name) = '\(value)'"), "\(name) drifted from \(value.debugDescription)")
@@ -196,27 +198,48 @@ final class TerminalsTests: XCTestCase {
         XCTAssertNil(DeepLink.parse(noID), "a link with no id names nothing")
     }
 
-    func testSettingsHasATerminalsRowThatOpensItsPage() {
-        XCTAssertTrue(SettingsHome.rows(.personal).contains(.terminals))
-        XCTAssertEqual(SettingsHome.title(.terminals), "Terminals")
-        XCTAssertEqual(SettingsHome.page(.terminals), .terminals)
-        XCTAssertEqual(SettingsPage.terminals.title, "Terminals")
+    /// The machine page lists its own terminals, newest approval first, and nothing of another machine's
+    /// (docs/mocks/terminals-on-machine-page/01-board.html ②) — web `machineTerminals`, Android `Terminals.on`.
+    func testAMachinePageListsItsOwnTerminalsNewestFirst() {
+        let older = Terminal(id: "34term2", machineName: "dev-laptop", runnerId: "run1",
+                             createdAt: "2026-11-10T10:00:00.000Z", approvedAt: "2026-11-10T10:00:00.000Z",
+                             lastUsedAt: nil, expiresAt: "2026-12-10T10:00:00.000Z")
+        let newer = Terminal(id: "34term9", machineName: "dev-laptop", runnerId: "run1",
+                             createdAt: "2026-11-14T10:00:00.000Z", approvedAt: "2026-11-14T10:00:00.000Z",
+                             lastUsedAt: nil, expiresAt: "2026-12-14T10:00:00.000Z")
+        let otherMachine = Terminal(id: "34term5", machineName: "build-box", runnerId: "run2",
+                                    createdAt: "2026-11-15T10:00:00.000Z", approvedAt: "2026-11-15T10:00:00.000Z",
+                                    lastUsedAt: nil, expiresAt: "2026-12-15T10:00:00.000Z")
+        XCTAssertEqual(Terminals.machineTerminals([older, newer, otherMachine], on: "run1").map(\.id),
+                       ["34term9", "34term2"], "this machine's only, newest approval first")
+        XCTAssertTrue(Terminals.machineTerminals([otherMachine], on: "run1").isEmpty,
+                      "a machine with no approved terminal draws no section")
+    }
+
+    /// Settings → Terminals is gone on the Apple clients (the owner, 2026-11-16): no row, no page, no value.
+    func testSettingsHasNoTerminalsRowOrPage() throws {
+        XCTAssertFalse(SettingsHome.Row.allCases.map(\.rawValue).contains("terminals"))
+        XCTAssertFalse(SettingsHome.rows(.personal).map(\.rawValue).contains("terminals"))
+        XCTAssertFalse(SettingsPage.allCases.map(\.rawValue).contains("terminals"))
+        let settings = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift")
+        XCTAssertFalse(settings.contains("TerminalsSettingsPage"), "the Settings page is gone")
+        XCTAssertFalse(settings.contains("Terminals.revoke"), "Revoke lives on the machine page now")
+        let home = try webSource("src/macos/OrbitKit/Sources/OrbitKit/App/SettingsHome.swift")
+        XCTAssertFalse(home.contains("case terminals"), "no Settings row of its own remains")
+        XCTAssertFalse(home.contains("case .terminals"), "no Settings page of its own remains")
     }
 
     /// OrbitApp does not build on Linux, so where the app draws and reads these is checked in its source: the card and
     /// the requests' read and doors (drawn on the machine page by the macOS + iOS task, board waiting-on-you-removal 02);
-    /// Settings has the row, its page with Revoke, and its read; the event re-reads both.
-    func testTheAppDrawsTheCardAndThePage() throws {
+    /// the machine page's own Terminals, between Workspaces and About, with Revoke and main's confirm — Settings has
+    /// neither the row nor the page; the event re-reads both.
+    func testTheAppDrawsTheCardAndTheMachineTerminals() throws {
         let views = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/OwnerRequestViews.swift")
         XCTAssertTrue(views.contains("struct TerminalApproveCard: View {"))
         XCTAssertTrue(views.contains("try await model.decideTerminal(request, approve: approve)"))
         let requests = try webSource("src/macos/OrbitApp/Sources/OrbitApp/OwnerRequestsModel.swift")
         XCTAssertTrue(requests.contains("private(set) var terminalRequests: [TerminalRequest] = []"))
         XCTAssertTrue(requests.contains("await loadTerminalRequests()"))
-        let settings = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/SettingsSheet.swift")
-        XCTAssertTrue(settings.contains("case .terminals:      TerminalsSettingsPage()"))
-        XCTAssertTrue(settings.contains(".task { await model.terminals?.load() }"))
-        XCTAssertTrue(settings.contains("Button(Terminals.revoke, role: .destructive) { Task { await revoke(terminal) } }"))
         let model = try webSource("src/macos/OrbitApp/Sources/OrbitApp/TerminalsModel.swift")
         XCTAssertTrue(model.contains("try await api.revokeTerminal(terminal.id)\n            await load()"),
                       "a revoke reads the list again, so the revoked terminal leaves it")
@@ -231,6 +254,23 @@ final class TerminalsTests: XCTestCase {
         XCTAssertTrue(section.contains("TerminalRequestCards(model: ownerRequests, requests: terminals, lit: lit, onSaid: onSaid)"))
         let block = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/TerminalRequestsView.swift")
         XCTAssertTrue(block.contains("RunnerSectionHeader(Terminals.toApprove, trailing: Terminals.requestLasts)"))
+        // The machine page's Terminals (docs/mocks/terminals-on-machine-page ②③): its own terminals,
+        // between Workspaces and About, hidden when it has none, with main's Revoke and confirm.
+        XCTAssertTrue(machines.contains("Terminals.machineTerminals(model.terminals?.terminals ?? [], on: runner.id)"))
+        XCTAssertTrue(machines.contains("RunnerSectionHeader(Terminals.title)"))
+        XCTAssertTrue(machines.contains("Text(Terminals.machineHint)"))
+        XCTAssertTrue(machines.contains("Text(Terminals.approvedLine(terminal))"))
+        XCTAssertTrue(machines.contains("Text(Terminals.usedAndExpiresLine(terminal, now: now))"))
+        XCTAssertTrue(machines.contains("Terminals.revokeTitle(terminal)"))
+        XCTAssertTrue(machines.contains("Text(Terminals.revokeDetail)"))
+        XCTAssertTrue(machines.contains("await terminals.revoke(terminal)"))
+        XCTAssertTrue(machines.contains(".task { await model.terminals?.load() }"))
+        let workspaces = try XCTUnwrap(machines.range(of: "workspacesSection(workspaces)"))
+        let terminals = try XCTUnwrap(machines.range(of: "terminalsSection(now: now)"))
+        let about = try XCTUnwrap(machines.range(of: "aboutSection(now: now)",
+                                                 range: terminals.upperBound..<machines.endIndex))
+        XCTAssertLessThan(workspaces.lowerBound, terminals.lowerBound, "Terminals comes after Workspaces")
+        XCTAssertLessThan(terminals.lowerBound, about.lowerBound, "Terminals comes before About")
         // The Mac's session list keeps its resident "Needs you" line — the phone has the one-time
         // notice instead, because there is no session list there to put a line on.
         let list = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")

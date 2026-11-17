@@ -521,7 +521,7 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
-    /// Settings → Terminals: the terminals approved on this account, with Revoke.
+    /// The terminals approved on this account: each machine page's Terminals section, with Revoke.
     private(set) var terminals: TerminalsModel?
     /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
@@ -1479,7 +1479,7 @@ final class AppModel {
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
         // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
-        // requests and Settings → Terminals are read again, and nothing else.
+        // requests and each machine page's Terminals are read again, and nothing else.
         case .terminals:
             Task {
                 await ownerRequests?.loadTerminalRequests()
