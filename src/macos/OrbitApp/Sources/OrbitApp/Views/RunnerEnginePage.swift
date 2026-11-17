@@ -477,6 +477,11 @@ private struct RunnerEngineContent: View {
                         .disabled(offline || removal?.pending == true)
                 }
             }
+            if let moving = removal?.moving {
+                Text(moving)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
             if let refused = removal?.refused {
                 Text(refused)
                     .font(.orbitLabel)
