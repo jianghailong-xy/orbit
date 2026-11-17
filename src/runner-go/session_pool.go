@@ -1678,6 +1678,10 @@ func (p *sessionPool) finish(s *liveSession) {
 			p.markActivityLocked() // a turn ends with its supervisor
 		}
 		delete(p.sessions, s.id)
+		// A session that ends holds no browser lease (browser_supervisor.go).
+		if !s.detaching {
+			runnerBrowser().Release(s.id)
+		}
 		// A detached supervisor's fence is the takeover's to lower — but only while there is
 		// one. Left raised without a takeover it can never come down: this id is out of the
 		// pool, so no register, park or finish will ever run for it again, and every later
