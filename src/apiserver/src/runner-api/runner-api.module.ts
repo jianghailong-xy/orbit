@@ -26,6 +26,7 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerConditionsController } from './runner-conditions.controller';
 import { RunnerSchedulesController } from './runner-schedules.controller';
 import { SchedulesModule } from '../schedules/schedules.module';
 import { ScheduleRunsModule } from '../schedules/schedule-runs.module';
@@ -118,6 +119,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerTaskProgressController,
     // A session's schedule_* tools (docs/scheduled-tasks-design.md §9.1).
     RunnerSchedulesController,
+    // A session's condition_get (docs/condition-triggers-design.md §8).
+    RunnerConditionsController,
     // SubAgent runs a session's `delegate` opens and ends (runner-subagents.controller.ts).
     RunnerSubagentsController,
     RunnerServiceTokensController,

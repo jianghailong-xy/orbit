@@ -755,6 +755,8 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/run':
     "the schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)",
+  'GET /runner/conditions/:id':
+    "read by (id, the runner's owner) and nothing else, 404 CONDITION_NOT_FOUND for another account's id (conditions/conditions.service.ts:445)",
   'POST /runner/schedule-runs/:id/stop':
     "the run's schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
   'POST /runner/main-checkout/:id/snapshot':

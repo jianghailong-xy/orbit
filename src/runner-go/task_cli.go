@@ -297,6 +297,9 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --start-when JSON           Start it once, when something outside Orbit becomes true: a
+                              condition with the baseline you read (see below); not with
+                              --run-at or --start-now
   --idempotency-key KEY       Your name for this create: the same key sent again (after a
                               timeout, or in a later turn) answers with the first task instead
                               of writing another; the same key with a different title is refused
@@ -453,6 +456,14 @@ is still created, a line on stderr says the start was deferred, and the server's
 starts it as soon as it can. It cannot be combined with --run-at. It is not
 --auto-run-when-ready, which is about prerequisites finishing.
 
+--start-when starts the task once, when something outside Orbit becomes true, in place of --run-at:
+a JSON object {text, command, compare, holdSeconds?, intervalSeconds?, timeoutSeconds?, unit?,
+baseline}, the same startWhen task_create takes. The command is a read-only probe that prints a
+number on its last line (or exits 0 under compare {"op": "EXIT_ZERO"}); the assignee's runner runs it
+unattended every intervalSeconds, the card shows it to the owner verbatim, and no secret is ever
+written into it. Run it once first and pass what it read as baseline ({"value": N}, or
+{"exitCode": N} under EXIT_ZERO): a condition without one is refused. It needs an assignee.
+
 --auto-run-when-ready, on by default, starts the task without a manual start once it is ready:
 once all its prerequisites are DONE, and — for a task in a project — once the project has started,
 even with no prerequisites at all. A task in no project that has no prerequisites is never started
@@ -468,7 +479,7 @@ JSON is an array of task objects (or {"tasks": [...]}), each taking the same fie
 as 'orbit task create': title (required), description, assigneeId, listId, projectId, fixesOpenItemId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
 completionCriterionOverrideReason, ownerConfirmationReason, ownerConfirmationReasonNote, acceptanceCommand,
-acceptanceExpectedExitCode, dueDate, runAt, engine, provider, model, modelHint, modelHintReason, dependsOnTaskIds, attachmentIds,
+acceptanceExpectedExitCode, dueDate, runAt, startWhen, engine, provider, model, modelHint, modelHintReason, dependsOnTaskIds, attachmentIds,
 autoRunWhenReady, completionPolicy. Nothing is written unless every item is valid.
 
 Each item's "engine" and "provider" pin its runs as --engine and --provider do on
@@ -514,6 +525,9 @@ and the run it starts clears it.
 batch's confirmation card counts it as starting within the minute and the server's scan starts it
 after the create — items are not started one by one. The one approval of the batch covers it.
 An item cannot carry both "startNow" and "runAt".
+
+"startWhen" starts an item once, when something outside Orbit becomes true, as --start-when does on
+'orbit task create'; it carries its baseline and cannot be combined with "runAt" or "startNow".
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -1796,6 +1810,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	dueDate := fs.String("due-date", "", "ISO due date")
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	startNow := fs.Bool("start-now", false, "start the task as soon as it is created: one approval covers the create and the start")
+	startWhen := fs.String("start-when", "", "start the task once, when a condition outside Orbit holds (JSON, with its baseline)")
 	idempotencyKey := fs.String("idempotency-key", "", "your name for this create: the same key sent again answers with the first task instead of writing another")
 	forkFromSession := fs.Bool("fork-from-session", false, "start the task from this session's work, uncommitted edits included")
 	engine := fs.String("engine", "", "run on this engine (the CLI) instead of the assignee's")
@@ -2028,6 +2043,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--start-now cannot be combined with --run-at: --start-now starts the task as soon as it is created, --run-at schedules its start for a set time. Pass one of them")
 		}
 		body["runAt"] = dueNow(time.Now())
+	}
+	// task_create's startWhen (condition_tools.go): the condition and the baseline the agent read.
+	if flagWasSet(fs, "start-when") {
+		condition, err := parseStartWhenFlag(*startWhen)
+		if err != nil {
+			return err
+		}
+		if _, set := body["runAt"]; set {
+			return fmt.Errorf("--start-when cannot be combined with --run-at or --start-now: a task starts at a time or when its condition holds, not both")
+		}
+		body["startWhen"] = condition
 	}
 	// Absent unless named: a provider pinned alone takes the engine it runs on by default, which is
 	// what a provider pin meant before engines could be named.
