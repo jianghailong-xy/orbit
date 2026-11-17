@@ -11,6 +11,27 @@ import org.commonmark.node.*
 import org.commonmark.ext.gfm.tables.*
 
 class TranscriptRenderingTest {
+    @Test fun legacySecretPatchNoticesFoldOnlyConsecutiveTemporaryNotices() {
+        val pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report."
+        val unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+        fun notice(seq: Long, text: String, subtype: String = "secret_patch_withheld", turn: String = "one") =
+            RunEvent("system", seq, buildJsonObject {
+                put("subtype", subtype); put("path", "file"); put("notice", text)
+            }, turnId = turn)
+        val rows = transcriptRows(listOf(
+            notice(1, "file: $pending"), notice(2, "file: $unreadable"),
+            notice(3, "file holds the value of a secret"), notice(4, "Unknown notice"),
+            notice(5, "Record summary", "secret_patches_withheld"),
+            notice(6, "file: $pending"), notice(7, "file: $pending", turn = "two")
+        ))
+        assertEquals(listOf(
+            "Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.",
+            "file holds the value of a secret", "Unknown notice", "Record summary",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it."
+        ), rows.map { it.event.body() })
+    }
+
     @Test fun giantSingleLineOutputHasBoundedSurrogateSafeDisplayChunks() {
         val source = "😀x".repeat(180_000)
         val chunks = io.orbitd.android.text.outputChunks(source)

@@ -623,16 +623,6 @@ var secretTaintPending struct {
 	sync.Mutex
 	list    []*integrationOutputRedactor
 	running map[*integrationOutputRedactor]bool
-	// ended is closed, and replaced, whenever a scan ends (waitPendingTaintScans).
-	ended chan struct{}
-}
-
-// pendingTaintScanEndedLocked wakes everyone waiting for a scan to end. secretTaintPending is held.
-func pendingTaintScanEndedLocked() {
-	if secretTaintPending.ended != nil {
-		close(secretTaintPending.ended)
-		secretTaintPending.ended = nil
-	}
 }
 
 // pendingTaintScanRunningLocked reports whether a pending matcher's scan is running. secretTaintPending is held.
@@ -643,30 +633,6 @@ func pendingTaintScanRunningLocked() bool {
 		}
 	}
 	return false
-}
-
-// waitPendingTaintScans waits, at most d, until no removal scan is running, and reports whether none is. A matcher
-// whose scan failed stays pending all the same: this waits for scans, not for the record.
-func waitPendingTaintScans(d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	for {
-		secretTaintPending.Lock()
-		if !pendingTaintScanRunningLocked() {
-			secretTaintPending.Unlock()
-			return true
-		}
-		if secretTaintPending.ended == nil {
-			secretTaintPending.ended = make(chan struct{})
-		}
-		ended := secretTaintPending.ended
-		secretTaintPending.Unlock()
-		select {
-		case <-ended:
-		case <-timer.C:
-			return false
-		}
-	}
 }
 
 // pendingTaintMatchers is every matcher still pending, its scan running or failed.
@@ -699,7 +665,6 @@ func recordPendingTaint(r *integrationOutputRedactor) error {
 	secretTaintPending.Lock()
 	defer secretTaintPending.Unlock()
 	delete(secretTaintPending.running, r)
-	defer pendingTaintScanEndedLocked()
 	if err != nil {
 		return err
 	}
