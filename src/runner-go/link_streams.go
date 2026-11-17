@@ -12,7 +12,7 @@ import (
 
 // Byte streams over the runner link (docs/runner-browser-design.md §4; contracts/runner-link/v1, StreamOpen): the
 // gateway relays a viewer's StreamOpen, and the runner bridges the stream's bytes to the managed runner browser's VNC
-// server, x11vnc on $ORBIT_HOME/browser/vnc.sock.
+// server, x11vnc on ~/.orbit/browser/vnc.sock (the browser supervisor's socket).
 //
 // The runner declares link-stream-v1 in Hello only as a managed runner (the managed entrypoint's
 // ORBIT_MANAGED_RUNNER_* identity), and opens a stream only while that holds, the connection's Welcome offered the
@@ -35,8 +35,14 @@ const (
 // linkStreamsDeclared says whether this process speaks byte streams: only a managed runner does.
 func linkStreamsDeclared() bool { return currentManagedInstance() != nil }
 
-// linkVNCSocket is where the browser's VNC server listens.
-func linkVNCSocket() string { return filepath.Join(machineHome(), "browser", "vnc.sock") }
+// linkVNCSocket is where the browser's VNC server listens: the socket the browser supervisor starts x11vnc on
+// (browser_supervisor.go), else where it would be.
+func linkVNCSocket() string {
+	if b := runnerBrowser(); b != nil {
+		return b.VNCSocket()
+	}
+	return filepath.Join(machineHome(), "browser", "vnc.sock")
+}
 
 // linkStreams is the open streams of one link.
 type linkStreams struct {

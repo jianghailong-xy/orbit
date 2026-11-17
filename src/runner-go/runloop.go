@@ -2104,6 +2104,13 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}
 			}
+			// Before the cancel: a coordinator handing over may be heard of here before its inbox hands over the
+			// end turn that says the same (session_keep_work.go). Only a session this process supervises.
+			for _, id := range resp.KeepWorkSessionIDs {
+				if _, ok := supervisors[id]; ok {
+					markSessionKeepsWork(id)
+				}
+			}
 			for _, id := range resp.CancelSessionIDs {
 				if snapshot, ok := supervisors[id]; ok && snapshot.cancel != nil {
 					snapshot.cancel()

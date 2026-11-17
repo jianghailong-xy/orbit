@@ -104,8 +104,8 @@ type linkWork struct {
 	slowBeats    int
 	slowLoggedAt time.Time
 	// browser is what the current connection's Welcome said of the managed runner browser (Welcome.browser,
-	// docs/runner-browser-design.md §2): whether the server offers it to this runner. A byte stream to the browser
-	// opens only while it does (link_streams.go).
+	// docs/runner-browser-design.md §2): whether the server offers it to this runner. The runner's browser supervisor
+	// follows it (browser_supervisor.go), and a byte stream to the browser opens only while it does (link_streams.go).
 	browser atomic.Bool
 	// streams is the byte streams open on the link's connections (link_streams.go).
 	streams *linkStreams
@@ -418,6 +418,7 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	// the release check the Welcome owes it (linkMode.afterHeartbeat).
 	w.m.assignRelease(welcome.GetRelease())
 	w.browser.Store(welcome.GetBrowser())
+	runnerBrowser().SetOffered(welcome.GetBrowser())
 	w.mu.Lock()
 	w.cur = conn
 	// The backoff is not reset here but once the connection has carried a reconciled heartbeat (reconciled): a
