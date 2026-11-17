@@ -231,7 +231,7 @@ test('the public share door answers after a seq with one group of events, read o
   const links = {
     resolve: async () => ({ sessionId: SESSION, include: { toolOutput: true } }),
   };
-  const controller = new SharedController(links as never, sessions, {} as never);
+  const controller = new SharedController(links as never, sessions, {} as never, {} as never);
 
   const answer = await controller.events('token', undefined, '7', undefined, '2048');
 
