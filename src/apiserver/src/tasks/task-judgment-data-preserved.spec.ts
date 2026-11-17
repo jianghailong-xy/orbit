@@ -3110,7 +3110,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0980 moves workspace.work_dir from /var/lib/orbit/home to /home/orbit for workspaces on managed runners (one
       // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
       // fence changes.
-      '0980_managed_runner_home_orbit'],
+      '0980_managed_runner_home_orbit',
+      // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
+      '0990_schedule_land'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

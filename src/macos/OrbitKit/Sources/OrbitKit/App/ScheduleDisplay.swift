@@ -366,7 +366,7 @@ public enum ScheduleDisplay {
             parts.append(heldReason.flatMap { C.heldShort[$0] } ?? C.Tags.held)
         } else {
             if let workspaceName, !workspaceName.isEmpty { parts.append(workspaceName) }
-            if accessLevel == "OPEN_PR" { parts.append(accessCopy("OPEN_PR").label) }
+            if accessLevel != "CHECK_ONLY" { parts.append(accessCopy(accessLevel).label) }
             if state == "PAUSED", let pausedAt, let timezone {
                 parts.append(fill(C.Row.pausedOn, ["date": dateText(pausedAt, timezone: timezone)]))
             }
@@ -510,7 +510,7 @@ public enum ScheduleDisplay {
 
     // MARK: - The envelope card: Now / Asked
 
-    static let accessOrder: [String: Int] = ["CHECK_ONLY": 0, "OPEN_PR": 1]
+    static let accessOrder: [String: Int] = ["CHECK_ONLY": 0, "OPEN_PR": 1, "LAND": 2]
 
     /// The parts of `after` wider than `before`, in the card's order (schedule-envelope.ts widenedParts).
     public static func widenedParts(before: ScheduleEnvelope, after: ScheduleEnvelope) -> [String] {
@@ -559,11 +559,11 @@ public enum ScheduleDisplay {
     }
 
     /// "Let Codex stable check open PRs?"
-    public static func envelopeTitle(_ title: String, widens: [String], workspaceName: String? = nil) -> String {
+    public static func envelopeTitle(_ title: String, widens: [String], workspaceName: String? = nil, accessLevel: String? = nil) -> String {
         let part = headPart(widens) ?? "RUNS_PER_WEEK"
         var values = ["title": title]
         if let workspaceName { values["workspace"] = workspaceName }
-        return fill(C.EnvelopeCard.titles[part] ?? "", values)
+        return fill(part == "ACCESS_LEVEL" && accessLevel == "LAND" ? C.EnvelopeCard.landTitle : C.EnvelopeCard.titles[part] ?? "", values)
     }
 
     /// The card's decline button: "Keep check only", "Keep weekly", else "Keep as it is".
@@ -617,7 +617,7 @@ public enum ScheduleDisplay {
                                   ruleNow: ruleNow, ruleAsked: ruleAsked, workspaceNames: names)
         let title = card.title ?? scheduleTitle ?? ""
         return EnvelopeCardText(
-            title: envelopeTitle(title, widens: envelope.widens, workspaceName: envelope.asked.runsIn.workspaceName),
+            title: envelopeTitle(title, widens: envelope.widens, workspaceName: envelope.asked.runsIn.workspaceName, accessLevel: envelope.asked.may.accessLevel),
             now: sides.now, asked: sides.asked,
             keep: keepLabel(widens: envelope.widens, now: envelope.now?.envelope,
                             workspaceName: envelope.now?.runsIn.workspaceName),

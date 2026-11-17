@@ -1448,6 +1448,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the run session reports again, and is judged against the run as it then stands.',
   },
   {
+    at: 'schedules/schedule-runs.service.ts#settleLanding',
+    shape: 'TX_RETRIED',
+    locks: 'Per-account schedule advisory key, then schedule row FOR UPDATE; re-read the run before updating landing status/SHA and summary. A final result increments or resets consecutive_failures and files or closes the ordinary failure item, under the same lock.',
+    identity: 'Only a reported LAND run whose landing is WAITING or MERGING is settled, under the schedule lock; a repeated terminal result writes nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
+    effects: "After commit: the landing failure is pushed. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.",
+    answer: 'The worker logs the failure and retries the pending landing on its next pass.',
+  },
+  {
     at: 'schedules/schedule-runs.service.ts#runNow',
     shape: 'TX_RETRIED',
     locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then an UPDATE of its QUEUED run to SKIPPED and one MANUAL schedule_run INSERT. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",

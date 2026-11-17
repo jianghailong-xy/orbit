@@ -146,10 +146,10 @@ export interface SchedulePatch {
   /** Dropped when the patch only reschedules (`isOnlyReschedule`): a correction of the time is not a new goal. */
   intent?: string;
   /**
-   * A new read-back for the schedule as it is after the change, at most 500 characters. Not a setting: no revision
-   * records it. A rule or time-zone change without one clears the stored one, and the read derives it.
+   * A new read-back for the schedule as it is after the change, at most 500 characters. Recorded and undoable.
+   * A rule or time-zone change without one clears the stored one, and the read derives it. Null restores a cleared value on undo.
    */
-  readBack?: string;
+  readBack?: string | null;
   title?: string;
   prompt?: string;
   rule?: unknown;
@@ -293,8 +293,8 @@ function checkRunLimit(minutes: number): void {
 }
 
 function checkAccessLevel(level: unknown): asserts level is AccessLevel {
-  if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR') {
-    throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY or OPEN_PR.');
+  if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR' && level !== 'LAND') {
+    throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY, OPEN_PR or LAND.');
   }
 }
 
@@ -947,13 +947,13 @@ export class SchedulesService {
     // The read-back describes the schedule as it is now: a new one when the change brings one, none (so the read
     // derives it) when the rule or zone moved without one.
     const readBack = patch.readBack !== undefined
-      ? patch.readBack.trim() || null
+      ? patch.readBack?.trim() || null
       : 'rule' in after || 'timezone' in after ? null : schedule.readBack;
-    if (Object.keys(after).length === 0) {
-      if (readBack === schedule.readBack) return { outcome: 'UNCHANGED', schedule };
-      const reread = await tx.schedule.update({ where: { id: schedule.id }, data: { readBack } });
-      return { outcome: 'UNCHANGED', schedule: reread };
+    if (readBack !== schedule.readBack) {
+      before.readBack = schedule.readBack;
+      after.readBack = readBack;
     }
+    if (Object.keys(after).length === 0) return { outcome: 'UNCHANGED', schedule };
 
     const revision = schedule.revision + 1;
     const updated = await tx.schedule.update({
@@ -1264,6 +1264,7 @@ export class SchedulesService {
   private fieldValues(s: Schedule): FieldValues {
     return {
       ...this.fieldValuesOfSettings(this.settingsOf(s)),
+      readBack: s.readBack,
       state: s.state,
       endedReason: s.endedReason,
       envelope: envelopeOf(s),

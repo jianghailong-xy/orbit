@@ -46,6 +46,7 @@ export const SCHEDULE_ACCESS_NOT_ENFORCEABLE = 'SCHEDULE_ACCESS_NOT_ENFORCEABLE'
 export const ACCESS_LEVEL_MODES: Readonly<Record<AccessLevel, readonly PermissionMode[]>> = {
   CHECK_ONLY: [PermissionMode.PLAN, PermissionMode.DONT_ASK],
   OPEN_PR: [PermissionMode.ACCEPT_EDITS, PermissionMode.DEFAULT],
+  LAND: [PermissionMode.ACCEPT_EDITS, PermissionMode.DEFAULT],
 };
 
 /**
@@ -319,9 +320,14 @@ export function checkOnlyRefusesApproval(
  */
 export const OPEN_PR_DISALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__session_merge',
+  'mcp__orbit__integration_*',
   'mcp__orbit__integration_request_promotion',
   'mcp__orbit__integration_skip_merge_check',
   'Bash(gh pr merge:*)',
+  'Bash(git push * main)',
+  'Bash(git push * main:*)',
+  'Bash(git push * *:main)',
+  'Bash(git push * *:refs/heads/main)',
   'Bash(gh release:*)',
   'Bash(npm publish:*)',
   'Bash(docker push:*)',
@@ -336,7 +342,7 @@ export function scheduleRunDisallowedTools(
   provider: string | null | undefined,
   runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
-  if (accessLevel === 'OPEN_PR') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
+  if (accessLevel === 'OPEN_PR' || accessLevel === 'LAND') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
   if (claudeCheckOnly(accessLevel, provider)) {
     const own = checkOnlyAsksOn(runnerCapabilities)
       ? CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS

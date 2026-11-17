@@ -228,7 +228,7 @@ export function ScheduleEnvelopeCardView({ card }: { card: ScheduleEnvelopeCard 
   const error = scheduleErrorText(decide.error);
   return (
     <section className="sched-card is-widen" data-schedule-card="envelope" data-state={card.state}>
-      <div className="sched-card-head"><WarnIcon />{scheduleEnvelopeTitle(title, widens, askedName)}</div>
+      <div className="sched-card-head"><WarnIcon />{scheduleEnvelopeTitle(title, widens, askedName, asked.accessLevel)}</div>
       <dl className="sched-card-facts">
         {sides.now ? (
           <>
