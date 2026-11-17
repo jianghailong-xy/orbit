@@ -1100,7 +1100,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
-	defer registerSecretWarnings(sessionID, emit)()
+	defer registerSecretWarnings(sessionID, emit, func() string {
+		curTurnMu.Lock()
+		defer curTurnMu.Unlock()
+		return curTurn
+	})()
 	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
 	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
