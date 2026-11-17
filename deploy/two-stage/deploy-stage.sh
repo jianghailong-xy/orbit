@@ -190,9 +190,14 @@ healthy() {
 # (src/apiserver/src/common/graceful-stop.ts); 137 would be Docker killing it at the end of its grace period.
 stop_and_say() {
   local began
-  began="$(date +%s%3N)"
+  began="$(monotonic_ms)"
   docker stop "$1" >/dev/null || return 1
-  echo "    $1 stopped in $(($(date +%s%3N) - began)) ms, exit code $(docker inspect -f '{{.State.ExitCode}}' "$1")"
+  echo "    $1 stopped in $(($(monotonic_ms) - began)) ms, exit code $(docker inspect -f '{{.State.ExitCode}}' "$1")"
+}
+# Milliseconds since boot, which no clock adjustment moves: a step of the wall clock during a stop once
+# printed "stopped in -24 ms". The wall clock where there is no /proc/uptime.
+monotonic_ms() {
+  if [ -r /proc/uptime ]; then awk '{ printf "%d\n", $1 * 1000 }' /proc/uptime; else date +%s%3N; fi
 }
 # The pids of the gateway's workers that take new connections.
 workers() {
