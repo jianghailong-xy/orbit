@@ -1,0 +1,8 @@
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test1FoldedCardDetailsAndTheSettledFold]' started.
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test1FoldedCardDetailsAndTheSettledFold]' passed (294.058 seconds).
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test2AccessibilityLargeText]' started.
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test2AccessibilityLargeText]' passed (153.544 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.608) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.609) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.613) seconds
+** TEST SUCCEEDED **

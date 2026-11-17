@@ -1,0 +1,1 @@
+cd src/apiserver && npx tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.spec\.js$') && node --test --test-concurrency=4 --test-reporter=spec $SPECS

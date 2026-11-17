@@ -1,0 +1,41 @@
+==> iPhone CDC7077E-2206-4FEC-B03A-52EB15B2CAD4: iPhone 17 Pro (CDC7077E-2206-4FEC-B03A-52EB15B2CAD4) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 5496, after 2s)
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test1FoldedCardDetailsAndTheSettledFold]' started.
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test1FoldedCardDetailsAndTheSettledFold]' passed (294.058 seconds).
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test2AccessibilityLargeText]' started.
+Test Case '-[OcitProbeUITests.OwnerCardTextShotTests test2AccessibilityLargeText]' passed (153.544 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.608) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.609) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 447.602 (447.613) seconds
+** TEST SUCCEEDED **
+==> pasteboard: cd src/apiserver && npx tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\.pg\.spec\.js$') && node --test --test-concurrency=4 --test-reporter=spec $SPECS
+.ocit-probe/run.sh: line 55:  5496 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 9248
+drwxr-xr-x  28 runner  staff     896 Nov 17 04:39 .
+drwxr-xr-x   3 runner  staff      96 Nov 17 04:15 ..
+drwxr-xr-x  23 runner  staff     736 Nov 17 04:39 attachments
+-rw-r--r--   1 runner  staff    9728 Nov 17 04:39 compiled-ios.txt
+-rw-r--r--   1 runner  staff  365048 Nov 17 04:33 ios-1-folded.png
+-rw-r--r--   1 runner  staff  421620 Nov 17 04:33 ios-2-details-open.png
+-rw-r--r--   1 runner  staff  456218 Nov 17 04:33 ios-3-full-output-sheet.png
+-rw-r--r--   1 runner  staff  327422 Nov 17 04:35 ios-4-fold-expanded.png
+-rw-r--r--   1 runner  staff  429574 Nov 17 04:35 ios-5-fold-collapsed.png
+-rw-r--r--   1 runner  staff  400035 Nov 17 04:35 ios-6-tail.png
+-rw-r--r--   1 runner  staff  392392 Nov 17 04:37 ios-7-ax-l-top.png
+-rw-r--r--   1 runner  staff  449500 Nov 17 04:37 ios-8-ax-l-doors.png
+-rw-r--r--   1 runner  staff  460701 Nov 17 04:38 ios-9-ax-l-details.png
+-rw-r--r--@  1 runner  staff   18714 Nov 17 04:37 missing-band-ax-heading.txt
+-rw-r--r--@  1 runner  staff   21622 Nov 17 04:34 missing-band-fold-again.txt
+-rw-r--r--   1 runner  staff     965 Nov 17 04:39 not-served.txt
+-rw-r--r--@  1 runner  staff    1587 Nov 17 04:35 OwnerCardTextShotTeststest1FoldedCardDetailsAndTheSettledFold-notes.txt
+-rw-r--r--@  1 runner  staff    1934 Nov 17 04:38 OwnerCardTextShotTeststest2AccessibilityLargeText-notes.txt
+-rw-r--r--   1 runner  staff     174 Nov 17 04:39 pasteboard-after-tests.txt
+-rw-r--r--   1 runner  staff   19898 Nov 17 04:38 requests.log
+-rw-r--r--   1 runner  staff      84 Nov 17 04:19 requests.log.out
+-rw-r--r--@  1 runner  staff   19618 Nov 17 04:33 tree-1-folded.txt
+-rw-r--r--@  1 runner  staff   17853 Nov 17 04:33 tree-2-details.txt
+-rw-r--r--@  1 runner  staff   23758 Nov 17 04:35 tree-4-fold-open.txt
+-rw-r--r--@  1 runner  staff   16758 Nov 17 04:35 tree-6-tail.txt
+-rw-r--r--@  1 runner  staff   17729 Nov 17 04:38 tree-9-ax-details.txt
+-rw-r--r--   1 runner  staff     452 Nov 17 04:39 writes.txt
+-rw-r--r--   1 runner  staff  808742 Nov 17 04:39 xcodebuild-ios.log

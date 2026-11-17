@@ -1,0 +1,15 @@
+ax-heading: never in the band 110.0–260.0; last frame (30.0, 199.00000000000009, 327.3333333333333, 119.66666666666666)
+ax button 9 label="Ask the coordinator again" value="" frame=(40.0, 532.3333333333333, 314.3333333333333, 93.66666666666663) hittable=true
+ax button 9 label="Fix it myself" value="" frame=(40.0, 824.9999999999999, 198.66666666666666, 53.66666666666674) hittable=true
+ax button 9 label="Retry" value="" frame=(248.66666666666666, 824.9999999999999, 107.33333333333334, 53.66666666666674) hittable=true
+ax button 9 label="or Chat about this first" value="" frame=(40.0, 632.0, 257.3333333333333, 32.33333333333337) hittable=true
+ax button 9 label="Ask the coordinator again" value="" frame=(40.0, 282.33333333333326, 314.3333333333333, 93.66666666666657) hittable=true
+ax button 9 label="Fix it myself" value="" frame=(40.0, 574.9999999999999, 198.66666666666666, 53.66666666666674) hittable=true
+ax button 9 label="Retry" value="" frame=(248.66666666666666, 574.9999999999999, 107.33333333333334, 53.66666666666674) hittable=true
+ax button 9 label="or Chat about this first" value="" frame=(40.0, 382.0, 257.3333333333333, 32.333333333333314) hittable=true
+ax button 9 label="Ask the coordinator again" value="" frame=(40.0, 32.33333333333326, 314.3333333333333, 93.66666666666663) hittable=true
+ax button 9 label="Fix it myself" value="" frame=(40.0, 324.9999999999999, 198.66666666666666, 53.6666666666668) hittable=true
+ax button 9 label="Retry" value="" frame=(248.66666666666666, 324.9999999999999, 107.33333333333334, 53.6666666666668) hittable=true
+ax button 9 label="or Chat about this first" value="" frame=(40.0, 132.0, 257.3333333333333, 32.33333333333337) hittable=true
+ax button 9 label="Mark as handled" value="" frame=(30.0, 756.3333333333331, 191.33333333333334, 32.33333333333326) hittable=true
+ax-copy: in view after 3 drag(s) at (30.0, 638.9999999999999, 177.66666666666666, 31.333333333333258)
