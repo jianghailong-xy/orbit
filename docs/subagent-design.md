@@ -292,7 +292,7 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 | 2 | `delegate(needs=["os:darwin"])` 或定义文件 `needs:` | 在候选 workspace 里选：同一 owner、启用、`repoUrl` 与父会话的 workspace 相同、runner 在线且报告了全部所需能力；多个时按额度余量，再按 Agents 列表顺序 |
 | 3 | 都没写 | 父会话本机（§5，同一 cwd） |
 
-- `repoUrl` 不同（或任一为空）一律拒绝：`SUBAGENT_WORKSPACE_REPO_MISMATCH`。跨仓库的活用 `session_create`。
+- owner 决策（2026-11-17）：点名 `workspace` 可选同一 owner 的任意仓库，不比较 `repoUrl`（任一为空也允许）；仅按 `needs` 自动选取时仍限父会话同一仓库。
 - runner 目前不报告操作系统；runner 任务要加上 `os:<GOOS>`（`os:darwin`、`os:linux`）。其他能力沿用 `Runner.capabilities`。
 - 目标 workspace 的 Agent 必须开着 SubAgents（`subagentsEnabled`），并发上限按**目标**会话树算在父会话的上限里。
 
