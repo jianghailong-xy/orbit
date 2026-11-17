@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -119,12 +121,26 @@ func cmdBrowserMCP() {
 		waitReady: waitBrowserDevTools,
 		out:       os.Stdout,
 	}
-	endpoint := "http://" + browserDevToolsHost + ":" + fmt.Sprint(browserDevToolsPort)
-	cmd := exec.Command(playwrightMCPBinary, "--cdp-endpoint", endpoint)
+	cmd := exec.Command(playwrightMCPBinary, playwrightMCPArgs(socket)...)
 	cmd.Stderr = os.Stderr
 	if err := p.run(cmd, os.Stdin); err != nil {
 		fmt.Fprintln(os.Stderr, "orbit browser-mcp:", err)
 		os.Exit(1)
+	}
+}
+
+// playwrightMCPArgs is playwright-mcp's argv: Chrome's DevTools endpoint, and where it writes its snapshots and
+// screenshots. Left to itself it writes them under the engine's working directory, which is the session's checkout,
+// where they would be committed with the session's work; they go to the session's run directory instead, beside its
+// socket (runDir), or under the temporary directory when there is no socket.
+func playwrightMCPArgs(socket string) []string {
+	out := filepath.Join(os.TempDir(), "orbit-browser-mcp")
+	if socket != "" {
+		out = filepath.Join(filepath.Dir(socket), "browser-output")
+	}
+	return []string{
+		"--cdp-endpoint", "http://" + browserDevToolsHost + ":" + strconv.Itoa(browserDevToolsPort),
+		"--output-dir", out,
 	}
 }
 

@@ -197,3 +197,17 @@ func TestBrowserMCPProxyTakesTheLeaseBeforeEachToolCall(t *testing.T) {
 		t.Fatalf("refused call's reply = %+v, want a tool error for id r4 carrying the refusal", reply)
 	}
 }
+
+// playwright-mcp writes its snapshots to its output directory, by default under the engine's working directory: the
+// session's checkout. It is pointed at the session's run directory instead, never at the checkout.
+func TestPlaywrightMCPWritesOutsideTheCheckout(t *testing.T) {
+	socket := filepath.Join(runDir("sess-a"), "bg.sock")
+	got := strings.Join(playwrightMCPArgs(socket), " ")
+	want := "--cdp-endpoint http://127.0.0.1:9222 --output-dir " + filepath.Join(runDir("sess-a"), "browser-output")
+	if got != want {
+		t.Fatalf("playwright-mcp argv = %q, want %q", got, want)
+	}
+	if got := playwrightMCPArgs(""); got[len(got)-1] != filepath.Join(os.TempDir(), "orbit-browser-mcp") {
+		t.Fatalf("without a socket the output goes to %q, want under the temporary directory", got[len(got)-1])
+	}
+}
