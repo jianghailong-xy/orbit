@@ -11,6 +11,13 @@ import org.junit.Test
  * alone, and nothing it sends carries a rule. A session on any other engine keeps "Allow & remember".
  */
 class DshApprovalCardTest {
+    @Test fun aScheduledCheckRemembersOnlyTheExactCommand() {
+        val command = """python3 -c "print(open('watched.txt').read())" """.trimEnd()
+        val input = buildJsonObject { put("command", command); put("orbitScheduleCheckOnly", true) }
+        assertEquals(listOf(PermissionRule("Bash", command)), ApprovalRules.remember("Bash", input))
+        assertEquals(listOf(PermissionRule("Bash", "python3:*")), ApprovalRules.remember("Bash", buildJsonObject { put("command", command) }))
+    }
+
     private val raw = fixture().obj("snapshot")!!
     /** The shared corpus's snapshot, on the engine the server says the session runs on. */
     private fun on(engine: String) = JsonObject(raw + ("detail" to JsonObject(raw.obj("detail")!! + ("engine" to JsonPrimitive(engine)))))

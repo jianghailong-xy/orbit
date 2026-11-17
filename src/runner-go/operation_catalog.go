@@ -253,6 +253,7 @@ var catalogCLIExemptions = map[string]string{
 	"schedule_run_report":             "reports the scheduled run the calling session serves: a terminal is no such session",
 	"open_item_resolve":               "closes an item as the project's coordinator session: a terminal outside one is refused by the server",
 	"open_item_hand_over":             "hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server",
+	"project_ruling_record":           "records as the project's coordinator session, from one of its turns: a terminal outside one is refused by the server",
 	"integration_retry":               "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
 	"integration_abandon":             "abandons a running job as the project's coordinator session: a terminal outside one is refused by the server",
 	"integration_observe":             "asks for an observation as the project's coordinator session: a terminal outside one is refused by the server",
@@ -274,6 +275,7 @@ var catalogMCPOnlyMutations = map[string]bool{
 	"integration_observe":             true,
 	"integration_retry":               true,
 	"open_item_hand_over":             true,
+	"project_ruling_record":           true,
 	"open_item_resolve":               true,
 	"permission_prompt":               false,
 	"request_owner_action":            true,
@@ -333,6 +335,7 @@ var catalogPlanRunsWrites = map[string]string{
 	"schedule_wakeup":        "schedules this session's own next turn; it changes no work",
 	"notify":                 "puts a line in front of the owner; a message is not work",
 	"ask_owner":              "puts a question to the owner; a question is not work",
+	"project_ruling_record":  "records what the owner already said; a record of a ruling is not work",
 	"request_owner_action":   "asks the owner for an action that is theirs to take; a question is not work",
 	"withdraw_owner_request": "takes back a question this session asked",
 	"schedule_create":        "puts a create card in front of the owner; nothing is scheduled until they press Create",
@@ -2076,6 +2079,42 @@ func buildOperationCatalog() []*operation {
 					"description": "Why the coordinator cannot settle it. Required, up to 2000 characters, and kept on the item.",
 				},
 			}, "projectId", "itemId", "note"),
+		},
+		{
+			"name": "project_ruling_record",
+			"description": "Record an owner ruling given in this conversation as a project record, so it outlives " +
+				"this conversation and every handoff. A ruling is what the owner told the coordinator, in one " +
+				"sentence; the quote is the owner's own words, copied exactly from the turn they were said in, " +
+				"and that turn's id is sourceTurnId. Refused unless the quote is in that turn's owner text (a " +
+				"turn Orbit or another session wrote is not the owner's) and unless this session coordinates " +
+				"the project. Answered ask_owner questions are recorded automatically; do not record them again. " +
+				"When a ruling replaces one already recorded, pass the old one's id as supersedes: it is marked " +
+				"superseded, not deleted. project_get lists the live rulings. Rulings are not acceptance " +
+				"criteria and change nothing the platform enforces.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"ruling": map[string]interface{}{
+					"type":        "string",
+					"maxLength":   500,
+					"description": "The ruling in one sentence, up to 500 characters.",
+				},
+				"quote": map[string]interface{}{
+					"type":        "string",
+					"maxLength":   2000,
+					"description": "The owner's own words, copied exactly from the turn (whitespace may differ), up to 2000 characters.",
+				},
+				"sourceTurnId": map[string]interface{}{
+					"type":        "string",
+					"description": "The id of the owner's turn the quote is from, in this coordinator conversation or one handed over to it.",
+				},
+				"supersedes": map[string]interface{}{
+					"type":        "string",
+					"description": "The id of a live ruling this one replaces, as project_get lists it. Optional.",
+				},
+			}, "projectId", "ruling", "quote", "sourceTurnId"),
 		},
 		{
 			"name": "integration_retry",
@@ -4935,6 +4974,10 @@ var catalogMetadata = map[string]operationMeta{
 		Object:   objectOwner,
 		Intent:   "Ask the account owner a question.",
 		Approval: approvalKindOwner,
+	},
+	"project_ruling_record": {
+		Object: objectProject,
+		Intent: "Record an owner ruling given in this conversation as a project record.",
 	},
 	"request_owner_action": {
 		Object:   objectOwner,

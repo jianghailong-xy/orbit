@@ -156,7 +156,7 @@ class CoordinatorHandoffTest {
     }
 
     @Test fun theNoteReadsAsItsFourSections() {
-        val note = "Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\n\nAgreed with the owner\nDon't merge Payment retries before Friday's release.\n" +
+        val note = "Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\n\nRulings not yet recorded\nDon't merge Payment retries before Friday's release.\n" +
             "## Waiting on\n- Evidence for Fix login redirect.\n**Next:**\n- Ask for the merge once that evidence is in."
         val parsed = CoordinatorHandoff.sections(note)!!
         val sections = parsed.sections
@@ -186,6 +186,21 @@ class CoordinatorHandoffTest {
         assertEquals("1 wait moved here", CoordinatorHandoffCopy.waitsMovedHere(1))
         assertEquals("2 pending waits move over", CoordinatorHandoffCopy.waitsRowTitle(2))
         assertEquals("1 pending wait moves over", CoordinatorHandoffCopy.waitsRowTitle(1))
+    }
+
+    /** Handoff v2 §1: each wait names its kind after its label; a watch, and a wait from a server without `kind`, read as before. */
+    @Test fun eachWaitNamesItsKindAndAWaitWithoutOneReadsAsBefore() {
+        val waits = CoordinatorHandoff.waits(Json.parseToJsonElement("""[
+            {"id":"r1","kind":"SUBAGENT","label":"Deploy 55a189aa3 to production","paused":false},
+            {"id":"sw1","kind":"WAKEUP","label":"Check the deploy","paused":false},
+            {"id":"bgj_1","kind":"JOB","label":"pnpm test","paused":false},
+            {"id":"l1","kind":"LOOP","label":"Babysit CI","paused":false},
+            {"id":"w1","kind":"WATCH","label":"Waiting for Fix login redirect","paused":true},
+            {"id":"w2","label":"Session finishing its turn","paused":false},
+            {"id":"x1","kind":"SOMETHING_NEW","label":"Something new","paused":false}]"""))
+        assertEquals(listOf("Deploy 55a189aa3 to production · SubAgent", "Check the deploy · Scheduled wakeup", "pnpm test · Background job",
+            "Babysit CI · Wakeup loop", "Waiting for Fix login redirect (paused)", "Session finishing its turn", "Something new"),
+            waits.map { it.shownLabel })
     }
 
     /** Board 03 iOS 2's body, word for word as OrbitKit's `phoneConfirmBody` pins it: the waits a count, none when there are none. */

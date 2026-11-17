@@ -406,3 +406,9 @@ test('nothing to match on means ask: no rules, no command, no tool', () => {
   assert.equal(ruleCoversApproval(AgentProvider.CODEX, 'Bash', bash('   '), NPM_TEST), false);
   assert.equal(ruleCoversApproval(AgentProvider.CODEX, '', bash('npm test'), NPM_TEST), false);
 });
+
+test('scheduled command grants never become engine patterns or ordinary prefix grants', () => {
+  const rules = [{ toolName: 'Bash', ruleContent: 'python3:*', fromScheduleRun: true }];
+  assert.deepEqual(dispatchAllowedTools('claude', [], rules), []);
+  assert.equal(ruleCoversApproval('kimi', 'Bash', { command: 'python3 -c "write()"' }, rules), false);
+});
