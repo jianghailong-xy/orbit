@@ -27,7 +27,7 @@ Interpret tags as follows:
 
 A release is mostly reading commits for its notes and then waiting 30 to 60 minutes on `release.yml`, which needs
 no expensive model. On one, such as an Opus, Fable or GPT-6.x Sol model, the session keeps only the decisions and
-hands the work to a cheaper model with Orbit's `delegate` (`model: "deepseek-v4-flash"`). If `delegate` refuses the
+hands the work to DeepSeek V4.1 Flash with Orbit's `delegate` (`model: "deepseek-flash"`, Orbit's id for it). If `delegate` refuses the
 model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash or mini model from the list the refusal prints. On an
 inexpensive model, follow [Workflow](#workflow) yourself.
 
