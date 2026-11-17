@@ -2,7 +2,7 @@
      live and can take control (WebVNC). Off by default; can be switched on only for managed runners.
      Design: docs/runner-browser-design.md. Demo data throughout. Render: see README.md -->
 <!doctype html><html lang="zh"><meta charset="utf-8">
-<title>Orbit Cloud 浏览器：看 agent 的 Chrome，必要时接管</title>
+<title>Orbit Cloud 浏览器：看 agent 的 Chrome，必要时接管，自己登录</title>
 <style>
   :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
           --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
@@ -92,12 +92,19 @@
   .cursor { position:absolute; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:14px solid #111; transform:rotate(-30deg); }
   .foot { padding:6px 12px 10px; font-size:11.5px; color:var(--t2); display:flex; gap:8px; align-items:center; }
   .foot .r { margin-left:auto; }
+  .rb-set { margin:-4px -4px 0; }
+  .rb-sh { font-size:11.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.03em; margin:12px 4px 6px; }
+  .rb-card { background:#fff; border:1px solid var(--sep); border-radius:10px; }
+  .rb-r { display:flex; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid var(--sep); justify-content:space-between; line-height:1.45; }
+  .rb-r:first-child { border-top:0; }
+  .rb-v, .rb-s { color:var(--t2); font-size:12px; }
+  .rb-red { color:#d93025; font-weight:600; }
   .xin::after { position:static; display:inline-block; margin-left:6px; vertical-align:1px; }
   .empty-n { color:#9a9aa2; font-size:12px; }
 </style>
 
 <h1>Orbit Cloud 浏览器：看 agent 的 Chrome，必要时接管</h1>
-<p class="lede">Orbit Cloud runner 里的 agent 用真的 Chrome 干活；你在自己的浏览器里实时看到它的画面（WebVNC），不对劲时点 <b>Take control</b> 接管。
+<p class="lede">Orbit Cloud runner 里的 agent 用真的 Chrome 干活；你在自己的浏览器里实时看到它的画面（WebVNC），不对劲时点 <b>Take control</b> 接管；也可以自己在 Settings 里打开它登录网站，登录态一直保存，agent 直接用。整台 runner 共用一个浏览器（已定）。
   只给 Orbit Cloud（托管 runner）用，<b>默认部署关闭</b>。设计文档：<code>docs/runner-browser-design.md</code>。界面文案英文，注释中文，页面内容是演示数据。</p>
 
 <!-- =================================================================== PART 1 -->
@@ -128,25 +135,25 @@
     <div class="rb-flow">
       <h3>② 新增：画面沿 runner 自己连出的链路回来，不开任何入站端口</h3>
       <div class="rb-lane">
-        <div class="rb-box new x" data-n="1"><b>你的浏览器</b><small>noVNC 画布（会话右侧抽屉）</small></div>
+        <div class="rb-box new x" data-n="1"><b>你的浏览器</b><small>noVNC 画布（会话或 Settings 的抽屉）</small></div>
         <div class="rb-arrow new"><i>⇄</i>WSS</div>
-        <div class="rb-box new x" data-n="2"><b>apiserver</b><small>新 WebSocket 路由：开关、归属、托管 runner 三查</small></div>
+        <div class="rb-box new x" data-n="2"><b>apiserver</b><small>新 WebSocket 路由：开关、runner 归属、托管 runner 三查</small></div>
       </div>
       <div class="rb-lane">
         <div class="rb-box new x" data-n="3"><b>链路网关</b><small>NATS <code>vnc.&lt;id&gt;.up/down</code> ⇄ 链路帧</small></div>
         <div class="rb-arrow new"><i>⇄</i>StreamOpen / Data<br>Credit / Close</div>
-        <div class="rb-box new x" data-n="4"><b>runner</b><small>把流接到本会话的 vnc.sock</small></div>
+        <div class="rb-box new x" data-n="4"><b>runner</b><small>把流接到 ~/.orbit/browser/vnc.sock</small></div>
       </div>
-      <div class="rb-ctr"><span class="lbl">runner 容器（新增，按会话按需启动）</span>
+      <div class="rb-ctr"><span class="lbl">runner 容器（新增，整台 runner 一个浏览器，按需启动）</span>
         <div class="rb-row">
-          <div class="rb-box new x" data-n="5"><b>Xvfb :n</b><small>1280×800</small></div>
-          <div class="rb-box new"><b>Chrome</b><small>--no-sandbox · 资料在卷上</small></div>
+          <div class="rb-box new x" data-n="5"><b>Xvfb :1</b><small>1280×800</small></div>
+          <div class="rb-box new"><b>Chrome</b><small>--no-sandbox · 资料在卷上，登录长期保存</small></div>
           <div class="rb-box new"><b>x11vnc</b><small>只听 unix socket，无 TCP</small></div>
-          <div class="rb-box new x" data-n="6"><b>browser MCP</b><small>@playwright/mcp → 本会话 Chrome</small></div>
+          <div class="rb-box new x" data-n="6"><b>browser MCP</b><small>@playwright/mcp → runner 的 Chrome，同一时间一个会话用</small></div>
         </div>
       </div>
-      <p class="note"><b>1</b> 默认只看，不发鼠标键盘。<b>2</b> 和网页同一登录；只认会话本人。<b>3</b> 只有持有该 runner 连接的网关节点应答；每 runner 最多 2 路、每会话 1 路。
-        <b>4</b> 流数据走最低一档写出，窗口 256 KiB，不会挤掉心跳和控制帧。<b>5</b> 会话第一次用浏览器才启动，会话结束或 15 分钟没人用就停。<b>6</b> 和今天给引擎挂 <code>orbit mcp</code> 一样挂上，开关关时不挂。</p>
+      <p class="note"><b>1</b> 默认只看，不发鼠标键盘。<b>2</b> 和网页同一登录；只认 runner 本人。<b>3</b> 只有持有该 runner 连接的网关节点应答；每 runner 最多 2 路（两个标签页或两台设备同时看）。
+        <b>4</b> 流数据走最低一档写出，窗口 256 KiB，不会挤掉心跳和控制帧。<b>5</b> agent 第一次用、或你点 Open browser 才启动；15 分钟没人用也没人看就停。<b>6</b> 和今天给引擎挂 <code>orbit mcp</code> 一样挂上，开关关时不挂；一个会话用着时，别的会话调用会收到“浏览器正被某会话使用”，等它这一轮结束。</p>
     </div>
   </div>
 
@@ -185,7 +192,7 @@
           <div class="composer">Reply…</div>
         </div></div>
       </div>
-      <p class="note"><b>1</b> 只在三件事同时成立时出现：开关开、会话跑在托管 runner、本会话的显示正在跑。红点 = 画面是实时的。点它打开右侧抽屉（复用现有的 <code>Drawer</code>，不新造外观）。agent 没用浏览器的会话，什么都不多。</p>
+      <p class="note"><b>1</b> 只在三件事同时成立时出现：开关开、会话跑在托管 runner、runner 的浏览器正在跑。红点 = 画面是实时的。点它打开右侧抽屉（复用现有的 <code>Drawer</code>，不新造外观）。agent 没用浏览器的会话，什么都不多。</p>
     </div>
 
     <div>
@@ -211,7 +218,7 @@
               </div>
               <div class="cursor" style="left:200px; top:170px"></div>
             </div>
-            <div class="foot">1280×800 · scaled to fit <span class="r">Live</span></div>
+            <div class="foot">Used by this session · 1280×800 <span class="r">Live</span></div>
           </div>
         </div>
       </div>
@@ -274,6 +281,57 @@
       </div>
       <p class="note"><b>5</b> 只预填，不自动发：你可以写清楚刚才改了什么（“密码加了个符号，提交成功了”），agent 下一轮从你停下的页面接着干。</p>
     </div>
+
+    <div>
+      <div class="fh">⑧ Settings → Orbit Cloud：自己打开浏览器 <span class="tag">新</span></div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body"><div class="main" style="background:#fafafb">
+          <div class="hd"><span class="tt">Settings · Orbit Cloud</span><span class="pill p-ok">Online</span></div>
+          <div class="tx">
+            <div class="rb-set">
+              <div class="rb-sh">Engines</div>
+              <div class="rb-card"><div class="rb-r"><span>Claude Code, Codex, OpenCode…</span><span class="rb-v">Up to date</span></div></div>
+              <div class="rb-sh">Browser</div>
+              <div class="rb-card">
+                <div class="rb-r"><span><b>Browser</b><br><span class="rb-s">Idle · not running</span></span><span class="btn pri x" data-n="6">Open browser</span></div>
+                <div class="rb-r"><span><b>Saved logins</b><br><span class="rb-s x xin" data-n="7">Sites you sign in to here stay signed in on this runner. Agents on this runner can use them.</span></span></div>
+                <div class="rb-r"><span class="rb-red x xin" data-n="8">Clear saved logins</span></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+      <p class="note"><b>6</b> 不用先开会话：点了就启动 Chrome，抽屉直接处于控制状态（你来就是要输入的）。若有 agent 正在用，先问 “An agent is using the browser. Take control and stop its turn?”。
+        <b>7</b> 就在登录入口旁边写明：登录会保存，agent 都能用。<b>8</b> 二次确认后停掉 Chrome、删除资料目录。</p>
+    </div>
+
+    <div>
+      <div class="fh">⑨ 在里面登录网站 <small>登录态存在 runner 卷上，以后 agent 打开就是已登录</small></div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="main" style="opacity:.55;background:#fafafb">
+            <div class="hd"><span class="tt">Settings · Orbit Cloud</span></div>
+            <div class="tx"><div class="rb-sh">Browser</div><div class="rb-card"><div class="rb-r"><span><b>Browser</b><br><span class="rb-s">Running · you are in control</span></span></div></div></div>
+          </div>
+          <div class="drawer">
+            <div class="ctrlbar"><b>You are controlling the browser</b><span class="btn">Done</span></div>
+            <div class="canvas ctl">
+              <div class="cbar">◀ ▶ ⟳ <span class="url">accounts.example.com/login</span></div>
+              <div class="site">
+                <h4>Sign in to Example</h4>
+                Email<div class="fld">me@example.com</div>
+                Password<div class="fld">••••••••••|</div>
+                <span class="go">Sign in</span>
+              </div>
+            </div>
+            <div class="foot x xin" data-n="9">Not in use by any session</div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>9</b> 底部始终写当前谁在用浏览器（某个会话 / 没人）。从 Settings 打开时只有 <b>Done</b>，不预填消息。密码经加密的流传过去，Orbit 不保存；保存的是网站自己的登录 cookie。</p>
+    </div>
   </div>
 </section>
 
@@ -285,21 +343,21 @@
       <table>
         <tr><th>#</th><th style="white-space:nowrap">问题</th><th>方案 A</th><th>方案 B</th><th>建议</th></tr>
         <tr><td>P1</td><td style="white-space:nowrap">镜像</td><td>一个镜像，浏览器一直在里面，开关开了才启动</td><td>另出一个 <code>-browser</code> 镜像，开了才用它</td><td><b>A</b>：只构建、只测一个；代价是每台主机多拉约 350 MB（默认部署也会拉到，但不运行）</td></tr>
-        <tr><td>P2</td><td>显示</td><td>每个会话一个，按需启动</td><td>每台 runner 一个，会话共用</td><td><b>A</b>：画面属于会话；会话之间看不到彼此的标签页和登录</td></tr>
+        <tr><td>P2</td><td>显示</td><td>每个会话一个，按需启动</td><td>每台 runner 一个，会话共用</td><td><span class="tag">已定 B</span> 你登录的、agent 登录的都保存；同一时间一个会话用</td></tr>
         <tr><td>P3</td><td>接管</td><td>中断 agent 这一轮再交给你</td><td>你和 agent 同时操作</td><td><b>A</b>：不抢鼠标；复用现有中断</td></tr>
-        <tr><td>P4</td><td style="white-space:nowrap">谁能看</td><td>只有会话本人</td><td>本人和会话访客</td><td><b>A</b>（v1）：画面里可能有登录态</td></tr>
+        <tr><td>P4</td><td style="white-space:nowrap">谁能看</td><td>只有 runner 本人</td><td>本人和会话访客</td><td><b>A</b>（v1）：画面里可能有登录态</td></tr>
         <tr><td>P5</td><td style="white-space:nowrap">首期客户端</td><td>只做网页</td><td>网页 + macOS</td><td><b>A</b>：原生端以后用 web view 套同一个 noVNC 页</td></tr>
       </table>
-      <div class="q"><b>资源：</b>一个 Chrome 约 0.5–1.5 GiB。配置里加 <code>browser.maxPerRunner</code>（默认 2），运营方相应调高 runner 的内存上限；第 3 个会话要浏览器时，工具直接回“浏览器都在用”。
-        <br><b>安全：</b>不开入站端口、不改防火墙；VNC 只在容器内 unix socket 上，每路流先过 apiserver 鉴权；不录屏。</div>
+      <div class="q"><b>资源：</b>整台 runner 只有一个 Chrome，约 0.5–1.5 GiB，运营方把 runner 内存上限调高约 1.5 GiB。
+        <br><b>安全：</b>不开入站端口、不改防火墙；VNC 只在容器内 unix socket 上，每路流先过 apiserver 鉴权；不录屏。保存的登录在 runner 卷上，runner 上所有 agent 都能用，Settings 里可一键清除。</div>
     </div>
     <div class="sheet">
       <h2>落地（按代价排）</h2>
       <table>
         <tr><th style="white-space:nowrap">阶段</th><th>做什么</th><th style="white-space:nowrap">做完能怎样</th></tr>
-        <tr><td>1</td><td>新开关 + <code>Welcome.browser</code>；镜像加 Chromium / Xvfb / x11vnc / 字体 / @playwright/mcp；按会话启停显示；先给 Claude Code、Codex 挂 browser 工具</td><td>agent 能用浏览器，还看不到</td></tr>
+        <tr><td>1</td><td>新开关 + <code>Welcome.browser</code>；镜像加 Chromium / Xvfb / x11vnc / 字体 / @playwright/mcp；runner 的浏览器和使用权（同一时间一个会话）；先给 Claude Code、Codex 挂 browser 工具</td><td>agent 能用浏览器，还看不到</td></tr>
         <tr><td>2</td><td>链路协议四个新帧；网关 NATS 中转；apiserver WebSocket 路由；nginx 升级配置；runner 接 vnc.sock</td><td>流打得通（用脚本客户端验）</td></tr>
-        <tr><td>3</td><td>网页：Browser 标签、抽屉、只看、接管、交还</td><td>你能看、能接管</td></tr>
+        <tr><td>3</td><td>网页：Browser 标签、Settings 里 Open browser / Clear saved logins、抽屉、只看、接管、交还</td><td>你能看、能接管</td></tr>
         <tr><td>4</td><td>其余引擎、macOS / iOS / Android、访客</td><td>以后</td></tr>
       </table>
       <p class="note">每一阶段都在托管 runner 实验环境（<code>scripts/managed-runner/lab/</code>）里开着开关跑一遍，再关着开关跑一遍，证明默认部署什么都没变。</p>
