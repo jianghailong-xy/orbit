@@ -119,6 +119,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
