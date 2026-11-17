@@ -755,6 +755,8 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/run':
     "the schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)",
+  'GET /runner/conditions/:id':
+    "read by (id, the runner's owner) and nothing else, 404 CONDITION_NOT_FOUND for another account's id (conditions/conditions.service.ts:445)",
   'POST /runner/schedule-runs/:id/stop':
     "the run's schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
   'POST /runner/main-checkout/:id/snapshot':
@@ -1484,6 +1486,12 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── conditions (docs/condition-triggers-design.md §4.2) ──────────────────────────────────────────
+  'POST /runner/heartbeat body conditionSamples[].conditionId':
+    "taken only for a condition of the runner's owner whose workspace the calling runner serves, read in one statement "
+    + 'before anything is written (conditions/conditions.service.ts:264) and again under the row lock; any other is '
+    + 'refused and stored nowhere. conditions.pg.spec.ts heartbeat-refuses-foreign sends it from a machine of the same '
+    + "owner and from another account's",
   // ── scheduled tasks ──────────────────────────────────────────────────────────────────────────────
   'POST /runner/schedules header x-orbit-session-id':
     "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",

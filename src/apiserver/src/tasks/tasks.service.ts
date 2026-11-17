@@ -109,6 +109,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ConditionsService, type ConditionFiring } from '../conditions/conditions.service';
+import {
+  START_WHEN_VIEW_SELECT,
+  TASK_START_WHEN_AND_RUN_AT,
+  assertStartWhenShape,
+  conditionStartedBlock,
+  endStartWhen,
+  startWhenCardLines,
+  startWhenFiredSql,
+  startWhenPermits,
+  startWhenPermitsSql,
+  startWhenView,
+  writeStartWhen,
+} from './task-start-when';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -1189,6 +1203,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
   -- task that predates the column is.
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- ...and so is a startWhen that has not fired (docs/condition-triggers-design.md §5.2): a peer of run_at, the
+  -- same veto. No startWhen permits, which is every task without one.
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   -- The auto-run sweep is for tasks that have prerequisites AT ALL: it is the "a dependency just
   -- completed, start what it released" pass, not a general starter. So it anchors on the task
   -- HAVING an edge, and the satisfaction of those edges is the clause below.
@@ -1284,6 +1301,8 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- A startWhen that has not fired is the same veto as a run_at still to come (task-start-when.ts).
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   AND NOT EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
   AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
@@ -1420,8 +1439,13 @@ type AutoRunRetryDecision =
  * reach execute() would log one rejection per task per minute for as long as the condition lasts.
  */
 const SCHEDULED_DUE_SQL = Prisma.sql`
-  t.run_at IS NOT NULL
-  AND t.run_at <= now()
+  -- Due: its time has come, or its startWhen condition has fired (docs/condition-triggers-design.md §5.2). A task
+  -- has at most one of the two (task_run_at_or_start_when_chk). Both are retained, not consumed, by everything
+  -- below: the start that keeps one clears it.
+  (
+    (t.run_at IS NOT NULL AND t.run_at <= now())
+    OR (t.start_when_condition_id IS NOT NULL AND ${Prisma.raw(startWhenFiredSql('t'))})
+  )
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
   -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
@@ -2197,7 +2221,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * `@Optional()` and last for the places that build this service directly: they run no sweep.
      */
     @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
+    /**
+     * Conditions (docs/condition-triggers-design.md): a task's startWhen is written through it, and its fire hook makes
+     * the task due (`onModuleInit`). `@Optional()` and last for the places that build this service directly: they get
+     * one over THIS prisma, so a startWhen is written exactly as the injected one writes it.
+     */
+    @Optional() conditions?: ConditionsService,
   ) {
+    this.conditions = conditions ?? new ConditionsService(prisma);
+    // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
+    // gets a new dispatch moment, so the scheduled sweep that starts it names a request no earlier pass could have
+    // (TASK_RUN_TRIGGER.scheduled). Being due is SCHEDULED_DUE_SQL's to read off the condition; nothing else is written.
+    this.conditions.registerFireHook({ onFired: (tx, firing) => this.onStartWhenFired(tx, firing) });
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
@@ -2222,6 +2257,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   private readonly handoffs: ProjectHandoffService;
+  private readonly conditions: ConditionsService;
   private readonly completionInputs?: CompletionInputRouter;
   private readonly pauseProjector?: TaskListPauseProjectorService;
   private readonly openItems?: ProjectOpenItemService;
@@ -3936,6 +3972,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    // One of runAt and startWhen, a line, a baseline and an assignee to probe on (task-start-when.ts): before anything.
+    assertStartWhenShape(dto);
     await this.assertVerifierCreateHasCard(ownerId, TASK_CREATE_CARD_TOOL, [dto], creatorSessionId);
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
@@ -4273,6 +4311,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
+          // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
+          if (dto.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: created.id, workspaceId: created.assigneeId!, startWhen: dto.startWhen,
+              createdFromSessionId: sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, created.projectId, dto.fixesOpenItemId, creatorSessionId, true,
           );
@@ -4382,6 +4428,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.openItems?.resolveByFact([dto.supersedesTaskId]);
       await this.fuse?.afterSupersession(task.projectId, dto.supersedesTaskId);
     }
+    // A startWhen is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md §4.2): one asleep
+    // is woken now, so its probe runs. Nothing for a self-managed runner or with the switch off.
+    if (dto.startWhen) await this.conditions.wakeWorkspaceRunner(task.assigneeId);
     return task;
   }
 
@@ -4663,6 +4712,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
+    items.forEach((item, index) => assertStartWhenShape(item, `tasks[${index}]: `));
     items.forEach((item, index) => {
       const completionCriterion = this.assertCompletionDeclaration({
         ...item,
@@ -4905,6 +4955,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pausedLists = new Set(lists.filter((l) => l.paused).map((l) => l.id));
     const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
     const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
+    // The workspaces on Orbit Cloud a startWhen keeps awake while it waits (docs/condition-triggers-design.md §6.2).
+    const awake = items.some((i) => i.startWhen)
+      ? await this.conditions.keepsAwake(items.filter((i) => i.startWhen && i.assigneeId).map((i) => i.assigneeId!))
+      : new Set<string>();
     const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
 
     let startingNow = 0;
@@ -4912,6 +4966,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let needsManualStart = 0;
     let notDispatchable = 0;
     let scheduled = 0;
+    let waitingForCondition = 0;
     let awaitingProjectStart = 0;
     let internalEdges = 0;
     let externalEdges = 0;
@@ -4943,6 +4998,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       //
       // `autoRunWhenReady` is deliberately not consulted here, and a prerequisite is not required
       // to exist: both are answers to the dependency question, and this trigger is the clock.
+      // A startWhen is the same kind of trigger as a runAt (task-start-when.ts), counted by what stands between it
+      // and a run in the same order, its condition last.
+      if (item.startWhen) {
+        if (waitsOnBatch || waitsOnExisting) blocked += 1;
+        else if (!runnable) notDispatchable += 1;
+        else if (awaitsStart) awaitingProjectStart += 1;
+        else waitingForCondition += 1;
+        continue;
+      }
       if (runAt) {
         if (waitsOnBatch || waitsOnExisting) blocked += 1;
         else if (!runnable) notDispatchable += 1;
@@ -5008,6 +5072,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // of which would misdescribe it; a client that predates the field ignores it and simply
       // does not count these as starting now, which is the true statement.
       scheduled,
+      // Ready in every respect except their startWhen condition: they start once it holds (each item's lines below).
+      waitingForCondition,
       // Would start by themselves, now or at their runAt, but in a project its owner has not
       // started: they start with the project. Named for the reason `scheduled` is — "needs a manual
       // start" would say the start releases nothing — and ignored the same way by older clients.
@@ -5024,6 +5090,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependsOnRefs: item.dependsOnRefs ?? [],
         dependsOnTaskIds: item.dependsOnTaskIds ?? [],
         ref: item.ref ?? null,
+        // The card's Starts when, Today and If never (docs/mocks/condition-triggers frame 2), on an item with one.
+        ...(item.startWhen
+          ? {
+              startWhen: startWhenCardLines(
+                item.startWhen,
+                item.assigneeId ? nameOf.get(item.assigneeId) ?? null : null,
+                !!item.assigneeId && awake.has(item.assigneeId),
+              ),
+            }
+          : {}),
       })),
       // The card shows a window, not the whole batch: fifty rows is not something a person reads
       // before clicking, and the counts above are the decision.
@@ -5445,6 +5521,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           }));
         if (!existing) {
           insertedIds.push(task.id);
+          // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
+          if (item.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: task.id, workspaceId: task.assigneeId!, startWhen: item.startWhen,
+              createdFromSessionId: origin?.sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
           );
@@ -5616,6 +5699,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // remaining set is closed is the producer's question to answer from the rows, not this
     // caller's to guess from the shape of its own write.
     await this.deliverSettledProjects(created.map((task) => task.projectId));
+    // Each startWhen's Orbit Cloud runner, woken now, as the single create does.
+    const waking = new Set(items.flatMap((item) => (item.startWhen && item.assigneeId ? [item.assigneeId] : [])));
+    for (const workspaceId of waking) await this.conditions.wakeWorkspaceRunner(workspaceId);
     return created;
   }
 
@@ -9286,6 +9372,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id, ownerId },
       include: {
         assignee: { select: { id: true, name: true, model: true } },
+        // Its startWhen (docs/condition-triggers-design.md §6.2): what it waits for and the newest reading.
+        startWhenCondition: { select: START_WHEN_VIEW_SELECT },
         // The project it is filed under, named: a project's task is not listed on the Tasks page,
         // so a task opened from a link says which project it belongs to and whether that project
         // is still going.
@@ -9418,6 +9506,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       autoRunSkipped,
+      // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
+      // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
+      startWhen: startWhenView(task.startWhenCondition),
+      // Read once, as `startWhen` above.
+      startWhenCondition: undefined,
       // The last change to this task's completion criterion, read back out of the audit column the
       // change door writes: which criterion it moved away from, which it landed on, and why.
       // Derived rather than stored a second time — the reason column already carries all three, and
@@ -9672,6 +9765,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (runsTask !== null && runsTask !== id) {
         throw new ForbiddenException(verifierWriteFromRunRefusalBody());
       }
+    }
+    // A task has at most one of runAt and startWhen (task_run_at_or_start_when_chk): refused here as a sentence
+    // rather than at the CHECK as a 500.
+    if (dto.runAt != null && before.startWhenConditionId) {
+      throw new BadRequestException({
+        code: TASK_START_WHEN_AND_RUN_AT,
+        message: 'this task starts when its condition holds; a task has at most one of runAt and startWhen',
+      });
     }
     // A schedule, or auto-run switched on, starts the task in the account's default mode with no
     // session in the way, so a session that may not start that with `task_start` may not arrange it.
@@ -11178,6 +11279,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: true,
         autoRunWhenReady: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): one that has not fired is the same veto as a run_at to come.
+        startWhenCondition: { select: { firedAt: true, state: true } },
         // The list this candidate belongs to, because that is the batch whose budget the dispatch
         // below spends — read in the same statement as the rest of what decides the candidate.
         listId: true,
@@ -11248,6 +11351,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // this same READY state is one of the things it re-checks. Two independent triggers, and
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
+      // Waiting for its condition: the same, and the scheduled sweep starts it once the condition fires.
+      if (!startWhenPermits(dep.startWhenCondition)) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
       // Its list holds ready work that outranks it: the slot this edge would fill is that work's,
       // and the sweep is what deals the list's slots by priority. Left OPEN and READY, like a
@@ -15206,6 +15311,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifiesTaskId: true,
         dispatchHold: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): the run that starts ends it, and a run its firing started is told so.
+        startWhenConditionId: true,
+        startWhenCondition: {
+          select: {
+            text: true, unit: true, probeCommand: true, compareOp: true, firedAt: true, lastValue: true, state: true,
+            events: { where: { kind: 'FIRED' }, orderBy: { at: 'desc' }, take: 1, select: { value: true } },
+          },
+        },
         supersededByTaskId: true,
         terminalReason: true,
         // WHICH MOMENT this row is at (0137). An automatic delivery names one, and this is what it
@@ -15414,7 +15527,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Moved below the dispatch, the two failure directions are both honest: a refused dispatch
     // records nothing, and an event that fails to write leaves a session that is already running
     // and already announces itself through its own creation.
-    const prompt = this.buildExecutePrompt(task);
+    // A run its condition started begins by saying so (docs/condition-triggers-design.md §6.2): the firing, and that
+    // it checks the condition again itself before acting. Only an automatic start of a fired condition: a person's
+    // task_start ignores the condition, and so does this brief.
+    const fired = auto && startWhenPermits(task.startWhenCondition) && task.startWhenCondition
+      ? task.startWhenCondition
+      : null;
+    const prompt = fired
+      ? `${conditionStartedBlock({ ...fired, firedValue: fired.events[0]?.value ?? null })}\n\n${this.buildExecutePrompt(task)}`
+      : this.buildExecutePrompt(task);
     // The commit-point half of the pre-check above. A supersession — or a lock this transaction
     // cannot have — landing between them is refused by the database, and arrives here as a typed
     // marker rather than as a session. Translated so the caller sees the same 409 either way,
@@ -15479,6 +15600,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dispatchOrigin: auto ? SessionDispatchOrigin.LEGACY_SWEEP : SessionDispatchOrigin.USER,
       runSource: auto ? SessionRunSource.TASK_LIST_AUTO : SessionRunSource.MANUAL,
       runAt: task.runAt ? task.runAt.toISOString() : null,
+      startWhenConditionId: task.startWhenConditionId ?? null,
       clearFailed: task.status === TaskStatus.FAILED,
       auto: auto != null,
     };
@@ -15590,6 +15712,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId, target.taskId, target.runAt ? new Date(target.runAt) : null,
     ).catch((e) =>
       this.logger.warn(`consumeRunAt for task ${target.taskId} failed: ${e?.message ?? e}`));
+    // And a startWhen ends with the start that keeps it, whichever door this is: task_start ignores the condition
+    // and ends it too (docs/condition-triggers-design.md §5.2).
+    await this.consumeStartWhen(ownerId, target.taskId, target.startWhenConditionId).catch((e) =>
+      this.logger.warn(`consumeStartWhen for task ${target.taskId} failed: ${e?.message ?? e}`));
     // Frozen last, and after the post-commit steps rather than before them: those are idempotent
     // recomputations of facts that follow from the Session, so a repeat that lands before this
     // write re-derives them harmlessly, while a repeat that lands after gets the same bytes without
@@ -15636,6 +15762,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await recordTaskRouteDecision(this.prisma, {
       ownerId, taskId, requestToken, sessionId: plan.sessionId, route,
     }).catch((e) => this.logger.warn(`task ${taskId}: route decision not recorded: ${e?.message ?? e}`));
+  }
+
+  /** The fire hook: a task's condition fired, so the task gets a new dispatch moment, inside the firing's transaction. */
+  private async onStartWhenFired(tx: Prisma.TransactionClient, firing: ConditionFiring): Promise<void> {
+    if (!firing.condition.taskId) return;
+    await tx.$executeRaw`SELECT "task_dispatch_epoch_advance"(ARRAY[${firing.condition.taskId}::uuid])`;
+  }
+
+  /** Spend a startWhen: its condition ends and the task's pointer clears, as consumeRunAt spends a runAt. */
+  private async consumeStartWhen(ownerId: string, taskId: string, conditionId: string | null | undefined): Promise<void> {
+    if (!conditionId) return;
+    const cleared = await withTransactionRetry(
+      this.prisma,
+      (tx) => endStartWhen(tx, ownerId, taskId, conditionId, new Date()),
+      this.transientWriteRetry('tasks.consumeStartWhen'),
+    );
+    if (cleared) this.publishKnownTaskRows(ownerId, [taskId]);
   }
 
   /**
@@ -15843,6 +15986,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         modelHintReason: true,
         status: true,
         runAt: true,
+        startWhenConditionId: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
@@ -16034,6 +16178,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...taskRunDispatch(t, route),
         route,
         runAt: t.runAt ? t.runAt.toISOString() : null,
+        startWhenConditionId: t.startWhenConditionId ?? null,
         clearFailed: t.status === TaskStatus.FAILED,
         projectId: t.projectId ?? null,
         ...itemPlan,
@@ -16101,6 +16246,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId, item.taskId, item.runAt ? new Date(item.runAt) : null,
         ).catch((e) =>
           this.logger.warn(`batchExecute: consumeRunAt for ${item.taskId} failed: ${e}`));
+        // And a startWhen, as the single Run ends one.
+        await this.consumeStartWhen(ownerId, item.taskId, item.startWhenConditionId).catch((e) =>
+          this.logger.warn(`batchExecute: consumeStartWhen for ${item.taskId} failed: ${e}`));
         return { id: item.taskId, ok: true as const, sessionId };
       } catch (e) {
         // Losing the fence is not an item outcome at all — it says this DELIVERY is no longer the

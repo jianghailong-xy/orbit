@@ -19,7 +19,7 @@ import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { scheduleRunMode } from './schedule-access';
 import { widenedParts, type AccessLevel, type Envelope } from './schedule-envelope';
-import { instantOfLocal, offsetAt, parseRule, runsPerWeek } from './schedule-time';
+import { instantOfLocal, offsetAt, parseRule, ruleCommandHash, runsPerWeek } from './schedule-time';
 
 export type ScheduleHeldReason =
   | 'WORKSPACE_NOT_OWNED'
@@ -86,12 +86,15 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
     accessLevel: schedule.envelopeAccessLevel,
     runsPerWeek: schedule.envelopeRunsPerWeek,
     runLimitMinutes: schedule.envelopeRunLimitMinutes,
+    commandHash: schedule.envelopeCommandHash,
   };
+  const rule = parseRule(schedule.rule);
   const need: Envelope = {
     workspaceId: schedule.workspaceId,
     accessLevel: schedule.accessLevel,
-    runsPerWeek: runsPerWeek(parseRule(schedule.rule)),
+    runsPerWeek: runsPerWeek(rule),
     runLimitMinutes: schedule.runLimitMinutes,
+    commandHash: ruleCommandHash(rule),
   };
   if (widenedParts(envelope, need).length > 0) return { ok: false, reason: 'OUTSIDE_ENVELOPE' };
 
