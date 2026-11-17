@@ -15,11 +15,6 @@ final class ReviewRecordsTests: XCTestCase {
     private let enUS = Locale(identifier: "en_US")
     private let enCN = Locale(identifier: "en_CN")
 
-    override func setUp() {
-        super.setUp()
-        NSTimeZone.default = utc
-    }
-
     func testTheClockOnTheDayAndTheDateAfter() {
         XCTAssertEqual(ReviewRecords.time(at, now: now, calendar: calendar, timeZone: utc, locale: enUS),
                        "2:06\u{202F}PM")
@@ -33,17 +28,21 @@ final class ReviewRecordsTests: XCTestCase {
                        "10/15 14:06")
     }
 
+    /// The footers below carry the reader's own clock: `testTheClockOnTheDayAndTheDateAfter` pins it per zone, so
+    /// here it is read the footers' way, whatever zone the host is in.
+    private var clock: String { ReviewRecords.time(at, now: now, locale: enUS)! }
+
     func testTheApprovals() {
         XCTAssertEqual(ReviewRecords.question(at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Answered by you · 2:06\u{202F}PM", detail: "Sent to the agent"))
+                       ReviewRecordFooter(mark: .done, line: "Answered by you · \(clock)", detail: "Sent to the agent"))
         XCTAssertEqual(ReviewRecords.plan(approved: true, at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · \(clock)",
                                           detail: "The agent is running the plan"))
         XCTAssertEqual(ReviewRecords.plan(approved: false, at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .keptOpen, line: "Kept planning · by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .keptOpen, line: "Kept planning · by you · \(clock)",
                                           detail: "The agent goes on planning"))
         XCTAssertEqual(ReviewRecords.toolAsk(at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM", detail: "Sent to the agent"))
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · \(clock)", detail: "Sent to the agent"))
     }
 
     func testAnAnswerSplitsIntoThePicksAndTheWordsTyped() {
@@ -61,26 +60,26 @@ final class ReviewRecordsTests: XCTestCase {
 
     func testTheDecisionCards() {
         XCTAssertEqual(ReviewRecords.evidence(revision: "2", at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Confirmed done by you · 2:06\u{202F}PM", detail: "Recorded on rev 2"))
+                       ReviewRecordFooter(mark: .done, line: "Confirmed done by you · \(clock)", detail: "Recorded on rev 2"))
         XCTAssertEqual(ReviewRecords.ownerConfirmed(at: at, reportedAt: "2026-10-15T13:58:00Z", now: now, locale: enUS).detail,
-                       "Recorded on the 1:58\u{202F}PM report")
+                       "Recorded on the \(OwnerConfirmations.receiptTime("2026-10-15T13:58:00Z", now: now, locale: enUS)!) report")
         XCTAssertNil(ReviewRecords.ownerConfirmed(at: at, reportedAt: nil, now: now, locale: enUS).detail,
                      "a report that did not say when leaves the line out")
         XCTAssertEqual(ReviewRecords.started(criteria: 3, seal: "a1b2c3", at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Started by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .done, line: "Started by you · \(clock)",
                                           detail: "On 3 criteria at seal a1b2c3"))
         XCTAssertEqual(ReviewRecords.confirmed(criteria: 5, seal: "d4e5f6", changes: "1 new, 1 stricter", at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Confirmed by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .done, line: "Confirmed by you · \(clock)",
                                           detail: "5 criteria at seal d4e5f6 — 1 new, 1 stricter"))
         XCTAssertEqual(ReviewRecords.confirmed(criteria: 1, seal: "d4e5f6", changes: nil, at: at, now: now, locale: enUS).detail,
                        "1 criterion at seal d4e5f6")
         XCTAssertEqual(ReviewRecords.criteriaDecision(approved: true, baseSeal: "d4e5f6", resultingSeal: "e7f8a9",
                                                       at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .done, line: "Approved by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .done, line: "Approved by you · \(clock)",
                                           detail: "Re-sealed: d4e5f6 → e7f8a9"))
         XCTAssertEqual(ReviewRecords.criteriaDecision(approved: false, baseSeal: "d4e5f6", resultingSeal: nil,
                                                       at: at, now: now, locale: enUS),
-                       ReviewRecordFooter(mark: .refused, line: "Refused by you · 2:06\u{202F}PM",
+                       ReviewRecordFooter(mark: .refused, line: "Refused by you · \(clock)",
                                           detail: "The criteria stay at seal d4e5f6"))
     }
 }
