@@ -16,7 +16,9 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -408,12 +410,160 @@ func fenceClaudeRefreshes(ctx context.Context, keys []string) func() {
 
 // claudeProcessesOn finds the Claude Code processes running on one of dirs: foreign ones — a `claude`
 // in a terminal, nothing this runner started — by pid and name, and how many of this runner's own
-// (an engine still stopping, a probe) there are. Both are waited for. Read from /proc, so on a system
-// without it (macOS) none are found.
+// (an engine still stopping, a probe) there are. Both are waited for. Linux reads /proc; macOS asks ps
+// (claudeProcessesOnDarwin).
 func claudeProcessesOn(dirs []string) (foreign []ClaudeSwapProcess, own int) {
-	if runtime.GOOS != "linux" {
+	switch runtime.GOOS {
+	case "linux":
+		return claudeProcessesOnLinux(dirs)
+	case "darwin":
+		return claudeProcessesOnDarwin(dirs, os.Getpid(), claudeSwapPS)
+	}
+	return nil, 0
+}
+
+// claudeSwapPS runs ps with args; a variable so the darwin scan can be fed recorded output.
+var claudeSwapPS = func(args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "ps", args...).Output()
+}
+
+// darwinProc is one line of `ps -axww -o pid=,ppid=,command=`.
+type darwinProc struct {
+	pid, ppid int
+	command   string
+}
+
+// parseDarwinPS reads `ps -axww -o pid=,ppid=,command=`: two numbers, then the command line.
+func parseDarwinPS(out []byte) []darwinProc {
+	var procs []darwinProc
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		pid, err1 := strconv.Atoi(fields[0])
+		ppid, err2 := strconv.Atoi(fields[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		// The command is everything after the second number, its own spacing kept.
+		rest := strings.TrimLeft(line, " \t")
+		rest = strings.TrimLeft(rest[len(fields[0]):], " \t")
+		rest = strings.TrimLeft(rest[len(fields[1]):], " \t")
+		procs = append(procs, darwinProc{pid: pid, ppid: ppid, command: strings.TrimRight(rest, " \t\r")})
+	}
+	return procs
+}
+
+// claudeCommandName is the command's name when it is Claude Code: the native `claude`, or node running
+// the claude-code package.
+func claudeCommandName(command string) (string, bool) {
+	args := strings.Fields(command)
+	if len(args) == 0 {
+		return "", false
+	}
+	if filepath.Base(args[0]) == "claude" {
+		return "claude", true
+	}
+	for _, a := range args[1:] {
+		if strings.Contains(a, "claude-code/cli") || strings.Contains(a, "@anthropic-ai/claude-code") {
+			return filepath.Base(args[0]), true
+		}
+	}
+	return "", false
+}
+
+// darwinEnvVar finds where each NAME= starts in what `ps -E` appends after a command.
+var darwinEnvVar = regexp.MustCompile(`(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=`)
+
+// parseDarwinPSEnv reads the environment `ps -E -ww -o command= -p <pid>` appends to command. ps joins
+// the variables with spaces, so a value runs until the next NAME=. Empty when ps shows none, which is
+// what it shows of another user's process.
+func parseDarwinPSEnv(line, command string) []string {
+	rest := strings.TrimSpace(line)
+	if !strings.HasPrefix(rest, command) {
+		return nil
+	}
+	rest = rest[len(command):]
+	idx := darwinEnvVar.FindAllStringSubmatchIndex(rest, -1)
+	var env []string
+	for i, m := range idx {
+		end := len(rest)
+		if i+1 < len(idx) {
+			end = idx[i+1][0]
+		}
+		env = append(env, rest[m[2]:m[3]]+"="+strings.TrimSpace(rest[m[3]+1:end]))
+	}
+	return env
+}
+
+// claudeProcessesOnDarwin is claudeProcessesOn on macOS, which has no /proc: ps lists every process with
+// its parent, and `ps -E` gives each Claude Code process's environment, which says its folder the way the
+// CLI resolves it (CLAUDE_CONFIG_DIR, else $HOME/.claude). A process whose environment ps does not show is
+// another user's, on another HOME.
+func claudeProcessesOnDarwin(dirs []string, self int, ps func(args ...string) ([]byte, error)) (foreign []ClaudeSwapProcess, own int) {
+	out, err := ps("-axww", "-o", "pid=,ppid=,command=")
+	if err != nil {
 		return nil, 0
 	}
+	procs := parseDarwinPS(out)
+	parent := map[int]int{}
+	for _, p := range procs {
+		parent[p.pid] = p.ppid
+	}
+	want := map[string]bool{}
+	for _, d := range dirs {
+		want[filepath.Clean(d)] = true
+	}
+	for _, p := range procs {
+		if p.pid == self {
+			continue
+		}
+		name, ok := claudeCommandName(p.command)
+		if !ok {
+			continue
+		}
+		line, err := ps("-E", "-ww", "-o", "command=", "-p", strconv.Itoa(p.pid))
+		if err != nil {
+			continue // ended meanwhile
+		}
+		env := parseDarwinPSEnv(string(line), p.command)
+		if len(env) == 0 {
+			continue
+		}
+		dir, err := effectiveClaudeConfigDir(env, "/")
+		if err != nil || !want[filepath.Clean(dir)] {
+			continue
+		}
+		if descendsFrom(parent, p.pid, self) {
+			own++
+		} else {
+			foreign = append(foreign, ClaudeSwapProcess{PID: p.pid, Command: name})
+		}
+	}
+	sort.Slice(foreign, func(i, j int) bool { return foreign[i].PID < foreign[j].PID })
+	return foreign, own
+}
+
+// descendsFrom reports whether pid's parent chain in parent reaches ancestor.
+func descendsFrom(parent map[int]int, pid, ancestor int) bool {
+	for i := 0; i < 64 && pid > 1; i++ {
+		ppid, ok := parent[pid]
+		if !ok {
+			return false
+		}
+		if ppid == ancestor {
+			return true
+		}
+		pid = ppid
+	}
+	return false
+}
+
+// claudeProcessesOnLinux is claudeProcessesOn read from /proc.
+func claudeProcessesOnLinux(dirs []string) (foreign []ClaudeSwapProcess, own int) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, 0

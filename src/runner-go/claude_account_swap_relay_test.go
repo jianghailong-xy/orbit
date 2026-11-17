@@ -422,3 +422,55 @@ func TestClaudeProcessesOnFindsClaudesOnTheFolders(t *testing.T) {
 		t.Fatalf("on the folder: foreign %+v, own %d; want one of each", foreign, own)
 	}
 }
+
+// The macOS scan, fed what ps prints there: a terminal claude on Default (no CLAUDE_CONFIG_DIR, so
+// $HOME/.claude), node running claude-code on the added folder under this runner, a claude on a third
+// folder, another user's claude whose environment ps does not show, and a process that is not Claude.
+func TestClaudeProcessesOnDarwinReadsPS(t *testing.T) {
+	const self = 500
+	home := "/Users/me"
+	def, added, other := home+"/.claude", home+"/.orbit/claude-accounts/1e84046c", home+"/.orbit/claude-accounts/9a9a9a9a"
+	list := "    1     0 /sbin/launchd\n" +
+		"  500     1 /usr/local/bin/orbit runner\n" +
+		"  610   500 /bin/zsh -c run\n" +
+		"  611   610 /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js -p hi\n" +
+		"  700   690 /Users/me/.local/bin/claude --resume abc\n" +
+		"  701   690 /Users/me/.local/bin/claude\n" +
+		"  702     1 /Users/other/.local/bin/claude\n" +
+		"  703     1 /usr/bin/vim notes.txt\n"
+	envs := map[string]string{
+		"611": "/opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js -p hi TERM=dumb CLAUDE_CONFIG_DIR=" + added + " HOME=" + home + " PATH=/usr/bin:/bin",
+		"700": "/Users/me/.local/bin/claude --resume abc SHELL=/bin/zsh HOME=" + home + " LANG=en_US.UTF-8 TERM_PROGRAM=Apple Terminal",
+		"701": "/Users/me/.local/bin/claude HOME=" + home + " CLAUDE_CONFIG_DIR=" + other,
+		"702": "/Users/other/.local/bin/claude",
+		"703": "/usr/bin/vim notes.txt HOME=" + home,
+	}
+	var asked []string
+	ps := func(args ...string) ([]byte, error) {
+		if args[0] == "-axww" {
+			return []byte(list), nil
+		}
+		pid := args[len(args)-1]
+		asked = append(asked, pid)
+		return []byte(envs[pid] + "\n"), nil
+	}
+	foreign, own := claudeProcessesOnDarwin([]string{def, added}, self, ps)
+	if !reflect.DeepEqual(foreign, []ClaudeSwapProcess{{PID: 700, Command: "claude"}}) || own != 1 {
+		t.Fatalf("foreign %+v, own %d; want the terminal claude on Default, and one of the runner's own", foreign, own)
+	}
+	if !reflect.DeepEqual(asked, []string{"611", "700", "701", "702"}) {
+		t.Fatalf("environments read for %v, want only the Claude processes", asked)
+	}
+	// Nothing on the folders: the swap does not wait.
+	if foreign, own := claudeProcessesOnDarwin([]string{"/nowhere"}, self, ps); len(foreign) != 0 || own != 0 {
+		t.Fatalf("on another folder: %+v, %d", foreign, own)
+	}
+}
+
+func TestParseDarwinPSEnvKeepsValuesWithSpaces(t *testing.T) {
+	got := parseDarwinPSEnv("/bin/claude -p x  TERM_PROGRAM=Apple Terminal HOME=/Users/me CLAUDE_CONFIG_DIR=/Users/me/My Accounts/a\n", "/bin/claude -p x")
+	want := []string{"TERM_PROGRAM=Apple Terminal", "HOME=/Users/me", "CLAUDE_CONFIG_DIR=/Users/me/My Accounts/a"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
