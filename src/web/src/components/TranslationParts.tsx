@@ -218,3 +218,20 @@ export function ReplyTranslationFoot({
   }
   return null;
 }
+
+/**
+ * One of Orbit's own cards drawn in the owner's language (board 04-owner-cards.html, mark A): one
+ * flip for the whole card, "Translated · Show original" ↔ "Original · Show translation", under its
+ * body. The card is wholly one language or the other, never half.
+ */
+export function CardTranslationFoot({ flipped, onFlip }: { flipped: boolean; onFlip: () => void }) {
+  return (
+    <div className="chat-translate-foot is-card">
+      <span>{flipped ? COPY.original : COPY.translated}</span>
+      <Sep />
+      <button type="button" className="chat-translate-action" onClick={onFlip}>
+        {flipped ? COPY.showTranslation : COPY.showOriginal}
+      </button>
+    </div>
+  );
+}
