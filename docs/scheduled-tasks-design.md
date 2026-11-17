@@ -673,7 +673,8 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 - Cron and sub-daily rules (P3). The envelope already counts runs per week, so they need no new rule.
 - Pinning a runner.
 - A cheap pre-check before starting a model ("only start a session if this URL's hash changed"). The Watch contract
-  keeps shell out of the server; if wanted later it belongs on the runner.
+  keeps shell out of the server; if wanted later it belongs on the runner. That pre-check is now designed in
+  [docs/condition-triggers-design.md](condition-triggers-design.md).
 - Schedules owned by a project, and delivering a finding to a project's coordinator instead of the owner.
 
 ## 11. Delivery
