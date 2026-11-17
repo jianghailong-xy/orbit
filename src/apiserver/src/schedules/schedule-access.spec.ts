@@ -53,6 +53,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
     'mcp__orbit__schedule_run_report',
     'mcp__orbit__schedule_get',
     'mcp__orbit__schedule_list',
+    'mcp__orbit__condition_get',
     'mcp__orbit__schedule_update',
     'mcp__orbit__schedule_end',
     'mcp__orbit__notify',

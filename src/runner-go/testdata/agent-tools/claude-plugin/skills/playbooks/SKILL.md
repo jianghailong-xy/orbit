@@ -5,7 +5,7 @@ description: Orbit's long recipes: keeping a worked-out plan as one batch, filin
 
 # Orbit playbooks 1.0.0
 
-Long recipes for Orbit, written from the Orbit Agent Contract 1.10.0. They add steps to what you already know; they change no rule. For a single call, guide (no arguments for the routes, a topic for the recipe) and the tool's own description are enough, and they win if anything here disagrees with them. Name tools as your tool list does; run the Orbit CLI only by the absolute path your instructions give.
+Long recipes for Orbit, written from the Orbit Agent Contract 1.11.0. They add steps to what you already know; they change no rule. For a single call, guide (no arguments for the routes, a topic for the recipe) and the tool's own description are enough, and they win if anything here disagrees with them. Name tools as your tool list does; run the Orbit CLI only by the absolute path your instructions give.
 
 ## Keep a worked-out plan
 

@@ -505,4 +505,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /schedules/:id/run',
   'POST /schedules/:id/undo',
   'POST /schedules/drafts',
+  // Conditions (conditions/conditions.controller.ts): the owner's read of one condition a task or a schedule waits on;
+  // a terminal drives sessions, not the conditions that start work.
+  'GET /conditions/:id',
 ];
