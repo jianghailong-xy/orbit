@@ -56,6 +56,9 @@ data class SessionLine(val text: String, val tone: Tone) {
             // A run whose report is still with its reviewer: who has it, in the quiet tone.
             if (live && s.confirmationUnderReview != null) return SessionLine(SessionLineCopy.underReviewLine(s.reviewerTitle), Tone.REVIEW)
             if (live && s.isGenerating) {
+                // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names the sub-agent's work.
+                if (s.lastToolUse?.let { fmtTool(it) in SUBAGENT_LAUNCH_TOOLS } == true && (s.runningSubagentCount ?: 0) > 0)
+                    return SessionLine(SessionLineCopy.subagentRunningLine(s.runningSubagentCount ?: 0, s.runningSubagentTitle), Tone.RUNNING)
                 s.lastToolUse?.takeIf { it.isNotEmpty() }?.let { return SessionLine(SessionLineCopy.runningTool(fmtTool(it)), Tone.RUNNING) }
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
                 s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
@@ -71,6 +74,8 @@ data class SessionLine(val text: String, val tone: Tone) {
                 if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.runnerUpdatingTitle(s.queuedGate), Tone.WARNING)
                 // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
                 if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.title(s.queuedGate), Tone.QUEUED)
+                // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+                if (held == null && QueuedDiskLow.isDiskHeld(s.queuedGate)) return SessionLine(QueuedDiskLow.TITLE, Tone.QUEUED)
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
@@ -177,7 +182,8 @@ internal object SessionHeader {
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.effectiveRunState) {
             RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
-                else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate) else SessionLineCopy.queued
+                else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate)
+                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.
@@ -311,3 +317,6 @@ internal fun plainPreview(md: String): String {
 
 /** A tool id shortened for the line: mcp__orbit__task_create reads task_create; Bash stays Bash. */
 internal fun fmtTool(name: String) = name.replace(Regex("^mcp__[^_]+__"), "")
+
+/** The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by [fmtTool]). */
+internal val SUBAGENT_LAUNCH_TOOLS = setOf("Task", "Agent", "Workflow", "delegate")

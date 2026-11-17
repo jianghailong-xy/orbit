@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -878,8 +879,13 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	files := newSubagentFileCollector(s.execDir)
 	// The tree as the child found it, so a stop can tell what changed while it ran (subagent_tree.go).
 	before, treeKnown := takeSubagentTreeSnapshot(s.execDir)
+	stderr := &subagentStderrTail{}
 	emit := func(eventType string, payload map[string]interface{}) {
 		files.note(eventType, payload)
+		if line, ok := payload["stderr"].(string); ok && eventType == evSystem {
+			// An engine that reports its stderr as events (Codex's app-server): kept for a failed end.
+			stderr.write(line)
+		}
 		if out, ok := rewriteSubagentEvent(run.id, run.toolUseID, eventType, payload); ok {
 			s.bg.emit(eventType, out)
 		}
@@ -903,7 +909,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// Every attempt's spend is the run's: a limit failure can still have cost something.
 	spent := 0.0
 	for attempt := 1; ; attempt++ {
-		res, err = s.runSubagentChild(ctx, run, target, def, prompt, resume, scratch, dir, emit, spawned)
+		res, err = s.runSubagentChild(ctx, run, target, def, prompt, resume, scratch, dir, emit, spawned, stderr)
 		spent += res.CostUsd
 		s.subagents.mu.Lock()
 		stopping := run.stopReason != ""
@@ -967,8 +973,24 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 		result = strings.TrimSpace("The SubAgent failed: " + err.Error() + "\n" + result)
 	case res.Status != stSucceeded || isAPIError(result) || isAuthError(result):
 		status = subagentStatusFailed
+		why := firstNonEmpty(strings.TrimSpace(res.ErrorMsg), res.Subtype, "no result")
 		if result == "" {
-			result = "The SubAgent failed: " + firstNonEmpty(res.ErrorMsg, res.Subtype, "no result")
+			result = "The SubAgent failed: " + why
+		} else if !strings.Contains(result, why) {
+			// What the model last wrote is not why its turn ended: the engine's own error comes first.
+			result = "The SubAgent failed: " + why + "\n" + result
+		}
+	}
+	if status == subagentStatusFailed {
+		// So the next failure like this is diagnosable after the engine and its records are gone.
+		tail := stderr.String()
+		if tail != "" && !strings.Contains(result, tail) {
+			result = strings.TrimSpace(result + "\n\nThe engine's stderr ended with:\n" + tail)
+		}
+		logln(fmt.Sprintf("SubAgent %s of session %s FAILED: %s", run.id, s.sessionID,
+			strings.ReplaceAll(firstNonEmpty(strings.TrimSpace(res.ErrorMsg), errString(err), limit, res.Subtype, "no result"), "\n", " | ")))
+		if tail != "" {
+			logln(fmt.Sprintf("SubAgent %s stderr tail: %s", run.id, strings.ReplaceAll(tail, "\n", " | ")))
 		}
 	}
 	if status == subagentStatusStopped || status == subagentStatusInterrupted {
@@ -1029,7 +1051,10 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// to a run stopped because its session ended: there is nobody left to wake.
 	// A run stopped because the session moved owes one too: the session goes on in its new home.
 	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
-	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver
+	// And a run its session left running when the coordinator handed over: its parent's engine has gone, and the
+	// server forwards the wake to the successor (session_keep_work.go).
+	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver ||
+		(s.keptPastEnd.Load() && stopReason == "")
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)
@@ -1152,7 +1177,7 @@ func (s *bgJobService) recordSubagentDetach(runID string) {
 // runSubagentChild runs one attempt of a run: its engine's child runner in the parent's cwd, with scratch as the
 // attempt's own dir, and records the conversation the engine opened, which a resume continues.
 func (s *bgJobService) runSubagentChild(ctx context.Context, run *subagentRun, exec AgentExecConfig, def subagentDefinition,
-	prompt string, resume bool, scratch, dir string, emit emitFn, spawned func(*exec.Cmd)) (ExecResult, error) {
+	prompt string, resume bool, scratch, dir string, emit emitFn, spawned func(*exec.Cmd), stderr *subagentStderrTail) (ExecResult, error) {
 	s.subagents.mu.Lock()
 	engine, engineSession, stateDir := run.engine, run.engineSession, run.stateDir
 	s.subagents.mu.Unlock()
@@ -1162,7 +1187,7 @@ func (s *bgJobService) runSubagentChild(ctx context.Context, run *subagentRun, e
 	}
 	res, conversation, err := runChild(withSubagentApprovals(ctx, run.id), subagentChild{
 		t: s.t, parent: s.job, exec: exec, def: def, runID: run.id, engineSession: engineSession, resume: resume,
-		cwd: s.execDir, scratch: scratch, stateDir: stateDir, prompt: prompt, emit: emit, spawned: spawned,
+		cwd: s.execDir, scratch: scratch, stateDir: stateDir, prompt: prompt, emit: emit, spawned: spawned, stderr: stderr,
 	})
 	if conversation != "" && conversation != engineSession {
 		// The conversation the engine opened, which a resume continues.
@@ -1226,12 +1251,12 @@ func claudeChildSession(parent *ClaimedSession, target AgentExecConfig, def suba
 // cwd, in child mode — its own scratch dir, its own conversation, one prompt, no checkout of its own, nothing
 // finalized and nothing committed. Every stream message is parsed by the session's own handleMessage.
 func runClaudeChild(ctx context.Context, c subagentChild) (ExecResult, string, error) {
-	res, err := runClaudeChildProcess(ctx, c.parent, c.exec, c.def, c.runID, c.engineSession, c.resume, c.cwd, c.scratch, c.prompt, c.emit, c.spawned)
+	res, err := runClaudeChildProcess(ctx, c.parent, c.exec, c.def, c.runID, c.engineSession, c.resume, c.cwd, c.scratch, c.prompt, c.emit, c.spawned, c.stderr)
 	return res, c.engineSession, err
 }
 
 func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID,
-	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn, spawned func(*exec.Cmd)) (ExecResult, error) {
+	engineSession string, resume bool, cwd, scratch, prompt string, emit emitFn, spawned func(*exec.Cmd), tail *subagentStderrTail) (ExecResult, error) {
 	child, args := claudeChildSession(parent, exec, def, runID, engineSession, resume, scratch)
 	sp, err := spawnClaude(ctx, child, cwd, args)
 	if err != nil {
@@ -1249,6 +1274,7 @@ func runClaudeChildProcess(ctx context.Context, parent *ClaimedSession, exec Age
 			if stderrTail.Len() < 4000 {
 				stderrTail.WriteString(sc.Text() + "\n")
 			}
+			tail.write(sc.Text())
 		}
 	}()
 	frame := userFrame(engineSession, []map[string]interface{}{{"type": "text", "text": prompt}})
@@ -1402,6 +1428,46 @@ type subagentChild struct {
 	// spawned is told the child's process once it is started, so a stop can interrupt its process group before
 	// the kill (stopSubagents). Every engine's runner calls it through started.
 	spawned func(*exec.Cmd)
+	// stderr keeps the end of what the child's engine wrote to stderr, for a failed end's result. An engine whose
+	// runner reports stderr as events (Codex) fills it through emit; one that reads it itself writes here. May be nil.
+	stderr *subagentStderrTail
+}
+
+// subagentStderrTailBytes is how much of a child engine's stderr a failed run keeps: its last lines.
+const subagentStderrTailBytes = 2000
+
+// subagentStderrTail is the last subagentStderrTailBytes of a child engine's stderr, whole lines where it can.
+type subagentStderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *subagentStderrTail) write(line string) {
+	if t == nil || strings.TrimSpace(line) == "" {
+		return
+	}
+	if !strings.HasSuffix(line, "\n") {
+		line += "\n"
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, line...)
+	if over := len(t.buf) - subagentStderrTailBytes; over > 0 {
+		cut := over
+		if i := bytes.IndexByte(t.buf[over:], '\n'); i >= 0 && over+i+1 < len(t.buf) {
+			cut = over + i + 1
+		}
+		t.buf = append([]byte(nil), t.buf[cut:]...)
+	}
+}
+
+func (t *subagentStderrTail) String() string {
+	if t == nil {
+		return ""
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.buf))
 }
 
 type subagentSpawnedKey struct{}

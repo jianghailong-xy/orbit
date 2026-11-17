@@ -37,7 +37,7 @@ import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
-import { CLEARED_RUNNING_WORK } from './running-work';
+import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnId, openingTurnKey } from './orbit-authored-turn';
@@ -157,6 +157,7 @@ import {
 import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -4579,6 +4580,10 @@ export class SessionsService {
               -- named before capacity, because a slot coming free would not start this session.
               WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
                 THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
+              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
+              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
+              WHEN ${sessionDiskHoldSql('s')}
+                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
@@ -9508,12 +9513,13 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    endTurnContent?: string,
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
     const ended = await withTransactionRetry(
       this.prisma,
-      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding, endTurnContent),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
@@ -9531,6 +9537,8 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    /** What the `end` turn says, when it says anything: KEEP_BACKGROUND_WORK_END_CONTENT for a handover (complete). */
+    endTurnContent?: string,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -9703,6 +9711,7 @@ export class SessionsService {
       await this.insertTurnLocked(tx, sessionId, {
         kind: 'end',
         clientTurnId: randomUUID(),
+        ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
     }
     return {
@@ -10056,18 +10065,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
-    // only at the scheduled approval door, never exported as an engine pattern.
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {
@@ -11051,12 +11048,17 @@ export class SessionsService {
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async complete(ownerId: string, id: string) {
+  async complete(ownerId: string, id: string, opts: { handingOver?: boolean } = {}) {
+    // A coordinator handing over (ProjectsService.coordinator's replace with a handoff) ends the same way, but its
+    // `end` turn says to leave the session's SubAgent runs and bg_run jobs running: their wake goes to the successor
+    // (docs/coordinator-handoff-v2-design.md §1). Every other Complete stops them.
     const ended = await this.transitionEnd(
       ownerId,
       id,
       SessionEndReason.COMPLETED,
       'completedAt',
+      false,
+      opts.handingOver ? KEEP_BACKGROUND_WORK_END_CONTENT : undefined,
     );
     // Everything below is deliberately post-commit. A failed end-turn insert rolls back
     // both the intent and completedAt, and therefore produces no runner/realtime signal.

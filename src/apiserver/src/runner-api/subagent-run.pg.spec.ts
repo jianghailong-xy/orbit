@@ -21,7 +21,8 @@
  *      which the gateway sends on in place of the session's own; the account is recorded on the run's attempt; the
  *      parent session's pool fields are unchanged and it holds no pool token of its own. Another account's Codex
  *      pools — one of its own, and one it shared without adding this owner — are never candidates, and naming one
- *      is refused.
+ * *      is refused. The token stops at the parent's ordinary end; after a coordinator handover it keeps serving the
+ *      run left RUNNING, and stops once that run has ended.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -550,6 +551,29 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.ok(caller && typeof caller === 'object', 'the gateway takes the token');
     assert.deepEqual([caller.accountId, caller.keyId, caller.sessionId, caller.subagent], [`acct-frank-${tag}`, null, sessionId, true]);
     assert.equal(await gateway.caller(token!, 'claude' as never), null, 'and only on the codex gateway');
+
+    // The parent ends while the run is RUNNING. By an ordinary end its token is refused; by a coordinator handover
+    // it keeps serving the run left running (kept-subagent-gateway.ts), until that run ends.
+    await prisma.session.update({
+      where: { id: sessionId }, data: { status: RunStatus.CANCELLED, completedAt: new Date(), endReason: 'completed' },
+    });
+    assert.equal(await gateway.caller(token!), null, 'an ordinary end refuses the token at once');
+    const projectId = (await prisma.project.create({ data: { ownerId, title: 'handover keeps the SubAgent' } })).id;
+    t.after(async () => { await prisma.project.deleteMany({ where: { id: projectId } }); });
+    // A COMPLETED handoff names its successor (coordinator_handoff_successor_chk).
+    const successorId = await parentSession({ runnerId: machineId });
+    const handoff = await prisma.coordinatorHandoff.create({
+      data: { ownerId, projectId, fromSessionId: sessionId, toSessionId: successorId, state: 'COMPLETED' },
+    });
+    const kept = await gateway.caller(token!);
+    assert.ok(kept && typeof kept === 'object', 'a handed-over parent still serves the SubAgent it left running');
+    assert.deepEqual([kept.accountId, kept.sessionId, kept.subagent], [`acct-frank-${tag}`, sessionId, true]);
+    await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'DONE', endedAt: new Date() } });
+    assert.equal(await gateway.caller(token!), null, 'and stops once the run has ended');
+    await prisma.subagentRun.update({ where: { id: opened.runId }, data: { status: 'RUNNING', endedAt: null } });
+    await prisma.coordinatorHandoff.update({ where: { id: handoff.id }, data: { state: 'FAILED', failureCode: 'TURN_FAILED', toSessionId: null } });
+    assert.equal(await gateway.caller(token!), null, 'a handoff that did not complete keeps nothing');
+    await prisma.coordinatorHandoff.delete({ where: { id: handoff.id } });
     const attempts = (await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).attempts as unknown as Array<Record<string, unknown>>;
     t.diagnostic(`subagent_run.attempts ${JSON.stringify(attempts)}`);
     assert.deepEqual(attempts[0].poolMember, { accountId: `acct-frank-${tag}`, label: 'frank@own.invalid' }, 'the account is recorded on the run');

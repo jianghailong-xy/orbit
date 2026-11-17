@@ -17,6 +17,18 @@ public enum RunnerUpdateNow {
         return report.phase == "available" || report.phase == "draining" || report.phase == "postponed"
     }
 
+    /// The request is one timestamp the runner's next heartbeat takes, and its report (phase
+    /// `restarting`) the answer: once taken, the runners are read again this often, for up to `answerWait`,
+    /// so the Update card turns to Restarting without a pull.
+    public static let answerPollInterval: TimeInterval = 2
+    public static let answerWait: TimeInterval = 30
+
+    /// Whether the runner has answered an Update Now: it no longer reports a release waiting.
+    public static func answered(_ runner: Runner?) -> Bool {
+        guard let runner else { return true }
+        return !offered(runner)
+    }
+
     /// What the confirmation asks (board 3 ⑧, board 5): the question, what it does, the turns it
     /// interrupts and how long each has run, the jobs note, and the red button's cost.
     public struct Confirmation: Equatable, Sendable {
