@@ -234,3 +234,32 @@ test('the directory is mounted where gateway/nginx.conf includes it: the staging
   assert.ok(read('docs/self-hosting.md').includes(`- ${line}`), 'docs/self-hosting.md shows the mount');
   assert.ok(read('scripts/runner-link/staging.spread.compose.yml').includes(`\${STAGING_REPO}/gateway/several-apiservers:${MOUNT}:ro`));
 });
+
+// The managed runner browser's viewer (src/apiserver/src/managed-runners/browser-viewer.ts): the owner's web login rides
+// in the query as ?access_token=, since a browser's WebSocket cannot set a header. Its location writes the server's
+// access log, whose line is $logged_request: the map drops the query of any request that carries access_token=.
+test('the viewer\'s access_token never reaches the gateway\'s access log', () => {
+  const code = uncommented(main);
+  // The server logs with the orbit format, and that format writes $logged_request, never the raw request or its query.
+  assert.match(block(main, /^server\s*\{/m), /^\s*access_log \/var\/log\/nginx\/access\.log orbit;/m);
+  const format = code.slice(code.indexOf('log_format orbit'), code.indexOf(';', code.indexOf('log_format orbit')));
+  assert.ok(format.includes('"$logged_request"'), format);
+  for (const raw of ['$request ', '$request"', '$request_uri', '$args', '$query_string', '$arg_access_token']) {
+    assert.ok(!format.includes(raw), `the log format writes ${raw}`);
+  }
+  // The viewer's location keeps the server's log: no access_log of its own, which would replace it.
+  const viewer = directives(block(main, /^\s*location ~ \^\/api\/runners\/\[\^\/\]\+\/browser\/vnc\$ \{/m));
+  assert.deepEqual(viewer.filter((d) => d.startsWith('access_log')), []);
+  // The map, applied to the viewer's request line as nginx's PCRE does: the query is gone, method and path stay.
+  const map = block(main, /^map \$request \$logged_request\s*\{/m);
+  const entry = /"~(.+?)"\s+"([^"]+)"/.exec(map);
+  assert.ok(entry, map);
+  const pattern = new RegExp(entry[1].replace(/\(\?<(\w+)>/g, '(?<$1>'));
+  const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJvd25lciJ9.c2lnbmF0dXJl';
+  const line = `GET /api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc?access_token=${token} HTTP/1.1`;
+  const m = pattern.exec(line);
+  assert.ok(m, `the map does not match ${line}`);
+  const logged = entry[2].replace('$method', m.groups.method).replace('$path', m.groups.path).replace('$server_protocol', 'HTTP/1.1');
+  assert.equal(logged, 'GET /api/runners/34z8OKBXxDRYsIZwzJ35E/browser/vnc HTTP/1.1');
+  assert.ok(!logged.includes(token));
+});

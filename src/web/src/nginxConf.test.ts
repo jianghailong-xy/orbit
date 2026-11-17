@@ -183,6 +183,12 @@ describe('nginx: the managed runner browser\'s viewer', () => {
     expect(map).toBe("default upgrade; '' close;");
   });
 
+  it('writes no access log: the owner\'s login rides in the query, and this image logs the whole request line', () => {
+    expect(viewer).toContain('access_log off');
+    // Nothing at server or http level turns it back on for this location.
+    expect(viewer.filter((d) => d.startsWith('access_log'))).toEqual(['access_log off']);
+  });
+
   it('does not take a quiet screen for a dead stream: an hour each way, nothing buffered', () => {
     expect(viewer).toContain('proxy_read_timeout 3600s');
     expect(viewer).toContain('proxy_send_timeout 3600s');
