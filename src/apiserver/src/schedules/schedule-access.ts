@@ -84,7 +84,8 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
  *     schedule the run serves and to its envelope (§8.3);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files.
+ *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
  * `session_send`, the create doors and every other Orbit write; `file_upload`, since a report carries links, not files.
@@ -105,6 +106,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__wiki_get',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
+  'mcp__orbit__guide',
   'WebFetch',
   'WebSearch',
 ];
@@ -127,6 +129,7 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
   'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
   'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_ruling_record',
   'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
   'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
   'mcp__orbit__request_owner_action', 'mcp__orbit__runner_delete', 'mcp__orbit__runner_engine_install',

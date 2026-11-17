@@ -41,7 +41,7 @@ import {
 import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
 import { machineName } from '../../lib/machineSetup';
-import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
@@ -218,6 +218,8 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   // server offers one, then its own machine row in the shared state words. Nothing is read with the feature off.
   const { managed } = useManagedRunner();
   const managedRowFor = (runner: Runner): ManagedRunnerRow | null => managedRowOf(managed, runner.id);
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
@@ -230,7 +232,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
       nowMs,
       latestVersion,
-      managed: !!managedRowFor(runner),
+      managed: runner.managed === true || !!managedRowFor(runner),
     });
     return items.length > 0 ? 'attention' : 'online';
   };
@@ -240,7 +242,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
 
   const machineOf = (workspace: SettingsWorkspace): string | null => {
     const runner = runners.find((r) => r.id === workspace.runnerId) ?? workspace.runner;
-    return runner ? machineName(runner, managed?.status.runnerId) || null : null;
+    return runner ? machineName(runner, managedRunnerId) || null : null;
   };
 
   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
@@ -258,7 +260,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         onQuery={onQuery}
         groups={searchSettings(query, {
           runners,
-          managedRunnerId: managed?.status.runnerId,
+          managedRunnerId,
           keys: providers.data ?? [],
           workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
         })}

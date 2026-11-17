@@ -24,9 +24,10 @@ volume.
 
 An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. If the
 session runs on one, such as an Opus or Fable model, hand the run to DeepSeek V4.1 Flash with Orbit's
-`delegate` (`model: "deepseek-v4.1-flash"`, `background: true`) instead of running it yourself. Claude Code's
-Agent tool cannot pick a model outside Claude's, so use `delegate`. On an inexpensive model, run it yourself as
-below.
+`delegate` (`model: "deepseek-flash"`, Orbit's id for DeepSeek V4.1 Flash; `background: true`) instead of running it
+yourself. If `delegate` refuses the model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash model from the list the
+refusal prints. Claude Code's Agent tool cannot pick a model outside Claude's, so use `delegate`. On an
+inexpensive model, run it yourself as below.
 
 - Settle every choice before you hand it off, since the agent cannot ask the owner: which checkout to run
   from (see [Where to run it](#where-to-run-it)), the exact command and flags the owner asked for, and for a

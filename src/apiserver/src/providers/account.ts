@@ -98,6 +98,23 @@ export function automaticPick(engine: AccountEngine, runner: AccountRunner | nul
   );
 }
 
+/**
+ * Where a session on account `leaving` goes while that account is being removed: Automatic's ranking
+ * (accountToStartOn) over the runner's other accounts of `engine` that are signed in — the only one when
+ * one is left. Null when none is, and the session has nowhere to go.
+ */
+export function accountInPlaceOf(
+  engine: AccountEngine,
+  runner: AccountRunner | null | undefined,
+  leaving: string,
+  now: Date,
+): string | null {
+  const pool = accountsOn(engine, runner, now)?.filter((account) => account.id !== leaving && account.auth !== 'no');
+  if (!pool || pool.length === 0) return null;
+  if (pool.length === 1) return pool[0].id;
+  return accountToStartOn(engine, pool, weighedPlanUsage(runner?.planUsage, runner?.engines), now) ?? pool[0].id;
+}
+
 /** Automatic's pick (automaticPick) while `engine`'s Default is removed from Orbit, as the account the
  *  runner reports; null while Default is in use. */
 export function remainingAccount(

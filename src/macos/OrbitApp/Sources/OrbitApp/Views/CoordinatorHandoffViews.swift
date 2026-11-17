@@ -77,8 +77,8 @@ struct CoordinatorHandoffConfirmView: View {
     }
 
     private var waitNames: String {
-        waits.map { $0.label + ($0.paused ? CoordinatorHandoffCopy.pausedSuffix : "") }
-            .joined(separator: " · ")
+        // One line each: a kind follows its label after " · ", so a joined list would blur them.
+        waits.map(CoordinatorHandoffCopy.waitLine).joined(separator: "\n")
     }
 
     var body: some View {
@@ -234,6 +234,7 @@ struct CoordinatorHandedOverBanner: View {
 /// sections, with a link back to it — then the waits that moved here.
 struct CoordinatorHandoffNoteCardView: View {
     let received: SessionCoordinatorHandoffReceived
+    let counts: CoordinatorCleanStart.Counts
     let onOpenPrevious: () -> Void
     @State private var showingWaits = false
 
@@ -254,6 +255,14 @@ struct CoordinatorHandoffNoteCardView: View {
             }
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.secondary.opacity(0.2)))
+            if let history = CoordinatorHandoffCopy.historyBefore(counts.decisions, counts.merges) {
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(history + " · ").foregroundStyle(.secondary)
+                    Button(CoordinatorHandoffCopy.openPrevious, action: onOpenPrevious)
+                        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                }
+                .font(.orbitSubtext)
+            }
             if !received.movedWaits.isEmpty { waitsChip }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,7 +327,7 @@ struct CoordinatorHandoffNoteCardView: View {
         .popover(isPresented: $showingWaits) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(received.movedWaits) { wait in
-                    Text(wait.label + (wait.paused ? CoordinatorHandoffCopy.pausedSuffix : ""))
+                    Text(CoordinatorHandoffCopy.waitLine(wait))
                         .font(.orbitLabel)
                 }
             }

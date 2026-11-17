@@ -15,7 +15,7 @@ export function runnerAccountRemoveTitle(name: string): string {
 }
 
 /** Removing an added account while Default is in use. */
-export const RUNNER_ACCOUNT_REMOVE_DETAIL = 'Workspaces using it switch to Default.';
+export const RUNNER_ACCOUNT_REMOVE_DETAIL = 'Its sessions move to another account first. Workspaces using it switch to Default.';
 
 /** Removing Default, which only Orbit stops using; `cli` is the CLI's own name (Codex, Claude Code). */
 export function runnerDefaultRemoveDetail(runner: string, cli: string): string {
@@ -24,7 +24,7 @@ export function runnerDefaultRemoveDetail(runner: string, cli: string): string {
 
 /** Removing an added account while Default is removed from Orbit, with another account left. */
 export function runnerAccountRemoveDetailAutomatic(runner: string): string {
-  return `Its sign-in is deleted from ${runner}. Workspaces set to this account run on Automatic.`;
+  return `Its sessions move to another account first, then its sign-in is deleted from ${runner}. Workspaces set to this account run on Automatic.`;
 }
 
 /** Removing the last account Orbit uses while Default is removed: the removal holds only while
@@ -51,15 +51,26 @@ export const ACCOUNT_SELECT_DEFAULT_REMOVED = 'removed from Orbit — sessions r
 /** And for one set to an account the runner no longer reports, while its Default is removed. */
 export const ACCOUNT_SELECT_GONE_AUTOMATIC = 'not on this runner — sessions run on Automatic';
 
-/** Over the sessions a refused removal lists, when one session is in the account — running or between
- *  turns, either holds it; `engine` is the CLI's own name (Codex, Claude Code). */
+/** Over the sessions a refused removal lists, when one session in the account can't move to another —
+ *  no other account is signed in, or its runner can't carry the conversation; `engine` is the CLI's own
+ *  name (Codex, Claude Code). Sessions that can move are moved, and don't refuse it. */
 export function runnerAccountInUseOne(engine: string): string {
-  return `This ${engine} account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account`;
+  return `This ${engine} account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account`;
 }
 
-/** The same, when several sessions are in it. */
+/** The same, when several sessions in it can't move. */
 export function runnerAccountInUseMany(engine: string, count: number): string {
-  return `This ${engine} account can’t be removed while ${count} sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account`;
+  return `This ${engine} account can’t be removed while ${count} sessions on it can’t move to another account — sign in another account, or end them below; then remove the account`;
+}
+
+/** Under an account whose removal is waiting on the one session it moved to another account to leave. */
+export function runnerAccountMovingOne(engine: string): string {
+  return `Moving a session to another ${engine} account — this one is removed once it has left, after its turn if one is running`;
+}
+
+/** The same, when it moved several. */
+export function runnerAccountMovingMany(engine: string, count: number): string {
+  return `Moving ${count} sessions to another ${engine} account — this one is removed once they have left, after their turns if any are running`;
 }
 
 /** Each listed session's way to it. */

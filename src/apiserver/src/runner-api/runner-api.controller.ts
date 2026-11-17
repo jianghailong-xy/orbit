@@ -56,6 +56,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { latestAgentToolsReport } from './agent-tools-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -119,6 +120,7 @@ import {
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
   AccountRemoveCommand,
+  AccountRemoveMove,
   AccountRemoveResult,
   CodexAccountRemoveResult,
   InstallCommand,
@@ -316,6 +318,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { forwardedDescription, handoffSuccessorOf } from './handoff-wake-forward';
 import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
@@ -580,6 +583,9 @@ export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 // measured, docs/cursor-runtime-contract.md §9) and then gives up by itself, which is what tells the
 // runner the link expired. Its sign-in is not swept before that: this must stay >= the runner's own
 // wait for it.
+/** How long an account removal waits for the sessions it moved off the account to leave it: a running
+ *  turn moves once it ends (RunnerApiController.applyAccountRemoveResult). */
+const ACCOUNT_REMOVE_MOVE_TIMEOUT_MS = 6 * 60 * 60_000;
 export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
 
 /** How long a sign-in of `engine` may stay in flight before it is swept as timed out. */
@@ -909,6 +915,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobs: { column: 'running_bg_jobs', type: 'text[]' },
   runningSubagents: { column: 'running_subagents', type: 'text[]' },
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
+  agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
@@ -2704,10 +2711,18 @@ export class RunnerApiController {
       // engine names itself. An old runner handed the generic field would remove a path under its
       // own codex-accounts that never existed and report done.
       if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
-        // The codex-named field keeps the exact shape it always had: an older runner reads only
-        // account and attempt, and the engine it is about is the field's own name.
+        // The codex-named field keeps the shape it always had: an older runner reads only account and
+        // attempt, and the engine it is about is the field's own name. `moves` rides along for a runner
+        // that carries sessions with no engine running (runner-go account_cold_move.go); an older one
+        // ignores it.
         codexAccountRemoveRequest =
-          removeRequest === undefined ? undefined : { account: removeRequest.account, attempt: removeRequest.attempt };
+          removeRequest === undefined
+            ? undefined
+            : {
+                account: removeRequest.account,
+                attempt: removeRequest.attempt,
+                ...(removeRequest.moves ? { moves: removeRequest.moves } : {}),
+              };
       } else {
         accountRemoveRequest = removeRequest;
       }
@@ -3724,16 +3739,22 @@ export class RunnerApiController {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
+        codexAccountRemoveSessions: true,
       },
     });
     if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
     const started = r.codexAccountRemoveAt?.getTime() ?? 0;
-    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+    // A removal waiting on its sessions to move to another account waits out their turns, too.
+    const moving = (r.codexAccountRemoveSessions?.length ?? 0) > 0;
+    if (started && Date.now() - started > (moving ? ACCOUNT_REMOVE_MOVE_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS)) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
-          codexAccountRemoveMessage: 'This runner did not answer — try again.',
+          codexAccountRemoveMessage: moving
+            ? 'Its sessions did not leave this account in time — try again once their turns finish.'
+            : 'This runner did not answer — try again.',
+          codexAccountRemoveSessions: [],
         },
       });
       return undefined;
@@ -3742,7 +3763,27 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
-    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
+    const moves = moving ? await this.accountRemoveMoves(runnerId, engine, account, r.codexAccountRemoveSessions ?? []) : [];
+    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '', ...(moves.length > 0 ? { moves } : {}) };
+  }
+
+  /**
+   * Where each session a removal moved off `account` now is: the account its row names for `engine`,
+   * which moveOffRemovedAccount wrote. A session with no engine running takes its reload only at its
+   * next claim, so the runner carries it there itself (runner-go account_cold_move.go). Only this
+   * runner's sessions, and only those moved to another account.
+   */
+  private async accountRemoveMoves(runnerId: string, engine: string, account: string, sessionIds: string[]): Promise<AccountRemoveMove[]> {
+    if (!isAccountEngine(engine) || sessionIds.length === 0) return [];
+    const column = ACCOUNT_CHOICE[engine];
+    const rows = (await this.prisma.session.findMany({
+      where: { id: { in: sessionIds }, assignedRunnerId: runnerId },
+      select: { id: true, [column]: true },
+    })) as unknown as Array<{ id: string } & Record<string, unknown>>;
+    return rows.flatMap((row) => {
+      const to = row[column];
+      return typeof to === 'string' && to !== account ? [{ sessionId: row.id, account: to }] : [];
+    });
   }
 
   /**
@@ -3806,23 +3847,41 @@ export class RunnerApiController {
     // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
     // another account's session ids on its row, even though the page reads only the viewer's back.
     const named = status === 'failed' ? accountInUseSessionIds(body) : [];
-    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+    let sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
       where: { id: { in: named }, assignedRunnerId: runnerId },
       select: { id: true },
     })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
+    // The removal this report is about, engine included: a report from a runner that carried out a
+    // Claude removal must not close out a Codex one. A row asked for before this build (no engine
+    // stored) therefore matches nothing — the relay's window then fails it with "This runner did not
+    // answer — try again", which for a request the previous build handed over is the honest outcome,
+    // and the person who pressed it can press it again.
+    const asked = {
+      id: runnerId,
+      codexAccountRemoveStatus: 'pending',
+      accountRemoveEngine: engine,
+      ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
+      ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
+    };
+    // Sessions in the account do not keep it: each moves to another of the runner's accounts, and the
+    // removal stays pending — redelivered every heartbeat — until the last has left (an idle one at its
+    // reload, a running one after its turn). Only those that cannot leave refuse it.
+    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine)) {
+      const row = await this.prisma.runner.findFirst({ where: asked, select: { codexAccountRemoveAccount: true } });
+      if (row?.codexAccountRemoveAccount) {
+        const stuck = await this.sessions.moveOffRemovedAccount(runnerId, engine, row.codexAccountRemoveAccount, sessionIds);
+        if (stuck.length === 0) {
+          const { count } = await this.prisma.runner.updateMany({
+            where: asked,
+            data: { codexAccountRemoveMessage: null, codexAccountRemoveSessions: sessionIds },
+          });
+          return { ok: true, applied: count > 0 };
+        }
+        sessionIds = stuck;
+      }
+    }
     const { count } = await this.prisma.runner.updateMany({
-      where: {
-        id: runnerId,
-        codexAccountRemoveStatus: 'pending',
-        // The removal this report is about, engine included: a report from a runner that carried
-        // out a Claude removal must not close out a Codex one. A row asked for before this build
-        // (no engine stored) therefore matches nothing — the relay's window then fails it with
-        // "This runner did not answer — try again", which for a request the previous build handed
-        // over is the honest outcome, and the person who pressed it can press it again.
-        accountRemoveEngine: engine,
-        ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
-        ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
-      },
+      where: asked,
       data: {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
@@ -6501,7 +6560,9 @@ export class RunnerApiController {
    *
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
-   * 200 because there is nothing for the runner to try again.
+   * 200 because there is nothing for the runner to try again — unless it ended by a COMPLETED coordinator
+   * handoff: then the wake is filed onto the last successor of the handoff chain, its description saying the
+   * previous coordinator started the job (handoff-wake-forward.ts).
    *
    * A job's exit is written into the turn the session is running, when it is running one this runtime
    * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
@@ -6528,38 +6589,63 @@ export class RunnerApiController {
     const receivedAt = new Date();
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
-    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
-    let merged = false;
     try {
-      const turn = await this.sessions.createTurn(
-        runner.ownerId,
-        sessionId,
-        { clientTurnId, content: '', intent: 'NEXT_TURN' },
-        {
-          steerIfLive: dto.trigger === 'exit',
-          coalesce: async (tx, session, route) => {
-            if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
-              throw new StaleBackgroundWake(dto.jobId, dto.trigger);
-            }
-            const queued = await undeliveredWakeTurn(tx, sessionId, route);
-            merged = queued !== null;
-            const filedOn = queued?.clientTurnId ?? clientTurnId;
-            await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
-            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
-            return queued;
-          },
-        },
-      );
-      return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
+      return await this.fileBackgroundWakeOn(runner.ownerId, sessionId, dto, receivedAt);
     } catch (e) {
       // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output or a stall
       // its job's exit already reported (StaleBackgroundWake).
+      if (e instanceof StaleBackgroundWake) return { outcome: 'DROPPED' };
+      if (!(e instanceof SessionNotSendable || e instanceof NotFoundException)) throw e;
+    }
+    // The session has ended. One that ended by a COMPLETED coordinator handoff forwards the wake to its last
+    // successor, naming that the previous coordinator started the job (docs/coordinator-handoff-v2-design.md
+    // §1); a handoff still HANDING_OVER answers 503 (HandoffInFlight), which the runner asks again for. A
+    // session that ended any other way drops it.
+    const successor = await handoffSuccessorOf(this.prisma, sessionId);
+    if (!successor) return { outcome: 'DROPPED' };
+    try {
+      return await this.fileBackgroundWakeOn(runner.ownerId, successor, {
+        ...dto,
+        description: forwardedDescription(dto.description, dto.command),
+      }, receivedAt);
+    } catch (e) {
       if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
         return { outcome: 'DROPPED' };
       }
       throw e;
     }
+  }
+
+  /** File one background job's wake as a turn of `sessionId`: its own session, or the successor a handoff forwards it to. */
+  private async fileBackgroundWakeOn(
+    ownerId: string,
+    sessionId: string,
+    dto: BackgroundWakeDto,
+    receivedAt: Date,
+  ): Promise<BackgroundWakeReceipt> {
+    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
+    let merged = false;
+    const turn = await this.sessions!.createTurn(
+      ownerId,
+      sessionId,
+      { clientTurnId, content: '', intent: 'NEXT_TURN' },
+      {
+        steerIfLive: dto.trigger === 'exit',
+        coalesce: async (tx, session, route) => {
+          if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+          if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+            throw new StaleBackgroundWake(dto.jobId, dto.trigger);
+          }
+          const queued = await undeliveredWakeTurn(tx, sessionId, route);
+          merged = queued !== null;
+          const filedOn = queued?.clientTurnId ?? clientTurnId;
+          await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
+          if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
+          return queued;
+        },
+      },
+    );
+    return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
   }
 
   /**
@@ -9076,6 +9162,8 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // The session's Agent Tools report (Session.agentTools): the newest one in the batch, kept whole.
+      const agentTools = latestAgentToolsReport(durable);
       // What the engine is doing in a stretch where it produces nothing else — see
       // Session.enginePhase. Reduced separately from engineTurnActive above because the two
       // answer different questions off overlapping events: a compaction is not a turn, and the
@@ -9100,6 +9188,7 @@ export class RunnerApiController {
         ...(context ? { contextTokens: context.tokens } : {}),
         ...(context?.window ? { contextWindow: context.window } : {}),
         ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        ...(agentTools ? { agentTools: agentTools as Prisma.InputJsonValue } : {}),
         // null is a decision here (the phase is over), undefined is "this batch said nothing
         // about it" — so only the first may be written over the stored value.
         ...(enginePhase !== undefined ? { enginePhase } : {}),

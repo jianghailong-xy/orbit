@@ -659,7 +659,7 @@ func TestSecretRemovalScanDoesNotHoldUpDelivery(t *testing.T) {
 	if store.scrubber().holds([]byte("retired-canary-9876543210fedcba")) {
 		t.Fatal("g-old's value is still in the scrubber")
 	}
-	if _, err := readSecretTaintChecked(); !errors.Is(err, errSecretTaintPending) {
+	if _, err := readSecretTaintChecked(); !errors.Is(err, errSecretTaintScanning) {
 		t.Fatalf("the taint record was readable while g-old's scan ran: %v", err)
 	}
 	// The next heartbeats still name g-old as removing: it is not reported before its scan ends, and a list that

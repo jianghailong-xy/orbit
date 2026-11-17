@@ -344,6 +344,8 @@ Only a shell command can ask. The claim hands the runner, for that run only:
   - `notify`;
   - reads: `task_get`, `task_list`, `session_get`, `session_search`, `project_get`, `wiki_search`, `wiki_get`,
     `file_fetch`, `file_list`;
+  - `guide`, which reads the operation catalogue and asks the server nothing (since contract 1.10.0, which merged
+    it from the project line);
   - `WebFetch` and `WebSearch`.
 
   These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`).

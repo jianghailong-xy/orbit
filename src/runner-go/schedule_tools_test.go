@@ -185,6 +185,26 @@ func TestScheduleToolDescriptionsCarryTheTimerChoice(t *testing.T) {
 	}
 }
 
+// §8.4: a Run now counts toward the weekly budget; over it a session is refused and only the person can start one.
+func TestScheduleRunNowDescriptionCountsTowardTheBudget(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		if name, _ := tool["name"].(string); name != "schedule_run_now" {
+			continue
+		}
+		description := tool["description"].(string)
+		for _, want := range []string{"counts toward its runs a week", "from an agent session is refused with SCHEDULE_OVER_BUDGET", "only the person can still start one, from the app"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("schedule_run_now does not say %q", want)
+			}
+		}
+		if strings.Contains(description, "not count") {
+			t.Error("schedule_run_now still says a run now does not count")
+		}
+		return
+	}
+	t.Fatal("schedule_run_now is not listed")
+}
+
 // §8.1, §8.2: a change goes to schedule_update, and a change of the time is no new intent.
 func TestScheduleToolDescriptionsSteerChangesToUpdate(t *testing.T) {
 	descriptions := map[string]string{}

@@ -202,6 +202,11 @@ func taintedPaths(dir, tip string, exclude ...string) []string {
 	if err != nil {
 		return []string{"(the runner's record of commits holding a secret could not be read: " + firstLine(err.Error()) + ")"}
 	}
+	return taintedPathsOf(entries, dir, tip, exclude...)
+}
+
+// taintedPathsOf is taintedPaths over entries already read.
+func taintedPathsOf(entries []secretTaintEntry, dir, tip string, exclude ...string) []string {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -336,35 +341,68 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 		}
 		return err
 	}
-	var failed error
-	for _, entry := range entries {
-		dir := filepath.Join(worktreesDir(), entry.Name())
-		if !entry.IsDir() {
-			continue
+	// The checkouts are scanned a few at a time: a removal on a runner with hundreds of them otherwise keeps the
+	// record pending, and every reader refusing, for minutes. Each record write takes secretTaintMu on its own.
+	var (
+		mu     sync.Mutex
+		failed error
+		wg     sync.WaitGroup
+	)
+	fail := func(err error) {
+		mu.Lock()
+		if failed == nil {
+			failed = err
 		}
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
-			continue
-		}
-		// A checkout git cannot read is not one with nothing in it.
-		if !isGitRepo(dir) {
-			if failed == nil {
-				failed = errors.New("the checkout " + dir + " could not be read by git")
+		mu.Unlock()
+	}
+	work := make(chan os.DirEntry)
+	for i := 0; i < secretTaintScanWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range work {
+				if err := taintCheckout(filepath.Join(worktreesDir(), entry.Name()), entry.Name(), r); err != nil {
+					fail(err)
+				}
 			}
-			continue
+		}()
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			work <- entry
 		}
-		base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(entry.Name()))
-		if err := recordSecretTaint(dir, "HEAD", r, base); err != nil && failed == nil {
-			failed = err
-		}
-		// What is not committed yet: a file held back from a commit stays in the working tree, and the next
-		// `git add -A` after the value is forgotten would stage it.
-		objects, scanErr := uncommittedObjectsHolding(dir, r)
-		if err := recordTaintObjects(dir, objects); err != nil && failed == nil {
-			failed = err
-		}
-		if scanErr != nil && failed == nil {
-			failed = scanErr
-		}
+	}
+	close(work)
+	wg.Wait()
+	return failed
+}
+
+// secretTaintScanWorkers is how many checkouts a removal scan reads at once.
+const secretTaintScanWorkers = 4
+
+// taintCheckout records what one session checkout, named name under worktreesDir, holds of r's values: its own
+// history and what is not committed yet.
+func taintCheckout(dir, name string, r *integrationOutputRedactor) error {
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err != nil {
+		return nil
+	}
+	// A checkout git cannot read is not one with nothing in it.
+	if !isGitRepo(dir) {
+		return errors.New("the checkout " + dir + " could not be read by git")
+	}
+	var failed error
+	base, _ := git(dir, "rev-parse", "--verify", "--quiet", baseRefName(name))
+	if err := recordSecretTaint(dir, "HEAD", r, base); err != nil {
+		failed = err
+	}
+	// What is not committed yet: a file held back from a commit stays in the working tree, and the next
+	// `git add -A` after the value is forgotten would stage it.
+	objects, scanErr := uncommittedObjectsHolding(dir, r)
+	if err := recordTaintObjects(dir, objects); err != nil && failed == nil {
+		failed = err
+	}
+	if scanErr != nil && failed == nil {
+		failed = scanErr
 	}
 	return failed
 }
@@ -547,11 +585,18 @@ func taintObjects(repo string) map[string]string {
 
 // taintObjectsChecked is taintObjects, and whether the record could be read at all.
 func taintObjectsChecked(repo string) (map[string]string, bool) {
+	ids, err := taintObjectsRead(repo)
+	return ids, err == nil
+}
+
+// taintObjectsRead is taintObjects, and why the record could not be read (errSecretTaintScanning while a removal's
+// scan runs, errSecretTaintPending when one failed).
+func taintObjectsRead(repo string) (map[string]string, error) {
 	secretTaintMu.Lock()
 	entries, err := readSecretTaintChecked()
 	secretTaintMu.Unlock()
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 	ids := map[string]string{}
 	for _, entry := range entries {
@@ -562,7 +607,7 @@ func taintObjectsChecked(repo string) (map[string]string, bool) {
 			ids[object.ID] = object.Path
 		}
 	}
-	return ids, true
+	return ids, nil
 }
 
 // secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.
@@ -578,6 +623,57 @@ var secretTaintPending struct {
 	sync.Mutex
 	list    []*integrationOutputRedactor
 	running map[*integrationOutputRedactor]bool
+	// ended is closed, and replaced, whenever a scan ends (waitPendingTaintScans).
+	ended chan struct{}
+}
+
+// pendingTaintScanEndedLocked wakes everyone waiting for a scan to end. secretTaintPending is held.
+func pendingTaintScanEndedLocked() {
+	if secretTaintPending.ended != nil {
+		close(secretTaintPending.ended)
+		secretTaintPending.ended = nil
+	}
+}
+
+// pendingTaintScanRunningLocked reports whether a pending matcher's scan is running. secretTaintPending is held.
+func pendingTaintScanRunningLocked() bool {
+	for _, r := range secretTaintPending.list {
+		if secretTaintPending.running[r] {
+			return true
+		}
+	}
+	return false
+}
+
+// waitPendingTaintScans waits, at most d, until no removal scan is running, and reports whether none is. A matcher
+// whose scan failed stays pending all the same: this waits for scans, not for the record.
+func waitPendingTaintScans(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		secretTaintPending.Lock()
+		if !pendingTaintScanRunningLocked() {
+			secretTaintPending.Unlock()
+			return true
+		}
+		if secretTaintPending.ended == nil {
+			secretTaintPending.ended = make(chan struct{})
+		}
+		ended := secretTaintPending.ended
+		secretTaintPending.Unlock()
+		select {
+		case <-ended:
+		case <-timer.C:
+			return false
+		}
+	}
+}
+
+// pendingTaintMatchers is every matcher still pending, its scan running or failed.
+func pendingTaintMatchers() []*integrationOutputRedactor {
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	return append([]*integrationOutputRedactor(nil), secretTaintPending.list...)
 }
 
 // holdPendingTaint keeps r pending, marked as being recorded, and reports whether there is a scan to run for it. It is
@@ -603,6 +699,7 @@ func recordPendingTaint(r *integrationOutputRedactor) error {
 	secretTaintPending.Lock()
 	defer secretTaintPending.Unlock()
 	delete(secretTaintPending.running, r)
+	defer pendingTaintScanEndedLocked()
 	if err != nil {
 		return err
 	}
@@ -659,17 +756,31 @@ func secretTaintIsPending() bool {
 	return len(secretTaintPending.list) > 0
 }
 
-// errSecretTaintPending is what every reader of the record sees while a removal's record is still to be written.
+// errSecretTaintPending is what every reader of the record sees while a removal's record could not be written: its
+// scan failed, and is retried.
 var errSecretTaintPending = errors.New("a removed secret's record could not be written yet")
 
+// errSecretTaintScanning is what every reader of the record sees while a removal's scan is still running: the record
+// is being written, and is readable again when the scan ends.
+var errSecretTaintScanning = errors.New("a removed secret's removal scan is still running on this runner")
+
 // readSecretTaintChecked is the record as a reader that decides what may leave this machine sees it: unreadable, and
-// so refusing, while anything is pending.
+// so refusing, while anything is pending. A failed scan wins over a running one: it does not end by itself.
 func readSecretTaintChecked() ([]secretTaintEntry, error) {
 	secretTaintPending.Lock()
 	pending := len(secretTaintPending.list) > 0
+	failed := false
+	for _, r := range secretTaintPending.list {
+		if !secretTaintPending.running[r] {
+			failed = true
+		}
+	}
 	secretTaintPending.Unlock()
-	if pending {
+	switch {
+	case failed:
 		return nil, errSecretTaintPending
+	case pending:
+		return nil, errSecretTaintScanning
 	}
 	return readSecretTaint()
 }
