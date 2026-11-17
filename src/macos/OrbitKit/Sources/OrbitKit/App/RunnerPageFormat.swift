@@ -384,6 +384,13 @@ public enum RunnerPageFormat {
         return KimiSite.current(of: health)?.domain
     }
 
+    /// OpenCode's note after its version when its CLI listed no provider key (web's
+    /// `1.19.5 · no provider key found`): its Unknown is about a key, never the version. Nil otherwise.
+    public static func engineKeyNote(_ health: RunnerEngineHealth) -> String? {
+        health.engine == "opencode" && health.openCodeNoKey == true && health.auth != "yes"
+            ? RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY : nil
+    }
+
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
     /// signed out — never Antigravity's Default on a runner that runs on its own Gemini key
     /// (`runsOnEnvKey`), which is not out.

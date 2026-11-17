@@ -448,6 +448,19 @@ describe("a machine's engine rows", () => {
     expect(row).toContain('updated 6h ago');
     expect(row).not.toContain('>Sign in<');
     expect(row).toContain('opencode auth login');
+    // The Unknown is about the sign-in, and the line says so, so the version beside it never reads
+    // as the thing in doubt.
+    expect(row).toContain('1.18.16 · sign-in unknown');
+  });
+
+  it('says so when OpenCode listed no provider key at all', () => {
+    const html = render([
+      runner({ engines: [health({ engine: 'opencode', version: '1.19.5', auth: 'unknown', openCodeNoKey: true })] }),
+    ]);
+    const row = html.slice(html.indexOf('data-engine="opencode"'));
+    expect(row).toContain('1.19.5 · no provider key found');
+    expect(row).toContain('Unknown');
+    expect(row).not.toContain('Signed in');
   });
 
 

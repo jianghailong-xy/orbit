@@ -799,7 +799,8 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
     // Kimi's site after its version while it has the one login: `2.1.1 · kimi.ai`.
-    val version = if (installed) listOfNotNull(RunnerPage.engineVersion(health.str("version")), RunnerPage.engineSite(health))
+    val version = if (installed) listOfNotNull(RunnerPage.engineVersion(health.str("version")), RunnerPage.engineSite(health),
+        RunnerPage.engineKeyNote(health))
         .takeIf { it.isNotEmpty() }?.joinToString(RunnerCopy.SEP) else null
     val hint = RunnerPage.signInHint(runner, engine)
     val next = RunnerPage.engineNextAccount(runner, engine, now)
