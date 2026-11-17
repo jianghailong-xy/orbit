@@ -579,6 +579,7 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
   scheduleRunPermissionMode,
@@ -6396,11 +6397,12 @@ export class RunnerApiController {
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
     // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
-    const refused = await this.checkOnlyRunRefuses(session, dto);
+    const checkOnly = await this.isCheckOnlyRun(session);
+    const refused = checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
-    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto);
+    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto, checkOnly);
     // The same shape for a coordinator's task creates in its own project when nobody has started it
     // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
     // them is a question on its own (`unstarted-project-create.ts`).
@@ -6439,7 +6441,8 @@ export class RunnerApiController {
       // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
       // agent that waits for a card nobody can ever be shown.
       toolName: stripNul(dto.toolName),
-      input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
+      input: await this.cardInput(session.ownerId, stripNul(dto.toolName),
+        checkOnly ? { ...(dto.input as object), orbitScheduleCheckOnly: true } : dto.input, { runnerId: runner.id, sessionId },
         dto.acceptsStartAfterCreate === true),
       // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
       // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
@@ -6588,10 +6591,9 @@ export class RunnerApiController {
     }
   }
 
-  /** Whether this session serves a scheduled CHECK_ONLY run whose engine may not ask about this call (schedule-access.ts). */
-  private async checkOnlyRunRefuses(
+  /** Whether the session belongs to a run that started at CHECK_ONLY, even if its schedule has since changed. */
+  private async isCheckOnlyRun(
     session: SessionEngineFacts & { scheduleRunId: string | null },
-    dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.scheduleRunId) return false;
     // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
@@ -6600,9 +6602,7 @@ export class RunnerApiController {
       where: { id: session.scheduleRunId },
       select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    if (runAccessLevel(run) !== 'CHECK_ONLY') return false;
-    return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
-      stripNul(dto.backgroundJobId ?? ''));
+    return runAccessLevel(run) === 'CHECK_ONLY';
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
@@ -6618,6 +6618,7 @@ export class RunnerApiController {
   private async standingGrantCovers(
     session: SessionEngineFacts & { workspaceId: string | null },
     dto: ApprovalCreateRequest,
+    checkOnly = false,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
@@ -6636,11 +6637,12 @@ export class RunnerApiController {
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = backgroundJob ? null : await sessionEngine(this.prisma, session);
-    if (!backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
+    if (!checkOnly && !backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
-      select: { toolName: true, ruleContent: true },
+      select: { toolName: true, ruleContent: true, fromScheduleRun: true },
     });
+    if (checkOnly) return checkOnlyRuleCoversApproval(dto, rules);
     return runtime
       ? ruleCoversApproval(runtime, dto.toolName, dto.input, rules)
       : ruleCoversBackgroundJobCard(dto.input, rules);

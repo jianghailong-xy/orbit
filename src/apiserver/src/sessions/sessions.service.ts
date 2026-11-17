@@ -32,7 +32,7 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
-import { checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
+import { checkOnlyCommandRules, checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -9759,7 +9759,8 @@ export class SessionsService {
   async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true },
+      select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } } },
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
@@ -9767,7 +9768,7 @@ export class SessionsService {
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
-    return (await visibleQuestions(this.prisma, answerable)).map((a) => this.toApprovalInfo(a));
+    return (await visibleQuestions(this.prisma, answerable)).map((a) => this.toApprovalInfo(a, runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'));
   }
 
   /**
@@ -9913,16 +9914,15 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true, translation: true, status: true },
     });
-    // A scheduled CHECK_ONLY run on Claude Code (design §6.2): Always allow on its card writes only that card's command's
-    // rules, computed here, and only those rules are marked for later checks to carry (from_schedule_run). A rule from
-    // any other card, an OPEN_PR run's included, is the client's choice and is never carried by a check.
+    // CHECK_ONLY scheduled approvals remember only the complete command, computed here. Older clients'
+    // prefixes express intent but never become the stored grant. Other approvals keep the client's rules.
     const checkOnlyRules = dto.behavior === 'allow' && !!dto.rememberRules?.length && !!answering
-      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'
-      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE;
+      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY';
     if (checkOnlyRules) {
       const refused = checkOnlyRuleRefusal(answering!, dto.rememberRules!);
       if (refused) throw new BadRequestException({ code: SCHEDULE_CHECK_ONLY_RULE_REFUSED, message: refused });
     }
+    const rememberRules = checkOnlyRules ? checkOnlyCommandRules(answering!) : dto.rememberRules;
     // Settings › Translation (3A, reply-translation.ts): what the engine reads is in the account's agent language —
     // options the owner picked in translation mapped back to the card's own, their own words translated. A failed translation
     // records nothing (422 TRANSLATION_FAILED). Only for a card still asking: a late click is a no-op anyway.
@@ -9952,12 +9952,12 @@ export class SessionsService {
           : {}),
         message: english.message ?? null,
         answers: english.answers ? (english.answers as Prisma.InputJsonValue) : Prisma.DbNull,
-        // Only an allow can carry "remember same kind" rules; the runner reads them off
-        // that read and adds them to claude's session permissions. Stored as a JSON
-        // array (the schemaless `remember_rule` column holds either shape).
+        // Literal scheduled grants are matched here on every request. Never send them back as
+        // engine patterns: wildcard characters in the approved command must remain literal.
+        // Other approvals keep their existing session permission updates.
         rememberRule:
-          dto.behavior === 'allow' && dto.rememberRules?.length
-            ? (dto.rememberRules as unknown as Prisma.InputJsonValue)
+          dto.behavior === 'allow' && !checkOnlyRules && rememberRules?.length
+            ? (rememberRules as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
         decidedById: ownerId,
         decidedCredentialKind: credential?.kind ?? null,
@@ -10003,7 +10003,7 @@ export class SessionsService {
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
         await this.rememberForWorkspace(
-          session.workspaceId, ownerId, approvalId, dto.rememberRules, checkOnlyRules,
+          session.workspaceId, ownerId, approvalId, rememberRules, checkOnlyRules,
         );
       }
       this.realtime.publish(id, {
@@ -10028,7 +10028,10 @@ export class SessionsService {
     rules: PermissionRule[] | undefined,
     fromScheduleRun = false,
   ): Promise<void> {
-    const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
+    // Scheduled commands stay literal data: never normalize them into engine rule syntax.
+    const stored = fromScheduleRun
+      ? (rules ?? []).map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent! }))
+      : normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
     await this.prisma.workspacePermissionRule.createMany({
       data: stored.map((rule) => ({
@@ -10041,8 +10044,8 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // A rule an interactive session wrote first is the same row: answering a CHECK_ONLY run's card for it marks it, so
-    // a CHECK_ONLY run carries it from now on (schedule-access.ts scheduleRunAllowedTools).
+    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
+    // only at the scheduled approval door, never exported as an engine pattern.
     if (fromScheduleRun) {
       await this.prisma.workspacePermissionRule.updateMany({
         where: {
@@ -10070,12 +10073,13 @@ export class SessionsService {
     decidedCredentialKind?: string | null;
     coordinatorFallback?: string | null;
     translation?: Prisma.JsonValue | null;
-  }): ApprovalInfo {
+  }, checkOnly = false): ApprovalInfo {
     return {
       id: a.id,
       sessionId: a.sessionId,
       toolName: a.toolName,
-      input: a.input,
+      input: checkOnly && a.toolName === 'Bash' && a.input && typeof a.input === 'object' && !Array.isArray(a.input)
+        ? { ...a.input, orbitScheduleCheckOnly: true } : a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
       ...(a.subagentRunId ? { subagentRunId: a.subagentRunId } : {}),
