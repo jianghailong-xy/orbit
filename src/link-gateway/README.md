@@ -129,7 +129,8 @@ Welcome carries:
 - protocol version 1 and `MODE_LINK`;
 - `heartbeat_interval_ms` 30000, `max_frame_bytes` 262144, and the [credit](#durable-events-and-credit) a connection
   gets now;
-- where each session Hello names stands and the runner's release, as the apiserver answers them ([Welcome](#welcome));
+- where each session Hello names stands, the runner's release and `browser`, as the apiserver answers them
+  ([Welcome](#welcome));
 - an empty `HintState` and a `connection_id` (`c-` followed by 16 hex digits).
 
 Welcome lists no `HintState` yet: a runner sends its first Heartbeat as soon as it has read Welcome, and that beat's
@@ -292,11 +293,13 @@ session in the order asked:
 
 And `release`, the release `GET /runner/release` would assign the runner, from the two releases the apiserver reads
 off /dl (`runner-release-feed.ts`), when it can state one. Welcome carries the sessions as `SessionState`s, under the ids
-Hello used, and the release as `AssignedRelease`. The call writes nothing and is retried across backends like any
+Hello used, and the release as `AssignedRelease`. And `browser`, whether the runner is offered the managed runner
+browser: true only with the apiserver's `ORBIT_MANAGED_RUNNER_BROWSER_ENABLED` and `ORBIT_MANAGED_RUNNERS_ENABLED` both
+on and the runner a managed instance the manager authorized; Welcome copies it as `browser`. The call writes nothing and is retried across backends like any
 idempotent call, within 3s in all, well inside the 10s a runner waits for Welcome. It is made before the new connection
 supersedes the process's older one, which carries the work meanwhile.
 
-**When the route cannot answer**, the Welcome goes without sessions and without a release, and the connection opens as
+**When the route cannot answer**, the Welcome goes without sessions, without a release and without the browser, and the connection opens as
 usual. That covers no backend reached, a refusal (404 from an apiserver older than the route, 5xx from a database that is
 down), an answer that does not state each session in order, and no answer within the 3s. The handshake is not refused:
 an apiserver released after the gateway, or a database outage, must not keep every runner off the link or turn its

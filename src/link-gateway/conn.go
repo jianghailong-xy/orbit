@@ -190,13 +190,15 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	c.hello = hello
 	c.mu.Unlock()
-	// What Welcome says of the Hello's sessions and of the runner's release, as the welcome route answers it (welcome.go).
+	// What Welcome says of the Hello's sessions, of the runner's release and of its browser, as the welcome route answers
+	// it (welcome.go).
 	// Asked before this connection takes over from an older one of the process, which carries the work meanwhile.
 	var sessions []*linkpb.SessionState
 	var release *linkpb.AssignedRelease
+	var browser bool
 	if c.link != nil {
 		c.link.greeted(hello)
-		sessions, release = c.link.welcome(hello)
+		sessions, release, browser = c.link.welcome(hello)
 	}
 	if old := c.g.reg.activate(c); old != nil {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
@@ -221,6 +223,7 @@ func (c *conn) handshake() bool {
 		Hints:               &linkpb.HintState{},
 		Release:             release,
 		ConnectionId:        c.id,
+		Browser:             browser,
 	}}}, true)
 	c.welcomed = true
 	c.welcomedAt = time.Now()

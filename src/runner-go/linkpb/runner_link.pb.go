@@ -979,7 +979,12 @@ type Welcome struct {
 	Release *AssignedRelease `protobuf:"bytes,8,opt,name=release,proto3" json:"release,omitempty"`
 	// Names this connection in gateway logs. The runner logs it too, so the two sides' logs can be
 	// matched.
-	ConnectionId  string `protobuf:"bytes,9,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	ConnectionId string `protobuf:"bytes,9,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Whether this runner is offered the managed runner browser (docs/runner-browser-design.md §2): true only when the
+	// server's ORBIT_MANAGED_RUNNER_BROWSER_ENABLED and ORBIT_MANAGED_RUNNERS_ENABLED switches are both on and Hello
+	// carried a ManagedInstance the manager authorized. False for every self-managed runner, and from a gateway or
+	// apiserver older than the field.
+	Browser       bool `protobuf:"varint,10,opt,name=browser,proto3" json:"browser,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1075,6 +1080,13 @@ func (x *Welcome) GetConnectionId() string {
 		return x.ConnectionId
 	}
 	return ""
+}
+
+func (x *Welcome) GetBrowser() bool {
+	if x != nil {
+		return x.Browser
+	}
+	return false
 }
 
 // The limits a connection runs under.
@@ -3326,7 +3338,7 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
 	"\blast_seq\x18\x02 \x01(\x04R\alastSeq\x12\x17\n" +
-	"\aturn_id\x18\x03 \x01(\tR\x06turnId\"\xdb\x03\n" +
+	"\aturn_id\x18\x03 \x01(\tR\x06turnId\"\xf5\x03\n" +
 	"\aWelcome\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12-\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x19.orbit.runnerlink.v1.ModeR\x04mode\x122\n" +
@@ -3336,7 +3348,9 @@ const file_v1_runner_link_proto_rawDesc = "" +
 	"\bsessions\x18\x06 \x03(\v2!.orbit.runnerlink.v1.SessionStateR\bsessions\x124\n" +
 	"\x05hints\x18\a \x01(\v2\x1e.orbit.runnerlink.v1.HintStateR\x05hints\x12>\n" +
 	"\arelease\x18\b \x01(\v2$.orbit.runnerlink.v1.AssignedReleaseR\arelease\x12#\n" +
-	"\rconnection_id\x18\t \x01(\tR\fconnectionId\"0\n" +
+	"\rconnection_id\x18\t \x01(\tR\fconnectionId\x12\x18\n" +
+	"\abrowser\x18\n" +
+	" \x01(\bR\abrowser\"0\n" +
 	"\x06Limits\x12&\n" +
 	"\x0fmax_frame_bytes\x18\x01 \x01(\rR\rmaxFrameBytes\"m\n" +
 	"\fSessionState\x12\x1d\n" +

@@ -103,7 +103,13 @@ type linkWork struct {
 	// slowBeats counts the beats answered after linkBeatSlow since slowLoggedAt, when the last of them was logged.
 	slowBeats    int
 	slowLoggedAt time.Time
+	// browser is what the current connection's Welcome said of the managed runner browser (Welcome.browser,
+	// docs/runner-browser-design.md §2): whether the server offers it to this runner. Nothing acts on it yet.
+	browser atomic.Bool
 }
+
+// browserOffered reports whether the last Welcome offered this runner the managed runner browser.
+func (w *linkWork) browserOffered() bool { return w.browser.Load() }
 
 // linkWorkConn is the work's state of one of its connections.
 type linkWorkConn struct {
@@ -406,6 +412,7 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 	// Taken before the connection carries anything: a beat can go out on it the moment it is current, and has to find
 	// the release check the Welcome owes it (linkMode.afterHeartbeat).
 	w.m.assignRelease(welcome.GetRelease())
+	w.browser.Store(welcome.GetBrowser())
 	w.mu.Lock()
 	w.cur = conn
 	// The backoff is not reset here but once the connection has carried a reconciled heartbeat (reconciled): a

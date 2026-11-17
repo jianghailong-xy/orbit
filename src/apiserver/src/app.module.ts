@@ -43,6 +43,7 @@ import { WikiModule } from './wiki/wiki.module';
 import { RunnerAttentionFixModule } from './runners/runner-attention-fix.module';
 import { WikiChatModule } from './wiki/wiki-chat.module';
 import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
+import { ManagedRunnerBrowserGateModule } from './managed-runners/managed-runner-browser-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
@@ -102,6 +103,8 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     // Fix with an agent: its own module, as it makes sessions through SessionsService (runner-attention-fix.module.ts).
     RunnerAttentionFixModule,
     ManagedRunnerGateModule,
+    // The browser switch over it (docs/runner-browser-design.md §2).
+    ManagedRunnerBrowserGateModule,
     ManagedRunnerModule,
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,

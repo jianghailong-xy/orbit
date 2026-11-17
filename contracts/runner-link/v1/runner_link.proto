@@ -180,6 +180,11 @@ message Welcome {
   // Names this connection in gateway logs. The runner logs it too, so the two sides' logs can be
   // matched.
   string connection_id = 9;
+  // Whether this runner is offered the managed runner browser (docs/runner-browser-design.md §2): true only when the
+  // server's ORBIT_MANAGED_RUNNER_BROWSER_ENABLED and ORBIT_MANAGED_RUNNERS_ENABLED switches are both on and Hello
+  // carried a ManagedInstance the manager authorized. False for every self-managed runner, and from a gateway or
+  // apiserver older than the field.
+  bool browser = 10;
 }
 
 // Which transport carries a runner's daemon work: claiming sessions, fetching messages, heartbeats,
