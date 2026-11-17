@@ -88,7 +88,7 @@ export function assertStartWhenShape(
 
 const INITIAL: ConditionMachine = {
   state: 'WAITING', armed: true, lastSampleAt: null, lastValue: null, lastOutcome: null, lastReadAt: null,
-  trueSince: null, unknownSince: null, unknownReason: null, failedChecks: 0, firedAt: null,
+  trueSince: null, unknownSince: null, unknownReason: null, failedChecks: 0, firedAt: null, repeatFrom: null,
 };
 
 /**
@@ -137,6 +137,8 @@ export async function writeStartWhen(
       rearmOp: null,
       rearmValue: null,
       intervalSeconds: condition.intervalSeconds,
+      // A startWhen fires once: no repeat (WHEN rules only).
+      repeatSeconds: null,
       scheduleId: null,
     },
     INITIAL,
