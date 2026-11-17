@@ -980,6 +980,8 @@ export interface UnreadSteer {
   /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
   delivery?: string;
   withdrawable?: boolean;
+  /** Settings › Translation: `text` is the English delivered; `original` is what the reader wrote. */
+  translation?: TurnTranslation;
 }
 
 // The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
@@ -1719,6 +1721,7 @@ function buildTranscript(
     attachmentRefs: node.attachmentRefs,
     delivery: node.delivery,
     withdrawable: node.withdrawable,
+    ...(node.translation ? { translation: node.translation } : {}),
   }));
   return { nodes: roots, unread };
 }
