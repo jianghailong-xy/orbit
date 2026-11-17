@@ -111,6 +111,7 @@ import { DshRunnerStatus } from './DshRunnerStatus';
 import { ProviderTile } from './ProviderGallery';
 import { GoogleSignInTerms, KIMI_SITE, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
+import { useMachineName } from '../lib/managedRunner';
 
 /** An engine this page has a row for: one a runner signs in with, or OpenCode — which it does not. */
 type RowEngine = LoginEngine | 'opencode';
@@ -628,6 +629,7 @@ function EngineRow({
   open: boolean;
   onFold: (open: boolean) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
@@ -1031,7 +1033,7 @@ function EngineRow({
       {kind === 'installing' && (
         <div className="re-panel">
           <div className="re-panel-row">
-            Installing {engineNameOf(engine)} on {runner.displayName || runner.name}…
+            Installing {engineNameOf(engine)} on {machineNameOf(runner)}…
           </div>
           {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
           <div className="re-panel-hint">
@@ -1292,6 +1294,7 @@ function AccountRow({
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
+  const machineNameOf = useMachineName();
   const message = useToast();
   const qc = useQueryClient();
   const kind = envKey ? 'in' : accountKindOf(account);
@@ -1332,7 +1335,7 @@ function AccountRow({
   // Default comes off Orbit's list, not the machine, and only while another account is there to
   // run on (RunnersService.removeAccount).
   const removable = !isDefault || others > 0;
-  const runnerName = runner.displayName || runner.name;
+  const runnerName = machineNameOf(runner);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back;
   // removing Default stops only Orbit using it, until Use again. Either is asked first, wherever it is
   // offered — anchored to More once its menu has closed, or to the duplicate panel's own Remove.
@@ -1480,7 +1483,7 @@ function AccountRow({
           </div>
           {blocking.length > 0 && <BlockingSessions sessions={blocking} />}
           <div className="re-panel-hint">
-            {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
+            {tildePath(accountDir(account))} on {machineNameOf(runner)} is untouched.
           </div>
         </div>
       )}

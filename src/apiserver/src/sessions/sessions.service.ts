@@ -130,6 +130,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
+  CLONE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -153,7 +154,10 @@ import {
   type AgentProviderSeed,
   type SessionOpenedBy,
 } from '../workspaces/workspace-provider';
+import { GithubConnectionService } from '../github/github-connection.service';
+import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -248,9 +252,12 @@ import {
 } from './dto';
 import {
   folderNameOf,
+  folderOfRepoName,
   freeWorkspaceName,
+  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
+  type NewWorkspaceGithubAsk,
   type NewWorkspaceTarget,
 } from './new-workspace';
 import {
@@ -270,6 +277,7 @@ import {
   HELD_TURN_STATUS,
   accountAgentLanguage,
   heldTurnColumns,
+  isSlashCommand,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -991,6 +999,12 @@ export class SessionsService {
      * their own over the same prisma and the same environment, which behaves the same.
      */
     @Optional() files?: FilesService,
+    /**
+     * Each account's GitHub connection (github/github-connection.service.ts): a `newWorkspace.github` asks it whether
+     * the caller can see the repository now. Absent in the specs that build this service by hand, where a GitHub
+     * workspace is refused as GitHub not being connected.
+     */
+    @Optional() private readonly githubConnections?: GithubConnectionService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1288,8 +1302,9 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
-    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
-    let enableWorktree = false;
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir. A workspace this
+    // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
+    let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
@@ -1769,7 +1784,7 @@ export class SessionsService {
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
-      && !opts.externalSender && !opts.fence && dto.prompt.trim()
+      && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const session = await (newWorkspace
@@ -1907,11 +1922,65 @@ export class SessionsService {
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
+    if (ask.github !== undefined) return this.githubWorkspaceFor(ownerId, runner, ask.github);
     return {
       runnerId: runner.id,
       workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
+    };
+  }
+
+  /**
+   * `newWorkspace.github` (docs/github-workspace-design.md §5.3), after readNewWorkspace's 400s and the machine's 403,
+   * refused in the design's order and reading only: 409 GITHUB_NOT_CONNECTED (none, or one GitHub no longer takes; GitHub
+   * off on this Orbit is the 409 GITHUB_NOT_CONFIGURED in its place), 403 GITHUB_REPO_FORBIDDEN (GitHub, asked now with
+   * the caller's own user token, does not show the caller this repository), 409 CLONE_UNSUPPORTED (the runner has not
+   * reported its reposRoot, or does not declare clone-workdir/v1). What is left is refused by `create` as for any other
+   * new workspace. The folder is the one asked for, else the repository's name; the URL is the repository's current
+   * one, without a credential. POST /workspaces `github` (WorkspacesService.create) is held to the same refusals.
+   */
+  async githubWorkspaceFor(
+    ownerId: string,
+    runner: { id: string; reposRoot: string | null; capabilities: string[]; capabilitiesReportedAt: Date | null },
+    ask: NewWorkspaceGithubAsk,
+  ): Promise<NewWorkspaceTarget> {
+    if (!this.githubConnections) {
+      throw new ConflictException({ code: 'GITHUB_NOT_CONNECTED', message: 'Connect GitHub in Settings → Integrations first.' });
+    }
+    const repo = await this.githubConnections.reachableRepository(ownerId, ask.repoId, { fresh: true });
+    if (!repo) {
+      throw new ForbiddenException({
+        code: 'GITHUB_REPO_FORBIDDEN',
+        message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
+      });
+    }
+    const reposRoot = runner.reposRoot?.trim();
+    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    if (!clones || !reposRoot) {
+      throw new ConflictException({
+        code: 'CLONE_UNSUPPORTED',
+        message: clones
+          ? 'This runner has not reported its Repos Folder, so it cannot clone a repository. Choose an existing folder.'
+          : 'This runner is too old to clone a repository — update it, or choose an existing folder.',
+      });
+    }
+    const name = repo.fullName.split('/').pop() ?? '';
+    const folder = ask.folder ?? folderOfRepoName(name);
+    if (!folder) {
+      throw new BadRequestException(`The repository's name ${JSON.stringify(name)} is not a folder name: send newWorkspace.github.folder`);
+    }
+    return {
+      runnerId: runner.id,
+      workDir: newFolderWorkDir(reposRoot, folder),
+      name: folder,
+      autoCreateWorkDir: false,
+      clone: {
+        repoUrl: githubRepoUrl(repo.fullName),
+        githubRepoId: BigInt(repo.id),
+        githubInstallationId: BigInt(repo.installationId),
+        cloneRef: ask.ref,
+      },
     };
   }
 
@@ -1996,9 +2065,12 @@ export class SessionsService {
           name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
           runnerId: target.runnerId,
           workDir: target.workDir,
-          // Isolation off, as every new workspace starts (board 04, settled item 3).
-          enableWorktree: false,
+          // Isolation off, as every new workspace starts (board 04, settled item 3) — except a clone from GitHub, whose
+          // point is landing work back to the repository, which needs each session on its own branch.
+          enableWorktree: !!target.clone,
           autoCreateWorkDir: target.autoCreateWorkDir,
+          // A clone (docs/github-workspace-design.md §5.3): PENDING until the runner reports it, and its sessions with it.
+          ...(target.clone ? { ...target.clone, cloneState: 'PENDING' } : {}),
         },
         select: { id: true, name: true },
       });
@@ -4235,7 +4307,9 @@ export class SessionsService {
       // background-job-activity.ts), so it cannot be a cardinality in the query.
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
-      runningSubagentCount: number;      engineTurnActive: boolean;
+      runningSubagentCount: number;
+      runningSubagentTitle: string | null;
+      engineTurnActive: boolean;
       activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
@@ -4376,6 +4450,18 @@ export class SessionsService {
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        -- What the newest of those is doing, as its launch call described it (the Agent tool's and
+        -- delegate's \`description\`): the row says "Agent: <this>…" rather than only that one runs.
+        -- Launches are appended, so the last id is the newest; an id with no described call is null
+        -- and the row keeps "Running Agent…". One indexed lookup, on the few rows with one in flight.
+        (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+          FROM tool_call tc
+          WHERE tc.session_id = s.id
+            AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+          ORDER BY tc.started_at DESC NULLS LAST
+          LIMIT 1
+        ) AS "runningSubagentTitle",
         s.engine_turn_active AS "engineTurnActive",
         -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
         -- session is still working, so no client has to rebuild it from the columns around it.
@@ -4488,6 +4574,10 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
+              -- named before capacity, because a slot coming free would not start this session.
+              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
+                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
@@ -4600,6 +4690,7 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
+        runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
         activity: r.activity,
         engineStartedAt: r.engineStartedAt,
@@ -6892,9 +6983,10 @@ export class SessionsService {
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
-    // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    // written. Words only — a `!cmd` and a `/command` are commands, and attachments alone carry no words.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -7592,7 +7684,7 @@ export class SessionsService {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // Settings › Translation: the follow-up's words are held until translated; the interrupt is not.
-    const heldFrom = opts?.translate && content.trim() ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
+    const heldFrom = opts?.translate && content.trim() && !isSlashCommand(content) ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
     // follow-up the server filed separately, and the flag that says this interrupt also ends the
     // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
@@ -10467,6 +10559,7 @@ export class SessionsService {
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
     const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {

@@ -542,11 +542,21 @@ final class ConsoleModel {
     private(set) var regionChecking = false
     /// The workspace this session made, as its detail read it (`createdWorkspaceLine`).
     private var madeWorkspace: SessionAgentRef?
+    /// When that detail was read: a clone frame heard before it is older news than its cloneState.
+    private(set) var madeWorkspaceReadAt: Date?
+    var madeWorkspaceID: String? { madeWorkspace?.id }
     /// The line this conversation opens with, when it made its workspace (board rule 8).
     var createdWorkspaceLine: CreatedWorkspaceLine? {
         guard let madeWorkspace, let name = madeWorkspace.name, let runnerName else { return nil }
         return CreatedWorkspaceLine(workspaceID: madeWorkspace.id, name: name, machine: runnerName,
-                                    path: madeWorkspace.workDir, live: madeWorkspace.deletedAt == nil)
+                                    path: madeWorkspace.workDir, live: madeWorkspace.deletedAt == nil,
+                                    repository: WorkspaceClone.repositoryOf(madeWorkspace.repoUrl),
+                                    cloneState: madeWorkspace.cloneState, cloneError: madeWorkspace.cloneError)
+    }
+
+    /// Read the detail again for the workspace this conversation made: its clone moved, or was retried.
+    func refreshMadeWorkspace() async {
+        await refreshServerStatus()
     }
 
     /// Rename, from that line. Trimmed; an empty or unchanged name is no edit, and a refusal says so.
@@ -2223,7 +2233,7 @@ final class ConsoleModel {
                                fastMode: Bool)?
 
     private func adoptRunnerSnapshot(_ runner: Runner) {
-        runnerName = runner.displayName?.isEmpty == false ? runner.displayName : runner.name
+        runnerName = RunnerPageFormat.displayName(runner)
         runnerRegion = runner.region
         runnerOnline = runner.online
         runnerHeartbeatLeaseOwner = runner.heartbeatLeaseOwner
@@ -2470,7 +2480,10 @@ final class ConsoleModel {
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
-        if session.createdWorkspace == true { madeWorkspace = session.agent }
+        if session.createdWorkspace == true {
+            madeWorkspace = session.agent
+            madeWorkspaceReadAt = Date()
+        }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
         if CursorRuntime.conversationStarted(session) { conversationStarted = true }
@@ -6131,6 +6144,39 @@ final class ConsoleModel {
         } catch {
             statusMessage = "\(ExceptionCards.notReturned) — \(APIClient.failureReason(error))."
             return nil
+        }
+    }
+
+    /// The project's coordinator status, for the owner exception card's coordinator row (board
+    /// owner-exception-who-fixes part 6) — the same read the project page's coordinator card makes.
+    /// Nil for a session that coordinates no project, and for a read that did not come back: the
+    /// card then reads the cause off the row alone (`ExceptionCards.readCoordinatorCause`).
+    func readCoordinatorStatus() async -> ProjectCoordinatorStatus? {
+        guard let projectID else { return nil }
+        return try? await api.projectCoordinatorStatus(projectID)
+    }
+
+    /// The two facts of the coordinator's workspace a LIVE status does not carry — whether it is
+    /// enabled, and the runner it is bound to — off the workspace itself.
+    func readCoordinatorWorkspace(_ workspaceID: String) async -> CoordinatorWorkspaceFacts? {
+        guard let agent = try? await api.agent(workspaceID) else { return nil }
+        return CoordinatorWorkspaceFacts(enabled: agent.enabled, runnerId: agent.runnerId)
+    }
+
+    /// Start a new coordinator from the owner exception card — the project page's replace, without
+    /// leaving the card (D1 = A): the item list is read again, and once the new coordinator can be
+    /// asked the card turns into the reachable one in place. A workspace named opens it there
+    /// (Change workspace…'s Start a new one there). Returns the refusal to say, nil when it was taken.
+    func replaceProjectCoordinator(inWorkspace workspaceID: String? = nil) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            _ = try await api.replaceProjectCoordinator(projectID, workspaceID: workspaceID)
+            await refreshRulerQuestions(force: true)
+            return nil
+        } catch {
+            let refused = "No new coordinator was started — \(APIClient.failureReason(error))."
+            statusMessage = refused
+            return refused
         }
     }
 

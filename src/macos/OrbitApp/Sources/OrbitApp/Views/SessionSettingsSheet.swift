@@ -231,7 +231,10 @@ struct SessionSettingsSheet: View {
             if let label = SessionSettingsPanel.engineLabel(engine, version: model.detail?.engineVersion) {
                 LabeledContent(SessionSettingsPanel.engine, value: label)
             }
-            if let runner = model.detail?.assignedRunner?.name {
+            if let ref = model.detail?.assignedRunner, let name = ref.name {
+                // The managed runner is Orbit Cloud, by id (RunnerPageFormat.displayName).
+                let runner = RunnerPageFormat.isManaged(ref.id, managedRunnerID: ManagedRunnerIdentity.runnerID)
+                    ? RunnerPageCopy.MANAGED_RUNNER_LABEL : name
                 LabeledContent(SessionSettingsPanel.runner, value: runner)
             }
             if let account = accountLabel {

@@ -144,15 +144,15 @@ func TestSubagentIsBackgroundIsTheDefault(t *testing.T) {
 	}
 }
 
-// readonly: the POST asks for a read-only run (the server answers with plan mode), and the child is spawned in
-// plan mode with the edit tools disallowed, whatever mode the server's exec carries.
-func TestSubagentReadonlyRunsInPlanModeWithoutEditTools(t *testing.T) {
+// readonly: the POST asks for a read-only run, and a Claude child is spawned in the server's mode (the parent's)
+// with the edit tools disallowed: plan mode would ask about every Bash call under an Auto parent.
+func TestSubagentReadonlyKeepsTheModeWithoutEditTools(t *testing.T) {
 	project := t.TempDir()
 	writeDefinition(t, project, ".claude/agents", "auditor.md",
 		"---\ndescription: Audits\nreadonly: true\ntools: Read, Grep, Edit\n---\nYou audit.\n")
 	defs := loadSubagentDefinitions(project, "")
 	parent := &ClaimedSession{SessionID: "sess-ro", Provider: providerClaude}
-	exec := AgentExecConfig{Model: "claude-sonnet-5-5", PermissionMode: "acceptEdits", DisallowedTools: []string{"WebFetch"}}
+	exec := AgentExecConfig{Model: "claude-sonnet-5-5", PermissionMode: "auto", DisallowedTools: []string{"WebFetch"}}
 
 	for _, name := range []string{"auditor", "explore"} {
 		def := definitionNamed(t, defs, name)
@@ -160,7 +160,7 @@ func TestSubagentReadonlyRunsInPlanModeWithoutEditTools(t *testing.T) {
 			t.Errorf("%s: the POST does not ask for read-only: %v", name, body)
 		}
 		child, args := claudeChildSession(parent, exec, def, "run1", "uuid-1", false, t.TempDir())
-		if mode := argValue(args, "--permission-mode"); mode != "plan" || child.Agent.PermissionMode != "plan" {
+		if mode := argValue(args, "--permission-mode"); mode != "auto" || child.Agent.PermissionMode != "auto" {
 			t.Errorf("%s: permission mode %q", name, mode)
 		}
 		disallowed := argValue(args, "--disallowedTools")
@@ -182,7 +182,7 @@ func TestSubagentReadonlyRunsInPlanModeWithoutEditTools(t *testing.T) {
 	}
 	_, args := claudeChildSession(parent, exec, general, "run1", "uuid-1", false, t.TempDir())
 	disallowed := argValue(args, "--disallowedTools")
-	if mode := argValue(args, "--permission-mode"); mode != "acceptEdits" || strings.Contains(","+disallowed+",", ",Edit,") {
+	if mode := argValue(args, "--permission-mode"); mode != "auto" || strings.Contains(","+disallowed+",", ",Edit,") {
 		t.Errorf("general runs as %q without %q", mode, disallowed)
 	}
 	if body := subagentStartBody(map[string]interface{}{"size": "L"}, general, "toolu_1", false); body["readonly"] != false ||

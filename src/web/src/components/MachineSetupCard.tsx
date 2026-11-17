@@ -1,15 +1,17 @@
-import { DesktopOutlined } from '@ant-design/icons';
+import { DesktopOutlined, GithubOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, type LoginEngine } from '@orbit/shared';
+import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
 import type { ManagedRunner } from '../lib/managedRunner';
 import {
   answersDirProbe,
+  homeShortPath,
   isConnecting,
   isValidNewFolder,
   makesNewFolders,
-  machineName,
   newFolderPath,
   newFolderPick,
   newFolderRootOf,
@@ -22,6 +24,10 @@ import {
   SETUP_CREATE,
   SETUP_FOLDER,
   SETUP_FOLDER_HINT,
+  SETUP_FOLDER_NAME_INSTEAD,
+  SETUP_FROM_GITHUB,
+  SETUP_GITHUB_DONE,
+  SETUP_GITHUB_META,
   SETUP_NAME,
   SETUP_NAME_EDITED,
   SETUP_NAME_EMPTY,
@@ -30,10 +36,13 @@ import {
   SETUP_NEW_FOLDER_INVALID,
   SETUP_NEW_FOLDER_NAME,
   SETUP_NEW_FOLDER_WITH_WORKSPACE,
+  SETUP_NEW_TAG,
   SETUP_OPEN_MACHINE,
+  SETUP_OR,
   setupChecking,
   setupConnectingCreate,
   setupCreateFailed,
+  setupGithubDonePath,
   setupNeedsUpdate,
   setupNewWorkspaceLead,
   setupNewWorkspaceTitle,
@@ -43,11 +52,13 @@ import {
 } from '../lib/machineSetupCopy';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 import { useDirProbe } from '../lib/useDirProbe';
+import { GithubFolderOption, takeGithubReturn } from './GithubFolderOption';
 import { probeReportsSignedIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { WelcomeHead } from './WelcomeCard';
+import { useMachineName } from '../lib/managedRunner';
 import './MachineSetupCard.css';
 
 const TYPED_PATH_SETTLE_MS = 400;
@@ -105,6 +116,11 @@ function useSettled(value: string): string {
  * workspace's name follows the folder's until it is edited. Signing in a coding CLI is not asked here: the new
  * workspace's sessions ask for it where they need it.
  *
+ * From GitHub (docs/github-workspace-design.md §8, board 04 A): under the folder and its Name, an "or" rule and a row
+ * that swaps the folder field for P2's repository picker; "Type a folder name instead" swaps it back. A picked
+ * repository is cloned into the Repos Folder (`repo → ~/orbit-repos/<name>`), and the Name follows its folder as it
+ * follows a typed one.
+ *
  * The account's managed runner while it is being set up or asleep (docs/managed-runner-no-default-workspace.md) is
  * not offline here: it cannot check the folder, so the name goes unchecked, and the workspace is made all the same.
  */
@@ -128,7 +144,9 @@ export function MachineSetupCard({
   /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it. */
   welcome?: boolean;
 }) {
-  const machine = machineName(runner);
+  // Orbit Cloud for the account's managed runner (machineName).
+  const machineNameOf = useMachineName();
+  const machine = machineNameOf(runner);
   const managedState = managedSetupState(runner.id, managed?.status);
   const offline = !managedState && runner.online !== true;
   const probes = answersDirProbe(runner);
@@ -148,17 +166,28 @@ export function MachineSetupCard({
   );
   const found = settled === folder && probe.state === 'answered' ? probe.probe : null;
   const verdict = found ? newFolderVerdict(found, machine) : null;
-  const candidate: PickedFolder | null = managedState
+  const typedPick: PickedFolder | null = managedState
     ? isValidNewFolder(folder) ? { kind: 'new', name: folder, path: newFolderPath(root, folder) } : null
     : found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
 
+  // From GitHub: offered only where the deployment has a GitHub App. A card come back from GitHub's sign-in opens on it.
+  const github = useQuery(githubIntegrationQuery());
+  const offersGithub = github.data?.available === true;
+  const [githubOpen, setGithubOpen] = useState(() => takeGithubReturn(runner.id));
+  const [repository, setRepository] = useState<PickedFolder | null>(null);
+  const fromGithub = offersGithub && !!github.data && githubOpen;
+  const candidate = fromGithub ? repository : typedPick;
+  // Not the folder field's lock: a machine too old to make folders may clone, and the picker says when it can't.
+  const locked = fromGithub ? offline : disabled;
+
   // The workspace's name: the folder's until it is edited, and from then on what was typed, empty included.
   const [editedName, setEditedName] = useState<string | null>(null);
-  const shownName = editedName ?? folder;
+  const followed = fromGithub ? (repository?.kind === 'github' ? repository.name : '') : folder;
+  const shownName = editedName ?? followed;
   const name = shownName.trim();
   const nameMissing = editedName !== null && !name;
 
-  const canCreate = !!candidate && !!name && !disabled && !creating;
+  const canCreate = !!candidate && !!name && !locked && !creating;
   const create = () => {
     if (canCreate && candidate) onCreate(candidate, name);
   };
@@ -203,45 +232,87 @@ export function MachineSetupCard({
       )}
 
       <div className="msc-body">
-        <div className="msc-field" data-field="folder">
-          <div className="msc-step-title">{SETUP_FOLDER}</div>
-          <Input
-            className="msc-input"
-            size="small"
-            prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
-            placeholder={SETUP_NEW_FOLDER_NAME}
-            aria-label={SETUP_FOLDER}
-            value={typed}
-            disabled={disabled || creating}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={onFieldKey}
-            invalid={!!folder && !isValidNewFolder(folder)}
-          />
-          <div className="msc-line">
-            {createError ? (
-              <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
-            ) : !folder ? (
-              <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
-            ) : !isValidNewFolder(folder) ? (
-              <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
-            ) : managedState ? (
-              <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
-            ) : verdict ? (
-              // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
-              found?.exists || found?.error ? (
-                <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
+        {fromGithub && github.data ? (
+          <div className="msc-field msc-github" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <span className="msc-github-title">
+              <GithubOutlined aria-hidden="true" /> {SETUP_FROM_GITHUB}
+              <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+            </span>
+            <GithubFolderOption
+              runner={runner}
+              integration={github.data}
+              disabled={offline || creating}
+              onCandidate={setRepository}
+              onEnter={create}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
               ) : (
-                <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
-              )
-            ) : settled === folder && (probe.state === 'unanswered' || probe.state === 'idle') ? (
-              <NoAnswer machine={machine} onAgain={probe.again} />
-            ) : (
-              <span className="msc-verdict wait">{setupChecking(machine)}</span>
-            )}
+                repository?.kind === 'github' && (
+                  <span className="msc-done-line">
+                    <span className="msc-path">{setupGithubDonePath(repository.repository, homeShortPath(repository.path))}</span>
+                    <span className="msc-meta">{SETUP_GITHUB_DONE}</span>
+                  </span>
+                )
+              )}
+            </div>
+            <div className="msc-back">
+              <button
+                className="msc-change"
+                type="button"
+                disabled={creating}
+                onClick={() => {
+                  setGithubOpen(false);
+                  setRepository(null);
+                }}
+              >
+                {SETUP_FOLDER_NAME_INSTEAD}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="msc-field" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <Input
+              className="msc-input"
+              size="small"
+              prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
+              placeholder={SETUP_NEW_FOLDER_NAME}
+              aria-label={SETUP_FOLDER}
+              value={typed}
+              disabled={disabled || creating}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={onFieldKey}
+              invalid={!!folder && !isValidNewFolder(folder)}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
+              ) : !folder ? (
+                <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
+              ) : !isValidNewFolder(folder) ? (
+                <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+              ) : managedState ? (
+                <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
+              ) : verdict ? (
+                // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
+                found?.exists || found?.error ? (
+                  <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
+                ) : (
+                  <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
+                )
+              ) : settled === folder && (probe.state === 'unanswered' || probe.state === 'idle') ? (
+                <NoAnswer machine={machine} onAgain={probe.again} />
+              ) : (
+                <span className="msc-verdict wait">{setupChecking(machine)}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="msc-field" data-field="name">
           <div className="msc-step-title">{SETUP_NAME}</div>
@@ -249,10 +320,10 @@ export function MachineSetupCard({
             <Input
               className="msc-input"
               size="small"
-              placeholder={folder || SETUP_NAME_PLACEHOLDER}
+              placeholder={followed || SETUP_NAME_PLACEHOLDER}
               aria-label={SETUP_NAME}
               value={shownName}
-              disabled={disabled || creating}
+              disabled={locked || creating}
               onChange={(e) => setEditedName(e.target.value)}
               onKeyDown={onFieldKey}
               invalid={nameMissing}
@@ -269,6 +340,27 @@ export function MachineSetupCard({
             )}
           </div>
         </div>
+
+        {offersGithub && !fromGithub && (
+          <div className="msc-field" data-field="github">
+            <div className="msc-or">{SETUP_OR}</div>
+            <button
+              className="msc-github-row"
+              type="button"
+              disabled={offline || creating}
+              onClick={() => setGithubOpen(true)}
+            >
+              <GithubOutlined className="msc-github-mark" aria-hidden="true" />
+              <span>
+                <span className="msc-github-title">
+                  {SETUP_FROM_GITHUB}
+                  <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+                </span>
+                <span className="msc-meta">{SETUP_GITHUB_META}</span>
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

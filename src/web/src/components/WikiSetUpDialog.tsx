@@ -61,6 +61,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { NumberInput } from './ui/NumberInput';
 import { Select, type SelectOptions } from './ui/Select';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /** Ids are compared in their public spelling: a space's settings keep a workspace's id as it was stored. */
 export const sameId = (a: string | null, b: string | null): boolean => a !== null && b !== null && encodeId(a) === encodeId(b);
@@ -72,6 +73,7 @@ export const sameId = (a: string | null, b: string | null): boolean => a !== nul
 export function useWikiWorkspaceChoices(): { choices: WikiWorkspaceChoice[]; loading: boolean; read: boolean } {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
+  const managedRunnerId = useManagedRunnerId();
   const choices = useMemo(() => {
     const rows = (workspaces.data ?? []) as Array<{
       id: string;
@@ -84,13 +86,13 @@ export function useWikiWorkspaceChoices(): { choices: WikiWorkspaceChoice[]; loa
       const runner = row.runner?.id ? machines.find((machine) => sameId(machine.id, row.runner!.id!)) : undefined;
       return {
         id: row.id,
-        label: wikiWorkspaceLabel(row),
+        label: wikiWorkspaceLabel(row, managedRunnerId),
         repository: wikiRepositoryName(row.repoUrl),
         repoUrl: row.repoUrl ?? null,
         online: runner ? runner.online === true : true,
       };
     });
-  }, [workspaces.data, runners.data]);
+  }, [workspaces.data, runners.data, managedRunnerId]);
   return { choices, loading: workspaces.isLoading, read: workspaces.isSuccess };
 }
 

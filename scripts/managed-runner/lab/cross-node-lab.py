@@ -69,7 +69,7 @@ al.OWN_SERVER_DIRS = al.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.OWN_SERVER_DIRS = wl.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.EMAIL = ml.EMAIL = 't08x-{}@lab.invalid'
 wl.NAME_RE = re.compile(r't08x-([a-z0-9]+)@lab\.invalid')
-wl.PROBE_ROOT = '/var/lib/orbit/home/t08x-probe'
+wl.PROBE_ROOT = '/home/orbit/t08x-probe'
 al.CONTEXT = SERVER / 't08x-context.json'
 tl.WRITER_RUN = 't08x-writer'
 tl.OPERATOR = 'T08x lab operator (task 34i56D6O5QbxCsbYrf8YO)'
@@ -169,7 +169,7 @@ def find_runner_block():
 TRANSCRIPTS = r'''
 import hashlib, json, sys
 from pathlib import Path
-home = Path('/var/lib/orbit/home')
+home = Path('/home/orbit')
 asked = json.loads(sys.argv[1]) if len(sys.argv) > 1 else {}
 found = {}
 for p in sorted((home / '.claude' / 'projects').rglob('*.jsonl')):
@@ -184,7 +184,7 @@ print(json.dumps(found, sort_keys=True))
 FILES_SINCE = r'''
 import hashlib, json, os, sys
 from pathlib import Path
-root, since = Path('/var/lib/orbit/home'), os.stat(sys.argv[1]).st_mtime
+root, since = Path('/home/orbit'), os.stat(sys.argv[1]).st_mtime
 found = {}
 for d, dirs, files in os.walk(root):
     dirs[:] = [x for x in dirs if x != 'storage-verification']  # the payload writer: judged by its acknowledged rows
@@ -204,7 +204,7 @@ print(json.dumps({'since': since, 'files': found}, sort_keys=True))
 FILES_NOW = r'''
 import hashlib, json, sys
 from pathlib import Path
-root = Path('/var/lib/orbit/home')
+root = Path('/home/orbit')
 found = {}
 for name in json.loads(sys.argv[1]):
     try:
@@ -264,7 +264,7 @@ def probe_check(name, run):
 
 
 def rbd_mount(step, name, snap, label):
-    step.check(f'{name}: /var/lib/orbit is an RBD device, ext4 {label}', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd')
+    step.check(f'{name}: /home/orbit is an RBD device, ext4 {label}', snap['mount'] and snap['mount'][0]['source'].startswith('/dev/rbd')
                and snap['mount'][0]['fstype'] == 'ext4', snap['mount'])
 
 
@@ -638,13 +638,13 @@ def takeover_cut(ctx, step):
     gate_before = ml.gate_connections()
     _, ann_pod = ml.running_pod('ann')
     sync_at = now()
-    synced = sw.pod_exec(ann_pod['metadata']['name'], 'sync', '-f', '/var/lib/orbit')
+    synced = sw.pod_exec(ann_pod['metadata']['name'], 'sync', '-f', '/home/orbit')
     sync_done = now()
     result = al.run([str(LAB / 'stop.sh'), '--node', '2', '--hard'])
     said = result.stdout + result.stderr
     killed = re.search(r'killed with SIGKILL at (\S+);', said)
     step.check('stop.sh killed the second VM\'s qemu with SIGKILL', bool(killed), said.strip()[-400:])
-    step.check('ann\'s volume was synced (sync -f /var/lib/orbit in her runner container) just before', synced.returncode == 0, synced.stderr.strip()[-200:])
+    step.check('ann\'s volume was synced (sync -f /home/orbit in her runner container) just before', synced.returncode == 0, synced.stderr.strip()[-200:])
     power = tl.power_state(2)
     step.check('the second VM is off: its unit inactive, no qemu process, SSH and QMP refused, the link down',
                power['activeState'] in ('inactive', 'failed') and not power['qemuProcesses'] and power['sshRefused'] and power['qmpRefused']

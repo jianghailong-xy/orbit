@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -67,11 +68,31 @@ var errGitAuthFailed = errors.New("git authentication failed")
 // failed was the credential, one that is errGitAuthFailed and unwraps to no *exec.ExitError, so that
 // gitStderr, which every path's report of a failed git command is made of, reads its whole text: what
 // happened, then git's own words.
+//
+// In a checkout Orbit cloned from GitHub (clone_workdir.go), a command the machine's own credential could not
+// authenticate is run once more with Orbit's (orbitGitCredentialFor): the GitHub App's token for that one
+// repository, handed to this command's helper alone.
 func networkGit(dir string, timeout time.Duration, args ...string) (string, error) {
+	out, err := networkGitWith(dir, timeout, nil, args)
+	if !errors.Is(err, errGitAuthFailed) {
+		return out, err
+	}
+	credential, why := orbitGitCredentialFor(dir)
+	if credential == nil {
+		if why != nil {
+			return out, fmt.Errorf("%w; Orbit's GitHub credential was not available either: %v", err, why)
+		}
+		return out, err
+	}
+	return networkGitWith(dir, timeout, credential, args)
+}
+
+// networkGitWith is one network git command, with Orbit's credential for its helper to answer when there is one.
+func networkGitWith(dir string, timeout time.Duration, credential *orbitGitCredential, args []string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", networkGitArgs(dir, args)...)
-	cmd.Env = append(os.Environ(), networkGitEnv...)
+	cmd := exec.CommandContext(ctx, "git", networkGitArgsWith(dir, credential, args)...)
+	cmd.Env = networkGitCommandEnv(credential)
 	// Stopped the way git cleans up after — a fetch holds ref locks — and not waited on past WaitDelay.
 	cmd.Cancel = func() error { return interruptGit(cmd.Process) }
 	cmd.WaitDelay = networkGitWaitDelay
@@ -100,11 +121,37 @@ func networkGit(dir string, timeout time.Duration, args ...string) (string, erro
 // named by its absolute path because it need not be on PATH, and through the shell, which is how git runs
 // a helper: quoted, and with forward slashes, which the sh of Git for Windows reads as readily as `\`.
 func networkGitArgs(dir string, args []string) []string {
+	return networkGitArgsWith(dir, nil, args)
+}
+
+// networkGitArgsWith is networkGitArgs for a command that carries Orbit's credential: its helper is told which
+// workspace's (--workspace), git hands it the repository path so the helper can check it is that repository's, and
+// no hook runs, since a hook would inherit the environment the credential travels in.
+func networkGitArgsWith(dir string, credential *orbitGitCredential, args []string) []string {
 	out := []string{"-C", dir, "-c", "credential.helper="}
 	if exe := orbitCLIExecutable(); exe != "" {
-		out = append(out, "-c", "credential.helper=!"+shellQuote(filepath.ToSlash(exe))+" "+gitCredentialReadOnlyCommand)
+		helper := "!" + shellQuote(filepath.ToSlash(exe)) + " " + gitCredentialReadOnlyCommand
+		if credential != nil {
+			helper += " " + gitCredentialWorkspaceFlag + " " + shellQuote(credential.WorkspaceID)
+		}
+		out = append(out, "-c", "credential.helper="+helper)
+	}
+	if credential != nil {
+		out = append(out, "-c", "credential.useHttpPath=true", "-c", "core.hooksPath="+filepath.ToSlash(os.DevNull))
 	}
 	return append(out, args...)
+}
+
+// networkGitCommandEnv is the environment of a network git command: the runner's own, networkGitEnv, and Orbit's
+// credential when the command carries one. Never an engine's environment: only this command and the helper it runs
+// see it.
+func networkGitCommandEnv(credential *orbitGitCredential) []string {
+	env := append(withoutOrbitGitCredential(os.Environ()), networkGitEnv...)
+	if credential != nil {
+		raw, _ := json.Marshal(credential)
+		env = append(env, orbitGitCredentialEnv+"="+string(raw))
+	}
+	return env
 }
 
 // gitAuthFailure reads git's stderr for what git says about a credential: that the remote refused the one
@@ -133,14 +180,32 @@ const gitCredentialReadOnlyCommand = "git-credential-readonly"
 // configured. It runs without the configuration networkGit put on git's command line — that names this
 // helper alone, so the fill would only ask this helper again — and with every prompt off, so a credential
 // nobody saved is answered with none rather than asked for.
+//
+// With --workspace (a command networkGit runs again with Orbit's credential), it answers that credential instead,
+// but only for the workspace it names and for the host and repository Orbit issued it for: git asking about any
+// other remote is answered by the machine's helpers as before.
 func runGitCredentialReadOnly(args []string) int {
+	workspace := ""
+	if len(args) >= 2 && args[0] == gitCredentialWorkspaceFlag {
+		workspace, args = args[1], args[2:]
+	}
 	if len(args) == 0 || args[0] != "get" {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
+	question, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return 1
+	}
+	if workspace != "" {
+		if answer, ok := orbitGitCredentialAnswer(workspace, string(question), os.Getenv(orbitGitCredentialEnv)); ok {
+			_, _ = io.WriteString(os.Stdout, answer)
+			return 0
+		}
+	}
 	fill := exec.Command("git", "credential", "fill")
-	fill.Env = append(withoutGitCommandLineConfig(os.Environ()), networkGitEnv...)
-	fill.Stdin, fill.Stdout, fill.Stderr = os.Stdin, os.Stdout, os.Stderr
+	fill.Env = append(withoutOrbitGitCredential(withoutGitCommandLineConfig(os.Environ())), networkGitEnv...)
+	fill.Stdin, fill.Stdout, fill.Stderr = strings.NewReader(string(question)), os.Stdout, os.Stderr
 	if fill.Run() != nil {
 		// The fill said why on stderr, which git shows with its own failure.
 		return 1

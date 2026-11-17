@@ -609,9 +609,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, accountManaged?.status.runnerId));
     return m;
-  }, [runners.data]);
+  }, [runners.data, accountManaged?.status.runnerId]);
 
   // The account menu's Machines row: every machine, and how many of them are online.
   const machineList = runners.data ?? [];
@@ -979,8 +979,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            a.runner?.displayName ??
-            a.runner?.name ??
+            (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1093,8 +1092,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      a.runner?.displayName ??
-                      a.runner?.name ??
+                      (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1144,7 +1142,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, accountManaged?.status.runnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1300,7 +1298,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
                       return {
                         key: `machine-${runner.id}`,
-                        textValue: runner.displayName || runner.name,
+                        textValue: machineName(runner, accountManaged?.status.runnerId),
                         icon: (
                           <span
                             className="tp-account-machine-dot"
@@ -1309,7 +1307,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{runner.displayName || runner.name}</span>
+                            <span>{machineName(runner, accountManaged?.status.runnerId)}</span>
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}

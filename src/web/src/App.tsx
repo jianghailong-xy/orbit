@@ -29,6 +29,7 @@ import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
+import { AdminGithubPage } from './pages/AdminGithubPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { AdminHelpFeedbackPage } from './pages/AdminHelpFeedbackPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
@@ -45,6 +46,7 @@ import { AccessTokensPage } from './pages/AccessTokensPage';
 import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
+import { GithubIntegrationPage } from './pages/GithubIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { GuestLinkRedirect } from './pages/GuestSessionPage';
@@ -291,6 +293,7 @@ export function App() {
             <Route path="email" element={<AdminEmailPage />} />
             <Route path="integrations" element={<AdminIntegrationsPage />} />
             <Route path="help-feedback" element={<AdminHelpFeedbackPage />} />
+            <Route path="integrations/github" element={<AdminGithubPage />} />
           </Route>
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
@@ -313,6 +316,8 @@ export function App() {
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
+            {/* The account's GitHub connection (docs/github-workspace-design.md §8). */}
+            <Route path="integrations/github" element={<GithubIntegrationPage />} />
             {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
             <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
             <Route path="machines/managed" element={<ManagedRunnerSetupPage />} />

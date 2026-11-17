@@ -122,7 +122,7 @@
       "preparing": "Not checked until your managed runner is up: used if it’s there, created if not.",
       "asleep": "Not checked while it’s asleep: used if it’s there, created if not."
     },
-    "reposRoot": "/var/lib/orbit/home/orbit-repos"
+    "reposRoot": "/home/orbit/orbit-repos"
   },
   "capabilities": [
     {

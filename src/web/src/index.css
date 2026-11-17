@@ -22832,6 +22832,87 @@ div.landing-jobs-open {
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
+/* Admin → Integrations → GitHub App: the steps on GitHub, and the private key file picker (board 02). */
+.github-app-file {
+  color: var(--brand);
+  cursor: pointer;
+}
+.github-app-step-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.github-app-step-list b {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.github-app-step-list code {
+  font-size: 12px;
+  background: var(--fill-muted);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* Settings → Integrations → GitHub. */
+.github-alert {
+  margin-bottom: 16px;
+}
+.github-card + .github-card {
+  margin-top: 16px;
+}
+.github-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-account-text {
+  flex: 1;
+  min-width: 0;
+}
+.github-avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--fill-muted);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.github-login {
+  font-weight: 500;
+}
+.github-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.github-warn {
+  color: var(--warning);
+}
+.github-installations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.github-installation {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.github-installation:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.github-installation-name {
+  font-weight: 500;
+}
+
 .feishu-page {
   max-width: 720px;
   margin: 0 auto;
@@ -25591,6 +25672,136 @@ button.project-open-item-action:disabled {
   border-top: 1px solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-2);
+}
+
+/* ── The owner exception card, organised around "Who fixes it?" (board
+   docs/mocks/owner-exception-who-fixes ②): the same amber card, ordered heading → what it is → who
+   fixes it → how it ends → Details (folded) → divider → the two ways to end it unfixed. */
+.project-open-item-clock {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.project-open-item-subline {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-open-item-whofixes {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+}
+.project-open-item-who-label,
+.project-open-item-settled-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.project-open-item-settled-label {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.project-open-item-who-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 10px 0 4px;
+}
+.project-open-item-who-row + .project-open-item-who-row {
+  border-top: 1px dashed var(--warning-border);
+}
+.project-open-item-who-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-open-item-who-status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-open-item-who-status b {
+  color: var(--text-1);
+}
+.project-open-item-actions.project-open-item-who-presses {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0 5px;
+}
+.project-open-item-who-presses .project-open-item-error {
+  flex-basis: 100%;
+}
+.project-open-item-chat-first {
+  height: auto;
+  padding: 0 2px;
+}
+.project-open-item-closes {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.project-open-item-closes > span {
+  color: var(--success);
+  font-weight: 700;
+}
+.project-open-item-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.project-open-item-details-toggle:hover {
+  color: var(--text-1);
+}
+.project-open-item-details-caret {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.project-open-item-details-body {
+  margin: 6px 0 2px;
+  padding: 8px 10px;
+  background: var(--fill-inset);
+  border-radius: 6px;
+}
+.project-open-item-settled {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-open-item-settled .project-open-item-actions {
+  margin-top: 6px;
+}
+.project-open-item-settled .project-open-item-door > .project-open-item-quiet {
+  justify-self: start;
+}
+@media (max-width: 600px) {
+  .project-open-item-who-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── The coordinator card's two progress rows (mock 2 ③) ───────────────────────────────────

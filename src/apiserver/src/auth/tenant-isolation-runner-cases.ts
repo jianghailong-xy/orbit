@@ -963,6 +963,17 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // A clone report about A's workspace from B's runner moves nothing (github/github-workspace.service.ts applyCloneReports).
+  'POST /runner/heartbeat body cloneReports[].workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ cloneReports: [{ workspaceId: of.workspaceId, state: 'FAILED', error: 'census' }] }) }),
+  },
+  // A GitHub workspace's token (docs/github-workspace-design.md §5.4): only for a workspace on the calling runner. The
+  // owner's own workspace is not from GitHub, which is 409; B naming A's is the 404 of an id that names nothing.
+  'POST /runner/git-credential body workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, host: 'github.com', path: 'census/none' } }),
+  },
   // A delegate call resuming A's ended SubAgent run, from B's own session: looked up only among that session's runs.
   'POST /runner/sessions/:id/subagents body resumeOf': {
     as: RUNNER,
@@ -1883,6 +1894,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'GET /integrations/github/callback':
+    'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
+    + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '
+    + 'Without a state it only redirects — github-connection.service.ts:151',
   'POST /auth/google/exchange':
     'the ticket is found by its hash and must come with the code verifier of the flow that made it — '
     + 'google-login.service.ts:455',

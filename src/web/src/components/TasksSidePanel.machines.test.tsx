@@ -178,8 +178,8 @@ describe('Machines in the account menu', () => {
   });
 
   it.each([
-    ['available', 'true', 'orbit-managed'],
-    ['sleeping', 'false', 'orbit-managedAsleep'],
+    ['available', 'true', 'Orbit Cloud'],
+    ['sleeping', 'false', 'Orbit CloudAsleep'],
   ])('shows the managed runner %s by its own state, never Ready', async (name, dot, text) => {
     managed = name;
     const id = managedState(name).runnerId!;
@@ -189,9 +189,9 @@ describe('Machines in the account menu', () => {
     await openAccountMenu();
     await press(accountRow('Machines'));
     await act(async () => {
-      await vi.waitFor(() => expect(accountRow('orbit-managed')?.textContent).toBe(text), { timeout: 5_000, interval: 20 });
+      await vi.waitFor(() => expect(accountRow('Orbit Cloud')?.textContent).toBe(text), { timeout: 5_000, interval: 20 });
     });
-    expect(accountRow('orbit-managed')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe(dot);
+    expect(accountRow('Orbit Cloud')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe(dot);
   });
 
   it('reads All online when none is down', async () => {

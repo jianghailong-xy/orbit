@@ -145,7 +145,7 @@ export function bootstrapCredentialOf(secret: Secret): string | null {
 export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string, profile: ManagedRunnerProfile): Pod {
   const runner = profile.runner;
   const stateMounts = [
-    { name: 'user-state', mountPath: '/var/lib/orbit' },
+    { name: 'user-state', mountPath: '/home/orbit' },
     { name: 'temporary', mountPath: '/tmp' },
   ];
   return {

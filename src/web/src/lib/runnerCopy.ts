@@ -154,6 +154,10 @@ export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
 export const RUNNER_ENGINES_FOOTER =
   'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends ' +
   'that subscription, nothing to paste.';
+/** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+export const RUNNER_ENGINES_MANAGED_FOOTER =
+  'Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends ' +
+  'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
 
 /** Under a signed-in account whose login lapses within three days — when Claude Code itself starts
@@ -242,6 +246,13 @@ export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
+/** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
+ *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
+/** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
+export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';
+/** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+export const MANAGED_RUNNER_UPDATED_BY_ORBIT = 'Orbit updates this machine for you.';
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';

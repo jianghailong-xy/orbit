@@ -691,6 +691,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
     /// Read off the session list; absent from older servers, which reads as none.
     public let runningSubagentCount: Int?
+    /// What the newest of those is doing, as its launch call described it ("Deploy dacad7403 to
+    /// production"): the row says "Agent: <this>…". Nil when none is running, when the call said
+    /// nothing, and from older servers — the row then keeps "Running Agent…".
+    public let runningSubagentTitle: String?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
@@ -896,6 +900,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
+        runningSubagentTitle = try values.decodeIfPresent(String.self, forKey: .runningSubagentTitle)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
@@ -937,6 +942,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
+                runningSubagentTitle: String? = nil,
                 engineTurnActive: Bool? = nil,
                 activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
@@ -1017,6 +1023,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
+        self.runningSubagentTitle = runningSubagentTitle
         self.engineTurnActive = engineTurnActive
         self.activity = activity
         self.error = error
@@ -1116,6 +1123,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// the conversation that made it reads (`CreatedWorkspaceLine`).
     public var workDir: String? = nil
     public var deletedAt: String? = nil
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+    /// stands. All nil for one that is not.
+    public var repoUrl: String? = nil
+    public var cloneState: String? = nil
+    public var cloneError: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library

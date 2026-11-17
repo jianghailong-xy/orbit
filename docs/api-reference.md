@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 34 |
-| `user` | 470 |
-| `admin` | 29 |
-| `runner` | 198 |
+| `public` | 35 |
+| `user` | 476 |
+| `admin` | 31 |
+| `runner` | 199 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **735** |
+| **Total** | **745** |
 
 ## Public routes
 
@@ -73,6 +73,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/help` | — | `HelpController.index` |
 | `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
 | `GET` | `/api/help/search` | query `q` | `HelpController.search` |
+| `GET` | `/api/integrations/github/callback` | query `code`, `error`, `setup_action`, `state` | `GithubCallbackController.callback` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
@@ -157,6 +158,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/integrations/feishu/connect-codes` | — | `FeishuController.connectCode` |
 | `DELETE` | `/api/integrations/feishu/owner` | — | `FeishuController.disconnectOwner` |
 | `POST` | `/api/integrations/feishu/test` | — | `FeishuController.sendTest` |
+| `DELETE` | `/api/integrations/github` | — | `GithubController.disconnect` |
+| `GET` | `/api/integrations/github` | — | `GithubController.read` |
+| `GET` | `/api/integrations/github/repos` | query `cursor`, `q` | `GithubController.repositories` |
+| `GET` | `/api/integrations/github/repos/:id/branches` | path `id`; query `q` | `GithubController.branches` |
+| `GET` | `/api/integrations/github/start` | query `return` | `GithubController.start` |
 | `POST` | `/api/link-previews` | body `LinkPreviewsDto` | `LinkPreviewsController.read` |
 | `GET` | `/api/managed-runner` | — | `ManagedRunnerController.status` |
 | `POST` | `/api/managed-runner/delete` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.delete` |
@@ -556,6 +562,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/workspaces/:id` | path `id` | `WorkspacesController.remove` |
 | `GET` | `/api/workspaces/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/workspaces/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
+| `POST` | `/api/workspaces/:id/clone/retry` | path `id` | `GithubWorkspaceController.retry` |
 | `GET` | `/api/workspaces/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
@@ -576,6 +583,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/admin/help-feedback` | — | `AdminHelpFeedbackController.summary` |
 | `GET` | `/api/admin/integrations/feishu` | — | `FeishuAdminController.settings` |
 | `PUT` | `/api/admin/integrations/feishu` | body `SetFeishuAdminDto` | `FeishuAdminController.setAllowed` |
+| `GET` | `/api/admin/integrations/github` | — | `GithubAdminController.settings` |
+| `PUT` | `/api/admin/integrations/github` | body `UpdateGithubAppDto` | `GithubAdminController.update` |
 | `POST` | `/api/admin/managed-runners/:id/volume-switch` | body `ManagedRunnerVolumeSwitchDto`; path `id` | `ManagedRunnerAdminController.switchVolume` |
 | `GET` | `/api/admin/providers` | — | `AdminProvidersController.list` |
 | `POST` | `/api/admin/providers` | body `CreateModelProviderDto` | `AdminProvidersController.create` |
@@ -615,6 +624,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
+| `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
 | `GET` | `/api/runner/help-ask/:read` | path `read` | `RunnerHelpAskController.read` |
 | `POST` | `/api/runner/install-result` | body `Object` | `RunnerApiController.installResult` |

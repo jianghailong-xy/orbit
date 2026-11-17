@@ -11,9 +11,9 @@ import { resetSettingsReturn } from '../../lib/settingsReturn';
 /**
  * Admin drawn as Settings is (owner's choice A, docs/mocks/admin-settings-style): it takes over the window, no
  * app sidebar, a nav of its pages in three groups — Accounts (Users with its count, Sign-in), Server (Email, Help feedback),
- * Integrations (Feishu bots) — each setting's On / Off as a dot, and Back to Orbit and Esc return to the page Admin
+ * Integrations (Feishu bots, GitHub App) — each setting's On / Off as a dot, and Back to Orbit and Esc return to the page Admin
  * was opened from, across pages inside it. The addresses stay /admin, /admin/sign-in, /admin/email and
- * /admin/integrations; Help feedback is /admin/help-feedback.
+ * /admin/integrations, with the GitHub App at /admin/integrations/github; Help feedback is /admin/help-feedback.
  *
  * Mounted through the real App routes under the real BrowserRouter; the pages are reduced to a line saying which
  * one answered.
@@ -51,6 +51,10 @@ vi.mock('../../pages/AdminIntegrationsPage', async (original) => ({
   ...(await original<typeof import('../../pages/AdminIntegrationsPage')>()),
   AdminIntegrationsPage: () => <p data-page="integrations">integrations</p>,
 }));
+vi.mock('../../pages/AdminGithubPage', async (original) => ({
+  ...(await original<typeof import('../../pages/AdminGithubPage')>()),
+  AdminGithubPage: () => <p data-page="github">github</p>,
+}));
 
 let container: HTMLDivElement;
 let root: Root | null = null;
@@ -68,6 +72,10 @@ beforeEach(() => {
     }
     if (path === '/admin/email') return { on: true };
     if (path === '/admin/integrations/feishu') return { allowed: true, connectedApps: 0, enabledApps: 0 };
+    // GitHub: saved, but switched off: Off.
+    if (path === '/admin/integrations/github') {
+      return { enabled: false, appId: '1', slug: 'x', clientId: 'Iv1', secretSaved: true, keySaved: true, secretUnreadable: false, callbackUrl: 'x', connectedUsers: 0, clonedWorkspaces: 0 };
+    }
     return [];
   }) as typeof api);
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })));
@@ -175,7 +183,13 @@ describe('the Admin window', () => {
           { label: 'Help feedback', href: '/admin/help-feedback', meta: null, dot: null },
         ],
       },
-      { title: 'Integrations', rows: [{ label: 'Feishu bots', href: '/admin/integrations', meta: null, dot: 'On' }] },
+      {
+        title: 'Integrations',
+        rows: [
+          { label: 'Feishu bots', href: '/admin/integrations', meta: null, dot: 'On' },
+          { label: 'GitHub App', href: '/admin/integrations/github', meta: null, dot: 'Off' },
+        ],
+      },
     ]);
     expect(page()).toBe('users');
     expect(active()).toBe('Users');
@@ -188,6 +202,8 @@ describe('the Admin window', () => {
       ['Email', '/admin/email', 'email'],
       ['Feishu bots', '/admin/integrations', 'integrations'],
       ['Help feedback', '/admin/help-feedback', 'help-feedback'],
+      ['GitHub App', '/admin/integrations/github', 'github'],
+      ['Feishu bots', '/admin/integrations', 'integrations'],
       ['Users', '/admin', 'users'],
     ] as const) {
       await click([...nav().querySelectorAll('a.settings-nav-row')].find((a) => a.textContent?.includes(label)));

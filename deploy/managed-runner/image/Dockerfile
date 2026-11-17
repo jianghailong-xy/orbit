@@ -105,8 +105,8 @@ RUN mkdir -p /etc/ssl/certs \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
- && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit \
- && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+ && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
+ && install -d -o 10001 -g 10001 -m 0700 /home/orbit
 
 COPY --from=orbit-build /usr/local/go/ /usr/local/go/
 COPY --from=codex /opt/codex/ /opt/codex/
@@ -118,10 +118,10 @@ COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
 COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
 ENV PATH="/usr/local/go/bin:${PATH}" \
-    HOME=/var/lib/orbit/home \
-    ORBIT_HOME=/var/lib/orbit/home/.orbit \
-    CODEX_HOME=/var/lib/orbit/home/.codex \
-    CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude \
+    HOME=/home/orbit \
+    ORBIT_HOME=/home/orbit/.orbit \
+    CODEX_HOME=/home/orbit/.codex \
+    CLAUDE_CONFIG_DIR=/home/orbit/.claude \
     ORBIT_ENGINE_STORE=/opt/orbit-engines \
     ORBIT_NO_SELFUPDATE=1 \
     ORBIT_NO_ENGINE_UPDATE=1 \
@@ -229,7 +229,7 @@ PY
 rm -rf /tmp/orbit-version-check
 SH
 
-WORKDIR /var/lib/orbit
+WORKDIR /home/orbit
 USER 10001:10001
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/orbit-container"]
