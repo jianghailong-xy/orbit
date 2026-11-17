@@ -18,6 +18,7 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import { isConditionItemKind } from '../conditions/condition-attention';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import {
@@ -497,7 +498,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */
   async withdraw(ownerId: string, sessionId: string, id: string, reason: string | undefined): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
-    if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind)) {
+    if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind) || isConditionItemKind(request.kind)) {
       throw new ForbiddenException({
         code: OWNER_REQUEST_NOT_ASKER,
         message: 'only the session that filed this request may withdraw it',
@@ -557,9 +558,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         data: { ...data, state: to, resolvedAt: now },
       });
       if (written.count === 1) {
-        // A scheduled task's item was written by the schedule, not asked by its session: nobody is waiting to hear.
+        // A scheduled task's item was written by the schedule, and a condition's by the condition, not asked by a
+        // session: nobody is waiting to hear.
         const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });
-        if (!kind || !isScheduleItemKind(kind.kind)) await enqueueResolutions(tx, [id]);
+        if (!kind || !(isScheduleItemKind(kind.kind) || isConditionItemKind(kind.kind))) await enqueueResolutions(tx, [id]);
         await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
       }
       return written;

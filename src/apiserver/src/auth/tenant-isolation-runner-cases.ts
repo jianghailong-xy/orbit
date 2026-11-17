@@ -1459,6 +1459,12 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── conditions (docs/condition-triggers-design.md §4.2) ──────────────────────────────────────────
+  'POST /runner/heartbeat body conditionSamples[].conditionId':
+    "taken only for a condition of the runner's owner whose workspace the calling runner serves, read in one statement "
+    + 'before anything is written (conditions/conditions.service.ts:264) and again under the row lock; any other is '
+    + 'refused and stored nowhere. conditions.pg.spec.ts heartbeat-refuses-foreign sends it from a machine of the same '
+    + "owner and from another account's",
   // ── scheduled tasks ──────────────────────────────────────────────────────────────────────────────
   'POST /runner/schedules header x-orbit-session-id':
     "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
