@@ -1,4 +1,4 @@
-import type { OwnerCardTranslation } from '@orbit/shared';
+import type { EvidenceTranslation, OwnerCardTranslation } from '@orbit/shared';
 import { mapBounded, queueTranslation } from './reply-translation';
 import { translate } from './translation';
 import type { TranslationLanguages } from './turn-translation';
@@ -6,8 +6,10 @@ import type { TranslationLanguages } from './turn-translation';
 /**
  * Settings › Translation for the owner cards that live outside a session (project 'Translate every owner card',
  * board docs/mocks/session-translation/04-owner-cards.html; wire shape OwnerCardTranslation in @orbit/shared
- * translation.ts): a coordinator's question (project_open_item) and an owner request (owner_request), and the
- * other cards later tasks add.
+ * translation.ts): a coordinator's question, start request and done request (project_open_item), an owner request
+ * (owner_request), completion evidence (task_completion_evidence), an owner-confirmation review
+ * (task_owner_confirmation_review_record), a crossing (project_handoff_approval) and a criteria-change proposal
+ * (project_criteria_change_translation, beside the frozen project_ratified_action_intent).
  *
  * The approval card's rules (reply-translation.ts translateCard), over a card's NAMED fields: each named field
  * with text is translated from the agent's language into the owner's; a card translates whole or is recorded
@@ -40,6 +42,41 @@ export const OWNER_REQUEST_FIELDS = {
   steps: [{ text: true }],
   verifyHint: true,
 } as const satisfies CardFields;
+
+/** A START_REQUEST's (`ProjectStartRequest`, project_open_item.payload) agent-written field. */
+export const START_REQUEST_FIELDS = { why: true } as const satisfies CardFields;
+
+/** A DONE_REQUEST's (`DoneRequest`, project_open_item.payload) agent-written fields. A gap's `criterionKey` and
+ *  `evidenceRefs` are left out: they are keys and references, read exactly as written. */
+export const DONE_REQUEST_FIELDS = {
+  judgment: true,
+  gaps: [{ title: true, whyNotProven: true, coordinatorChecked: true }],
+} as const satisfies CardFields;
+
+/** A completion-evidence envelope's (task_completion_evidence.evidence) agent-written fields. A check's `ref` and
+ *  `command` are never sent. */
+export const EVIDENCE_FIELDS = { claim: true, gaps: [true] } as const satisfies CardFields;
+
+/** An owner-confirmation REVIEW record's agent-written fields the owner decides on: the reviewer's call and the
+ *  lines only the owner can answer (task_owner_confirmation_review_record.judgment, body.needsYou). */
+export const CONFIRMATION_REVIEW_FIELDS = {
+  judgment: true,
+  needsYou: [{ text: true, options: [{ label: true, description: true }] }],
+} as const satisfies CardFields;
+
+/** An owner-confirmation PROBLEMS record's agent-written fields (reason, body.problems). */
+export const CONFIRMATION_PROBLEMS_FIELDS = { reason: true, problems: [{ text: true }] } as const satisfies CardFields;
+
+/** A crossing's (project_handoff_approval) agent-written fields. */
+export const CROSSING_FIELDS = { title: true, reason: true } as const satisfies CardFields;
+
+/** A criteria-change proposal's agent-written fields: each proposed criterion's words. */
+export const CRITERIA_CHANGE_FIELDS = {
+  proposed: [{ text: true, verificationMethod: true }],
+} as const satisfies CardFields;
+
+/** What a card's `translation` holds: most cards' shape, or completion evidence's. */
+export type CardTranslation = OwnerCardTranslation | EvidenceTranslation;
 
 const hasText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
@@ -78,13 +115,13 @@ export async function translateCardFields(
   source: unknown,
   fields: CardFields,
   langs: TranslationLanguages,
-): Promise<OwnerCardTranslation> {
+): Promise<CardTranslation> {
   const out: Record<string, unknown> = {};
   const pieces: Piece[] = [];
   collect(source, fields, out, pieces);
   const texts = await mapBounded(pieces, (piece) => translate(piece.text, langs.agent, langs.owner));
   pieces.forEach((piece, at) => piece.put(texts[at]));
-  return { ...out, lang: langs.owner } as OwnerCardTranslation;
+  return { ...out, lang: langs.owner } as CardTranslation;
 }
 
 /** Whether a stored `translation` is one in the owner's current language — a failed one counts: it was tried. */
@@ -99,7 +136,7 @@ export interface OwnerCardStore {
   /** The card while it is still open: its source and the fields to translate. Null once it has ended. */
   read(): Promise<{ source: unknown; fields: CardFields; translation: unknown } | null>;
   /** Store `translation` on the card if it is still open; true when it was written. */
-  write(translation: OwnerCardTranslation): Promise<boolean>;
+  write(translation: CardTranslation): Promise<boolean>;
   /** After a write: tell the owner's clients to read the card again. */
   published(): void;
 }
@@ -111,11 +148,11 @@ export interface OwnerCardStore {
 export async function translateOwnerCardNow(
   store: OwnerCardStore,
   langs: TranslationLanguages,
-): Promise<OwnerCardTranslation | null> {
+): Promise<CardTranslation | null> {
   const card = await store.read();
   if (!card || !cardFieldsHaveText(card.source, card.fields)) return null;
-  if (translatedInto(card.translation, langs)) return card.translation as OwnerCardTranslation;
-  let translation: OwnerCardTranslation;
+  if (translatedInto(card.translation, langs)) return card.translation as CardTranslation;
+  let translation: CardTranslation;
   try {
     translation = await translateCardFields(card.source, card.fields, langs);
   } catch {

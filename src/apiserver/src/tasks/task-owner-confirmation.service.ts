@@ -16,7 +16,9 @@ import {
 } from './owner-confirmation-read';
 import { confirmationReviewStates, decisionReview, type DecisionReview } from './owner-confirmation-review';
 import { writeOwnerAnswersComment } from './owner-confirmation-review-turn';
-import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
+import { OwnerConfirmationReviewService, queueConfirmationRecordTranslation } from './owner-confirmation-review.service';
+import { translatedInto } from '../sessions/card-translation';
+import { translationLanguages } from '../sessions/turn-translation';
 import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
@@ -121,8 +123,25 @@ export class TaskOwnerConfirmationService {
   ) {}
 
   async read(ownerId: string, taskId: string): Promise<OwnerConfirmationView> {
-    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId, this.tasks);
+    const langs = await translationLanguages(this.prisma, ownerId);
+    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId, this.tasks, langs?.owner ?? null);
     if (!view) throw new NotFoundException('task not found');
+    // Decision 1A: the review records of the request waiting on the owner, read without a translation in their
+    // current language, get one queued; one already tried in this language, failed or not, is left.
+    const waiting = view.waiting;
+    const records = [waiting?.review?.review, waiting?.review?.problems].filter((record) => record != null);
+    for (const record of langs && waiting ? records : []) {
+      if (translatedInto(record.translation, langs!)) continue;
+      queueConfirmationRecordTranslation(
+        this.prisma,
+        { ownerId, taskId, recordId: record.recordId, runSessionId: waiting!.sessionId },
+        langs!,
+        () => {
+          this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [taskId], resync: false });
+          this.realtime?.publishSessionUpdated(waiting!.sessionId);
+        },
+      );
+    }
     return view;
   }
 

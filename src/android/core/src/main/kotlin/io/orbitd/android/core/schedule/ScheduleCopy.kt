@@ -278,6 +278,7 @@ object ScheduleCopy {
             "RUNS_PER_WEEK" to "Let {title} run more often?",
             "RUN_LIMIT" to "Let {title} run longer?",
             "WORKSPACE" to "Let {title} run in {workspace}?",
+            "PROBE_COMMAND" to "Let {title} check with a new command?",
         )
         const val now = "Now"
         const val asked = "Asked"
@@ -567,6 +568,7 @@ object ScheduleCopy {
         "envelopeCard.titles.RUNS_PER_WEEK" to EnvelopeCard.titles.getValue("RUNS_PER_WEEK"),
         "envelopeCard.titles.RUN_LIMIT" to EnvelopeCard.titles.getValue("RUN_LIMIT"),
         "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
+        "envelopeCard.titles.PROBE_COMMAND" to EnvelopeCard.titles.getValue("PROBE_COMMAND"),
         "envelopeCard.now" to EnvelopeCard.now,
         "envelopeCard.asked" to EnvelopeCard.asked,
         "envelopeCard.accessJoin" to EnvelopeCard.accessJoin,

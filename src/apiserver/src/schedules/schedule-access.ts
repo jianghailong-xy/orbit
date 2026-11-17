@@ -83,7 +83,8 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  * Grep, Glob, `git log`, `ls`, …) without asking. Each Orbit tool here is one a check needs:
  *
  *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
- *     schedule the run serves and to its envelope (§8.3);
+ *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
+ *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
  *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
@@ -95,6 +96,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_report',
   'mcp__orbit__schedule_get',
   'mcp__orbit__schedule_list',
+  'mcp__orbit__condition_get',
   'mcp__orbit__schedule_update',
   'mcp__orbit__schedule_end',
   'mcp__orbit__notify',

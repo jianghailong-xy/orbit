@@ -32,6 +32,8 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import { readPendingEvidenceJudgments } from './pending-evidence-judgments';
+import { EVIDENCE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import {
   RESTART_TASK_ACTION,
   unansweredUndecidableRevision,
@@ -492,6 +494,12 @@ export class TaskCompletionEvidenceService {
     }, loggedRetry(this.logger, 'taskCompletionEvidence.submit'));
 
     await this.reprojectProjectStatus(ownerId, committed.projectId);
+    // Translated for the owner in the background, when their translation is on (decision 1A).
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => {
+        if (langs) this.queueTranslation(ownerId, taskId, committed.evidenceRow.revision.toString(), langs);
+      })
+      .catch((error: Error) => this.logger.warn(`translating evidence of task ${taskId} failed to queue: ${error.message}`));
 
     try {
       // The revision itself is the trigger. A source Session may still be RUNNING or
@@ -1062,7 +1070,53 @@ export class TaskCompletionEvidenceService {
       select: { id: true, taskId: true },
     });
     if (!session) throw new NotFoundException('deciding session not found');
-    return readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    const queue = await readPendingEvidenceJudgments(this.prisma, ownerId, session);
+    await this.translateUntranslated(ownerId, [...queue.pending, ...queue.waitingOnYou]).catch((error: Error) =>
+      this.logger.warn(`queueing evidence translations failed: ${error.message}`));
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one evidence revision's claim and gaps into the owner's language
+   * (sessions/card-translation.ts): stored in `translation` while no decision answers the revision, then the task
+   * and the conversation its card is drawn in are announced, as a new revision is. Returns at once.
+   */
+  queueTranslation(ownerId: string, taskId: string, revision: string, langs: TranslationLanguages): boolean {
+    const where = { taskId, ownerId, revision: BigInt(revision), decisions: { none: {} } };
+    return queueOwnerCardTranslation({
+      key: `evidence:${taskId}:${revision}`,
+      read: async () => {
+        const row = await this.prisma.taskCompletionEvidence.findFirst({
+          where,
+          select: { evidence: true, translation: true },
+        });
+        return row ? { source: row.evidence, fields: EVIDENCE_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.taskCompletionEvidence.updateMany({
+        where,
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => {
+        this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [taskId], resync: false });
+        void this.nudgeCoordinatorRow(ownerId, taskId);
+      },
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: an unanswered revision on this reader's card with no translation in the owner's current language
+   * gets one queued as it is read; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    rows: ReadonlyArray<{ taskId: string; evidenceRevision: string; translation?: unknown }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of rows) {
+      if (!translatedInto(row.translation, langs)) this.queueTranslation(ownerId, row.taskId, row.evidenceRevision, langs);
+    }
   }
 
   /**

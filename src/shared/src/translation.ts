@@ -302,10 +302,14 @@ export interface TranslatedTaskBody {
 }
 
 /**
- * An owner card that lives outside a session (board 04-owner-cards.html): a coordinator's question
- * (`ProjectOpenItemRow.translation`, `ProjectClosedQuestion.translation`) or an owner request
- * (`OwnerRequest.translation`), in the owner's language. Stored beside the card's own fields, which stay
- * exactly what the agent wrote. Absent until it is translated, and on every card translation is off for.
+ * An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language: a
+ * coordinator's question, start request or done request (`ProjectOpenItemRow.translation`,
+ * `ProjectClosedQuestion.translation`), an owner request (`OwnerRequest.translation`), an owner-confirmation
+ * review (`review.translation`, `problems.translation` on OwnerConfirmationReviewView), a crossing
+ * (`translation` on a `GET /projects/:id/handoffs` row) or a criteria-change proposal (`translation` on a
+ * pending criteria decision). Completion evidence has its own shape, EvidenceTranslation. Stored beside the
+ * card's own fields, which stay exactly what the agent wrote. Absent until it is translated, and on every
+ * card translation is off for.
  *
  * Each field is the card's field of the same name translated, present only when the original has text;
  * arrays go index for index with the card's, and an entry's field the original lacks is absent there too.
@@ -329,6 +333,33 @@ export interface OwnerCardTranslation {
   steps?: Array<{ text?: string }>;
   /** An owner request's `verifyHint`. */
   verifyHint?: string;
+  /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
+   *  review's `judgment`. */
+  judgment?: string;
+  /** A DONE_REQUEST's `gaps`, index for index; `criterionKey` and `evidenceRefs` are drawn from the original. */
+  gaps?: Array<{ title?: string; whyNotProven?: string; coordinatorChecked?: string }>;
+  /** An owner-confirmation review's `needsYou`, index for index: each line's `text` and `options`. */
+  needsYou?: Array<{ text?: string; options?: Array<{ label?: string; description?: string }> }>;
+  /** An owner-confirmation PROBLEMS record's `reason`, or a crossing's `reason`. */
+  reason?: string;
+  /** An owner-confirmation PROBLEMS record's `problems`, the text of each. */
+  problems?: Array<{ text?: string }>;
+  /** A criteria-change proposal's `proposed`, index for index: each criterion's `text` and
+   *  `verificationMethod`. */
+  proposed?: Array<{ text?: string; verificationMethod?: string }>;
+}
+
+/**
+ * A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+ * pending evidence judgment). `gaps` goes index for index with the envelope's. Absent until it is
+ * translated, and on every revision translation is off for.
+ */
+export interface EvidenceTranslation {
+  lang: TranslationLanguage;
+  /** The evidence could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  claim?: string;
+  gaps?: string[];
 }
 
 /** The Orbit cards whose agent-written fields beyond `description` are translated. */

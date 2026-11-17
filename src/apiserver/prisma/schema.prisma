@@ -398,6 +398,8 @@ model User {
   /// Scheduled tasks (migration 0790) and the changes to them waiting on this owner.
   schedules             Schedule[]
   scheduleChangeRequests ScheduleChangeRequest[]
+  /// Conditions (migration 1030, docs/condition-triggers-design.md §3).
+  conditions            Condition[]
 }
 
 /// A long-lived opaque refresh token a client swaps for a fresh short-lived access JWT via
@@ -4798,9 +4800,23 @@ model ProjectRatifiedActionIntent {
   idempotencyKey       String   @map("idempotency_key")
   commitToken          String   @unique @map("commit_token") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  translation          ProjectCriteriaChangeTranslation?
 
   @@unique([ownerId, projectId, idempotencyKey])
   @@map("project_ratified_action_intent")
+}
+
+/// Settings › Translation (migration 1080): a criteria proposal's `proposed[].text` and `verificationMethod` in the
+/// owner's language, `{ lang, failed?, proposed? }`. A table of its own because 0195 refuses every write to a filed
+/// intent; the translation is a reader's copy, never part of what is approved.
+model ProjectCriteriaChangeTranslation {
+  intentId    String                      @id @map("intent_id") @db.Uuid
+  ownerId     String                      @map("owner_id") @db.Uuid
+  translation Json
+  updatedAt   DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_change_translation_intent_fkey")
+
+  @@map("project_criteria_change_translation")
 }
 
 model ProjectRatifiedActionCommit {
@@ -5550,6 +5566,10 @@ model ProjectHandoffApproval {
   /// waiting, from any session, find the first instead of filing beside it.
   requestedCriterionDefinitionId String? @map("requested_criterion_definition_id") @db.Uuid
 
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): `title` and `reason` in the
+  /// owner's language, written only while PENDING. Not one of the guarded columns. NULL when not involved.
+  translation Json?
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
 
@@ -5955,6 +5975,11 @@ model Task {
   /// migration 0001 put on the long-deleted execution `Task`: that table is gone, and this is a
   /// property of the human-facing task, not of a run.
   runAt            DateTime?   @map("run_at")
+  /// The condition that starts this task (migration 1060, docs/condition-triggers-design.md §6.2): a peer of
+  /// `runAt`, and a task has at most one of the two (`task_run_at_or_start_when_chk`). The start that keeps it
+  /// clears it, as a start clears `runAt`.
+  startWhenConditionId String?    @unique @map("start_when_condition_id") @db.Uuid
+  startWhenCondition   Condition? @relation("TaskStartWhen", fields: [startWhenConditionId], references: [id], onDelete: SetNull)
   // Per-task override for the runs this task dispatches: a built-in engine slug
   // ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the owner's configured
   // ModelProvider slugs, and a model id inside that provider's space. NULL keeps the historical
@@ -6172,6 +6197,8 @@ model Task {
   /// Files the task carries as INPUT to its work (design mocks, specs). Copied into each run's
   /// session at dispatch; cascade-deleted with the task.
   attachments  Attachment[]
+  /// Its startWhen condition (migration 1030), when it has one.
+  conditions   Condition[] @relation("ConditionTask")
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
@@ -6402,6 +6429,9 @@ model TaskCompletionEvidence {
   evidence          Json
   evidenceDigest    String @map("evidence_digest") @db.Char(64)
   revision          BigInt
+  /// Settings › Translation (migration 1080, @orbit/shared EvidenceTranslation): the envelope's claim and gaps in
+  /// the owner's language, `{ lang, failed?, claim?, gaps? }`. `evidence` stays the agent's words. NULL when not involved.
+  translation       Json?
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
   legacyImport TaskLegacyEvidenceImport?
@@ -6660,6 +6690,9 @@ model TaskOwnerConfirmationReviewRecord {
   /// RETURN only: the key of the turn that carries it to the run, derived from this row's id.
   returnClientTurnId String?  @map("return_client_turn_id")
   recordedAt         DateTime @map("recorded_at")
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): judgment and needsYou (REVIEW),
+  /// reason and problems (PROBLEMS) in the owner's language. NULL when translation was not involved.
+  translation        Json?
 
   decisions TaskOwnerDecision[]
 
@@ -7994,6 +8027,8 @@ model OwnerRequest {
   scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
   approvalId              String?   @map("approval_id") @db.Uuid
   scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
+  /// CONDITION_UNKNOWN (migration 1030): the condition that cannot be read. History, no FK.
+  conditionId             String?   @map("condition_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -9963,6 +9998,8 @@ enum ScheduleRunTrigger {
   SCHEDULED
   CATCH_UP
   MANUAL
+  /// A WHEN schedule's condition fired (migration 1040); `plannedAt` is the firing sample's time.
+  CONDITION
 
   @@map("schedule_run_trigger")
 }
@@ -10012,7 +10049,8 @@ model Schedule {
   intent                   String
   title                    String
   prompt                   String
-  /// `{ kind: ONCE, at }` | `{ kind: DAILY, time }` | `{ kind: WEEKLY, time, weekdays[] }` (schedule-time.ts).
+  /// `{ kind: ONCE, at }` | `{ kind: DAILY, time }` | `{ kind: WEEKLY, time, weekdays[] }` |
+  /// `{ kind: WHEN, conditionId, runsPerWeek, condition }` (schedule-time.ts).
   rule                     Json
   timezone                 String
   startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
@@ -10023,6 +10061,8 @@ model Schedule {
   envelopeAccessLevel      ScheduleAccessLevel @map("envelope_access_level")
   envelopeRunsPerWeek      Int                 @map("envelope_runs_per_week")
   envelopeRunLimitMinutes  Int                 @map("envelope_run_limit_minutes")
+  /// A WHEN rule's approved probe command, as its sha256 (migration 1040); NULL for a timed schedule.
+  envelopeCommandHash      String?             @map("envelope_command_hash")
   state                    ScheduleState       @default(ACTIVE)
   heldReason               String?             @map("held_reason")
   endedReason              ScheduleEndedReason? @map("ended_reason")
@@ -10042,6 +10082,8 @@ model Schedule {
   runs                     ScheduleRun[]
   findings                 ScheduleFinding[]
   changeRequests           ScheduleChangeRequest[]
+  /// Its WHEN rule's condition (migration 1030), when it has one.
+  conditions               Condition[]
 
   @@index([ownerId, state], map: "schedule_owner_state_idx")
   @@map("schedule")
@@ -10141,6 +10183,152 @@ model ScheduleChangeRequest {
 
   @@index([ownerId, state, createdAt], map: "schedule_change_request_owner_state_idx")
   @@map("schedule_change_request")
+}
+
+/// Conditions: work that starts when something outside Orbit becomes true (migration 1030,
+/// docs/condition-triggers-design.md §3, §5; conditions/).
+
+enum ConditionState {
+  WAITING
+  HOLDING
+  FIRED
+  UNKNOWN
+  ENDED
+
+  @@map("condition_state")
+}
+
+enum ConditionCompareOp {
+  GT
+  GTE
+  LT
+  LTE
+  EQ
+  EXIT_ZERO
+
+  @@map("condition_compare_op")
+}
+
+enum ConditionSampleOutcome {
+  VALUE
+  EXIT
+  TIMEOUT
+  ERROR
+
+  @@map("condition_sample_outcome")
+}
+
+enum ConditionEventKind {
+  FIRED
+  READY_AGAIN
+  CANT_READ
+  READ_AGAIN
+  ASKED_STILL_WAITING
+
+  @@map("condition_event_kind")
+}
+
+/// One probe and the comparison its readings are held to, attached to exactly one task or schedule. The runner runs
+/// the probe; the server moves `state` (conditions/condition-evaluation.ts). `workspaceId` is the workspace whose
+/// runner runs it, a history reference like Schedule's. The CHECKs (timeout 1..60, interval at least 60, exactly one
+/// of task or schedule, a value for every op but EXIT_ZERO) and the limit of 20 not ENDED per account
+/// (conditions.service.ts createCondition) live outside this file.
+model Condition {
+  id                   String                  @id @default(uuid(7)) @db.Uuid
+  ownerId              String                  @map("owner_id") @db.Uuid
+  owner                User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  probeCommand         String                  @map("probe_command")
+  probeTimeoutSeconds  Int                     @default(20) @map("probe_timeout_seconds")
+  compareOp            ConditionCompareOp      @map("compare_op")
+  compareValue         Float?                  @map("compare_value")
+  holdSeconds          Int                     @default(0) @map("hold_seconds")
+  rearmOp              ConditionCompareOp?     @map("rearm_op")
+  rearmValue           Float?                  @map("rearm_value")
+  intervalSeconds      Int                     @default(300) @map("interval_seconds")
+  /// The condition in words, written by the agent: "3 or more OSDs are in".
+  text                 String
+  unit                 String?
+  state                ConditionState          @default(WAITING)
+  /// False from FIRED until the re-arm comparison holds: what UNKNOWN goes back to.
+  armed                Boolean                 @default(true)
+  lastSampleAt         DateTime?               @map("last_sample_at") @db.Timestamptz(3)
+  lastValue            Float?                  @map("last_value")
+  lastOutcome          ConditionSampleOutcome? @map("last_outcome")
+  /// When the newest sample that read was taken: the age a can't-read card shows.
+  lastReadAt           DateTime?               @map("last_read_at") @db.Timestamptz(3)
+  trueSince            DateTime?               @map("true_since") @db.Timestamptz(3)
+  unknownSince         DateTime?               @map("unknown_since") @db.Timestamptz(3)
+  /// TIMEOUT | ERROR | RUNNER_OFFLINE | RUNNER_ASLEEP, while UNKNOWN.
+  unknownReason        String?                 @map("unknown_reason")
+  failedChecks         Int                     @default(0) @map("failed_checks")
+  firedAt              DateTime?               @map("fired_at") @db.Timestamptz(3)
+  /// WHEN rules only (migration 1050): fire again every this many seconds while the comparison still holds and it has
+  /// not re-armed. At least 900 and at least intervalSeconds; NULL fires on the crossing only.
+  repeatSeconds        Int?                    @map("repeat_seconds")
+  /// What a repeat is counted from: the last FIRED, or the sample the comparison held again on after a break. NULL
+  /// while no repeat is due (not FIRED, the comparison false, UNKNOWN, or no repeatSeconds).
+  repeatFrom           DateTime?               @map("repeat_from") @db.Timestamptz(3)
+  /// When its schedule was last resumed (migration 1040): silence is counted from the newer of this and the newest sample.
+  resumedAt            DateTime?               @map("resumed_at") @db.Timestamptz(3)
+  approvedCommandHash  String                  @map("approved_command_hash")
+  approvedAt           DateTime                @map("approved_at") @db.Timestamptz(3)
+  taskId               String?                 @map("task_id") @db.Uuid
+  task                 Task?                   @relation("ConditionTask", fields: [taskId], references: [id], onDelete: Cascade)
+  /// The task this condition starts (Task.startWhenConditionId, migration 1060).
+  startsTask           Task?                   @relation("TaskStartWhen")
+  scheduleId           String?                 @map("schedule_id") @db.Uuid
+  schedule             Schedule?               @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  /// The conversation it was created from, where its Waiting on you item is shown. History, no FK.
+  createdFromSessionId String?                 @map("created_from_session_id") @db.Uuid
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt              DateTime?               @map("ended_at") @db.Timestamptz(3)
+  /// When the owner last answered Keep waiting on the 30-day question (migration 1060, §6.2).
+  keepWaitingSince     DateTime?               @map("keep_waiting_since") @db.Timestamptz(3)
+  samples              ConditionSample[]
+  events               ConditionEvent[]
+
+  @@unique([taskId], map: "condition_task_key")
+  @@unique([scheduleId], map: "condition_schedule_key")
+  @@index([ownerId, state], map: "condition_owner_state_idx")
+  @@index([workspaceId], map: "condition_workspace_idx")
+  @@map("condition")
+}
+
+/// One reading the runner reported. Kept 30 days, and the latest 1000 per condition (conditions.service.ts).
+model ConditionSample {
+  id          String                 @id @default(uuid(7)) @db.Uuid
+  conditionId String                 @map("condition_id") @db.Uuid
+  condition   Condition              @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime               @db.Timestamptz(3)
+  outcome     ConditionSampleOutcome
+  value       Float?
+  exitCode    Int?                   @map("exit_code")
+  stderrTail  String?                @map("stderr_tail")
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([conditionId, at], map: "condition_sample_condition_at_key")
+  /// What the 30-day prune reads.
+  @@index([at], map: "condition_sample_at_idx")
+  @@map("condition_sample")
+}
+
+/// What a condition's history shows.
+model ConditionEvent {
+  id          String             @id @default(uuid(7)) @db.Uuid
+  conditionId String             @map("condition_id") @db.Uuid
+  condition   Condition          @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  at          DateTime           @db.Timestamptz(3)
+  kind        ConditionEventKind
+  value       Float?
+  runId       String?            @map("run_id") @db.Uuid
+  /// A FIRED that is a repeat (migration 1050): the history says "Fired again".
+  repeat      Boolean            @default(false)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([conditionId, at(sort: Desc)], map: "condition_event_condition_at_idx")
+  @@map("condition_event")
 }
 
 /// Still stuck → Ask your admin (migration 0890; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask

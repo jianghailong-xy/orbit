@@ -1,5 +1,6 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
+import type { ConditionProbe, ConditionSampleReport } from './condition';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -854,6 +855,10 @@ export interface RunnerHeartbeatRequest {
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
   agentDirProbes?: AgentDirProbe[];
+  /** What the runner read for the conditions it was handed (RunnerHeartbeatResponse.conditionProbes,
+   *  docs/condition-triggers-design.md §4.2). Only from a runner that declares condition-probe/v1; a
+   *  sample for a condition whose workspace this runner does not serve is refused and stored nowhere. */
+  conditionSamples?: ConditionSampleReport[];
   /** State of the shared checkouts this machine's agents work in. Absent on older runners,
    *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
   repos?: RunnerRepoHealth[];
@@ -1479,6 +1484,11 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** The conditions of the workspaces this runner serves, to probe on their intervals and answer with
+   *  RunnerHeartbeatRequest.conditionSamples (docs/condition-triggers-design.md §4.2). On every full answer to a
+   *  runner that declares condition-probe/v1, the whole list ([] for none); absent otherwise, which the runner reads
+   *  as "keep probing what you have". */
+  conditionProbes?: ConditionProbe[];
   /** Every PENDING and CLONING GitHub workspace of this runner (docs/github-workspace-design.md §5.4), on every full
    *  answer to a runner that declared clone-workdir/v1: a full reconcile, answered by cloneReports. Absent otherwise. */
   cloneRequests?: CloneRequest[];

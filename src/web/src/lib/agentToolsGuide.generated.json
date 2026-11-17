@@ -57,6 +57,7 @@
         "task_start runs work that is already recorded, on its assignee, once its prerequisites are DONE.",
         "task_create with startNow: true records the work and starts it on one card.",
         "runAt starts it once, at a set time; it is not a deadline (that is dueDate).",
+        "startWhen starts it once, when something outside Orbit becomes true (\"when a third OSD is in\"); a schedule with a WHEN rule runs each time it does. The agent writes a read-only check command, runs it once, and the card shows you that command verbatim before anything is created; your runner then runs it unattended, with no secret in it. When you answer a question with \"wait until X\", the agent proposes that card instead of keeping a note to itself, and condition_get reads either one back.",
         "autoRunWhenReady defaults to true: an assigned task in a started project starts by itself once every prerequisite is DONE. To hold work until you say so, the agent passes autoRunWhenReady: false.",
         "Your own \"Create and start\" on the card starts it even if the agent asked for no start, and the agent does not undo that."
       ],
@@ -699,6 +700,7 @@
       "id": "schedules",
       "label": "Schedules",
       "tools": [
+        "condition_get",
         "schedule_create",
         "schedule_delete",
         "schedule_end",
@@ -863,7 +865,7 @@
         "title": "Orbit's runtime instructions",
         "role": "system",
         "roleLabel": "System · appended",
-        "detail": "The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
+        "detail": "The primer 1.4.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Appended to the system prompt, so a compaction does not touch them.",
         "source": "orbit"
       },
       {
@@ -955,7 +957,7 @@
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
+        "detail": "The primer 1.4.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. Application context, sent with every turn, so a compaction cannot drop them.",
         "source": "orbit",
         "when": [
           "additional_context"
@@ -978,7 +980,7 @@
         "title": "Orbit's runtime instructions",
         "role": "developer",
         "roleLabel": "Developer",
-        "detail": "The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
+        "detail": "The primer 1.4.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. One developer message, sent again after a compaction.",
         "source": "orbit",
         "when": [
           "developer_message"
@@ -1001,7 +1003,7 @@
         "title": "Orbit's runtime instructions",
         "role": "user",
         "roleLabel": "User · turn input",
-        "detail": "The primer 1.4.0, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
+        "detail": "The primer 1.4.1, then the CLI's absolute path, files, evidence, progress, waits and the wiki. At the top of every turn's input.",
         "source": "orbit",
         "when": [
           "turn_input"

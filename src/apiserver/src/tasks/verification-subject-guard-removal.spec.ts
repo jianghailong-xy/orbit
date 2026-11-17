@@ -345,7 +345,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 66,
+  assert.equal(core.length, 67,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -373,7 +373,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'cheap: three `open_list_epoch_*` triggers on `task`, three on `session`, and three plus '
     + '`conversation_turn_evidence_review_deadline` on `conversation_turn`, and 65 once 0615 added '
     + '`task_fork_guard` to `task`, which refuses a write that would change where a forked task starts, and 66 once '
-    + '0850 added `session_help_ask_guard` to `session`, which refuses a write that would make a session an Ask or not');
+    + '0850 added `session_help_ask_guard` to `session`, which refuses a write that would make a session an Ask or not, '
+    + 'and 67 once 1060 added `condition_ended_with_task` to `task`, which ends a task\'s condition when it is cancelled, '
+    + 'done or failed');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -385,7 +387,8 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'and 34 until 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   assert.deepEqual(
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
-    ['conversation_turn_evidence_review_deadline',
+    ['condition_ended_with_task',
+      'conversation_turn_evidence_review_deadline',
       'conversation_turn_open_list_epoch_delete',
       'conversation_turn_open_list_epoch_insert',
       'conversation_turn_open_list_epoch_update',
@@ -416,7 +419,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '`session_cursor_runner_acquisition_guard` and 0441\'s two `project_rollup_candidate_task_*` '
     + 'and 0476\'s `session_wiki_chat_space_guard`. '
     + '0484\'s nine `open_list_epoch_*` triggers and `conversation_turn_evidence_review_deadline`, '
-    + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`. '
+    + 'and 0615\'s `task_fork_guard`, and 0850\'s `session_help_ask_guard`, and 1060\'s `condition_ended_with_task`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(
