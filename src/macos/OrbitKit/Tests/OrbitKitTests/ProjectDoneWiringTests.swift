@@ -128,11 +128,9 @@ final class ProjectDoneWiringTests: XCTestCase {
                       "Ask the coordinator sends the card's own facts as one turn")
     }
 
-    /// The transcript draws each kind, and both whole where they arrived: the done card is the
-    /// question and then its receipt, in the conversation itself (mock ⑤ ①–③, the browser's inline
-    /// `ProjectDoneCard`) — not a preview that opens a review, which is what it was before
-    /// (evidence revision 1's first gap).
-    func testTheTranscriptDrawsBothCardsWholeWhereTheyArrived() throws {
+    /// The transcript draws each kind: the done question as a preview whose press opens the whole
+    /// card in the review sheet (the owner, 2026-11-17), and why it is not done whole, inline.
+    func testTheTranscriptPreviewsTheDoneQuestionAndDrawsWhyNotDoneWhole() throws {
         let approvals = try source(Self.approvals)
         let dispatch = code(try section(approvals, from: "struct DeliveredDecisionCardView: View {",
                                         to: ".environment(\\.approvalReviewTarget, .delivered(card))"))
@@ -153,8 +151,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         }
         XCTAssertTrue(card.contains("openItems: ProjectDone.openItemsCount(console.openItems),"),
                       "Orbit checked counts the open-items read the card is drawn beside")
-        XCTAssertTrue(card.contains(".environment(\\.approvalReviewTarget, nil)"),
-                      "with no review target the card takes ApprovalReviewLayout's whole-card path")
+        XCTAssertFalse(card.contains(".environment(\\.approvalReviewTarget, nil)"),
+                      "the row's .delivered target makes the question a preview that opens the review")
         let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
                                        to: "/// The start card itself"))
         XCTAssertTrue(notDone.contains("onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })"))
@@ -169,8 +167,8 @@ final class ProjectDoneWiringTests: XCTestCase {
         let view = try source(Self.consoleView)
         let route = code(try section(view, from: "private func openReview(for row: TranscriptRow) {",
                                      to: "default:"))
-        XCTAssertFalse(route.contains(".projectDone"),
-                       "the needs-you bar scrolls to the done card; there is no review to open")
+        XCTAssertTrue(route.contains(".projectDone:") || route.contains(".projectDone,"),
+                      "the open-question capsule opens the done card's review, as a tap on its preview does")
         XCTAssertFalse(route.contains(".projectNotDone"), "why it is not done is drawn whole, inline")
     }
 
