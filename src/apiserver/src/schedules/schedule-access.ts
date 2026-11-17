@@ -216,8 +216,15 @@ export function checkOnlyAsksOn(capabilities: readonly string[] | null | undefin
 }
 
 /**
- * The permission mode the claim hands the runner: the session's own, except that a CHECK_ONLY run on Claude Code
- * claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't Ask, as S2b ran it.
+ * The permission mode the claim hands the runner: the session's own, except that
+ *  - a CHECK_ONLY run on Claude Code claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't
+ *    Ask, as S2b ran it;
+ *  - an OPEN_PR or LAND run on Claude Code runs in Auto, so that the routine commands an unattended run needs
+ *    (`git fetch`, `npm view`, its tests, `git commit`) do not each wait on a card: measured 2026-11-17, a LAND run
+ *    waited 278 minutes on them and timed out. The level's denials still hold: Claude's --disallowedTools and the
+ *    server door (scheduleRunDeniesApproval) refuse them in every mode. Claude only, as owner-ruled 2026-11-18: no
+ *    other engine's Auto has a classifier (permissionSemantics.ts). A model with no Auto runs as Default
+ *    (normalizeBuiltinPermissionMode). Interim, until per-schedule grants (docs/scheduled-run-grants-design.md).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,
@@ -225,7 +232,11 @@ export function scheduleRunPermissionMode(
   provider: string | null | undefined,
   runnerCapabilities: readonly string[] | null | undefined,
 ): PermissionMode {
-  return claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities) ? PermissionMode.DONT_ASK : mode;
+  if (claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities)) return PermissionMode.DONT_ASK;
+  if ((accessLevel === 'OPEN_PR' || accessLevel === 'LAND') && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE) {
+    return PermissionMode.AUTO;
+  }
+  return mode;
 }
 
 /**

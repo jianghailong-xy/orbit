@@ -309,7 +309,7 @@ The mode each engine gets (`schedules/schedule-access.ts`; measured on the real 
 
 | Engine | `CHECK_ONLY` | `OPEN_PR` | Measured |
 | --- | --- | --- | --- |
-| Claude Code | `default`, with its own allow and deny lists; only a shell command asks (below) | `acceptEdits` | 2.1.325 |
+| Claude Code | `default`, with its own allow and deny lists; only a shell command asks (below) | `auto` since 2026-11-18 (owner ruling: routine commands must not wait on a card; the level's denials still hold through `--disallowedTools` and the server door; Default on a model with no Auto). Interim, until per-schedule grants (docs/scheduled-run-grants-design.md). The same for `LAND` | 2.1.325 |
 | Codex | `plan`, in Codex's read-only sandbox (below) | `acceptEdits` | 0.169.0 |
 | Kimi | `plan` | `acceptEdits` | 2.5.3 |
 | OpenCode | `plan` (denies everything but reads) | refused: `SCHEDULE_ACCESS_NOT_ENFORCEABLE` | 1.19.5 |
