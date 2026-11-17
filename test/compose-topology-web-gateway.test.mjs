@@ -158,6 +158,32 @@ test('the session stream route takes /api/sessions/:id/events alone, and hashes 
   }
 });
 
+// The viewer streams' locations (task 34yQEOwNFB5lKxKxGQmAY): a guest's and a public link visitor's, over the session
+// streams' upstream and keyed by the same variable.
+const GUEST_STREAM = /^location ~ \^\/api\/guest-sessions\/\S+ \{/m;
+const SHARED_STREAM = /^location ~ \^\/api\/shared\/\S+ \{/m;
+
+test('the viewer stream routes take the guest and public link streams alone: a guest\'s by its session, a link\'s by its token', () => {
+  const key = (header) => {
+    const pattern = new RegExp(uncommented(routes).match(header)[0].replace(/^location ~ (\S+) \{$/, '$1'));
+    return (uri) => pattern.exec(uri)?.groups?.orbit_stream_session ?? null;
+  };
+  const guest = key(GUEST_STREAM);
+  assert.equal(guest('/api/guest-sessions/343dlzsYWKo5z8l2M8tsB/stream'), '343dlzsYWKo5z8l2M8tsB');
+  // The query, where a guest's access_token rides, is not part of the URI a location matches.
+  for (const other of ['/api/guest-sessions/s1', '/api/guest-sessions/s1/events', '/api/guest-sessions/s1/stream/x',
+    '/api/guest-sessions//stream', '/api/x/guest-sessions/s1/stream', '/api/sessions/s1/stream']) {
+    assert.equal(guest(other), null, `${other} stays on the first apiserver`);
+  }
+  const shared = key(SHARED_STREAM);
+  assert.equal(shared('/api/shared/tok_AbC-123/stream'), 'tok_AbC-123');
+  assert.equal(shared('/api/shared/tok_AbC-123/sessions/343dlzsYWKo5z8l2M8tsB/stream'), 'tok_AbC-123');
+  for (const other of ['/api/shared/t1', '/api/shared/t1/events', '/api/shared/t1/sessions/s1', '/api/shared/t1/sessions/s1/events',
+    '/api/shared/t1/sessions//stream', '/api/shared/t1/sessions/s1/x/stream', '/api/shared//stream', '/api/x/shared/t1/stream']) {
+    assert.equal(shared(other), null, `${other} stays on the first apiserver`);
+  }
+});
+
 test('both routes proxy exactly as the /api/ location does, to their upstream, and give up on a gone apiserver within 2 s', () => {
   // The /api/ location's settings, less what picks the upstream and the upload limit, which no stream or token needs.
   const api = directives(block(main, /^\s*location \/api\/ \{/m))
@@ -165,6 +191,8 @@ test('both routes proxy exactly as the /api/ location does, to their upstream, a
   const cases = [
     [/^location ~ \S+ \{/m, 'proxy_pass http://orbit_session_streams$request_uri'],
     [/^location = \/api\/runner\/link-token \{/m, 'proxy_pass http://orbit_link_tokens$request_uri'],
+    [GUEST_STREAM, 'proxy_pass http://orbit_session_streams$request_uri'],
+    [SHARED_STREAM, 'proxy_pass http://orbit_session_streams$request_uri'],
   ];
   for (const [header, pass] of cases) {
     const d = directives(block(routes, header));
@@ -172,8 +200,11 @@ test('both routes proxy exactly as the /api/ location does, to their upstream, a
     assert.ok(d.includes('proxy_connect_timeout 2s'));
     assert.deepEqual(d.filter((x) => !/^(proxy_pass|error_page) /.test(x) && x !== 'proxy_connect_timeout 2s').sort(), api);
   }
-  // Nothing else is routed there: the two locations, and the streams' fallback, which only nginx sends to.
-  assert.deepEqual(uncommented(routes).match(/^location \S+/gm), ['location ~', 'location @orbit_stream_any_apiserver', 'location =']);
+  // Nothing else is routed there: the four locations, and the streams' fallback, which only nginx sends to.
+  assert.deepEqual(uncommented(routes).match(/^location \S+ \S+/gm), ['location ~ ^/api/sessions/(?<orbit_stream_session>[^/]+)/events$',
+    'location ~ ^/api/guest-sessions/(?<orbit_stream_session>[^/]+)/stream$',
+    'location ~ ^/api/shared/(?<orbit_stream_session>[^/]+)(?:/sessions/[^/]+)?/stream$',
+    'location @orbit_stream_any_apiserver {', 'location = /api/runner/link-token']);
 });
 
 test('a stream the gateway could not open is opened once more on any apiserver, a GET only (task 34wTlHHwbkvPyPDtw1Z88)', () => {
@@ -182,6 +213,8 @@ test('a stream the gateway could not open is opened once more on any apiserver, 
   // proxy_intercept_errors is off, so an apiserver's own answer passes through.
   const stream = directives(block(routes, /^location ~ \S+ \{/m));
   assert.ok(stream.includes('error_page 502 504 = @orbit_stream_any_apiserver'));
+  // The viewer streams fall back alike, and are proxied exactly as the session's stream is.
+  for (const header of [GUEST_STREAM, SHARED_STREAM]) assert.deepEqual(directives(block(routes, header)).sort(), [...stream].sort());
   assert.ok(!uncommented(routes).includes('proxy_intercept_errors'));
   const body = block(routes, /^location @orbit_stream_any_apiserver \{/m);
   // Nothing but a GET is sent again: anything else answers the 502 it had.

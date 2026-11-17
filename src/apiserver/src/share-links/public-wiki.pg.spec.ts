@@ -49,6 +49,7 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { SessionsService } from '../sessions/sessions.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
@@ -287,6 +288,8 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
     providers: [
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma, new WikiDocs(prisma, {} as never)) },
       // A wiki link reads neither: the transcript and attachment routes answer it the one 404.
+      // SharedController's streams, which nothing here opens.
+      { provide: ViewerStreamService, useValue: {} },
       { provide: SessionsService, useValue: {} },
       { provide: AttachmentsService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },

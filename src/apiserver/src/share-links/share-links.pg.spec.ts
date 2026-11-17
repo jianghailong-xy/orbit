@@ -65,6 +65,7 @@ import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
 import { ShareLinksController } from './share-links.controller';
 import { ShareLinksService } from './share-links.service';
 
@@ -220,6 +221,8 @@ test('share links: one row per link, an owner interface for three roots, one 404
   @Module({
     controllers: [SharedController, ShareLinksController, SessionsController],
     providers: [
+      // SharedController's streams, which nothing here opens.
+      { provide: ViewerStreamService, useValue: {} },
       { provide: SessionsService, useValue: sessions },
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
