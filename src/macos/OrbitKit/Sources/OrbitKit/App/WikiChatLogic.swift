@@ -342,7 +342,7 @@ public enum WikiChatLogic {
         "chat": "orbit_wiki_chat", "page": "orbit_wiki_page", "selection": "orbit_wiki_selection", "drafts": "orbit_wiki_drafts",
     ]
 
-    /// What the "Orbit attached:" line names a chat note (`wikiChatNoteLabel`, board 42 ②).
+    /// What a chat note is named as where a note is named (`describeNote`; `wikiChatNoteLabel`, board 42 ②).
     public static func noteLabel(_ note: Note) -> String {
         func count(_ n: Int, _ one: String, _ many: String) -> String { n == 1 ? one : fill(many, ["n": "\(n)"]) }
         switch note {

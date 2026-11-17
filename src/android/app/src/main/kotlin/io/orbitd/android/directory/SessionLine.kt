@@ -72,8 +72,8 @@ data class SessionLine(val text: String, val tone: Tone) {
                 // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it can last hours, and
                 // only the owner can shorten it.
                 if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.runnerUpdatingTitle(s.queuedGate), Tone.WARNING)
-                // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
-                if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.title(s.queuedGate), Tone.QUEUED)
+                // A full runner, run or batch reads in plain words, in the queue's own colour (board session-row-runner-full, web `sessionLine`).
+                if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.CAPACITY_HELD_LINE, Tone.QUEUED)
                 // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
                 if (held == null && QueuedDiskLow.isDiskHeld(s.queuedGate)) return SessionLine(QueuedDiskLow.TITLE, Tone.QUEUED)
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)

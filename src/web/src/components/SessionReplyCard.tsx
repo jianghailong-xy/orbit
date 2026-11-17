@@ -31,18 +31,18 @@ export function SessionReplyCards({
   cards,
   seq,
   ts,
-  attached,
+  queued,
 }: {
   cards: readonly Card[];
   seq?: number;
   ts?: string;
-  /** What else delivery appended to the same turn, as its own folded entry. */
-  attached?: ReactNode;
+  /** The queue's status line, while a reply turn waits to be delivered. */
+  queued?: ReactNode;
 }) {
   return (
     <div className="src-wrap" data-seq={seq} data-orbit-round>
       {cards.map((card) => <SessionReplyCard key={card.requestId} card={card} ts={ts} />)}
-      {attached}
+      {queued}
     </div>
   );
 }
