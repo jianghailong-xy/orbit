@@ -225,6 +225,19 @@ private fun FootAction(label: String, color: Color, onPress: (() -> Unit)?) {
         color = color, style = MaterialTheme.typography.labelSmall, textDecoration = TextDecoration.Underline)
 }
 
+/**
+ * One of Orbit's own cards drawn in the owner's language (board 04-owner-cards.html, part 2): one foot for the whole card, as a reply's,
+ * "Translated · Show original" ↔ "Original · Show translation".
+ */
+@Composable
+fun CardTranslationFoot(flipped: Boolean, onFlip: () -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (flipped) TranslationCopy.ORIGINAL else TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+        Sep(muted); FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
+    }
+}
+
 @Composable
 fun TranslationChip(text: String) {
     Text(text, Modifier.testTag("translation-chip").clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)

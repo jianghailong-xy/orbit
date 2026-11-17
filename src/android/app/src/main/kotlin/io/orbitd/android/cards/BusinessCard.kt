@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.translation.TranslationCopy
 import io.orbitd.android.tasks.TaskReopen
 import io.orbitd.android.tasks.TaskReopenCopy
@@ -47,7 +48,10 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     var confirming by remember { mutableStateOf<CardVerb?>(null) }
     // A08-7: the batch review's open task page, by its place in the window; the batch's yes waits on the review it came from.
     var batchPage by rememberSaveable(card.key, card.binding) { mutableStateOf<Int?>(null) }
-    val batchPreview = card.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
+    // Orbit's own cards in the owner's language: one foot flips the whole card to the agent's words and back.
+    var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
+    val shown = OrbitCardTranslation.shown(card, showOriginal)
+    val batchPreview = shown.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
     val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
     // Restart the task is a Run press: named once per drawn card, so a press sent again is the same press, not a second run.
@@ -74,14 +78,15 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         Column(Modifier.alpha(if (recorded != null) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("From Orbit", style = MaterialTheme.typography.labelSmall)
             if (recorded == null) card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-            if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
-            else CardBody(card, open, owner = when {
+            if (batchPreview != null) BatchReviewBody(shown, open, batchPage) { batchPage = it }
+            else CardBody(shown, open, owner = when {
                     card.family != CardFamily.OWNER_CONFIRMATION || CardVerb.CONFIRM_OWNER !in card.actions -> null
                     recorded != null -> OwnerForm(recorded.ownerAnswers, false) {}
                     else -> OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer }
                 }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
                 recorded = recorded != null)
         }
+        if (recorded == null && OrbitCardTranslation.translated(card)) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
         if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
