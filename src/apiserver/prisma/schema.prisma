@@ -9962,6 +9962,8 @@ enum ScheduleRunTrigger {
   SCHEDULED
   CATCH_UP
   MANUAL
+  /// A WHEN schedule's condition fired (migration 1040); `plannedAt` is the firing sample's time.
+  CONDITION
 
   @@map("schedule_run_trigger")
 }
@@ -10011,7 +10013,8 @@ model Schedule {
   intent                   String
   title                    String
   prompt                   String
-  /// `{ kind: ONCE, at }` | `{ kind: DAILY, time }` | `{ kind: WEEKLY, time, weekdays[] }` (schedule-time.ts).
+  /// `{ kind: ONCE, at }` | `{ kind: DAILY, time }` | `{ kind: WEEKLY, time, weekdays[] }` |
+  /// `{ kind: WHEN, conditionId, runsPerWeek, condition }` (schedule-time.ts).
   rule                     Json
   timezone                 String
   startAt                  DateTime            @map("start_at") @db.Timestamptz(3)
@@ -10022,6 +10025,8 @@ model Schedule {
   envelopeAccessLevel      ScheduleAccessLevel @map("envelope_access_level")
   envelopeRunsPerWeek      Int                 @map("envelope_runs_per_week")
   envelopeRunLimitMinutes  Int                 @map("envelope_run_limit_minutes")
+  /// A WHEN rule's approved probe command, as its sha256 (migration 1040); NULL for a timed schedule.
+  envelopeCommandHash      String?             @map("envelope_command_hash")
   state                    ScheduleState       @default(ACTIVE)
   heldReason               String?             @map("held_reason")
   endedReason              ScheduleEndedReason? @map("ended_reason")
@@ -10222,6 +10227,8 @@ model Condition {
   unknownReason        String?                 @map("unknown_reason")
   failedChecks         Int                     @default(0) @map("failed_checks")
   firedAt              DateTime?               @map("fired_at") @db.Timestamptz(3)
+  /// When its schedule was last resumed (migration 1040): silence is counted from the newer of this and the newest sample.
+  resumedAt            DateTime?               @map("resumed_at") @db.Timestamptz(3)
   approvedCommandHash  String                  @map("approved_command_hash")
   approvedAt           DateTime                @map("approved_at") @db.Timestamptz(3)
   taskId               String?                 @map("task_id") @db.Uuid

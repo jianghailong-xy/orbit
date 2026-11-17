@@ -107,6 +107,50 @@ interface CleanSample extends ConditionSampleInput {
   stderrTail: string | null;
 }
 
+/**
+ * Refused past 20 conditions not ENDED in the account (CONDITION_LIMIT_REACHED), counted under the owner's advisory
+ * lock so two creates, or a create and a schedule's resume, cannot both take the twentieth place.
+ */
+export async function assertConditionRoom(tx: Prisma.TransactionClient, ownerId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`condition-limit:${ownerId}`}, 0))`;
+  const live = await tx.condition.count({ where: { ownerId, state: { not: 'ENDED' } } });
+  if (live >= CONDITION_LIMIT_PER_ACCOUNT) {
+    throw new ConflictException({
+      code: CONDITION_LIMIT_REACHED,
+      message: `this account already has ${CONDITION_LIMIT_PER_ACCOUNT} conditions that have not ended; end one first`,
+    });
+  }
+}
+
+/** A condition for a task or a schedule, inside the caller's transaction (ConditionsService.createCondition). */
+export async function createConditionRow(tx: Prisma.TransactionClient, input: ConditionCreateInput): Promise<Condition> {
+  const command = input.command.trim();
+  if (!command) throw new BadRequestException('a condition needs a probe command');
+  if (!input.text.trim()) throw new BadRequestException('a condition needs its text: the condition in words');
+  await assertConditionRoom(tx, input.ownerId);
+  return tx.condition.create({
+    data: {
+      ownerId: input.ownerId,
+      workspaceId: input.workspaceId,
+      probeCommand: command,
+      probeTimeoutSeconds: input.timeoutSeconds ?? 20,
+      compareOp: input.compare.op,
+      compareValue: input.compare.op === 'EXIT_ZERO' ? null : input.compare.value ?? null,
+      holdSeconds: input.holdSeconds ?? 0,
+      rearmOp: input.rearm?.op ?? null,
+      rearmValue: input.rearm && input.rearm.op !== 'EXIT_ZERO' ? input.rearm.value ?? null : null,
+      intervalSeconds: input.intervalSeconds ?? 300,
+      text: input.text.trim(),
+      unit: input.unit ?? null,
+      approvedCommandHash: conditionCommandHash(command),
+      approvedAt: input.approvedAt,
+      taskId: input.taskId ?? null,
+      scheduleId: input.scheduleId ?? null,
+      createdFromSessionId: input.createdFromSessionId ?? null,
+    },
+  });
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function cleanSample(raw: unknown): CleanSample | null {
@@ -178,38 +222,7 @@ export class ConditionsService {
    * account, counted under the owner's advisory lock so two creates cannot both take the twentieth place.
    */
   async createCondition(tx: Prisma.TransactionClient, input: ConditionCreateInput): Promise<Condition> {
-    const command = input.command.trim();
-    if (!command) throw new BadRequestException('a condition needs a probe command');
-    if (!input.text.trim()) throw new BadRequestException('a condition needs its text: the condition in words');
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`condition-limit:${input.ownerId}`}, 0))`;
-    const live = await tx.condition.count({ where: { ownerId: input.ownerId, state: { not: 'ENDED' } } });
-    if (live >= CONDITION_LIMIT_PER_ACCOUNT) {
-      throw new ConflictException({
-        code: CONDITION_LIMIT_REACHED,
-        message: `this account already has ${CONDITION_LIMIT_PER_ACCOUNT} conditions that have not ended; end one first`,
-      });
-    }
-    return tx.condition.create({
-      data: {
-        ownerId: input.ownerId,
-        workspaceId: input.workspaceId,
-        probeCommand: command,
-        probeTimeoutSeconds: input.timeoutSeconds ?? 20,
-        compareOp: input.compare.op,
-        compareValue: input.compare.op === 'EXIT_ZERO' ? null : input.compare.value ?? null,
-        holdSeconds: input.holdSeconds ?? 0,
-        rearmOp: input.rearm?.op ?? null,
-        rearmValue: input.rearm && input.rearm.op !== 'EXIT_ZERO' ? input.rearm.value ?? null : null,
-        intervalSeconds: input.intervalSeconds ?? 300,
-        text: input.text.trim(),
-        unit: input.unit ?? null,
-        approvedCommandHash: conditionCommandHash(command),
-        approvedAt: input.approvedAt,
-        taskId: input.taskId ?? null,
-        scheduleId: input.scheduleId ?? null,
-        createdFromSessionId: input.createdFromSessionId ?? null,
-      },
-    });
+    return createConditionRow(tx, input);
   }
 
   /**
@@ -324,7 +337,7 @@ export class ConditionsService {
     const candidates = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id" FROM "condition"
        WHERE "state" IN ('WAITING', 'HOLDING', 'FIRED')
-         AND COALESCE("last_sample_at", "approved_at") <= ${now}::timestamptz - ("interval_seconds" * 3) * interval '1 second'
+         AND GREATEST(COALESCE("last_sample_at", "approved_at"), "resumed_at") <= ${now}::timestamptz - ("interval_seconds" * 3) * interval '1 second'
        LIMIT 500
     `;
     const alerts: ConditionAlert[] = [];
@@ -334,7 +347,9 @@ export class ConditionsService {
         const condition = await this.lock(tx, id);
         if (!condition || !silentSince(condition, condition, now)) return undefined;
         const asleep = await this.runnerAsleep(tx, condition);
-        const step = evaluateSilence(condition, { ...machineOf(condition), approvedAt: condition.approvedAt }, now, asleep);
+        const step = evaluateSilence(
+          condition, { ...machineOf(condition), approvedAt: condition.approvedAt, resumedAt: condition.resumedAt }, now, asleep,
+        );
         if (!step.enteredUnknown) return undefined;
         unknown += 1;
         return this.write(tx, condition, step.next, [step]);

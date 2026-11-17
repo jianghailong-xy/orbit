@@ -71,7 +71,9 @@ import {
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
-import { scheduledRunTurn } from './schedule-run-block';
+import type { ConditionFiring } from '../conditions/conditions.service';
+import { sampleHolds } from '../conditions/condition-evaluation';
+import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import {
   scheduleBudgetStarts,
   scheduleOverBudget,
@@ -237,7 +239,8 @@ export function waitedOnCards(cards: Array<{ createdAt: Date; decidedAt: Date | 
 
 /** How far back a slot may still be caught up, or retried: one period of its rule. */
 export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date): number {
-  if (rule.kind === 'ONCE') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // A WHEN run's slot is its firing: like a ONCE slot, it may start for a day, and is MISSED after.
+  if (rule.kind === 'ONCE' || rule.kind === 'WHEN') return SCHEDULE_ONCE_CATCH_UP_MS;
   const next = nextDueAt(rule, timezone, slot);
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }
@@ -343,6 +346,32 @@ export class ScheduleRunsService {
     );
     await this.alert(alerts);
     return fired;
+  }
+
+  /**
+   * A WHEN schedule's condition fired (docs/condition-triggers-design.md §5.2), inside the transaction that fired it,
+   * which holds the condition's row lock: one firing, one run. The run is CONDITION, planned at the firing sample's
+   * time, QUEUED under the overlap rule; from there it is any run's — the start checks, the weekly budget (a firing
+   * over it is MISSED OVER_BUDGET at its start), the report, findings and who hears. A schedule that is not ACTIVE
+   * (HELD) starts nothing, as a held schedule fires no slot; the condition waits for its re-arm either way. Returns the
+   * run's id, written on the FIRED event, or null.
+   */
+  async fireCondition(tx: Tx, firing: ConditionFiring): Promise<string | null> {
+    const scheduleId = firing.condition.scheduleId;
+    if (!scheduleId) return null;
+    const schedule = await this.lock(tx, scheduleId);
+    if (!schedule || schedule.state !== 'ACTIVE') return null;
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || rule.conditionId !== firing.condition.id) return null;
+    await this.skipQueued(tx, scheduleId, this.clock());
+    const id = randomUUID();
+    await tx.scheduleRun.create({
+      data: {
+        id, scheduleId, scheduleRevision: schedule.revision, plannedAt: firing.at, trigger: 'CONDITION', state: 'QUEUED',
+      },
+    });
+    await tx.conditionEvent.update({ where: { id: firing.eventId }, data: { runId: id } });
+    return id;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1472,7 +1501,44 @@ export class ScheduleRunsService {
       note: schedule.note,
       accessLevel: schedule.accessLevel,
       runLimitMinutes: schedule.runLimitMinutes,
+      firing: run.trigger === 'CONDITION' ? await this.firingOf(tx, schedule, run) : null,
     });
+  }
+
+  /**
+   * What a CONDITION run's block says about its firing (docs/condition-triggers-design.md §6.1): the condition, the
+   * reading that fired it, since when the comparison held (the oldest of the unbroken true readings up to the firing;
+   * a failed check neither breaks nor starts it), and the recent samples up to the firing, newest first.
+   */
+  private async firingOf(tx: Tx, schedule: Schedule, run: ScheduleRun): Promise<RunBlockFiring | null> {
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || !rule.conditionId) return null;
+    const condition = await tx.condition.findUnique({ where: { id: rule.conditionId } });
+    if (!condition) return null;
+    const samples = await tx.conditionSample.findMany({
+      where: { conditionId: condition.id, at: { lte: run.plannedAt } },
+      orderBy: { at: 'desc' },
+      take: 200,
+    });
+    const fired = samples[0] && samples[0].at.getTime() === run.plannedAt.getTime() ? samples[0] : null;
+    let since: Date | null = null;
+    for (const sample of samples) {
+      const held = sampleHolds(condition.compareOp, condition.compareValue, sample);
+      if (held === false) break;
+      if (held) since = sample.at;
+    }
+    return {
+      text: condition.text,
+      unit: condition.unit,
+      at: run.plannedAt,
+      value: fired ? (condition.compareOp === 'EXIT_ZERO' ? fired.exitCode : fired.value) : null,
+      since,
+      samples: samples.slice(0, RUN_BLOCK_MAX_SAMPLES).map((s) => ({
+        at: s.at,
+        value: condition.compareOp === 'EXIT_ZERO' ? (s.outcome === 'EXIT' ? s.exitCode : null) : s.outcome === 'VALUE' ? s.value : null,
+        outcome: s.outcome,
+      })),
+    };
   }
 
   private openInput(schedule: Schedule, run: ScheduleRun, sessionId: string, prompt: string, plan: StartPlan): OpenRunSession {

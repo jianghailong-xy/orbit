@@ -46,7 +46,8 @@ This design is that pre-check, made the trigger.
 - Watch still reads only Orbit's records. Its predicate grammar gains no leaf, and the server still runs no command.
 - A condition is not a dependency state. `dependencyState` stays `NONE | READY | BLOCKED | BLOCKED_FAILED`; a
   condition answers "when does this start", as `runAt` does, and is evaluated beside it.
-- Schedules keep their two access levels. There is no level that may act on an outside system by itself.
+- Schedules keep their three access levels, `CHECK_ONLY`, `OPEN_PR` and `LAND`, and a `WHEN` schedule takes any of them
+  as a timed one does. `LAND` lands code on main; none of them is a level that may act on an outside system by itself.
 - The agent-first rule of the schedule design holds: nothing here is a form. A person says the condition; an agent
   writes the probe; the card reads it back.
 
@@ -183,7 +184,8 @@ A condition that has not fired for 30 days asks the owner once ("Still waiting f
 
 Nothing new is built for this, by decision.
 
-- A `WHEN` schedule is `CHECK_ONLY` or `OPEN_PR`. A run that wants to change the outside system runs the command,
+- A `WHEN` schedule is `CHECK_ONLY`, `OPEN_PR` or `LAND`, as a timed schedule is; `LAND` lands code on main and acts on
+  no outside system. A run that wants to change the outside system runs the command,
   and that command is an approval card: the run is AWAITING_APPROVAL and the card is in **Waiting on you**
   (schedule design §6.4). Unanswered for 2 hours, the run ends and nothing was done. "Always allow" on such a card
   is how an owner later lets a guard act by itself, one command pattern at a time.

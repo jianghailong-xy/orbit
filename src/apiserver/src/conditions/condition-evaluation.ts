@@ -109,6 +109,12 @@ function holds(op: ConditionCompareOp, line: number | null, reading: { value: nu
   }
 }
 
+/** Whether one sample holds the comparison: null when it read nothing (a failed check is neither true nor false). */
+export function sampleHolds(op: ConditionCompareOp, line: number | null, sample: ConditionSampleInput): boolean | null {
+  const reading = readingOf(sample, op);
+  return reading.ok ? holds(op, line, reading) : null;
+}
+
 function enterUnknown(m: ConditionMachine, at: Date, reason: ConditionUnknownReason, step: ConditionStep): void {
   m.state = 'UNKNOWN';
   m.unknownSince = at;
@@ -190,11 +196,11 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
  */
 export function evaluateSilence(
   rules: Pick<ConditionRules, 'intervalSeconds'>,
-  machine: ConditionMachine & { approvedAt: Date },
+  machine: ConditionMachine & { approvedAt: Date; resumedAt?: Date | null },
   now: Date,
   runnerAsleep: boolean,
 ): ConditionStep {
-  const { approvedAt: _approvedAt, ...rest } = machine;
+  const { approvedAt: _approvedAt, resumedAt: _resumedAt, ...rest } = machine;
   const step = blankStep(rest);
   if (machine.state === 'UNKNOWN' || machine.state === 'ENDED') return step;
   if (!silentSince(rules, machine, now)) return step;
@@ -202,12 +208,16 @@ export function evaluateSilence(
   return step;
 }
 
-/** Whether no sample has arrived for three intervals. */
+/**
+ * Whether no sample has arrived for three intervals: since the newest sample (or the approval, before any), or since
+ * its schedule was resumed when that is newer, so a resume does not read as a runner gone quiet.
+ */
 export function silentSince(
   rules: Pick<ConditionRules, 'intervalSeconds'>,
-  machine: { lastSampleAt: Date | null; approvedAt: Date },
+  machine: { lastSampleAt: Date | null; approvedAt: Date; resumedAt?: Date | null },
   now: Date,
 ): boolean {
-  const since = machine.lastSampleAt ?? machine.approvedAt;
+  const from = machine.lastSampleAt ?? machine.approvedAt;
+  const since = machine.resumedAt && machine.resumedAt > from ? machine.resumedAt : from;
   return now.getTime() - since.getTime() >= CONDITION_SILENT_INTERVALS_TO_UNKNOWN * rules.intervalSeconds * 1000;
 }

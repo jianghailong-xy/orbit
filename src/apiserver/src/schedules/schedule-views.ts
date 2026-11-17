@@ -18,6 +18,8 @@ import {
   scheduleRuleText as sharedRuleText,
   scheduleRunsInText,
   scheduleUsageText,
+  scheduleWhenLines,
+  type ScheduleConditionReading,
   type ScheduleRule as SharedRule,
 } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, ScheduleRevision, ScheduleRun } from '@prisma/client';
@@ -43,8 +45,13 @@ export function scheduleReadBack(s: Pick<Schedule, 'readBack' | 'rule' | 'timezo
   if (s.readBack) return s.readBack;
   const rule = s.rule as unknown as ScheduleRule;
   const when = rule.kind === 'ONCE' ? [scheduleRuleText(rule), rule.at.replace('T', ' ')] : [sharedRuleText(rule as SharedRule, 'long')];
-  const what = s.prompt.trim().split(/(?<=[.!?])\s+|\r?\n/, 1)[0] || s.title;
-  return [...when, s.timezone, what].join(SCHEDULE_COPY.separator);
+  // A WHEN rule has no time, so its zone says nothing.
+  if (rule.kind === 'WHEN') return [...when, what(s)].join(SCHEDULE_COPY.separator);
+  return [...when, s.timezone, what(s)].join(SCHEDULE_COPY.separator);
+}
+
+function what(s: Pick<Schedule, 'title' | 'prompt'>): string {
+  return s.prompt.trim().split(/(?<=[.!?])\s+|\r?\n/, 1)[0] || s.title;
 }
 
 interface WorkspaceRef {
@@ -85,6 +92,17 @@ export async function workspaceNames(tx: Tx, ownerId: string, ids: Iterable<stri
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
+/** The runner each workspace's probes run on, for a WHEN rule's "Checked every 5 min on workstation-gpu". */
+export async function workspaceRunnerNames(tx: Tx, ownerId: string, ids: Iterable<string>): Promise<Map<string, string>> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0) return new Map();
+  const rows = await tx.workspace.findMany({
+    where: { id: { in: unique }, ownerId, deletedAt: null },
+    select: { id: true, runner: { select: { name: true } } },
+  });
+  return new Map(rows.filter((r) => r.runner?.name).map((r) => [r.id, r.runner!.name]));
+}
+
 /** The engine the asking session runs, for the card's *Runs in* line. */
 export async function sessionEngines(tx: Tx, ownerId: string, ids: Iterable<string>): Promise<Map<string, string | null>> {
   const unique = [...new Set(ids)].filter(Boolean);
@@ -98,6 +116,8 @@ export interface ScheduleCardContext {
   engines: Map<string, string | null>;
   /** The schedule an UPDATE card is about. */
   schedules: Map<string, Pick<Schedule, 'id' | 'title' | 'timezone' | 'rule' | 'workspaceId'>>;
+  /** The runner of each workspace a WHEN rule's card names; absent, the card leaves the runner out. */
+  runners?: Map<string, string>;
   now: Date;
 }
 
@@ -150,7 +170,15 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
       readBack: p.readBack ?? p.intent,
       intent: p.intent,
       // A card with no zone has no first run yet, so the zone it falls back to is never read.
-      when: { ...when, text: scheduleCreateWhen({ when: when as never }, ctx.now, p.timezone ?? 'UTC').text },
+      when: rule.kind === 'WHEN'
+        ? {
+            ...when,
+            // The When line of the condition-triggers board ③: the condition, its re-arm and how it is checked, and
+            // the command verbatim, which is what Create approves.
+            text: scheduleWhenLines(rule.condition, ctx.runners?.get(asked.workspaceId) ?? null).text,
+            condition: scheduleWhenLines(rule.condition, ctx.runners?.get(asked.workspaceId) ?? null),
+          }
+        : { ...when, text: scheduleCreateWhen({ when: when as never }, ctx.now, p.timezone ?? 'UTC').text, condition: null },
       ...lines,
       today: p.baseline
         ? { key: p.baseline.key, summary: p.baseline.summary ?? null, text: p.baseline.summary ?? p.baseline.key }
@@ -202,6 +230,12 @@ export async function scheduleCardViews(tx: Tx, ownerId: string, requests: Sched
     workspaces: await workspaceNames(tx, ownerId, workspaceIds),
     engines: await sessionEngines(tx, ownerId, requests.map((r) => r.askedBySessionId).filter((id): id is string => !!id)),
     schedules: new Map(schedules.map((s) => [s.id, s])),
+    runners: await workspaceRunnerNames(
+      tx,
+      ownerId,
+      requests.filter((r) => (r.proposed as { rule?: { kind?: string } } | null)?.rule?.kind === 'WHEN')
+        .map((r) => (r.envelopeAsked as unknown as Envelope).workspaceId),
+    ),
     now,
   };
   return requests.map((r) => scheduleCardView(r, ctx));
@@ -292,6 +326,8 @@ export interface ScheduleViewNames {
   agents: Map<string, string>;
   /** By the session a schedule came from. */
   engines: Map<string, string | null>;
+  /** A WHEN schedule's condition, by the schedule's id. */
+  conditions?: Map<string, ScheduleConditionReading>;
 }
 
 /**
@@ -301,7 +337,7 @@ export interface ScheduleViewNames {
 export async function scheduleViewNames(
   tx: Tx,
   ownerId: string,
-  schedules: readonly Pick<Schedule, 'agentId' | 'createdFromSessionId' | 'workspaceId'>[],
+  schedules: readonly Pick<Schedule, 'id' | 'agentId' | 'createdFromSessionId' | 'workspaceId' | 'rule'>[],
 ): Promise<ScheduleViewNames> {
   const agentIds = [...new Set(schedules.map((s) => s.agentId).filter((id): id is string => !!id))];
   const sessionIds = [...new Set(schedules.map((s) => s.createdFromSessionId).filter((id): id is string => !!id))];
@@ -320,7 +356,25 @@ export async function scheduleViewNames(
     const origin = s.createdFromSessionId ? byId.get(s.createdFromSessionId) : undefined;
     if (origin && origin.workspaceId === s.workspaceId) engines.set(origin.id, origin.engine);
   }
-  return { agents: new Map(agents.map((a) => [a.id, a.name])), engines };
+  const whenIds = schedules.filter((s) => (s.rule as { kind?: string } | null)?.kind === 'WHEN').map((s) => s.id);
+  const conditions = whenIds.length
+    ? await tx.condition.findMany({
+        where: { scheduleId: { in: whenIds }, ownerId },
+        select: { id: true, scheduleId: true, text: true, unit: true, state: true, lastValue: true, lastSampleAt: true },
+      })
+    : [];
+  return {
+    agents: new Map(agents.map((a) => [a.id, a.name])),
+    engines,
+    conditions: new Map(conditions.map((c) => [c.scheduleId!, {
+      id: c.id,
+      text: c.text,
+      unit: c.unit,
+      state: c.state,
+      lastValue: c.lastValue,
+      lastSampleAt: c.lastSampleAt?.toISOString() ?? null,
+    }])),
+  };
 }
 
 /** A schedule as the list shows it. */
@@ -348,6 +402,7 @@ export function scheduleView(s: Schedule, workspaces: Map<string, string>, names
       accessLevel: s.envelopeAccessLevel,
       runsPerWeek: s.envelopeRunsPerWeek,
       runLimitMinutes: s.envelopeRunLimitMinutes,
+      commandHash: s.envelopeCommandHash,
     },
     state: s.state,
     heldReason: s.heldReason,
@@ -361,6 +416,8 @@ export function scheduleView(s: Schedule, workspaces: Map<string, string>, names
     createdFromSessionId: s.createdFromSessionId,
     createdAt: s.createdAt.toISOString(),
     endedAt: s.endedAt?.toISOString() ?? null,
+    /** A WHEN rule's condition with its newest reading and its age (condition-triggers board ④); null for a timed one. */
+    condition: names?.conditions?.get(s.id) ?? null,
   };
 }
 
