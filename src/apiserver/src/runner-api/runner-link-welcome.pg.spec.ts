@@ -416,6 +416,8 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
       [firstMissing, 0, true],
       [empty, 0, true],
     ]);
+    // A self-managed runner is never offered the managed runner browser (docs/runner-browser-design.md §2).
+    assert.equal(answer.body.browser, false);
 
     // The hole filled, the seqs after it count again.
     await viaHttpsBatch(holed, [text(4, 'four')]);
