@@ -54,7 +54,7 @@ after(async () => {
 const NOTE = [
   'Where things stand',
   '4 of 6 tasks done; Fix login redirect in review.',
-  'Agreed with the owner',
+  'Rulings not yet recorded',
   "Don't merge Payment retries before Friday's release.",
   'Waiting on',
   'Evidence for Fix login redirect.',
@@ -111,6 +111,8 @@ function services(f: Fixture) {
   const turns: Array<{ sessionId: string; clientTurnId: string; content: string; intent?: string }> = [];
   const openings: Array<{ id: string; prompt: string }> = [];
   const completed: string[] = [];
+  /** What each completion was asked: a handoff's keeps the outgoing coordinator's background work running. */
+  const completeOpts: Array<{ handingOver?: boolean } | undefined> = [];
   const interrupted: string[] = [];
   const published: string[] = [];
   let seq = 100;
@@ -125,8 +127,9 @@ function services(f: Fixture) {
       await db.conversationTurn.deleteMany({ where: { id: turnId, sessionId, status: 'PENDING' } });
     },
     interrupt: async (_owner: string, sessionId: string) => { interrupted.push(sessionId); },
-    complete: async (_owner: string, id: string) => {
+    complete: async (_owner: string, id: string, opts?: { handingOver?: boolean }) => {
       completed.push(id);
+      completeOpts.push(opts);
       await db.session.update({ where: { id }, data: { completedAt: new Date() } });
       return { ok: true };
     },
@@ -153,7 +156,7 @@ function services(f: Fixture) {
   }) as unknown as RealtimeService;
   const projects = new ProjectsService(db as unknown as PrismaService, undefined, sessions, realtime);
   const handoffs = new CoordinatorHandoffService(db as unknown as PrismaService, projects, sessions, realtime);
-  return { projects, handoffs, turns, openings, completed, interrupted, published };
+  return { projects, handoffs, turns, openings, completed, completeOpts, interrupted, published };
 }
 
 /** The note turn the handoff asked for, as a row. */
@@ -214,9 +217,14 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
   const successor = await projectPointer(f);
   assert.notEqual(successor, f.outgoing);
   assert.deepEqual(s.completed, [f.outgoing], 'the outgoing coordinator is completed');
+  // As a handover: its end turn tells the runner to leave its SubAgent runs and bg_run jobs running
+  // (SessionsService.complete, session-complete-keeps-work.spec.ts), and their wake comes here.
+  assert.deepEqual(s.completeOpts, [{ handingOver: true }], 'the completion is a handover');
   const opening = s.openings.find((o) => o.id === successor)!.prompt;
   assert.ok(opening.includes(`<handoff_note>\n${NOTE}\n</handoff_note>`), 'the note — the final top-level text — is in the opening');
-  assert.match(opening, /project_get and task_list win/);
+  assert.match(opening, /disagrees with the note or with the digest above, the later read wins/);
+  assert.ok(opening.indexOf('</state_digest>') < opening.indexOf('<handoff_note>'), 'the digest is in the opening, before the note');
+  assert.ok(!opening.includes('Read first'), 'a successor does not have to read before its first report');
   assert.ok(opening.indexOf('this is its coordinator session') < opening.indexOf('<handoff_note>'), 'after the standing instructions');
 
   // Both waits moved; the PAUSED one kept its state.
@@ -236,8 +244,8 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
   assert.equal(inn.coordinatorHandoffReceived?.handoffFromSessionId, f.outgoing);
   assert.equal(inn.coordinatorHandoffReceived?.note, NOTE);
   assert.deepEqual(inn.coordinatorHandoffReceived?.movedWaits, [
-    { id: active, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
-    { id: paused, label: 'Waiting for "Payment retries" to finish its turn', paused: true },
+    { id: active, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: paused, kind: 'WATCH', label: 'Waiting for "Payment retries" to finish its turn', paused: true },
   ]);
   assert.ok(s.published.includes(successor!), 'the successor is told it received a handoff');
 
@@ -490,7 +498,7 @@ test('the pending-waits preview lists ACTIVE and PAUSED waits, the PAUSED ones m
   await watch(f, f.bystander, 'ACTIVE', { kind: 'TASK', id: f.taskId, leaf: 'TASK_DONE' });
   const s = services(f);
   assert.deepEqual(await s.projects.coordinatorPendingWaits(f.ownerId, f.projectId), [
-    { id: active, label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
-    { id: paused, label: 'Waiting for "Payment retries" to finish its turn', paused: true },
+    { id: active, kind: 'WATCH', label: 'Waiting for "Fix login redirect" to be DONE', paused: false },
+    { id: paused, kind: 'WATCH', label: 'Waiting for "Payment retries" to finish its turn', paused: true },
   ]);
 });

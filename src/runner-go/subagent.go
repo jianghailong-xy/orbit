@@ -186,9 +186,9 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" a turn in this session with the result when it ends: end your turn then instead of polling. With" +
 			" background: true it returns { runId, status: \"running\" } at once and Orbit wakes this session with the" +
 			" result when it ends. SubAgents share your working tree; give parallel ones disjoint files. A SubAgent cannot" +
-			" ask the user anything and cannot delegate further. With workspace (another workspace of this repository, by" +
+			" ask the user anything and cannot delegate further. With workspace (any workspace of this account, by" +
 			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
-			" remote SubAgents run on that workspace's own HEAD and return text only. They do not see your uncommitted" +
+			" remote SubAgents run on that workspace's own HEAD in its own repository and return text only. They do not see your uncommitted" +
 			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
 			" they discarded. Before naming a workspace, provider_list with that workspace says which provider × engine" +
 			" its runner can run, with the reason for each it cannot. " + subagentTypesDescription(defs),
@@ -208,7 +208,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
 			"resume":    str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message. A remote one continues on the workspace it ran on, in a new worktree of that workspace's HEAD: what it changed before was discarded. Leave out workspace and needs."),
-			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only. Check it first with provider_list(workspace): it says which providers and models that workspace's runner can run, and why not."),
+			"workspace": str("Run on any workspace of this account, by name (e.g. one on a Mac). Runs on that workspace's own HEAD in its own repository and returns text only. Check it first with provider_list(workspace): it says which providers and models that workspace's runner can run, and why not."),
 			"needs": map[string]interface{}{
 				"type": "array", "items": map[string]interface{}{"type": "string"},
 				"description": "Runner capabilities the work needs, e.g. [\"os:darwin\"]: Orbit picks a workspace of this repository whose runner reports them. Runs on that workspace's own HEAD and returns text only.",
@@ -1029,7 +1029,10 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	// to a run stopped because its session ended: there is nobody left to wake.
 	// A run stopped because the session moved owes one too: the session goes on in its new home.
 	answeredElsewhere := run.background || run.detached || status == subagentStatusInterrupted
-	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver
+	// And a run its session left running when the coordinator handed over: its parent's engine has gone, and the
+	// server forwards the wake to the successor (session_keep_work.go).
+	wake := (answeredElsewhere && status != subagentStatusStopped) || stopReason == subagentStopHandedOver ||
+		(s.keptPastEnd.Load() && stopReason == "")
 	s.subagents.mu.Unlock()
 
 	_ = os.WriteFile(filepath.Join(dir, "result.txt"), []byte(result), 0o600)

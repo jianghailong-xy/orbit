@@ -176,6 +176,11 @@ class ScheduleDisplayTest {
             schedule(state = "PAUSED"), schedule())))
     }
 
+    @Test fun landMayCopy() {
+        assertEquals("Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.", ScheduleDisplay.mayText("LAND"))
+        assertEquals(2, ScheduleDisplay.accessOrder["LAND"])
+    }
+
     // lines
 
     @Test fun rowLinesReadLikeBoardOne() {

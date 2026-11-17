@@ -462,7 +462,9 @@ object ExceptionCards {
                 Run(" after ${checkDuration((check["durationMs"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)}")),
                 CheckTail.of(check.text("outputTail")))
         }
-        if (facts.flag("branchUnchanged")) rows += FactRow(branchLabel, branchUnchanged)
+        // The server writes the sentence by the job the check failed in (a task's landing, or a promotion of the project branch or of one
+        // task's branch to main); a server older than `branchLine` leaves the task's.
+        if (facts.flag("branchUnchanged")) rows += FactRow(branchLabel, facts.text("branchLine") ?: branchUnchanged)
         facts.obj("failure")?.let { failure ->
             rows += FactRow(howLabel, howFailed(failure))
             chainStanding(failure)?.let { rows += FactRow(retriesLabel, it) }

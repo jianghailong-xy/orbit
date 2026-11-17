@@ -340,8 +340,8 @@ public extension Approvals {
             }
         }
         written("workDir", "Working directory")
-        written("systemPrompt", "System prompt")
-        written("appendSystemPrompt", "Appended system prompt")
+        written("systemPrompt", "Base instructions")
+        written("appendSystemPrompt", "Runtime instructions")
         if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
         if let worktree = changes?["enableWorktree"]?.boolValue {
             fields.append(.init(caption: "Worktree", value: worktree

@@ -272,7 +272,8 @@ A card is not standing permission for a world that has changed. Before each run 
 
 - the owner still owns the workspace, the workspace is not deleted, the agent exists and is enabled;
 - the schedule is inside its envelope, and the mode for its access level is still within the account's default mode;
-- for `OPEN_PR`: the workspace still has a repository.
+- for `OPEN_PR` and `LAND`: the workspace still has a repository;
+- for `LAND`: worktrees are enabled, so its sessions can be merged.
 
 When a check fails the run is HELD with the reason, the schedule moves to HELD, and the owner gets an item in
 **Waiting on you**. A HELD schedule fires nothing until it is resumed. It is never retried in silence.
@@ -282,7 +283,7 @@ The reasons (`heldReason`, on the run and the schedule): `WORKSPACE_NOT_OWNED`, 
 `OUTSIDE_ENVELOPE`, `ACCESS_NOT_ENFORCEABLE` (§6.2, on the engine the run would use), `MODE_WIDER_THAN_ACCOUNT_DEFAULT`
 (its on-hold item and its refusal to resume say what to change: "your account's default permission mode is narrower
 than its runs use (set it to Default in Settings > General)"),
-`NO_REPOSITORY`, and `SESSION_REFUSED` when the session door refuses the run's session before writing it (a 4xx: the
+`NO_REPOSITORY`, `WORKTREE_DISABLED` (LAND needs worktrees), and `SESSION_REFUSED` when the session door refuses the run's session before writing it (a 4xx: the
 request cannot be served as it stands, and retrying would not change that). A run uses the engine and credential of
 the session that created the schedule while that session exists in the schedule's workspace and is not in Trash,
 else what the workspace last ran. Resuming a HELD schedule runs the
@@ -291,12 +292,18 @@ same checks and is refused `SCHEDULE_START_CHECK_FAILED` while one still fails.
 ### 6.2 Access levels
 
 The agent picks the level from what the intent needs: a check, a report or a summary is `CHECK_ONLY`; "open a PR",
-"bump it", "fix it" is `OPEN_PR`.
+"bump it", "fix it" is `OPEN_PR`; an explicit request to land changes on main without a PR is `LAND`.
+The order is `CHECK_ONLY` < `OPEN_PR` < `LAND`: creating LAND or widening to it waits on the owner’s Allow card.
 
 | Level | Card says | Session | May not |
 | --- | --- | --- | --- |
 | `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode (`default` on Claude Code, below), no worktree | edit files, create tasks |
 | `OPEN_PR` | "edits in its own worktree and opens a PR; can't merge or deploy" | `acceptEdits` mode, own worktree when the workspace has worktrees | `session_merge`, release and deploy tools |
+| `LAND` | "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy." | same modes as `OPEN_PR`, own worktree required | same denied tools as `OPEN_PR`; no PR |
+
+`LAND` uses the same ordered modes as `OPEN_PR`. Both deny `session_merge`, `integration_*`, `gh pr merge`,
+`git push` to main, release and deploy tools, `Skill(release)` and `Skill(upgrade)`. A LAND run commits on its branch
+and reports; it never opens a PR or merges itself.
 
 The mode each engine gets (`schedules/schedule-access.ts`; measured on the real CLIs, §12):
 
@@ -344,6 +351,8 @@ Only a shell command can ask. The claim hands the runner, for that run only:
   - `notify`;
   - reads: `task_get`, `task_list`, `session_get`, `session_search`, `project_get`, `wiki_search`, `wiki_get`,
     `file_fetch`, `file_list`;
+  - `guide`, which reads the operation catalogue and asks the server nothing (since contract 1.10.0, which merged
+    it from the project line);
   - `WebFetch` and `WebSearch`.
 
   These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`).
@@ -466,6 +475,13 @@ first turn carries a block written by the control plane, then the prompt:
 A fresh session per run keeps each run's context small. What carries over is on the schedule: the intent, the
 findings and the note.
 
+After a `LAND` turn settles and has reported `CHANGED` or `NO_CHANGE`, Orbit lands commits ahead of its base through
+SessionsService’s ordinary Merge-to-main path and the same merge check. It waits for the runner’s receipt before
+recording the landed SHA (`landedSha`) and appending it to the run summary. No commits means no merge. A FAILED run,
+a run stopped at its limit, or an unsuccessful turn lands nothing. A refusal, conflict or red merge check fails the
+run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on you** path (§7.3). Landing status
+(`WAITING`, `MERGING`, `LANDED`, `NO_COMMITS`, `FAILED`) survives restarts; replays do not land or notify twice.
+
 ### 6.4 Approvals while nobody is watching
 
 - A run that hits an approval card moves to AWAITING_APPROVAL and the card goes to **Waiting on you**.
@@ -494,7 +510,7 @@ findings and the note.
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
 | `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
-| `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
+| `LANDING_FAILED`, `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
 - Retry: after 1, 5 and 15 minutes, then once an hour, for as long as the catch-up window lasts; a retry that would
@@ -525,7 +541,7 @@ findings and the note.
 | NO_CHANGE | no | |
 | CHANGED, new key | once | push, opens the run's session |
 | CHANGED, known key | no; `lastSeenRunId` moves and `links` merge | |
-| FAILED | yes | push and **Waiting on you** |
+| FAILED (including `LANDING_FAILED`) | yes | push and **Waiting on you** |
 | HELD, AWAITING_APPROVAL | yes | push and **Waiting on you** |
 | the run ended its own schedule (§8.3) | once | push, opens the schedule |
 | a slot MISSED over the weekly budget (§4) | once, not for the next slots in a row | push, opens the schedule |
@@ -592,6 +608,10 @@ in progress keeps the revision it started with.
 
 - `intent` changes only when the person restates the goal. An agent rewriting its `prompt` leaves the intent as it
   was, so the history always shows what was asked next to what is being done.
+- `readBack` is optional: one first-person sentence (at most 500 characters) describing the schedule after the
+  change. It applies at once inside the envelope, including by itself, and is recorded in the revision’s before /
+  after and undoable. Pass it when the prompt or access changes as well as the time; a rule or time-zone change
+  without it clears the old read-back so the read derives it.
 - In the inspector, **Change…** opens a new session in the schedule's workspace with the schedule attached, and the
   person types what to change.
 

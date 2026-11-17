@@ -45,7 +45,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { isUsageLimitErrorText } from '@orbit/shared';
+import { SCHEDULE_COPY, scheduleFill, isUsageLimitErrorText } from '@orbit/shared';
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
@@ -72,7 +72,13 @@ import {
   type ScheduleNotifier,
 } from './schedule-attention';
 import { scheduledRunTurn } from './schedule-run-block';
-import { scheduleOverBudget, scheduleStartCheck, type StartPlan } from './schedule-start-check';
+import {
+  scheduleBudgetStarts,
+  scheduleOverBudget,
+  scheduleOverBudgetMessage,
+  scheduleStartCheck,
+  type StartPlan,
+} from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
 import {
   SCHEDULE_CLOCK,
@@ -117,7 +123,8 @@ export type ScheduleFailureReason =
   | 'ENGINE_CRASHED'
   | 'APPROVAL_TIMEOUT'
   | 'RUN_LIMIT'
-  | 'CANCELLED_BY_OWNER';
+  | 'CANCELLED_BY_OWNER'
+  | 'LANDING_FAILED';
 
 /** The reasons of a run that never reached its engine: the only ones retried. */
 export const RETRIED_FAILURES: ReadonlySet<ScheduleFailureReason> = new Set([
@@ -155,6 +162,8 @@ export interface OpenRunSession {
 /** The session doors a run needs, so the passes can be driven in a spec without a runner. */
 export interface ScheduleRunSessionPort {
   open(input: OpenRunSession): Promise<void>;
+  /** Queue the ordinary Merge-to-main path, including its merge check. */
+  land(ownerId: string, sessionId: string): Promise<void>;
   interrupt(ownerId: string, sessionId: string): Promise<void>;
   complete(ownerId: string, sessionId: string): Promise<void>;
   /** Retire the session: no auto-retry, ended; one already ended or never written counts as retired. */
@@ -627,6 +636,112 @@ export class ScheduleRunsService {
     return 'UNCHANGED';
   }
 
+  /** LAND reports wait for the turn, then use the owner's merge path and its durable receipt. */
+  async landReportedRuns(batch = 25): Promise<void> {
+    const pending = await this.prisma.scheduleRun.findMany({
+      where: { accessLevel: 'LAND', state: { in: ['CHANGED', 'NO_CHANGE'] }, landingStatus: { in: ['WAITING', 'MERGING'] } },
+      orderBy: { endedAt: 'asc' }, take: batch,
+    });
+    for (const run of pending) {
+      try {
+        await this.landRun(run);
+      } catch (error) {
+        this.logger.error(`schedule run ${run.id} landing pass failed: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  private async landRun(run: ScheduleRun): Promise<void> {
+    const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
+    if (!session || session.deletedAt || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED
+        || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
+      await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
+      return;
+    }
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way.
+    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED) {
+      // Reporting does not exempt the rest of a LAND turn from its run limit.
+      const opening = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
+      });
+      if (opening?.deliveredAt) {
+        const schedule = await this.prisma.schedule.findUniqueOrThrow({ where: { id: run.scheduleId } });
+        const cards = await this.prisma.approval.findMany({ where: { sessionId: session.id, createdAt: { gte: opening.deliveredAt } } });
+        const now = this.clock();
+        const working = now.getTime() - opening.deliveredAt.getTime() - waitedOnCards(cards, now);
+        if (working >= schedule.runLimitMinutes * MINUTE) {
+          await this.sessions.interrupt(session.ownerId, session.id);
+          await this.settleLanding(run.id, 'FAILED', null, 'The run exceeded its working-time limit after reporting.', 'RUN_LIMIT');
+        }
+      }
+      return;
+    }
+    if (!session.branchSha || !session.baseSha) {
+      await this.settleLanding(run.id, 'FAILED', null, 'The runner did not report the branch and base commits.');
+      return;
+    }
+    const receipt = await this.prisma.sessionMergeReceipt.findFirst({
+      where: { ownerId: session.ownerId, sessionId: session.id, sourceSha: session.branchSha,
+        targetBranch: 'main', result: { in: ['MERGED', 'ALREADY_MERGED'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (receipt?.targetShaAfter) {
+      await this.settleLanding(run.id, 'LANDED', receipt.targetShaAfter);
+      return;
+    }
+    if (session.branchSha === session.baseSha) {
+      await this.settleLanding(run.id, 'NO_COMMITS');
+      return;
+    }
+    if (session.mergeStatus === 'pending') {
+      await this.settleLanding(run.id, 'MERGING');
+      return;
+    }
+    if (session.mergeStatus === 'error' || session.mergeStatus === 'conflict') {
+      await this.settleLanding(run.id, 'FAILED', null, session.mergeError ?? 'The merge check refused the landing.');
+      return;
+    }
+    try {
+      await this.sessions.land(session.ownerId, session.id);
+    } catch (error) {
+      await this.settleLanding(run.id, 'FAILED', null, messageOf(error));
+      return;
+    }
+    // Replaying after a crash queues the same session operation; mergeToMain is idempotent while pending.
+    await this.settleLanding(run.id, 'MERGING');
+  }
+
+  private async settleLanding(
+    runId: string, status: 'MERGING' | 'LANDED' | 'NO_COMMITS' | 'FAILED', sha: string | null = null, reason?: string,
+    failureReason: ScheduleFailureReason = 'LANDING_FAILED',
+  ): Promise<void> {
+    const alerts: ScheduleAlert[] = [];
+    await withTransactionRetry(this.prisma, async (tx) => {
+      alerts.length = 0;
+      const ref = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
+      if (!ref) return;
+      const schedule = await this.lock(tx, ref.scheduleId);
+      const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
+      if (!schedule || !run || (run.state !== 'CHANGED' && run.state !== 'NO_CHANGE')
+          || (run.landingStatus !== 'WAITING' && run.landingStatus !== 'MERGING')) return;
+      const failed = status === 'FAILED';
+      const suffix = status === 'LANDED' ? scheduleFill(SCHEDULE_COPY.landing.landed, { sha: sha! })
+        : failed ? scheduleFill(SCHEDULE_COPY.landing.failed, { reason: reason! }) : null;
+      const summary = suffix ? `${run.summary ?? ''}\n${suffix}`.trim() : run.summary;
+      await tx.scheduleRun.update({ where: { id: runId }, data: {
+        landingStatus: status, landedSha: sha, summary,
+        ...(failed ? { state: 'FAILED', failureReason } : {}),
+      } });
+      if (status !== 'MERGING') {
+        await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: failed ? { increment: 1 } : 0 } });
+        await this.settleItems(tx, schedule, run, failed ? 'FAILED' : 'SUCCEEDED', this.clock(), alerts, {
+          reason: failureReason, summary: reason ?? null, consecutiveFailures: failed ? schedule.consecutiveFailures + 1 : 0,
+        });
+      }
+    }, loggedRetry(this.logger, 'scheduleRuns.settleLanding'));
+    await this.alert(alerts);
+  }
+
   /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
   async completeNoChangeSessions(batch = 25): Promise<string[]> {
     const sessions = await this.prisma.session.findMany({
@@ -635,7 +750,7 @@ export class ScheduleRunsService {
         completedAt: null,
         deletedAt: null,
         status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING] },
-        scheduleRun: { state: 'NO_CHANGE' },
+        scheduleRun: { state: 'NO_CHANGE', OR: [{ landingStatus: null }, { landingStatus: { in: ['LANDED', 'NO_COMMITS'] } }] },
       },
       take: batch,
       select: { id: true, ownerId: true, scheduleRun: { select: { sessionId: true } } },
@@ -690,10 +805,12 @@ export class ScheduleRunsService {
         }
         const now = this.clock();
         const alerts: ScheduleAlert[] = [];
+        const waitsForLanding = run.accessLevel === 'LAND' && report.outcome !== 'FAILED';
         const ended = await tx.scheduleRun.update({
           where: { id: run.id },
           data: {
             state: report.outcome,
+            landingStatus: waitsForLanding ? 'WAITING' : null,
             key: report.key,
             summary: report.summary,
             links: report.links as Prisma.InputJsonValue,
@@ -705,7 +822,7 @@ export class ScheduleRunsService {
           where: { id: schedule.id },
           data: {
             ...(report.note !== undefined ? { note: report.note } : {}),
-            consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0,
+            ...(waitsForLanding ? {} : { consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0 }),
           },
         });
         let newFinding = false;
@@ -746,7 +863,7 @@ export class ScheduleRunsService {
             });
           }
         }
-        await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
+        if (!waitsForLanding) await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
           reason: 'REPORTED_FAILED',
           summary: report.summary,
           consecutiveFailures: report.outcome === 'FAILED' ? schedule.consecutiveFailures + 1 : 0,
@@ -756,7 +873,7 @@ export class ScheduleRunsService {
       loggedRetry(this.logger, 'scheduleRuns.report'),
     );
     await this.alert(result.alerts);
-    if (result.run.state === 'NO_CHANGE') await this.completeIfSettled(ownerId, sessionId);
+    if (result.run.state === 'NO_CHANGE' && result.run.accessLevel !== 'LAND') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
   }
@@ -781,12 +898,15 @@ export class ScheduleRunsService {
         // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
         // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
         // The run it would write is planned at now.
-        if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
-          throw refusal(
-            'CONFLICT',
-            'SCHEDULE_OVER_BUDGET',
-            `This schedule has already started ${schedule.envelopeRunsPerWeek} runs in the past 7 days, as many as its owner allowed; only the owner can run it now.`,
-          );
+        if (actor.kind !== 'OWNER') {
+          const started = await scheduleBudgetStarts(tx, schedule, now);
+          if (started >= schedule.envelopeRunsPerWeek) {
+            throw refusal(
+              'CONFLICT',
+              'SCHEDULE_OVER_BUDGET',
+              scheduleOverBudgetMessage(started, schedule.envelopeRunsPerWeek),
+            );
+          }
         }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
@@ -1192,7 +1312,7 @@ export class ScheduleRunsService {
             title: schedule.title,
             deadline: new Date(card.createdAt.getTime() + SCHEDULE_APPROVAL_TIMEOUT_MS),
             nextAt: schedule.nextDueAt,
-            pattern: approvalPattern(card.toolName, card.input),
+            pattern: approvalPattern(card.toolName, card.input, (run.accessLevel ?? schedule.accessLevel) === 'CHECK_ONLY'),
             workspaceName: workspace?.name ?? '',
             now,
             timezone: schedule.timezone,

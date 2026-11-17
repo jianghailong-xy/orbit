@@ -289,7 +289,7 @@ describe('renaming an account on a runner', () => {
     const [, rdRow] = accountsOf(page);
 
     await clickRunnerMenuItem(rdRow, 'Remove account');
-    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toBe('Workspaces using it switch to Default.');
+    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toBe('Its sessions move to another account first. Workspaces using it switch to Default.');
   });
 });
 

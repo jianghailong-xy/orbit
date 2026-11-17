@@ -3515,7 +3515,7 @@ function fullyAppliedComment(input: {
     + where;
 }
 
-/** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
+/** What a person is shown about a failure (§4.2's payload column). */export function failurePayload(
   state: string,
   detail: {
     kind: string;

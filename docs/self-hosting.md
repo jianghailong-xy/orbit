@@ -153,6 +153,23 @@ The included gateway serves HTTP. Before exposing Orbit beyond a trusted local h
 Orbit can execute code with the runner account's privileges. Do not expose an instance to untrusted users or
 attach a runner with broader credentials than its users should be able to exercise.
 
+### Live viewers of shared sessions
+
+A public link's page and a guest's page follow the session over a live stream, which stays open while the page is.
+Each apiserver caps how many are open at once:
+
+| Cap | Limit |
+| --- | --- |
+| One visitor (address) on one public link | 4 |
+| One public link, all visitors | 200 |
+| One apiserver, every public and guest stream | 2000, or `VIEWER_STREAMS_MAX` |
+
+A stream over a cap is refused with `429`, and the page then follows the session by reloading what is new every few
+seconds instead. Set `VIEWER_STREAMS_MAX` in `.env` to a whole number of streams to change the per-apiserver total,
+then recreate the apiserver. Any other value stops the apiserver at start. Behind a proxy, list it in
+`TRUSTED_PROXIES` too: otherwise every visitor has the proxy's address, and four streams fill the first cap for a
+link ([configuration](configuration.md)).
+
 ## 4. Register a runner
 
 With managed runners on, every account is given a runner at sign-in, and this step is optional: register a machine
@@ -1131,13 +1148,16 @@ container.
   from every tab and device, reach one apiserver while the set of apiservers stays the same. That apiserver alone
   subscribes to the session's live stream on NATS and relays its deltas. The apps address a session by its public id;
   a stream addressed by its UUID can reach another apiserver, which costs that apiserver a subscription of its own.
+  A guest's stream of a session (`/api/guest-sessions/<id>/stream`) is hashed the same way, so it reaches the apiserver
+  its owner's streams of that session reach. A public link's streams (`/api/shared/<token>/stream` and
+  `/api/shared/<token>/sessions/<id>/stream`) are hashed by the link's token.
 - **When the set changes.** When an apiserver is added or stops, some sessions move to another apiserver, each when its
   stream next connects. A stream already open stays where it is.
 - **When an apiserver stops.** Its streams end, and the clients open them again on the others. A stopping apiserver
   refuses connections, so the web gateway moves on at once. It gives up on one that went away without stopping after
   2 seconds, then leaves it out. Each stream picks up from the last stored event it had, and the deltas go on.
 - **When the web gateway starts.** It looks the name up as it starts, which Compose does once the first apiserver is
-  healthy. Had no apiserver been running then, the two routes would answer 502 until its next look-up, 10 seconds
+  healthy. Had no apiserver been running then, these routes would answer 502 until its next look-up, 10 seconds
   later.
 - **Who watches.** Each apiserver tells the link gateway how many streams it has of each session, and the gateway adds
   the counts up. The count of an apiserver that stopped lapses after 60 seconds.

@@ -401,6 +401,10 @@ type ModelParameterValue struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// KeepWorkSessionIDs are those of CancelSessionIDs whose end is a coordinator handing over: the session ends,
+	// but its running SubAgent runs and bg_run jobs are left to end by themselves (session_keep_work.go). Absent
+	// from an older control plane, which reads as none.
+	KeepWorkSessionIDs []string `json:"keepWorkSessionIds,omitempty"`
 	// The owner-request secrets this runner may hold (secret_store.go), sent only to a runner that declares
 	// owner-secret/v1. A POINTER because only a present list states anything: absent (an older control plane, or an
 	// answer that reconciled nothing) removes nothing, and [] means hold nothing.
@@ -1019,6 +1023,17 @@ type AccountRemoveCommand struct {
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
 	// request it answers.
 	Attempt string `json:"attempt,omitempty"`
+	// While the removal waits on sessions it moved to another account: each one's new account, so a
+	// session with no engine running, which would take that move only at its next claim, is carried
+	// there now (carryColdSessionsOff). Absent from an older control plane.
+	Moves []AccountRemoveMove `json:"moves,omitempty"`
+}
+
+// AccountRemoveMove is one session of a removal under way and the account the control plane moved it
+// to: "default", or the id of a slot this runner added.
+type AccountRemoveMove struct {
+	SessionID string `json:"sessionId"`
+	Account   string `json:"account"`
 }
 
 // AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
@@ -1405,9 +1420,12 @@ type ClaimedSession struct {
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
-	WorkDir          string `json:"workDir,omitempty"`
-	SessionUUID      string `json:"sessionUuid"`
-	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
+	WorkDir string `json:"workDir,omitempty"`
+	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
+	// never in WorkDir. Sent only to a runner that declares helpAskCapabilityV1.
+	HelpAsk          *HelpAskMarker `json:"helpAsk,omitempty"`
+	SessionUUID      string         `json:"sessionUuid"`
+	RuntimeSessionID string         `json:"runtimeSessionId,omitempty"`
 	// LeaseOwner is the runner process identity observed when the server built this claim.
 	// A fresh process CAS-takes it over before it may activate an inbox generation.
 	LeaseOwner string `json:"leaseOwner,omitempty"`

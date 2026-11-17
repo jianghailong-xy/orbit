@@ -553,8 +553,8 @@ internal fun wikiWorkspaceRows(reads: WikiMaintenanceReads, data: DirectoryData)
     class Machine(val id: String, val name: String, val online: Boolean)
     class Workspace(val id: String, val name: String?, val runner: String?, val repoUrl: String?)
     val machines = reads.runners?.filterIsInstance<JsonObject>()?.mapNotNull { runner ->
-        runner["id"].text()?.let { id -> Machine(id, io.orbitd.android.management.RunnerPage.nameOf(id, runner["name"].text() ?: id, runner["displayName"].text()), runner["online"].bool() == true) }
-    } ?: data.runners.map { Machine(it.id, io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName), it.online == true) }
+        runner["id"].text()?.let { id -> Machine(id, io.orbitd.android.management.RunnerPage.nameOf(id, runner["name"].text() ?: id, runner["displayName"].text(), managed = runner["managed"].bool()), runner["online"].bool() == true) }
+    } ?: data.runners.map { Machine(it.id, io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed), it.online == true) }
     val rows = reads.workspaces?.filterIsInstance<JsonObject>()?.mapNotNull { workspace ->
         workspace["id"].text()?.let { Workspace(it, workspace["name"].text(), workspace["runnerId"].text(), workspace["repoUrl"].text()) }
     } ?: data.workspaces.map { Workspace(it.id, it.name, it.runnerId, it.repoUrl) }

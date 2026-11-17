@@ -1430,6 +1430,10 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Those of cancelSessionIds whose end is a coordinator handing over (docs/coordinator-handoff-v2-design.md §1):
+   *  the runner ends the session but leaves its running SubAgent runs and bg_run jobs to end by themselves, their
+   *  wake forwarded to the successor. The same fact the session's `end` turn carries; absent when there are none. */
+  keepWorkSessionIds?: string[];
   /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
    *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
   remoteSubagentRuns?: string[];
@@ -1709,6 +1713,20 @@ export interface RunnerRegion {
   checkedAt: string;
   /** Consecutive blocked results. An allowed one resets it; an unknown one leaves it. */
   blockedChecks: number;
+}
+
+/** How a row of GET /runners and GET /runners/:id names its machine. Every client labels the account's
+ *  managed runner Orbit Cloud unless its owner named it; `managed` says which row that is, so no client
+ *  shows its stored name while GET /managed-runner is still on its way. Absent from an older server, whose
+ *  clients fall back to comparing the id with the managed status's runnerId. */
+export interface RunnerRowIdentity {
+  id: string;
+  /** The name it registered with. A managed runner's is `orbit-managed`, which no client shows. */
+  name: string;
+  /** The name its owner gave it, which wins over both. */
+  displayName: string | null;
+  /** True on the account's managed runner (it has a ManagedRunner mapping), false on every other. */
+  managed?: boolean;
 }
 
 /** `region` on GET /runners and GET /runners/:id (contract §6). null for a runner that does not
@@ -2077,6 +2095,16 @@ export interface AccountRemoveCommand {
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
    *  request it answers. */
   attempt?: string;
+  /** While the removal waits on sessions it moved to another account: each one's new account
+   *  (`default` or a slot id), so the runner carries a session with no engine running there now
+   *  rather than at its next claim. Absent otherwise. */
+  moves?: AccountRemoveMove[];
+}
+
+/** One session of a removal under way and the account it was moved to. */
+export interface AccountRemoveMove {
+  sessionId: string;
+  account: string;
 }
 
 /** @deprecated The same command on the codex-named field; read AccountRemoveCommand, whose `engine`
@@ -2468,6 +2496,10 @@ export interface RunnerAccountRemoveState {
    *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
    *  and then `message` alone says what happened. */
   sessions?: RunnerAccountRemoveSession[];
+  /** With `pending`: how many sessions the removal moved to another account and is waiting on to leave
+   *  it — one between turns at once, one in a turn when that turn ends. Absent while it waits on none
+   *  (and from an older server). */
+  moving?: number;
 }
 
 /** A session that keeps an account from being removed: what the runner's page lists and opens. */
@@ -2590,7 +2622,7 @@ export interface SubagentDecision {
   readonly?: boolean;
 }
 
-/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the owner's account. */
 export interface SubagentWorkspaceChoice {
   /** The workspace's id, as the runner has it (a UUID). */
   id: string;
@@ -2714,7 +2746,7 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
-  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  /** A workspace to run on, by name (§10.1 row 1): any workspace of the owner's account, in its own repository. */
   workspace?: string;
   /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
   needs?: string[];
@@ -2865,6 +2897,9 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** An Ask (migration 0850, help.ts): start this session read-only, in a scratch folder holding the help article
+   *  library, never in workDir. Only to a runner that declares HELP_ASK_V1. Absent for every other session. */
+  helpAsk?: import('./help').HelpAskMarker;
   /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */

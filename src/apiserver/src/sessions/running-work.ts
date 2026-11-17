@@ -31,3 +31,13 @@ export const CLEARED_RUNNING_WORK = {
   runningBgJobActivity: {},
   runningSubagents: [],
 };
+
+/**
+ * The content of the `end` turn that completes a coordinator handing over (docs/coordinator-handoff-v2-design.md §1).
+ * The runner ends the session as any end does, but leaves its running SubAgent runs and `bg_run` jobs to end by
+ * themselves, in the old checkout, so the wake their end owes reaches the successor (runner-api/handoff-wake-forward.ts).
+ * Every other end has no content and stops them. The heartbeat names the same sessions in `keepWorkSessionIds`
+ * (RealtimeService.keepingWork), for a runner that learns of the end there first. Read by runner-go
+ * (keepBackgroundWorkRequested), which compares the parsed field, not these bytes.
+ */
+export const KEEP_BACKGROUND_WORK_END_CONTENT = JSON.stringify({ keepBackgroundWork: true });

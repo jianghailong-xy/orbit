@@ -43,6 +43,7 @@ func cmdMcp() {
 		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
+		helpAsk:               helpAskModeFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -64,6 +65,9 @@ type mcpServer struct {
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
 	callTimeout time.Duration
+	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
+	// (mcp_help_ask.go).
+	helpAsk bool
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -227,17 +231,24 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
 		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
+		instructions := agentPrimer
+		if s.helpAsk {
+			instructions = helpAskInstructions
+		}
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
 			"serverInfo":      map[string]interface{}{"name": "orbit", "version": version},
-			"instructions":    agentPrimer,
+			"instructions":    instructions,
 		}), true
 	case "notifications/initialized", "notifications/cancelled":
 		return rpcResponse{}, false // notifications get no response
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
+		if s.helpAsk {
+			return s.ok(req.ID, map[string]interface{}{"tools": helpAskToolDescriptors()}), true
+		}
 		// schedule_run_report's filter lives in listedToolDescriptors, so recovery's listedTools counts what this lists.
 		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
@@ -248,6 +259,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
+		}
+		if s.helpAsk {
+			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
 		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			result := toolResult(p.Name+" is not served in this session", true)
@@ -390,6 +404,11 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
 	if result, handled := s.callScheduleTool(name, args); handled {
 		return result
+	}
+	// The guide reads the catalogue and this session's switches, and asks the control plane nothing
+	// (agent_guide.go); `orbit guide` answers the same document.
+	if name == "guide" {
+		return s.callGuide(args)
 	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
@@ -1008,6 +1027,29 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
 			prettyJSON(raw), false)
 
+	case "project_ruling_record":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		ruling := strings.TrimSpace(getString(args, "ruling"))
+		quote := strings.TrimSpace(getString(args, "quote"))
+		turnID := strings.TrimSpace(getString(args, "sourceTurnId"))
+		if ruling == "" || quote == "" || turnID == "" {
+			return toolResult("ruling, quote and sourceTurnId are required", true)
+		}
+		body := map[string]interface{}{"ruling": ruling, "quote": quote, "sourceTurnId": turnID}
+		if supersedes := strings.TrimSpace(getString(args, "supersedes")); supersedes != "" {
+			body["supersedes"] = supersedes
+		}
+		// The acting session IS the authority, as it is for ask_owner: the server checks it against the
+		// project's coordinator pointer, and checks the quote against the turn's owner text.
+		raw, err := s.t.recordProjectRuling(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("record project ruling failed: "+err.Error(), true)
+		}
+		return toolResult("The ruling is recorded on the project.\n"+prettyJSON(raw), false)
+
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -1263,10 +1305,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 			}
 			s.rec.setEntity(raw)
 			s.rec.startOutcome(by, started, deferred)
-			if deferred == "" {
-				s.rec.note(startedAtOnceNote)
-			}
-			return toolResult(startedTaskResult(raw, started, deferred), false)
+			s.rec.note(createStartNote(by, started, deferred))
+			return toolResult(startedTaskResult(raw, started, deferred, by), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 

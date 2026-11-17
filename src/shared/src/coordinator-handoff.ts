@@ -26,10 +26,12 @@ export const COORDINATOR_HANDOFF_TURN_PREFIX = 'coordinator-handoff:v1:';
  *  prompt by this line and keep it out of the transcript. */
 export const COORDINATOR_HANDOFF_PROMPT_HEAD = 'From Orbit · handoff note';
 
-/** The four sections the note is asked for, in order, as the successor's card titles them. */
+/** The four sections the note is asked for, in order, as the successor's card titles them. Owner rulings are
+ *  project records (`project_ruling`, coordinator handoff v2 §2): the note turn records them first, so "Rulings
+ *  not yet recorded" is normally empty. */
 export const COORDINATOR_HANDOFF_SECTIONS = [
   'Where things stand',
-  'Agreed with the owner',
+  'Rulings not yet recorded',
   'Waiting on',
   'Next',
 ] as const;
@@ -68,15 +70,51 @@ export const COORDINATOR_HANDOFF_FAILURE_REASONS: Readonly<Record<CoordinatorHan
   REPLACE_FAILED: 'the new coordinator could not be opened.',
 };
 
-/** One wait the outgoing coordinator set (a `task_await` or a watch), as the confirm dialog and the
- *  successor's "N waits moved here" list name it. A PAUSED watch moves too and stays paused. */
+/**
+ * What kind of pending work a `CoordinatorPendingWait` is (docs/coordinator-handoff-v2-design.md §1):
+ *
+ *   WATCH     — a `task_await` or a watch; it moves to the successor in the swap.
+ *   SUBAGENT  — a running `delegate` run owing its coordinator a wake; it keeps running where it is, and its
+ *               wake goes to the successor ("Started by the previous coordinator: …").
+ *   JOB       — a running `bg_run` job; the same as a SubAgent run.
+ *   WAKEUP    — the pending `schedule_wakeup`; it moves in the swap and keeps its due time.
+ *   LOOP      — the running wakeup loop; it moves in the swap and keeps its schedule.
+ */
+export type CoordinatorPendingWaitKind = 'WATCH' | 'SUBAGENT' | 'JOB' | 'WAKEUP' | 'LOOP';
+
+/** One piece of pending work the outgoing coordinator has, as the confirm dialog and the successor's "N waits
+ *  moved here" list name it. A PAUSED watch moves too and stays paused. */
 export interface CoordinatorPendingWait {
-  /** The watch's id. */
+  /** The watch's, run's, wakeup's or loop's id; a bg_run job's `bgj_…` id. */
   id: string;
-  /** e.g. `Waiting for "Fix login redirect" to be DONE`. */
+  /** Added with v2: what kind of work it is. A client that predates it ignores it; a handoff recorded
+   *  before it was added reads as WATCH. */
+  kind: CoordinatorPendingWaitKind;
+  /** e.g. `Waiting for "Fix login redirect" to be DONE`, or a run's or job's description such as
+   *  "Deploy 55a189aa3 to production". */
   label: string;
-  /** True for a PAUSED watch: it moves and stays paused. */
+  /** True for a PAUSED watch: it moves and stays paused. False for every other kind. */
   paused: boolean;
+}
+
+/**
+ * The words after a wait's label naming its kind ("Deploy 55a189aa3 to production · SubAgent"); null for a
+ * watch, whose label already says what it waits for, so a watch — and a wait from a server without `kind` —
+ * reads as it did before kinds.
+ */
+export const COORDINATOR_PENDING_WAIT_KIND_LABELS: Readonly<Record<CoordinatorPendingWaitKind, string | null>> = {
+  WATCH: null,
+  SUBAGENT: 'SubAgent',
+  JOB: 'Background job',
+  WAKEUP: 'Scheduled wakeup',
+  LOOP: 'Wakeup loop',
+};
+
+/** One wait as the confirm dialog and the moved-here list name it: its label, " (paused)" when paused, then
+ *  " · <kind>" unless it is a watch. A missing or unknown kind reads as a watch. */
+export function coordinatorPendingWaitLine(wait: Pick<CoordinatorPendingWait, 'label' | 'paused'> & { kind?: string | null }): string {
+  const kind = wait.kind ? COORDINATOR_PENDING_WAIT_KIND_LABELS[wait.kind as CoordinatorPendingWaitKind] ?? null : null;
+  return `${wait.label}${wait.paused ? ' (paused)' : ''}${kind ? ` · ${kind}` : ''}`;
 }
 
 /** `coordinatorHandoff` on the OUTGOING coordinator's session (detail and `session.updated`). */
@@ -145,6 +183,13 @@ export const COORDINATOR_HANDOFF_COPY = {
   handingOver: 'Handing over to a new coordinator…',
   noteCardTitle: 'Handoff from the previous coordinator',
   waitsMovedHere: (count: number) => (count === 1 ? '1 wait moved here' : `${count} waits moved here`),
+  /**
+   * The note card's line counting what this conversation does not draw (handoff v2 §4, board 3):
+   * the records stamped before it was created. Null when there are none, and the line is omitted.
+   */
+  historyBefore: (decisions: number, merges: number): string | null =>
+    decisions === 0 && merges === 0 ? null : `${decisions} ${decisions === 1 ? 'decision' : 'decisions'} and ${merges} ${merges === 1 ? 'merge' : 'merges'} before this conversation`,
+  openPrevious: 'Open previous coordinator',
   handedOver: 'Handed over to a new coordinator.',
   openIt: 'Open it',
   tryAgain: 'Try again',

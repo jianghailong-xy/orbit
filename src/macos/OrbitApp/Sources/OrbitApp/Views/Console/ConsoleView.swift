@@ -49,6 +49,10 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    #if os(macOS)
+    /// Agent Tools, from the window toolbar (docs/mocks/agent-tools board ⑤).
+    @State private var showAgentTools = false
+    #endif
     /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
     /// or the Mac toolbar.
     @State private var settingsSession: Session?
@@ -244,7 +248,7 @@ struct ConsoleView: View {
     /// tray's waiting rows say which (`PendingTrayView.held`).
     private func trayHeld(_ console: ConsoleModel) -> Session? {
         guard let session = appModel.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -645,6 +649,29 @@ struct ConsoleView: View {
                     .help("Session settings: labels, public link, environment, notifications and info")
                 }
             }
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what the agent here can reach in Orbit and what
+            // it was told, read-only. None on a landing session (LS6), which runs no engine.
+            ToolbarItem(placement: .primaryAction) {
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showAgentTools = true } label: {
+                        Label(AgentToolsCopy.title, systemImage: "puzzlepiece.extension")
+                    }
+                    .help(AgentToolsCopy.sessionLead)
+                }
+            }
+        }
+        .sheet(isPresented: $showAgentTools) {
+            let session = appModel.session(id: sessionID)
+            ConsoleAgentToolsSheet(
+                worktree: registry.peek(sessionID)?.worktree,
+                engine: session?.engine,
+                // The mode the server resolves for the session: its own, else the account's default.
+                permissionMode: AgentDefaults.resolvePermissionMode(
+                    session: session?.permissionMode,
+                    accountDefault: appModel.user?.preferences?.defaultPermissionMode).rawValue,
+                // Settings' reading of the switch: absent is on.
+                orchestrationOn: appModel.user?.preferences?.enableOrchestration ?? true,
+                onDone: { showAgentTools = false })
         }
         #endif
         // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
@@ -853,6 +880,27 @@ struct ConsoleView: View {
     #endif
 }
 
+#if os(macOS)
+/// The console's Agent Tools sheet. The sheet holds values only; this reads the one that moves: the session's
+/// report, off the detail (GET /sessions/:id) the worktree bar keeps current while the session runs, read once
+/// more as the sheet opens, since a settled session's bar does not poll and its runner may have reported since.
+private struct ConsoleAgentToolsSheet: View {
+    let worktree: WorktreeModel?
+    let engine: String?
+    let permissionMode: String
+    let orchestrationOn: Bool
+    let onDone: () -> Void
+
+    var body: some View {
+        AgentToolsSheet(
+            mode: .session(report: worktree?.detail?.agentTools, engine: engine, permissionMode: permissionMode,
+                           orchestrationOn: orchestrationOn, now: Date()),
+            onDone: onDone)
+            .task { await worktree?.loadDetail() }
+    }
+}
+#endif
+
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
 /// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
@@ -1042,7 +1090,7 @@ struct TranscriptView: View {
     /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
         guard let session = app.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -1454,6 +1502,7 @@ struct TranscriptView: View {
                              running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
+                             conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
@@ -1541,7 +1590,10 @@ struct TranscriptView: View {
             CreatedWorkspaceLineView(line: line, console: console)
         case .handoffReceived(let received):
             // The note this coordinator opened with, linking back to the one that wrote it.
-            CoordinatorHandoffNoteCardView(received: received) {
+            CoordinatorHandoffNoteCardView(
+                received: received,
+                counts: console.coordinatorHistoryCounts(
+                    createdAt: app.session(id: console.sessionID)?.createdAt)) {
                 app.route(to: .session(received.handoffFromSessionId))
             }
         case .loadOlder:
@@ -1562,7 +1614,12 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+            // Live while the turn may still be at work (docs/mocks/session-compact-steps: a call in
+            // flight sits under the line until it answers; once the turn is over it joins the line).
+            // `.pending` counts: a window whose pages carry no `status` event stays there, and reading
+            // it as over folded a running call into "ran 2 shell commands" while its row still spun.
+            StepsRowView(items: items, live: [.running, .pending].contains(console.sessionStatus),
+                         fullPayload: console.fullPayload)
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)

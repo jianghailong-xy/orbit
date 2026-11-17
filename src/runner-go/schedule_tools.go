@@ -85,10 +85,12 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 		"required": []string{"kind"},
 	}
 	access := map[string]interface{}{
-		"type": "string", "enum": []string{"CHECK_ONLY", "OPEN_PR"},
+		"type": "string", "enum": []string{"CHECK_ONLY", "OPEN_PR", "LAND"},
 		"description": "What each run may do. CHECK_ONLY reads and reports and edits nothing: a check, a report, a " +
 			"summary. OPEN_PR edits in its own worktree and opens a PR, and can't merge or deploy: only when the person " +
-			"asked for changes.",
+			"asked for changes. LAND edits in its own worktree and commits on its branch; after the turn and report Orbit " +
+			"lands it on main through the normal merge check. LAND never opens a PR and cannot release or deploy. " +
+			"Creating or widening to LAND needs the owner to allow it.",
 	}
 	runLimit := map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 120, "description": "Minutes one run may work, 30 when omitted, at most 120."}
 	timezone := str("IANA time zone the person named (\"Beijing time\" is Asia/Shanghai). Leave it out when they named none.")
@@ -137,20 +139,20 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"description": "Change a schedule from what the person says (\"make it 9:00\", \"only on weekdays\", \"stop opening " +
 				"PRs\"). A change inside what the person allowed (the envelope: workspace, access level, runs per week, run " +
 				"limit) applies at once: the answer is outcome APPLIED with the record of the change, which the person can " +
-				"undo. A change that grows the envelope (another workspace, OPEN_PR, more runs a week, a longer run limit) " +
+				"undo. A change that grows the envelope (another workspace, a wider access level (OPEN_PR or LAND), more runs a week, a longer run limit) " +
 				"applies nothing. It puts a card showing Now and Asked in front of the person and returns outcome PENDING, " +
 				"and the schedule runs as before until they allow it. Leave intent out unless the person restates the goal " +
 				"(what to watch, what counts as news): a change of time, frequency, limits or prompt leaves intent alone, " +
 				"and a correction such as \"weekly is too rare, make it daily again\" is never the new intent. An intent " +
-				"sent with only a change of when or how much it runs is not written. When the time or frequency changes, " +
-				"pass a new readBack that reads the schedule back as it will be. " +
+				"sent with only a change of when or how much it runs is not written. Whenever you change when or how often the schedule runs (rule or timezone), " +
+				"pass a fresh readBack: one sentence saying when it runs and what it checks after the change. Pass one too when the prompt or access level changes. " +
 				"A scheduled run may change only the schedule it serves: rewrite its prompt, run less often, or go back up to " +
 				"what was allowed. A run's request to widen goes to the person's Waiting on you, and the run goes on with the " +
 				"access it has.",
 			"inputSchema": obj(map[string]interface{}{
 				"scheduleId":      id,
 				"intent":          str("Only when the person restates the goal: their new goal, verbatim. Never a correction of the time, frequency or limits."),
-				"readBack":        str("The schedule read back as it is after this change, one first-person sentence of at most 500 characters, like schedule_create's: \"Every Monday at 09:00 Beijing time I check ...\". Pass it whenever the time or frequency changes."),
+				"readBack":        str("The schedule read back as it is after this change, one first-person sentence of at most 500 characters, like schedule_create's: \"Every Monday at 09:00 Beijing time I check ...\". Pass it whenever the prompt, access, time or frequency changes; say both when it runs and what it checks. A readBack-only change applies at once and is undoable."),
 				"title":           str("A new title."),
 				"prompt":          str("New instructions for every run."),
 				"rule":            rule,
@@ -186,8 +188,10 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{
-			"name":        "schedule_run_now",
-			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. It does not count against its runs a week.",
+			"name": "schedule_run_now",
+			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. Every run started now " +
+				"counts toward its runs a week: once the runs started in the past 7 days reach that number, a run now from an agent " +
+				"session is refused with SCHEDULE_OVER_BUDGET, and only the person can still start one, from the app.",
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{

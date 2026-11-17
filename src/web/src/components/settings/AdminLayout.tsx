@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ApiOutlined, GithubOutlined, LeftOutlined, LoginOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApiOutlined, GithubOutlined, LeftOutlined, LoginOutlined, MailOutlined, QuestionCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../../api';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
@@ -10,6 +10,7 @@ import { githubAppOn, githubAppQuery } from '../../pages/AdminGithubPage';
 import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
 import { emailSettingsQuery } from '../../pages/AdminEmailPage';
 import { ImpersonationBanner } from '../ImpersonationBanner';
+import { HelpDrawer } from '../HelpDrawer';
 import { NARROW_SETTINGS_QUERY, NavGroup, NavRow } from './SettingsLayout';
 import './Settings.css';
 
@@ -70,6 +71,7 @@ export function AdminLayout() {
             </div>
           </main>
         )}
+        <HelpDrawer />
       </div>
     </>
   );
@@ -106,6 +108,7 @@ function AdminNav() {
         </NavGroup>
         <NavGroup title="Server">
           <NavRow to="/admin/email" icon={<MailOutlined />} label="Email" trailing={<OnDot on={email.data?.on} />} />
+          <NavRow to="/admin/help-feedback" icon={<QuestionCircleOutlined />} label="Help feedback" />
         </NavGroup>
         <NavGroup title="Integrations">
           <NavRow

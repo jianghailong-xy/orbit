@@ -120,6 +120,77 @@ public enum GuestFollow {
     }
 }
 
+/// The messages a guest view sent, drawn the moment Send is pressed until the runner's own `user`
+/// event for each turn is read (web `GuestConversation`'s `sent`, Android `GuestConversation`). The
+/// runner writes that echo a moment after the send is accepted (production 11-16: ~0.7 s), so the read
+/// right after a send comes back without it; until it is read the view asks every `echoInterval`, for up
+/// to `echoWindow` — a message behind a running turn is echoed only when its turn starts, which can be
+/// minutes, and it stays drawn meanwhile.
+public struct GuestSentTurns: Equatable, Sendable {
+    public static let echoInterval: TimeInterval = 0.5
+    public static let echoWindow: TimeInterval = 10
+    /// The seqs below `RunEvent.sentinelSeq` a drawn message takes, one per message sent: after every
+    /// real event, and never one a real event can take.
+    static let drawnSeqs = 1_000_000_000
+
+    struct Turn: Equatable, Sendable {
+        let key: Int
+        var turnId: String?
+        let text: String
+        let ts: String
+        var askUntil: Date?
+    }
+
+    private(set) var turns: [Turn] = []
+    private var sent = 0
+
+    public init() {}
+
+    public var isEmpty: Bool { turns.isEmpty }
+
+    /// Draw `text` as sent now; the key names it to `accepted` and `refused`.
+    public mutating func draw(_ text: String, at now: Date = Date()) -> Int {
+        sent += 1
+        turns.append(Turn(key: sent, turnId: nil, text: text, ts: ISO8601DateFormatter().string(from: now), askUntil: nil))
+        return sent
+    }
+
+    /// The door took it: its echo will carry `turnId`, asked for often until `echoWindow` has passed.
+    public mutating func accepted(_ key: Int, turnId: String?, at now: Date = Date()) {
+        guard let i = turns.firstIndex(where: { $0.key == key }) else { return }
+        turns[i].turnId = turnId
+        turns[i].askUntil = turnId == nil ? nil : now.addingTimeInterval(Self.echoWindow)
+    }
+
+    /// The door refused it: it is no longer drawn.
+    public mutating func refused(_ key: Int) {
+        turns.removeAll { $0.key == key }
+    }
+
+    /// Events read from the door: a `user` event for a turn drawn here replaces the drawing.
+    public mutating func read(_ events: [RunEvent]) {
+        let echoed = Set(events.compactMap { $0.type == .user ? $0.turnId : nil })
+        if !echoed.isEmpty { turns.removeAll { $0.turnId.map(echoed.contains) ?? false } }
+    }
+
+    /// The drawn messages as `user` events, headed as the reader's own.
+    public var events: [RunEvent] {
+        turns.map { turn in
+            RunEvent(seq: RunEvent.sentinelSeq - Self.drawnSeqs + turn.key, type: .user, ts: turn.ts,
+                     turnId: turn.turnId ?? "sent-\(turn.key)",
+                     payload: .object(["text": .string(turn.text),
+                                       "externalSender": .object(["source": .string(ExternalSender.readerSource)])]))
+        }
+    }
+
+    /// The wait before the next follow read: `following` (GuestFollow's), cut to `echoInterval` while an
+    /// accepted message's echo is still missing and its window is open.
+    public func delay(_ following: TimeInterval?, at now: Date = Date()) -> TimeInterval? {
+        guard turns.contains(where: { ($0.askUntil ?? .distantPast) > now }) else { return following }
+        return min(following ?? Self.echoInterval, Self.echoInterval)
+    }
+}
+
 /// The guest's own words read as theirs: a `user` event the door attributes to this account
 /// (`ORBIT_GUEST` under its name) is headed `You` instead of `From <name>` (web `sentByReader`). The
 /// owner's own messages carry no sender and stay plain bubbles; anyone else's keep `From <name>`.

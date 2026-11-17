@@ -130,7 +130,9 @@ final class ProjectLandingCardTests: XCTestCase {
         XCTAssertEqual(card.clock, "110m")
         XCTAssertEqual(card.clockLabel, "No report for")
         XCTAssertEqual(card.updated, "limit 10m")
-        XCTAssertEqual(card.detail, "Runner workstation-gpu took it at 07:16 · stopped at checking · no push recorded")
+        // The clock is the reader's own (ProjectPageTests pins it per zone), so it is read the card's way here.
+        let tookIt = ProjectPage.landingClockTime(now.addingTimeInterval(-6_630))
+        XCTAssertEqual(card.detail, "Runner workstation-gpu took it at \(tookIt) · stopped at checking · no push recorded")
         XCTAssertEqual(card.retryJobId, "j-c5")
     }
 

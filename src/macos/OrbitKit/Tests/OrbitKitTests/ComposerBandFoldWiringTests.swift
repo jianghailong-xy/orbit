@@ -159,4 +159,16 @@ final class ComposerBandFoldWiringTests: XCTestCase {
         XCTAssertTrue(slot.contains("WTChip(title: \"✓ In \\(landed)\")"))
         XCTAssertTrue(slot.contains("WTPillButton(title: \"Merging…\", disabled: true) {}"))
     }
+
+    /// The marks' row fits the pill: only each count holds its size, and a long landing chip
+    /// ("Merged → scratch/…") is cut at its tail. A row fixed at its full width made the pill wider
+    /// than the screen, which widened the band and slid the whole conversation sideways while folded.
+    func testTheMarksRowGivesWayInsteadOfWideningThePill() throws {
+        let marks = try slice(try bar, from: "private func marks(", to: "\n    }\n")
+        XCTAssertTrue(marks.contains(".lineLimit(1)\n    }"), "the row ends at its line limit, not a fixedSize")
+        XCTAssertFalse(marks.contains(".lineLimit(1)\n        .fixedSize()"))
+        XCTAssertTrue(marks.contains(".truncationMode(.tail)"), "the landing chip is what gives way")
+        let mark = try slice(try bar, from: "private func mark(", to: "\n    }\n")
+        XCTAssertTrue(mark.contains(".fixedSize()"), "a count never shrinks")
+    }
 }

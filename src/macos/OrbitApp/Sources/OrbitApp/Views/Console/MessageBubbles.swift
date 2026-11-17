@@ -115,6 +115,9 @@ struct UserBubbleView: View {
                         typedText(shown, showsCard: showsCard)
                         if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }
                     }
+                        // The English under the words fills what it is offered, divider and all; the
+                        // bubble still hugs the wider of its two lines rather than taking the row.
+                        .hugWidth(!showsCard)
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))

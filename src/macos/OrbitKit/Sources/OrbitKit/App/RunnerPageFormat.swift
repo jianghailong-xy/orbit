@@ -33,8 +33,8 @@ public enum RunnerPageFormat {
     }
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
-    /// managed runner (`ManagedRunnerIdentity`, the managed status's runnerId — never its stored name
-    /// `orbit-managed`), else the machine's own name.
+    /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
+    /// never its stored name `orbit-managed`), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }
@@ -43,7 +43,7 @@ public enum RunnerPageFormat {
     public static func displayName(_ runner: Runner, managedRunnerID: String?) -> String {
         let alias = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !alias.isEmpty { return alias }
-        return isManaged(runner.id, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+        return isManaged(runner, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
     /// The name a machine falls back to with no alias: Orbit Cloud for the managed runner, else its own.
@@ -51,9 +51,15 @@ public enum RunnerPageFormat {
         isManaged(runner) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
-    /// Whether `runner` is the account's managed runner, by id.
+    /// Whether `runner` is the account's managed runner: its row says so (`managed`), or its id is the
+    /// managed status's runnerId (an older server, which sends no flag).
     public static func isManaged(_ runner: Runner) -> Bool {
-        isManaged(runner.id, managedRunnerID: ManagedRunnerIdentity.runnerID)
+        isManaged(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `isManaged` against a given managed runner id, kept pure for tests.
+    public static func isManaged(_ runner: Runner, managedRunnerID: String?) -> Bool {
+        runner.managed == true || isManaged(runner.id, managedRunnerID: managedRunnerID)
     }
 
     public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {
@@ -714,11 +720,15 @@ public enum RunnerPageFormat {
         public let pending: Bool
         public let refused: String?
         public let blocking: [BlockingSession]
+        /// Under way and waiting on the sessions it moved to another account to leave this one (web
+        /// `runnerAccountMovingOne`/`Many`); nil otherwise.
+        public let moving: String?
 
-        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = []) {
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = [], moving: String? = nil) {
             self.pending = pending
             self.refused = refused
             self.blocking = blocking
+            self.moving = moving
         }
     }
 
@@ -759,7 +769,15 @@ public enum RunnerPageFormat {
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
-        return AccountRemoval(pending: state.status == "pending", refused: refused, blocking: blocking)
+        let pending = state.status == "pending"
+        let count = pending ? (state.moving ?? 0) : 0
+        let moving: String?
+        switch count {
+        case ..<1: moving = nil
+        case 1: moving = RunnerAccountCopy.runnerAccountMovingOne(engine: engineName(engine))
+        default: moving = RunnerAccountCopy.runnerAccountMovingMany(engine: engineName(engine), count: count)
+        }
+        return AccountRemoval(pending: pending, refused: refused, blocking: blocking, moving: moving)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
