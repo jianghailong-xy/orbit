@@ -34,7 +34,8 @@
     "runTriggers": [
       "SCHEDULED",
       "CATCH_UP",
-      "MANUAL"
+      "MANUAL",
+      "CONDITION"
     ],
     "runStates": [
       "QUEUED",
@@ -78,7 +79,8 @@
       "WORKSPACE",
       "ACCESS_LEVEL",
       "RUNS_PER_WEEK",
-      "RUN_LIMIT"
+      "RUN_LIMIT",
+      "PROBE_COMMAND"
     ],
     "requestKinds": [
       "CREATE",
@@ -474,6 +476,7 @@
         "ACCESS_LEVEL": "Let {title} open PRs?",
         "RUNS_PER_WEEK": "Let {title} run more often?",
         "RUN_LIMIT": "Let {title} run longer?",
+        "PROBE_COMMAND": "Let {title} check with a new command?",
         "WORKSPACE": "Let {title} run in {workspace}?"
       },
       "now": "Now",

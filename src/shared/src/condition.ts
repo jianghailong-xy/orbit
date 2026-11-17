@@ -71,6 +71,8 @@ export interface ConditionEventView {
   kind: ConditionEventKind;
   value: number | null;
   runId: string | null;
+  /** A FIRED that is a repeat: the history says "Fired again". */
+  repeat: boolean;
 }
 
 /** GET /conditions/:id: a condition's state, its newest samples and its events. */
@@ -84,6 +86,8 @@ export interface ConditionView {
   holdSeconds: number;
   rearm: ConditionCompare | null;
   intervalSeconds: number;
+  /** A WHEN condition's repeat: it fires again every this many seconds while it still holds; null fires once. */
+  repeatSeconds: number | null;
   state: ConditionState;
   lastSampleAt: string | null;
   lastValue: number | null;

@@ -1,6 +1,7 @@
 /**
  * The envelope (docs/scheduled-tasks-design.md §4): what a person agreed to on a card, in four parts and nothing
- * else — the workspace, the access level, runs per week and the run limit. One pure rule decides whether a change
+ * else — the workspace, the access level, runs per week and the run limit — and, for a WHEN rule, a fifth: the probe
+ * command the owner approved (docs/condition-triggers-design.md §4.1, §6.1), kept as its hash. One pure rule decides whether a change
  * applies at once or waits for the owner's press, and what the envelope becomes after it.
  */
 import { PermissionMode } from '@orbit/shared';
@@ -13,9 +14,14 @@ export interface Envelope {
   accessLevel: AccessLevel;
   runsPerWeek: number;
   runLimitMinutes: number;
+  /**
+   * A WHEN rule's approved probe command, as its sha256; null (or absent, in an envelope stored before it existed) for
+   * a timed schedule. A command whose hash differs from the envelope's is wider: any change of command waits for Allow.
+   */
+  commandHash?: string | null;
 }
 
-export type EnvelopePart = 'WORKSPACE' | 'ACCESS_LEVEL' | 'RUNS_PER_WEEK' | 'RUN_LIMIT';
+export type EnvelopePart = 'WORKSPACE' | 'ACCESS_LEVEL' | 'RUNS_PER_WEEK' | 'RUN_LIMIT' | 'PROBE_COMMAND';
 
 export const DEFAULT_RUN_LIMIT_MINUTES = 30;
 export const MAX_RUN_LIMIT_MINUTES = 120;
@@ -36,6 +42,7 @@ export function widenedParts(envelope: Envelope, asked: Envelope): EnvelopePart[
   if (ACCESS_ORDER[asked.accessLevel] > ACCESS_ORDER[envelope.accessLevel]) parts.push('ACCESS_LEVEL');
   if (asked.runsPerWeek > envelope.runsPerWeek) parts.push('RUNS_PER_WEEK');
   if (asked.runLimitMinutes > envelope.runLimitMinutes) parts.push('RUN_LIMIT');
+  if (asked.commandHash && asked.commandHash !== (envelope.commandHash ?? null)) parts.push('PROBE_COMMAND');
   return parts;
 }
 
@@ -64,6 +71,7 @@ export function judgeEnvelopeChange(envelope: Envelope, before: Envelope, after:
   if (widens.includes('ACCESS_LEVEL')) next.accessLevel = after.accessLevel;
   if (widens.includes('RUNS_PER_WEEK')) next.runsPerWeek = after.runsPerWeek;
   if (widens.includes('RUN_LIMIT')) next.runLimitMinutes = after.runLimitMinutes;
+  if (widens.includes('PROBE_COMMAND')) next.commandHash = after.commandHash;
   if (changedBy !== 'RUN') {
     if (ACCESS_ORDER[after.accessLevel] < ACCESS_ORDER[before.accessLevel]) {
       next.accessLevel = ACCESS_ORDER[after.accessLevel] < ACCESS_ORDER[next.accessLevel] ? after.accessLevel : next.accessLevel;
@@ -80,5 +88,6 @@ export function sameEnvelope(a: Envelope, b: Envelope): boolean {
     && a.accessLevel === b.accessLevel
     && a.runsPerWeek === b.runsPerWeek
     && a.runLimitMinutes === b.runLimitMinutes
+    && (a.commandHash ?? null) === (b.commandHash ?? null)
   );
 }

@@ -2628,7 +2628,7 @@ export interface SubagentDecision {
   readonly?: boolean;
 }
 
-/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the owner's account. */
 export interface SubagentWorkspaceChoice {
   /** The workspace's id, as the runner has it (a UUID). */
   id: string;
@@ -2752,7 +2752,7 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
-  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  /** A workspace to run on, by name (§10.1 row 1): any workspace of the owner's account, in its own repository. */
   workspace?: string;
   /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
   needs?: string[];

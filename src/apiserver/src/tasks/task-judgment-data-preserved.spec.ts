@@ -3111,6 +3111,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
       // written.
       '1030_conditions',
+      // 1040 widens schedule_run_trigger by CONDITION and adds a nullable schedule.envelope_command_hash and
+      // condition.resumed_at; none is a preserved relation, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1040_schedule_when_rule',
+      // 1050 adds a nullable condition.repeat_seconds with condition_repeat_chk, a nullable condition.repeat_from and
+      // condition_event.repeat with a constant default; none is a preserved relation, no trigger, function or DONE
+      // fence changes, and no row is written.
+      '1050_condition_repeat',
       // 1060 adds a nullable task.start_when_condition_id (FK to condition, SET NULL) with a unique index and a CHECK
       // every stored row passes, a nullable condition.keep_waiting_since, widens owner_request_kind_chk by
       // CONDITION_STILL_WAITING, and adds two triggers that write only `condition` and pg_notify; no task row is

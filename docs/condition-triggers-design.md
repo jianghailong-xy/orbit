@@ -15,6 +15,12 @@ Owner decisions of 2026-11-17, all kept:
 - P3: a one-shot condition that has not held for 30 days asks the owner once (§6.2);
 - P4: three failed checks in a row are "can't read", and notify once (§5.3).
 
+Owner decision of 2026-11-17, after the design was written:
+
+- a `WHEN` condition may **fire again every N while it still holds** (`repeatSeconds`, §3, §5.1): a guard whose fix
+  failed leaves the service unhealthy, the condition never re-arms, and without a repeat nothing would fire again.
+  Optional, `WHEN` rules only, at least 15 minutes; each repeat is a run like any other, counted in the weekly budget.
+
 ## 1. Why
 
 A conversation on the HPC workspace, 2026-11-17. The owner asked for the `kubernetes` pool to keep 3 copies. The
@@ -46,7 +52,8 @@ This design is that pre-check, made the trigger.
 - Watch still reads only Orbit's records. Its predicate grammar gains no leaf, and the server still runs no command.
 - A condition is not a dependency state. `dependencyState` stays `NONE | READY | BLOCKED | BLOCKED_FAILED`; a
   condition answers "when does this start", as `runAt` does, and is evaluated beside it.
-- Schedules keep their two access levels. There is no level that may act on an outside system by itself.
+- Schedules keep their three access levels, `CHECK_ONLY`, `OPEN_PR` and `LAND`, and a `WHEN` schedule takes any of them
+  as a timed one does. `LAND` lands code on main; none of them is a level that may act on an outside system by itself.
 - The agent-first rule of the schedule design holds: nothing here is a form. A person says the condition; an agent
   writes the probe; the card reads it back.
 
@@ -60,11 +67,15 @@ Condition
   holdSeconds                                    the comparison must stay true this long; 0 by default
   rearm?        { op, value }                    WHEN rules only: ready again once this holds
   intervalSeconds                                300 by default, 60 at least
+  repeatSeconds?                                 WHEN rules only: fire again every this long while it still holds
+                                                 (§5.1); 900 at least, and at least intervalSeconds; none by default
   text                                           the condition in words, written by the agent: "3 or more OSDs are in"
   unit?                                          how a reading is shown: "%", "in", "GiB"
   state         WAITING | HOLDING | FIRED | UNKNOWN | ENDED          §5
   lastSampleAt?, lastValue?, lastOutcome?        the newest sample, as the list shows it
   trueSince?, unknownSince?, failedChecks
+  repeatFrom?                                    what the next repeat is counted from: the last FIRED, or the sample
+                                                 the comparison held again on after a break
   approvedCommandHash, approvedAt                what the owner pressed Create or Allow on
   taskId? | scheduleId?                          exactly one
 
@@ -72,7 +83,8 @@ ConditionSample                                  kept 30 days, and the latest 10
   conditionId, at, outcome (VALUE | EXIT | TIMEOUT | ERROR), value?, exitCode?, stderrTail?
 
 ConditionEvent                                   what the history shows
-  conditionId, at, kind (FIRED | READY_AGAIN | CANT_READ | READ_AGAIN | ASKED_STILL_WAITING), value?, runId?
+  conditionId, at, kind (FIRED | READY_AGAIN | CANT_READ | READ_AGAIN | ASKED_STILL_WAITING), value?, runId?,
+  repeat                                         a FIRED that is a repeat: the history says "Fired again"
 ```
 
 Attach points:
@@ -129,6 +141,15 @@ any ──3 failed checks, or no sample for 3 intervals──▶ UNKNOWN ──a
 ```
 
 - A condition fires on the **crossing**, once. Staying above the line fires nothing more.
+- **Unless it repeats** (owner, 2026-11-17). A `WHEN` condition with `repeatSeconds` fires again when that long has
+  passed since its last `FIRED` event, while it is FIRED, its comparison has held in every sample since, and it has not
+  re-armed. Each repeat writes a `FIRED` event marked `repeat` and starts the work as any firing does (§5.2): one run
+  with `trigger: CONDITION`, under the schedule's overlap rule, weekly budget (over budget is MISSED `OVER_BUDGET`) and
+  start checks. A sample whose comparison is false while the re-arm has not held yet stops the repeats; when the
+  comparison holds again, the clock restarts from that sample. A failed check neither completes a repeat nor breaks
+  one; UNKNOWN never repeats, and the sample that leaves it restarts the clock. A repeat leaves `firedAt` at the
+  crossing. With no `repeatSeconds`, nothing changes. A `startWhen` condition never repeats, and one created with
+  `repeatSeconds` is refused.
 - With no `rearm`, a `WHEN` condition is ready again as soon as the comparison is false. The agent writes a `rearm`
   whenever the reading can hover at the line ("above 90%, ready again below 85%").
 - `holdSeconds` is measured between samples: the comparison held in every sample across that span.
@@ -164,7 +185,12 @@ for 10 min"), the re-arm line and how it is checked, then the command. **Costs**
 are not counted, because they start no model. The envelope gains the command's hash, so changing the command grows
 it.
 
-A run started by a condition gets the firing in its run block: the reading, since when, and the recent samples.
+With a repeat, **When** carries one more line in words: "And again every 2 hours while it stays that way." The
+inspector's *Condition* block carries the same sentence. A repeat is not part of the envelope: the weekly budget
+already bounds the runs it can start, so changing it, shorter or longer, applies at once and is recorded as a revision.
+
+A run started by a condition gets the firing in its run block: the reading, since when, and the recent samples. A
+repeat's block also says that it is a repeat, when the condition first fired, and how many runs it has started since.
 The run's report key is its own choice, as today (`above-90@2026-11-21`).
 
 ### 6.2 A task's startWhen (P3: A)
@@ -183,7 +209,8 @@ A condition that has not fired for 30 days asks the owner once ("Still waiting f
 
 Nothing new is built for this, by decision.
 
-- A `WHEN` schedule is `CHECK_ONLY` or `OPEN_PR`. A run that wants to change the outside system runs the command,
+- A `WHEN` schedule is `CHECK_ONLY`, `OPEN_PR` or `LAND`, as a timed schedule is; `LAND` lands code on main and acts on
+  no outside system. A run that wants to change the outside system runs the command,
   and that command is an approval card: the run is AWAITING_APPROVAL and the card is in **Waiting on you**
   (schedule design §6.4). Unanswered for 2 hours, the run ends and nothing was done. "Always allow" on such a card
   is how an owner later lets a guard act by itself, one command pattern at a time.
@@ -193,8 +220,8 @@ Nothing new is built for this, by decision.
 ## 8. Agents
 
 - `schedule_create`: `rule: { kind: "WHEN", condition }`; `task_create`: `startWhen: condition`. The condition is
-  `{ text, command, compare, holdSeconds?, rearm?, intervalSeconds?, unit? }`, and `baseline` is required: the
-  agent ran the command and passes what it read.
+  `{ text, command, compare, holdSeconds?, rearm?, intervalSeconds?, unit?, repeatSeconds? }`, and `baseline` is
+  required: the agent ran the command and passes what it read. `repeatSeconds` is accepted on a `WHEN` rule only.
 - Tool descriptions gain the fifth row of the schedule design's "which timer" table: "when something outside Orbit
   becomes true" is a condition, not a `bg_run` poll and not a daily check.
 - When a person answers a question with "wait until X", the agent proposes the card instead of writing a note.

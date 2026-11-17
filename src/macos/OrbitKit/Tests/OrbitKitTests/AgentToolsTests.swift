@@ -157,7 +157,7 @@ final class AgentToolsTests: XCTestCase {
         XCTAssertEqual(rows.count, 2, "every family but orchestration on one row, orchestration on its own")
         let others = guide.families.filter { $0.id != "orchestration" }
         XCTAssertEqual(rows[0].text, others.map { "\($0.label) \($0.tools?.count ?? 1)" }.joined(separator: " · "))
-        XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 19 · Task lists 6"), rows[0].text)
+        XCTAssertTrue(rows[0].text.hasPrefix("Tasks 21 · Projects 20 · Task lists 6"), rows[0].text)
         XCTAssertEqual(rows[0].word, "Available")
         XCTAssertEqual(rows[0].tone, .ok)
         XCTAssertEqual(rows[1].text, "Sessions, agents and runners · 22")

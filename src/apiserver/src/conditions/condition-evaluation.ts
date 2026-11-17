@@ -22,7 +22,12 @@
  *     reading only if it was armed: the newest sample decides, and nothing replays;
  *   - with no `rearm`, a WHEN condition is ready again as soon as the comparison is false; the sample that re-arms it
  *     starts no hold of its own;
- *   - a sample no newer than the newest one already evaluated is stored and not evaluated.
+ *   - a sample no newer than the newest one already evaluated is stored and not evaluated;
+ *   - with `repeatSeconds` (WHEN rules only), a FIRED condition fires again once that long has passed since
+ *     `repeatFrom`, on a sample whose comparison holds, while it has not re-armed. `repeatFrom` is the last FIRED; a
+ *     sample whose comparison is false without re-arming clears it, and the next sample that holds sets it again, so
+ *     the clock restarts from that sample. Entering UNKNOWN clears it too, and the sample that leaves UNKNOWN restarts
+ *     it: UNKNOWN never repeats. A failed sample neither completes a repeat nor breaks one.
  */
 import type { ConditionCompareOp, ConditionEventKind, ConditionSampleOutcome, ConditionState, ConditionUnknownReason } from '@orbit/shared';
 
@@ -40,6 +45,8 @@ export interface ConditionRules {
   intervalSeconds: number;
   /** A schedule's WHEN rule re-arms; a task's startWhen fires once. */
   scheduleId: string | null;
+  /** WHEN rules only: fire again every this many seconds while it still holds and has not re-armed; null never. */
+  repeatSeconds: number | null;
 }
 
 /** The columns the evaluation moves. */
@@ -54,7 +61,10 @@ export interface ConditionMachine {
   unknownSince: Date | null;
   unknownReason: ConditionUnknownReason | null;
   failedChecks: number;
+  /** When it last fired on a crossing (a repeat leaves it): the run block's "first fired". */
   firedAt: Date | null;
+  /** What the next repeat is counted from; null while none is due. */
+  repeatFrom: Date | null;
 }
 
 export interface ConditionSampleInput {
@@ -68,6 +78,8 @@ export interface ConditionEventDraft {
   kind: ConditionEventKind;
   at: Date;
   value: number | null;
+  /** A FIRED that is a repeat: "Fired again". */
+  repeat?: boolean;
 }
 
 export interface ConditionStep {
@@ -109,11 +121,18 @@ function holds(op: ConditionCompareOp, line: number | null, reading: { value: nu
   }
 }
 
+/** Whether one sample holds the comparison: null when it read nothing (a failed check is neither true nor false). */
+export function sampleHolds(op: ConditionCompareOp, line: number | null, sample: ConditionSampleInput): boolean | null {
+  const reading = readingOf(sample, op);
+  return reading.ok ? holds(op, line, reading) : null;
+}
+
 function enterUnknown(m: ConditionMachine, at: Date, reason: ConditionUnknownReason, step: ConditionStep): void {
   m.state = 'UNKNOWN';
   m.unknownSince = at;
   m.unknownReason = reason;
   m.trueSince = null;
+  m.repeatFrom = null;
   step.events.push({ kind: 'CANT_READ', at, value: null });
   step.enteredUnknown = reason;
 }
@@ -146,6 +165,7 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
     m.unknownSince = null;
     m.unknownReason = null;
     m.trueSince = null;
+    m.repeatFrom = null;
     step.events.push({ kind: 'READ_AGAIN', at: sample.at, value: reading.value });
     step.leftUnknown = true;
   }
@@ -159,7 +179,21 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
       m.armed = true;
       m.state = 'WAITING';
       m.trueSince = null;
+      m.repeatFrom = null;
       step.events.push({ kind: 'READY_AGAIN', at: sample.at, value: reading.value });
+      return step;
+    }
+    if (rules.repeatSeconds === null) return step;
+    if (!compareHolds) {
+      // False, but not re-armed yet: the repeats stop until the comparison holds again.
+      m.repeatFrom = null;
+    } else if (m.repeatFrom === null) {
+      // It holds again after a break, or after UNKNOWN: the clock restarts from this sample.
+      m.repeatFrom = sample.at;
+    } else if (sample.at.getTime() - m.repeatFrom.getTime() >= rules.repeatSeconds * 1000) {
+      m.repeatFrom = sample.at;
+      step.events.push({ kind: 'FIRED', at: sample.at, value: reading.value, repeat: true });
+      step.fired = true;
     }
     return step;
   }
@@ -175,6 +209,7 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
     m.armed = false;
     m.firedAt = sample.at;
     m.trueSince = null;
+    m.repeatFrom = rules.repeatSeconds !== null && rules.scheduleId !== null ? sample.at : null;
     step.events.push({ kind: 'FIRED', at: sample.at, value: reading.value });
     step.fired = true;
   } else {
@@ -190,11 +225,11 @@ export function evaluateSample(rules: ConditionRules, machine: ConditionMachine,
  */
 export function evaluateSilence(
   rules: Pick<ConditionRules, 'intervalSeconds'>,
-  machine: ConditionMachine & { approvedAt: Date },
+  machine: ConditionMachine & { approvedAt: Date; resumedAt?: Date | null },
   now: Date,
   runnerAsleep: boolean,
 ): ConditionStep {
-  const { approvedAt: _approvedAt, ...rest } = machine;
+  const { approvedAt: _approvedAt, resumedAt: _resumedAt, ...rest } = machine;
   const step = blankStep(rest);
   if (machine.state === 'UNKNOWN' || machine.state === 'ENDED') return step;
   if (!silentSince(rules, machine, now)) return step;
@@ -202,12 +237,16 @@ export function evaluateSilence(
   return step;
 }
 
-/** Whether no sample has arrived for three intervals. */
+/**
+ * Whether no sample has arrived for three intervals: since the newest sample (or the approval, before any), or since
+ * its schedule was resumed when that is newer, so a resume does not read as a runner gone quiet.
+ */
 export function silentSince(
   rules: Pick<ConditionRules, 'intervalSeconds'>,
-  machine: { lastSampleAt: Date | null; approvedAt: Date },
+  machine: { lastSampleAt: Date | null; approvedAt: Date; resumedAt?: Date | null },
   now: Date,
 ): boolean {
-  const since = machine.lastSampleAt ?? machine.approvedAt;
+  const from = machine.lastSampleAt ?? machine.approvedAt;
+  const since = machine.resumedAt && machine.resumedAt > from ? machine.resumedAt : from;
   return now.getTime() - since.getTime() >= CONDITION_SILENT_INTERVALS_TO_UNKNOWN * rules.intervalSeconds * 1000;
 }
