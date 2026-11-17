@@ -200,7 +200,12 @@ type bgTailer struct {
 	// which a stopped SubAgent's hold leaves to the parent (subagent_tree.go).
 	announceSubagents func()
 	subagentHandoff   func() bool
-	parentEdits       parentEditLog
+	// endKeepsWork reports whether the session is ending because its coordinator handed over, which leaves its
+	// SubAgents and jobs running (session_keep_work.go); nil reads as no. keepSubagents is how that leaves the
+	// SubAgents, installed with stopSubagents.
+	endKeepsWork  func() bool
+	keepSubagents func(shutdown context.Context)
+	parentEdits   parentEditLog
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -1018,16 +1023,27 @@ func (b *bgTailer) stopAll() {
 	// SubAgents first: they write the checkout as the engine does, and the finalize that follows must not
 	// capture what one is half-way through (docs/subagent-design.md §5.2). A runner that is stopping
 	// interrupts them; anything else is the session ending, which stops them.
+	//
+	// Except when the session ends because its coordinator handed over: its SubAgents and its jobs (not its
+	// services) are left to end by themselves, and the wake their end owes goes to the successor
+	// (session_keep_work.go). The drain below then has only the services left to end.
 	b.mu.Lock()
-	stopSubagents := b.stopSubagents
+	stopSubagents, keepSubagents, shutdown := b.stopSubagents, b.keepSubagents, b.shutdown
 	reason := subagentStopSessionEnded
 	if b.runnerStoppingLocked() {
 		reason = subagentStopRunnerStopped
 	} else if b.subagentHandoff != nil && b.subagentHandoff() {
 		reason = subagentStopHandedOver
 	}
+	keep := reason == subagentStopSessionEnded && b.endKeepsWork != nil && b.endKeepsWork()
 	b.mu.Unlock()
-	if stopSubagents != nil {
+	switch {
+	case keep:
+		if keepSubagents != nil {
+			keepSubagents(shutdown)
+		}
+		b.keepJobsPastEnd()
+	case stopSubagents != nil:
 		stopSubagents(reason)
 	}
 	b.drainJobs(bgDrainWaitCap)

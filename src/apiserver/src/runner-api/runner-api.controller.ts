@@ -2667,6 +2667,7 @@ export class RunnerApiController {
       cloneRequests = await this.githubWorkspaces.cloneRequestsFor(runner.id).catch(() => undefined);
     }
     let cancelSessionIds: string[] = [];
+    let keepWorkSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
@@ -2686,6 +2687,7 @@ export class RunnerApiController {
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
+      keepWorkSessionIds = await this.realtime.keepingWork(cancelSessionIds);
       // Manual git mutations are fail-closed: a runner must advertise its process owner,
       // or requests stay pending instead of executing an unfenced operation.
       if (heartbeatLeaseOwner) {
@@ -2796,6 +2798,7 @@ export class RunnerApiController {
     // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
+      ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
