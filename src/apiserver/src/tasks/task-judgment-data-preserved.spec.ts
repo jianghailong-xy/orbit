@@ -3090,6 +3090,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0950 adds a nullable schedule.read_back and fills it from each schedule's own create card; schedule is not one
       // of the preserved relations, and no trigger, function or DONE fence changes.
       '0950_schedule_read_back',
+      // 0970_project_ruling adds the project_ruling table (owner rulings kept on their project); no preserved relation,
+      // trigger, function or DONE fence changes.
+      '0970_project_ruling',
       // 0980 moves workspace.work_dir from /var/lib/orbit/home to /home/orbit for workspaces on managed runners (one
       // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
       // fence changes.

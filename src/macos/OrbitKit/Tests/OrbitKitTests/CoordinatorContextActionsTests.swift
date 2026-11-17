@@ -220,7 +220,7 @@ final class CoordinatorContextActionsTests: XCTestCase {
             ## Where things stand
             - 4 of 6 tasks done; Fix login redirect in review.
 
-            **Agreed with the owner**
+            **Rulings not yet recorded**
             - Don't merge Payment retries before Friday's release.
             Waiting on
             * Evidence for Fix login redirect.
@@ -267,6 +267,63 @@ final class CoordinatorContextActionsTests: XCTestCase {
                        + "conversation. Nothing is deleted.")
         XCTAssertTrue(CoordinatorContextCopy.phoneConfirmBody(waits: 1, running: true)
             .hasPrefix("After the current turn ends, this coordinator writes a handoff note"))
+    }
+
+    // MARK: Pending work's kind — handoff v2 §1
+
+    /// The confirm (the Mac's sheet, the iPhone's Alert) and the successor's moved-here list name each
+    /// wait's kind after its label; a watch, and a wait from a server without `kind`, read as before.
+    func testEachPendingWaitNamesItsKindInTheConfirmAndTheMovedList() throws {
+        let preview = try JSONDecoder().decode([CoordinatorPendingWait].self, from: Data("""
+            [{"id":"r1","kind":"SUBAGENT","label":"Deploy 55a189aa3 to production","paused":false},
+             {"id":"sw1","kind":"WAKEUP","label":"Check the deploy","paused":false},
+             {"id":"bgj_1","kind":"JOB","label":"pnpm test","paused":false},
+             {"id":"l1","kind":"LOOP","label":"Babysit CI","paused":false},
+             {"id":"w1","kind":"WATCH","label":"Waiting for Fix login redirect","paused":true}]
+            """.utf8))
+        XCTAssertEqual(preview.map(\.kind), [.subagent, .wakeup, .job, .loop, .watch])
+        let lines = ["Deploy 55a189aa3 to production · SubAgent", "Check the deploy · Scheduled wakeup",
+                     "pnpm test · Background job", "Babysit CI · Wakeup loop", "Waiting for Fix login redirect (paused)"]
+        // The Mac's confirm: one line per wait.
+        XCTAssertEqual(preview.map(CoordinatorHandoffCopy.waitLine), lines)
+        // The iPhone's Alert: the body, then each wait on its own line.
+        XCTAssertEqual(CoordinatorContextCopy.phoneConfirmMessage(waits: Array(preview.prefix(2)), running: false),
+                       "This coordinator writes a handoff note, then the project continues in a new conversation. "
+                       + "2 pending waits move over. Nothing is deleted.\n\n"
+                       + "Deploy 55a189aa3 to production · SubAgent\nCheck the deploy · Scheduled wakeup")
+
+        // The successor's moved-here list.
+        let successor = try session("""
+            {"id":"s2","status":"RUNNING","pendingApprovals":0,"projectId":"p1",
+             "coordinatorHandoffReceived":{"handoffFromSessionId":"s1","note":null,"handedOverAt":"2026-11-14T10:42:00Z",
+             "movedWaits":[{"id":"r1","kind":"SUBAGENT","label":"Deploy 55a189aa3 to production","paused":false},
+                           {"id":"sw1","kind":"WAKEUP","label":"Check the deploy","paused":false}]}}
+            """)
+        XCTAssertEqual(successor.coordinatorHandoffReceived?.movedWaits.map(CoordinatorHandoffCopy.waitLine),
+                       ["Deploy 55a189aa3 to production · SubAgent", "Check the deploy · Scheduled wakeup"])
+    }
+
+    /// An older server sends no `kind` (and a newer one may send one this build does not know): each reads
+    /// as a watch, so the confirm and the moved-here list say what they said before kinds — and the
+    /// iPhone's Alert keeps the waits a count only.
+    func testAWaitWithoutAKindReadsAsBefore() throws {
+        let older = try JSONDecoder().decode([CoordinatorPendingWait].self, from: Data("""
+            [{"id":"w1","label":"Waiting for Fix login redirect","paused":false},
+             {"id":"w2","label":"Session Payment retries finishing its turn","paused":true},
+             {"id":"x1","kind":"SOMETHING_NEW","label":"Something new","paused":false}]
+            """.utf8))
+        XCTAssertEqual(older.map(\.kind), [.watch, .watch, .watch])
+        XCTAssertEqual(older.map(CoordinatorHandoffCopy.waitLine),
+                       ["Waiting for Fix login redirect", "Session Payment retries finishing its turn (paused)", "Something new"])
+        XCTAssertEqual(CoordinatorContextCopy.phoneConfirmMessage(waits: older, running: false),
+                       CoordinatorContextCopy.phoneConfirmBody(waits: 3, running: false))
+        let successor = try session("""
+            {"id":"s2","status":"RUNNING","pendingApprovals":0,"projectId":"p1",
+             "coordinatorHandoffReceived":{"handoffFromSessionId":"s1","note":null,"handedOverAt":"2026-11-14T10:42:00Z",
+             "movedWaits":[{"id":"w1","label":"Waiting for Fix login redirect","paused":false}]}}
+            """)
+        XCTAssertEqual(successor.coordinatorHandoffReceived?.movedWaits.map(CoordinatorHandoffCopy.waitLine),
+                       ["Waiting for Fix login redirect"])
     }
 
     /// A refused press reads web's toast title, then why (`APIClient.failureReason`).
