@@ -120,6 +120,7 @@ import {
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
   AccountRemoveCommand,
+  AccountRemoveMove,
   AccountRemoveResult,
   CodexAccountRemoveResult,
   InstallCommand,
@@ -2709,10 +2710,18 @@ export class RunnerApiController {
       // engine names itself. An old runner handed the generic field would remove a path under its
       // own codex-accounts that never existed and report done.
       if (removeRequest?.engine === 'codex' || removeRequest === undefined) {
-        // The codex-named field keeps the exact shape it always had: an older runner reads only
-        // account and attempt, and the engine it is about is the field's own name.
+        // The codex-named field keeps the shape it always had: an older runner reads only account and
+        // attempt, and the engine it is about is the field's own name. `moves` rides along for a runner
+        // that carries sessions with no engine running (runner-go account_cold_move.go); an older one
+        // ignores it.
         codexAccountRemoveRequest =
-          removeRequest === undefined ? undefined : { account: removeRequest.account, attempt: removeRequest.attempt };
+          removeRequest === undefined
+            ? undefined
+            : {
+                account: removeRequest.account,
+                attempt: removeRequest.attempt,
+                ...(removeRequest.moves ? { moves: removeRequest.moves } : {}),
+              };
       } else {
         accountRemoveRequest = removeRequest;
       }
@@ -3753,7 +3762,27 @@ export class RunnerApiController {
     if (!account) return undefined;
     // A row written before accounts-per-engine meant Codex.
     const engine = (r.accountRemoveEngine as LoginCommand['engine']) ?? 'codex';
-    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '' };
+    const moves = moving ? await this.accountRemoveMoves(runnerId, engine, account, r.codexAccountRemoveSessions ?? []) : [];
+    return { engine, account, attempt: r.codexAccountRemoveAt?.toISOString() ?? '', ...(moves.length > 0 ? { moves } : {}) };
+  }
+
+  /**
+   * Where each session a removal moved off `account` now is: the account its row names for `engine`,
+   * which moveOffRemovedAccount wrote. A session with no engine running takes its reload only at its
+   * next claim, so the runner carries it there itself (runner-go account_cold_move.go). Only this
+   * runner's sessions, and only those moved to another account.
+   */
+  private async accountRemoveMoves(runnerId: string, engine: string, account: string, sessionIds: string[]): Promise<AccountRemoveMove[]> {
+    if (!isAccountEngine(engine) || sessionIds.length === 0) return [];
+    const column = ACCOUNT_CHOICE[engine];
+    const rows = (await this.prisma.session.findMany({
+      where: { id: { in: sessionIds }, assignedRunnerId: runnerId },
+      select: { id: true, [column]: true },
+    })) as unknown as Array<{ id: string } & Record<string, unknown>>;
+    return rows.flatMap((row) => {
+      const to = row[column];
+      return typeof to === 'string' && to !== account ? [{ sessionId: row.id, account: to }] : [];
+    });
   }
 
   /**
