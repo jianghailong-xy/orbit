@@ -4850,7 +4850,9 @@ export class ProjectsService {
     // coordinate, so a swap that left this one open would demote a conversation still being written
     // to — it would go on being talked to and quietly stop being able to act. Already-completed is
     // the no-op case, and the one this call reached through the ordinary route.
-    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
+    // A handoff's outgoing coordinator leaves its SubAgent runs and bg_run jobs running; their end wakes the
+    // successor (docs/coordinator-handoff-v2-design.md §1).
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id, { handingOver: handoff != null });
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of

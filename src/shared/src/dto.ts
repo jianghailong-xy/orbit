@@ -1430,6 +1430,10 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Those of cancelSessionIds whose end is a coordinator handing over (docs/coordinator-handoff-v2-design.md §1):
+   *  the runner ends the session but leaves its running SubAgent runs and bg_run jobs to end by themselves, their
+   *  wake forwarded to the successor. The same fact the session's `end` turn carries; absent when there are none. */
+  keepWorkSessionIds?: string[];
   /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
    *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
   remoteSubagentRuns?: string[];
