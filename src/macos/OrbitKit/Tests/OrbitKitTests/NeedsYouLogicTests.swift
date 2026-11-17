@@ -516,7 +516,7 @@ final class NeedsYouLogicTests: XCTestCase {
                         lastTurnAt: "2026-11-15T02:00:00Z")
         let seen = Set([a].map(NeedsYouLogic.waitKey))
         let fresh = NeedsYouLogic.newlyWaiting([a, b], seen: seen)
-        XCTAssertEqual(fresh.map(\.target.id), ["b"], "only what was not waiting before")
+        XCTAssertEqual(fresh.compactMap(\.target?.id), ["b"], "only what was not waiting before")
         let notice = try XCTUnwrap(fresh.first)
         XCTAssertEqual(notice.title, "Orbit 接入 Ollama")
         XCTAssertEqual(notice.line, "Needs your reply · orbit-op")
@@ -526,7 +526,7 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: bothSeen).isEmpty, "the same wait, not again")
         let bAgain = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
                              lastTurnAt: "2026-11-15T03:00:00Z")
-        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).map(\.target.id), ["b"],
+        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).compactMap(\.target?.id), ["b"],
                        "stopping again is a new wait")
         XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: seen, excluding: "b").isEmpty,
                       "the conversation on screen has its own card in front of the reader")

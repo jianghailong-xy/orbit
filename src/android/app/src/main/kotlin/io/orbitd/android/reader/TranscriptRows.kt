@@ -162,6 +162,8 @@ internal class EngineReading(events: List<RunEvent>) {
         val retries = mutableListOf<Retry>()
         val seen = HashMap<String, Triple<Stderr, String, Int>>()
         val diagnosticsSeen = HashMap<String, Diagnostic>()
+        var legacyWithheld: RunEvent? = null
+        var legacyCount = 0
         var lastStderr: Triple<Stderr, Long, Boolean>? = null
         var lastFailure: Failure? = null
         val open = LinkedHashMap<String, String>()
@@ -190,6 +192,12 @@ internal class EngineReading(events: List<RunEvent>) {
             else -> false
         }
         events.forEach { e ->
+            val legacy = e.type == "system" && e.fields.string("subtype") == "secret_patch_withheld" &&
+                e.fields.string("path")?.let { path -> listOf(
+                    "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+                    "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+                ).any { e.fields.string("notice") == "$path: $it" } } == true
+            if (!legacy || legacyWithheld?.turnId != e.turnId) { legacyWithheld = null; legacyCount = 0 }
             // A tool call can sit between a stderr line and its continuation; anything else ends the log.
             if (e.type !in setOf("system", "tool_use", "tool_result")) { lastStderr = null; lastFailure = null }
             if (!e.parent().isNullOrEmpty() && e.type in setOf("assistant", "thinking", "tool_use", "tool_result")) {
@@ -240,10 +248,17 @@ internal class EngineReading(events: List<RunEvent>) {
                             }
                         }
                     }
-                    // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic is a calm row of its own kind.
+                    // A deliberate heads-up wins over stderr; legacy temporary secret notices fold into one row.
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {
-                        rows[e.seq] = e.row("notice") { put("text", notice) }
+                        if (legacy) {
+                            val first = legacyWithheld ?: e.also { legacyWithheld = it }
+                            legacyCount++
+                            rows[first.seq] = first.row("notice") { put("text", if (legacyCount == 1) "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it." else "Orbit held back the diffs of $legacyCount files while it checked this runner for a removed secret. No secret was found in them.") }
+                            if (first.seq != e.seq) rows[e.seq] = null
+                        } else {
+                            rows[e.seq] = e.row("notice") { put("text", notice) }
+                        }
                         if (e.fields.string("noticeKind") == "pool-member-switched") { switches += e to notice; openSwitches += e.seq }
                         lastRow = e
                         return@forEach

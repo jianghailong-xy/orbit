@@ -1852,6 +1852,16 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
   'GET /shared/:token/events':
     'a page of the link\'s own session — `before` and `limit` are numbers, and any link that is not a session\'s is '
     + 'the one 404 (shared.controller.ts:196)',
+  'GET /shared/:token/stream':
+    'the link\'s own session pushed — `sinceSeq` and `maxPayload` are numbers, and any link that is not a session\'s is '
+    + 'the one 404 before anything is read (shared/shared-stream.guard.ts:29, :39)',
+  // By hand rather than a case: an answered request is a stream that never ends, which (2) of the runner census
+  // would wait on forever. The guard asks what `:token/sessions/:sessionId/events` asks (openConversation) before
+  // anything is read; viewer-stream.pg.spec.ts sends another link's token with this conversation in it.
+  'GET /shared/:token/sessions/:sessionId/stream':
+    'a conversation the link opens, pushed: SharedStreamGuard resolves the token, then asks whether the link opens '
+    + '`sessionId` exactly as `GET /shared/:token/sessions/:sessionId/events` does (shared/shared-stream.guard.ts:37, '
+    + 'share-links.service.ts:428), the one 404 otherwise, before the stream reads or subscribes to anything',
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
     + '(sessions.service.ts:3719)',

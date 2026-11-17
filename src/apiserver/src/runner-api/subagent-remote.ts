@@ -32,7 +32,7 @@ import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-rou
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
- * parent's repository, on that workspace's own runner, and returns text only.
+ * owner's account, on that workspace's own runner, and returns text only.
  *
  *   - Which workspace (§10.1): the one the call names, or, for `needs`, the owner's enabled workspaces of the
  *     parent's repository whose runner is online and reports every needed capability, the one with the most quota
@@ -91,11 +91,8 @@ export function neededCapabilities(needs: readonly string[] | undefined): string
 }
 
 /** What one workspace lacks for this SubAgent, English, in the order a person would fix them. */
-function lacksOf(row: CandidateRow, parentRepo: string | null, needs: readonly string[], now: number): string[] {
+function lacksOf(row: CandidateRow, needs: readonly string[], now: number): string[] {
   const lacks: string[] = [];
-  const repo = repoOf(row.repoUrl);
-  if (!parentRepo || !repo) lacks.push(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
-  else if (repo !== parentRepo) lacks.push(`it works on another repository (${repo})`);
   if (row.workDirIsGit === false) lacks.push('its work directory is not a git repository');
   if (!row.subagentsEnabled) lacks.push('SubAgents are turned off for it');
   if (!row.runner || !runnerIsOnline(row.runner, now)) lacks.push('its runner is offline');
@@ -132,10 +129,6 @@ export async function chooseSubagentWorkspace(
   const needs = neededCapabilities(args.needs);
   if (!named && needs.length === 0) return { kind: 'local', reason: null };
   const now = args.now ?? new Date();
-  const parent = args.parentWorkspaceId
-    ? await db.workspace.findUnique({ where: { id: args.parentWorkspaceId }, select: { repoUrl: true, name: true } })
-    : null;
-  const parentRepo = repoOf(parent?.repoUrl);
   const needText = needs.join(', ');
 
   if (named) {
@@ -149,15 +142,6 @@ export async function chooseSubagentWorkspace(
     }
     if (row.id === args.parentWorkspaceId) {
       return { kind: 'local', reason: null };
-    }
-    const repo = repoOf(row.repoUrl);
-    if (!parentRepo || !repo || repo !== parentRepo) {
-      throw refusal(
-        HttpStatus.CONFLICT,
-        'SUBAGENT_WORKSPACE_REPO_MISMATCH',
-        `${row.name} works on ${repo ?? 'no repository URL'}, and this session's workspace on ${parentRepo ?? 'no repository URL'}. ` +
-          'A SubAgent runs only on a workspace of the same repository; use session_create for work in another one.',
-      );
     }
     if (row.workDirIsGit === false) {
       throw refusal(
@@ -179,7 +163,7 @@ export async function chooseSubagentWorkspace(
     if (!row.runner || !row.runnerId || !runnerIsOnline(row.runner, now.getTime())) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_OFFLINE', `${row.name}'s runner is offline.`);
     }
-    const lacks = lacksOf(row, parentRepo, needs, now.getTime());
+    const lacks = lacksOf(row, needs, now.getTime());
     if (lacks.length) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_LACKS_NEEDS', `${row.name} cannot run this SubAgent: ${lacks.join('; ')}.`);
     }
@@ -190,6 +174,11 @@ export async function chooseSubagentWorkspace(
     };
   }
 
+  const parent = args.parentWorkspaceId
+    ? await db.workspace.findUnique({ where: { id: args.parentWorkspaceId }, select: { repoUrl: true, name: true } })
+    : null;
+  const parentRepo = repoOf(parent?.repoUrl);
+
   // By capability: the owner's enabled workspaces in the Agents list's order (position, then creation).
   const rows = await db.workspace.findMany({
     where: { ownerId: args.ownerId, enabled: true, deletedAt: null },
@@ -198,7 +187,10 @@ export async function chooseSubagentWorkspace(
   });
   const candidates: WorkspaceCandidate[] = [];
   for (const row of rows) {
-    const lacks = lacksOf(row, parentRepo, needs, now.getTime());
+    const lacks = lacksOf(row, needs, now.getTime());
+    const repo = repoOf(row.repoUrl);
+    if (!parentRepo || !repo) lacks.unshift(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
+    else if (repo !== parentRepo) lacks.unshift(`it works on another repository (${repo})`);
     candidates.push({
       id: row.id,
       name: row.name,

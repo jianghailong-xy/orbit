@@ -551,6 +551,10 @@ struct OwnerRequestSteps: View {
 struct TerminalApproveCard: View {
     let model: OwnerRequestsModel
     let request: TerminalRequest
+    /// Opened from the needs-you line or the push: the card's outline says which one for a moment.
+    var lit = false
+    /// What the server recorded, for the page's notice (board ② choice 3).
+    var onSaid: (String) -> Void = { _ in }
     @State private var busy = false
     @State private var failure: String?
 
@@ -599,7 +603,9 @@ struct TerminalApproveCard: View {
             .padding(16)
         }
         .background(Color.ownerRequestAccent.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ownerRequestAccent.opacity(0.45)))
+        .overlay(RoundedRectangle(cornerRadius: 12)
+            .strokeBorder(Color.ownerRequestAccent.opacity(lit ? 1 : 0.45), lineWidth: lit ? 2 : 1))
+        .shadow(color: lit ? .orange.opacity(0.35) : .clear, radius: lit ? 6 : 0)
         // A container, so its own identifier does not overwrite its buttons'.
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("terminal-request-\(request.id)")
@@ -608,7 +614,10 @@ struct TerminalApproveCard: View {
     private func decide(approve: Bool) {
         busy = true
         Task { @MainActor in
-            do { try await model.decideTerminal(request, approve: approve) } catch { failure = error.localizedDescription }
+            do {
+                try await model.decideTerminal(request, approve: approve)
+                onSaid(approve ? Terminals.approvedToast : Terminals.deniedToast)
+            } catch { failure = error.localizedDescription }
             busy = false
         }
     }

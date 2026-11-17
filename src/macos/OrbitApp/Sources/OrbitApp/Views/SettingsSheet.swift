@@ -161,6 +161,8 @@ struct SettingsHomeView: View {
         .task { await model.accessTokens?.load() }
         .task { await model.terminals?.load() }
         .task { await model.loadGithub() }
+        // The terminals asking to be approved count toward Machines & models' row too.
+        .task { await model.ownerRequests?.loadTerminalRequests() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -254,7 +256,7 @@ struct SettingsHomeView: View {
     /// machines' lines the page's Needs you holds, or with none how many machines are online.
     private var machinesValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = MachinesAndModelsLists(model).attention.filter(\.isMachine).count
+        let needsYou = MachinesAndModelsLists(model).needsYouCount
         return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 

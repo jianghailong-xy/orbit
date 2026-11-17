@@ -88,7 +88,10 @@ public enum PendingTray {
     }
 
     static func text(of bubble: UserBubble) -> String {
-        let words = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Translated (Settings › Translation): the words the reader wrote, not the English delivered
+        // — as the bubble shows them unflipped (web parity: `queuedRow`'s `translation?.original`).
+        let words = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if !words.isEmpty { return bubble.shell ? "!\(words)" : words }
         let images = bubble.attachments.filter(\.isImage).count
         return summary(images: images, files: bubble.attachments.count - images)

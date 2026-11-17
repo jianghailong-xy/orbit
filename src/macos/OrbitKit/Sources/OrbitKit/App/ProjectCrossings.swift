@@ -77,13 +77,19 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
 
     /// A criterion a move names: the target's it would count towards — whose `text` is nil once
     /// that criterion has been deleted — or the source's it serves now.
+    ///
+    /// `ordinal` is the criterion's 1-based position in its project's list, and is what a person
+    /// calls it (`Criterion 4`). `key` is an opaque id and is never drawn. A server older than the
+    /// number sends none, and then `text` is what the card falls back to.
     public struct Criterion: Decodable, Equatable, Sendable {
         public let key: String
         public let text: String?
+        public let ordinal: Int?
 
-        public init(key: String, text: String?) {
+        public init(key: String, text: String?, ordinal: Int? = nil) {
             self.key = key
             self.text = text
+            self.ordinal = ordinal
         }
     }
 

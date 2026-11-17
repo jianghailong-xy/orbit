@@ -287,6 +287,28 @@ describe('the composer tag (6A)', () => {
   });
 });
 
+describe('the tray, for a translated message', () => {
+  it('says what the reader wrote, not the English delivered', async () => {
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
+    const steer = {
+      seq: 13, type: 'user', turnId: 'turn-steer', ts: '2026-10-08T03:05:10Z',
+      payload: {
+        text: 'lfs belongs to another repository', steer: true, delivery: 'written', withdrawable: true,
+        translation: { state: 'DONE', from: 'zh-Hans', original: 'lfs 属于另一个仓库' },
+      },
+    };
+    seedMock.mockImplementation(async () => ({ events: [...SEED, steer], hasMore: false }));
+    queue = [{
+      turnId: 'turn-next', kind: 'message', placement: 'queued', content: 'and update the changelog',
+      createdAt: '2026-10-08T03:06:00Z', attachments: [],
+      translation: { state: 'DONE', from: 'zh-Hans', original: '顺便更新变更日志' },
+    }];
+    await mount();
+    const rows = () => [...mounted().querySelectorAll('.pending-tray-text')].map((n) => n.textContent);
+    await waitForUi(() => expect(rows()).toEqual(['lfs 属于另一个仓库', '顺便更新变更日志']));
+  });
+});
+
 describe('a message held for its translation', () => {
   const held = (state: 'TRANSLATING' | 'FAILED') => ({
     turnId: 'turn-held',

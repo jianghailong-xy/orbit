@@ -175,11 +175,25 @@ final class TerminalsTests: XCTestCase {
     }
 
     /// The server's push for a terminal asking (`PushService.notifyTerminalLogin`) names no session: its tap opens where
-    /// the card is (the machine page's Needs you section, docs/mocks/waiting-on-you-removal/02 ④).
+    /// the card is (the machine page's Needs you section, docs/mocks/waiting-on-you-removal/02 ④), and
+    /// the push's own id is the card it lights.
     func testTheTerminalLoginPushOpensTheTerminalRequests() {
         XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
                                             userInfo: ["kind": "terminal-login", "terminalLoginID": "34req1", "runnerID": "r1"]),
-                       .openTerminalRequests)
+                       .openTerminalRequests(requestID: "34req1"))
+        XCTAssertEqual(Notifications.intent(actionId: "com.apple.UNNotificationDefaultActionIdentifier",
+                                            userInfo: ["kind": "terminal-login", "runnerID": "r1"]),
+                       .openTerminalRequests(requestID: nil))
+    }
+
+    /// `orbit://terminal-login/<id>` is a route now, and it round-trips; a host with no id names nothing.
+    func testTheTerminalLoginLinkIsARoute() throws {
+        let url = try XCTUnwrap(URL(string: "orbit://terminal-login/34req1"))
+        XCTAssertEqual(DeepLink.parse(url), .terminalLogin("34req1"))
+        XCTAssertEqual(DeepLink.url(for: .terminalLogin("34req1")), url)
+        XCTAssertEqual(AppSection.forRoute(.terminalLogin("34req1")), .runners)
+        let noID = try XCTUnwrap(URL(string: "orbit://terminal-login"))
+        XCTAssertNil(DeepLink.parse(noID), "a link with no id names nothing")
     }
 
     func testSettingsHasATerminalsRowThatOpensItsPage() {
@@ -208,6 +222,165 @@ final class TerminalsTests: XCTestCase {
                       "a revoke reads the list again, so the revoked terminal leaves it")
         let app = try webSource("src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift")
         XCTAssertTrue(app.contains("case .terminals:\n            Task {\n                await ownerRequests?.loadTerminalRequests()\n                await terminals?.load()"))
+        // The card is on Machines & models' Needs you section and on the machine's own page; the
+        // needs-you line, the push and the link all land there (board 02 ①③④).
+        let machines = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift")
+        XCTAssertTrue(machines.contains("MachinesAndModelsNeedsYouSection(\n                            items: attention, terminals: terminals"))
+        XCTAssertTrue(machines.contains("TerminalRequestsSection(runnerID: runner.id, onSaid: show)"))
+        let section = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/MachinesAndModelsSections.swift")
+        XCTAssertTrue(section.contains("TerminalRequestCards(model: ownerRequests, requests: terminals, lit: lit, onSaid: onSaid)"))
+        let block = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/TerminalRequestsView.swift")
+        XCTAssertTrue(block.contains("RunnerSectionHeader(Terminals.toApprove, trailing: Terminals.requestLasts)"))
+        // The Mac's session list keeps its resident "Needs you" line — the phone has the one-time
+        // notice instead, because there is no session list there to put a line on.
+        let list = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
+        XCTAssertTrue(list.contains("if let terminal = app.terminalNeedsYou(now: terminalNow)"))
+        XCTAssertTrue(list.contains("TerminalNeedsYouRow(line: terminal) { app.openTerminalNeedsYou(terminal) }"))
+        XCTAssertTrue(app.contains("nav.settingsPath = [.settingsPage(.machines)]"),
+                      "the phone raises Settings on the Machines page, where its pending terminals are")
+        XCTAssertTrue(app.contains("case .openTerminalRequests(let requestID):"))
+        let links = try webSource("src/macos/OrbitKit/Sources/OrbitKit/App/DeepLink.swift")
+        XCTAssertTrue(links.contains("case \"terminal-login\": return id.map(Route.terminalLogin)"))
+    }
+
+    /// The needs-you line: one request names its machine and code; several count on a machine or name
+    /// the machines, oldest first (board ③ choice 5).
+    func testTheNeedsYouLine() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:05:00.000Z"))
+        let one = Terminals.liveRequests([request], now: now)
+        XCTAssertEqual(Terminals.approveNeedsYou(count: 1), "Approve a terminal")
+        XCTAssertEqual(Terminals.approveNeedsYou(count: 2), "Approve 2 terminals")
+        XCTAssertEqual(Terminals.needsYouDetail(one), "dev-laptop · code 7KQ-4MZ")
+        let line = try XCTUnwrap(TerminalNeedsYou.banner([request], now: now))
+        XCTAssertEqual(line.text, "Approve a terminal")
+        XCTAssertEqual(line.detail, "dev-laptop · code 7KQ-4MZ")
+        XCTAssertEqual(line.glyph, .terminal)
+        XCTAssertEqual(line.count, 1)
+        XCTAssertEqual(line.oldest.id, "34req1")
+        XCTAssertEqual(line.since, request.createdAt)
+
+        let other = TerminalRequest(id: "34req2", userCode: "AAAA-1111", machineName: "build-box", runnerId: "run2",
+                                    createdAt: "2026-11-12T10:02:00.000Z", expiresAt: "2026-11-12T10:12:00.000Z")
+        let twoMachines = Terminals.liveRequests([other, request], now: now)
+        XCTAssertEqual(twoMachines.map(\.id), ["34req1", "34req2"], "oldest first")
+        XCTAssertEqual(Terminals.needsYouDetail(twoMachines), "dev-laptop, build-box")
+        XCTAssertEqual(Terminals.approveNeedsYou(count: twoMachines.count), "Approve 2 terminals")
+
+        let sameMachine = TerminalRequest(id: "34req3", userCode: "BBBB-2222", machineName: "dev-laptop", runnerId: "run1",
+                                          createdAt: "2026-11-12T10:04:00.000Z", expiresAt: "2026-11-12T10:14:00.000Z")
+        XCTAssertEqual(Terminals.needsYouDetail([request, sameMachine]), "dev-laptop · 2 waiting")
+    }
+
+    /// A new request is announced once, as a toast (the owner, 2026-11-16: the resident needs-you bar
+    /// is gone). One notice per request, keyed by its own id, so a read that still holds an answered
+    /// request says nothing again; the words are the approve card's, and a press knows which machine.
+    func testATerminalRequestIsNoticedOnceAsAToast() throws {
+        let now = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:05:00.000Z"))
+        let other = TerminalRequest(id: "34req2", userCode: "AAAA-1111", machineName: "build-box", runnerId: "run2",
+                                    createdAt: "2026-11-12T10:02:00.000Z", expiresAt: "2026-11-12T10:12:00.000Z")
+        let fresh = Terminals.newNotices([other, request], seen: [], now: now)
+        XCTAssertEqual(fresh.map(\.id), ["34req1", "34req2"], "one notice each, oldest first")
+        let notice = try XCTUnwrap(fresh.first)
+        XCTAssertEqual(notice.title, "Approve a terminal")
+        XCTAssertEqual(notice.line, "dev-laptop · code 7KQ-4MZ")
+        XCTAssertEqual(notice.glyph, .terminal)
+        XCTAssertEqual(notice.terminal?.id, "34req1", "the press goes to this machine's section")
+        XCTAssertNil(notice.target, "a terminal is no conversation")
+
+        // The same request, read again, is not announced again — however many times it is read.
+        let seen = Set([request.id])
+        XCTAssertEqual(Terminals.newNotices([request, other], seen: seen, now: now).map(\.id), ["34req2"])
+        XCTAssertTrue(Terminals.newNotices([request], seen: seen, now: now).isEmpty, "once per request id")
+
+        // A request past its deadline waits on nobody, so it is never announced.
+        let after = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:11:00.000Z"))
+        XCTAssertTrue(Terminals.newNotices([request], seen: [], now: after).isEmpty)
+
+        // Two on one machine are two notices, each naming the machine and its own code.
+        let sameMachine = TerminalRequest(id: "34req3", userCode: "BBBB-2222", machineName: "dev-laptop", runnerId: "run1",
+                                          createdAt: "2026-11-12T10:04:00.000Z", expiresAt: "2026-11-12T10:14:00.000Z")
+        XCTAssertEqual(Terminals.newNotices([request, sameMachine], seen: [], now: now).map(\.line),
+                       ["dev-laptop · code 7KQ-4MZ", "dev-laptop · code BBBB-2222"])
+    }
+
+    /// OrbitApp does not build on Linux, so the notice's wiring is read out of its source: the store's
+    /// change is noticed, the first look only takes stock, a request answered or expired takes its
+    /// notice with it, and a press opens that machine's pending section on the machine page.
+    func testTheTerminalNoticeIsWiredToTheMachinePage() throws {
+        let app = try webSource("src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift")
+        XCTAssertTrue(app.contains("ownerRequestsModel.onTerminalRequestsRead = { [weak self] in self?.noticeNewlyWaitingTerminals() }"))
+        let notice = try slice(app, from: "private func noticeNewlyWaitingTerminals() {", to: "\n    }\n")
+        XCTAssertTrue(notice.contains("guard let seen = terminalsSeen else { return }"), "the first look only takes stock")
+        XCTAssertTrue(notice.contains("Terminals.newNotices(live, seen: seen)"))
+        XCTAssertTrue(notice.contains("needsYouToasts.removeAll { $0.terminal != nil && !ids.contains($0.id) }"),
+                      "answered or expired, the notice goes")
+        XCTAssertTrue(app.contains("terminalsSeen = nil"))
+        let press = try slice(app, from: "func openNeedsYouToast(", to: "\n    }\n")
+        XCTAssertTrue(press.contains("if let request = notice.terminal {\n            return openTerminalRequests(request.id)"),
+                      "a terminal's notice lands on that machine's pending section")
+        let model = try webSource("src/macos/OrbitApp/Sources/OrbitApp/OwnerRequestsModel.swift")
+        XCTAssertTrue(model.contains("var onTerminalRequestsRead: (() -> Void)?"))
+        XCTAssertTrue(model.contains("onTerminalRequestsRead?()"),
+                      "every read of the waiting terminals is noticed, the first one only taking stock")
+        let card = try webSource("src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouToast.swift")
+        XCTAssertTrue(card.contains("case .terminal: return \"terminal\""), "the notice draws the terminal's mark")
+        XCTAssertTrue(card.contains("notice.terminal != nil ? Terminals.needsYouHint"))
+    }
+
+    /// A request folds at its own deadline, not at the next read; one machine's page draws its own.
+    func testOnlyAnswerableRequestsAreDrawn() throws {
+        let after = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:11:00.000Z"))
+        XCTAssertTrue(Terminals.liveRequests([request], now: after).isEmpty)
+        XCTAssertNil(TerminalNeedsYou.banner([request], now: after))
+        let before = try XCTUnwrap(RelativeTime.parse("2026-11-12T10:09:00.000Z"))
+        XCTAssertEqual(Terminals.liveRequests([request], now: before).map(\.id), ["34req1"])
+        XCTAssertEqual(Terminals.nextDeadline([request], after: before),
+                       try XCTUnwrap(RelativeTime.parse(request.expiresAt)))
+        XCTAssertEqual(Terminals.requests([request], on: "run1").map(\.id), ["34req1"])
+        XCTAssertTrue(Terminals.requests([request], on: "run2").isEmpty)
+    }
+
+    /// The web declares the needs-you words once in `lib/terminals.ts`; this end says them byte for byte.
+    func testTheNeedsYouWordsAreTheWebsWords() throws {
+        let web = try webSource("src/web/src/lib/terminals.ts")
+        for (name, value) in [("TERMINALS_TO_APPROVE", Terminals.toApprove),
+                              ("TERMINAL_REQUEST_LASTS", Terminals.requestLasts),
+                              ("TERMINAL_APPROVED", Terminals.approvedToast),
+                              ("TERMINAL_DENIED", Terminals.deniedToast),
+                              ("TERMINALS_NEEDS_YOU", Terminals.needsYou)] {
+            XCTAssertTrue(web.contains("\(name) = '\(value)'"), "\(name) drifted from \(value.debugDescription)")
+        }
+        for template in ["count === 1 ? 'Approve a terminal' : `Approve ${count} terminals`",
+                         "`${requests[0].machineName} · code ${requests[0].userCode}`",
+                         "`${machines[0]} · ${requests.length} waiting`", "machines.join(', ')"] {
+            XCTAssertTrue(web.contains(template), "the web no longer says \(template)")
+        }
+    }
+
+    /// No Waiting on you entry or sheet comes back (the project removes them): the card's own
+    /// header still says "Waiting on you", as main's card does, but nothing navigates to a summary
+    /// page or raises an inbox.
+    func testThereIsNoWaitingOnYouEntryOrSheet() throws {
+        for path in ["src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift",
+                     "src/macos/OrbitApp/Sources/OrbitApp/Views/CompactShell.swift",
+                     "src/macos/OrbitApp/Sources/OrbitApp/Views/MainView.swift",
+                     "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift",
+                     "src/macos/OrbitApp/Sources/OrbitApp/Views/OwnerRequestViews.swift",
+                     "src/macos/OrbitKit/Sources/OrbitKit/App/Navigation.swift"] {
+            let source = try webSource(path)
+            for symbol in ["OwnerRequestInboxSheet", "WaitingOnYouPage", "Destination.WAITING_ON_YOU",
+                           "waitingOnYouSheet", "openWaitingOnYou"] {
+                XCTAssertFalse(source.contains(symbol), "\(path) still has \(symbol)")
+            }
+        }
+    }
+
+    /// From the first `start` through the next `end` after it, in a source read above.
+    private func slice(_ text: String, from start: String, to end: String) throws -> String {
+        let lower = try XCTUnwrap(text.range(of: start), "no `\(start)`")
+        let upper = try XCTUnwrap(text.range(of: end, range: lower.upperBound..<text.endIndex),
+                                  "no `\(end)` after `\(start)`")
+        return String(text[lower.lowerBound..<upper.upperBound])
     }
 
     private func webSource(_ path: String) throws -> String {
