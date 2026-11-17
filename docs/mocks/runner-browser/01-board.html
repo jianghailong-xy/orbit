@@ -1,0 +1,308 @@
+<!-- DESIGN MOCK (2026-11-17). Orbit Cloud browser: an agent on the managed runner drives Chrome; the owner watches it
+     live and can take control (WebVNC). Off by default; can be switched on only for managed runners.
+     Design: docs/runner-browser-design.md. Demo data throughout. Render: see README.md -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>Orbit Cloud 浏览器：看 agent 的 Chrome，必要时接管</title>
+<style>
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
+          --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"Inter","Noto Sans SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1400px; }
+  .part { margin-bottom:34px; padding:2px 0; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .tag.grey { background:#e6e6ea; color:#55555e; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.65; } .note b { color:var(--t1); }
+  code { font:12px "JetBrains Mono","DejaVu Sans Mono",monospace; }
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:2; }
+
+  /* ---- architecture ---- */
+  .rb-arch { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .rb-flow { background:#fff; border-radius:12px; padding:18px 20px; }
+  .rb-flow h3 { margin:0 0 12px; font-size:15px; }
+  .rb-lane { display:flex; align-items:center; gap:10px; margin:8px 0; }
+  .rb-box { border:1.5px solid #cfd3dc; border-radius:10px; padding:8px 12px; background:#fafbfd; font-size:13px; line-height:1.4; min-width:150px; }
+  .rb-box b { display:block; font-size:13.5px; }
+  .rb-box small { color:#6b6b75; }
+  .rb-box.new { border-color:var(--brand); background:var(--brand-bg); }
+  .rb-box.off { border-style:dashed; color:#9a9aa2; background:#fff; }
+  .rb-arrow { color:#8a8a90; font-size:12px; text-align:center; flex:none; width:96px; line-height:1.3; }
+  .rb-arrow i { display:block; font-style:normal; font-size:18px; color:#6b6b75; }
+  .rb-arrow.new i, .rb-arrow.new { color:var(--brand); }
+  .rb-arrow.no i { color:var(--red); }
+  .rb-ctr { border:2px dashed #b7bcc8; border-radius:14px; padding:12px; margin-top:10px; position:relative; }
+  .rb-ctr > .lbl { position:absolute; top:-10px; left:14px; background:#fff; padding:0 6px; font-size:12px; color:#6b6b75; }
+  .rb-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .rb-sw { width:100%; }
+  .rb-sw td:first-child { white-space:nowrap; }
+  .rb-on { color:#17683b; font-weight:600; } .rb-offt { color:#9a9aa2; }
+
+  /* ---- web frames ---- */
+  .rb-grid { display:grid; grid-template-columns:repeat(2, 695px); gap:30px; }
+  .win { width:695px; background:#fff; border-radius:12px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06); overflow:hidden; position:relative; font-size:13px; }
+  .win .top { height:30px; background:#f3f3f5; border-bottom:1px solid var(--sep); display:flex; align-items:center; gap:6px; padding:0 12px; }
+  .win .top i { width:10px; height:10px; border-radius:50%; background:#d9d9de; display:inline-block; }
+  .win .body { display:flex; height:440px; }
+  .win .main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .win .hd { padding:10px 16px; border-bottom:1px solid var(--sep); display:flex; align-items:center; gap:8px; }
+  .win .hd .tt { font-weight:600; font-size:14px; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600; border-radius:999px; padding:2px 8px; white-space:nowrap; flex:none; }
+  .p-run { background:var(--brand-bg); color:#2546b8; } .p-ok { background:var(--grey-bg); color:#55555e; }
+  .p-warn { background:var(--amber-bg); color:var(--amber); }
+  .tx { flex:1; padding:12px 16px; overflow:hidden; }
+  .bub { margin:0 0 10px 120px; background:var(--brand); color:#fff; border-radius:14px 14px 4px 14px; padding:7px 11px; line-height:1.45; }
+  .ans { margin:0 0 8px; line-height:1.5; }
+  .tool { border:1px solid var(--sep); border-radius:8px; padding:5px 9px; margin:0 0 6px; color:#55555e; font-size:12px; display:flex; gap:6px; align-items:center; }
+  .tool b { color:var(--t1); font-weight:600; }
+  .outbar { border-top:1px solid var(--sep); padding:8px 16px; display:flex; gap:8px; align-items:center; font-size:12px; color:#55555e; }
+  .chip { border:1px solid #dcdce1; border-radius:999px; padding:3px 10px; background:#fff; color:var(--t1); font-weight:500; display:inline-flex; gap:5px; align-items:center; white-space:nowrap; }
+  .chip.live::before { content:''; width:7px; height:7px; border-radius:50%; background:#e0453a; display:inline-block; }
+  .composer { margin:0 16px 12px; border:1px solid #dcdce1; border-radius:12px; padding:9px 12px; color:var(--t2); min-height:40px; }
+  .composer.filled { color:var(--t1); }
+  .drawer { width:380px; border-left:1px solid var(--sep); display:flex; flex-direction:column; background:#fafafb; flex:none; }
+  .drawer .dh { padding:10px 12px; border-bottom:1px solid var(--sep); display:flex; align-items:center; gap:8px; background:#fff; }
+  .drawer .dh .tt { font-weight:600; flex:1; }
+  .drawer .dh .cl { color:var(--t2); font-size:15px; }
+  .btn { border-radius:8px; padding:5px 11px; font-weight:600; font-size:12.5px; background:#fff; color:var(--brand); border:1px solid #dcdce1; white-space:nowrap; }
+  .btn.pri { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .ctrlbar { background:var(--amber-bg); color:#6b4200; padding:7px 12px; font-size:12.5px; display:flex; gap:8px; align-items:center; border-bottom:1px solid #f1d9a8; }
+  .ctrlbar b { flex:1; }
+  .canvas { margin:10px; border:1px solid #d7d7dc; border-radius:6px; background:#fff; overflow:hidden; flex:1; position:relative; }
+  .canvas.ctl { outline:2px solid #f0a020; outline-offset:-1px; }
+  .cbar { background:#dee1e6; padding:5px 8px; font-size:10.5px; color:#3c4043; display:flex; gap:6px; align-items:center; }
+  .cbar .url { flex:1; background:#fff; border-radius:10px; padding:2px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .site { padding:12px 14px; font-size:11.5px; color:#333; }
+  .site h4 { margin:0 0 8px; font-size:14px; }
+  .fld { border:1px solid #c9ccd2; border-radius:4px; padding:4px 7px; margin:3px 0 7px; color:#222; background:#fff; }
+  .fld.err { border-color:#d93025; }
+  .site .err-t { color:#d93025; font-size:10.5px; margin:-4px 0 7px; }
+  .site .go { background:#1a73e8; color:#fff; border-radius:4px; padding:5px 10px; display:inline-block; font-weight:600; }
+  .cursor { position:absolute; width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:14px solid #111; transform:rotate(-30deg); }
+  .foot { padding:6px 12px 10px; font-size:11.5px; color:var(--t2); display:flex; gap:8px; align-items:center; }
+  .foot .r { margin-left:auto; }
+  .xin::after { position:static; display:inline-block; margin-left:6px; vertical-align:1px; }
+  .empty-n { color:#9a9aa2; font-size:12px; }
+</style>
+
+<h1>Orbit Cloud 浏览器：看 agent 的 Chrome，必要时接管</h1>
+<p class="lede">Orbit Cloud runner 里的 agent 用真的 Chrome 干活；你在自己的浏览器里实时看到它的画面（WebVNC），不对劲时点 <b>Take control</b> 接管。
+  只给 Orbit Cloud（托管 runner）用，<b>默认部署关闭</b>。设计文档：<code>docs/runner-browser-design.md</code>。界面文案英文，注释中文，页面内容是演示数据。</p>
+
+<!-- =================================================================== PART 1 -->
+<section class="part" id="part-1">
+  <div class="rb-arch">
+    <div class="rb-flow">
+      <h3>① 今天：没有任何路能进到 runner 容器里</h3>
+      <div class="rb-lane">
+        <div class="rb-box"><b>你的浏览器</b><small>Orbit 网页</small></div>
+        <div class="rb-arrow no"><i>✕</i>看不到画面</div>
+        <div class="rb-box"><b>apiserver</b><small>只回答 runner 的请求</small></div>
+      </div>
+      <div class="rb-lane">
+        <div class="rb-box"><b>链路网关</b><small>提示、RPC、事件、实时增量</small></div>
+        <div class="rb-arrow"><i>⇠</i>runner 主动连出</div>
+        <div class="rb-box"><b>Orbit Cloud runner</b><small>uid 10001 · 只读根 · 无 capability</small></div>
+      </div>
+      <div class="rb-ctr"><span class="lbl">runner 容器（今天）</span>
+        <div class="rb-row">
+          <div class="rb-box off"><b>没有 Chrome</b><small>镜像里只有 git、rg、python…</small></div>
+          <div class="rb-box off"><b>没有显示</b><small>没有 X、没有 VNC</small></div>
+          <div class="rb-box off"><b>不开端口</b><small>PortBindings: {}，防火墙只放出站</small></div>
+        </div>
+      </div>
+      <p class="note">链路里的 <code>TunnelRequest</code> 是 runner 调 apiserver，<b>服务器没法主动往 runner 里开一条字节流</b>。所以这件事不是“装个 Chrome”就完了，要补三样：镜像里的浏览器和显示、链路上的新流、客户端的查看器。</p>
+    </div>
+
+    <div class="rb-flow">
+      <h3>② 新增：画面沿 runner 自己连出的链路回来，不开任何入站端口</h3>
+      <div class="rb-lane">
+        <div class="rb-box new x" data-n="1"><b>你的浏览器</b><small>noVNC 画布（会话右侧抽屉）</small></div>
+        <div class="rb-arrow new"><i>⇄</i>WSS</div>
+        <div class="rb-box new x" data-n="2"><b>apiserver</b><small>新 WebSocket 路由：开关、归属、托管 runner 三查</small></div>
+      </div>
+      <div class="rb-lane">
+        <div class="rb-box new x" data-n="3"><b>链路网关</b><small>NATS <code>vnc.&lt;id&gt;.up/down</code> ⇄ 链路帧</small></div>
+        <div class="rb-arrow new"><i>⇄</i>StreamOpen / Data<br>Credit / Close</div>
+        <div class="rb-box new x" data-n="4"><b>runner</b><small>把流接到本会话的 vnc.sock</small></div>
+      </div>
+      <div class="rb-ctr"><span class="lbl">runner 容器（新增，按会话按需启动）</span>
+        <div class="rb-row">
+          <div class="rb-box new x" data-n="5"><b>Xvfb :n</b><small>1280×800</small></div>
+          <div class="rb-box new"><b>Chrome</b><small>--no-sandbox · 资料在卷上</small></div>
+          <div class="rb-box new"><b>x11vnc</b><small>只听 unix socket，无 TCP</small></div>
+          <div class="rb-box new x" data-n="6"><b>browser MCP</b><small>@playwright/mcp → 本会话 Chrome</small></div>
+        </div>
+      </div>
+      <p class="note"><b>1</b> 默认只看，不发鼠标键盘。<b>2</b> 和网页同一登录；只认会话本人。<b>3</b> 只有持有该 runner 连接的网关节点应答；每 runner 最多 2 路、每会话 1 路。
+        <b>4</b> 流数据走最低一档写出，窗口 256 KiB，不会挤掉心跳和控制帧。<b>5</b> 会话第一次用浏览器才启动，会话结束或 15 分钟没人用就停。<b>6</b> 和今天给引擎挂 <code>orbit mcp</code> 一样挂上，开关关时不挂。</p>
+    </div>
+  </div>
+
+  <div class="sheet" style="margin-top:28px">
+    <h2>③ 开关：只有 Orbit Cloud 能开，默认部署是关的</h2>
+    <table class="rb-sw">
+      <tr><th>部署</th><th><code>ORBIT_MANAGED_RUNNERS_ENABLED</code></th><th><code>ORBIT_MANAGED_RUNNER_BROWSER_ENABLED</code>（新）</th><th>结果</th></tr>
+      <tr><td>默认自托管安装 / 升级</td><td>true 或不写</td><td><span class="rb-offt">不写（安装和 /upgrade 都不会写它）</span></td><td><span class="rb-offt">关：没有 Chrome 进程、不挂 browser 工具、路由 404、界面不出现入口</span></td></tr>
+      <tr><td>Orbit Cloud 生产</td><td>true</td><td><span class="rb-on">true</span></td><td><span class="rb-on">开：只对托管 runner</span></td></tr>
+      <tr><td>托管 runner 关着</td><td>false</td><td>true</td><td><span class="rb-offt">关：第二个开关依赖第一个</span></td></tr>
+      <tr><td>写错了，如 <code>1</code>、<code>yes</code></td><td>—</td><td><code>yes</code></td><td><span class="rb-offt">关，日志里警告一次（和现有托管 runner 开关同一张表）</span></td></tr>
+      <tr><td>用户自己的 runner（自托管机器）</td><td>任意</td><td>任意</td><td><span class="rb-offt">永远没有：服务器只对 Hello 里带 ManagedInstance 且对得上记录的 runner 开流；runner 程序也只在托管镜像入口启动时才接流。两道各自都能拒</span></td></tr>
+    </table>
+    <p class="note">关掉 = 不存在，不是灰掉的按钮。启动时读一次；关掉后重启 apiserver，已开的流断开，runner 在下一次 <code>Welcome</code> 得知，当前一轮结束后停掉显示。</p>
+  </div>
+</section>
+
+<!-- =================================================================== PART 2 -->
+<section class="part" id="part-2">
+  <div class="rb-grid">
+    <div>
+      <div class="fh">④ 会话页：agent 用了浏览器，输出栏多一个 Browser <span class="tag">新</span></div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body"><div class="main">
+          <div class="hd"><span class="tt">Check the signup form on the staging site</span><span class="pill p-run">Running</span><span class="pill p-ok">Orbit Cloud</span></div>
+          <div class="tx">
+            <div class="bub">Open staging.example.com/signup, fill it with a test user and tell me if it submits.</div>
+            <div class="ans">I'll open the page in the browser and fill the form.</div>
+            <div class="tool">⌘ <b>browser_navigate</b> staging.example.com/signup</div>
+            <div class="tool">⌘ <b>browser_type</b> Email → test+0117@example.com</div>
+            <div class="tool">⌘ <b>browser_click</b> Create account</div>
+            <div class="ans">The form shows an error under Password. Trying a longer password…</div>
+          </div>
+          <div class="outbar"><span class="chip">2 files changed</span><span class="chip live x" data-n="1">Browser</span><span style="margin-left:auto">Outputs</span></div>
+          <div class="composer">Reply…</div>
+        </div></div>
+      </div>
+      <p class="note"><b>1</b> 只在三件事同时成立时出现：开关开、会话跑在托管 runner、本会话的显示正在跑。红点 = 画面是实时的。点它打开右侧抽屉（复用现有的 <code>Drawer</code>，不新造外观）。agent 没用浏览器的会话，什么都不多。</p>
+    </div>
+
+    <div>
+      <div class="fh">⑤ 抽屉：默认只看 <small>鼠标键盘不会发给 runner</small></div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="main" style="opacity:.55">
+            <div class="hd"><span class="tt">Check the signup form on the…</span></div>
+            <div class="tx"><div class="tool">⌘ <b>browser_type</b> Password → ••••••••••••</div><div class="ans">Trying a longer password…</div></div>
+            <div class="composer">Reply…</div>
+          </div>
+          <div class="drawer">
+            <div class="dh"><span class="tt">Browser</span><span class="pill p-ok">View only</span><span class="btn pri x" data-n="2">Take control</span><span class="cl">✕</span></div>
+            <div class="canvas"><span class="x xi" data-n="3" style="position:absolute;left:14px;top:34px"></span>
+              <div class="cbar">◀ ▶ ⟳ <span class="url">staging.example.com/signup</span></div>
+              <div class="site">
+                <h4>Create your account</h4>
+                Email<div class="fld">test+0117@example.com</div>
+                Password<div class="fld err">••••••••••••</div>
+                <div class="err-t">Password must include a symbol.</div>
+                <span class="go">Create account</span>
+              </div>
+              <div class="cursor" style="left:200px; top:170px"></div>
+            </div>
+            <div class="foot">1280×800 · scaled to fit <span class="r">Live</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>2</b> 主操作是接管，其余都不需要。<b>3</b> 画面就是 agent 的 Chrome：它点到哪、页面报什么错，你和它看到的一样。关掉抽屉 = 断开这路流，不影响 agent。</p>
+    </div>
+
+    <div>
+      <div class="fh">⑥ 接管：agent 这一轮先停 <small>不会两个人同时点</small></div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="main" style="opacity:.55">
+            <div class="hd"><span class="tt">Check the signup form on the…</span><span class="pill p-warn">Interrupted</span></div>
+            <div class="tx"><div class="ans">Trying a longer password…</div><div class="tool">Interrupted — you took control of the browser.</div></div>
+            <div class="composer">Reply…</div>
+          </div>
+          <div class="drawer">
+            <div class="ctrlbar"><b class="x xin" data-n="4">You are controlling the browser</b><span class="btn">Hand back</span></div>
+            <div class="canvas ctl">
+              <div class="cbar">◀ ▶ ⟳ <span class="url">staging.example.com/signup</span></div>
+              <div class="site">
+                <h4>Create your account</h4>
+                Email<div class="fld">test+0117@example.com</div>
+                Password<div class="fld">••••••••••••!</div>
+                <span class="go">Create account</span>
+              </div>
+              <div class="cursor" style="left:150px; top:150px"></div>
+            </div>
+            <div class="foot">Your pointer and keys go to the runner's browser</div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>4</b> 点 Take control 就用现有的“中断”停掉 agent 这一轮，然后你的鼠标键盘才发过去；画布描橙边，免得忘了自己在控制。</p>
+    </div>
+
+    <div>
+      <div class="fh">⑦ 交还：输入框里预填一句，你改完再发</div>
+      <div class="win">
+        <div class="top"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="main">
+            <div class="hd"><span class="tt">Check the signup form on the staging site</span><span class="pill p-ok">Idle</span><span class="pill p-ok">Orbit Cloud</span></div>
+            <div class="tx">
+              <div class="ans">Trying a longer password…</div>
+              <div class="tool">Interrupted — you took control of the browser.</div>
+              <div class="tool">You handed the browser back.</div>
+            </div>
+            <div class="outbar"><span class="chip">2 files changed</span><span class="chip live">Browser</span></div>
+            <div class="composer filled x" data-n="5">I finished in the browser. Continue.</div>
+          </div>
+          <div class="drawer">
+            <div class="dh"><span class="tt">Browser</span><span class="pill p-ok">View only</span><span class="btn pri">Take control</span><span class="cl">✕</span></div>
+            <div class="canvas">
+              <div class="cbar">◀ ▶ ⟳ <span class="url">staging.example.com/welcome</span></div>
+              <div class="site"><h4>Welcome, test user</h4>Your account is ready.</div>
+            </div>
+            <div class="foot">1280×800 · scaled to fit <span class="r">Live</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="note"><b>5</b> 只预填，不自动发：你可以写清楚刚才改了什么（“密码加了个符号，提交成功了”），agent 下一轮从你停下的页面接着干。</p>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== PART 3 -->
+<section class="part" id="part-3">
+  <div class="two">
+    <div class="sheet">
+      <h2>待定 · 要你拍板</h2>
+      <table>
+        <tr><th>#</th><th style="white-space:nowrap">问题</th><th>方案 A</th><th>方案 B</th><th>建议</th></tr>
+        <tr><td>P1</td><td style="white-space:nowrap">镜像</td><td>一个镜像，浏览器一直在里面，开关开了才启动</td><td>另出一个 <code>-browser</code> 镜像，开了才用它</td><td><b>A</b>：只构建、只测一个；代价是每台主机多拉约 350 MB（默认部署也会拉到，但不运行）</td></tr>
+        <tr><td>P2</td><td>显示</td><td>每个会话一个，按需启动</td><td>每台 runner 一个，会话共用</td><td><b>A</b>：画面属于会话；会话之间看不到彼此的标签页和登录</td></tr>
+        <tr><td>P3</td><td>接管</td><td>中断 agent 这一轮再交给你</td><td>你和 agent 同时操作</td><td><b>A</b>：不抢鼠标；复用现有中断</td></tr>
+        <tr><td>P4</td><td style="white-space:nowrap">谁能看</td><td>只有会话本人</td><td>本人和会话访客</td><td><b>A</b>（v1）：画面里可能有登录态</td></tr>
+        <tr><td>P5</td><td style="white-space:nowrap">首期客户端</td><td>只做网页</td><td>网页 + macOS</td><td><b>A</b>：原生端以后用 web view 套同一个 noVNC 页</td></tr>
+      </table>
+      <div class="q"><b>资源：</b>一个 Chrome 约 0.5–1.5 GiB。配置里加 <code>browser.maxPerRunner</code>（默认 2），运营方相应调高 runner 的内存上限；第 3 个会话要浏览器时，工具直接回“浏览器都在用”。
+        <br><b>安全：</b>不开入站端口、不改防火墙；VNC 只在容器内 unix socket 上，每路流先过 apiserver 鉴权；不录屏。</div>
+    </div>
+    <div class="sheet">
+      <h2>落地（按代价排）</h2>
+      <table>
+        <tr><th style="white-space:nowrap">阶段</th><th>做什么</th><th style="white-space:nowrap">做完能怎样</th></tr>
+        <tr><td>1</td><td>新开关 + <code>Welcome.browser</code>；镜像加 Chromium / Xvfb / x11vnc / 字体 / @playwright/mcp；按会话启停显示；先给 Claude Code、Codex 挂 browser 工具</td><td>agent 能用浏览器，还看不到</td></tr>
+        <tr><td>2</td><td>链路协议四个新帧；网关 NATS 中转；apiserver WebSocket 路由；nginx 升级配置；runner 接 vnc.sock</td><td>流打得通（用脚本客户端验）</td></tr>
+        <tr><td>3</td><td>网页：Browser 标签、抽屉、只看、接管、交还</td><td>你能看、能接管</td></tr>
+        <tr><td>4</td><td>其余引擎、macOS / iOS / Android、访客</td><td>以后</td></tr>
+      </table>
+      <p class="note">每一阶段都在托管 runner 实验环境（<code>scripts/managed-runner/lab/</code>）里开着开关跑一遍，再关着开关跑一遍，证明默认部署什么都没变。</p>
+    </div>
+  </div>
+</section>
