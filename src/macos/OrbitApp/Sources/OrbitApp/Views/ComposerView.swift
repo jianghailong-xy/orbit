@@ -2926,7 +2926,7 @@ private struct ContextActionsSheet: View {
                         ContextReadingSection(reading: reading, pct: pct, showsBar: showsBar,
                                               caption: caption, modelLine: modelLine)
                     case .plan:
-                        if let plan { PlanUsageSection(plan: plan) }
+                        PlanUsageSection(plan: plan)
                     case .actions:
                         ContextActionSection(actions: actions, dismiss: dismiss,
                                              startNewCoordinator: startNewCoordinator)
@@ -2943,19 +2943,34 @@ private struct ContextActionsSheet: View {
 }
 
 /// The plan usage group: whose quota it is, each window with its bar and reset, and a Codex reset
-/// credit when the runner has one — what the phone's own Plan usage sheet reads.
+/// credit when the runner has one — what the phone's own Plan usage sheet reads. Its rows are one
+/// flat array, as `ContextReadingSection`'s are (ListRowShapeTests).
 private struct PlanUsageSection: View {
-    let plan: FooterPlanUsage
+    /// Never nil where the sheet draws this group (`ContextActionsSheet.groups`); nil draws no rows.
+    let plan: FooterPlanUsage?
+
+    private enum Row: Hashable { case windows, resetCard }
+
+    private var rows: [Row] {
+        guard let plan else { return [] }
+        var rows: [Row] = [.windows]
+        if plan.resetConsole?.codexResetCardVisible == true { rows.append(.resetCard) }
+        return rows
+    }
 
     var body: some View {
         Section("Plan usage") {
-            VStack(alignment: .leading, spacing: 18) {
-                if let account = plan.account { PlanUsageAccountRow(account: account) }
-                PlanUsageDetailRows(rows: plan.usage.currentRows())
-            }
-            .padding(.vertical, 6)
-            if let console = plan.resetConsole, console.codexResetCardVisible {
-                CodexResetCreditCard(console: console)
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .windows:
+                    VStack(alignment: .leading, spacing: 18) {
+                        plan?.account.map { PlanUsageAccountRow(account: $0) }
+                        PlanUsageDetailRows(rows: plan?.usage.currentRows() ?? [])
+                    }
+                    .padding(.vertical, 6)
+                case .resetCard:
+                    plan?.resetConsole.map { CodexResetCreditCard(console: $0) }
+                }
             }
         }
     }
