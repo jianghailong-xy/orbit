@@ -183,11 +183,13 @@ env = dict(os.environ, HOME='/tmp/orbit-version-check',
            CLAUDE_CONFIG_DIR='/tmp/orbit-version-check/.claude')
 def version(*argv):
     return subprocess.check_output(argv, env=env, text=True).strip()
-def first_line(*argv):  # Xvfb and x11vnc print their version on stderr; Xvfb then exits 1
+def first_line(*argv):  # x11vnc prints its version on stderr
     out = subprocess.run(argv, env=env, text=True, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT).stdout.split('\n')
     return next(line.strip() for line in out if line.strip())
-def package(name):
+def package(name, binary=None):  # Xvfb has no version option: its package's version, once its binary is there
+    if binary and not os.access(binary, os.X_OK):
+        raise SystemExit(f'{name}: {binary} is missing')
     return version('dpkg-query', '-W', '-f=${Version}', name)
 
 actual = {
@@ -206,8 +208,7 @@ actual = {
     'agy': version('agy', '--version'),
     # The browser stack (docs/runner-browser-design.md §3). Nothing here starts at boot.
     'chromium': version('chromium', '--version'),
-    'xvfb': first_line('Xvfb', '-version'),
-    'xvfbPackage': package('xvfb'),
+    'xvfb': package('xvfb', '/usr/bin/Xvfb'),
     'x11vnc': first_line('x11vnc', '-version'),
     'fontsNotoCjk': package('fonts-noto-cjk'),
     'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
@@ -220,8 +221,8 @@ if platform.machine() == 'x86_64':
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
 expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.169.0',
                      'claude': '2.1.326 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.10',
-                     'chromium': 'Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)', 'xvfb': 'X.Org X Server 1.21.1.16',
-                     'xvfbPackage': '2:21.1.16-1.3+deb13u4', 'x11vnc': 'x11vnc: 0.9.17 lastmod: 2020-08-04',
+                     'chromium': 'Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
+                     'xvfb': '2:21.1.16-1.3+deb13u4', 'x11vnc': 'x11vnc: 0.9.17 lastmod: 2020-08-04',
                      'fontsNotoCjk': '1:20240730+repack1-1', 'fontsNotoColorEmoji': '2.051-0+deb13u1',
                      'playwrightMcp': 'Version 0.0.85'}
 if platform.machine() == 'x86_64':
