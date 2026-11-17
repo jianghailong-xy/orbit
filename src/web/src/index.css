@@ -8269,6 +8269,11 @@ button.chat-jump-start:hover {
   display: flex;
   margin: 6px 0 0;
 }
+/* A send-back the composer finished and the server could not translate: above the composer. */
+.composer-translate-refused {
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
 .chat-translate-foot.is-reply {
   display: flex;
   margin: 2px 0 6px;

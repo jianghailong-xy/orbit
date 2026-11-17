@@ -20,7 +20,9 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
 import { ReviewCard } from './ReviewCard';
 import { Alert } from './ui/Alert';
 import { Textarea } from './ui/Textarea';
+import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { api } from '../api';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { rehypeCodeWords } from '../lib/codeWords';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -115,10 +117,32 @@ export function coordinatorQuestions(
   );
 }
 
+/** What the answer door takes; `sendAsWritten` is Send as written after a TRANSLATION_FAILED refusal. */
+type AnswerBody = { option?: number; text?: string; sendAsWritten?: boolean };
+
+/** A question's words as the card draws them: translated, index for index, while it is shown
+ *  translated (board 04-owner-cards.html, frame 2); the option picked still goes by index. */
+function shownQuestion(question: CoordinatorQuestion, t: { question?: string; options?: Array<{ label?: string; description?: string }> } | undefined): CoordinatorQuestion {
+  if (!t) return question;
+  return {
+    ...question,
+    question: t.question || question.question,
+    options: question.options.map((o, i) => {
+      const to = t.options?.[i];
+      if (!to) return o;
+      return {
+        ...o,
+        label: to.label || o.label,
+        ...(o.description !== undefined ? { description: to.description || o.description } : {}),
+      };
+    }),
+  };
+}
+
 function answerOpenItem(
   projectId: string,
   itemId: string,
-  body: { option?: number; text?: string },
+  body: AnswerBody,
 ): Promise<OwnerAnswerReceipt> {
   return api<OwnerAnswerReceipt>(
     `/projects/${encodeURIComponent(projectId)}/open-items/${encodeURIComponent(itemId)}/answer`,
@@ -200,12 +224,13 @@ export function CoordinatorQuestionCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
-  const question = row.question;
+  const original = row.question;
+  const translated = useOwnerCardTranslation(row.translation);
+  const question = original ? shownQuestion(original, translated.shown) : null;
   const [chosen, setChosen] = useState<Choice>(question?.recommendedOption ?? null);
   const [text, setText] = useState('');
   const answer = useMutation({
-    mutationFn: (body: { option?: number; text?: string }) =>
-      answerOpenItem(projectId, row.itemId, body),
+    mutationFn: (body: AnswerBody) => answerOpenItem(projectId, row.itemId, body),
     // Answered or refused, the items are re-read: a question somebody answered in another window
     // leaves this page rather than staying pressable.
     onSettled: () => {
@@ -220,7 +245,7 @@ export function CoordinatorQuestionCard({
   if (answer.data && answer.variables) {
     return (
       <AnsweredQuestionCard
-        record={answeredHere(row, question, answer.variables, answer.data, new Date(answer.submittedAt))}
+        record={answeredHere(row, original!, answer.variables, answer.data, new Date(answer.submittedAt))}
       />
     );
   }
@@ -272,6 +297,7 @@ export function CoordinatorQuestionCard({
           chosen={chosen}
           onChoose={setChosen}
         />
+        {translated.foot}
         {/* Always there: none of the options may be what the owner wants, and one that is may
             still need a condition said with it. */}
         <Textarea
@@ -290,7 +316,13 @@ export function CoordinatorQuestionCard({
           <p className="coordinator-question-meta">{row.detailLine}</p>
         ) : null}
       </div>
-      {answer.isError ? (
+      {answer.isError && answerRefusedUntranslated(answer.error) && answer.variables ? (
+        <RefusedAnswerFoot
+          resend={(sendAsWritten) =>
+            answer.mutateAsync({ ...answer.variables!, ...(sendAsWritten ? { sendAsWritten: true } : {}) })
+          }
+        />
+      ) : answer.isError ? (
         <Alert
           type="error"
           className="coordinator-question-error"
@@ -465,6 +497,7 @@ export function answeredHere(
     answer: { option: body.option ?? null, text: body.text ?? null },
     delivery: receipt.delivery ? { sessionId: receipt.delivery.sessionId, at: moment } : null,
     withdrawReason: null,
+    ...(row.translation ? { translation: row.translation } : {}),
   };
 }
 
@@ -530,7 +563,7 @@ function RecordOption({ label, why, recommended, chosen, said, saidLabel }: {
  * (docs/mocks/owner-answer-sent-card/tone.html).
  */
 export function AnsweredQuestionCard({
-  record,
+  record: asRecorded,
   now = new Date(),
   handover,
 }: {
@@ -544,6 +577,11 @@ export function AnsweredQuestionCard({
   handover?: { queued: boolean; notice: string | null; told: ReactNode };
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  // The question in the owner's language as it was translated while open; the owner's words are theirs.
+  const translated = useOwnerCardTranslation(asRecorded.translation);
+  const record = translated.shown
+    ? { ...asRecorded, question: shownQuestion(asRecorded.question, translated.shown) }
+    : asRecorded;
   const isWithdrawn = withdrawn(record);
   const heading = isWithdrawn ? WITHDRAWN_HEADING : ANSWERED_HEADING;
   const lead = closedQuestionLead(record.question);
@@ -637,6 +675,7 @@ export function AnsweredQuestionCard({
               {said}
             </span>
           ) : null}
+          {translated.foot}
         </div>
         {handover?.told}
         <div className="card-actions approval-actions answered-question-footer">

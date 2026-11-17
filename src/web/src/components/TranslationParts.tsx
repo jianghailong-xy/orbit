@@ -2,8 +2,10 @@
 // frames 4–6): the foot under a translated message, its per-message Show original toggle, and the
 // held and failed states. The server translates; these only draw what it wrote and call its doors.
 import { DEFAULT_AGENT_LANGUAGE, type ReplyTranslation, type TranslationLanguage, type TurnTranslation } from '@orbit/shared';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { sentToAgentLabel, TRANSLATION_COPY as COPY } from '../lib/translation';
+import { QueryClientContext } from '@tanstack/react-query';
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { meQuery, type Me } from '../lib/queries';
+import { answerRefusedUntranslated, ownerLanguageTranslation, sentToAgentLabel, TRANSLATION_COPY as COPY } from '../lib/translation';
 
 /** What the open conversation can do about a translation, provided by WorkspaceView. `on` is the
  *  account's switch with the server able to translate: a reply streaming then is greyed (2A). */
@@ -232,6 +234,90 @@ export function CardTranslationFoot({ flipped, onFlip }: { flipped: boolean; onF
       <button type="button" className="chat-translate-action" onClick={onFlip}>
         {flipped ? COPY.showTranslation : COPY.showOriginal}
       </button>
+    </div>
+  );
+}
+
+/** The signed-in account as the app shell's read left it in the cache, never fetched here. */
+const noSubscription = () => () => {};
+function useCachedMe(): Me | undefined {
+  // A card drawn outside a QueryClientProvider (a static render) reads as no account: the original.
+  const client = useContext(QueryClientContext);
+  const subscribe = useCallback(
+    (onChange: () => void) => (client ? client.getQueryCache().subscribe(onChange) : noSubscription()),
+    [client],
+  );
+  const read = () => client?.getQueryData<Me>(meQuery().queryKey);
+  return useSyncExternalStore(subscribe, read, read);
+}
+
+/**
+ * An owner card that lives outside a session (board 04-owner-cards.html, frames 2–3; decision 4A):
+ * the server's `translation` while the card is drawn translated, undefined while it is flipped to
+ * the original or there is none in the owner's language, and the card's one foot.
+ * Decision 4A: one language at a time, with Show both languages on too.
+ */
+export function useOwnerCardTranslation<T extends { lang: TranslationLanguage; failed?: true }>(
+  translation: T | null | undefined,
+): { shown: T | undefined; foot: ReactNode } {
+  const flip = useOwnerCardFlip(translation);
+  return { shown: flip.pick(translation), foot: flip.foot };
+}
+
+type AnyCardTranslation = { lang: TranslationLanguage; failed?: true } | null | undefined;
+
+/**
+ * A card whose agent-written words come in several translations (a confirmation's report, review and
+ * problems): one flip for all of them, drawn while any is in the owner's language. `pick` gives a
+ * translation while the card is drawn translated and undefined otherwise.
+ */
+export function useOwnerCardFlip(...translations: AnyCardTranslation[]): {
+  pick: <T extends { lang: TranslationLanguage; failed?: true }>(t: T | null | undefined) => T | undefined;
+  foot: ReactNode;
+} {
+  const me = useCachedMe();
+  const [flipped, setFlipped] = useState(false);
+  const any = translations.some((t) => ownerLanguageTranslation(t, me) !== undefined);
+  return {
+    pick: (t) => (any && !flipped ? ownerLanguageTranslation(t, me) : undefined),
+    foot: any ? <CardTranslationFoot flipped={flipped} onFlip={() => setFlipped((v) => !v)} /> : null,
+  };
+}
+
+/**
+ * An owner card's answer the server refused 422 TRANSLATION_FAILED, so nothing was recorded (2A):
+ * "Couldn't translate, so it wasn't sent · Retry · Send as written", each press posting the same
+ * answer again, Send as written with `sendAsWritten: true`.
+ */
+export function RefusedAnswerFoot({ resend }: { resend: (sendAsWritten: boolean) => Promise<unknown> }) {
+  // A press that fails again is drawn by the card from its own state; nothing here rethrows.
+  const press = (sendAsWritten: boolean) => () => resend(sendAsWritten).catch(() => undefined);
+  return <UntranslatedDecisionFoot onRetry={press(false)} onSendAsWritten={press(true)} />;
+}
+
+/**
+ * A send-back finished at the composer (an owner confirmation's or an evidence card's "Chat about
+ * this") that the door refused 422 TRANSLATION_FAILED: the refusal with Retry and Send as written,
+ * each posting the same press again. Nothing while the last press was not refused, or `when` says
+ * it belongs to another conversation.
+ */
+export function RefusedSendBack<V extends object>({
+  mutation,
+  when = () => true,
+}: {
+  mutation: {
+    isError: boolean;
+    error: unknown;
+    variables: V | undefined;
+    mutateAsync: (press: V & { sendAsWritten?: boolean }) => Promise<unknown>;
+  };
+  when?: (press: V) => boolean;
+}) {
+  const press = mutation.variables;
+  if (!mutation.isError || !press || !answerRefusedUntranslated(mutation.error) || !when(press)) return null;
+  return (
+    <div className="composer-translate-refused">
+      <RefusedAnswerFoot resend={(sendAsWritten) => mutation.mutateAsync({ ...press, sendAsWritten })} />
     </div>
   );
 }
