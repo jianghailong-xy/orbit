@@ -2,14 +2,14 @@
 
 满足外部条件时开始的工作：Task 的 **Starts when**（只触发一次）和定时任务的 **When** 规则（每次越线触发一次）。起因是 HPC 上的一次 Ceph 会话：“等第三个 OSD 再改 3 副本”今天只能记进 Agent 的私有备忘。
 
-已定（2026-11-17）：一个条件概念挂在 Task 和定时任务两处；触发后先提方案、批准再动手；先做 runner 上的轮询探针，外部事件推送放后面。P1–P4 待定，见板上第 3 部分。
+已定（2026-11-17）：一个条件概念挂在 Task 和定时任务两处；触发后先提方案、批准再动手；先做 runner 上的轮询探针，外部事件推送放后面。P1–P4 同日都按 A 定了。设计文档：[`docs/condition-triggers-design.md`](../../condition-triggers-design.md)。
 
 | 图 | 内容 |
 | --- | --- |
 | [`01-board.png`](01-board.png) | 整板 |
 | [`01-board-1.png`](01-board-1.png) | ① 今天 ② Task 的创建卡（Starts when）③ 定时任务的创建卡（When 规则） |
 | [`01-board-2.png`](01-board-2.png) | ④ Scheduled 页的“等条件”分组 ⑤ 触发后先提方案 ⑥ 读不到数、详情里的 Condition 块 |
-| [`01-board-3.png`](01-board-3.png) | 模型、已定、待定 P1–P4、落地顺序 |
+| [`01-board-3.png`](01-board-3.png) | 模型、已定（含 P1–P4）、落地顺序 |
 
 ## 怎么做的
 
