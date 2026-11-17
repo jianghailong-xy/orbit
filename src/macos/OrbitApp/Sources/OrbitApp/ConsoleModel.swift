@@ -5575,7 +5575,7 @@ final class ConsoleModel {
     /// turn here did.
     func questionTold(_ itemID: String) -> OwnerAnswerTold? {
         guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }
-        return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)
+        return OwnerAnswerTold(card: card, text: turn.text)
     }
 
     /// Where one delivered proposal stands right now — the whole of what decides whether its
