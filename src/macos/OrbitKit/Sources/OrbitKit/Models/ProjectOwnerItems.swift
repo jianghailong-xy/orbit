@@ -501,6 +501,10 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
     public let check: IntegrationCheckResult?
     /// Whether the task's own branch passed — the check failed only combined with it.
     public let branchUnchanged: Bool
+    /// The Branch row's sentence, written by the server by the job the check failed in: a task's
+    /// landing, or a promotion of the project branch or of one task's branch to main. Nil from a
+    /// server older than the field, where the card keeps the task's sentence.
+    public let branchLine: String?
     /// The code an integration job ended with (INTEGRATION_ERROR).
     public let errorCode: String?
     /// Why a task's attempt failed, and where its chain stands (TASK_FAILED).
@@ -509,7 +513,7 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
     public init(task: Task? = nil, targetRef: String? = nil, targetSha: String? = nil,
                 files: [String] = [], nothingLanded: Bool = false,
                 check: IntegrationCheckResult? = nil, branchUnchanged: Bool = false,
-                errorCode: String? = nil, failure: Failure? = nil) {
+                branchLine: String? = nil, errorCode: String? = nil, failure: Failure? = nil) {
         self.task = task
         self.targetRef = targetRef
         self.targetSha = targetSha
@@ -517,6 +521,7 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
         self.nothingLanded = nothingLanded
         self.check = check
         self.branchUnchanged = branchUnchanged
+        self.branchLine = branchLine
         self.errorCode = errorCode
         self.failure = failure
     }
@@ -530,6 +535,7 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
         nothingLanded = try c.decodeIfPresent(Bool.self, forKey: .nothingLanded) ?? false
         check = try c.decodeIfPresent(IntegrationCheckResult.self, forKey: .check)
         branchUnchanged = try c.decodeIfPresent(Bool.self, forKey: .branchUnchanged) ?? false
+        branchLine = try c.decodeIfPresent(String.self, forKey: .branchLine)
         errorCode = try c.decodeIfPresent(String.self, forKey: .errorCode)
         failure = try c.decodeIfPresent(Failure.self, forKey: .failure)
     }

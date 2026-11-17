@@ -337,3 +337,10 @@ test('none of the sentences the server wrote before it read the shared copy is b
     }
   }
 });
+
+test('a check-only approval names the complete command, while other approvals keep their prefixes', () => {
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  assert.equal(approvalPattern('Bash', { command }, true), command);
+  assert.equal(approvalPattern('Bash', { command, orbitScheduleCheckOnly: true }), command);
+  assert.equal(approvalPattern('Bash', { command }), 'python3:*');
+});

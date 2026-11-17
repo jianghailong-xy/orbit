@@ -2552,7 +2552,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(kind, rr, pool)); err != nil {
 						res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
@@ -2568,7 +2568,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(codexAccountKind, rr, pool)); err != nil {
 					res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 				} else {
 					go func() {

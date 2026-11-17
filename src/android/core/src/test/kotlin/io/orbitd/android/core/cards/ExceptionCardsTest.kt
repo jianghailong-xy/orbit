@@ -487,6 +487,25 @@ class ExceptionCardsTest {
         assertEquals(1, block.rows.count { it.logTail != null })
     }
 
+    /** The Branch row says what the server wrote for the job the check failed in: a task's landing keeps the task's sentence, a promotion
+     * of the project branch or of one task's branch says only that the branch did not move and nothing reached main. */
+    @Test fun theBranchRowIsTheServersSentenceForTheJobTheCheckFailedIn() {
+        fun branchOf(extra: String): String? {
+            val facts = Wire.json.parseToJsonElement("""{"task":null,"targetRef":null,"targetSha":null,"files":[],"nothingLanded":false,
+                "check":{"command":"npm test","exitCode":1,"expectedExitCode":0,"durationMs":14400000},"errorCode":null,"failure":null$extra}""")
+            val block = ExceptionCards.facts(row(kind = "INTEGRATION_CHECK_FAILED", facts = facts)) as ExceptionCards.Facts.Rows
+            return block.rows.firstOrNull { it.label == ExceptionCards.branchLabel }?.value
+        }
+        val project = "unchanged — the project branch did not move, and nothing reached main"
+        val candidate = "unchanged — this task’s branch did not move, and nothing on it reached main"
+        assertEquals(project, branchOf(""","branchUnchanged":true,"branchLine":"$project""""))
+        assertEquals(candidate, branchOf(""","branchUnchanged":true,"branchLine":"$candidate""""))
+        assertEquals("unchanged — the task passed on its own branch; it fails only on the combined tree",
+            branchOf(""","branchUnchanged":true,"branchLine":"${ExceptionCards.branchUnchanged}""""))
+        assertEquals("a server older than branchLine leaves the task's sentence", ExceptionCards.branchUnchanged, branchOf(""","branchUnchanged":true"""))
+        assertNull(branchOf(""","branchUnchanged":false,"branchLine":null"""))
+    }
+
     @Test fun aLongLogFoldsFromItsEndAndQuietRowsDrawNoBlankBlocks() {
         val written = (1..9).joinToString("\n") { "line $it" }
         val tail = ExceptionCards.CheckTail.of(written)!!

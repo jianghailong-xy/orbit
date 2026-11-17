@@ -97,6 +97,9 @@ final class RunnerAccountCopyParityTests: XCTestCase {
         // A count no sentence says otherwise, put back as the web's `${count}`.
         ("runnerAccountInUseMany", RunnerAccountCopy.runnerAccountInUseMany(engine: "${engine}", count: 90_001)
             .replacingOccurrences(of: "90001", with: "${count}")),
+        ("runnerAccountMovingOne", RunnerAccountCopy.runnerAccountMovingOne(engine: "${engine}")),
+        ("runnerAccountMovingMany", RunnerAccountCopy.runnerAccountMovingMany(engine: "${engine}", count: 90_001)
+            .replacingOccurrences(of: "90001", with: "${count}")),
     ]
 
     /// The web's declarations this end has nowhere to say, and why.

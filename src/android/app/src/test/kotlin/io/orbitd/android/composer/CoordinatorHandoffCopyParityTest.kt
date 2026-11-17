@@ -39,6 +39,7 @@ class CoordinatorHandoffCopyParityTest {
             "noteCardTitle" to CoordinatorHandoffCopy.NOTE_CARD_TITLE,
             "handedOver" to CoordinatorHandoffCopy.HANDED_OVER,
             "openIt" to CoordinatorHandoffCopy.OPEN_IT,
+            "openPrevious" to CoordinatorHandoffCopy.OPEN_PREVIOUS,
             "tryAgain" to CoordinatorHandoffCopy.TRY_AGAIN,
             "handOverWithoutNote" to CoordinatorHandoffCopy.HAND_OVER_WITHOUT_NOTE,
             "keepThisCoordinator" to CoordinatorHandoffCopy.KEEP_THIS_COORDINATOR,
@@ -60,6 +61,18 @@ class CoordinatorHandoffCopyParityTest {
         assertTrue(shared.contains("(count === 1 ? '1 pending wait moves over' : `\${count} pending waits move over`)"))
         assertTrue(shared.contains("(count === 1 ? '1 wait moved here' : `\${count} waits moved here`)"))
         assertTrue(shared.contains("`The handoff note wasn't written: \${COORDINATOR_HANDOFF_FAILURE_REASONS[code]}`"))
+    }
+
+    @Test fun historyBeforeMatchesSharedTemplate() {
+        val template = shared.substringAfter("historyBefore:").substringBefore("openPrevious:")
+        assertTrue(template.contains("decisions === 0 && merges === 0"))
+        assertTrue(template.contains("decisions === 1 ? 'decision' : 'decisions'"))
+        assertTrue(template.contains("merges === 1 ? 'merge' : 'merges'"))
+        val kotlin = CoordinatorHandoffCopy.historyBefore(12, 3)!!
+            .replace("12", "\${decisions}").replace("decisions and", "\${decisions === 1 ? 'decision' : 'decisions'} and")
+            .replace("3", "\${merges}").replace("merges before", "\${merges === 1 ? 'merge' : 'merges'} before")
+        assertTrue(template.contains("`$kotlin`"))
+        assertNull(CoordinatorHandoffCopy.historyBefore(0, 0))
     }
 
     @Test fun theFailureReasonsAndTheSectionsAreTheSharedOnes() {

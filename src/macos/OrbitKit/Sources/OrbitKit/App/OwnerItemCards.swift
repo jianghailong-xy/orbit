@@ -1263,7 +1263,7 @@ public enum ExceptionCards {
                                 logTail: CheckTail.of(check.outputTail)))
         }
         if facts.branchUnchanged {
-            rows.append(FactRow(label: branchLabel, value: branchUnchanged))
+            rows.append(FactRow(label: branchLabel, value: facts.branchLine ?? branchUnchanged))
         }
         if let failure = facts.failure {
             rows.append(FactRow(label: howLabel, value: howFailed(failure)))
@@ -1331,7 +1331,9 @@ public enum ExceptionCards {
     /// What a fix is expected to do, and the one thing it does not ask the reader to do.
     public static let afterAFix =
         "push to the task branch — Orbit re-integrates and re-checks on its own"
-    /// The whole sentence of a check that failed only combined with the task's own branch.
+    /// The whole sentence of a check that failed only combined with the task's own branch: a task's
+    /// landing. The server writes `branchLine` by the job the check failed in, and this is what a
+    /// server older than that field leaves the card to say.
     public static let branchUnchanged =
         "unchanged — the task passed on its own branch; it fails only on the combined tree"
 
@@ -2400,7 +2402,7 @@ extension ExceptionCards {
                                            .init(text: " after \(checkDuration(check.durationMs ?? 0))")],
                                     logTail: CheckTail.of(check.outputTail)))
             }
-            if payload.branchUnchanged { rows.append(FactRow(label: branchLabel, value: branchUnchanged)) }
+            if payload.branchUnchanged { rows.append(FactRow(label: branchLabel, value: payload.branchLine ?? branchUnchanged)) }
             if let failure = payload.failure {
                 rows.append(FactRow(label: howLabel, value: howFailed(failure)))
                 if let standing = chainStanding(failure) {

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.MainActivity
 import io.orbitd.android.TestOrbitApplication
@@ -105,10 +106,35 @@ class ExceptionCardUnreachableShotTest {
         @Composable override fun ChangeSheet(currentWorkspaceId: String?, close: () -> Unit, pick: (CoordinatorChange.Row) -> Unit) = Unit
     }
 
-    private fun show(unreachable: Boolean) {
+    /** A project-branch-to-main check that timed out after 4h, as the server serves it: `branchLine` is the promotion's sentence. */
+    private fun promotionRow() = buildJsonObject {
+        put("itemId", "35aItem0000000000000001"); put("kind", "INTEGRATION_CHECK_FAILED")
+        put("title", "Checks failed on the combined tree: merging the project branch into main"); put("detailLine", "the merge check timed out")
+        put("assignee", "OWNER"); put("assigneeReason", "ESCALATED")
+        put("waitingSince", ago(181)); put("escalatedAt", ago(5))
+        put("taskId", JsonNull); put("sessionId", JsonNull); put("promotionId", "35aPromo0000000000001"); put("fuseEpisodeId", JsonNull)
+        put("landingSessionId", "35aLanding00000000001"); put("integrationJobId", JsonNull)
+        putJsonObject("delivery") { put("state", "DELIVERED"); put("sessionId", "35aCoord0000000000001"); put("at", ago(180)) }
+        putJsonArray("actions") { listOf("ASK_COORDINATOR_AGAIN", "OPEN_LANDING").forEach { add(it) } }
+        put("requiredAction", "The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.")
+        put("question", JsonNull); put("lease", JsonNull)
+        putJsonObject("facts") {
+            put("task", JsonNull); put("targetRef", JsonNull); put("targetSha", JsonNull); putJsonArray("files") {}
+            put("nothingLanded", false)
+            putJsonObject("check") {
+                put("name", "MERGE_CHECK"); put("command", "npm run test -w @orbit/apiserver"); put("expectedExitCode", 0); put("exitCode", JsonNull)
+                put("timedOut", true); put("durationMs", 14_400_000); put("outputTail", "")
+            }
+            put("branchUnchanged", true); put("branchLine", PROJECT_BRANCH_LINE); put("errorCode", JsonNull); put("failure", JsonNull)
+        }
+        putJsonObject("chat") { put("sessionId", "35aCoord0000000000001"); put("stage", "WITH_OWNER"); put("refusal", JsonNull) }
+        put("coordinatorUnreachable", false)
+    }
+
+    private fun show(unreachable: Boolean, item: JsonObject = row(unreachable)) {
         val project = buildJsonObject { put("id", "p1"); put("title", "Checkout v2"); put("exceptionEscalationSeconds", 7200) }
         val card = CardCatalog.project("s1", "p1", mapOf("project" to project,
-            "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row(unreachable)) }; putJsonArray("withCoordinator") {} })).single()
+            "openItems" to buildJsonObject { putJsonArray("needsYou") { add(item) }; putJsonArray("withCoordinator") {} })).single()
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -170,5 +196,20 @@ class ExceptionCardUnreachableShotTest {
         compose.onNodeWithTag("$key:MARK_HANDLED").assertExists()
         compose.onNodeWithTag("$key:CANCEL_TASK").assertExists()
         shot("reachable", "android-b.png")
+    }
+
+    /** A project-branch promotion check's Details: the Branch row says the project branch did not move and nothing reached main. */
+    @Test fun promotionCheckBranchLine() {
+        show(unreachable = false, item = promotionRow())
+        compose.onNodeWithTag("$key:details").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("$key:details-body").assertExists()
+        compose.onNode(hasText(PROJECT_BRANCH_LINE)).assertExists()
+        compose.onNode(hasText(ExceptionCards.branchUnchanged)).assertDoesNotExist()
+        shot("promotion-branch", "android-promotion-branch.png")
+    }
+
+    private companion object {
+        const val PROJECT_BRANCH_LINE = "unchanged — the project branch did not move, and nothing reached main"
     }
 }

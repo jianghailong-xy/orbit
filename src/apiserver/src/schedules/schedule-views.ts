@@ -36,15 +36,15 @@ export function scheduleRuleText(rule: ScheduleRule): string {
 }
 
 /**
- * The inspector's "What it does" (§9.2): the agent's read-back of the schedule as it is now, or, when a change of the
- * rule or zone came without one, the When part from the current rule ("Every day at 23:46 · Asia/Shanghai · Codex
- * stable check"), so it never names a time the schedule no longer runs at.
+ * The inspector's "What it does" (§9.2): the agent's current read-back, or the current When with the first
+ * sentence of the run instructions. Do not try to strip timing from free-form read-backs or the person's intent.
  */
-export function scheduleReadBack(s: Pick<Schedule, 'readBack' | 'rule' | 'timezone' | 'title'>): string {
+export function scheduleReadBack(s: Pick<Schedule, 'readBack' | 'rule' | 'timezone' | 'title' | 'prompt'>): string {
   if (s.readBack) return s.readBack;
   const rule = s.rule as unknown as ScheduleRule;
   const when = rule.kind === 'ONCE' ? [scheduleRuleText(rule), rule.at.replace('T', ' ')] : [sharedRuleText(rule as SharedRule, 'long')];
-  return [...when, s.timezone, s.title].join(SCHEDULE_COPY.separator);
+  const what = s.prompt.trim().split(/(?<=[.!?])\s+|\r?\n/, 1)[0] || s.title;
+  return [...when, s.timezone, what].join(SCHEDULE_COPY.separator);
 }
 
 interface WorkspaceRef {

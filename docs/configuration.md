@@ -392,6 +392,7 @@ credential in `~/.orbit/config.json`; that file is private and must not be poste
 | `ORBIT_HOME` | `path` | Optional; `~/.orbit` | Runner configuration and run scratch directory, and the CLI's saved login (`user.json`). A shell and service must use the same home. Session checkouts are made in its `worktrees` directory, cloned from the workspace's checkout where both are on one filesystem that can clone files: [Session checkouts on the runner's disk](self-hosting.md#session-checkouts-on-the-runners-disk). | Directory contains credentials | Update the service configuration and restart it |
 | `ORBIT_NO_SELFUPDATE` | `flag` | Optional; unset | Disables runner self-updates. | No | Restart runner with the setting |
 | `ORBIT_NO_ENGINE_UPDATE` | `flag` | Optional; unset | Disables periodic coding-runtime updates. | No | Restart runner with the setting |
+| `ORBIT_AGENT_CONTRACT_TELEMETRY` | `off` | Optional; unset (on) | `off` stops the counts-only telemetry each session turn that touches Orbit files before its end: operations, receipt outcomes and error codes, never values, text, ids or credentials ([agent-contract eval](agent-contract-eval.md#telemetry)). | No | Restart runner with the setting |
 
 An export in an interactive shell does not update an already-running systemd/launchd service. Use
 `orbit doctor` to inspect the selected runtime and service PATH; see
