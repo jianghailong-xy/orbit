@@ -231,7 +231,7 @@
 
 <section class="ct-part" id="part-1">
 <h1>条件触发：满足外部条件时开始的工作</h1>
-<p class="lede">起因是 HPC 上的一次会话：要把 <code>kubernetes</code> 池改成 3 副本，但集群只有 2 个 OSD，你选了“等第三个 OSD”。这个“等”今天没有地方放。已定（2026-11-17）：<b>一个“条件”概念，挂在两处</b>：Task 的 <b>Starts when</b>（只触发一次）和定时任务的 <b>When</b> 规则（每次越线触发一次）；触发后<b>先提方案、你批准再动手</b>；第一版用 <b>runner 上的轮询探针</b>，外部事件推送放后面。界面文案英文，注释中文；数值、时间都是演示数据。</p>
+<p class="lede">依据 <code>docs/condition-triggers-design.md</code>。起因是 HPC 上的一次会话：要把 <code>kubernetes</code> 池改成 3 副本，但集群只有 2 个 OSD，你选了“等第三个 OSD”。这个“等”今天没有地方放。已定（2026-11-17）：<b>一个“条件”概念，挂在两处</b>：Task 的 <b>Starts when</b>（只触发一次）和定时任务的 <b>When</b> 规则（每次越线触发一次）；触发后<b>先提方案、你批准再动手</b>；第一版用 <b>runner 上的轮询探针</b>，外部事件推送放后面。界面文案英文，注释中文；数值、时间都是演示数据。</p>
 
 <div class="grid">
 
@@ -423,11 +423,11 @@
     <b>2</b> 第一版触发后先提方案，你批准再动手；不做无人值守的直接执行。<br>
     <b>3</b> 先做轮询探针；外部事件推送（Alertmanager、Ceph health）放后面。
   </div>
-  <div class="q"><b>待定 · 要你拍板</b><br>
-    <b>P1 探针能跑什么</b>：<span class="rec">A（建议）</span> 卡上批准的那一条命令原文，声明只读，用工作区已有的权限跑；B 只能从 Orbit 内置的几种探针里选（磁盘、HTTP、命令退出码）。A 才接得住 Ceph 这类任意系统，代价是你要看一眼命令。<br>
-    <b>P2 放在哪</b>：<span class="rec">A（建议）</span> Scheduled 页里多一组 “Waiting for a condition”（④）；B 单独一页。A 不增加入口，“以后会自己开始的事”都在一处。<br>
-    <b>P3 一次性条件一直不成立</b>：<span class="rec">A（建议）</span> 30 天后问你一次“还等吗”；B 一直等，只在列表里显示。<br>
-    <b>P4 探针失败几次算“读不到”</b>：<span class="rec">A（建议）</span> 连续 3 次（默认间隔下约 15 分钟）通知一次；B 第一次失败就通知。
+  <div class="ct-ok" style="margin-top:20px"><b>已定（2026-11-17，P1–P4 都按 A；文档 §4.1、§9、§6.2、§5.3）</b><br>
+    <b>P1 探针能跑什么</b>：A 卡上批准的那一条命令原文，声明只读，用工作区已有的权限跑；B 只能从内置的几种探针里选。<br>
+    <b>P2 放在哪</b>：A Scheduled 页里多一组 “Waiting for a condition”（④）；B 单独一页。<br>
+    <b>P3 一次性条件一直不成立</b>：A 30 天后问你一次“还等吗”；B 一直等。<br>
+    <b>P4 探针失败几次算“读不到”</b>：A 连续 3 次通知一次；B 第一次失败就通知。
   </div>
 </div>
 
