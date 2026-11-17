@@ -32,6 +32,7 @@
 import {
   AgentProvider,
   bashCommandRules,
+  bashSegments,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   PermissionMode,
@@ -334,6 +335,41 @@ export const OPEN_PR_DISALLOWED_TOOLS: readonly string[] = [
   'Skill(release)',
   'Skill(upgrade)',
 ];
+
+/** Match level denials at the server door, regardless of the engine asking. */
+export function scheduleRunDeniesApproval(
+  accessLevel: AccessLevel | null | undefined,
+  provider: string | null | undefined,
+  toolName: string,
+  input: unknown,
+): boolean {
+  const card = input as { command?: unknown; skill?: unknown } | null;
+  const glob = (pattern: string, value: string) => {
+    const escaped = pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+    return new RegExp(`^${escaped}$`).test(value);
+  };
+  const commands = (command: string): string[] => bashSegments(command).flatMap((segment) => {
+    // Codex sends argv as a shell-quoted command, e.g. /bin/bash -lc 'gh pr merge 12'.
+    const wrapper = segment.trim().match(/^(?:\/[^\s]+\/)?(?:bash|sh)\s+-(?:lc|c)\s+(['"])([\s\S]*)\1$/);
+    if (!wrapper) return [segment.trim()];
+    const inner = wrapper[1] === "'"
+      ? wrapper[2].replace(/'\\''/g, "'")
+      : wrapper[2].replace(/\\(["\\$`])/g, '$1');
+    return commands(inner);
+  });
+  return scheduleRunDisallowedTools([], accessLevel, provider).some((rule) => {
+    const scoped = rule.match(/^([^()]+)\((.*)\)$/);
+    if (!scoped) return glob(rule, toolName);
+    const [, tool, content] = scoped;
+    if (tool === 'Bash' && (toolName === 'Bash' || toolName === 'Terminal')) {
+      if (typeof card?.command !== 'string') return false;
+      return commands(card.command).some((command) => content.endsWith(':*')
+        ? glob(content.slice(0, -2), command) || glob(`${content.slice(0, -2)} *`, command)
+        : glob(content, command));
+    }
+    return tool === toolName && typeof card?.skill === 'string' && glob(content, card.skill);
+  });
+}
 
 /** The workspace's own disallowed tools, plus the run's when the session serves a schedule's run. */
 export function scheduleRunDisallowedTools(

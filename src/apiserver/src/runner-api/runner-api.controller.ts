@@ -568,6 +568,7 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  scheduleRunDeniesApproval,
   checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
@@ -6259,8 +6260,12 @@ export class RunnerApiController {
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
     // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
-    const checkOnly = await this.isCheckOnlyRun(session);
-    const refused = checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
+    const accessLevel = await this.scheduledRunLevel(session);
+    const checkOnly = accessLevel === 'CHECK_ONLY';
+    const deniedByLevel = !!accessLevel && scheduleRunDeniesApproval(
+      accessLevel, await sessionEngine(this.prisma, session), stripNul(dto.toolName), dto.input,
+    );
+    const refused = deniedByLevel || checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
@@ -6316,7 +6321,9 @@ export class RunnerApiController {
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
-      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: CHECK_ONLY_REFUSED_MESSAGE } : {}),
+      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: deniedByLevel && !checkOnly
+        ? 'Not run: this tool or command is denied by the scheduled run’s access level.'
+        : CHECK_ONLY_REFUSED_MESSAGE } : {}),
     };
     let held = false;
     let fallback: string | null = null;
@@ -6453,18 +6460,18 @@ export class RunnerApiController {
     }
   }
 
-  /** Whether the session belongs to a run that started at CHECK_ONLY, even if its schedule has since changed. */
-  private async isCheckOnlyRun(
+  /** The level this session's scheduled run started with, even if its schedule has since changed. */
+  private async scheduledRunLevel(
     session: SessionEngineFacts & { scheduleRunId: string | null },
-  ): Promise<boolean> {
-    if (!session.scheduleRunId) return false;
+  ): Promise<ReturnType<typeof runAccessLevel>> {
+    if (!session.scheduleRunId) return null;
     // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
     // does not open this check to cards for other tools (runAccessLevel).
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: session.scheduleRunId },
       select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    return runAccessLevel(run) === 'CHECK_ONLY';
+    return runAccessLevel(run);
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
