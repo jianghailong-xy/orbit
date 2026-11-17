@@ -2,14 +2,12 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // What leaves this machine besides events, held to the same scrubber (docs/design/owner-request-secrets.md §7.2): a
@@ -54,33 +52,37 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	if len(patches) == 0 {
 		return patches
 	}
-	recorded, err := taintObjectsRead("")
-	if errors.Is(err, errSecretTaintScanning) && waitPendingTaintScans(secretPatchScanWait) {
-		// A grant's removal is being recorded: a turn ending just after it waits a little for the record, rather than
-		// lose its diffs to it.
-		recorded, err = taintObjectsRead("")
+	// Check in lifecycle order: held -> pending -> recorded. A value moving during this
+	// call is therefore checked in at least one stage, without waiting for its scan.
+	matched := make([]bool, len(patches))
+	check := func(matcher *integrationOutputRedactor) {
+		if matcher == nil {
+			return
+		}
+		for i, patch := range patches {
+			matched[i] = matched[i] || matcher.holds([]byte(patch.Patch)) || matcher.holds([]byte(patch.Preview))
+		}
 	}
+	check(r)
+	for _, pending := range pendingTaintMatchers() {
+		check(pending)
+	}
+	secretTaintMu.Lock()
+	entries, err := readSecretTaint()
+	secretTaintMu.Unlock()
 	if err != nil {
-		// The record of what held a value cannot be read, so nothing here can tell which patch is safe: none is sent.
-		// The files stay in the list with their counts, as for any withheld patch, and the next report of the
-		// checkout carries their diffs once the record can be read. Nothing in them is known to hold a value.
-		reason, notice := "had its diff withheld: the runner's secret record is unreadable", "%s: Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
-		if errors.Is(err, errSecretTaintScanning) {
-			reason, notice = "had its diff withheld: the secret record is pending (a removal scan is running)", "%s: Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report."
-		} else if errors.Is(err, errSecretTaintPending) {
-			reason = "had its diff withheld: the secret record is pending (a removal scan failed and is retried)"
-		}
-		for _, patch := range patches {
-			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", reason, fmt.Sprintf(notice, patch.Path))
-		}
+		secretPatchesWarning(sessionID, len(patches))
 		return nil
 	}
-	if r == nil && len(recorded) == 0 {
-		return patches
+	recorded := map[string]string{}
+	for _, entry := range entries {
+		for _, object := range entry.Objects {
+			recorded[object.ID] = object.Path
+		}
 	}
 	kept := make([]FilePatch, 0, len(patches))
-	for _, patch := range patches {
-		if (r != nil && (r.holds([]byte(patch.Patch)) || r.holds([]byte(patch.Preview)))) || patchNamesRecordedBlob(patch.Patch, recorded) {
+	for i, patch := range patches {
+		if matched[i] || patchNamesRecordedBlob(patch.Patch, recorded) {
 			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", secretHoldsValueReason, fmt.Sprintf(
 				"%s holds the value of a secret the owner delivered to this runner, so Orbit left its diff out of what it reports. Remove the value from the file and from the branch's history.", patch.Path))
 			continue
@@ -89,9 +91,6 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	}
 	return kept
 }
-
-// secretPatchScanWait is how long a turn's report waits for a running removal scan before withholding its diffs.
-var secretPatchScanWait = 30 * time.Second
 
 // patchNamesRecordedBlob reports whether a unified diff's `index <old>..<new>` line names a recorded blob on either
 // side. The ids there are abbreviated, so they are matched as prefixes, and only at git's own minimum of 7 digits.
@@ -159,6 +158,12 @@ func listPublishedObjects(repo, tip string, exclude ...string) ([]string, map[st
 	var not []string
 	for _, ref := range exclude {
 		if ref == "" {
+			continue
+		}
+		// The removal scan can exclude objects already public on origin. This is
+		// a rev-list selector, not a revision that rev-parse can verify.
+		if ref == "--remotes=origin" {
+			not = append(not, ref)
 			continue
 		}
 		if _, err := git(repo, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil {

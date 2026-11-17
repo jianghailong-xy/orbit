@@ -1,11 +1,13 @@
 package io.orbitd.android.core.guests
 
+import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.realtime.SseFrame
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -97,6 +99,9 @@ object GuestWire {
 
     fun page(bytes: ByteArray): GuestEventPage = root(bytes).let { GuestEventPage(events(it), it.bool("hasMore") ?: false) }
 
+    /** A `head` frame's payload: the title, when it has one, and the state as `events?after=` states it. */
+    fun head(obj: JsonObject): Pair<String?, GuestState> = obj.string("title") to state(obj)
+
     fun accepted(bytes: ByteArray): GuestTurnAccepted = root(bytes).let { GuestTurnAccepted(it.string("turnId"), it.bool("revived") ?: false) }
 }
 
@@ -151,3 +156,20 @@ suspend fun OrbitApi.sendGuestTurn(handle: SessionHandle, id: String, clientTurn
             put("clientTurnId", clientTurnId); put("content", content)
             if (attachmentIds.isNotEmpty()) putJsonArray("attachmentIds") { attachmentIds.forEach { add(it) } }
         }.toString().encodeToByteArray())).body)
+
+/** The guest stream (`GET /guest-sessions/:id/stream`, docs/session-viewer-stream-design.md §3): the events after [sinceSeq] — the
+ * newest page when it is 0 — then live ones, deltas included, `head` frames for the state, and a `gone` frame when access ends.
+ * Web parity: `useSessionStream` on the guest stream. */
+fun interface GuestStream {
+    /** Returns when the server ends the stream; throws when it cannot be opened or drops. [onOpen] follows the headers. */
+    suspend fun open(id: String, sinceSeq: Long, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit)
+}
+
+/** The guest stream's request: [sinceSeq] when there is one, and the listed reads' payload cap. */
+fun guestStreamRequest(id: String, sinceSeq: Long) = ApiRequest(guestPath(id, "stream"),
+    query = (if (sinceSeq > 0) listOf("sinceSeq" to "$sinceSeq") else emptyList()) + ("maxPayload" to "$GUEST_MAX_PAYLOAD"))
+
+/** The guest stream over this account's own SSE transport ([AuthSession.stream], `EventTransport`). */
+fun AuthSession.guestStream(handle: SessionHandle) = GuestStream { id, sinceSeq, onOpen, onFrame ->
+    stream(handle, guestStreamRequest(id, sinceSeq), onOpen, onFrame)
+}

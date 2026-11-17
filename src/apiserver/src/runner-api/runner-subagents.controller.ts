@@ -194,7 +194,7 @@ export class RunnerSubagentsController {
    * it opened, whose decision is frozen, on the candidate its last attempt runs on.
    *
    * A call that names a `workspace` or `needs` capabilities is placed first (docs/subagent-design.md §10.1,
-   * chooseSubagentWorkspace): on another workspace of the parent's repository it is opened there
+   * chooseSubagentWorkspace): on another workspace of the owner's account it is opened there
    * (openRemoteSubagentRun), and answered without `exec`; on the parent's own it is opened here, the choice's
    * reason heading the Why. The refusals of §10.1 are thrown before anything is written.
    */

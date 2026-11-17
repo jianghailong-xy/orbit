@@ -6,6 +6,35 @@ import XCTest
 /// reconciliation. This is the test that de-risks the whole native-console bet.
 final class TranscriptReducerTests: XCTestCase {
 
+
+    func testLegacySecretPatchNoticesFoldOnlyConsecutiveTemporaryNotices() {
+        var r = TranscriptReducer()
+        let pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report."
+        let unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+        func event(_ seq: Int, _ notice: String, subtype: String = "secret_patch_withheld", turn: String = "one") -> RunEvent {
+            RunEvent(seq: seq, type: .system, turnId: turn, payload: .object([
+                "subtype": .string(subtype), "path": .string("file"), "notice": .string(notice)
+            ]))
+        }
+        r.apply(event(1, "file: \(pending)"))
+        r.apply(event(2, "file: \(unreadable)"))
+        r.apply(event(3, "file holds the value of a secret"))
+        r.apply(event(4, "Unknown notice"))
+        r.apply(event(5, "Record summary", subtype: "secret_patches_withheld"))
+        r.apply(event(6, "file: \(pending)"))
+        r.apply(event(7, "file: \(pending)", turn: "two"))
+        let messages = r.state.items.compactMap { item -> String? in
+            if case .notice(_, let message, _) = item { return message }
+            return nil
+        }
+        XCTAssertEqual(messages, [
+            "Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.",
+            "file holds the value of a secret", "Unknown notice", "Record summary",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it."
+        ])
+    }
+
     /// A representative turn: user → streamed assistant text → tool call+result → more text →
     /// a resolved approval → a background process → a DUPLICATE durable event → turn end.
     private func recordedSession() -> [RunEvent] {
