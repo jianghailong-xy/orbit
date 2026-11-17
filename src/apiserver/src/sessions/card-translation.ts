@@ -9,7 +9,7 @@ import type { TranslationLanguages } from './turn-translation';
  * translation.ts): a coordinator's question, start request and done request (project_open_item), an owner request
  * (owner_request), completion evidence (task_completion_evidence), an owner-confirmation review
  * (task_owner_confirmation_review_record), a crossing (project_handoff_approval) and a criteria-change proposal
- * (project_criteria_proposal_translation, beside the frozen project_ratified_action_intent).
+ * (project_criteria_change_translation, beside the frozen project_ratified_action_intent).
  *
  * The approval card's rules (reply-translation.ts translateCard), over a card's NAMED fields: each named field
  * with text is translated from the agent's language into the owner's; a card translates whole or is recorded
@@ -71,7 +71,7 @@ export const CONFIRMATION_PROBLEMS_FIELDS = { reason: true, problems: [{ text: t
 export const CROSSING_FIELDS = { title: true, reason: true } as const satisfies CardFields;
 
 /** A criteria-change proposal's agent-written fields: each proposed criterion's words. */
-export const CRITERIA_PROPOSAL_FIELDS = {
+export const CRITERIA_CHANGE_FIELDS = {
   proposed: [{ text: true, verificationMethod: true }],
 } as const satisfies CardFields;
 

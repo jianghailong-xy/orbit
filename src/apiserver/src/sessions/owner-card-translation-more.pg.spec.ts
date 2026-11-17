@@ -385,7 +385,7 @@ test('six more owner cards are translated, once, whole or failed', { skip, concu
     },
     served: async (id) => (await pendingProposal(id)).translation,
     original: async (id) => (await pendingProposal(id)).proposed.map((p) => p.text),
-    stored: (id) => storedIn('project_criteria_proposal_translation', id, 'intent_id'),
+    stored: (id) => storedIn('project_criteria_change_translation', id, 'intent_id'),
     translated: {
       lang: 'zh-Hans',
       proposed: [{ text: zh(FIRST), verificationMethod: zh(METHOD) }, { text: zh(THIRD), verificationMethod: zh(METHOD) }],

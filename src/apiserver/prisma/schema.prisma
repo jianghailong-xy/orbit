@@ -4798,7 +4798,7 @@ model ProjectRatifiedActionIntent {
   idempotencyKey       String   @map("idempotency_key")
   commitToken          String   @unique @map("commit_token") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  translation          ProjectCriteriaProposalTranslation?
+  translation          ProjectCriteriaChangeTranslation?
 
   @@unique([ownerId, projectId, idempotencyKey])
   @@map("project_ratified_action_intent")
@@ -4807,14 +4807,14 @@ model ProjectRatifiedActionIntent {
 /// Settings › Translation (migration 1080): a criteria proposal's `proposed[].text` and `verificationMethod` in the
 /// owner's language, `{ lang, failed?, proposed? }`. A table of its own because 0195 refuses every write to a filed
 /// intent; the translation is a reader's copy, never part of what is approved.
-model ProjectCriteriaProposalTranslation {
+model ProjectCriteriaChangeTranslation {
   intentId    String                      @id @map("intent_id") @db.Uuid
   ownerId     String                      @map("owner_id") @db.Uuid
   translation Json
   updatedAt   DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
-  intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_proposal_translation_intent_fkey")
+  intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_change_translation_intent_fkey")
 
-  @@map("project_criteria_proposal_translation")
+  @@map("project_criteria_change_translation")
 }
 
 model ProjectRatifiedActionCommit {

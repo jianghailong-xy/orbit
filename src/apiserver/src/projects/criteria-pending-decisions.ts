@@ -1000,7 +1000,7 @@ export async function readPendingCriteriaDecisionsForOwner(
   );
   // The owner's reading copy of each proposal (Settings › Translation), kept beside the frozen row.
   const translations = new Map(
-    (await tx.projectCriteriaProposalTranslation.findMany({
+    (await tx.projectCriteriaChangeTranslation.findMany({
       where: { ownerId, intentId: { in: queue.pending.map((row) => row.intentId) } },
       select: { intentId: true, translation: true },
     })).map((row) => [row.intentId, row.translation as unknown as OwnerCardTranslation]),

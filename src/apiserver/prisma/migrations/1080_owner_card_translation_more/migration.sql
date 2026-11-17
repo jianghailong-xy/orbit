@@ -11,7 +11,7 @@
 -- task_owner_confirmation_review_record.translation JSONB, nullable: { lang, failed?, judgment?, needsYou?,
 --                                                   reason?, problems? }.
 -- project_handoff_approval.translation             JSONB, nullable: { lang, failed?, title?, reason? }.
--- project_criteria_proposal_translation            one row per translated criteria proposal, keyed by its
+-- project_criteria_change_translation            one row per translated criteria proposal, keyed by its
 --                                                   project_ratified_action_intent id: { lang, failed?, proposed? }.
 -- The card's own columns stay exactly what the agent wrote; the translation is kept beside them, and NULL (or no
 -- row) means translation was not involved. Nothing is backfilled: a card still open is translated the first time it
@@ -98,12 +98,12 @@ BEGIN
   END LOOP;
 END $$;
 
-CREATE TABLE IF NOT EXISTS "project_criteria_proposal_translation" (
+CREATE TABLE IF NOT EXISTS "project_criteria_change_translation" (
   "intent_id"   UUID         NOT NULL,
   "owner_id"    UUID         NOT NULL,
   "translation" JSONB        NOT NULL,
   "updated_at"  TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "project_criteria_proposal_translation_pkey" PRIMARY KEY ("intent_id"),
-  CONSTRAINT "project_criteria_proposal_translation_intent_fkey" FOREIGN KEY ("intent_id")
+  CONSTRAINT "project_criteria_change_translation_pkey" PRIMARY KEY ("intent_id"),
+  CONSTRAINT "project_criteria_change_translation_intent_fkey" FOREIGN KEY ("intent_id")
     REFERENCES "project_ratified_action_intent"("id") ON DELETE CASCADE ON UPDATE CASCADE
 );

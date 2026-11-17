@@ -103,7 +103,7 @@ import {
   stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
-import { CRITERIA_PROPOSAL_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
@@ -1881,12 +1881,12 @@ export class ProjectsService {
   /**
    * Queue the translation of one criteria proposal's words into the owner's language
    * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
-   * translation is kept in project_criteria_proposal_translation beside it; the owner's pending criteria
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
    * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
    */
   queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
     return queueOwnerCardTranslation({
-      key: `criteria-proposal:${intentId}`,
+      key: `criteria-change:${intentId}`,
       read: async () => {
         const db = this.prisma as unknown as Prisma.TransactionClient;
         const rows = await db.projectRatifiedActionIntent.findMany({
@@ -1895,16 +1895,16 @@ export class ProjectsService {
         });
         const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
         if (!open) return null;
-        const stored = await this.prisma.projectCriteriaProposalTranslation.findUnique({
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
           where: { intentId },
           select: { translation: true },
         });
         const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
-        return { source: { proposed }, fields: CRITERIA_PROPOSAL_FIELDS, translation: stored?.translation ?? null };
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
       },
       write: async (translation) => {
         const value = translation as unknown as Prisma.InputJsonValue;
-        await this.prisma.projectCriteriaProposalTranslation.upsert({
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
           where: { intentId },
           create: { intentId, ownerId, translation: value },
           update: { translation: value },
