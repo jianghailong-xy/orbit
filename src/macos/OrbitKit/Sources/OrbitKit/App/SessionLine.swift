@@ -80,6 +80,8 @@ public struct SessionLine: Equatable, Sendable {
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
             // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
             if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
+            // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+            if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
