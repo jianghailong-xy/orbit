@@ -96,3 +96,56 @@ body.m { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe U
 .ptb .tap.wide { width: auto; padding: 0 7px; border-radius: 14px; }
 .tb .send { flex: none; }
 .tb .model { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── board 02: the capsule behind the merged gauge (tertiarySystemFill, dark) ── */
+.m-grid3z { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.cap { background: rgba(118, 118, 128, .24); border-radius: 999px; }
+.cap.press { background: rgba(118, 118, 128, .40); }
+.zoom .gp.capd { height: 64px; padding: 0 16px; }
+.ptb .gp.capd { height: 28px; padding: 0 8px; }
+.rs .gp.capd { height: 32px; padding: 0 8px; }
+.hint { margin: 10px 2px 0; font-size: 12.5px; color: var(--text-2); }
+.hint b { color: var(--text-1); }
+.m-grid3z { grid-template-columns: 1fr; gap: 14px; }
+.m-grid3z .m-stage { display: grid; grid-template-columns: 820px 1fr; column-gap: 26px; align-items: center; }
+.m-grid3z .m-stage-l { grid-column: 1 / -1; }
+.m-grid3z .zoom { width: 820px; box-sizing: border-box; }
+.m-grid3z .hint { margin: 0; font-size: 14px; line-height: 1.7; }
+.zoom .tb .send { flex: none; }
+
+/* ── board 03: lighter ways to read as one control ───────────────────── */
+.opt { display: grid; grid-template-columns: 760px 1fr 300px; column-gap: 24px; align-items: center; }
+.opt + .opt { margin-top: 14px; }
+.opt .zoom { padding: 16px; }
+.opt .card { padding: 14px 16px; }
+.strip { display: flex; flex-direction: column; gap: 10px; }
+.mini { border-radius: 18px; padding: 8px; }
+.mini.dk { background: #1c1c1e; border: 1px solid #2c2c2e; }
+.mini.lt { background: #fff; border: 1px solid #e5e5ea; }
+.mini.lt .ptb .model b { color: #1c1c1e; }
+.mini.lt .ptb .send { background: #e5e5ea; }
+.desc { font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+.desc b { color: var(--text-1); }
+.desc .pro { color: #389e0d; }
+.desc .con { color: #cf1322; }
+.gp.tight { gap: 3px !important; }
+.zoom .gp.tight { gap: 6px !important; }
+.gp.line { border: .5px solid rgba(118, 118, 128, .45); border-radius: 999px; padding: 0 7px; height: 26px; }
+.zoom .gp.line { border-width: 1.5px; padding: 0 14px; height: 54px; }
+.mini.lt .gp.line { border-color: rgba(60, 60, 67, .22); }
+.ring2 { position: relative; display: inline-block; width: 20px; height: 20px; flex: none; }
+.zoom .ring2 { width: 40px; height: 40px; }
+.ring2 svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+.stack { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.stack .gbar { width: 16px !important; height: 3px !important; }
+.zoom .stack { gap: 4px; }
+.zoom .stack .gbar { width: 32px !important; height: 6px !important; }
+.stack .ring { width: 16px; height: 16px; }
+.zoom .stack .ring { width: 32px; height: 32px; }
+.stack .gbar { border-radius: 2px; background: #3a3a3c; overflow: hidden; }
+.stack .gbar i { display: block; height: 100%; background: #0a84ff; }
+.stack .gbar.amber i { background: #ff9f0a; }
+.mini.lt .gbar { background: #e5e5ea !important; }
+.desc .pro, .desc .con { display: block; font-weight: 400; color: var(--text-2); margin-top: 4px; }
+.desc .pro::before { content: '优点  '; color: #389e0d; font-weight: 600; }
+.desc .con::before { content: '缺点  '; color: #cf1322; font-weight: 600; }
