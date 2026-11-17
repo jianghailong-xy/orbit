@@ -102,12 +102,3 @@ export function parseSessionReplies(payload: unknown): SessionReplyCard[] | null
   }
   return cards.length > 0 ? cards : null;
 }
-
-/**
- * A recorded note without the `<orbit-session-reply>` blocks in it: what is left for the folded
- * "Orbit attached" entry once the reply cards have drawn those. Empty when the blocks were all of it.
- */
-export function withoutReplyBlocks(note: string | undefined): string {
-  if (!note) return '';
-  return note.replace(/<orbit-session-reply[\s>][\s\S]*?\n<\/orbit-session-reply>/g, '').trim();
-}

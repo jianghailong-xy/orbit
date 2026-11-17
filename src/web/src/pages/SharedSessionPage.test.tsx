@@ -190,13 +190,12 @@ async function click(el: Element) {
 /** The requests that read the transcript — the root and its events — in the order they left. */
 const transcriptReads = () => requests.filter((url) => url === SHARE || url.startsWith(`${SHARE}?`) || url.startsWith(`${SHARE}/events`));
 
-/** Open every fold that draws links when open: the notes delivery appends to a message. */
+/** Open card details that draw links when open. */
 async function openFolds() {
   // A turn Orbit opened is folded with its answer (OrbitExchangeFold): open each, the group first.
   for (const sel of ['.orbit-exchanges:not(.is-open) > .orbit-exchanges-line', '.orbit-branch:not(.is-open) > .orbit-branch-line', '.orbit-exchange:not(.is-open) > .orbit-exchange-line']) {
     for (let fold = container.querySelector<HTMLElement>(sel); fold; fold = container.querySelector<HTMLElement>(sel)) await click(fold);
   }
-  for (const fold of [...container.querySelectorAll('button.chat-injected-head')]) await click(fold);
 }
 
 /** Every link on the page that goes to an app page for a task, project or session. */
@@ -211,6 +210,8 @@ describe('the shared page, a page at a time', () => {
 
     expect(transcriptReads()).toEqual([`${SHARE}?limit=200&maxPayload=2048`]);
     expect(container.textContent).toContain(rows.REFERENCES_REPLY.payload.text.slice(0, 8));
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.querySelector('[class*="chat-injected"]')).toBeNull();
     expect(container.textContent).not.toContain(rows.OLDER_PROGRESS_1.payload.text);
   });
 
@@ -495,7 +496,7 @@ describe('links on the shared page', () => {
     `/tasks/${encodeId('34ORZ0jC7dpeqvYxg35Rn')}`, // REFERENCES_REPLY: orbit-task
     `/sessions/${encodeId('1wSVXdBhiCI1t54AHKoaVv')}`, // REFERENCES_REPLY: orbit-session
     `/projects/${encodeId('34JNIW4b31ujSVqEG784v')}`, // REFERENCES_REPLY: orbit-project
-    `/tasks/${encodeId('34OEE9MQXMEm0h0Ptm1GG')}`, // REFERENCED_TASK: orbit-task, and the note's card
+    `/tasks/${encodeId('34OEE9MQXMEm0h0Ptm1GG')}`, // REFERENCED_TASK: the orbit-task link in the typed words
     `/tasks/${encodeId('01a0c49c-468f-766f-80ff-1fd6245c6dd0')}`, // WATCH_WAKE: the task that changed
     `/tasks/${encodeId(rows.EXCEPTION_ITEM.payload.openItemDelivery.task.id)}`, // Open item: its task
     `/sessions/${encodeId(rows.EXCEPTION_ITEM.payload.openItemDelivery.task.sessionId)}`, // Open item: failed session

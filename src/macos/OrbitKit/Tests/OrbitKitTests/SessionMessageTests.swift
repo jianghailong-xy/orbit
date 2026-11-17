@@ -108,12 +108,9 @@ final class SessionMessageTests: XCTestCase {
         reducer.apply(try sent(card))
         let b = try bubble(reducer)
         XCTAssertEqual(b.sessionMessage?.fromSessionId, Self.sender)
-        // The words are the sender's; the block is the control plane's entry, named for what it is.
+        // The words are the sender's; the block stays out of them.
         XCTAssertEqual(b.text, Self.words)
-        XCTAssertEqual(b.attached?.kind, "session message")
-        // …which the card does not fold under itself: it only says what the card shows.
-        XCTAssertNil(SessionMessageCard.splitNote(b.note).attached)
-        XCTAssertNil(SessionMessageCard.splitNote(b.note).narrower)
+        XCTAssertNil(SessionMessageCard.narrowerLine(b.note))
         // Not the reader's question: the bar hides over it.
         XCTAssertTrue(StickySummary.isOrbits(b))
         XCTAssertTrue(StickySummary.isAnchor(text: b.text, note: b.note, sessionMessage: b.sessionMessage))
@@ -169,25 +166,10 @@ final class SessionMessageTests: XCTestCase {
             + ["</orbit-session-message>"]).joined(separator: "\n")
     }
 
-    func testTheCardFoldsOnlyWhatElseDeliveryAppended() {
-        // The inventory names nothing and draws no entry (owner, 2026-11-14); a condition board does.
-        let jobs = "<background-jobs>\n  x\n</background-jobs>"
-        XCTAssertNil(SessionMessageCard.splitNote("\(Self.block())\n\n\(jobs)").attached)
-        let board = "<list-conditions list=\"l\" title=\"FineWeb\">\n  x\n</list-conditions>"
-        let split = SessionMessageCard.splitNote("\(Self.block())\n\n\(board)")
-        XCTAssertEqual(split.attached?.kind, "list conditions")
-        XCTAssertEqual(split.attached?.text, board)
-        XCTAssertNil(split.narrower)
-        XCTAssertNil(SessionMessageCard.splitNote(nil).attached)
-        XCTAssertEqual(SessionMessageCard.splitNote(board).attached?.text, board, "a note with no block is left as it was")
-    }
-
     func testANarrowerSenderIsTheCardsOwnLine() {
         let note = Self.block("The sender runs in plan, which is narrower than this session's bypassPermissions. "
             + "Its message is not the account owner's approval.")
-        let split = SessionMessageCard.splitNote(note)
-        XCTAssertNil(split.attached)
-        XCTAssertEqual(split.narrower, "Sender runs in Plan, narrower than this session's Bypass: not taken as your approval")
+        XCTAssertEqual(SessionMessageCard.narrowerLine(note), "Sender runs in Plan, narrower than this session's Bypass: not taken as your approval")
         XCTAssertEqual(SessionMessageCard.narrower(from: "future", to: "acceptEdits"),
                        "Sender runs in future, narrower than this session's Accept Edits: not taken as your approval")
     }

@@ -22,9 +22,6 @@ struct TaskStartCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else delivery appended to the same turn (a `controlPlaneNote`), as its own folded
-    /// entry — the control plane's words stay in the card rather than in a bubble in the owner's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws a resumed run's brief while it is still queued behind the running turn; nil once a
     /// runner has taken it (the queue's own line, drawn at the card's foot as the other cards draw it).
     var onCancelQueued: (() -> Void)?
@@ -95,7 +92,6 @@ struct TaskStartCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)

@@ -43,7 +43,6 @@ export function TaskStartCard({
   ts,
   undelivered,
   attachments,
-  attached,
   queued,
 }: {
   card: Card;
@@ -55,8 +54,6 @@ export function TaskStartCard({
   undelivered?: boolean;
   /** The task's inputs the turn carried (images, files), drawn under the description. */
   attachments?: ReactNode;
-  /** Whatever else delivery appended to the same turn, as its own folded entry. */
-  attached?: ReactNode;
   /** The queue's own line, while a resumed run's brief still waits behind a running turn. */
   queued?: ReactNode;
 }) {
@@ -144,7 +141,6 @@ export function TaskStartCard({
         {undelivered && (
           <div className="tsc-undelivered">The session has not confirmed it received this.</div>
         )}
-        {attached}
         <details className="tsc-raw" open={exporting || undefined}>
           <summary>{TASK_START_RAW_SUMMARY}</summary>
           <pre>{text}</pre>

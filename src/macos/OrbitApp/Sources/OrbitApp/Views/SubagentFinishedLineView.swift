@@ -3,9 +3,8 @@ import OrbitKit
 
 /// A turn the control plane opened because a SubAgent ended (OrbitKit's `SubagentFinishedText.parse`),
 /// drawn as one event line in the agent's stream in the grammar a background job's news uses
-/// (`BackgroundWakeCardView`) — not as the reader's own bubble carrying the raw block under
-/// "Orbit attached: context", which is what it was: a message nobody typed, signed with the reader's
-/// name, its protocol sentences for the agent on show.
+/// (`BackgroundWakeCardView`). Nobody typed this turn, so its raw block and protocol sentences
+/// stay out of the reader's own bubble.
 ///
 /// The ✦ is the SubAgent card's own mark and purple, so the line reads back to the card that started
 /// it. What it handed back stays out of the fold — it is what the agent goes on from — three lines of
@@ -19,8 +18,6 @@ struct SubagentFinishedLineView: View {
     let wake: SubagentFinished
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else the same note carried, as its own folded entry.
-    var attached: (kind: String, text: String)?
     /// Cancels a wake that is still queued; nil once a runner has taken it, and on a steer.
     var onCancelQueued: (() -> Void)?
     /// How far a wake written into the running turn has got (`BackgroundWakeCard.steerState`).
@@ -147,7 +144,6 @@ struct SubagentFinishedLineView: View {
             Text(SubagentFinishedCard.queuedBy)
                 .font(.orbitMeta).foregroundStyle(Color.secondary)
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
         }
         .padding(.leading, 10)
         .overlay(alignment: .leading) {

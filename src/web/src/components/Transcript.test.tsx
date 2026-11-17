@@ -1690,40 +1690,28 @@ describe('injected context in a user bubble', () => {
       <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
-    // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
+    // Over the whole markup: the block is nowhere in it — not in the body, and not in an
     // attribute either, where it used to ride as a tooltip.
     expect(html).toContain('把这个项目协调起来');
     expect(html).not.toContain('list-conditions');
     expect(html).not.toContain('的协调会话');
   });
 
-  it('keeps the block one click away, so what the model read is not lost', () => {
-    const events = [userEvent(`把这个项目协调起来${appended}`, appended)];
+  it('omits the appended note from both the live transcript and the export', () => {
+    const events = [userEvent(`Keep this project coordinated${appended}`, appended)];
     const html = renderToStaticMarkup(<Transcript events={events} />);
     const exported = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <Transcript events={events} live={false} />
       </ExportCtx.Provider>,
     );
-
-    // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
-    // here (⊕), and already open in an export (⊖), where there is nothing to click.
-    const entry = (expanded: boolean) =>
-      new RegExp(
-        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: list conditions</button>`,
-      );
-    expect(html).toMatch(entry(false));
-    expect(exported).toMatch(entry(true));
-    expect(exported).toContain('的协调会话');
-  });
-
-  it('says that something was attached, so the reply is not unexplained', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
-    );
-
-    expect(html).toContain('Orbit attached');
-    expect(html).toContain('list conditions');
+    for (const markup of [html, exported]) {
+      expect(markup).toContain('Keep this project coordinated');
+      expect(markup).not.toContain('Orbit attached');
+      expect(markup).not.toContain('chat-injected');
+      expect(markup).not.toContain('list-conditions');
+      expect(markup).not.toContain('的协调会话');
+    }
   });
 
   it('leaves a message nobody appended to completely alone', () => {
