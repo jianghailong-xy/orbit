@@ -295,7 +295,7 @@ object ScheduleDisplay {
             parts += heldReason?.let { C.heldShort[it] } ?: C.Tags.held
         } else {
             if (!workspaceName.isNullOrEmpty()) parts += workspaceName
-            if (accessLevel == "OPEN_PR") parts += accessCopy("OPEN_PR").label
+            if (accessLevel != "CHECK_ONLY") parts += accessCopy(accessLevel).label
             if (state == "PAUSED" && pausedAt != null && timezone != null) parts += fill(C.Row.pausedOn, mapOf("date" to dateText(pausedAt, timezone)))
         }
         if (runningMinutes != null) parts += fill(C.Row.runningShort, mapOf("minutes" to runningMinutes.toString()))
@@ -410,7 +410,7 @@ object ScheduleDisplay {
 
     // The envelope card: Now / Asked
 
-    internal val accessOrder = mapOf("CHECK_ONLY" to 0, "OPEN_PR" to 1)
+    internal val accessOrder = mapOf("CHECK_ONLY" to 0, "OPEN_PR" to 1, "LAND" to 2)
 
     /** The parts of [after] wider than [before], in the card's order (schedule-envelope.ts widenedParts). */
     fun widenedParts(before: ScheduleEnvelope, after: ScheduleEnvelope): List<String> = buildList {
@@ -448,10 +448,10 @@ object ScheduleDisplay {
     }
 
     /** "Let Codex stable check open PRs?" */
-    fun envelopeTitle(title: String, widens: List<String>, workspaceName: String? = null): String {
+    fun envelopeTitle(title: String, widens: List<String>, workspaceName: String? = null, accessLevel: String? = null): String {
         val part = headPart(widens) ?: "RUNS_PER_WEEK"
         val values = buildMap { put("title", title); workspaceName?.let { put("workspace", it) } }
-        return fill(C.EnvelopeCard.titles[part] ?: "", values)
+        return fill(if (part == "ACCESS_LEVEL" && accessLevel == "LAND") C.EnvelopeCard.landTitle else C.EnvelopeCard.titles[part] ?: "", values)
     }
 
     /** The card's decline button: "Keep check only", "Keep weekly", else "Keep as it is". */
@@ -489,7 +489,7 @@ object ScheduleDisplay {
         val ruleAsked = ScheduleRule.parse(card.proposed?.get("rule"))
         val sides = envelopeSides(envelope.widens, envelope.now?.envelope, envelope.asked.envelope, ruleNow, ruleAsked, names)
         val title = card.title ?: scheduleTitle ?: ""
-        return EnvelopeCardText(envelopeTitle(title, envelope.widens, envelope.asked.runsIn.workspaceName), sides.now, sides.asked,
+        return EnvelopeCardText(envelopeTitle(title, envelope.widens, envelope.asked.runsIn.workspaceName, envelope.asked.may.accessLevel), sides.now, sides.asked,
             keepLabel(envelope.widens, envelope.now?.envelope, envelope.now?.runsIn?.workspaceName), envelopeNote(envelope.widens))
     }
 

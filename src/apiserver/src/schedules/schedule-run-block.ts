@@ -70,6 +70,10 @@ export function scheduledRunTurn(input: RunBlockInput): string {
   }
   lines.push(`Note from the last run: ${input.note ?? 'none.'}`);
   lines.push(`Access: ${input.accessLevel}. Limit: ${input.runLimitMinutes} minutes.`);
+  if (input.accessLevel === 'LAND') {
+    lines.push('Commit your work on your branch. Do not open a PR, merge, push, release or deploy. '
+      + 'Orbit lands it on main after your turn ends and you report CHANGED or NO_CHANGE, using the normal merge check.');
+  }
   lines.push('When you are done, call mcp__orbit__schedule_run_report exactly once.');
   return ['<scheduled-run>', ...lines.map((l) => `  ${l}`), '</scheduled-run>', input.prompt].join('\n');
 }
