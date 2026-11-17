@@ -247,7 +247,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.deepEqual(
       { ...quiet.answer, linkHints: undefined },
       {
-        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: null,
+        // A runner created without a Keep Free has the column's default: 10 GB since 0990_runner_keep_free_default.
+        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: 10240,
         mergeRequests: [], commitRequests: [], artifactRequests: [], linkHints: undefined,
       },
     );

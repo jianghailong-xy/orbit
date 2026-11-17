@@ -576,6 +576,16 @@ describe('statusLabel over a session parked on a watch', () => {
       text: 'Agent: Deploy dacad7403 to production…',
       tone: 'running',
     });
+    // A foreground delegate (or synchronous Agent) is still the tool in flight: its work, not the tool.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'mcp__orbit__delegate' }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // Any other tool still says itself.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'Bash' }, true)).toEqual({
+      text: 'Running Bash…',
+      tone: 'running',
+    });
     // No title (an older server, an undescribed call): the label it always said.
     expect(sessionLine({ ...one, runningSubagentTitle: '  ' }, true)).toEqual({ text: 'Running Agent…', tone: 'running' });
     expect(sessionLine({ ...one, runningSubagentTitle: null, runningSubagentCount: 2 }, true)).toEqual({

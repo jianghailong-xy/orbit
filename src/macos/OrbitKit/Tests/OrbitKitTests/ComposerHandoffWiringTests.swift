@@ -340,8 +340,17 @@ final class ComposerHandoffWiringTests: XCTestCase {
         // A raw string, so the assertion reads as the line it is looking for: what is being
         // matched is source text, escapes and all.
         XCTAssertTrue(
-            sent.contains(#"await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)""#),
-            "the typed sentence must go out as an ordinary turn with the item in front of it")
+            sent.contains(#"await send(authoritative: authoritative, overrideText: text.isEmpty ? context : "\(context)\n\n\(text)""#),
+            "the typed sentence must go out as an ordinary turn with the item in front of it, "
+                + "and a screenshot alone with the item and nothing after it")
+        let target = try section(console, from: "var needsText: Bool {", to: "let target: Target")
+        XCTAssertTrue(target.contains("case .planChange: return true"),
+                      "only a plan change needs typed words")
+        XCTAssertTrue(target.contains("if case .ownerItem = self { return true }"),
+                      "an item or request talked about may carry a screenshot alone: a request may ask "
+                          + "for one, and the Send button must light for it")
+        XCTAssertTrue(console.contains("(replyContext == nil || replyContext?.target.sendsAttachmentsAlone == true)"),
+                      "the composer lets attachments alone go for the reply targets that take them")
         XCTAssertTrue(sent.contains("takesStagedAttachments: true"),
                       "and with the composer's staged chips: picked for this message, left behind they "
                           + "sit in the composer looking unsent (web parity)")
