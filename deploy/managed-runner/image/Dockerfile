@@ -183,8 +183,8 @@ env = dict(os.environ, HOME='/tmp/orbit-version-check',
            CLAUDE_CONFIG_DIR='/tmp/orbit-version-check/.claude')
 def version(*argv):
     return subprocess.check_output(argv, env=env, text=True).strip()
-def first_line(*argv):  # Xvfb and x11vnc print their version on stderr
-    out = subprocess.run(argv, env=env, text=True, check=True, stdout=subprocess.PIPE,
+def first_line(*argv):  # Xvfb and x11vnc print their version on stderr; Xvfb then exits 1
+    out = subprocess.run(argv, env=env, text=True, stdout=subprocess.PIPE,
                           stderr=subprocess.STDOUT).stdout.split('\n')
     return next(line.strip() for line in out if line.strip())
 def package(name):
