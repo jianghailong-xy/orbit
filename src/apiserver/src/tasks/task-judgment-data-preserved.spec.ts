@@ -3110,7 +3110,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
       // written.
-      '1030_conditions'],
+      '1030_conditions',
+      // 1040 widens schedule_run_trigger by CONDITION and adds a nullable schedule.envelope_command_hash and
+      // condition.resumed_at; none is a preserved relation, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1040_schedule_when_rule'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
