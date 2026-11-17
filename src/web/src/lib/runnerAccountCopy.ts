@@ -129,3 +129,7 @@ export function runnerAccountSetDefaultFailed(name: string): string {
 
 /** Under that reason: a failed swap puts both logins back. */
 export const RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED = 'Both logins are as they were.';
+
+/** What a former Default is called — the account a Set as default moved out of ~/.claude into an added
+ *  folder — while the owner has not named it and no email is known for it. */
+export const RUNNER_ACCOUNT_FORMER_DEFAULT = 'Former default';

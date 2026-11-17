@@ -1092,6 +1092,9 @@ type ClaudeSwapProcess struct {
 type ClaudeAccountSwapNow struct {
 	DefaultAccountUUID string `json:"defaultAccountUuid"`
 	AccountAccountUUID string `json:"accountAccountUuid"`
+	// AccountEmail is the emailAddress of the account now in the added folder — the former Default —
+	// which the page names it by until the owner renames it. Empty when its .claude.json names none.
+	AccountEmail string `json:"accountEmail,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card

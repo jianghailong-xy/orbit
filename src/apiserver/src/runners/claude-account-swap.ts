@@ -19,7 +19,7 @@ import type {
 } from '@orbit/shared';
 import { DEFAULT_ACCOUNT } from '../providers/account';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
-import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { FORMER_DEFAULT_KEY, sanitizeRunnerEngines } from '../common/runner-engines';
 
 /** Runner swaps an added Claude account's login with the one in ~/.claude (§5). One that does not declare it would
  *  never answer the request. */
@@ -45,33 +45,50 @@ export function swappedAccount(account: string | null | undefined, added: string
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The account Default and `added` are called, in Orbit, before a swap: its alias, else what the runner reports, else
- *  "Default" for Default. */
-function nameOf(names: Record<string, unknown>, engines: unknown, account: string): string | null {
+/** What the owner, or the account's own record, calls an account of the pair before a swap: its alias, else the name
+ *  the runner reports for its slot. Never a placeholder: Default with neither has no name, and the slot of a former
+ *  Default reports the name the account now in ~/.claude was added under, which is not this account's. */
+function nameOf(names: Record<string, unknown>, engines: unknown, account: string, formerDefault: boolean): string | null {
   const alias = names[account];
-  if (typeof alias === 'string' && alias) return alias;
+  if (typeof alias === 'string' && alias.trim()) return alias;
+  if (formerDefault) return null;
   const reported = sanitizeRunnerEngines(engines)
     ?.find((entry) => entry.engine === 'claude')
     ?.accounts?.find((entry) => entry.id === account)?.name;
-  if (reported) return reported;
-  return account === DEFAULT_ACCOUNT ? 'Default' : null;
+  return reported || null;
 }
 
 /**
  * `runner.account_names` with Claude's two names exchanged. Each name follows its account into the other folder, and
  * is written as an alias even where it was the reported one: the runner's own record of the added slot keeps the name
  * it was added under, which now belongs to the account in ~/.claude.
+ *
+ * Default's placeholder is not a name and does not move: a Default the owner never renamed lands in the added slot
+ * with no name, marked as the former Default with `formerDefaultEmail` (the email the runner read there, or "" where
+ * none), which the clients name it by — else "Former default". The account promoted to ~/.claude leaves its mark, if
+ * it had one, behind: Default is called Default.
  */
-export function swappedAccountNames(accountNames: unknown, engines: unknown, added: string): Prisma.InputJsonValue | null {
+export function swappedAccountNames(
+  accountNames: unknown,
+  engines: unknown,
+  added: string,
+  formerDefaultEmail: string | null = null,
+): Prisma.InputJsonValue | null {
   const all = isObject(accountNames) ? { ...accountNames } : {};
   const claude = isObject(all.claude) ? { ...all.claude } : {};
-  const defaultName = nameOf(claude, engines, DEFAULT_ACCOUNT);
-  const addedName = nameOf(claude, engines, added);
+  const kept = isObject(all[FORMER_DEFAULT_KEY]) ? { ...all[FORMER_DEFAULT_KEY] } : {};
+  const former = isObject(kept.claude) ? { ...kept.claude } : {};
+  const defaultName = nameOf(claude, engines, DEFAULT_ACCOUNT, false);
+  const addedName = nameOf(claude, engines, added, added in former);
   delete claude[DEFAULT_ACCOUNT];
   delete claude[added];
   if (addedName) claude[DEFAULT_ACCOUNT] = addedName;
   if (defaultName) claude[added] = defaultName;
   all.claude = claude;
+  delete former[DEFAULT_ACCOUNT];
+  former[added] = formerDefaultEmail ?? '';
+  kept.claude = former;
+  all[FORMER_DEFAULT_KEY] = kept;
   return all as Prisma.InputJsonValue;
 }
 
@@ -190,6 +207,9 @@ export interface ClaudeAccountSwapApplied {
  * given its account explicitly (unpinned), so it stays on it in the new folder. Answers null when the fence matches no
  * row: a redelivered `done`, or one about a swap the row has moved past.
  *
+ * `formerDefaultEmail` is the email the runner read in the added folder after the swap (`now.accountEmail`): what the
+ * former Default is called there until the owner renames it (swappedAccountNames).
+ *
  * `reloadLocked` is called inside the transaction for each live session whose account column changed (the session
  * row is locked by the UPDATE that changed it), so its next turn starts in the new folder.
  */
@@ -199,6 +219,7 @@ export async function swapClaudeAccountRecords(
   added: string,
   attempt: Date,
   reloadLocked: (tx: Prisma.TransactionClient, sessionId: string) => Promise<void>,
+  formerDefaultEmail: string | null = null,
 ): Promise<ClaudeAccountSwapApplied | null> {
   const locked = await tx.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM "runner"
@@ -232,7 +253,7 @@ export async function swapClaudeAccountRecords(
       claudeAccountSwapMessage: null,
       claudeAccountSwapWaiting: [],
       claudeAccountSwapForeign: Prisma.DbNull,
-      accountNames: swappedAccountNames(runner.accountNames, runner.engines, added) ?? Prisma.DbNull,
+      accountNames: swappedAccountNames(runner.accountNames, runner.engines, added, formerDefaultEmail) ?? Prisma.DbNull,
       accountPauses: swappedAccountPauses(runner.accountPauses, added) ?? Prisma.DbNull,
       planUsage: swappedPlanUsage(runner.planUsage, added) ?? Prisma.DbNull,
     },

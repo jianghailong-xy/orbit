@@ -251,7 +251,9 @@ func (r *claudeAccountSwapRelay) run(cmd ClaudeAccountSwapCommand) {
 	if e := cmd.Expect; e != nil && e.DefaultAccountUUID != "" && e.AccountAccountUUID != "" {
 		nowDef, nowAcct := readClaudeOAuthAccountUUID(def), readClaudeOAuthAccountUUID(acct)
 		if nowDef == e.AccountAccountUUID && nowAcct == e.DefaultAccountUUID {
-			res.Status, res.Now = "done", &ClaudeAccountSwapNow{DefaultAccountUUID: nowDef, AccountAccountUUID: nowAcct}
+			res.Status, res.Now = "done", &ClaudeAccountSwapNow{
+				DefaultAccountUUID: nowDef, AccountAccountUUID: nowAcct, AccountEmail: readClaudeOAuthAccount(acct).EmailAddress,
+			}
 			r.finish(res)
 			r.ended()
 			return
@@ -320,7 +322,10 @@ func (r *claudeAccountSwapRelay) run(cmd ClaudeAccountSwapCommand) {
 		r.carry(id, job)
 	}
 	res.Status = "done"
-	res.Now = &ClaudeAccountSwapNow{DefaultAccountUUID: outcome.defaultAccountUUID, AccountAccountUUID: outcome.accountAccountUUID}
+	res.Now = &ClaudeAccountSwapNow{
+		DefaultAccountUUID: outcome.defaultAccountUUID, AccountAccountUUID: outcome.accountAccountUUID,
+		AccountEmail: outcome.accountEmail,
+	}
 	r.finish(res)
 }
 

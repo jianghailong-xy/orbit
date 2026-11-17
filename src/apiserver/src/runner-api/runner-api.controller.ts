@@ -499,7 +499,9 @@ import {
   replayableEventSql,
   TOMBSTONE_EVENT_TYPE,
 } from '../common/system-noise';
-import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
+import {
+  FORMER_DEFAULT_KEY, formerDefaultEmail, isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines,
+} from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
@@ -3906,14 +3908,17 @@ export class RunnerApiController {
         codexAccountRemoveSessions: sessionIds,
       },
     });
-    // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
-    // would show it again, and a slot added later under the same id must not inherit it.
+    // The name the account was given in Orbit goes with it (RunnersService.renameAccount), and so does
+    // its mark as a former Default: nothing would show them again, and a slot added later under the
+    // same id must not inherit them.
     if (count > 0 && status === 'done' && body.account) {
       await this.prisma.$executeRaw`
         UPDATE "runner"
            SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]
+                                 #- ARRAY[${FORMER_DEFAULT_KEY}::text, ${engine}::text, ${body.account}::text]
          WHERE "id" = ${runnerId}::uuid
-           AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
+           AND ("account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL
+                OR "account_names" #> ARRAY[${FORMER_DEFAULT_KEY}::text, ${engine}::text, ${body.account}::text] IS NOT NULL)`;
     }
     return { ok: true, applied: count > 0 };
   }
@@ -4034,7 +4039,9 @@ export class RunnerApiController {
       return { ok: true, applied: count > 0 };
     }
     if (!this.sessions) throw new HttpException('sessions are not available', 503);
-    const applied = await this.sessions.applyClaudeAccountSwap(runner.id, body.account, attempt);
+    const applied = await this.sessions.applyClaudeAccountSwap(
+      runner.id, body.account, attempt, formerDefaultEmail(body.now?.accountEmail),
+    );
     if (applied) {
       this.queue.notifySessionQueued(runner.id);
       // The page shows the exchanged accounts at once, as for a sign-in.

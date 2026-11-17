@@ -258,19 +258,25 @@ func readClaudeLoginState(ctx context.Context, store claudeCredentialStore, f cl
 // readClaudeOAuthAccountUUID is the accountUuid a folder's .claude.json names, read without any CLI:
 // what tells a redelivered swap that already happened from a new one.
 func readClaudeOAuthAccountUUID(f claudeLoginFolder) string {
+	return readClaudeOAuthAccount(f).AccountUUID
+}
+
+// readClaudeOAuthAccount is the oauthAccount a folder's .claude.json names, read without any CLI;
+// empty when there is none to read.
+func readClaudeOAuthAccount(f claudeLoginFolder) claudeOAuthAccount {
+	var account claudeOAuthAccount
 	doc, err := os.ReadFile(f.configJSON)
 	if err != nil {
-		return ""
+		return account
 	}
 	raw, _, _, err := jsonTopLevelValue(doc, "oauthAccount")
 	if err != nil {
-		return ""
+		return account
 	}
-	var account claudeOAuthAccount
 	if json.Unmarshal(raw, &account) != nil {
-		return ""
+		return claudeOAuthAccount{}
 	}
-	return account.AccountUUID
+	return account
 }
 
 // claudeAuthStatus is what `claude auth status` says of a folder.
@@ -379,6 +385,8 @@ type claudeSwapOutcome struct {
 	message string
 	// now is the accountUuid each folder holds afterwards (done only).
 	defaultAccountUUID, accountAccountUUID string
+	// accountEmail is the emailAddress the added folder holds afterwards: the former Default's (done only).
+	accountEmail string
 }
 
 // run carries out the swap on two folders nothing runs on (the relay sees to that): preconditions,
@@ -438,7 +446,10 @@ func (s *claudeLoginSwap) run(ctx context.Context) claudeSwapOutcome {
 		return s.rollBack(ctx, def, acct, err)
 	}
 	_ = os.RemoveAll(s.backupDir)
-	return claudeSwapOutcome{ok: true, defaultAccountUUID: acct.account.AccountUUID, accountAccountUUID: def.account.AccountUUID}
+	return claudeSwapOutcome{
+		ok: true, defaultAccountUUID: acct.account.AccountUUID, accountAccountUUID: def.account.AccountUUID,
+		accountEmail: def.account.EmailAddress,
+	}
 }
 
 // preconditions reads both logins and holds them to §2: both claude.ai logins of different accounts,

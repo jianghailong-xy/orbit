@@ -164,8 +164,9 @@ interface ClaudeAccountSwapResult {
    *  by pid and command name. The swap waits for them too and the page can say so. */
   foreignProcesses?: { pid: number; command: string }[];
   /** done: the accountUuid now in each folder, so the server can swap its per-account records
-   *  (names, pause, workspace choices, session pins) to match. */
-  now?: { defaultAccountUuid: string; accountAccountUuid: string };
+   *  (names, pause, workspace choices, session pins) to match; and the emailAddress now in the
+   *  added folder — the former Default's — which names it there until the owner renames it. */
+  now?: { defaultAccountUuid: string; accountAccountUuid: string; accountEmail?: string };
 }
 ```
 
@@ -192,6 +193,17 @@ a result has named `waitingOn`. When the deadline passes, the result is `failed`
 did not finish their turns in time — try again." A `done` result is applied once (matched on
 `account` + `attempt`), and in the same transaction the per-account records of the two accounts
 swap. A result for an attempt that is not current is dropped.
+
+**Names after a swap.** A name follows its account, but "Default" is the `default` slot's label, not a
+name, and it never moves. A Default the owner never renamed lands in the added slot with no name.
+The server keeps that slot marked as a former Default in `runner.account_names.formerDefault.claude`,
+with `now.accountEmail`, or `""` where none was sent. It serves the slot's account with
+`formerDefault: true` and `email`. Clients call it by the email, else "Former default"
+(runnerAccountCopy `RUNNER_ACCOUNT_FORMER_DEFAULT`). The runner's own name for that slot belongs to
+the account now in ~/.claude, so it is not shown. A name the owner gives it (Rename) wins and moves
+with it. When the former Default is made the Default again, its mark stays behind, and the default
+slot is called Default once more. This is the one place an account's email reaches the server. The
+owner chose to name the former Default by it.
 
 ## 6. Evidence this contract rests on
 

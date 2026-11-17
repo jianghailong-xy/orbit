@@ -76,4 +76,8 @@ public enum RunnerAccountCopy {
     public static let RUNNER_ACCOUNT_IN_USE_WAITING = "Waiting for input"
     /// A listed session with no title yet.
     public static let RUNNER_ACCOUNT_IN_USE_UNTITLED = "Untitled session"
+
+    /// What a former Default is called — the account a Set as default moved out of ~/.claude into an
+    /// added folder — while the owner has not named it and no email is known for it.
+    public static let RUNNER_ACCOUNT_FORMER_DEFAULT = "Former default"
 }

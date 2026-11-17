@@ -11847,10 +11847,13 @@ export class SessionsService {
   /**
    * Apply a finished Set as default swap of Claude accounts on a runner (docs/claude-default-swap-contract.md §5): in one
    * transaction, every record Orbit keys by the two account ids follows its account (swapClaudeAccountRecords), and
-   * each live session on either account is given a reload, so its next turn starts in its account's new folder. After
+   * each live session on either account is given a reload, so its next turn starts in its account's new folder. The
+   * former Default is named by `formerDefaultEmail`, the runner's `now.accountEmail`, until the owner renames it. After
    * the commit, each is hinted, which delivers what the swap held. Null when the swap is not the pending one.
    */
-  async applyClaudeAccountSwap(runnerId: string, added: string, attempt: Date): Promise<ClaudeAccountSwapApplied | null> {
+  async applyClaudeAccountSwap(
+    runnerId: string, added: string, attempt: Date, formerDefaultEmail: string | null = null,
+  ): Promise<ClaudeAccountSwapApplied | null> {
     const applied = await withTransactionRetry(this.prisma, (tx) => swapClaudeAccountRecords(tx, runnerId, added, attempt, async (lockTx, id) => {
       await lockTx.$queryRaw`SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
       await this.insertTurnLocked(lockTx, id, {
@@ -11858,7 +11861,7 @@ export class SessionsService {
         content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
         clientTurnId: randomUUID(),
       });
-    }), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
+    }, formerDefaultEmail), loggedRetry(this.logger, 'sessions.applyClaudeAccountSwap'));
     for (const id of applied?.release ?? []) this.realtime.notifyInbox(id);
     return applied;
   }

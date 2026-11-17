@@ -14,6 +14,10 @@
  *       while the swap was pending is held from the inbox and the claim, and delivered after, in the new folder.
  *       A redelivered done swaps nothing back.
  *   (3) A failed swap leaves every record unchanged, says why, and releases what it held.
+ *   (4) "Default" is a slot's label, not a name: an unnamed Default lands in the added slot with no name, served as the
+ *       former Default with the email the runner read there (none from a runner that sends none); a name the owner
+ *       gives it is kept as theirs, and swapped back to Default it is called Default again. A renamed Default keeps its
+ *       name through the swap, (2).
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runners/claude-account-swap.pg.spec.ts
  *
@@ -233,6 +237,16 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
   }
   const reloads = async (id: string) =>
     (await sql.query(`SELECT content FROM "conversation_turn" WHERE session_id = $1::uuid AND kind = 'reload'`, [id])).rows;
+  /** Claude's accounts as the runner page is served them: id, name, and the former Default's mark and email. */
+  const claudeAccounts = async (m: Machine) => {
+    const runner = (await runners.getRunner(m.ownerId, m.runnerId)) as unknown as { engines: RunnerEngineHealth[] | null };
+    return (runner.engines?.find((e) => e.engine === 'claude')?.accounts ?? []).map((a) => ({
+      id: a.id,
+      ...(a.name !== undefined ? { name: a.name } : {}),
+      ...(a.formerDefault !== undefined ? { formerDefault: a.formerDefault } : {}),
+      ...(a.email !== undefined ? { email: a.email } : {}),
+    }));
+  };
   const served = async (m: Machine) =>
     ((await runners.getRunner(m.ownerId, m.runnerId)) as unknown as { claudeAccountSwap: unknown }).claudeAccountSwap;
 
@@ -298,10 +312,17 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
     // Done: everything keyed by the two ids is swapped.
     assert.deepEqual(await report(m.runnerId, {
       account: WORK, attempt: command!.attempt, status: 'done',
-      now: { defaultAccountUuid: 'acct-work', accountAccountUuid: 'acct-personal' },
+      now: { defaultAccountUuid: 'acct-work', accountAccountUuid: 'acct-personal', accountEmail: 'me@home.example' },
     }), { ok: true, applied: true });
     const after = await records(m, all);
-    assert.deepEqual(after.names, { claude: { default: 'Work', [WORK]: 'Personal' } }, 'names follow their account');
+    assert.deepEqual(after.names, {
+      claude: { default: 'Work', [WORK]: 'Personal' },
+      formerDefault: { claude: { [WORK]: 'me@home.example' } },
+    }, 'names follow their account; the one the owner gave Default stays its name');
+    assert.deepEqual(await claudeAccounts(m), [
+      { id: 'default', name: 'Work' },
+      { id: WORK, name: 'Personal', formerDefault: true, email: 'me@home.example' },
+    ], 'served: the former Default by the name the owner gave it');
     assert.deepEqual(after.pauses, { claude: { [WORK]: LATER } }, 'the pause follows its account');
     assert.deepEqual(after.planUsage, {
       claude: {
@@ -397,5 +418,65 @@ test('Set as default for Claude Code accounts: the swap relay and the records th
       if (claimed) claims.set(claimed.sessionId, claimed.agent.env?.CLAUDE_CONFIG_DIR);
     }
     assert.equal(claims.get(queued), WORK_HOME, 'the queued session is claimed, still on Work');
+  });
+
+  await t.test('(4) an unnamed Default is not called "Default" in the added slot: its email, else "Former default"', async () => {
+    const swap = async (m: Machine, now: Record<string, unknown>) => {
+      await runners.setDefaultAccount(m.ownerId, m.runnerId, 'claude', WORK);
+      const command = (await drain(m.runnerId))!;
+      assert.deepEqual(await report(m.runnerId, { account: WORK, attempt: command.attempt, status: 'done', now }),
+        { ok: true, applied: true });
+    };
+    const unnamed = async (label: string) => {
+      const m = await machine(label);
+      await db.runner.update({ where: { id: m.runnerId }, data: { accountNames: Prisma.DbNull, accountPauses: Prisma.DbNull } });
+      assert.deepEqual(await claudeAccounts(m), [{ id: 'default' }, { id: WORK, name: 'Work' }]);
+      return m;
+    };
+
+    // A runner that read the former Default's email: no name is written for the slot, and the page is served the email.
+    const m = await unnamed('unnamed');
+    await swap(m, { defaultAccountUuid: 'acct-work', accountAccountUuid: 'acct-personal', accountEmail: ' me@home.example ' });
+    const names = (await records(m, [])).names;
+    assert.deepEqual(names, { claude: { default: 'Work' }, formerDefault: { claude: { [WORK]: 'me@home.example' } } });
+    assert.ok(!JSON.stringify(names).includes('"Default"'), 'no "Default" is written as a name');
+    assert.deepEqual(await claudeAccounts(m), [
+      { id: 'default', name: 'Work' },
+      // Not "Work": that is the name the runner keeps for the slot, which belongs to the account now in ~/.claude.
+      { id: WORK, formerDefault: true, email: 'me@home.example' },
+    ]);
+
+    // The owner names it after the slot's own record ("Work"): that is now their name for it, kept as an alias.
+    const renamed = await runners.renameAccount(m.ownerId, m.runnerId, 'claude', WORK, 'Work');
+    assert.equal(renamed.name, 'Work');
+    assert.deepEqual(await claudeAccounts(m), [
+      { id: 'default', name: 'Work' },
+      { id: WORK, name: 'Work', formerDefault: true, email: 'me@home.example' },
+    ]);
+    // Swapped back, it goes back to ~/.claude with the name the owner gave it, and the other account takes its own.
+    await swap(m, { defaultAccountUuid: 'acct-personal', accountAccountUuid: 'acct-work', accountEmail: 'me@work.example' });
+    assert.deepEqual(await claudeAccounts(m), [
+      { id: 'default', name: 'Work' },
+      { id: WORK, name: 'Work', formerDefault: true, email: 'me@work.example' },
+    ]);
+
+    // Never renamed and swapped back: Default is called Default again — it does not take its email to ~/.claude.
+    const back = await unnamed('back');
+    await swap(back, { defaultAccountUuid: 'acct-work', accountAccountUuid: 'acct-personal', accountEmail: 'me@home.example' });
+    await swap(back, { defaultAccountUuid: 'acct-personal', accountAccountUuid: 'acct-work', accountEmail: 'me@work.example' });
+    assert.deepEqual((await records(back, [])).names, {
+      claude: { [WORK]: 'Work' }, formerDefault: { claude: { [WORK]: 'me@work.example' } },
+    });
+    assert.deepEqual(await claudeAccounts(back), [
+      { id: 'default' },
+      { id: WORK, name: 'Work', formerDefault: true, email: 'me@work.example' },
+    ]);
+
+    // A runner that sends no email (older, or a .claude.json that names none): the slot is marked with none, and the
+    // clients call it "Former default".
+    const old = await unnamed('no-email');
+    await swap(old, { defaultAccountUuid: 'acct-work', accountAccountUuid: 'acct-personal' });
+    assert.deepEqual((await records(old, [])).names, { claude: { default: 'Work' }, formerDefault: { claude: { [WORK]: '' } } });
+    assert.deepEqual(await claudeAccounts(old), [{ id: 'default', name: 'Work' }, { id: WORK, formerDefault: true }]);
   });
 });

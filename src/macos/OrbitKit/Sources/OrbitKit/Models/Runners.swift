@@ -415,11 +415,17 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site this account's login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai)
     /// — each account's own (`KimiSite.site(of:)`). Absent before its first sign-in.
     public let kimiRegion: String?
+    /// Claude Code only: this added slot holds the account a Set as default moved out of ~/.claude.
+    /// Unless the owner renamed it, it has no `name` and is called by `email`, else "Former default".
+    public let formerDefault: Bool?
+    /// With `formerDefault`: the account's email as Claude reported it at the swap.
+    public let email: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil, pausedUntil: String? = nil,
-                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil) {
+                loginExpiresAt: String? = nil, kimiRegion: String? = nil, activeSessions: Int? = nil,
+                formerDefault: Bool? = nil, email: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
@@ -430,6 +436,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
         self.loginExpiresAt = loginExpiresAt
         self.kimiRegion = kimiRegion
         self.activeSessions = activeSessions
+        self.formerDefault = formerDefault
+        self.email = email
     }
 }
 

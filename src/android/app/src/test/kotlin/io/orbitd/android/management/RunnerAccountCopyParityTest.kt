@@ -57,7 +57,8 @@ class RunnerAccountCopyParityTest {
             "runnerAccountSettingDefaultMany" to RunnerAccountCopy.settingDefaultMany("{name}", 7).replace("7", "{count}"),
             "RUNNER_ACCOUNT_SETTING_DEFAULT_TERMINAL" to RunnerAccountCopy.SETTING_DEFAULT_TERMINAL,
             "runnerAccountSetDefaultFailed" to RunnerAccountCopy.setDefaultFailed("{name}"),
-            "RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED" to RunnerAccountCopy.SET_DEFAULT_UNCHANGED)
+            "RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED" to RunnerAccountCopy.SET_DEFAULT_UNCHANGED,
+            "RUNNER_ACCOUNT_FORMER_DEFAULT" to RunnerAccountCopy.FORMER_DEFAULT)
         val web = templates + constants
         for ((name, said) in android) assertEquals(name, web[name], said)
         // Every sentence of the web's is said here but the two of the workspace form's account field, which no Android page has.

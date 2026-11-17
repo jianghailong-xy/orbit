@@ -2162,8 +2162,9 @@ export interface ClaudeAccountSwapResult {
   waitingOn?: string[];
   /** pending: Claude processes on either folder that are not Orbit sessions; the swap waits for them too. */
   foreignProcesses?: ClaudeAccountSwapForeignProcess[];
-  /** done: the accountUuid now in each folder. */
-  now?: { defaultAccountUuid: string; accountAccountUuid: string };
+  /** done: the accountUuid now in each folder, and the emailAddress now in the added one — the former Default's,
+   *  which names it until the owner renames it (absent where its .claude.json names none, and from an older runner). */
+  now?: { defaultAccountUuid: string; accountAccountUuid: string; accountEmail?: string };
 }
 
 /** Runner → control plane: progress of a sign-in relay. */
@@ -2274,10 +2275,12 @@ export interface DshRuntimeHealth {
  * Code's CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a Kimi Code
  * KIMI_CODE_HOME, a Cursor CLI account's directory — which the runner signs in and runs sessions on.
  *
- * Nothing here names the account itself. Neither its email nor its account id leaves the machine
- * (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called the slot, and
- * `fingerprintPrefix`, where an engine reports one, is the start of a non-reversible fingerprint
- * the runner computed locally.
+ * Nothing the runner reports here names the account itself. Neither its email nor its account id leaves
+ * the machine in a report (docs/codex-rate-limit-reset-contract.md §3): `name` is what the user called
+ * the slot, and `fingerprintPrefix`, where an engine reports one, is the start of a non-reversible
+ * fingerprint the runner computed locally. The one exception is Orbit's, not the report's: `email` on a
+ * Claude Code former Default, which the owner chose to name it by (the Set as default swap's `done`
+ * carries it once).
  */
 export interface RunnerEngineAccount {
   /** Manual pause in Orbit. Sign-in and quota remain unchanged; expires automatically. */
@@ -2314,6 +2317,13 @@ export interface RunnerEngineAccount {
    *  refreshTokenExpiresAt, which the CLI warns about three days ahead). Absent where the CLI recorded
    *  none, for an account not signed in, and for every engine but Claude Code. */
   loginExpiresAt?: string;
+  /** Claude Code only: this added slot holds the account that was the Default before a Set as default
+   *  moved it here. Served by Orbit, never reported. Unless the owner renamed it, it has no `name`, and
+   *  is called by `email`, else "Former default" (runnerAccountCopy formerDefaultAccountName). */
+  formerDefault?: boolean;
+  /** With `formerDefault`: the account's email as Claude reported it at the swap. Absent where none was
+   *  known. */
+  email?: string;
 }
 
 /**

@@ -254,8 +254,8 @@ describe('what a swap comes to', () => {
     let swapped = false;
     const before = runner([DEFAULT, WORK]);
     // Done: Orbit's records followed their accounts, so the name Work is now on the default slot, and the
-    // former Default (unnamed) is in Work's folder.
-    const after = runner([{ ...DEFAULT, name: 'Work' }, { ...WORK, name: undefined }], {
+    // former Default (unnamed) is in Work's folder, served as the former Default with its email.
+    const after = runner([{ ...DEFAULT, name: 'Work' }, { ...WORK, name: undefined, formerDefault: true, email: 'me@home.example' }], {
       claudeAccountSwap: swap({ status: 'done' }),
     });
     const page = mount([before], async () => { swapped = true; return swap({}); }, () => [swapped ? after : before]);
@@ -272,8 +272,35 @@ describe('what a swap comes to', () => {
     expect(chips(defaultRow)).toContain('DEFAULT');
     expect(defaultRow.querySelector('.re-meta')?.textContent).toContain('~/.claude');
     expect(addedRow.querySelector('.re-meta')?.textContent).toContain('~/.orbit/claude-accounts/3fa91c2e');
+    // The former Default is called by its email, never "Default": that is the label of the slot it left.
+    expect(addedRow.querySelector('.re-name')?.textContent).toContain('me@home.example');
+    expect(addedRow.querySelector('.re-name')?.textContent).not.toContain('Default');
+    expect(chips(addedRow)).not.toContain('DEFAULT');
     // Nothing left under either account: done says nothing.
     expect(page.querySelector('.re-swapping')).toBeNull();
     expect(page.querySelector('.re-swap-failed')).toBeNull();
+  });
+});
+
+describe('the former Default, after the swap', () => {
+  const nameOfRow = (page: ParentNode, index: number) => claudeRows(page)[index].querySelector('.re-name')?.textContent ?? '';
+  const done = { claudeAccountSwap: swap({ status: 'done' }) };
+
+  it('is named by its email when Claude reported one', () => {
+    const page = mount([runner([{ ...DEFAULT, name: 'Work' }, { ...WORK, name: undefined, formerDefault: true, email: 'me@home.example' }], done)]);
+    expect(nameOfRow(page, 0)).toContain('Work');
+    expect(nameOfRow(page, 1)).toContain('me@home.example');
+    expect(nameOfRow(page, 1)).not.toContain('Default');
+  });
+
+  it('is "Former default" when no email is known', () => {
+    const page = mount([runner([{ ...DEFAULT, name: 'Work' }, { ...WORK, name: undefined, formerDefault: true }], done)]);
+    expect(nameOfRow(page, 1)).toContain('Former default');
+  });
+
+  it('keeps the name the owner gave it', () => {
+    const page = mount([runner([{ ...DEFAULT, name: 'Work' }, { ...WORK, name: 'Personal', formerDefault: true, email: 'me@home.example' }], done)]);
+    expect(nameOfRow(page, 1)).toContain('Personal');
+    expect(nameOfRow(page, 1)).not.toContain('me@home.example');
   });
 });

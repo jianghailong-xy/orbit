@@ -194,6 +194,11 @@ test('renaming a runner’s accounts, Default included', { skip, concurrency: 1,
     await runners.renameAccount(m.ownerId, m.runnerId, 'claude', 'default', 'Main');
     await runners.renameAccount(m.ownerId, m.runnerId, 'claude', WORK, 'Research');
     await runners.renameAccount(m.ownerId, m.runnerId, 'codex', WORK, 'Clients');
+    // Research is a former Default (a Set as default moved it there): its mark goes with it too.
+    await sql.query(
+      `UPDATE "runner" SET account_names = account_names || jsonb_build_object('formerDefault', jsonb_build_object('claude', jsonb_build_object($2::text, 'me@home.example'))) WHERE id = $1::uuid`,
+      [m.runnerId, WORK],
+    );
 
     // A report about another removal does not apply, and takes nothing.
     const stale = await api.accountRemoveResult(
@@ -201,7 +206,10 @@ test('renaming a runner’s accounts, Default included', { skip, concurrency: 1,
       { engine: 'claude', account: WORK, status: 'done', attempt: '2026-10-03T02:00:00Z' },
     );
     assert.equal(stale.applied, false);
-    assert.deepEqual(await stored(m.runnerId), { claude: { default: 'Main', [WORK]: 'Research' }, codex: { [WORK]: 'Clients' } });
+    assert.deepEqual(await stored(m.runnerId), {
+      claude: { default: 'Main', [WORK]: 'Research' }, codex: { [WORK]: 'Clients' },
+      formerDefault: { claude: { [WORK]: 'me@home.example' } },
+    });
 
     const done = await api.accountRemoveResult(
       { id: m.runnerId },
@@ -209,6 +217,6 @@ test('renaming a runner’s accounts, Default included', { skip, concurrency: 1,
     );
     assert.equal(done.applied, true);
     // Codex's slot with the same id is another account, and keeps its name.
-    assert.deepEqual(await stored(m.runnerId), { claude: { default: 'Main' }, codex: { [WORK]: 'Clients' } });
+    assert.deepEqual(await stored(m.runnerId), { claude: { default: 'Main' }, codex: { [WORK]: 'Clients' }, formerDefault: { claude: {} } });
   });
 });

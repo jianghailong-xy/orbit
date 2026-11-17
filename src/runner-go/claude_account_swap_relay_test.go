@@ -212,7 +212,8 @@ func TestClaudeAccountSwapQuietsBothFoldersSwapsAndReleasesHeldTurns(t *testing.
 	p.park(busyDef.live, p.permitGeneration(busyDef.live))
 
 	done := results.next(t, "done")
-	if done.Now == nil || done.Now.DefaultAccountUUID != "uuid-work" || done.Now.AccountAccountUUID != "uuid-default" || done.Message != "" {
+	if done.Now == nil || done.Now.DefaultAccountUUID != "uuid-work" || done.Now.AccountAccountUUID != "uuid-default" ||
+		done.Now.AccountEmail != "me@home.example" || done.Message != "" {
 		t.Fatalf("done = %+v", done)
 	}
 	for _, ss := range []*swapPoolSession{idleDef, busyDef, idleAcct, busyAcct} {
@@ -376,7 +377,8 @@ func TestClaudeAccountSwapRedeliveredAfterARestartReportsDone(t *testing.T) {
 	relay, _ := newTestSwapRelay(t, p, f, results, nil)
 	relay.handle(ClaudeAccountSwapCommand{Account: filepath.Base(f.acct.dir), Attempt: "a3",
 		Expect: &ClaudeAccountSwapExpect{DefaultAccountUUID: "uuid-default", AccountAccountUUID: "uuid-work"}})
-	if done := results.next(t, "done"); done.Now == nil || done.Now.DefaultAccountUUID != "uuid-work" {
+	if done := results.next(t, "done"); done.Now == nil || done.Now.DefaultAccountUUID != "uuid-work" ||
+		done.Now.AccountEmail != "me@home.example" {
 		t.Fatalf("done = %+v", done)
 	}
 	if !reflect.DeepEqual(f.read(t), swapped) {

@@ -331,6 +331,9 @@ internal object RunnerAccountCopy {
     fun setDefaultFailed(name: String) = "Couldn’t make $name the default"
     /** Under that reason: a failed swap puts both logins back. */
     const val SET_DEFAULT_UNCHANGED = "Both logins are as they were."
+    /** What a former Default is called — the account a Set as default moved out of ~/.claude into an added folder — while the owner has
+     * not named it and no email is known for it. */
+    const val FORMER_DEFAULT = "Former default"
 }
 
 /**
@@ -1373,9 +1376,17 @@ internal object RunnerPage {
     fun accountNoQuotaLimit(runner: JsonObject, engine: String, account: String): Boolean =
         engine == "kimi" && kimiNoQuotaLimit(accountSnapshotReported(EngineAccounts.usage(engine, runner), account))
 
-    /** CodexAccounts.label: what the user called it, else Default, or `Account <id>`. */
-    fun accountLabel(id: String, accounts: List<JsonObject>): String =
-        accounts.firstOrNull { it.str("id") == id }?.str("name")?.takeIf { it.isNotEmpty() } ?: if (id == "default") "Default" else "Account $id"
+    /** CodexAccounts.label: what the user called it, else Default; a former Default (the account a Set as default moved out of
+     * ~/.claude) by its email, else "Former default"; or `Account <id>`. */
+    fun accountLabel(id: String, accounts: List<JsonObject>): String {
+        val account = accounts.firstOrNull { it.str("id") == id }
+        account?.str("name")?.takeIf { it.isNotEmpty() }?.let { return it }
+        if (id == "default") return "Default"
+        if ((account?.get("formerDefault") as? JsonPrimitive)?.booleanOrNull == true) {
+            return account?.str("email")?.takeIf { it.isNotEmpty() } ?: RunnerAccountCopy.FORMER_DEFAULT
+        }
+        return "Account $id"
+    }
 
     /** One sign-in on the engine page. [auth] is none for an Antigravity Default on the machine's Gemini key ([envKey]),
      * which has nothing to sign in or pause; its line says what it runs on. [site]: Kimi only, the site its login is on —

@@ -34,7 +34,7 @@ import type {
 import { Prisma, RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { agentFixesOf } from './attention-fix';
-import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeFormerDefaults, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -1035,13 +1035,16 @@ export class RunnersService {
     }
     const trimmed = (name ?? '').trim();
     if (!trimmed) throw new BadRequestException('An account needs a name');
-    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true, accountNames: true } });
     if (!runner) throw new NotFoundException('runner not found');
     const reported = sanitizeRunnerEngines(runner.engines)
       ?.find((entry) => entry.engine === engine)
       ?.accounts?.find((entry) => entry.id === account);
     if (!reported) throw new NotFoundException('That account is not one this runner reports');
-    const own = reported.name || (account === 'default' ? 'Default' : '');
+    // A former Default carries no name of its slot's: the runner's name for that slot belongs to the
+    // account now in ~/.claude, so any name the owner gives it is kept as theirs.
+    const formerDefault = engine === 'claude' && sanitizeFormerDefaults(runner.accountNames).has(account);
+    const own = formerDefault ? '' : (reported.name || (account === 'default' ? 'Default' : ''));
     const alias = trimmed === own ? null : trimmed;
     const written = await this.prisma.$executeRaw`
       UPDATE "runner"

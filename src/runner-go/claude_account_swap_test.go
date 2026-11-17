@@ -162,7 +162,7 @@ func TestClaudeLoginSwapExchangesOnlyTheLoginAndTheAccount(t *testing.T) {
 	f := newClaudeSwapFixture(t)
 	s := f.swap(t)
 	out := s.run(context.Background())
-	if !out.ok || out.defaultAccountUUID != "uuid-work" || out.accountAccountUUID != "uuid-default" {
+	if !out.ok || out.defaultAccountUUID != "uuid-work" || out.accountAccountUUID != "uuid-default" || out.accountEmail != "me@home.example" {
 		t.Fatalf("swap = %+v, want done with work in Default", out)
 	}
 	defCreds, acctCreds := filepath.Join(f.def.dir, ".credentials.json"), filepath.Join(f.acct.dir, ".credentials.json")
