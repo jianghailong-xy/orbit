@@ -29234,6 +29234,12 @@ button.agent-progress-agent:hover {
 .project-done-moved-out, .acceptance-moved-out { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px;
   font-size: 12px; color: var(--text-3); }
 .project-done-moved-out a, .acceptance-moved-out a, .acceptance-moved a { color: var(--brand); }
+.acceptance-rulings { padding: 12px 24px; border-top: 1px solid var(--border-subtle); }
+.acceptance-rulings-title { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text-1); }
+.acceptance-rulings ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.acceptance-ruling { display: grid; gap: 2px; font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.acceptance-ruling-quote { color: var(--text-2); font-style: italic; }
+.acceptance-ruling-meta { font-size: 12px; color: var(--text-3); }
 .project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
   background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
 .project-done-blockers > b { display: block; margin-bottom: 6px; }

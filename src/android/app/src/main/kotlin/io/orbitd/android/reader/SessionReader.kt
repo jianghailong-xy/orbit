@@ -669,7 +669,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
                     val receivedHandoff = CoordinatorHandoff.received(detail)
                     if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
-                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
+                        HandoffNoteCard(receivedHandoff, io.orbitd.android.core.cards.CoordinatorCleanStart.history(
+                            detail?.text("createdAt"), session?.snapshot?.standing.orEmpty(), cards.merged)) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {

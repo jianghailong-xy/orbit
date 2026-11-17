@@ -318,6 +318,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { forwardedDescription, handoffSuccessorOf } from './handoff-wake-forward';
 import { settleUnrunWakeTurns, signalDrainedWakeups, type DrainedWakeupDrop } from './wake-turn-withdraw';
 import {
   appendScheduledWakeupContext,
@@ -567,6 +568,7 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
   scheduleRunPermissionMode,
@@ -6248,11 +6250,12 @@ export class RunnerApiController {
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
     // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
-    const refused = await this.checkOnlyRunRefuses(session, dto);
+    const checkOnly = await this.isCheckOnlyRun(session);
+    const refused = checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
-    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto);
+    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto, checkOnly);
     // The same shape for a coordinator's task creates in its own project when nobody has started it
     // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
     // them is a question on its own (`unstarted-project-create.ts`).
@@ -6291,7 +6294,8 @@ export class RunnerApiController {
       // 22P05, and the runner retries a 5xx forever. An approval that cannot be written is an
       // agent that waits for a card nobody can ever be shown.
       toolName: stripNul(dto.toolName),
-      input: await this.cardInput(session.ownerId, stripNul(dto.toolName), dto.input, { runnerId: runner.id, sessionId },
+      input: await this.cardInput(session.ownerId, stripNul(dto.toolName),
+        checkOnly ? { ...(dto.input as object), orbitScheduleCheckOnly: true } : dto.input, { runnerId: runner.id, sessionId },
         dto.acceptsStartAfterCreate === true),
       // Empty is no id at all, as the lookup above reads it. Stored as '', the session's second such
       // card would fail on approval_session_id_tool_use_id_key, and the runner answers a card it
@@ -6440,10 +6444,9 @@ export class RunnerApiController {
     }
   }
 
-  /** Whether this session serves a scheduled CHECK_ONLY run whose engine may not ask about this call (schedule-access.ts). */
-  private async checkOnlyRunRefuses(
+  /** Whether the session belongs to a run that started at CHECK_ONLY, even if its schedule has since changed. */
+  private async isCheckOnlyRun(
     session: SessionEngineFacts & { scheduleRunId: string | null },
-    dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.scheduleRunId) return false;
     // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
@@ -6452,9 +6455,7 @@ export class RunnerApiController {
       where: { id: session.scheduleRunId },
       select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    if (runAccessLevel(run) !== 'CHECK_ONLY') return false;
-    return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
-      stripNul(dto.backgroundJobId ?? ''));
+    return runAccessLevel(run) === 'CHECK_ONLY';
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
@@ -6470,6 +6471,7 @@ export class RunnerApiController {
   private async standingGrantCovers(
     session: SessionEngineFacts & { workspaceId: string | null },
     dto: ApprovalCreateRequest,
+    checkOnly = false,
   ): Promise<boolean> {
     if (!session.workspaceId) return false;
     // Deleting a runner or a workspace is asked every time; the delete routes refuse a card no person
@@ -6488,11 +6490,12 @@ export class RunnerApiController {
     // It is the engine that will run the command, so the grant is judged by the session's own —
     // not by the label its credential was given. One nobody can place is asked about.
     const runtime = backgroundJob ? null : await sessionEngine(this.prisma, session);
-    if (!backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
+    if (!checkOnly && !backgroundJob && (!runtime || !serverMatchedRuntime(runtime))) return false;
     const rules = await this.prisma.workspacePermissionRule.findMany({
       where: { workspaceId: session.workspaceId },
-      select: { toolName: true, ruleContent: true },
+      select: { toolName: true, ruleContent: true, fromScheduleRun: true },
     });
+    if (checkOnly) return checkOnlyRuleCoversApproval(dto, rules);
     return runtime
       ? ruleCoversApproval(runtime, dto.toolName, dto.input, rules)
       : ruleCoversBackgroundJobCard(dto.input, rules);
@@ -6559,7 +6562,9 @@ export class RunnerApiController {
    *
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
-   * 200 because there is nothing for the runner to try again.
+   * 200 because there is nothing for the runner to try again — unless it ended by a COMPLETED coordinator
+   * handoff: then the wake is filed onto the last successor of the handoff chain, its description saying the
+   * previous coordinator started the job (handoff-wake-forward.ts).
    *
    * A job's exit is written into the turn the session is running, when it is running one this runtime
    * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
@@ -6586,38 +6591,63 @@ export class RunnerApiController {
     const receivedAt = new Date();
     await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
-    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
-    let merged = false;
     try {
-      const turn = await this.sessions.createTurn(
-        runner.ownerId,
-        sessionId,
-        { clientTurnId, content: '', intent: 'NEXT_TURN' },
-        {
-          steerIfLive: dto.trigger === 'exit',
-          coalesce: async (tx, session, route) => {
-            if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
-              throw new StaleBackgroundWake(dto.jobId, dto.trigger);
-            }
-            const queued = await undeliveredWakeTurn(tx, sessionId, route);
-            merged = queued !== null;
-            const filedOn = queued?.clientTurnId ?? clientTurnId;
-            await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
-            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
-            return queued;
-          },
-        },
-      );
-      return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
+      return await this.fileBackgroundWakeOn(runner.ownerId, sessionId, dto, receivedAt);
     } catch (e) {
       // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output or a stall
       // its job's exit already reported (StaleBackgroundWake).
+      if (e instanceof StaleBackgroundWake) return { outcome: 'DROPPED' };
+      if (!(e instanceof SessionNotSendable || e instanceof NotFoundException)) throw e;
+    }
+    // The session has ended. One that ended by a COMPLETED coordinator handoff forwards the wake to its last
+    // successor, naming that the previous coordinator started the job (docs/coordinator-handoff-v2-design.md
+    // §1); a handoff still HANDING_OVER answers 503 (HandoffInFlight), which the runner asks again for. A
+    // session that ended any other way drops it.
+    const successor = await handoffSuccessorOf(this.prisma, sessionId);
+    if (!successor) return { outcome: 'DROPPED' };
+    try {
+      return await this.fileBackgroundWakeOn(runner.ownerId, successor, {
+        ...dto,
+        description: forwardedDescription(dto.description, dto.command),
+      }, receivedAt);
+    } catch (e) {
       if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
         return { outcome: 'DROPPED' };
       }
       throw e;
     }
+  }
+
+  /** File one background job's wake as a turn of `sessionId`: its own session, or the successor a handoff forwards it to. */
+  private async fileBackgroundWakeOn(
+    ownerId: string,
+    sessionId: string,
+    dto: BackgroundWakeDto,
+    receivedAt: Date,
+  ): Promise<BackgroundWakeReceipt> {
+    const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
+    let merged = false;
+    const turn = await this.sessions!.createTurn(
+      ownerId,
+      sessionId,
+      { clientTurnId, content: '', intent: 'NEXT_TURN' },
+      {
+        steerIfLive: dto.trigger === 'exit',
+        coalesce: async (tx, session, route) => {
+          if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+          if (dto.trigger !== 'exit' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+            throw new StaleBackgroundWake(dto.jobId, dto.trigger);
+          }
+          const queued = await undeliveredWakeTurn(tx, sessionId, route);
+          merged = queued !== null;
+          const filedOn = queued?.clientTurnId ?? clientTurnId;
+          await fileBackgroundJobWake(tx, sessionId, filedOn, dto, receivedAt);
+          if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
+          return queued;
+        },
+      },
+    );
+    return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
   }
 
   /**

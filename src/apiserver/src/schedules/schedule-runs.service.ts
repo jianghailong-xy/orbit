@@ -1201,7 +1201,7 @@ export class ScheduleRunsService {
             title: schedule.title,
             deadline: new Date(card.createdAt.getTime() + SCHEDULE_APPROVAL_TIMEOUT_MS),
             nextAt: schedule.nextDueAt,
-            pattern: approvalPattern(card.toolName, card.input),
+            pattern: approvalPattern(card.toolName, card.input, (run.accessLevel ?? schedule.accessLevel) === 'CHECK_ONLY'),
             workspaceName: workspace?.name ?? '',
             now,
             timezone: schedule.timezone,

@@ -962,29 +962,41 @@ test('schedule_update: a correction of the time does not overwrite what was aske
   assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).intent, restated);
 });
 
-test('the inspector reads the schedule back as it is now: 09:30 moved to 23:46 says 23:46', { skip }, async () => {
+test('a timing change without readBack keeps what the check does and reads the current timing', { skip }, async () => {
   const w = await world('read-back');
-  const at0930 = 'Every day at 09:30 Beijing time I check the pinned Codex version, and tell you only when there is a new one.';
-  const s = await createdThroughCard(w, { rule: { kind: 'DAILY', time: '09:30' }, readBack: at0930 });
-  assert.equal((await rest.get(w.user, s.id)).readBack, at0930);
+  const at0900 = 'Every day at 09:00 Beijing time, check X and tell me only when Y changes.';
+  const what = 'Check X and tell me only when Y changes.';
+  const s = await createdThroughCard(w, {
+    rule: { kind: 'DAILY', time: '09:00' }, readBack: at0900,
+    prompt: `${what} Read watched.txt to find Y.`,
+  });
+  assert.equal((await rest.get(w.user, s.id)).readBack, at0900);
 
   // A rule change that brings no read-back: the read derives When from the rule as it is now.
   const moved = await tools.update(w.runner, w.sessionId, s.id, { rule: { kind: 'DAILY', time: '23:46' } } as never);
   assert.equal(moved.outcome, 'APPLIED');
   const derived = (await rest.get(w.user, s.id)).readBack;
   assert.match(derived, /^Every day at 23:46/);
-  assert.ok(!derived.includes('09:30'), `the read-back still names the old time: ${derived}`);
+  assert.ok(derived.includes(what), `the read-back lost what the check does: ${derived}`);
+  assert.ok(!derived.includes('09:00'), `the read-back still names the old time: ${derived}`);
   assert.equal((moved as { readBack: string }).readBack, derived, 'the update answers with the same read-back');
   const movedRevision = (moved as { record: { revision: number } }).record.revision;
 
   // One the agent writes with the change is kept as the latest.
-  const at2346 = 'Every day at 23:46 Beijing time I check the pinned Codex version, and tell you only when there is a new one.';
+  const at2346 = 'Every day at 23:46 Beijing time I check X, and tell you only when Y changes.';
   const reworded = await tools.update(w.runner, w.sessionId, s.id, { readBack: at2346 } as never);
   assert.equal(reworded.outcome, 'UNCHANGED', 'a read-back alone is no revision');
   assert.equal((await rest.get(w.user, s.id)).readBack, at2346);
-  const weekly = 'Every Monday at 08:00 Beijing time I check the pinned Codex version, and tell you only when there is a new one.';
+
+  // A timezone-only change also keeps what the check does.
+  await tools.update(w.runner, w.sessionId, s.id, { timezone: 'Europe/London' } as never);
+  const rezoned = (await rest.get(w.user, s.id)).readBack;
+  assert.equal(rezoned, `Every day at 23:46 · Europe/London · ${what}`);
+
+  const weekly = 'Every Monday at 08:00 London time I check X, and tell you only when Y changes.';
   await tools.update(w.runner, w.sessionId, s.id, { rule: { kind: 'WEEKLY', time: '08:00', weekdays: ['MON'] }, readBack: weekly } as never);
   assert.equal((await rest.get(w.user, s.id)).readBack, weekly);
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).readBack, weekly);
   await refusedWith(tools.update(w.runner, w.sessionId, s.id, { readBack: 'x'.repeat(501) } as never), 'SCHEDULE_FIELD_INVALID');
 
   // Undo moves the rule back, and the read-back moves with it.

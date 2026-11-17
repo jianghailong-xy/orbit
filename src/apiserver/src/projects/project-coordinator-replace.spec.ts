@@ -150,6 +150,10 @@ function store(
         for (const w of moved) w.observer = successor;
         return moved.map((w) => ({ id: w.id, state: w.state }));
       }
+      if (text.includes('UPDATE "session_wakeup_loop"') || text.includes('UPDATE "session_scheduled_wakeup"')) {
+        // No case here holds a wakeup or a loop (coordinator-handoff-pending-work.pg.spec.ts moves them).
+        return [];
+      }
       if (text.includes('FROM "project"')) {
         return values[0] === project.id && values[1] === project.ownerId
           ? [{ coordinator_session_id: project.coordinatorSessionId, title: project.title }]

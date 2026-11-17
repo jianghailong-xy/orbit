@@ -270,7 +270,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
           coalesce: async (tx, session) => {
             if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
             const queued = await undeliveredWakeTurn(tx, sessionId);
-            await markScheduledWakeupDelivered(tx, wakeupId, queued?.clientTurnId ?? clientTurnId);
+            await markScheduledWakeupDelivered(tx, wakeupId, queued?.clientTurnId ?? clientTurnId, sessionId);
             return queued;
           },
         },
@@ -282,7 +282,7 @@ export class ScheduledWakeupWorker implements OnModuleInit, OnModuleDestroy {
       // its auto-retry armed: that session is coming back, and the wakeup waits for it.
       if (error instanceof SessionNotSendable || error instanceof NotFoundException) {
         if (error instanceof SessionNotSendable && (await this.recoveringByRetry(sessionId))) return 'HELD';
-        if (!(await dropScheduledWakeup(this.prisma, wakeupId))) return 'SETTLED_ELSEWHERE';
+        if (!(await dropScheduledWakeup(this.prisma, wakeupId, sessionId))) return 'SETTLED_ELSEWHERE';
         await this.signalDropped(wakeupId, sessionId, ownerId);
         return 'DROPPED';
       }
