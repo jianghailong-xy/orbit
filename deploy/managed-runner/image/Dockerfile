@@ -222,7 +222,7 @@ if platform.machine() == 'x86_64':
 expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.169.0',
                      'claude': '2.1.326 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.10',
                      'chromium': 'Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
-                     'xvfb': '2:21.1.16-1.3+deb13u4', 'x11vnc': 'x11vnc: 0.9.17 lastmod: 2020-08-04',
+                     'xvfb': '2:21.1.16-1.3+deb13u4', 'x11vnc': 'x11vnc: 0.9.17 lastmod: 2025-04-11',
                      'fontsNotoCjk': '1:20240730+repack1-1', 'fontsNotoColorEmoji': '2.051-0+deb13u1',
                      'playwrightMcp': 'Version 0.0.85'}
 if platform.machine() == 'x86_64':
