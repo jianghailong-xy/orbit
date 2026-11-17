@@ -10072,18 +10072,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
-    // only at the scheduled approval door, never exported as an engine pattern.
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {

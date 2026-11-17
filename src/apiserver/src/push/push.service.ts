@@ -38,6 +38,8 @@ import { claudeRegionPushBody, regionMachineName } from '../runners/runner-regio
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
+type ApnsEnvironment = 'production' | 'sandbox';
+type ApnsCredentials = { keyId: string; p8: string; cached?: { token: string; iat: number } };
 const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent badge sync
 /** How soon a reconcile looks again at a Feishu card another call was drawing (FeishuTransport.closeSettled). */
 const FEISHU_BUSY_RETRY_MS = 5_000;
@@ -125,12 +127,11 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
 @Injectable()
 export class PushService {
   private readonly log = new Logger(PushService.name);
-  private readonly keyId?: string;
   private readonly teamId?: string;
   private readonly bundleId: string;
-  private readonly p8?: string;
+  private readonly apnsCredentials: Partial<Record<ApnsEnvironment, ApnsCredentials>> = {};
+  private readonly blockedApnsEnvironments = new Set<ApnsEnvironment>();
   private readonly fcm: FcmTransport;
-  private cached?: { token: string; iat: number };
   // Per-owner "needs you" state last pushed to that user's devices, so a reconcile pushes only on a
   // real change and can tell iOS which sessions' banners to clear. In-memory/per-replica; pushes are
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
@@ -145,18 +146,27 @@ export class PushService {
     @Optional() private readonly feishu?: FeishuTransport,
     @Optional() private readonly moduleRef?: ModuleRef,
   ) {
-    this.keyId = config.get<string>('APNS_KEY_ID');
     this.teamId = config.get<string>('APNS_TEAM_ID');
     this.bundleId = config.get<string>('APNS_BUNDLE_ID') ?? 'io.orbitd.app';
-    const b64 = config.get<string>('APNS_KEY'); // base64 of the AuthKey_XXXX.p8
-    this.p8 = b64 ? Buffer.from(b64, 'base64').toString('utf8') : undefined;
+    for (const environment of ['production', 'sandbox'] as const) {
+      const prefix = `APNS_${environment.toUpperCase()}`;
+      const specificKey = config.get<string>(`${prefix}_KEY`);
+      const specificKeyId = config.get<string>(`${prefix}_KEY_ID`);
+      // A partial override must not pair one key's contents with another key's identifier.
+      const overridden = Boolean(specificKey || specificKeyId);
+      const b64 = overridden ? specificKey : config.get<string>('APNS_KEY');
+      const keyId = overridden ? specificKeyId : config.get<string>('APNS_KEY_ID');
+      if (this.teamId && b64 && keyId) {
+        this.apnsCredentials[environment] = { keyId, p8: Buffer.from(b64, 'base64').toString('utf8') };
+      }
+    }
     this.fcm = new FcmTransport(config);
     if (!this.apnsEnabled) this.log.warn('APNs not configured — iOS pushes disabled');
     if (!this.fcm.enabled) this.log.warn('FCM not configured — Android pushes disabled');
   }
 
   private get apnsEnabled(): boolean {
-    return Boolean(this.keyId && this.teamId && this.p8);
+    return Object.keys(this.apnsCredentials).length > 0;
   }
 
   /**
@@ -1627,14 +1637,27 @@ export class PushService {
         }
         if (t.platform !== 'ios' || !this.apnsEnabled || t.bundleId !== this.bundleId
           || !['sandbox', 'production'].includes(t.environment)) return false;
-        const auth = this.authToken();
-        if (!auth || !await isCurrent()) return false;
-        const host = t.environment === 'sandbox' ? APNS_HOST_SANDBOX : APNS_HOST_PROD;
+        const environment = t.environment === 'sandbox' ? 'sandbox' : 'production';
+        const host = environment === 'sandbox' ? APNS_HOST_SANDBOX : APNS_HOST_PROD;
+        if (this.blockedApnsEnvironments.has(environment)) return false;
+        if (!this.apnsCredentials[environment]) {
+          this.blockedApnsEnvironments.add(environment);
+          this.log.warn(`APNs ${environment} (${host}) skipped: no complete credentials configured; configure APNS_${environment.toUpperCase()}_KEY and APNS_${environment.toUpperCase()}_KEY_ID`);
+          return false;
+        }
+        const auth = this.authToken(environment);
+        if (!auth || !await isCurrent() || this.blockedApnsEnvironments.has(environment)) return false;
         const res = await this.send(host, t.token, body, auth, pushType, priority, collapseId);
-        if (res.status === 410 || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered') {
+        if (res.status === 403 && res.reason === 'BadEnvironmentKeyInToken') {
+          // This rejects the signing key for the host, not the device token. Keep the registration.
+          if (!this.blockedApnsEnvironments.has(environment)) {
+            this.blockedApnsEnvironments.add(environment);
+            this.log.warn(`APNs 403 BadEnvironmentKeyInToken for ${environment} (${host}); further sends skipped until API restart. Configure a key authorized for this environment with APNS_${environment.toUpperCase()}_KEY and APNS_${environment.toUpperCase()}_KEY_ID`);
+          }
+        } else if (res.status === 410 || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered') {
           await this.prisma.deviceToken.deleteMany({ where });
         } else if (res.status >= 400) {
-          this.log.warn(`APNs ${res.status} ${res.reason ?? ''}`);
+          this.log.warn(`APNs ${res.status} ${res.reason ?? ''} for ${environment} (${host})`);
         }
         return res.status >= 200 && res.status < 300;
       } catch {
@@ -1646,15 +1669,16 @@ export class PushService {
   }
 
   /** Cached provider JWT (ES256, kid=keyId, iss=teamId). Refreshed well before APNs's 1h limit. */
-  private authToken(): string | null {
-    if (!this.apnsEnabled) return null;
+  private authToken(environment: ApnsEnvironment): string | null {
+    const credentials = this.apnsCredentials[environment];
+    if (!credentials) return null;
     const now = Math.floor(Date.now() / 1000);
-    if (this.cached && now - this.cached.iat < 3000) return this.cached.token;
-    const token = jwt.sign({ iss: this.teamId, iat: now }, this.p8 as string, {
+    if (credentials.cached && now - credentials.cached.iat < 3000) return credentials.cached.token;
+    const token = jwt.sign({ iss: this.teamId, iat: now }, credentials.p8, {
       algorithm: 'ES256',
-      keyid: this.keyId,
+      keyid: credentials.keyId,
     });
-    this.cached = { token, iat: now };
+    credentials.cached = { token, iat: now };
     return token;
   }
 
