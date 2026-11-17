@@ -89,6 +89,12 @@ function track(run: Promise<unknown>): void {
   inFlight.add(settled);
 }
 
+/** Run `job` on the same bounded queue as replies and cards, tracked by `replyTranslationsSettled`. Returns at once;
+ *  `job` must catch what it can fail with (a rejection is swallowed). For card-translation.ts. */
+export function queueTranslation(job: () => Promise<unknown>): void {
+  track(queue.run(job));
+}
+
 /** Resolves once every translation this process has started so far has settled. For specs. */
 export async function replyTranslationsSettled(): Promise<void> {
   while (inFlight.size > 0) await Promise.all([...inFlight]);
@@ -226,7 +232,7 @@ export function cardHasText(input: unknown, toolName?: string | null): boolean {
 const CARD_PIECES_AT_ONCE = 6;
 
 /** `fn` over `items` in order, at most CARD_PIECES_AT_ONCE at a time. */
-async function mapBounded<T, R>(items: readonly T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapBounded<T, R>(items: readonly T[], fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
   const worker = async (): Promise<void> => {

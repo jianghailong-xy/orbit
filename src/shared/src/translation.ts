@@ -301,6 +301,36 @@ export interface TranslatedTaskBody {
   acceptanceCriteria?: string;
 }
 
+/**
+ * An owner card that lives outside a session (board 04-owner-cards.html): a coordinator's question
+ * (`ProjectOpenItemRow.translation`, `ProjectClosedQuestion.translation`) or an owner request
+ * (`OwnerRequest.translation`), in the owner's language. Stored beside the card's own fields, which stay
+ * exactly what the agent wrote. Absent until it is translated, and on every card translation is off for.
+ *
+ * Each field is the card's field of the same name translated, present only when the original has text;
+ * arrays go index for index with the card's, and an entry's field the original lacks is absent there too.
+ * A step's `command` and `link` are never translated: the card draws them from the original.
+ */
+export interface OwnerCardTranslation {
+  lang: TranslationLanguage;
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  /** A coordinator question's `question`. */
+  question?: string;
+  /** A question's or a DECISION request's `options`. */
+  options?: Array<{ label?: string; description?: string }>;
+  /** A question's or a request's `ifUnanswered`. */
+  ifUnanswered?: string;
+  /** An owner request's `title`. */
+  title?: string;
+  /** An owner request's `why`. */
+  why?: string;
+  /** A MANUAL_STEP request's `steps`, the text of each. */
+  steps?: Array<{ text?: string }>;
+  /** An owner request's `verifyHint`. */
+  verifyHint?: string;
+}
+
 /** The Orbit cards whose agent-written fields beyond `description` are translated. */
 export const TRANSLATED_ORBIT_CARDS = [
   'orbit_task_create',

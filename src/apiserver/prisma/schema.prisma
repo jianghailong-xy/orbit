@@ -4401,6 +4401,10 @@ model ProjectOpenItem {
   resolutionNote      String?   @map("resolution_note")
   answer              Json?
   supersededByItemId  String?   @map("superseded_by_item_id") @db.Uuid
+  /// Settings › Translation (migration 1070, @orbit/shared OwnerCardTranslation): a COORDINATOR_QUESTION's
+  /// agent-written fields in the owner's language, `{ lang, failed?, … }`. `payload` stays the agent's words.
+  /// NULL when translation was not involved.
+  translation         Json?
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -8001,6 +8005,9 @@ model OwnerRequest {
   resolutionNote      String?   @map("resolution_note")
   /// What the owner chose or said when marking it done: `{ option?, text? }`.
   answer              Json?
+  /// Settings › Translation (migration 1070, @orbit/shared OwnerCardTranslation): the agent-written fields in the
+  /// owner's language, `{ lang, failed?, … }`; the columns above stay the agent's words. NULL when not involved.
+  translation         Json?
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   /// The one delivery of its ending to the asking session (migration 0504), written with the ending.

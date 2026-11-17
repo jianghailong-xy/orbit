@@ -32,6 +32,8 @@ import {
   type ProjectStartSettings,
   type ProjectRulingView,
   type RequestProjectDoneBody,
+  type OwnerCardTranslation,
+  RunEventType,
 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -41,6 +43,14 @@ import { settleTaskSegmentAfterHandledItem } from './landing-session';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { RealtimeService } from '../realtime/realtime.service';
+import {
+  COORDINATOR_QUESTION_FIELDS,
+  queueOwnerCardTranslation,
+  translatedInto,
+  type CardFields,
+} from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import {
   AskedQuestion,
   CoordinatorQuestion,
@@ -351,6 +361,8 @@ export interface OpenItemRow {
     | 'OBSERVE';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
+  /** The card's words in the owner's language (Settings › Translation); absent until translated. */
+  translation?: OwnerCardTranslation;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
    *  kind. */
   startRequest: ProjectStartRequest | null;
@@ -533,6 +545,12 @@ const CLOSED_QUESTIONS_SHOWN = 50;
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
 
+/** The open-item kinds whose card is translated for the owner (Settings › Translation), and which of the payload's
+ *  fields are the agent's words (sessions/card-translation.ts). */
+const TRANSLATED_ITEM_FIELDS: Readonly<Partial<Record<string, CardFields>>> = {
+  COORDINATOR_QUESTION: COORDINATOR_QUESTION_FIELDS,
+};
+
 /**
  * Exception items after the fact that opened them has committed: delivering them to the project's
  * coordinator, handing them to the owner when there is nobody to deliver to, closing them when the
@@ -561,6 +579,9 @@ export class ProjectOpenItemService {
      *  a notification is one reader of an item and never a condition of filing one: a build without
      *  PushModule — every spec that assembles this service by hand — writes the same rows. */
     @Optional() private readonly push?: PushService,
+    /** Tells the owner's clients to read the project's items again once a card's translation is stored.
+     *  Optional for the reason `push` is: a translation is a reader of an item, never a condition of it. */
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   /**
@@ -962,6 +983,10 @@ export class ProjectOpenItemService {
     if (created) {
       // R9: the question is filed and the owner is told, in that order and after the commit.
       void this.push?.notifyOwnerItem(created.id);
+      // And translated for them in the background, when their translation is on (decision 1A).
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueItemTranslation(ownerId, projectId, created.id, langs); })
+        .catch((error: Error) => this.logger.warn(`translating question ${created.id} failed to queue: ${error.message}`));
       return { itemId: created.id, state: 'OPEN' };
     }
     const already = await this.prisma.projectOpenItem.findFirst({
@@ -975,6 +1000,32 @@ export class ProjectOpenItemService {
       code: OPEN_ITEM_NOT_OPEN,
       message: 'a question under this clientQuestionId was already answered; ask under a new one',
     });
+  }
+
+  /**
+   * Queue the translation of one open item's card into the owner's language (sessions/card-translation.ts): stored
+   * in `translation` while the item is still OPEN, and the project announced changed (`project.changed`, which
+   * re-reads its open items) so clients swap the card in place. A kind with no translated card
+   * (TRANSLATED_ITEM_FIELDS), an item no longer open, or a translation of it into that language already queued,
+   * translates nothing. Returns at once: true when it queued one.
+   */
+  queueItemTranslation(ownerId: string, projectId: string, itemId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `open-item:${itemId}`,
+      read: async () => {
+        const item = await this.prisma.projectOpenItem.findFirst({
+          where: { id: itemId, ownerId, state: 'OPEN' },
+          select: { kind: true, payload: true, translation: true },
+        });
+        const fields = item ? TRANSLATED_ITEM_FIELDS[item.kind] : undefined;
+        return item && fields ? { source: item.payload, fields, translation: item.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.projectOpenItem.updateMany({
+        where: { id: itemId, ownerId, state: 'OPEN' },
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -3220,6 +3271,7 @@ export class ProjectOpenItemService {
         promotionId: true,
         fuseEpisodeId: true,
         assignedAt: true,
+        translation: true,
         ...HANDLING_SELECT,
         deliveries: {
           where: { purpose: 'ITEM' },
@@ -3238,6 +3290,9 @@ export class ProjectOpenItemService {
       : new Set<string>();
     const rows = open.filter((row) => !settled.has(row.id) && !hidden.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
+    await this.guarded('translateUntranslatedItems', async () => {
+      await this.translateUntranslatedItems(ownerId, projectId, rows);
+    });
     // §4.7 H5: what the coordinator closed in the last day — handled, or superseded by the item its
     // failed rerun opened — so the card a conversation drew for it is seen to end rather than vanish.
     // The coordinator's own kinds only: a question, a merge card, a pause and a request each have a
@@ -3366,6 +3421,7 @@ export class ProjectOpenItemService {
               ? doneRequestDetailLine(doneRequest)
               : detailLine(row.kind, row.payload),
         question,
+        ...(row.translation ? { translation: row.translation as unknown as OwnerCardTranslation } : {}),
         startRequest,
         doneRequest,
         facts: openItemFacts(
@@ -3546,6 +3602,27 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * Decision 1A: an open item whose card is translated (TRANSLATED_ITEM_FIELDS) and that has no translation in the
+   * owner's current language — translation was turned on after it was filed, or the language changed — gets one
+   * queued as it is read. At most one per item and language is queued at a time (`queueItemTranslation`), so a
+   * list read again while it runs queues nothing more; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslatedItems(
+    ownerId: string,
+    projectId: string,
+    rows: ReadonlyArray<{ id: string; kind: string; translation: unknown }>,
+  ): Promise<void> {
+    if (!rows.some((row) => TRANSLATED_ITEM_FIELDS[row.kind])) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of rows) {
+      if (TRANSLATED_ITEM_FIELDS[row.kind] && !translatedInto(row.translation, langs)) {
+        this.queueItemTranslation(ownerId, projectId, row.id, langs);
+      }
+    }
+  }
+
+  /**
    * The questions this project's coordinator asked that have ended, newest first (§4.8, §5.2 R10,
    * R12): answered by the owner, or withdrawn. Each carries the question as it was asked and what
    * became of it, so the card the conversation drew is drawn as the record it became — after a
@@ -3573,6 +3650,7 @@ export class ProjectOpenItemService {
         resolvedAt: true,
         resolutionNote: true,
         answer: true,
+        translation: true,
         deliveries: {
           where: { purpose: 'ANSWER' },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -3597,6 +3675,7 @@ export class ProjectOpenItemService {
           ? { sessionId: delivered.sessionId, at: delivered.createdAt }
           : null,
         withdrawReason: answered ? null : row.resolutionNote,
+        ...(row.translation ? { translation: row.translation as unknown as OwnerCardTranslation } : {}),
       };
     });
   }

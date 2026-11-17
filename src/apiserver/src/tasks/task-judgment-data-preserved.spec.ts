@@ -3108,7 +3108,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // relations, and no trigger, function or DONE fence changes.
       '0990_runner_keep_free_default',
       // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
-      '0990_schedule_land'],
+      '0990_schedule_land',
+      // 1070 adds nullable translation JSONB columns to project_open_item and owner_request (ADD COLUMN IF NOT
+      // EXISTS, no default); neither is one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1070_owner_card_translation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

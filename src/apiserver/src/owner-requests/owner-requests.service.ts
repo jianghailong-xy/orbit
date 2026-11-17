@@ -18,6 +18,8 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import { OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import {
@@ -85,6 +87,8 @@ const VIEW = {
   resolvedClient: true,
   resolutionNote: true,
   answer: true,
+  // Settings › Translation (migration 1070): the agent-written fields in the owner's language, or null.
+  translation: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OwnerRequestSelect;
@@ -233,6 +237,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      // And translated for the owner in the background, when their translation is on (decision 1A).
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
       return { ...created, created: true };
     }
     // A WIKI_CREATE meeting the card already waiting for its repository answers that card, and the owner is not told again.
@@ -310,7 +318,56 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       take: LIST_LIMIT,
       select: VIEW,
     });
+    await this.translateUntranslated(ownerId, requests).catch((error: Error) =>
+      this.logger.warn(`queueing request translations failed: ${error.message}`));
     return { requests: await this.withGrants(ownerId, requests) };
+  }
+
+  /**
+   * Queue the translation of one request's card into the owner's language (sessions/card-translation.ts): stored
+   * in `translation` while the request is still PENDING, and the asking session's row announced (`session.updated`,
+   * as filing it is) so clients read it again. A SCHEDULE_* item is Orbit's own words, not an agent's, and is not
+   * translated. Returns at once: true when it queued one.
+   */
+  queueTranslation(
+    ownerId: string,
+    request: { id: string; kind: string; askedBySessionId: string },
+    langs: TranslationLanguages,
+  ): boolean {
+    if (isScheduleItemKind(request.kind)) return false;
+    return queueOwnerCardTranslation({
+      key: `owner-request:${request.id}`,
+      read: async () => {
+        const row = await this.prisma.ownerRequest.findFirst({
+          where: { id: request.id, ownerId, state: 'PENDING' },
+          select: { title: true, why: true, ifUnanswered: true, options: true, steps: true, verifyHint: true, translation: true },
+        });
+        return row ? { source: row, fields: OWNER_REQUEST_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.ownerRequest.updateMany({
+        where: { id: request.id, ownerId, state: 'PENDING' },
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.realtime?.publishSessionUpdated(request.askedBySessionId),
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: a PENDING request with no translation in the owner's current language — translation was turned on
+   * after it was filed, or the language changed — gets one queued as the list is read; one already tried in this
+   * language, failed or not, is left, and one queued or running is not queued again.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    requests: ReadonlyArray<{ id: string; kind: string; state: string; askedBySessionId: string; translation: unknown }>,
+  ): Promise<void> {
+    const pending = requests.filter((r) => r.state === 'PENDING' && !isScheduleItemKind(r.kind));
+    if (pending.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const request of pending) {
+      if (!translatedInto(request.translation, langs)) this.queueTranslation(ownerId, request, langs);
+    }
   }
 
   async get(ownerId: string, id: string): Promise<OwnerRequestView> {
