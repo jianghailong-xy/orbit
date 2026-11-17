@@ -2687,7 +2687,6 @@ export class RunnerApiController {
     let forkSnapshotsOpen: RunnerHeartbeatResponse['forkSnapshotsOpen'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
-      keepWorkSessionIds = await this.realtime.keepingWork(cancelSessionIds);
       // Manual git mutations are fail-closed: a runner must advertise its process owner,
       // or requests stay pending instead of executing an unfenced operation.
       if (heartbeatLeaseOwner) {
@@ -2762,6 +2761,11 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Which of those cancels are a coordinator handing over (RealtimeService.keepingWork), read apart: a read that
+    // fails leaves the field out and drops nothing else, and the runner still learns it from the session's end turn.
+    keepWorkSessionIds = await Promise.resolve()
+      .then(() => this.realtime.keepingWork(cancelSessionIds))
+      .catch(() => []);
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".
     let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
