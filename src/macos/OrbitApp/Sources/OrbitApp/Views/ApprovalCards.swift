@@ -4595,6 +4595,17 @@ private struct OwnerItemCardView: View {
 
     private var standing: OwnerItemStanding { console.ownerItemStanding(itemID) }
 
+    /// The receipt this card draws. On a phone a settled card is drawn again when its fold opens
+    /// (board owner-card-ios-text, D1 = A), as a new view: the console's copy of the press keeps
+    /// it saying how it ended.
+    private var shownReceipt: String? {
+        #if os(iOS)
+        return receipt ?? console.ownerItemReceipts[itemID]
+        #else
+        return receipt
+        #endif
+    }
+
     /// The kind the header is drawn for: the item as the read publishes it, or as it was last read.
     private var shownKind: ProjectOpenItemKind? {
         if case .open(let row) = standing { return row.kind }
@@ -4605,7 +4616,7 @@ private struct OwnerItemCardView: View {
     /// an exception that became the owner's by escalation, a hand-over, or an ended or missing
     /// coordinator (`ExceptionCards.whoFixesIt`). Every other card keeps the layout below.
     private func whoFixesRow(_ standing: OwnerItemStanding) -> ProjectOpenItemRow? {
-        guard !isPause, receipt == nil, case .open(let row) = standing,
+        guard !isPause, shownReceipt == nil, case .open(let row) = standing,
               ExceptionCards.whoFixesIt(row) else { return nil }
         return row
     }
@@ -4620,8 +4631,8 @@ private struct OwnerItemCardView: View {
                 // small label, not the card's title — that is the cause under it — with the clock
                 // on its right.
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Label(ExceptionCards.title(shownKind, isPause: false),
-                          systemImage: "exclamationmark.triangle.fill")
+                    (Text(Image(systemName: "exclamationmark.triangle.fill"))
+                        + Text(" " + ExceptionCards.title(shownKind, isPause: false)))
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -4643,7 +4654,7 @@ private struct OwnerItemCardView: View {
                     .help(ExceptionCards.provenanceTitle)
             }
 
-            if let receipt {
+            if let receipt = shownReceipt {
                 Text("✓ \(receipt)")
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -4689,13 +4700,9 @@ private struct OwnerItemCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
+        .approvalChrome(.orange, dimmed: shownReceipt != nil || !ExceptionCards.isOpen(standing))
         .onChange(of: standing, initial: true) { _, now in
             if case .open(let row) = now { lastKind = row.kind }
-        }
-        // The transcript's copy of a press made here, which the iPhone's settled-items fold reads.
-        .onChange(of: receipt) { _, now in
-            if let now { console.ownerItemReceipts[itemID] = now }
         }
     }
 

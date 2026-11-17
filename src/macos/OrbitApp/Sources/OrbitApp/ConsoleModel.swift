@@ -4568,8 +4568,9 @@ final class ConsoleModel {
     private(set) var questionsAnsweredHere: Set<String> = []
     /// The exception cards a press HERE ended, by item id, with the receipt each one drew ("Sent
     /// back to the coordinator"): what the iPhone's settled-items fold counts and names (board
-    /// owner-card-ios-text, D1 = A). The card keeps its own receipt; this is the transcript's copy.
-    var ownerItemReceipts: [String: String] = [:]
+    /// owner-card-ios-text, D1 = A). Written by the door's own call, before the read that drops the
+    /// item, because by then the card that pressed may no longer be drawn.
+    private(set) var ownerItemReceipts: [String: String] = [:]
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -6188,6 +6189,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.returnOpenItemToCoordinator(projectID: projectID,
                                                                     itemID: row.itemId)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.returned
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
@@ -6241,6 +6244,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.resolveOpenItem(projectID: projectID, itemID: row.itemId,
                                                         request)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.handled
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
@@ -6321,6 +6326,8 @@ final class ConsoleModel {
         guard let projectID, ExceptionCards.addressed(row, .accept) else { return false }
         do {
             try await api.acceptOpenItem(projectID: projectID, itemID: row.itemId)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.accepted
             await refreshRulerQuestions(force: true)
             return true
         } catch {
@@ -6376,6 +6383,8 @@ final class ConsoleModel {
         guard let projectID, let episodeID = row.fuseEpisodeId else { return nil }
         do {
             let resumed = try await api.resumeProjectFuse(projectID: projectID, episodeID: episodeID)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.resumed
             await refreshRulerQuestions(force: true)
             return resumed
         } catch {
