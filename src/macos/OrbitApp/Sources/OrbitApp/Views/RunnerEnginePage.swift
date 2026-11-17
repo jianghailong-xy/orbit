@@ -380,6 +380,8 @@ private struct RunnerEngineContent: View {
             }
         } footer: {
             Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER
+                 : RunnerPageFormat.isManaged(runner)
+                     ? (engine == "dsh" ? DshRuntime.managedEnginePageFooter : RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER)
                  : engine == "dsh" ? DshRuntime.enginePageFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
         }
     }

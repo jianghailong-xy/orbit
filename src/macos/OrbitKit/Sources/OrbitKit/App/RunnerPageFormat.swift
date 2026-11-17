@@ -206,6 +206,7 @@ public enum RunnerPageFormat {
     /// (board iOS 2 ②) — its version is the one Orbit pins, not the latest every 30 minutes.
     public static func enginesFooter(_ runner: Runner, fleet: [Runner]? = nil, offline: Bool) -> String {
         if offline { return RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER }
+        if isManaged(runner) { return RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER }
         return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
