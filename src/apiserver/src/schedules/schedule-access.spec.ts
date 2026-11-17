@@ -298,3 +298,15 @@ test('migration 0860 marks no existing rule: only a CHECK_ONLY card\'s server-co
   assert.doesNotMatch(statements, /UPDATE\s+"workspace_permission_rule"/i, 'no backfill marks a rule');
   assert.match(statements, /UPDATE "schedule_run" r\s+SET "access_level"/);
 });
+
+
+test('LAND has OPEN_PR modes on every engine and the same denied tools, including main pushes and release skills', () => {
+  for (const engine of ['claude', 'codex', 'kimi', 'dsh', 'opencode', 'antigravity', null]) {
+    assert.equal(scheduleRunMode('LAND', engine), scheduleRunMode('OPEN_PR', engine));
+    assert.deepEqual(scheduleRunDisallowedTools(['X'], 'LAND', engine), ['X', ...OPEN_PR_DISALLOWED_TOOLS]);
+  }
+  assert.equal(scheduleRunMode('LAND', 'claude'), PermissionMode.ACCEPT_EDITS);
+  for (const tool of ['mcp__orbit__session_merge', 'Bash(gh pr merge:*)', 'Skill(release)', 'Skill(upgrade)', 'Bash(git push * *:main)']) {
+    assert.ok(OPEN_PR_DISALLOWED_TOOLS.includes(tool));
+  }
+});

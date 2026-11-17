@@ -42,7 +42,7 @@ export function sh(day: number, time: string): string {
   return new Date(Date.UTC(2025, 10, day, h! - SH_OFFSET_H, m!)).toISOString();
 }
 
-function lines(ws: { id: string; name: string }, engine: string | null, access: 'CHECK_ONLY' | 'OPEN_PR', runs: number, minutes: number): ScheduleEnvelopeLines {
+function lines(ws: { id: string; name: string }, engine: string | null, access: 'CHECK_ONLY' | 'OPEN_PR' | 'LAND', runs: number, minutes: number): ScheduleEnvelopeLines {
   return {
     runsIn: { workspaceId: ws.id, workspaceName: ws.name, engine, text: ws.name },
     may: { accessLevel: access, text: access },
@@ -339,6 +339,11 @@ export const MORE_OFTEN_CARD = envelopeCard(
 export const OPEN_PRS_CARD = envelopeCard(
   'req-codex-pr', ['ACCESS_LEVEL'],
   lines(WS.apiserver, 'codex', 'CHECK_ONLY', 7, 30), lines(WS.apiserver, 'codex', 'OPEN_PR', 7, 30), { accessLevel: 'OPEN_PR' },
+);
+
+export const LAND_CARD = envelopeCard(
+  'req-codex-land', ['ACCESS_LEVEL'],
+  lines(WS.apiserver, 'codex', 'OPEN_PR', 7, 30), lines(WS.apiserver, 'codex', 'LAND', 7, 30), { accessLevel: 'LAND' },
 );
 
 /** The run's own request, which waits in Waiting on you (board 2/2 ④). */

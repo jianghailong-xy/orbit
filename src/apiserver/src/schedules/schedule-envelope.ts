@@ -5,7 +5,7 @@
  */
 import { PermissionMode } from '@orbit/shared';
 
-export type AccessLevel = 'CHECK_ONLY' | 'OPEN_PR';
+export type AccessLevel = 'CHECK_ONLY' | 'OPEN_PR' | 'LAND';
 export type ChangedBy = 'USER' | 'SESSION' | 'RUN';
 
 export interface Envelope {
@@ -20,12 +20,13 @@ export type EnvelopePart = 'WORKSPACE' | 'ACCESS_LEVEL' | 'RUNS_PER_WEEK' | 'RUN
 export const DEFAULT_RUN_LIMIT_MINUTES = 30;
 export const MAX_RUN_LIMIT_MINUTES = 120;
 
-const ACCESS_ORDER: Record<AccessLevel, number> = { CHECK_ONLY: 0, OPEN_PR: 1 };
+const ACCESS_ORDER: Record<AccessLevel, number> = { CHECK_ONLY: 0, OPEN_PR: 1, LAND: 2 };
 
 /** The permission mode a run at each access level gets (§6.2). */
 export const ACCESS_LEVEL_MODE: Record<AccessLevel, PermissionMode> = {
   CHECK_ONLY: PermissionMode.PLAN,
   OPEN_PR: PermissionMode.ACCEPT_EDITS,
+  LAND: PermissionMode.ACCEPT_EDITS,
 };
 
 /** The parts of `asked` that are wider than `envelope`, in the card's order. */

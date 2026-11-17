@@ -201,7 +201,7 @@ export function ScheduleWaitingCard({ request, now = Date.now() }: { request: Ow
     const asked = envelopeOf(env.asked);
     const decided = card.data.state !== 'PENDING';
     drawn = {
-      title: scheduleEnvelopeTitle(card.data.title ?? title, env.widens, names[asked.workspaceId]),
+      title: scheduleEnvelopeTitle(card.data.title ?? title, env.widens, names[asked.workspaceId], asked.accessLevel),
       kind: C.waiting.kinds.schedule,
       body: scheduleWidenWaitingText({
         reason: run?.summary ?? '',

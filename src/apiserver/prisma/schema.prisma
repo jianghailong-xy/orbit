@@ -9920,6 +9920,7 @@ model SessionGuest {
 enum ScheduleAccessLevel {
   CHECK_ONLY
   OPEN_PR
+  LAND
 
   @@map("schedule_access_level")
 }
@@ -10074,6 +10075,9 @@ model ScheduleRun {
   summary          String?
   links            Json               @default("[]")
   failureReason    String?            @map("failure_reason")
+  /// LAND after a successful report: WAITING, MERGING, LANDED, NO_COMMITS or FAILED (0990).
+  landingStatus    String?            @map("landing_status")
+  landedSha        String?            @map("landed_sha") @db.Char(40)
   /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
   notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
   /// Why a HELD run's start checks failed (§6.1, migration 0830).

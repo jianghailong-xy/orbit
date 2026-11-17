@@ -63,6 +63,7 @@ before(async () => {
   const prisma = db as unknown as PrismaService;
   // The run side's session doors: no runner here, and what is under test is the rows the doors write.
   const port: ScheduleRunSessionPort = {
+    land: async () => undefined,
     open: async () => undefined,
     interrupt: async (_owner, sessionId) => void interrupted.push(sessionId),
     complete: async () => undefined,
@@ -937,7 +938,7 @@ test('schedule_update: a correction of the time does not overwrite what was aske
   const applied = weekly as unknown as { intentKept: boolean; note: string; record: { changed: string[] } };
   assert.equal(applied.intentKept, true);
   assert.match(applied.note, /intent\) was left as it was/);
-  assert.deepEqual(applied.record.changed.filter((k) => k !== 'envelope'), ['rule']);
+  assert.deepEqual(applied.record.changed.filter((k) => k !== 'envelope'), ['rule', 'readBack']);
   let row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
   assert.deepEqual(row.rule, { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] });
   assert.equal(row.intent, CREATE.intent, 'what was asked is the original goal');
@@ -985,7 +986,14 @@ test('a timing change without readBack keeps what the check does and reads the c
   // One the agent writes with the change is kept as the latest.
   const at2346 = 'Every day at 23:46 Beijing time I check X, and tell you only when Y changes.';
   const reworded = await tools.update(w.runner, w.sessionId, s.id, { readBack: at2346 } as never);
-  assert.equal(reworded.outcome, 'UNCHANGED', 'a read-back alone is no revision');
+  assert.equal(reworded.outcome, 'APPLIED', 'a read-back alone is an undoable revision');
+  const rewordedRevision = (reworded as { record: { revision: number } }).record.revision;
+  const row = await db.scheduleRevision.findUniqueOrThrow({ where: { scheduleId_revision: { scheduleId: s.id, revision: rewordedRevision } } });
+  assert.deepEqual(row.fields, { before: { readBack: null }, after: { readBack: at2346 } });
+  assert.equal((reworded as { readBack: string }).readBack, at2346);
+  assert.equal((await rest.undo(w.user, s.id, { revision: rewordedRevision }, NO_SESSION)).outcome, 'APPLIED');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).readBack, null);
+  await tools.update(w.runner, w.sessionId, s.id, { readBack: at2346 });
   assert.equal((await rest.get(w.user, s.id)).readBack, at2346);
 
   // A timezone-only change also keeps what the check does.
@@ -1003,5 +1011,6 @@ test('a timing change without readBack keeps what the check does and reads the c
   const latest = await db.scheduleRevision.findFirstOrThrow({ where: { scheduleId: s.id }, orderBy: { revision: 'desc' } });
   assert.ok(latest.revision > movedRevision);
   assert.equal((await rest.undo(w.user, s.id, { revision: latest.revision }, NO_SESSION)).outcome, 'APPLIED');
-  assert.match((await rest.get(w.user, s.id)).readBack, /^Every day at 23:46/);
+  assert.equal((await rest.get(w.user, s.id)).readBack, at2346);
+  await refusedWith(rest.undo(w.user, s.id, { revision: movedRevision }, NO_SESSION), 'SCHEDULE_UNDO_STALE');
 });
