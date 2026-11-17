@@ -56,6 +56,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus, type Runner } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
+import { latestAgentToolsReport } from './agent-tools-report';
 import { withActiveSessions } from '../providers/active-sessions';
 import { accountAfterSignOut, accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount, waitsForWarmCache } from '../providers/plan-usage-accounts';
 import {
@@ -580,6 +581,9 @@ export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 // measured, docs/cursor-runtime-contract.md §9) and then gives up by itself, which is what tells the
 // runner the link expired. Its sign-in is not swept before that: this must stay >= the runner's own
 // wait for it.
+/** How long an account removal waits for the sessions it moved off the account to leave it: a running
+ *  turn moves once it ends (RunnerApiController.applyAccountRemoveResult). */
+const ACCOUNT_REMOVE_MOVE_TIMEOUT_MS = 6 * 60 * 60_000;
 export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
 
 /** How long a sign-in of `engine` may stay in flight before it is swept as timed out. */
@@ -909,6 +913,7 @@ const INGESTED_SESSION_COLUMNS: Record<string, { column: string; type: 'text' | 
   runningBgJobs: { column: 'running_bg_jobs', type: 'text[]' },
   runningSubagents: { column: 'running_subagents', type: 'text[]' },
   runningBgJobActivity: { column: 'running_bg_job_activity', type: 'jsonb' },
+  agentTools: { column: 'agent_tools', type: 'jsonb' },
 };
 
 /** A value of an ingested Session column as text, or undefined when it is not one writeCallSessions carries. */
@@ -3724,16 +3729,22 @@ export class RunnerApiController {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveAt: true,
+        codexAccountRemoveSessions: true,
       },
     });
     if (r?.codexAccountRemoveStatus !== 'pending') return undefined;
     const started = r.codexAccountRemoveAt?.getTime() ?? 0;
-    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+    // A removal waiting on its sessions to move to another account waits out their turns, too.
+    const moving = (r.codexAccountRemoveSessions?.length ?? 0) > 0;
+    if (started && Date.now() - started > (moving ? ACCOUNT_REMOVE_MOVE_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS)) {
       await this.prisma.runner.update({
         where: { id: runnerId },
         data: {
           codexAccountRemoveStatus: 'failed',
-          codexAccountRemoveMessage: 'This runner did not answer — try again.',
+          codexAccountRemoveMessage: moving
+            ? 'Its sessions did not leave this account in time — try again once their turns finish.'
+            : 'This runner did not answer — try again.',
+          codexAccountRemoveSessions: [],
         },
       });
       return undefined;
@@ -3806,23 +3817,41 @@ export class RunnerApiController {
     // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
     // another account's session ids on its row, even though the page reads only the viewer's back.
     const named = status === 'failed' ? accountInUseSessionIds(body) : [];
-    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+    let sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
       where: { id: { in: named }, assignedRunnerId: runnerId },
       select: { id: true },
     })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
+    // The removal this report is about, engine included: a report from a runner that carried out a
+    // Claude removal must not close out a Codex one. A row asked for before this build (no engine
+    // stored) therefore matches nothing — the relay's window then fails it with "This runner did not
+    // answer — try again", which for a request the previous build handed over is the honest outcome,
+    // and the person who pressed it can press it again.
+    const asked = {
+      id: runnerId,
+      codexAccountRemoveStatus: 'pending',
+      accountRemoveEngine: engine,
+      ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
+      ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
+    };
+    // Sessions in the account do not keep it: each moves to another of the runner's accounts, and the
+    // removal stays pending — redelivered every heartbeat — until the last has left (an idle one at its
+    // reload, a running one after its turn). Only those that cannot leave refuse it.
+    if (sessionIds.length > 0 && this.sessions && isAccountEngine(engine)) {
+      const row = await this.prisma.runner.findFirst({ where: asked, select: { codexAccountRemoveAccount: true } });
+      if (row?.codexAccountRemoveAccount) {
+        const stuck = await this.sessions.moveOffRemovedAccount(runnerId, engine, row.codexAccountRemoveAccount, sessionIds);
+        if (stuck.length === 0) {
+          const { count } = await this.prisma.runner.updateMany({
+            where: asked,
+            data: { codexAccountRemoveMessage: null, codexAccountRemoveSessions: sessionIds },
+          });
+          return { ok: true, applied: count > 0 };
+        }
+        sessionIds = stuck;
+      }
+    }
     const { count } = await this.prisma.runner.updateMany({
-      where: {
-        id: runnerId,
-        codexAccountRemoveStatus: 'pending',
-        // The removal this report is about, engine included: a report from a runner that carried
-        // out a Claude removal must not close out a Codex one. A row asked for before this build
-        // (no engine stored) therefore matches nothing — the relay's window then fails it with
-        // "This runner did not answer — try again", which for a request the previous build handed
-        // over is the honest outcome, and the person who pressed it can press it again.
-        accountRemoveEngine: engine,
-        ...(body.account ? { codexAccountRemoveAccount: body.account } : {}),
-        ...(attempt ? { codexAccountRemoveAt: attempt } : {}),
-      },
+      where: asked,
       data: {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
@@ -9076,6 +9105,8 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
+      // The session's Agent Tools report (Session.agentTools): the newest one in the batch, kept whole.
+      const agentTools = latestAgentToolsReport(durable);
       // What the engine is doing in a stretch where it produces nothing else — see
       // Session.enginePhase. Reduced separately from engineTurnActive above because the two
       // answer different questions off overlapping events: a compaction is not a turn, and the
@@ -9100,6 +9131,7 @@ export class RunnerApiController {
         ...(context ? { contextTokens: context.tokens } : {}),
         ...(context?.window ? { contextWindow: context.window } : {}),
         ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        ...(agentTools ? { agentTools: agentTools as Prisma.InputJsonValue } : {}),
         // null is a decision here (the phase is over), undefined is "this batch said nothing
         // about it" — so only the first may be written over the stored value.
         ...(enginePhase !== undefined ? { enginePhase } : {}),

@@ -388,6 +388,7 @@ import {
   ACCOUNT_CHOICE,
   ACCOUNT_PINNED,
   DEFAULT_ACCOUNT,
+  accountInPlaceOf,
   defaultRemovedOn,
   remainingAccount,
   type AccountRunner,
@@ -11752,6 +11753,103 @@ export class SessionsService {
     }, loggedRetry(this.logger, 'sessions.switchAccount'));
     if (reload) this.realtime.notifyInbox(id);
     return { ok: true };
+  }
+
+  /**
+   * Move the sessions a runner named as keeping account `account` of `engine` from being removed onto
+   * another of its accounts — Automatic's pick among the rest (accountInPlaceOf), unpinned — the way
+   * switchAccount moves one: a live session gets a `reload`, which re-spawns it there with its
+   * conversation carried once no turn is in flight, and the runner can then remove the account.
+   *
+   * Answers the sessions that cannot leave: no other signed-in account to go to, a runner that cannot
+   * carry the conversation, a Cursor CLI conversation that has talked. A session already off the
+   * account (moved by an earlier report, its turn still running) or no longer the runner's is not one.
+   */
+  async moveOffRemovedAccount(
+    runnerId: string,
+    engine: AccountEngine,
+    account: string,
+    sessionIds: string[],
+  ): Promise<string[]> {
+    const stuck: string[] = [];
+    for (const id of sessionIds) {
+      const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "session"
+          WHERE id = ${id}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
+          FOR UPDATE`;
+        if (locked.length === 0) return 'gone' as const;
+        const session = await tx.session.findUniqueOrThrow({
+          where: { id },
+          select: {
+            status: true,
+            engine: true,
+            provider: true,
+            providerBuiltin: true,
+            retryAt: true,
+            numTurns: true,
+            runtimeSessionId: true,
+            engineTurnActive: true,
+            poolSwitchNotice: true,
+            codexAccount: true,
+            claudeAccount: true,
+            antigravityAccount: true,
+            kimiAccount: true,
+            cursorAccount: true,
+            workspace: {
+              select: {
+                env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
+              },
+            },
+            assignedRunner: {
+              select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+            },
+          },
+        });
+        const runner = session.assignedRunner;
+        if (
+          !runner ||
+          session.provider !== engine ||
+          !isBuiltinProvider(session.provider, session.providerBuiltin) ||
+          (recordedEngine(session.engine) ?? engine) !== engine
+        ) {
+          return 'stuck' as const;
+        }
+        const column = ACCOUNT_CHOICE[engine];
+        const choice = { [column]: session[column] ?? session.workspace?.[column] };
+        if (reportedRunAccount(engine, session.workspace?.env, choice, runner.engines) !== account) {
+          return 'leaving' as const;
+        }
+        const now = new Date();
+        const to = accountInPlaceOf(engine, runner, account, now);
+        if (!to) return 'stuck' as const;
+        if (engine === AgentProvider.CURSOR ? cursorMoveRefusal(session, runner) : !runnerCarriesAccounts(runner, engine)) {
+          return 'stuck' as const;
+        }
+        await tx.session.update({
+          where: { id },
+          data: {
+            [column]: to,
+            [ACCOUNT_PINNED[engine]]: false,
+            ...(session.poolSwitchNotice
+              ? {}
+              : { poolSwitchNotice: accountSwitchNotice(engine, { from: account, to, removed: true }, runner) }),
+            ...(session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
+          },
+        });
+        // An ended or unclaimed session just stores it, for the claim that runs it next.
+        if (SessionsService.TERMINAL.includes(session.status) || session.status === RunStatus.PENDING) return 'leaving' as const;
+        await this.insertTurnLocked(tx, id, {
+          kind: 'reload',
+          content: JSON.stringify({ provider: engine }),
+          clientTurnId: randomUUID(),
+        });
+        return 'reloaded' as const;
+      }, loggedRetry(this.logger, 'sessions.moveOffRemovedAccount'));
+      if (outcome === 'stuck') stuck.push(id);
+      if (outcome === 'reloaded') this.realtime.notifyInbox(id);
+    }
+    return stuck;
   }
 
   /**

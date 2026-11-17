@@ -97,12 +97,20 @@ func startDeferredNote(reason string) string {
 }
 
 // startedTaskResult is what task_create returns when it also started the task: the created task as it
-// always was, then the run that started it or the line saying the start was deferred.
-func startedTaskResult(created, started json.RawMessage, deferred string) string {
+// always was, then the run that started it, the line saying the start was deferred, or what the server answered
+// when it started nothing, and last who started it (createStartNote).
+func startedTaskResult(created, started json.RawMessage, deferred, by string) string {
 	text := prettyJSON(created)
-	if deferred != "" {
-		return text + "\n\n" + deferred
+	switch refusal := answerRefusal(started); {
+	case deferred != "":
+		text += "\n\n" + deferred
+	case refusal != nil:
+		text += "\n\nCreated, but not started: " + refusal.Message
+	default:
+		text += "\n\n" + prettyJSON(started)
 	}
-	return text + "\n\nStarted at once, as task_start would have started it, so do not call task_start for it:\n" +
-		prettyJSON(started)
+	if note := createStartNote(by, started, deferred); note != "" {
+		text += "\n\n" + note
+	}
+	return text
 }

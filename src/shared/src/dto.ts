@@ -2468,6 +2468,10 @@ export interface RunnerAccountRemoveState {
    *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
    *  and then `message` alone says what happened. */
   sessions?: RunnerAccountRemoveSession[];
+  /** With `pending`: how many sessions the removal moved to another account and is waiting on to leave
+   *  it — one between turns at once, one in a turn when that turn ends. Absent while it waits on none
+   *  (and from an older server). */
+  moving?: number;
 }
 
 /** A session that keeps an account from being removed: what the runner's page lists and opens. */

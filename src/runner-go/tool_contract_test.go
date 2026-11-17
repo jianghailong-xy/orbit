@@ -420,6 +420,44 @@ func TestContractCreateAndStartReceiptCarriesTheStartedSession(t *testing.T) {
 	}
 }
 
+// What a create's note says follows from what became of its start: the owner's "Create and start" is said to be
+// the owner's, started or deferred, and a start the server answered without making is never called started.
+func TestContractCreateAndStartNoteSaysWhoStartedItAndOnlyWhenItStarted(t *testing.T) {
+	for _, tc := range []struct {
+		name, decision, execute string
+		startNow, started       bool
+		note                    string
+	}{
+		{"the owner's start", `{"status":"ALLOWED","startAfterCreate":true}`, `{"id":"s9","status":"PENDING"}`, false, true, startedByOwnerNote},
+		{"the owner's start, skipped", `{"status":"ALLOWED","startAfterCreate":true}`, `{"ok":false,"skipped":"superseded"}`, false, false, startDeferredByOwnerNote},
+		{"a startNow the server skipped", `{"status":"ALLOWED"}`, `{"ok":false,"skipped":"superseded"}`, true, false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, srv := newContractServer(t, tc.decision, func(r *http.Request, _ map[string]interface{}) (int, string) {
+				if strings.HasSuffix(r.URL.Path, "/execute") {
+					return 200, tc.execute
+				}
+				return 200, `{"id":"t1","status":"OPEN"}`
+			})
+			args := map[string]interface{}{"title": "Now", "completionCriterion": "EVIDENCE_JUDGMENT"}
+			if tc.startNow {
+				args["startNow"] = true
+			}
+			_, receipt := rpcCall(t, contractMCP(srv.URL), "task_create", args)
+			if !receipt.OK || receipt.Start == nil || receipt.Start.Started != tc.started {
+				t.Fatalf("receipt = %+v, start = %+v", receipt, receipt.Start)
+			}
+			var want []string
+			if tc.note != "" {
+				want = []string{tc.note}
+			}
+			if !reflect.DeepEqual(receipt.Notes, want) {
+				t.Fatalf("notes = %q, want %q", receipt.Notes, want)
+			}
+		})
+	}
+}
+
 // A declined card is a refusal with its own outcome, never a success, and nothing is written.
 // cardWrites are the creates of the five objects that ask on a card first, with arguments that fit.
 var cardWrites = []struct {
@@ -846,7 +884,8 @@ func TestEveryAdvertisedObjectSchemaIsClosed(t *testing.T) {
 }
 
 // The creates and updates of the five objects, and the start, advertise the receipt's schema; no
-// other tool's own outputSchema is replaced.
+// other tool's own outputSchema is replaced. The tools that answer with a document of their own — the
+// wiki's, and the guide's (OrbitGuideV1) — keep it.
 func TestReceiptOutputSchemaIsAdvertisedOnTheFiveObjectsWrites(t *testing.T) {
 	advertised := map[string]bool{}
 	for _, descriptor := range toolDescriptors(true, true) {
@@ -857,7 +896,7 @@ func TestReceiptOutputSchemaIsAdvertisedOnTheFiveObjectsWrites(t *testing.T) {
 		}
 		if isReceiptSchema(schema) {
 			advertised[name] = true
-		} else if !strings.HasPrefix(name, "wiki_") {
+		} else if !strings.HasPrefix(name, "wiki_") && name != "guide" {
 			t.Errorf("%s advertises an outputSchema that is neither the receipt's nor a wiki answer's", name)
 		}
 	}

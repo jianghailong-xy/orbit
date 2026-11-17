@@ -405,6 +405,11 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	if result, handled := s.callScheduleTool(name, args); handled {
 		return result
 	}
+	// The guide reads the catalogue and this session's switches, and asks the control plane nothing
+	// (agent_guide.go); `orbit guide` answers the same document.
+	if name == "guide" {
+		return s.callGuide(args)
+	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
 	}
@@ -1277,10 +1282,8 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 			}
 			s.rec.setEntity(raw)
 			s.rec.startOutcome(by, started, deferred)
-			if deferred == "" {
-				s.rec.note(startedAtOnceNote)
-			}
-			return toolResult(startedTaskResult(raw, started, deferred), false)
+			s.rec.note(createStartNote(by, started, deferred))
+			return toolResult(startedTaskResult(raw, started, deferred, by), false)
 		}
 		return toolResult(prettyJSON(raw), false)
 

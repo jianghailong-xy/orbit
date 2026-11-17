@@ -397,7 +397,7 @@ describe('workspace write approval', () => {
       description: 'builds at night',
       defaultMergeTarget: 'develop',
     }));
-    for (const line of ['Working directory', '/srv/other', 'System prompt', 'Answer in French.', 'Appended system prompt',
+    for (const line of ['Working directory', '/srv/other', 'Base instructions', 'Answer in French.', 'Runtime instructions',
       'And briefly.', 'Runner', 'gpu-2', 'Worktree', 'Sessions run in the shared folder', 'Name', 'renamed', 'Description',
       'builds at night', 'Merge target', 'develop']) {
       expect(html).toContain(line);

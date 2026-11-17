@@ -385,7 +385,10 @@ func TestTheAllowlistIsTheCapabilitySpecInEverySessionShape(t *testing.T) {
 				t.Setenv(envWiki, wiki)
 				shape := "orchestration=" + map[bool]string{true: "on", false: "off"}[orchestration] + " watches=" + watches + " wiki=" + wiki
 				r := readCapabilities(t)
-				want := map[string]bool{"Bash(" + capabilityTestExe + " capabilities --json)": true}
+				// The document's own doors: `capabilities --json` itself, and its graded views (`capabilities *`:
+				// --summary, --family, --id), which the instructions send an agent to (operation_discovery.go).
+				want := map[string]bool{"Bash(" + capabilityTestExe + " capabilities --json)": true,
+					"Bash(" + capabilityTestExe + " capabilities *)": true}
 				for _, c := range r.doc.Capabilities {
 					want["Bash("+strings.Join(c.Argv, " ")+" *)"] = true
 				}

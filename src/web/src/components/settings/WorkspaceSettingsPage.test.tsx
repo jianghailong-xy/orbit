@@ -268,15 +268,29 @@ describe('a workspace’s Settings page', () => {
     expect($$('.settings-row-title', section('Agent environment')).map(text)).toEqual([
       'Environment variables',
       'Instructions',
+      'Agent tools',
       'Always allowed',
     ]);
     expect(text(row('Environment variables').querySelector('.settings-row-description'))).toBe('GOFLAGS, NODE_OPTIONS');
     expect(text(row('Instructions').querySelector('.settings-row-description'))).toBe(
-      'Added to this workspace’s system prompt on every run · 32 characters',
+      "Added to every run's runtime instructions · 32 characters",
     );
     expect(text(row('Always allowed').querySelector('.settings-row-description'))).toBe(
       '2 tools you said “don’t ask again” for',
     );
+    // What agents here are given, read-only, in a drawer: the row holds a View button, never a switch.
+    expect(text(row('Agent tools').querySelector('.settings-row-description'))).toBe(
+      "What agents here are given: Orbit's tools, the instructions they read and in what order, and the playbooks.",
+    );
+    expect(row('Agent tools').querySelector('[role="switch"]')).toBeNull();
+    const view = Array.from(row('Agent tools').querySelectorAll('button')).find((b) => text(b) === 'View');
+    await act(async () => {
+      view?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const drawer = Array.from(document.querySelectorAll('[role="dialog"]')).find((d) => text(d).includes('Agent tools · orbit'));
+    expect(drawer).toBeTruthy();
+    expect(text(drawer?.querySelector('.agent-tools-layers') ?? null)).toContain("This workspace's runtime instructions");
     expect($$('.settings-row-title', section('Danger zone')).map(text)).toEqual(['Disable workspace', 'Delete workspace']);
     // No whole-form Save on this page.
     expect($$('button').some((b) => text(b) === 'Save')).toBe(false);

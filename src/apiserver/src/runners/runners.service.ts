@@ -250,7 +250,7 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
-      codexAccountRemoveSessions: _removalSessionIds,
+      codexAccountRemoveSessions: removalSessionIds,
       selfUpdate,
       presence,
       region,
@@ -283,6 +283,7 @@ export class RunnersService {
         codexAccountRemoveAccount,
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
+        codexAccountRemoveSessions: removalSessionIds,
         sessions: removalSessions.get(r.id),
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
@@ -1495,10 +1496,14 @@ export function accountRemoveStateOf(r: {
   codexAccountRemoveAccount?: string | null;
   codexAccountRemoveStatus?: string | null;
   codexAccountRemoveMessage?: string | null;
+  codexAccountRemoveSessions?: string[] | null;
   sessions?: RunnerAccountRemoveSession[];
 }): RunnerAccountRemoveState {
   // Only a refusal over sessions in the account lists any; every other state leaves the field out.
   const sessions = r.codexAccountRemoveStatus === 'failed' ? (r.sessions ?? []) : [];
+  // A pending removal that names sessions is waiting on them to move off the account
+  // (RunnerApiController.applyAccountRemoveResult).
+  const moving = r.codexAccountRemoveStatus === 'pending' ? (r.codexAccountRemoveSessions?.length ?? 0) : 0;
   return {
     // A row written before accounts-per-engine meant Codex.
     engine: (r.accountRemoveEngine as LoginEngine) ?? 'codex',
@@ -1506,6 +1511,7 @@ export function accountRemoveStateOf(r: {
     status: (r.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
     message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
     ...(sessions.length > 0 ? { sessions } : {}),
+    ...(moving > 0 ? { moving } : {}),
   };
 }
 
