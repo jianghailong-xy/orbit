@@ -650,6 +650,11 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	if r.TurnID == "" {
 		return nil, nil
 	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
+	}
 	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
 }

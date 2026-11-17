@@ -1,4 +1,5 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
+import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
@@ -1846,6 +1847,22 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     return sessions.map((s) => s.id);
+  }
+
+  /**
+   * Those of `sessionIds` (drainCancellations' answer) whose end is a coordinator handing over: their `end` turn
+   * carries KEEP_BACKGROUND_WORK_END_CONTENT, written in the transaction that requested the end. The heartbeat names
+   * them in `keepWorkSessionIds`, so a runner told of the end here before its inbox hands it that turn still leaves
+   * the session's SubAgent runs and jobs running.
+   */
+  async keepingWork(sessionIds: string[]): Promise<string[]> {
+    if (sessionIds.length === 0) return [];
+    const turns = await this.prisma.conversationTurn.findMany({
+      where: { sessionId: { in: sessionIds }, kind: 'end', content: KEEP_BACKGROUND_WORK_END_CONTENT },
+      select: { sessionId: true },
+      distinct: ['sessionId'],
+    });
+    return turns.map((turn) => turn.sessionId);
   }
 
   /**
