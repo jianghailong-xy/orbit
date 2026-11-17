@@ -9,6 +9,8 @@ final class OwnerCardPhoneTextTests: XCTestCase {
 
     private static let command =
         "cd src/apiserver && npx tsc -p tsconfig.test.json && SPECS=$(ls build/*/*.spec.js | grep -v '\\.pg\\.spec\\.js$') && node --test --test-concurrency=4 $SPECS"
+    private static let branchLine =
+        "unchanged — the task passed on its own branch; it fails only on the combined tree"
     private static let title = "docs: 排队规则设计稿补「每条结论的来历」一节（情况 · 问题 · 修复）"
 
     /// A node test runner's output: one failure where it ran, the same failure again in the
@@ -41,6 +43,7 @@ final class OwnerCardPhoneTextTests: XCTestCase {
             "actions": ["ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "RETRY", "OPEN_LANDING"],
             "facts": ["task": ["id": "01a03f58", "title": title],
                       "targetRef": "project/queue-rules", "files": [String](),
+                      "branchUnchanged": true, "branchLine": Self.branchLine,
                       "check": check],
         ]
         return try JSONDecoder().decode(ProjectOpenItemRow.self,
@@ -96,6 +99,11 @@ final class OwnerCardPhoneTextTests: XCTestCase {
         let failed = try XCTUnwrap(details.first { $0.label == ExceptionCards.failedLabel })
         XCTAssertEqual(failed.value, "exit 1 after 6m 12s")
         XCTAssertEqual(failed.runs.first?.face, .bad)
+        XCTAssertEqual(details.first { $0.label == ExceptionCards.branchLabel }?.value, Self.branchLine,
+                       "the Branch row every client draws stays in the phone's Details, as the server wrote it")
+        XCTAssertEqual(details.map(\.label).filter { $0 != "Task" && $0 != ExceptionCards.failedLabel },
+                       ExceptionCards.detailRows(item, projectName: "Queue rules").map(\.label),
+                       "every row the other clients draw is in the phone's Details, in their order")
     }
 
     func testTheSublineIsOneLineAndTheWholeTitleLeadsDetails() throws {
