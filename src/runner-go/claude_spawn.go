@@ -92,6 +92,8 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 			"args":    []string{"mcp"},
 			"timeout": mcpToolTimeoutMs,
 		}
+		// The runner's browser, while it is active (browser_mcp.go).
+		addClaudeBrowserMCPServer(servers, orbitExe)
 	}
 	if len(servers) > 0 {
 		mcpPath := filepath.Join(scratchDir, "mcp.json")

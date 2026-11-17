@@ -148,6 +148,16 @@ func (b *browserSupervisor) SetOffered(offered bool) {
 	b.stopLocked("the server no longer offers it")
 }
 
+// Offered reports whether the current connection's Welcome offers the browser (false on a runner that has none).
+func (b *browserSupervisor) Offered() bool {
+	if b == nil {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.offered
+}
+
 // Acquire is one browser tool call by sessionID: it takes the lease when it is free (starting the browser if
 // needed), renews it when sessionID already holds it, and is refused with an error naming the holder when another
 // session holds it. title is the session's title, shown in that error to other sessions. A session is keyed by its
