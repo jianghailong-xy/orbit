@@ -165,13 +165,16 @@ function store(
 
   /** Every session this call ended, in order. */
   const completed: string[] = [];
+  /** What each of those completions was asked, in the same order. */
+  const completeOpts: Array<{ handingOver?: boolean } | undefined> = [];
 
   const sessionsService = {
     // The real `SessionsService.complete`: it writes `completed_at` and is a no-op on a row that
     // already carries one.
-    complete: async (owner: string, sessionId: string) => {
+    complete: async (owner: string, sessionId: string, opts?: { handingOver?: boolean }) => {
       assert.equal(owner, OWNER);
       completed.push(sessionId);
+      completeOpts.push(opts);
       const row = find(sessionId);
       if (row && row.completedAt == null) row.completedAt = new Date('2026-09-07T10:00:00.000Z');
       return { ok: true };
@@ -196,7 +199,7 @@ function store(
 
   const acceptance = { criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }) };
   const service = new ProjectsService(prisma as never, acceptance as never, sessionsService as never);
-  return { service, project, sessions, writes, created, completed, watches };
+  return { service, project, sessions, writes, created, completed, completeOpts, watches };
 }
 
 async function thrown(work: () => Promise<unknown>): Promise<unknown> {
@@ -252,7 +255,7 @@ test('a row completed under the legacy mirror alone is just as finished', async 
 // ── A conversation that is still going ───────────────────────────────────────────────────────
 
 test('an OPEN coordinator is completed before the replacement takes its place', async () => {
-  const { service, project, sessions, created, completed } = store(sessionRow());
+  const { service, project, sessions, created, completed, completeOpts } = store(sessionRow());
 
   const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
 
@@ -262,6 +265,9 @@ test('an OPEN coordinator is completed before the replacement takes its place', 
   // reader and is still running to everybody else.
   assert.deepEqual(completed, [STANDING]);
   assert.notEqual(sessions.find((s) => s.id === STANDING)!.completedAt, null);
+  // A replacement that is no handoff ends it the way Complete does: its SubAgents and jobs stop with it
+  // (a handoff's keeps them: coordinator-handoff.pg.spec.ts).
+  assert.deepEqual(completeOpts, [{ handingOver: false }]);
 
   // Only then the replacement, and the pointer with it. A swap that left the old conversation open
   // would leave it being written to while it silently lost the authority to act on this project.

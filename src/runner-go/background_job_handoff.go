@@ -206,6 +206,8 @@ func (b *bgTailer) adoptJobs(jobs []*bgJob) {
 			awaitChildExit(job.pid)
 			if b.claimReap(job) {
 				b.finishJob(job, job.reap())
+			} else {
+				b.endKeptJob(job)
 			}
 		}()
 	}

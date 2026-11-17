@@ -2679,6 +2679,7 @@ export class RunnerApiController {
       cloneRequests = await this.githubWorkspaces.cloneRequestsFor(runner.id).catch(() => undefined);
     }
     let cancelSessionIds: string[] = [];
+    let keepWorkSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
@@ -2778,6 +2779,11 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Which of those cancels are a coordinator handing over (RealtimeService.keepingWork), read apart: a read that
+    // fails leaves the field out and drops nothing else, and the runner still learns it from the session's end turn.
+    keepWorkSessionIds = await Promise.resolve()
+      .then(() => this.realtime.keepingWork(cancelSessionIds))
+      .catch(() => []);
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".
     let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
@@ -2814,6 +2820,7 @@ export class RunnerApiController {
     // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
+      ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,

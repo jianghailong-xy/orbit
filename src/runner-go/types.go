@@ -442,6 +442,10 @@ type ModelParameterValue struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// KeepWorkSessionIDs are those of CancelSessionIDs whose end is a coordinator handing over: the session ends,
+	// but its running SubAgent runs and bg_run jobs are left to end by themselves (session_keep_work.go). Absent
+	// from an older control plane, which reads as none.
+	KeepWorkSessionIDs []string `json:"keepWorkSessionIds,omitempty"`
 	// The owner-request secrets this runner may hold (secret_store.go), sent only to a runner that declares
 	// owner-secret/v1. A POINTER because only a present list states anything: absent (an older control plane, or an
 	// answer that reconciled nothing) removes nothing, and [] means hold nothing.

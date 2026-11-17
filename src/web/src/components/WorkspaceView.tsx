@@ -13154,7 +13154,8 @@ export function usePendingTray({
       return {
         key: steer.turnId,
         heading: requeued ? 'next' : 'current',
-        text: steer.text,
+        // Translated (Settings › Translation): the words the owner wrote, not the English delivered.
+        text: steer.translation?.original ?? steer.text,
         ...trayPictures(steer.images, steer.attachmentRefs),
         state: withdrawing ? 'Withdrawing…' : requeued ? 'Queued for next turn' : steerDeliveryState(steer.delivery).label,
         busy: withdrawing,

@@ -145,6 +145,12 @@ export const HEARTBEAT_DELIVERIES = {
     ],
     pending: 'drained for an hour, or until five minutes after its session finished: every full answer carries it',
   },
+  // A subset of cancelSessionIds, read with it: delivered exactly when that is.
+  keepWorkSessionIds: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#publishEndIntent'],
+    pending: 'carried beside cancelSessionIds, for as long as it carries the session',
+  },
   leaseLostSessionIds: { how: 'EVERY_BEAT', reads: 'the lease of every supervised session, by the leaseLostSessionIds rule' },
   maxConcurrent: { how: 'EVERY_BEAT', reads: 'runner.max_concurrent, which the quiet answer carries' },
   minFreeDiskMb: {
