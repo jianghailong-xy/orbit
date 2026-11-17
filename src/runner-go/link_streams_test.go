@@ -317,6 +317,7 @@ func TestASaturatedLinkStreamDoesNotHoldUpHeartbeats(t *testing.T) {
 	var upBytes, downBytes atomic.Int64
 	downRoom := make(chan int, 4096)
 	opened := make(chan struct{})
+	var measured atomic.Bool // set once the measurement is over: the teardown closes the socket, and the stream with it
 	r.g.onStream = func(c *fakeWorkConn, f *linkpb.Frame) {
 		switch {
 		case f.GetStreamOpened() != nil:
@@ -328,7 +329,7 @@ func TestASaturatedLinkStreamDoesNotHoldUpHeartbeats(t *testing.T) {
 			}}})
 		case f.GetStreamCredit() != nil:
 			downRoom <- int(f.GetStreamCredit().GetBytes())
-		case f.GetStreamClose() != nil:
+		case f.GetStreamClose() != nil && !measured.Load():
 			t.Errorf("the stream closed: %v", f.GetStreamClose())
 		}
 	}
@@ -395,6 +396,7 @@ func TestASaturatedLinkStreamDoesNotHoldUpHeartbeats(t *testing.T) {
 		worst = max(worst, time.Since(start))
 		time.Sleep(50 * time.Millisecond)
 	}
+	measured.Store(true)
 	close(stop)
 	wg.Wait()
 	t.Logf("saturated: %.1f MiB up and %.1f MiB down; the slowest of 20 heartbeats took %s", float64(upBytes.Load())/(1<<20), float64(downBytes.Load())/(1<<20), worst)
