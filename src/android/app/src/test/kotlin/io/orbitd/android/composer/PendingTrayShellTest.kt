@@ -70,6 +70,24 @@ class PendingTrayShellTest : ComposerShellTest() {
         assertTrue("after the reply written before it was read: $order", order.indexOf("event:3") > order.indexOf("event:4"))
     }
 
+    /** Settings › Translation: a row says what the reader wrote, as their bubble does, not the English the engine is given (web
+     * `queuedRow`'s `translation?.original`, OrbitKit PendingTrayTests). */
+    @Test fun aTranslatedRowSaysWhatTheReaderWrote() {
+        running()
+        val translation = """{"state":"DONE","from":"zh-Hans","original":"lfs 属于另一个仓库"}"""
+        ComposerShell.events = ComposerShell.events.dropLast(1) + ComposerShell.obj("""{"type":"user","seq":3,"turnId":"$steerId",
+            "ts":"2026-10-16T09:41:00.000Z","payload":{"text":"lfs belongs to another repository","steer":true,"delivery":"written",
+            "withdrawable":true,"translation":$translation}}""")
+        ComposerShell.answers["GET sessions/${ComposerShell.SESSION}/turns"] = { ApiResponse(200, """[{"turnId":"$queuedId","kind":"message",
+            "placement":"queued","content":"and update the changelog","translation":{"state":"DONE","from":"zh-Hans","original":"顺便更新变更日志"},
+            "attachments":[],"createdAt":"2026-10-16T09:42:00.000Z"}]""".encodeToByteArray()) }
+        signIn(); openSession()
+        await { has(hasText("顺便更新变更日志") and tray) }
+        assertTrue(has(hasText("lfs 属于另一个仓库") and tray))
+        assertFalse(has(hasText("lfs belongs to another repository") and tray))
+        assertFalse(has(hasText("and update the changelog") and tray))
+    }
+
     @Test fun steerSendsAQueuedMessageIntoTheRunningTurn() {
         running(); signIn(); openSession()
         await { has(hasTestTag("pending-tray-steer")) }
