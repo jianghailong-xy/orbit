@@ -80,6 +80,7 @@ import { TaskCheckpointService } from '../projects/task-checkpoint.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { ViewerStreamCaps } from '../sessions/viewer-stream-caps';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -424,6 +425,8 @@ test('a shared project: its seven blocks, the red line, and the scope a token re
       { provide: ProjectAttributionService, useValue: {} },
       // A budget no case here comes near: the budget is public-surface.pg.spec's subject.
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },
+      // The anonymous viewer streams' caps, at their defaults: the caps are public-surface.pg.spec's subject.
+      { provide: ViewerStreamCaps, useValue: new ViewerStreamCaps() },
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerId }) } },
