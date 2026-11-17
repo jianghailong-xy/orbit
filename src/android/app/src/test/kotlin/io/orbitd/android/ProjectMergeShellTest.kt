@@ -56,12 +56,13 @@ class ProjectMergeShellTest {
     /** The owner item a merge's push names (`openItemID`). */
     private val mergeItem = "019a11a9-0000-7000-8000-000000000001"
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
+    // A blocked candidate is a record at decidedAt; keep it inside this coordinator's conversation.
     private fun candidate(state: String, conflicts: String = "[]", execution: String? = null, extra: String = "") = """{"promotionId":"pr-1","state":"$state",
         "sourceRef":"refs/heads/project/launch","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":7,"filesChanged":10,
         "taskIds":["t1","t2","t3","t4"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs off by default"},
         {"taskId":"t3","title":"P6 end to end"},{"taskId":"t4","title":"P7 rehearsal"}],
         "checks":[{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":372000}],
-        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${execution?.let { ",\"execution\":$it" }.orEmpty()}$extra}"""
+        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${if (state == "BLOCKED") ",\"decidedAt\":\"${ago(120)}\"" else ""}${execution?.let { ",\"execution\":$it" }.orEmpty()}$extra}"""
     private val criteria = """[{"key":"c1","text":"Notes exist","satisfied":true},{"key":"c2","text":"Contract written","satisfied":true},
         {"key":"c3","text":"Smoke passes","satisfied":false}]"""
 
@@ -307,8 +308,9 @@ class ProjectMergeShellTest {
      * and the merge already made is one line that opens its receipt. */
     @Test fun theConversationKeepsOneLinePerMoment() {
         ProjectShell.promotion = candidate("READY")
+        // The coordinator was created 10 hours ago; earlier merges belong to its predecessor.
         ProjectShell.merged = """[${candidate("MERGED").replace("\"promotionId\":\"pr-1\"", "\"promotionId\":\"pr-0\"").replace("\"merged\":null",
-            "\"merged\":{\"sha\":\"8d5a868e90df\",\"at\":\"${ago(60 * 26)}\",\"automatic\":true,\"revert\":\"git revert -m 1 8d5a868e90df\"}")}]"""
+            "\"merged\":{\"sha\":\"8d5a868e90df\",\"at\":\"${ago(60 * 6)}\",\"automatic\":true,\"revert\":\"git revert -m 1 8d5a868e90df\"}")}]"""
         openPage()
         await { exists(hasText("Coordinate launch") and hasClickAction()) }
         compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
