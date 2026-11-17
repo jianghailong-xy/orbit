@@ -23,6 +23,7 @@ import { bashCommandRules } from '@orbit/shared';
 import { shownQuestions } from '../lib/translation';
 import type { HeldDecision } from '../lib/approvalDecisions';
 import { UntranslatedDecisionFoot } from './TranslationParts';
+import { CONDITION_COPY } from '../lib/conditions';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -121,8 +122,51 @@ interface BatchPreview {
   externalEdges?: number;
   lists?: Array<{ id: string; title: string }>;
   assignees?: Array<{ id: string; name: string; hasRunner: boolean }>;
-  tasks?: Array<{ title: string; dependsOnRefs?: string[]; dependsOnTaskIds?: string[]; ref?: string | null }>;
+  tasks?: Array<{
+    title: string;
+    dependsOnRefs?: string[];
+    dependsOnTaskIds?: string[];
+    ref?: string | null;
+    /** A task that starts when its condition holds: the card's Starts when, Today and If never lines. */
+    startWhen?: StartWhenCardLines;
+  }>;
   titlesTruncated?: number;
+}
+
+/** The server's lines for a startWhen task's card (apiserver tasks/task-start-when.ts startWhenCardLines). */
+interface StartWhenCardLines {
+  startsWhen: string;
+  checked: string;
+  command: string;
+  today: string;
+  ifNever: string;
+  awake?: string | null;
+}
+
+/** A single create's startWhen lines, when the task starts on a condition (condition-triggers ②). */
+function startWhenOf(input: CreateInput | null): StartWhenCardLines | null {
+  if (!input || input.isProject) return null;
+  return input.preview?.tasks?.[0]?.startWhen ?? null;
+}
+
+/** Starts when, Today and If never (condition-triggers ②): the condition, how it is checked and its command. */
+function StartWhenFacts({ lines }: { lines: StartWhenCardLines }): JSX.Element {
+  const K = CONDITION_COPY.facts;
+  return (
+    <dl className="sched-card-facts create-start-when" data-start-when-facts="">
+      <dt>{K.startsWhen}</dt>
+      <dd data-fact="starts-when">
+        <b>{lines.startsWhen}</b>
+        <div className="sched-card-sub">{lines.checked}</div>
+        {lines.awake ? <div className="sched-card-sub" data-fact="awake">{lines.awake}</div> : null}
+        <code className="sched-command">{lines.command}</code>
+      </dd>
+      <dt>{K.today}</dt>
+      <dd data-fact="today">{lines.today}</dd>
+      <dt>{K.ifNever}</dt>
+      <dd data-fact="if-never">{lines.ifNever}</dd>
+    </dl>
+  );
 }
 
 /**
@@ -792,7 +836,9 @@ export function ApprovalPanel({
                   ? `📁 Confirm: create project “${create.title}”?`
                   // A task's own name is the card's first row, where it can wrap to as many lines
                   // as it needs; the header carries the count, exactly as the batch card's does.
-                  : '📝 Confirm: create 1 task?'
+                  : startWhenOf(create)
+                    ? CONDITION_COPY.createTaskHeading
+                    : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
                   : skipCheck
@@ -1176,6 +1222,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const noun = createFoldNoun(input);
   const detail = createDetail(input);
+  const startWhen = startWhenOf(input);
   // A task's criteria is one prose block written as a prompt for the agent that will run it — the
   // field that turns into a wall. Its marks taken off, its lines kept, and folded at the ceiling the
   // owner-confirmation card folds a run's report at, which is the same kind of field read by the
@@ -1188,6 +1235,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
       <ImpactPills preview={input.preview} withZeroStarting={false} />
       {detail && <p className="dag-approval-foot">{detail}</p>}
       {!input.isProject && input.title && <p className="create-title">{input.title}</p>}
+      {startWhen && <StartWhenFacts lines={startWhen} />}
       {input.prose && (
         <details
           className="create-fold"
