@@ -3496,6 +3496,25 @@ final class AppModel {
             answered: projectSessionsReadAt != nil)
     }
 
+    /// Whether the project sessions button spins: anything the page it opens shows as active — a
+    /// member or landing session working (the spinner) or with a background job in flight (the
+    /// breathing glyph), a landing job running or queued, or a merge into main being checked or
+    /// landing. False until the page's read holds this project.
+    func projectActive(_ projectID: String) -> Bool {
+        guard let address = projectSessionsAddress,
+              PublicID.storageKey(address.projectID) == PublicID.storageKey(projectID) else { return false }
+        if let integration = projectSessionsIntegration,
+           projectSessionsLandingRunning || integration.integratingCount + integration.queuedCount > 0
+            || integration.inFlight != nil || integration.inFlightJobs?.isEmpty == false {
+            return true
+        }
+        if projectSessionsMerge?.projectID == address.projectID, projectSessionsMergeRunning { return true }
+        return projectSessions.contains { session in
+            let glyph = SessionStatusGlyph.make(for: session, watching: watches?.summary(for: session.id))
+            return glyph.shape == .spinner || glyph.pulse
+        }
+    }
+
     #if os(iOS)
     /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
     /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).

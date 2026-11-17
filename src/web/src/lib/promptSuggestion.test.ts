@@ -37,6 +37,7 @@ describe('currentPromptSuggestion', () => {
 describe('offeredPromptSuggestion', () => {
   const open: PromptSuggestionGate = {
     idle: true,
+    queuedTurns: 0,
     draftEmpty: true,
     replying: false,
     pendingApprovals: 0,
@@ -51,6 +52,7 @@ describe('offeredPromptSuggestion', () => {
 
   it.each([
     ['a turn is running', { idle: false }],
+    ['a sent message waits in the queue', { queuedTurns: 1 }],
     ['something is typed or staged', { draftEmpty: false }],
     ['a reply to a question is armed', { replying: true }],
     ['a card waits on an approval', { pendingApprovals: 1 }],

@@ -14,12 +14,13 @@ class SessionLineTest {
     private fun session(status: String, lastAssistantText: String? = null, lastToolUse: String? = null, lastUserText: String? = null,
         runningBgCount: Int? = null, engineTurnActive: Boolean? = null, pendingApprovals: Int = 0, endReason: String? = null,
         runningSubagentCount: Int? = null, waitingKind: String? = null, ownerItems: String? = null, review: String? = null,
-        retryAt: String? = null, error: String? = null, recapText: String? = null, recapAt: String? = null) =
+        retryAt: String? = null, error: String? = null, recapText: String? = null, recapAt: String? = null,
+        runningSubagentTitle: String? = null) =
         DirectorySession("s", "t", status = status, lastAssistantText = lastAssistantText, lastToolUse = lastToolUse, lastUserText = lastUserText,
             runningBgCount = runningBgCount, engineTurnActive = engineTurnActive, pendingApprovals = pendingApprovals, endReason = endReason,
             runningSubagentCount = runningSubagentCount, waitingKind = waitingKind, ownerItems = ownerItems?.let { Json.parseToJsonElement(it).jsonArray },
             confirmationUnderReview = review?.let { Json.parseToJsonElement(it).jsonObject }, retryAt = retryAt, error = error,
-            recapText = recapText, recapAt = recapAt)
+            recapText = recapText, recapAt = recapAt, runningSubagentTitle = runningSubagentTitle)
     private fun line(s: DirectorySession, live: Boolean = true) = SessionLine.make(s, live, now = now)
 
     // The recap (0418). When it was written is the Recap card's to say (RecapCardTest); the line is the sentence alone.
@@ -141,6 +142,15 @@ class SessionLineTest {
         assertEquals(SessionLine("Under review · Reviewer", Tone.REVIEW), line(session("AWAITING_INPUT", review = """{"reviewerTitle":null}""")))
         assertEquals(SessionLine("Running Agent…", Tone.RUNNING), line(session("RUNNING", runningSubagentCount = 1)))
         assertEquals(SessionLine("Running 3 agents…", Tone.RUNNING), line(session("AWAITING_INPUT", "reply", runningSubagentCount = 3, runningBgCount = 1)))
+    }
+
+    /** A running sub-agent the server knows the title of names what it is doing (web `subagentRunningLine`). */
+    @Test fun subagentLineNamesItsTitle() {
+        val title = "Deploy dacad7403 to production"
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING), line(session("RUNNING", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running 2 agents · $title…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 2, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running Agent…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 1, runningSubagentTitle = " ")))
     }
 
     /** The list payload's fields decode, null for a server that sends none. */

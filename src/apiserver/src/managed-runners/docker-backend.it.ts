@@ -405,7 +405,7 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     await shell(containerOf(m), 'codex login --with-api-key >/dev/null 2>&1; codex login status >/dev/null 2>&1', PLACEHOLDER_KEY);
   }
 
-  const DATA = '/var/lib/orbit/home/d2-data';
+  const DATA = '/home/orbit/d2-data';
   async function seedData(m: ManagedRunner): Promise<void> {
     await shell(containerOf(m), [
       `mkdir -p ${DATA}`,
@@ -528,7 +528,7 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     assert.deepEqual({ cpu: host.NanoCpus, memory: host.Memory, swap: host.MemorySwap, pids: host.PidsLimit }, { cpu: 500_000_000, memory: 512 * MiB, swap: 512 * MiB, pids: 512 });
     assert.ok(host.SecurityOpt.includes('no-new-privileges:true'));
     assert.deepEqual(inspected.Mounts.map((m: { Type: string; Name?: string; Destination: string }) => `${m.Type}:${m.Destination}`).sort(),
-      ['tmpfs:/tmp', 'volume:/run/orbit-bootstrap', 'volume:/var/lib/orbit']);
+      ['tmpfs:/tmp', 'volume:/run/orbit-bootstrap', 'volume:/home/orbit']);
     const tmp = host.Mounts.find((m: { Type: string; Target: string }) => m.Type === 'tmpfs' && m.Target === '/tmp');
     assert.deepEqual(tmp?.TmpfsOptions, { SizeBytes: 64 * MiB, Mode: 0o1777, Options: [['exec']] }, '/tmp executable, sized, nosuid and nodev by Docker');
     assert.ok(!JSON.stringify(inspected).includes('docker.sock'), 'no Docker socket anywhere in it');

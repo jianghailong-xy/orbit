@@ -560,9 +560,34 @@ struct ConsoleView: View {
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         // The project's sessions page read as the conversation opens, so the button's count is the
-        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
-        .task(id: projectSheetAddress) {
-            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`). Its
+        // members, landing line and merge are then polled as the page polls them, so the button's
+        // spinner (`projectActive`) follows them with the sheet closed. While the sheet is open the
+        // page polls them itself, so these stop, and read again when it closes.
+        .task(id: projectButtonReadAddress) {
+            if let address = projectButtonReadAddress { await appModel.loadProjectSessions(address) }
+            guard let address = projectButtonReadAddress else { return }
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await ViewPoll.run(appModel, every: 4, inFlight: { 4 }) {
+                        await appModel.pollProjectSessions(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectIntegration(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsLandingRunning ? 4 : nil }) {
+                        await appModel.loadProjectIntegration(address)
+                    }
+                }
+                group.addTask { @MainActor in
+                    await appModel.loadProjectMerge(address)
+                    await ViewPoll.run(appModel, every: 15, hints: { appModel.projectHints },
+                                       inFlight: { appModel.projectSessionsMergeRunning ? 4 : nil }) {
+                        await appModel.loadProjectMerge(address)
+                    }
+                }
+            }
         }
         .sheet(item: $projectSheet, onDismiss: {
             let action = afterProjectSheet
@@ -670,27 +695,41 @@ struct ConsoleView: View {
         return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
     }
 
+    /// What the conversation reads for its project sessions button: the sheet's address, while the
+    /// sheet is closed. Open, the page in it reads the same things.
+    private var projectButtonReadAddress: SessionProjectAddress? {
+        projectSheet == nil ? projectSheetAddress : nil
+    }
+
     /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
     private struct ProjectSheetTarget: Identifiable {
         let address: SessionProjectAddress
         var id: SessionProjectAddress { address }
     }
 
-    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
-    /// sessions page up as a sheet, opening at medium height.
+    /// The project glyph and the project's session count ("⊞ 11"); while anything the sheet shows is
+    /// active the glyph gives its place to the session rows' spinner, in the accent (owner
+    /// 2026-11-17, docs/mocks/project-sessions-button-running, option C). A press puts the
+    /// project's sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
+        let active = appModel.projectActive(projectID)
         return Button {
             projectSheet = ProjectSheetTarget(
                 address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: SessionProjectSheet.glyph)
+                if active {
+                    SpinnerGlyph(color: .accentColor).frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: SessionProjectSheet.glyph)
+                }
                 if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityValue([count.map { "\($0) sessions" }, active ? "Active" : nil]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityIdentifier("project-sessions-button")
     }
     #endif

@@ -57,7 +57,7 @@ fi
 stat -c 'volume root: owner %u:%g, mode %a' /data"
 # One line per SQLite file and per repository, its result or the error; anything but ok fails.
 INSPECT="set -eu
-cd /var/lib/orbit
+cd /home/orbit
 find . -type f \\( -name '*.sqlite' -o -name '*.sqlite3' -o -name '*.db' \\) -print0 | sort -z |
   xargs -0 -r sh -c 'for f; do printf \"sqlite %s: %s\\n\" \"\$f\" \"\$(sqlite3 -readonly \"\$f\" \"pragma integrity_check\" 2>&1 | tr \"\\n\" \" \" | sed \"s/ *\$//\")\"; done' sh > /tmp/inspect.txt
 find . -name .git -type d -prune -print0 | sort -z |
@@ -92,7 +92,7 @@ check)
   docker volume create "$scratch" >/dev/null
   trap 'docker volume rm "$scratch" >/dev/null' EXIT
   helper "$scratch" rw 0:0 /data "$UNPACK"
-  helper "$scratch" rw 10001:10001 /var/lib/orbit "$INSPECT"
+  helper "$scratch" rw 10001:10001 /home/orbit "$INSPECT"
   ;;
 restore)
   for f in tar.gz sha256 labels; do [ -s "$DIR/$V.$f" ] || die "$DIR/$V.$f is missing"; done
@@ -100,11 +100,11 @@ restore)
   # shellcheck disable=SC2046 # the labels file is a list of --label key=value arguments
   docker volume create $(cat "$DIR/$V.labels") "$V" >/dev/null
   helper "$V" rw 0:0 /data "$UNPACK"
-  helper "$V" rw 10001:10001 /var/lib/orbit "$INSPECT"
+  helper "$V" rw 10001:10001 /home/orbit "$INSPECT"
   ;;
 verify)
   docker volume inspect "$V" >/dev/null 2>&1 || die "there is no volume $V"
   [ -z "$(docker ps -q --filter "volume=$V")" ] || die "a running container uses $V: verify it while its runner is down"
-  helper "$V" rw 10001:10001 /var/lib/orbit "$INSPECT"
+  helper "$V" rw 10001:10001 /home/orbit "$INSPECT"
   ;;
 esac

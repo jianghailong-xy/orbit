@@ -24,6 +24,18 @@ import { translationAvailable } from './translation';
  * held (queue.service trySessionClaim).
  */
 
+/**
+ * A slash command (`/compact`, `/review the login fix`) goes to the engine as written and is never held for
+ * translation: the engine runs it by name, so translating it can only delay it or reword its arguments. The rule
+ * is web's `slashCommandName` (lib/slashCommands.ts): a single bare word after the slash, so text that merely
+ * starts with one, such as an absolute path (`/tmp/foo 删掉吧`) or a comment (`// TODO`), is prose and is translated.
+ */
+const SLASH_COMMAND = /^\/[A-Za-z0-9][A-Za-z0-9_.:-]*(?:\s|$)/;
+
+export function isSlashCommand(content: string): boolean {
+  return SLASH_COMMAND.test(content.trim());
+}
+
 /** The status of a turn that must not be delivered: being translated, or its translation failed. */
 export const HELD_TURN_STATUS = 'HELD';
 

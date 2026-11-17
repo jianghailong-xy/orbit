@@ -68,6 +68,8 @@ data class DirectorySession(
     val runStatus: String? = null, val endReason: String? = null, val error: String? = null, val retryAt: String? = null,
     val completedAt: String? = null, val deletedAt: String? = null, val lastToolUse: String? = null,
     val runningBgCount: Int? = null, val runningSubagentCount: Int? = null, val engineTurnActive: Boolean? = null,
+    /** What the newest running sub-agent is doing, as its launch call described it; null when none is or it said nothing. */
+    val runningSubagentTitle: String? = null,
     /** What a parked session is still doing (`TURN`, `BACKGROUND_JOB`, `WAITING`), as the server decides it; null when none and
      *  from an older server. See [resumesOnItsOwn]. */
     val activity: String? = null,
