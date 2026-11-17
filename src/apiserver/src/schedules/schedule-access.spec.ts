@@ -63,6 +63,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
     'mcp__orbit__wiki_get',
     'mcp__orbit__file_fetch',
     'mcp__orbit__file_list',
+    'mcp__orbit__guide',
     'WebFetch',
     'WebSearch',
   ]);
@@ -87,7 +88,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
   }
   // Only Orbit tools that read, report the run, or touch the run's own schedule.
   for (const tool of allowed.filter((t) => t.startsWith('mcp__orbit__'))) {
-    assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|[a-z]+_(get|list|search|fetch))$/, tool);
+    assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|guide|[a-z]+_(get|list|search|fetch))$/, tool);
   }
   // A rule for a file edit is not carried: Edit is denied anyway, and no rule but a shell command's is the run's.
   assert.ok(!allowed.includes('Edit'));
@@ -162,7 +163,10 @@ test('every Orbit tool orbit mcp serves is allowed or denied by name for a CHECK
   // The runner answers Claude Code's ask about an Orbit tool itself and allows it outside Plan, so a tool on neither
   // list would run unasked. docs/operation-catalog.md is generated from the runner's catalogue (and checked there).
   const doc = readFileSync(join(__dirname, '..', '..', '..', '..', 'docs', 'operation-catalog.md'), 'utf8');
-  const table = doc.slice(0, doc.indexOf('## Writes Plan mode runs'));
+  // The operations table only: the guide's topics, above it, are a table of their own (contract 1.10.0).
+  const start = doc.indexOf('| Operation | Object |');
+  assert.ok(start >= 0, 'the operations table');
+  const table = doc.slice(start, doc.indexOf('## Writes Plan mode runs'));
   // Every row of the table is read, or the spec fails: a row it skipped would be a tool on neither list.
   const rows = table.split('\n').filter((line) => line.startsWith('| `'));
   const parsed = rows.map((line) => /^\| `([a-z_]+)` \|(?:[^|]*\|){7}\s*([a-z_+]+)\s*\|/.exec(line));
