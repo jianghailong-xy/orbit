@@ -294,6 +294,7 @@ public enum ScheduleCopy {
             "RUNS_PER_WEEK": "Let {title} run more often?",
             "RUN_LIMIT": "Let {title} run longer?",
             "WORKSPACE": "Let {title} run in {workspace}?",
+            "PROBE_COMMAND": "Let {title} check with a new command?",
         ]
     }
     public enum SessionPreview {
@@ -580,6 +581,7 @@ public enum ScheduleCopy {
         "envelopeCard.titles.RUNS_PER_WEEK": ScheduleCopy.EnvelopeCard.titles["RUNS_PER_WEEK"]!,
         "envelopeCard.titles.RUN_LIMIT": ScheduleCopy.EnvelopeCard.titles["RUN_LIMIT"]!,
         "envelopeCard.titles.WORKSPACE": ScheduleCopy.EnvelopeCard.titles["WORKSPACE"]!,
+        "envelopeCard.titles.PROBE_COMMAND": ScheduleCopy.EnvelopeCard.titles["PROBE_COMMAND"]!,
         "sessionPreview.create": ScheduleCopy.SessionPreview.create,
         "sessionPreview.envelope": ScheduleCopy.SessionPreview.envelope,
         "waiting.title": ScheduleCopy.Waiting.title,

@@ -8,9 +8,10 @@
  *   * the cards: requests the owner has to answer, the drafts of the Scheduled page (PENDING CREATE requests), and
  *     what one session put up — its cards and the records of the changes it made.
  */
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma, Schedule, ScheduleChangeRequestKind, ScheduleChangeRequestState, ScheduleState } from '@prisma/client';
 
+import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   scheduleCardViews,
@@ -67,7 +68,11 @@ function badState(name: string, value: string, allowed: readonly string[]): neve
 
 @Injectable()
 export class ScheduleReadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    /** The managed-runner switch, for a WHEN card's "Keeps this cloud workspace awake" line. Absent, off. */
+    @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly gate?: ManagedRunnerGate,
+  ) {}
 
   private now(): Date {
     return new Date();
@@ -186,7 +191,7 @@ export class ScheduleReadsService {
       findings: findings.map(scheduleFindingView),
       usage,
       history: revisions.map((r) => scheduleRecordView(schedule.id, schedule.title, r, undone.get(r.revision) ?? null)),
-      pendingCards: await scheduleCardViews(tx, ownerId, pending, now),
+      pendingCards: await scheduleCardViews(tx, ownerId, pending, now, this.gate),
     };
   }
 
@@ -223,13 +228,13 @@ export class ScheduleReadsService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
-    return { requests: await scheduleCardViews(this.prisma, ownerId, rows, this.now()) };
+    return { requests: await scheduleCardViews(this.prisma, ownerId, rows, this.now(), this.gate) };
   }
 
   async request(ownerId: string, requestId: string) {
     const row = await this.prisma.scheduleChangeRequest.findFirst({ where: { id: requestId, ownerId } });
     if (!row) throw new NotFoundException({ code: 'SCHEDULE_REQUEST_NOT_FOUND', message: 'No such schedule request.' });
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [row], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [row], this.now(), this.gate);
     return card;
   }
 
@@ -293,7 +298,7 @@ export class ScheduleReadsService {
       const schedule = await this.rowView(ownerId, result.schedule);
       return { outcome: 'EXISTS' as const, scheduled: false, note: SCHEDULE_EXISTS_NOTE, scheduleId: schedule.id, schedule };
     }
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
     return { outcome: 'PENDING' as const, scheduled: false, note: SCHEDULE_PENDING_CREATE_NOTE, card };
   }
 
@@ -301,7 +306,7 @@ export class ScheduleReadsService {
     const kept = result.intentKept ? ` ${SCHEDULE_INTENT_KEPT_NOTE}` : '';
     const intentKept = result.intentKept ? { intentKept: true as const } : {};
     if (result.outcome === 'PENDING') {
-      const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+      const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
       return { outcome: 'PENDING' as const, changed: false, note: SCHEDULE_PENDING_UPDATE_NOTE + kept, ...intentKept, card };
     }
     const schedule = await this.rowView(ownerId, result.schedule);
@@ -320,7 +325,7 @@ export class ScheduleReadsService {
   }
 
   async decisionAnswer(ownerId: string, result: ScheduleDecisionResult) {
-    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
+    const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now(), this.gate);
     return {
       outcome: result.outcome,
       card,
