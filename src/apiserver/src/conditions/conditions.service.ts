@@ -18,7 +18,7 @@ import {
 import type { Condition, Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
-import { withTransactionRetry } from '../common/transaction-retry';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { stringEnv } from '../sessions/session-settings';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -311,7 +311,7 @@ export class ConditionsService {
         )
       `;
       return { stored: inserted.count, alert };
-    }, { label: 'conditions.applySamples' });
+    }, loggedRetry(this.log, 'conditions.applySamples'));
   }
 
   /**
@@ -338,7 +338,7 @@ export class ConditionsService {
         if (!step.enteredUnknown) return undefined;
         unknown += 1;
         return this.write(tx, condition, step.next, [step]);
-      }, { label: 'conditions.sweep' });
+      }, loggedRetry(this.log, 'conditions.sweep'));
       if (alert) alerts.push(alert);
     }
     await this.send(alerts);
