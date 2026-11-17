@@ -20,16 +20,42 @@ any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is 
 versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
 rendered for a person is the [operation catalogue](operation-catalog.md).
 
+The whole document is large — about 300 KB inside a session with orchestration on, far more than an
+engine shows a model of one command's output — so ask for the part you need:
+
+```bash
+orbit guide --json                         # the objects, the intent routes and the topics
+orbit guide task-create --json             # one topic's recipe: each step's argv, availability, approval, example, proof
+orbit capabilities --summary --json        # one row per command; the ones not offered here, grouped under why
+orbit capabilities --family task --json    # one family, each command with argv, approval, success evidence, example
+orbit capabilities --id task_create --json # one operation in full: description, leaf parameters, both examples
+```
+
+Every one of these answers the same `context` (actor, session, agent, task) and absolute argv as the
+whole document, and says whether each command runs here and, if not, why — a switch that is off, a
+credential this process lacks, or a command that exists only as an MCP tool. Their examples are
+generated from the catalogue: the MCP tool's required fields and the command's required flags, each
+filled with a placeholder in angle brackets where the catalogue declares no value. The `guide` MCP tool
+answers the same documents as `orbit guide`. See docs/orbit-agent-contract.md §2.5.
+
+For failures, submission uncertainty, partial success and safe replay examples, see the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). The same rules apply to
+Agent shell calls and MCP; a CLI command never bypasses a missing capability or a refused card.
+
 ## Tasks and task lists
 
 ```bash
 orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
-orbit task update <task-id> --status DONE --json
+orbit task evidence-submit <task-id> --evidence-file evidence.json --receipt
 orbit task reopen <task-id> --json
 orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```
+
+Completion follows the task's declared criterion. For an evidence task, submit an envelope with
+`claim`, recorded `checks` and `gaps`; the evaluator decides completion. A direct status update to
+`DONE` does not establish acceptance.
 
 To create a task with existing uploaded Orbit attachments, pass their IDs:
 
@@ -583,7 +609,11 @@ read or sent, saying why and what to use instead: the ones that act for an Orbit
 in another shape or not at all (`task batch-pin`, `session create`, `session import`). No command falls back to
 the runner credential while you are logged in: the machine's other commands — `orbit task-list`, `orbit provider`,
 `orbit notify`, `orbit token` and the rest — are refused too, so run them where you are not logged in.
-`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason.
+`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason
+and a stable `unavailableCode`. `unavailableCapabilities` lists every command this process cannot run, each with
+its code: `ORCHESTRATION_DISABLED`, `SESSION_CONTEXT_MISSING`, `SERVICE_TOKEN_SCOPE_MISSING`, `TOKEN_INVALID`,
+`TOKEN_EXPIRED`, `RUNNER_NOT_REGISTERED`, `RUNNER_CREDENTIAL_UNUSABLE`, `NOT_AVAILABLE_AS_USER`,
+`REQUIRES_USER_LOGIN`, `HUMAN_ONLY`, `WATCHES_OFF` or `WIKI_OFF` (docs/orbit-agent-contract.md §2.5).
 
 Inside a session the session decides for every command, the session commands included: a service token in the
 session's environment is not used there.

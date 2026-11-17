@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- Design mock: "Handing over" in the iPhone (ConsoleView .principal) and Android (SessionReader PageBar center)
+     top bar while coordinatorHandoff.state is WRITING or HANDING_OVER. Hand-drawn. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Handing over · iPhone and Android top bar</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="boards.css">
+<style>
+  .phone { height: 600px; }
+  .bar { position: absolute; left: 0; right: 0; top: 0; height: 92px; display: flex; align-items: flex-end; gap: 6px; padding: 0 10px 8px; }
+  .bar.ios { background: rgba(249, 249, 249, .94); border-bottom: .5px solid #d8d8dc; }
+  .bar.and { background: #fbf8ff; height: 96px; padding-bottom: 10px; }
+  .status { position: absolute; top: 12px; left: 26px; right: 26px; display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+  .gl { width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: grid; place-items: center; color: #1c1c1e; flex: none; }
+  .gl svg { width: 17px; height: 17px; }
+  .ab { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #1b1b1f; flex: none; }
+  .ab svg { width: 20px; height: 20px; }
+  .mid { flex: 1; min-width: 0; display: flex; justify-content: center; }
+  .cap { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 34px; padding: 0 14px; border-radius: 999px; background: #fff;
+         box-shadow: 0 1px 4px rgba(0,0,0,.12); font-size: 13px; color: #1c1c1e; white-space: nowrap; position: relative; }
+  .cap .t { white-space: nowrap; }
+  .cap .t { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .cap .ar { color: #8e8e93; }
+  .cap.ho { color: #6c6c70; font-weight: 500; }
+  .and .cap { box-shadow: none; background: #ebe9f3; color: #1b1b1f; }
+  .and .cap.ho { color: #46464f; }
+  .tx { position: absolute; left: 0; right: 0; top: 92px; bottom: 96px; padding: 14px 14px 0; font-size: 12.5px; line-height: 1.6; color: var(--text-1); overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .tx .u { align-self: flex-end; max-width: 82%; background: #e9e9eb; border-radius: 14px; padding: 6px 11px; }
+  .and .u, .tx.and .u { background: #e3e1ec; }
+  .tx .run { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 9px; background: var(--brand-tint); color: var(--brand-strong); }
+  .tx .run .btns { display: flex; gap: 6px; margin-top: 6px; }
+  .tx .run .btns span { background: #fff; border: 1px solid var(--brand-border); border-radius: 6px; padding: 1px 7px; font-size: 11.5px; color: var(--text-1); }
+  .tx .faded { color: var(--text-3); }
+  .comp { position: absolute; left: 10px; right: 10px; bottom: 22px; height: 60px; border-radius: 22px; background: #fff; border: 1px solid #e0e0e4; padding: 10px 14px; font-size: 13px; color: #a1a1a6; font-style: italic; }
+  .disc { position: absolute; right: 18px; bottom: 96px; width: 34px; height: 34px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18); display: grid; place-items: center; }
+  .disc svg { width: 16px; height: 16px; }
+  .strip { background: #fff; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 12px 14px; }
+  .strip h4 { margin: 0 0 10px; font-size: 13px; font-weight: 650; }
+  .strip .row { display: grid; grid-template-columns: 300px 300px; gap: 20px; align-items: center; }
+  .mini { position: relative; height: 56px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5ea; }
+  .mini .bar { height: 56px; padding-bottom: 11px; }
+  .m-k.rec { background: #e8f7ee; color: #1f8a4c; }
+</style>
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="back-ios" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="back-and" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="more-h" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></symbol>
+  <symbol id="more-v" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></symbol>
+  <symbol id="stack" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></symbol>
+  <symbol id="down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+</svg>
+
+<template id="ios-bar">
+  <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+  <div class="gl"><svg><use href="#back-ios"/></svg></div>
+  <div class="mid"></div>
+  <div class="gl"><svg><use href="#stack"/></svg></div>
+  <div class="gl"><svg><use href="#more-h"/></svg></div>
+</template>
+<template id="and-bar">
+  <div class="status"><span>9:41</span><span>▾ ▮</span></div>
+  <div class="ab"><svg><use href="#back-and"/></svg></div>
+  <div class="mid"></div>
+  <div class="ab"><svg><use href="#stack"/></svg></div>
+  <div class="ab"><svg><use href="#more-v"/></svg></div>
+</template>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">04 · 手机端顶栏："Handing over"</h1>
+  <p class="m-sub zh">交接进行中（coordinatorHandoff.state 为 WRITING 或 HANDING_OVER）时，iPhone 和 Android 顶栏中间显示 "Handing over"，和 web / Mac 头部（02-2）用同一个词。其他状态不显示，顶栏和现在一样。手绘示意，控件按现有代码画：iOS 是 ConsoleView 的 <code>.principal</code>，Android 是 SessionReader 里 <code>PageBar.Bind</code> 的 center。</p>
+
+  <div class="m-grid4">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">iOS 1</span><span class="zh">在末尾（今天中间是空的）</span></div>
+      <div class="phone"><div class="screen" data-p="ios" data-mid='<span class="cap ho m-mark"><span class="m-n" style="top:-9px;right:-9px">1</span><span class="t">Handing over</span></span>'></div></div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">iOS 2</span><span class="zh">不在末尾：替换问题胶囊（建议 A）</span></div>
+      <div class="phone"><div class="screen" data-p="ios" data-off="1" data-mid='<span class="cap ho m-mark"><span class="m-n" style="top:-9px;right:-9px">2</span><span class="t">Handing over</span></span>'></div></div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">Android 1</span><span class="zh">在末尾</span></div>
+      <div class="phone"><div class="screen" style="background:#fbf8ff" data-p="and" data-mid='<span class="cap ho m-mark"><span class="t">Handing over</span></span>'></div></div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">Android 2</span><span class="zh">不在末尾（建议 A）</span></div>
+      <div class="phone"><div class="screen" style="background:#fbf8ff" data-p="and" data-off="1" data-mid='<span class="cap ho m-mark"><span class="t">Handing over</span></span>'></div></div>
+    </div>
+  </div>
+
+  <h2 class="m-h2 zh"><span class="m-n" style="position:static;display:inline-grid;margin-right:6px">3</span>待你决定：不在末尾时，中间那一格给谁？</h2>
+  <div class="m-grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="strip">
+      <h4 class="zh"><span class="m-k rec">A · 建议</span>&nbsp;交接期间 "Handing over" 一直占着中间</h4>
+      <div class="row">
+        <div class="mini"><div class="bar ios" data-b="ios" data-mid='<span class="cap ho"><span class="t">Handing over</span></span>'></div></div>
+        <div class="mini" style="background:#fbf8ff"><div class="bar and" data-b="and" data-mid='<span class="cap ho"><span class="t">Handing over</span></span>'></div></div>
+      </div>
+    </div>
+    <div class="strip">
+      <h4 class="zh"><span class="m-k state">B</span>&nbsp;不在末尾时问题胶囊 / 等待胶囊照旧，"Handing over" 只在末尾出现</h4>
+      <div class="row">
+        <div class="mini"><div class="bar ios" data-b="ios" data-mid='<span class="cap"><span class="ar">→</span><span class="t">Can we merge Fix login redirect?</span></span>'></div></div>
+        <div class="mini" style="background:#fbf8ff"><div class="bar and" data-b="and" data-mid='<span class="cap"><span class="ar">→</span><span class="t">Can we merge Fix login redirect?</span></span>'></div></div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>在末尾：</b>今天中间是空的（问题胶囊只在不在末尾时出现），这里放一个不可点的胶囊，灰色字 "Handing over"，玻璃底和问题胶囊一样高。不加转圈，和 web / Mac 的头部一致；转圈和计时留在对话里的 "Writing the handoff note" 那一行。输入框占位文字仍是 "Handing over to a new coordinator…"。</span></li>
+    <li><span class="m-n">2</span><span><b>不在末尾：</b>建议 A，"Handing over" 优先于问题胶囊和等待胶囊（needs-you）。理由：交接改变了输入框能不能用，而这个会话里的等待正要转到新会话，往上跳到旧卡片意义不大；回到末尾仍可以点右下角的跳到最新按钮。</span></li>
+    <li><span class="m-n">3</span><span><b>B 的代价：</b>人往上翻历史时，顶栏看不出正在交接，只能靠输入框的占位文字。</span></li>
+    <li><span class="m-n">·</span><span><b>出现与消失：</b>只在 WRITING / HANDING_OVER 时出现（iOS 判断用 <code>CoordinatorContextActions.locksComposer</code>，Android 用 <code>CoordinatorHandoff.outgoing(detail)?.locksComposer</code>，文字用 <code>CoordinatorHandoffCopy</code> 里的 badge 文案）。交接完成、失败或取消后立刻消失，中间恢复今天的规则。输入框收起导航栏时（打字中）跟着一起收起。</span></li>
+  </ul>
+</div>
+
+<script>
+const tx = off => `
+  <div class="tx">
+    ${off ? `<div class="u">Can we merge Fix login redirect?</div>
+    <div>Not yet. Fix login redirect is in review; I'm waiting on its evidence before asking you about the merge.</div>
+    <div class="faded">Then I'll check the release notes and the other two tasks…</div>`
+    : `<div class="faded">…Fix login redirect is in review; I'm waiting on its evidence before asking you about the merge.</div>
+    <div class="run"><span class="spin"></span><div><div>Writing the handoff note <span class="clock">0:24</span></div><div class="btns"><span>Skip the note</span><span>Cancel handover</span></div></div></div>`}
+  </div>
+  ${off ? `<div class="disc"><svg><use href="#down"/></svg></div>` : ''}
+  <div class="comp">Handing over to a new coordinator…</div>`;
+for (const s of document.querySelectorAll('.screen[data-p]')) {
+  const p = s.dataset.p;
+  s.innerHTML = `<div class="bar ${p}">${document.getElementById(p + '-bar').innerHTML}</div>` + tx(!!s.dataset.off);
+  s.querySelector('.mid').innerHTML = s.dataset.mid;
+}
+for (const b of document.querySelectorAll('[data-b]')) {
+  b.innerHTML = document.getElementById(b.dataset.b + '-bar').innerHTML;
+  b.querySelector('.status').remove();
+  b.querySelector('.mid').innerHTML = b.dataset.mid;
+}
+</script>
+</body>
+</html>

@@ -42,6 +42,7 @@ function fixture(adopted: boolean) {
     conversationTurn: currentWork.conversationTurn,
   };
   const realtime: any = {
+    publishViewerRevoked: () => undefined,
     notifyInbox: () => undefined,
     requestCancel: () => undefined,
     publishSessionUpdated: () => undefined,

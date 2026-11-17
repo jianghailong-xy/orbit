@@ -1,0 +1,149 @@
+diff --git a/internal/rbd/nodeserver.go b/internal/rbd/nodeserver.go
+index d762f8d..9bdfe23 100644
+--- a/internal/rbd/nodeserver.go
++++ b/internal/rbd/nodeserver.go
+@@ -1118,9 +1118,10 @@ func (ns *NodeServer) mountVolumeToStagePath(
+ 		args := ns.getMkfsArgs(fsType)
+ 
+ 		// if the VolumeContext contains "mkfsOptions", use those as args instead
++		var mkfsOptions string
+ 		volumeCtx := req.GetVolumeContext()
+ 		if volumeCtx != nil {
+-			mkfsOptions := volumeCtx["mkfsOptions"]
++			mkfsOptions = volumeCtx["mkfsOptions"]
+ 			if mkfsOptions != "" {
+ 				args = strings.Split(mkfsOptions, " ")
+ 			}
+@@ -1134,11 +1135,27 @@ func (ns *NodeServer) mountVolumeToStagePath(
+ 				args = append(args, "-Oencrypt")
+ 			}
+ 		case xfsFilesystem:
+-			// always disable reflink
+-			// TODO: make enabling an option, see ceph/ceph-csi#1256
+-			if ns.xfsSupportsReflink() {
+-				args = append(args, "-m", "reflink=0")
++			// The StorageClass parameter "reflink" selects XFS copy-on-write.
++			// The upstream default (empty or "disabled") keeps reflink=0.
++			// "enabled" forces reflink=1, for filesystems whose node kernels
++			// support it. "auto" leaves the mkfs.xfs default.
++			reflink := ""
++			if volumeCtx != nil {
++				reflink = volumeCtx["reflink"]
+ 			}
++			if reflink != xfsReflinkAuto && strings.Contains(mkfsOptions, "reflink=") {
++				return fmt.Errorf("mkfsOptions %q sets XFS reflink; use the reflink parameter (%q, %q or %q) instead",
++					mkfsOptions, xfsReflinkEnabled, xfsReflinkDisabled, xfsReflinkAuto)
++			}
++			supportsReflink := false
++			if reflink == "" || reflink == xfsReflinkDisabled {
++				supportsReflink = ns.xfsSupportsReflink()
++			}
++			reflinkArgs, err := xfsReflinkArgs(reflink, supportsReflink)
++			if err != nil {
++				return err
++			}
++			args = append(args, reflinkArgs...)
+ 		case "":
+ 			// no filesystem type specified, just use "mkfs"
+ 			mkfs = "mkfs"
+@@ -1634,6 +1651,36 @@ func (ns *NodeServer) processEncryptedDevice(
+ 	return devicePath, nil
+ }
+ 
++// Values of the StorageClass "reflink" parameter for XFS volumes.
++const (
++	xfsReflinkAuto     = "auto"
++	xfsReflinkEnabled  = "enabled"
++	xfsReflinkDisabled = "disabled"
++)
++
++// xfsReflinkArgs returns the mkfs.xfs arguments that the StorageClass "reflink"
++// parameter asks for. The empty value and "disabled" keep the upstream behavior,
++// reflink=0, when mkfs.xfs accepts the argument. "enabled" forces reflink=1; the
++// node's kernel must support mounting reflink filesystems. "auto" passes nothing
++// and leaves the mkfs.xfs default (reflink=1 since xfsprogs 5.1).
++func xfsReflinkArgs(reflink string, supportsReflink bool) ([]string, error) {
++	switch reflink {
++	case "", xfsReflinkDisabled:
++		if supportsReflink {
++			return []string{"-m", "reflink=0"}, nil
++		}
++
++		return nil, nil
++	case xfsReflinkEnabled:
++		return []string{"-m", "reflink=1"}, nil
++	case xfsReflinkAuto:
++		return nil, nil
++	default:
++		return nil, fmt.Errorf("invalid reflink value %q: use %q, %q or %q",
++			reflink, xfsReflinkEnabled, xfsReflinkDisabled, xfsReflinkAuto)
++	}
++}
++
+ // xfsSupportsReflink checks if mkfs.xfs supports the "-m reflink=0|1"
+ // argument. In case it is supported, return true.
+ func (ns *NodeServer) xfsSupportsReflink() bool {
+diff --git a/internal/rbd/xfs_reflink_test.go b/internal/rbd/xfs_reflink_test.go
+new file mode 100644
+index 0000000..fdfd211
+--- /dev/null
++++ b/internal/rbd/xfs_reflink_test.go
+@@ -0,0 +1,58 @@
++/*
++Copyright 2026 The Ceph-CSI Authors.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++*/
++
++package rbd
++
++import (
++	"reflect"
++	"testing"
++)
++
++func TestXfsReflinkArgs(t *testing.T) {
++	t.Parallel()
++
++	tests := []struct {
++		name            string
++		reflink         string
++		supportsReflink bool
++		want            []string
++		wantErr         bool
++	}{
++		{"default with support", "", true, []string{"-m", "reflink=0"}, false},
++		{"default without support", "", false, nil, false},
++		{"disabled with support", xfsReflinkDisabled, true, []string{"-m", "reflink=0"}, false},
++		{"disabled without support", xfsReflinkDisabled, false, nil, false},
++		{"enabled", xfsReflinkEnabled, false, []string{"-m", "reflink=1"}, false},
++		{"auto", xfsReflinkAuto, true, nil, false},
++		{"invalid", "yes", true, nil, true},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			t.Parallel()
++
++			got, err := xfsReflinkArgs(tt.reflink, tt.supportsReflink)
++			if (err != nil) != tt.wantErr {
++				t.Fatalf("xfsReflinkArgs(%q, %v) error = %v, wantErr %v",
++					tt.reflink, tt.supportsReflink, err, tt.wantErr)
++			}
++			if !reflect.DeepEqual(got, tt.want) {
++				t.Errorf("xfsReflinkArgs(%q, %v) = %v, want %v",
++					tt.reflink, tt.supportsReflink, got, tt.want)
++			}
++		})
++	}
++}

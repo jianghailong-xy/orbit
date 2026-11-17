@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DownOutlined, RightOutlined } from '@ant-design/icons';
 import { stripAnsi } from '../lib/ansi';
-import type { BackgroundWake, BackgroundWakeJob } from '../lib/backgroundWake';
+import type { BackgroundJobStall, BackgroundWake, BackgroundWakeJob } from '../lib/backgroundWake';
 import { formatSpan } from '../lib/watches';
 import { Pre, relTime } from './Transcript';
 
@@ -16,8 +16,10 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** How one job came out, as the word its row closes on — null while it has only written something. */
+/** How one job came out, as the word its row closes on — how long it has been quiet when it went
+ *  quiet, null while it has only written something. */
 function status(job: BackgroundWakeJob): string | null {
+  if (job.stall) return job.stall.quietForMs === null ? 'quiet' : `quiet ${formatSpan(job.stall.quietForMs)}`;
   if (job.status === 'killed') return job.killReason ? `killed: ${job.killReason}` : 'killed';
   if (job.exitCode !== null) return `exit ${job.exitCode}`;
   return job.ended ? job.status : null;
@@ -27,7 +29,10 @@ function status(job: BackgroundWakeJob): string | null {
 export function backgroundWakeTitle(wake: BackgroundWake): string {
   const { jobs } = wake;
   if (jobs.length === 0) return 'Scheduled wakeup';
-  if (jobs.length > 1) return `${jobs.length} background jobs finished`;
+  if (jobs.length > 1) {
+    return jobs.every((job) => job.stall) ? `${jobs.length} background jobs went quiet` : `${jobs.length} background jobs finished`;
+  }
+  if (jobs[0].stall) return 'Background job went quiet';
   if (!jobs[0].ended) return 'Background job has new output';
   return isFailed(jobs[0]) ? 'Background job failed' : 'Background job finished';
 }
@@ -54,8 +59,17 @@ function JobMark({ job }: { job: BackgroundWakeJob }) {
   return job.ended ? <CheckCircleFilled /> : <ClockCircleOutlined />;
 }
 
+/** How a quiet job stood: still running, for how long, and when it last wrote anything. */
+function stallLine(stall: BackgroundJobStall): string {
+  const parts = ['Still running'];
+  if (stall.runningForMs !== null) parts.push(`${formatSpan(stall.runningForMs)} in`);
+  if (stall.wroteNothing) parts.push('has written nothing yet');
+  else if (stall.lastOutputAt) parts.push(`last wrote ${relTime(stall.lastOutputAt)}`);
+  return parts.join(' · ');
+}
+
 /** Native disclosure also works in a static export; CSS bounds wrapped output to three lines. */
-function FailedOutput({ text }: { text: string }) {
+function OutputTail({ text }: { text: string }) {
   const clean = stripAnsi(text);
   return (
     <details className="bgwake-output">
@@ -173,6 +187,9 @@ export function BackgroundWakeCard({
                     {job.outputTo !== null &&
                       ` · ${job.outputTo === 0 ? 'no output' : `${formatBytes(job.outputTo)} of output`}`}
                   </div>
+                  {job.stall && <div className="bgwake-job-meta">{stallLine(job.stall)}</div>}
+                  {/* A quiet job is no bad news: what it last wrote stays in the fold, not under the line. */}
+                  {job.stall && job.outputTail !== '' && <OutputTail text={job.outputTail} />}
                 </li>
               ))}
             </ul>
@@ -208,7 +225,7 @@ export function BackgroundWakeCard({
       {wake.jobs.filter((job) => isFailed(job) && job.outputTail !== '').map((job) => (
         <div className="bgwake-tail" key={job.id}>
           {several && <div className="bgwake-tail-name">{job.description || job.command}</div>}
-          <FailedOutput text={job.outputTail} />
+          <OutputTail text={job.outputTail} />
         </div>
       ))}
       {undelivered && <div className="bgwake-undelivered">The session has not confirmed it received this.</div>}

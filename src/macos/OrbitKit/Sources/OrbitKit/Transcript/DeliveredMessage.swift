@@ -43,12 +43,12 @@ public func splitRecordedNote(_ text: String?, note: String?) -> (text: String, 
 let injectedTagLabels: [String: String] = [
     "list-conditions": "list conditions",
     "orbit-session-message": "session message",
-    "orbit-external-sender": "sender note",
     "orbit-session-reply": "session reply",
 ]
 
-/// Blocks `describeNote` leaves unnamed, so a note holding only them draws no line.
-let unnamedTags: Set<String> = ["orbit_project_coordinator_context", "referenced-task", "referenced-list", "background-jobs"]
+/// Blocks `describeNote` leaves unnamed, so a note holding only them draws no line. The external
+/// sender's note only repeats the bubble's "From <name>" head (web parity).
+let unnamedTags: Set<String> = ["orbit_project_coordinator_context", "orbit-external-sender", "referenced-task", "referenced-list", "background-jobs"]
 
 /// The tag `text` opens with, as `<tag>` or `<tag …>`. Nil when it opens with anything else.
 private func openingTag(_ text: String) -> String? {

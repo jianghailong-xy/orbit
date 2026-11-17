@@ -464,7 +464,7 @@ func TestKimiAccountRemoval(t *testing.T) {
 		t.Fatalf("the session on Default records %#v, want no account", meta)
 	}
 	live := kimiAccountKind.liveDirs([]string{onWork, onDefault})
-	if !reflect.DeepEqual(live, map[string]bool{work.Dir: true}) {
+	if !reflect.DeepEqual(live, accountDirSessions{work.Dir: {onWork}}) {
 		t.Fatalf("live homes = %v, want only Work's", live)
 	}
 

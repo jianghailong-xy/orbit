@@ -65,7 +65,7 @@ delegate({
 | `description` | 给父模型看，决定是否委派 | — |
 | `model` | `inherit` = 父会话的模型；`auto` = 路由；具体 id = 点名 | 当作 `auto`，Why 里写明 |
 | `size` | Orbit 扩展：S / M / L / XL | 忽略 |
-| `readonly` | `true` → 权限模式降为只读（plan），不给编辑工具 | — |
+| `readonly` | `true` → 不给编辑工具；Claude 子 Agent 沿用父会话的权限模式，其他引擎降为 plan | — |
 | `tools` / `disallowedTools` | 原样传给支持它的引擎；不支持的引擎忽略并在 Why 里写明 | — |
 | `is_background` | 作为 `background` 的默认值 | — |
 
@@ -107,6 +107,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 1. owner 在 SubAgents 设置里屏蔽的 Provider；
 2. `usableProviderScope` 之外的（共享 Provider 只给管理员）；
 3. 父会话所在 runner 上没装、没登录、区域不可用的引擎（`task-route-decision.ts` `engineState` 已有这些读法）；
+   区域不可用只去掉 `claude` 引擎上对 Anthropic 的凭据（`credentialIsAnthropicBound`：Claude 自己的登录、Claude 号池、
+   `anthropic` preset 或 anthropic.com 的 key），理由 `claude can’t use Anthropic on <runner>`；DeepSeek 等 key 和别的引擎照常
+   （docs/claude-region-check-contract.md §8）。远程 delegate 和 `provider_list --workspace` 走同一个判断；
 4. 额度 ≥ 90%（`ENGINE_QUOTA_LIMIT`）或账号暂停中的；
 5. **没有档位的模型**。自定义 endpoint 的模型要先在 Providers 页标档位才进池；点名（§4.1 第 1 条）不受影响。
 
@@ -137,7 +140,12 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
   Codex 池的子进程拿一张只给它铸的网关 token（`mintSubagentPoolLoginToken`，迁移 0800：`pool_login_token.account_id` / `key_id`），
   网关按 token 上的账号或 key 发请求，而不是父会话行上的；这种 token 只在 codex 网关有效，网关也不给父会话记换号提示。
   别人的池（包括别人共享、没把本人加进去的池）不是候选，按名字点它也会被拒。
-  换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
+  换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度 / 容量 / 登录失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
+- **登录失败**（2026-11-16 追加；`isAuthErrorText` 的 `Failed to authenticate`，例如 `OAuth session expired and could not be
+  refreshed`，以及开头是 `Not logged in` / `OAuth session expired` 的原话；Cloudflare 拦截、断连不算）：和额度失败同一条路，
+  同档下一个候选、最多换 2 次、每次记进 `attempts`（结果 `AUTH_FAILED`），Why 追加 `Moved to <model> after <model>'s login failed`。
+  runner 在 `subagentLimitFailure` 里同样认这些原话（`isSubagentLoginFailure`，和服务端的 `isLoginFailureText` 保持一致）。
+  **调用方点名了模型**（`decision.tierSource = named-model`）时不换：回 `SUBAGENT_NAMED_MODEL_NOT_MOVED`，失败原样交回父 Agent。
 - **开跑时选中项起不来**（例如账号池里没有能跑的账号、凭证缺失）：按排序取同档下一个，被跳过的记进 `candidates` 并带原因，
   Why 里计入被去掉的数目。
 - **活本身失败**：不升档、不重跑，交回父 Agent，结果里写明。父 Agent 决定加档再派，还是自己做。
@@ -174,8 +182,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ### 5.3 权限与审批
 
-- 权限模式：定义里 `readonly` → plan；否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
-  只读子 Agent 在各引擎上怎样读仓库：Claude、Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
+- 权限模式：定义里 `readonly` → Claude 子 Agent 与父会话相同、去掉编辑工具（Edit / MultiEdit / Write / NotebookEdit），
+  因为 plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人；其他引擎 → plan。否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
+  只读子 Agent 在各引擎上怎样读仓库：Claude 在父会话的模式下保留读文件工具；Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
   DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
   Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
   在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
@@ -283,7 +292,7 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 | 2 | `delegate(needs=["os:darwin"])` 或定义文件 `needs:` | 在候选 workspace 里选：同一 owner、启用、`repoUrl` 与父会话的 workspace 相同、runner 在线且报告了全部所需能力；多个时按额度余量，再按 Agents 列表顺序 |
 | 3 | 都没写 | 父会话本机（§5，同一 cwd） |
 
-- `repoUrl` 不同（或任一为空）一律拒绝：`SUBAGENT_WORKSPACE_REPO_MISMATCH`。跨仓库的活用 `session_create`。
+- owner 决策（2026-11-17）：点名 `workspace` 可选同一 owner 的任意仓库，不比较 `repoUrl`（任一为空也允许）；仅按 `needs` 自动选取时仍限父会话同一仓库。
 - runner 目前不报告操作系统；runner 任务要加上 `os:<GOOS>`（`os:darwin`、`os:linux`）。其他能力沿用 `Runner.capabilities`。
 - 目标 workspace 的 Agent 必须开着 SubAgents（`subagentsEnabled`），并发上限按**目标**会话树算在父会话的上限里。
 
@@ -296,10 +305,30 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
+- **续跑**：worktree 随结束删掉，对话留下。目标 runner 把结束的运行记成 `ended`（`remote-subagents/<runId>/run.json`：
+  引擎、会话 id、引擎状态目录、worktree 路径），最后一次运行后保留 7 天（`gcRemoteSubagentConversations`）。父 runner
+  为远程运行也写 `run.json`（带 `workspace`）；`resume` 它时带上 `resumeOf` 和新 prompt，不带 `workspace`/`needs`。服务端
+  （`openRemoteResume`）把新运行派回原 workspace 和原 runner，claim 里带 `resumeOf`；运行中、原 workspace 已删或换了
+  runner、目标 runner 没声明 `subagent-remote-resume/v1` 时拒绝。目标 runner 在**同一路径**重建 worktree（引擎按 cwd 找对话），
+  用原来的会话 id 和状态目录续上，prompt 前加一句说明旧 worktree 已丢弃。引擎换了、记录已过期、或同一对话正在被另一次续跑时失败并说明原因。
+- **记录的回收**：父 runner 上 `runs/<session>/subagents/` 存着续跑要的 `run.json` 和各次尝试的引擎状态。worktree GC 的同一轮
+  问 `worktrees-removable`，父会话已 Completed、删除、不存在或移走时整个删掉（`gcSubagentRuns`）；`runs/<session>/` 其余内容不动。
 
 ### 10.3 路由、显示、生命周期
 
 - 路由（§4）的候选池按**目标 runner** 的引擎、登录、额度算；`decision` 记 `workspaceId` 和选中它的理由。
+  实现（2026-11-16，`planRemoteSubagent`）：
+  - **点名模型**（`delegate(model=…)`）：在目标 runner 上找提供它的 Provider × 引擎，过 §4.2 的 1–4 条（屏蔽、范围、
+    装没装、登录没登录、额度、暂停），第一个能起的就用它；一个都没有，开跑前立刻回 `SUBAGENT_TARGET_CANNOT_RUN`，
+    写明每个提供者被去掉的原因，并列出这个 workspace 能跑的模型（按 Provider 和引擎）。**不会换成别的模型。**
+  - **没点名**：先看目标 workspace 自己的默认引擎在目标 runner 上能不能用（同样过 §4.2 的 1–4 条，登录看
+    `engines[].auth` 和 `engineState` 的 `signedOut`，含 `loginExpiresAt`）。能用就照旧跑默认引擎和模型
+    （`tierSource: not-routed`，`policyVersion: subagent-remote-v2`）；不能用就按 `routeSubagent` 在目标 runner 的报告上选，
+    跳过的默认引擎和原因写进 `reasons`（`Skipped <workspace>'s default <provider>: <reason>`）和 `candidates`。
+    一个能用的都没有，回 `NO_SUBAGENT_PROVIDER`，列出每个 Provider 的原因；不会退回父会话的模型。
+  - 定义文件里的 `model` 在父会话那台机器上读，跨 workspace 时不参与选择。
+  - 领取（claim）按开跑时记下的候选建 `exec`；记的是默认引擎的，按默认引擎重建。
+  - 目标 runner 上的跑没有 §4.3 的换候选回路：开跑前已经跳过没登录的引擎，跑起来再撞上登录失败或额度，失败交回父 Agent。
 - 事件由目标 runner 发给服务端，服务端以父会话的 `sessionId`、`parentToolUseId` = `delegate` 调用写进父会话的事件流；
   只有被派到的那台 runner 能为这次运行写事件（按 `subagent_run` 的 `target_runner_id` 鉴权）。
 - 块头多一项：`general · M · Claude Sonnet 5.5 · on orbit-macos`；Why 里写 workspace 是怎么选出来的。
@@ -313,6 +342,6 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
 （`parentToolUseId` = `delegate` 调用，子 id 加 run id 前缀）后存进 `subagent_relay_event`；父会话的 runner 从
 `GET /runner/sessions/:id/subagents/:runId/events?after=` 读出，再由它编号写进父会话的事件流。其余门：
 目标 runner 的 heartbeat 带 `remoteSubagentRuns`（待领取）和 `stopSubagentRunIds`（父会话已停止或结束）；
-`POST /runner/subagent-runs/:runId/claim` 交回目标 workspace 自己默认引擎和模型的 `exec`；`PATCH /runner/subagent-runs/:runId`
+`POST /runner/subagent-runs/:runId/claim` 交回开跑时选定的候选（默认是目标 workspace 自己的默认引擎和模型）的 `exec`；`PATCH /runner/subagent-runs/:runId`
 报结束；父会话 runner 用 `POST /runner/sessions/:id/subagents/:runId/stop` 停它；审批卡由目标 runner 以父会话 id +
 `subagentRunId` 提交。目标 runner 掉线由唤醒 sweep 记 `INTERRUPTED`。代码：`apiserver/src/runner-api/subagent-remote.ts`。

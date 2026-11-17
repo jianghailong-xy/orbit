@@ -20,6 +20,9 @@ final class OwnerRequestsModel {
     private(set) var savedSecrets: [AccountSecret] = []
     /// The coordinators' open questions: one inbox and one count with the requests (web `WaitingOnYouPage`).
     private(set) var questions: [OwnerInboxQuestion] = []
+    /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their cards
+    /// head the Open tab and count with the rest (docs/scheduled-tasks-design.md §6.4).
+    private(set) var scheduleItems: [ScheduleWaitingItem] = []
     /// Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and
     /// count with the rest. Each waits ten minutes at most.
     private(set) var terminalRequests: [TerminalRequest] = []
@@ -58,6 +61,7 @@ final class OwnerRequestsModel {
 
     var waitingCount: Int {
         OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
+            + scheduleItems.count
     }
 
     /// The Open tab: pending requests and open questions, newest first.
@@ -77,7 +81,9 @@ final class OwnerRequestsModel {
     func load() async {
         guard !unsupported else { return }
         do {
-            assignIfChanged(\.open, try await api.ownerRequests(state: "open").requests)
+            let openList = try await api.ownerRequests(state: "open")
+            assignIfChanged(\.open, openList.requests)
+            assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             if tab != .open { await loadTab(tab) }
             await loadQuestions()

@@ -342,9 +342,9 @@ final class ComposerHandoffWiringTests: XCTestCase {
         XCTAssertTrue(
             sent.contains(#"await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)""#),
             "the typed sentence must go out as an ordinary turn with the item in front of it")
-        XCTAssertTrue(sent.contains("overrideAttachments: []"),
-                      "and with none of the composer's staged chips: an attachment cannot say what "
-                          + "should be done about an exception")
+        XCTAssertTrue(sent.contains("takesStagedAttachments: true"),
+                      "and with the composer's staged chips: picked for this message, left behind they "
+                          + "sit in the composer looking unsent (web parity)")
         for door in ["decideOwnerConfirmation", "replyToQuestion", "api."] {
             XCTAssertFalse(branch.contains(door),
                            "the item reply was routed through \(door): it answers no call, so it "

@@ -5,6 +5,9 @@
 !src/runner-go/*.go
 !src/runner-go/go.mod
 !src/runner-go/go.sum
+!src/runner-go/dsh-install/
+!src/runner-go/dsh-install/package.json
+!src/runner-go/dsh-install/package-lock.json
 !deploy/
 !deploy/managed-runner/
 !deploy/managed-runner/image/

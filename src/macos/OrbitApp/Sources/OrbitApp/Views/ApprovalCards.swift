@@ -18,12 +18,14 @@ struct ApprovalCard: View {
     let approval: PendingApproval
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 6) {
             switch approval.kind {
             case .question: QuestionCard(console: console, approval: approval)
             case .plan:     PlanCard(console: console, approval: approval)
             case .tool:     ToolApprovalCard(console: console, approval: approval)
             }
+            // Settings › Translation (1A): the last answer was refused untranslated.
+            UntranslatedDecisionRow(console: console, approval: approval)
         }
         .environment(\.approvalReviewTarget, .approval(id: approval.id))
     }
@@ -364,9 +366,14 @@ struct ToolApprovalCard: View {
 
     private var actions: some View {
         ApprovalActions {
-            allowButton
-            if Approvals.offersCreateAndStart(toolName: approval.toolName ?? "", input: approval.input) {
-                createAndStartButton
+            if createAndStartLeads {
+                createAndStartButton(prominent: true)
+                allowButton(prominent: false)
+            } else {
+                allowButton(prominent: true)
+                if Approvals.offersCreateAndStart(toolName: approval.toolName ?? "", input: approval.input) {
+                    createAndStartButton(prominent: false)
+                }
             }
             if !rememberRules.isEmpty { rememberButton(rememberRules) }
             denyButton
@@ -629,12 +636,18 @@ struct ToolApprovalCard: View {
         }
     }
 
-    private var allowButton: some View {
-        Button { decide(console, approval, .allow) } label: {
+    /// Create and start leads the card where it is offered, unless the task was filed held
+    /// (`Approvals.createAndStartLeads`); Create it then sits beside it, bordered.
+    private var createAndStartLeads: Bool {
+        Approvals.createAndStartLeads(toolName: approval.toolName ?? "", input: approval.input)
+    }
+
+    @ViewBuilder private func allowButton(prominent: Bool) -> some View {
+        let button = Button { decide(console, approval, .allow) } label: {
             Text(allowLabel)
                 .approvalActionLabel()
         }
-        .buttonStyle(.borderedProminent)
+        if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }
     }
 
     /// The yes, in the words of what it does. A batch names its count, because the question above
@@ -653,14 +666,14 @@ struct ToolApprovalCard: View {
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
     /// the runner that filed the card acts on the choice (`Approvals.offersCreateAndStart`): it creates
-    /// the task and starts its run in the same press. Bordered, so Create it stays the card's one filled
-    /// answer.
-    private var createAndStartButton: some View {
-        Button { decide(console, approval, .allow, startAfterCreate: true) } label: {
+    /// the task and starts its run in the same press. Filled where it leads the card, bordered on a
+    /// held task, where Create it stays the one filled answer.
+    @ViewBuilder private func createAndStartButton(prominent: Bool) -> some View {
+        let button = Button { decide(console, approval, .allow, startAfterCreate: true) } label: {
             Text(Approvals.createAndStartAction)
                 .approvalActionLabel()
         }
-        .buttonStyle(.bordered)
+        if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
@@ -788,7 +801,9 @@ struct QuestionCard: View {
     private var draft: QuestionReviewDraft { drafts.question(approval.id) }
 
     private var questions: [AskQuestion] {
-        approval.input.map { Approvals.parseQuestions(from: $0) } ?? []
+        // Shown in the owner's language where the server translated it (Settings › Translation, 3A);
+        // answers keyed by what is shown are mapped back to the English by the server.
+        approval.shownInput.map { Approvals.parseQuestions(from: $0) } ?? []
     }
     private var allAnswered: Bool {
         Approvals.allAnswered(questions, selections: draft.selections, custom: draft.custom)
@@ -2231,7 +2246,7 @@ struct PlanCard: View {
     let console: ConsoleModel
     let approval: PendingApproval
 
-    private var plan: String { approval.input?["plan"]?.stringValue ?? "Plan ready for review." }
+    private var plan: String { approval.shownInput?["plan"]?.stringValue ?? "Plan ready for review." }
 
     var body: some View {
         ApprovalReviewLayout(title: "Review this plan", symbol: "list.bullet.clipboard", tone: .purple,
@@ -2333,6 +2348,8 @@ struct DeliveredDecisionCardView: View {
                                  onChat: { console.startOwnerRequestReply($0) })
             case .crossingBatch(let batchID):
                 CrossingDecisionCard(console: console, batchID: batchID)
+            case .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+                ScheduleConsoleCard(console: console, kind: card.kind)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))
@@ -4585,25 +4602,63 @@ private struct OwnerItemCardView: View {
         return lastKind
     }
 
+    /// The item, when it is drawn as the "Who fixes it?" card (board owner-exception-who-fixes):
+    /// an exception that became the owner's by escalation, a hand-over, or an ended or missing
+    /// coordinator (`ExceptionCards.whoFixesIt`). Every other card keeps the layout below.
+    private func whoFixesRow(_ standing: OwnerItemStanding) -> ProjectOpenItemRow? {
+        guard !isPause, receipt == nil, case .open(let row) = standing,
+              ExceptionCards.whoFixesIt(row) else { return nil }
+        return row
+    }
+
     var body: some View {
         let standing = self.standing
+        let whoFixes = whoFixesRow(standing)
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            // Work that reached main without the owner's confirmation is no escalation: it wears its
-            // own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
-            ApprovalHeader(symbol: isPause ? "pause.circle.fill"
-                               : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
-                               : "exclamationmark.triangle.fill",
-                           title: ExceptionCards.title(shownKind, isPause: isPause),
-                           tone: .orange)
-            Text(ExceptionCards.provenance)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .help(ExceptionCards.provenanceTitle)
+            HStack(alignment: .center, spacing: 8) {
+                // Work that reached main without the owner's confirmation is no escalation: it wears
+                // its own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
+                ApprovalHeader(symbol: isPause ? "pause.circle.fill"
+                                   : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
+                                   : "exclamationmark.triangle.fill",
+                               title: ExceptionCards.title(shownKind, isPause: isPause),
+                               tone: .orange)
+                // D3 = A: the "Who fixes it?" card's one clock — the total wait, top right — in
+                // place of the footer.
+                if let whoFixes {
+                    Text(ExceptionCards.whoFixesClock(whoFixes))
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            if whoFixes == nil {
+                Text(ExceptionCards.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(ExceptionCards.provenanceTitle)
+            }
 
             if let receipt {
                 Text("✓ \(receipt)")
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let whoFixes {
+                WhoFixesItBody(console: console, row: whoFixes, sending: sending,
+                               askAgain: { press(whoFixes) },
+                               chat: { console.startOwnerItemReply(whoFixes, isPause: false) },
+                               markHandled: {
+                                   PlatformHaptics.tap()
+                                   askingToHandle = true
+                               },
+                               makePress: { makePress($0, row: whoFixes) })
+                if askingToHandle { markHandledPanel() }
+                if observing {
+                    ObserveAgainPanel(console: console, sending: $sending) { observing = false }
+                }
+                Text(ExceptionCards.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(ExceptionCards.provenanceTitle)
             } else if case .open(let row) = standing {
                 heading(row)
                 // What has to happen next, and the doors that do it — ahead of the facts, because

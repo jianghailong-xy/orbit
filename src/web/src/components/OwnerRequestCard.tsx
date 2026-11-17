@@ -27,6 +27,7 @@ import {
   snoozeRequest,
   useSnoozes,
   wakeRequest,
+  type AgentRequestKind,
   type OwnerRequest,
   type OwnerRequestSecretGrant,
   type OwnerRequestSecretSpec,
@@ -56,7 +57,9 @@ import { Menu } from './ui/Menu';
 import { PasswordInput } from './ui/PasswordInput';
 import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
+import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import './OwnerRequest.css';
+import { useMachineName } from '../lib/managedRunner';
 
 /**
  * What a session asked the owner to do, as a card in the conversation that asked and in the
@@ -71,7 +74,7 @@ type Ending =
   // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
   | { to: 'create-wiki'; body: Record<string, never> };
 
-const PRIMARY: Readonly<Record<OwnerRequest['kind'], string>> = {
+const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   DECISION: 'Send answer',
   SECRET: 'Provide key',
   MANUAL_STEP: 'Mark done',
@@ -83,7 +86,8 @@ const PRIMARY: Readonly<Record<OwnerRequest['kind'], string>> = {
 function useRunnerName(runnerId: string | undefined): string {
   const runners = useQuery({ ...runnersQuery(), enabled: Boolean(runnerId) });
   const runner = runners.data?.find((row) => runnerId && sameResourceId(row.id, runnerId));
-  return runner?.displayName ?? runner?.name ?? 'this runner';
+  const machineNameOf = useMachineName();
+  return (runner ? machineNameOf(runner) : '') || 'this runner';
 }
 
 /** The tasks a request holds up, linked by title. A task that cannot be read keeps a link with no name. */
@@ -364,7 +368,19 @@ function RemindLater({ request, now }: { request: OwnerRequest; now: number }): 
 type ChatAbout = (request: OwnerRequest) => void;
 
 /** A pending request, whole. */
-export function OwnerRequestCard({ request: given, now = Date.now(), onChat }: {
+export function OwnerRequestCard(props: {
+  request: OwnerRequest;
+  now?: number;
+  onChat?: ChatAbout;
+}): JSX.Element {
+  // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
+  // what they point at, so they draw their own body in the same frame.
+  return isScheduleWaitingKind(props.request.kind) && props.request.state === 'PENDING'
+    ? <ScheduleWaitingCard request={props.request} now={props.now} />
+    : <AgentRequestCard {...props} />;
+}
+
+function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
   request: OwnerRequest;
   now?: number;
   onChat?: ChatAbout;
@@ -565,7 +581,7 @@ export function OwnerRequestCard({ request: given, now = Date.now(), onChat }: {
                 disabled={!ready || end.isPending || door.busy || closed}
                 onClick={pressPrimary}
               >
-                {PRIMARY[request.kind]}
+                {PRIMARY[request.kind as AgentRequestKind]}
               </CardActionButton>
             )}
             {onChat && !closed ? (

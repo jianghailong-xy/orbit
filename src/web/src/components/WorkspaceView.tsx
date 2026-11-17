@@ -1,5 +1,14 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
+  COORDINATOR_HANDOFF_COPY,
+  managedSetupState,
+  firstSessionProvider,
+  type MergeRecoveryAction,
+  type ProjectSidebarTaskCounts,
+  type SessionCoordinatorHandoff,
+  type SessionCoordinatorHandoffReceived,
+} from '@orbit/shared';
+import {
+  ApiOutlined,
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -43,6 +52,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AgentToolsDrawer, agentToolsMenuStatus } from './AgentToolsDrawer';
 import {
   applyReferencePick,
   materializeReferences,
@@ -50,6 +60,17 @@ import {
   type ReferenceMap,
 } from '../lib/composerRefs';
 import { WAITING_ON_YOU } from '../lib/ownerRequests';
+import {
+  ContextActions,
+  CoordinatorHandedOverBanner,
+  CoordinatorHandoffConfirm,
+  CoordinatorHandoffFailure,
+  CoordinatorHandoffProgress,
+  CoordinatorHandoffReceivedCard,
+  coordinatorHandoffRequest,
+  type ContextActionsProps,
+  type CoordinatorHandoffAction,
+} from './CoordinatorHandoff';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -236,12 +257,11 @@ import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { HeldFirstMessage, MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
-import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
-import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
-import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
@@ -283,7 +303,6 @@ import {
   createMergeRepairSession,
   createInteractiveSession,
   createSessionFolder,
-  decideApproval,
   deleteSession,
   deleteSessionFolder,
   cleanUpWorkspaceRepo,
@@ -295,7 +314,6 @@ import {
   completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
-  type PermissionRule,
   pinSession,
   purgeSession,
   getSessionRetryMessage,
@@ -308,13 +326,21 @@ import {
   type SessionFolder,
   type SessionListItem,
   sendTurn,
+  type OptimizedSend,
   type TaskRunRoute,
   unpinSession,
   updateSessionConfig,
   switchSessionAccount,
   uploadAttachment,
+  retryTurnTranslation,
+  sendTurnAsWritten,
+  retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import type { TranslationActionResponse } from '@orbit/shared';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
+import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -344,8 +370,9 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -394,7 +421,7 @@ import {
   type ChatAbout,
   type CoordinatorChatSubject,
 } from '../lib/coordinatorChat';
-import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
+import { criteriaDecisionReceiptRows, decisionReceiptAnchor, recordsBeforeConversation } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
   DECISION_SEND_BACK_LABEL,
@@ -468,7 +495,6 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
-  NewWorkspaceRequest,
   SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -481,6 +507,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -500,13 +527,13 @@ import {
   newWorkspaceOf,
   SETUP_CONNECTING_POLL_MS,
   SETUP_POLL_MS,
+  type PickedFolder,
 } from '../lib/machineSetup';
 import {
+  CLONE_RETRY_FAILED,
   composerPlaceholderFor,
-  HELD_ALREADY_WAITING,
-  HELD_ALREADY_WAITING_DETAIL,
 } from '../lib/machineSetupCopy';
-import { useMachineSetup, type HeldMessage } from '../lib/useMachineSetup';
+import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -608,6 +635,13 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import {
+  OPTIMIZE_SHORTCUT,
+  optimizedSendOf,
+  usePromptOptimizer,
+  type OptimizedInsert,
+  type PromptOptimizerTarget,
+} from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -667,19 +701,21 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
-  /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
-   *  of a workspace. */
-  firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
-  /** The message that waited under the setup card, going by itself: the composer has nothing to do
-   *  with it by now, and what it holds may be somebody's next thought. */
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box. */
+  optimized?: OptimizedSend;
+  /** Sent by no composer (Compact, from the Context popover): the composer has nothing to do with it,
+   *  and what it holds may be somebody's next thought. */
   held?: boolean;
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
-// tighter (kept in sync with the runner's image-block dispatch). Anything else is a generic
-// file — any type, up to the server's 25MB cap (attachments.media.ts).
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// tighter (kept in sync with the runner's image-block dispatch, and with the guest door's
+// COMPOSER_IMAGE_TYPES / MAX_COMPOSER_IMAGE_BYTES in attachments.media.ts). Anything else is a
+// generic file — any type, up to the server's 25MB cap (attachments.media.ts).
+export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** What a composer that takes only pictures (a guest's) says of anything else. */
+export const IMAGES_ONLY_REFUSED = 'Only PNG, JPEG, WebP or GIF images can be attached';
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 // What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
 // picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
@@ -830,6 +866,7 @@ function ContextWindowIndicator({
   modelCatalog,
   configured,
   unavailable,
+  actions,
 }: {
   tokens: number;
   /** The window this session reported alongside its tokens, when it did. */
@@ -841,7 +878,11 @@ function ContextWindowIndicator({
   /** Why there will never be a reading: an engine that does not report context use (Cursor CLI over
    *  ACP, docs/cursor-runtime-contract.md §4.1), in a sentence. Never a 0% or a token count then. */
   unavailable?: string;
+  /** Compact and Start a new coordinator, below the gauge (board 01); absent where neither applies. */
+  actions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }) {
+  // Controlled, so picking an action closes the popover it was picked in.
+  const [open, setOpen] = useState(false);
   if (unavailable) {
     return (
       <Popover
@@ -849,6 +890,8 @@ function ContextWindowIndicator({
         side="top"
         align="end"
         openOnHover
+        open={open}
+        onOpenChange={setOpen}
         nativeButton={false}
         trigger={
           <span className="composer-pill composer-usage" aria-label="Context window unavailable">
@@ -866,6 +909,7 @@ function ContextWindowIndicator({
             <div className="cu-reset">{unavailable}</div>
           </div>
         </div>
+        {actions && <ContextActions {...actions} pct={0} onPicked={() => setOpen(false)} />}
       </Popover>
     );
   }
@@ -887,7 +931,7 @@ function ContextWindowIndicator({
           <span className="cu-pct">{headline}</span>
         </div>
         {sized && (
-          <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+          <div className={`runner-util ${pct >= 90 ? 'danger' : pct >= 75 ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -910,6 +954,8 @@ function ContextWindowIndicator({
       side="top"
       align="end"
       openOnHover
+      open={open}
+      onOpenChange={setOpen}
       // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
       nativeButton={false}
       trigger={
@@ -929,6 +975,7 @@ function ContextWindowIndicator({
       }
     >
       {pop}
+      {actions && <ContextActions {...actions} pct={pct} onPicked={() => setOpen(false)} />}
     </Popover>
   );
 }
@@ -997,9 +1044,11 @@ const STRANDED_AFTER_MS = 400;
 const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
- *  item. Answered and snoozed forms carry none of these. */
+ *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
+ *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
+ *  in the transcript, under the card's `question-<itemId>` id. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
  *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
 export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
@@ -1078,6 +1127,17 @@ const bgRunningLabel = (n: number): string =>
 // The async Agent tool_result lands at once, so lastToolUse can't carry this on its own.
 const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
+
+// The list row's words for the same, naming what the newest one is doing when the server knows
+// (runningSubagentTitle, its launch call's description): "Agent: Deploy …" for one, "Running 2
+// agents · Deploy …" for several. Without a title it is the label above. The row only — the header
+// and the glyph keep the short label.
+const subagentRunningLine = (s: any): string => {
+  const n = s.runningSubagentCount ?? 0;
+  const title = typeof s.runningSubagentTitle === 'string' ? s.runningSubagentTitle.trim() : '';
+  if (!title) return `${subagentRunningLabel(n)}…`;
+  return n > 1 ? `${subagentRunningLabel(n)} · ${title}…` : `Agent: ${title}…`;
+};
 
 // Whether to draw this session as working. RUNNING is the dispatched case. The second one is a
 // turn the runtime started for itself — a background task reporting in, a scheduled wake-up —
@@ -1285,7 +1345,7 @@ export const sessionLine = (
     // the parent's own system progress events), so surface it explicitly instead of falling
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
-      return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
+      return { text: subagentRunningLine(s), tone: 'running' };
     // The workspace hasn't answered yet: show the message it was sent (the server keeps lastUserText
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
@@ -1305,13 +1365,15 @@ export const sessionLine = (
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  if (parked?.kind === 'subagent') return { text: subagentRunningLine(s), tone: 'running' };
   // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
   // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
   // and the strip above its composer read the same.
   const resume = resumeWords(s, watching?.line);
   if (live && resume && state === 'AWAITING_INPUT') return { text: resume, tone: 'watching' };
-  if (parked) return { text: `${parked.text}…`, tone: 'background' };
+  // A background process it left up does not take the line from what the session said or was told:
+  // the unanswered message, the recap and the reply all outrank it (the owner, 2026-11-16). The row's
+  // glyph still says a process is up; the words only fill a row that has nothing else to say.
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1325,6 +1387,7 @@ export const sessionLine = (
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
@@ -1370,8 +1433,8 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string) => ({
-  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+  runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
   permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
 });
 
@@ -2192,7 +2255,9 @@ function StopSquareIcon({ className }: { className?: string }) {
  * and stays in the conversation with it.
  */
 export function inPendingTray(turn: QueuedTurn): boolean {
-  return turn.delivery == null && returnsToComposer(turn);
+  // A message held for its translation is drawn in the conversation, with its chip or its failure
+  // (Settings › Translation, board frame 6) — not in the tray, which only waits for the engine.
+  return turn.delivery == null && returnsToComposer(turn) && !heldForTranslation(turn.translation);
 }
 
 /** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
@@ -2239,11 +2304,14 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  translationHeld,
   held,
   onCancel,
   onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
+  /** Held for its translation (Settings › Translation): the bubble's own foot says how it stands. */
+  translationHeld?: boolean;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
@@ -2255,6 +2323,7 @@ export function QueuedTurnMeta({
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
+  if (translationHeld) return null;
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
@@ -2316,6 +2385,9 @@ export function WorkspaceView({
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
+  // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
+  const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
+  const runnerShownName = machineName(runner, managedRunnerId);
   // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
   // session id so their result continues polling even if the user opens another conversation.
   const pendingOperationSeq = useRef(0);
@@ -2436,6 +2508,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it goes with
+  // the optimizer's own translation, or as written. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<OptimizedInsert | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -2451,8 +2526,6 @@ export function WorkspaceView({
   // mirrors `text` so the switch effect (below) can stash the *outgoing* draft without
   // re-running on every keystroke; prevDraftKey tracks which target `text` belongs to.
   const draftKey = selectedId ?? 'new';
-  // What a machine's new session page has been told: its folder, and the message waiting on it.
-  const setup = useMachineSetup(runner.id);
   const drafts = useRef<Map<string, string>>(new Map());
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
@@ -2535,6 +2608,7 @@ export function WorkspaceView({
     pressTimer.current = undefined;
   };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  const [agentToolsOpen, setAgentToolsOpen] = useState(false); // the open session's Agent tools drawer
   const [settingsOpen, setSettingsOpen] = useState(false); // the open session's Settings… drawer
   useEffect(() => setSettingsOpen(false), [selectedId]); // it belongs to the session it was opened on
   // A row's Share action opens the share dialog for that row rather than for the open session.
@@ -2745,6 +2819,8 @@ export function WorkspaceView({
   const [stuck, setStuck] = useState<
     { seq: string | null; text: string; loading?: boolean } | null
   >(null);
+  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
+  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
   // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
@@ -2919,7 +2995,9 @@ export function WorkspaceView({
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
-    const rows = (sessionsQ.data ?? []).slice();
+    // A scheduled task's run is in no session list (owner ruling, docs/scheduled-tasks-design.md §7.4): the server
+    // leaves them out, and a row that says it is one is not drawn here either. It is reached from the schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3444,10 +3522,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
@@ -3670,6 +3748,16 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
+  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
+  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
+  useEffect(() => {
+    if (!composing) return;
+    const entry = window.history.state as { usr?: { composerText?: string } } | null;
+    const seed = entry?.usr?.composerText;
+    if (!seed) return;
+    setText(seed);
+    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
+  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -3788,6 +3876,7 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  const managedSetup = managedSetupState(runner.id, managed?.status);
   // While the card is up its machine is read every few seconds, and more often while it is still connecting:
   // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
   const machineConnecting = bareMachine && isConnecting(runner);
@@ -3796,9 +3885,6 @@ export function WorkspaceView({
     enabled: bareMachine,
     refetchInterval: machineConnecting ? SETUP_CONNECTING_POLL_MS : SETUP_POLL_MS,
   });
-  // A machine still connecting takes no work, but a message sent on its setup page only waits under the card
-  // (board rule 6), as both steps do: the composer stays open for it. An offline one says so (board 02).
-  const composerTakesWork = runnerTakesWork || machineConnecting;
   const lockedWorkspace = useMemo(
     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
     [workspacesForRunner, lockedWorkspaceId],
@@ -3837,20 +3923,10 @@ export function WorkspaceView({
   // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
   // deprecated alias of `lastProvider`, still served for older native builds.
   const lastWorkspaceProvider =
-    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? firstEngineOn(runner.engines) : 'claude');
+    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
   const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
   const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
-  // The managed runner's default workspace has no engine for a first session until its runner has
-  // been ready with one (`initialProvider`): before that the server refuses the session with
-  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
-  const managedDraftBlocked =
-    !selected &&
-    !!managed &&
-    !managed.display.startsNewSession &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4067,34 +4143,8 @@ export function WorkspaceView({
     () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
     [pickedEngine, pickedProvider, draftEngines, choiceSources],
   );
-  // The setup card's second step, and whether the next send makes the workspace. Rule 5: it follows
-  // the composer, so a key picked in the Provider menu answers it as well as a sign-in does.
-  const setupCredential = setupCredentialOf(runner, pickedEngine, currentDraftEngine.provider);
-  const setupReady =
-    bareMachine &&
-    !!setup.folder &&
-    !!runner.online &&
-    (setupCredential.step === 'signedIn' || setupCredential.step === 'onKey');
-  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
-  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
-  // machine as the setup card's greeting. Only while the account has never had a session.
-  const managedDraft =
-    !selected &&
-    !!managed &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
-  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
-  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
-  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-  const welcomeEngine: LoginEngine =
-    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
-  const welcomeCredential = setupCredentialOf(
-    runner,
-    welcomeEngine,
-    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
-  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -4149,11 +4199,6 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
-  };
-  // A first message from the welcome card: into the composer, to be read, changed and sent there.
-  const pickWelcomeExample = (example: string): void => {
-    setText(example);
-    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -4315,7 +4360,7 @@ export function WorkspaceView({
     activeSlots,
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
-    machineName(runner),
+    runnerShownName,
   );
   const selectedStartingSession = selectedSession ?? selected;
   const selectedIsQueued = selected
@@ -4376,19 +4421,25 @@ export function WorkspaceView({
             session: selectedSession as NeverStartedSession,
             runtime: selectedRuntime,
             keyName: selectedKeyName,
-            runnerName: runner.displayName || runner.name,
+            runnerName: runnerShownName,
             region: runner.region ?? null,
+            clone: detailForSelected?.workspace?.cloneState
+              ? {
+                  repository: githubRepositoryOf(detailForSelected.workspace.repoUrl),
+                  error: detailForSelected.workspace.cloneError ?? null,
+                }
+              : null,
           })
         : null,
     [
       selected,
       selectedSession,
+      detailForSelected?.workspace,
       selectedTrashed,
       selectedMissing,
       selectedRuntime,
       selectedKeyName,
-      runner.displayName,
-      runner.name,
+      runnerShownName,
       runner.region,
     ],
   );
@@ -4475,6 +4526,38 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
+  // retry a held message's translation or send it as written (1A), retry a reply's (2A) — and whether
+  // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
+  // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
+  const translationIsOn = translationOn(me.data);
+  const translationBilingual = bilingualOn(me.data);
+  const translationAgentLanguage = agentLanguageOf(me.data);
+  const translationActions = useMemo<TranslationActions>(() => {
+    const settle = (res: TranslationActionResponse) =>
+      setQueued((current) =>
+        current.map((turn) => (turn.turnId === res.turnId ? { ...turn, translation: res.translation } : turn)),
+      );
+    const failed = (what: string) => (e: unknown) =>
+      message.error(what, e instanceof Error ? e.message : undefined);
+    return {
+      on: translationIsOn,
+      bilingual: translationBilingual,
+      agentLanguage: translationAgentLanguage,
+      retryTurn: (turnId) =>
+        selectedId
+          ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+      sendAsWritten: (turnId) =>
+        selectedId
+          ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
+          : Promise.resolve(),
+      retryReply: (seq) =>
+        selectedId
+          ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+    };
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -4557,11 +4640,21 @@ export function WorkspaceView({
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
-    let cur: HTMLElement | null = null;
+    let at = -1;
     for (const b of bubbles) {
-      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
+    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
+    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
+    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
+    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
+    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
+    // and the question the bar names until then is the one before it.
+    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
+    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
+      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
+    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
     if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
@@ -4618,13 +4711,13 @@ export function WorkspaceView({
   const queuedHeldTag = runnerUpdatingGate ? (
     <RunnerUpdatingTag
       gate={runnerUpdatingGate}
-      machine={machineName(runner)}
+      machine={runnerShownName}
       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
       updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={machineName(runner)} />
+    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -5051,6 +5144,10 @@ export function WorkspaceView({
     void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(selectedTaskId).queryKey });
   }, [qc, selectedTaskId, selectedRunMoment]);
 
+  // When this conversation was created: a record stamped before it is not drawn in it (handoff v2
+  // §4), so a new coordinator starts clean rather than with the project's whole history at its head.
+  // Open items take no part in this — an open question asked before it still needs an answer.
+  const conversationCreatedAt = selectedSession?.createdAt ?? null;
   // The decisions this conversation has recorded, drawn into the transcript at the moment each was
   // made (`EvidenceDecisionReceipt`, `CriteriaDecisionReceipt`, `OwnerDecisionReceipt`,
   // `AcceptanceConfirmationReceipt`). Memoized because `Transcript` is: a fresh array on every
@@ -5059,7 +5156,7 @@ export function WorkspaceView({
   // window and the ones that do are ordered by it (`TranscriptInsert`).
   const decisionReceipts = useMemo(
     () => [
-      ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies)
+      ...criteriaDecisionReceiptRows(criteriaDecisions.data, transcriptEvents, criteriaReplies, conversationCreatedAt)
         .map((row) => ({
           anchor: row.placement,
           moment: row.settled.decidedAt,
@@ -5067,7 +5164,7 @@ export function WorkspaceView({
           element: <CriteriaDecisionReceipt settled={row.settled} reply={row.reply} />,
         })),
       ...(pendingDecisions.data?.decided ?? []).flatMap((decided) => {
-        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5078,7 +5175,7 @@ export function WorkspaceView({
             }];
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
-        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt, conversationCreatedAt);
         const view = ownerConfirmation.data;
         return anchor === null || !view
           ? []
@@ -5101,7 +5198,7 @@ export function WorkspaceView({
       // became, at the moment it was sent back (contract §8 B6).
       ...reviewerReturnsIn(ownerConfirmation.data, selectedId).flatMap((returned) => {
         const at = returned.review.returned?.recordedAt;
-        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at) : null;
+        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at, conversationCreatedAt) : null;
         return anchor === null || !at || !ownerConfirmation.data
           ? []
           : [{
@@ -5120,7 +5217,7 @@ export function WorkspaceView({
       // the window rather than at the bottom of it.
       ...[acceptanceConfirmation.data?.confirmation].flatMap((confirmation) => {
         if (!confirmation) return [];
-        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, confirmation.confirmedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5146,7 +5243,7 @@ export function WorkspaceView({
         // A candidate with no `merged` is not a record: no moment, so nothing to place.
         const mergedAt = promotionRecordMoment(promotion);
         if (mergedAt === null) return [];
-        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt);
+        const anchor = decisionReceiptAnchor(transcriptEvents, mergedAt, conversationCreatedAt);
         return anchor === null
           ? []
           : [{
@@ -5160,6 +5257,7 @@ export function WorkspaceView({
     [
       acceptanceConfirmation.data,
       confirmedChanges.data,
+      conversationCreatedAt,
       criteriaDecisions.data,
       criteriaReplies,
       mergedPromotions.data,
@@ -5312,7 +5410,7 @@ export function WorkspaceView({
     // fallback are both `promotionRecordMoment`'s).
     const blockedAt = promotionRecordMoment(current);
     if (blockedAt === null) return [];
-    const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt);
+    const anchor = decisionReceiptAnchor(transcriptEvents, blockedAt, conversationCreatedAt);
     if (anchor === null) return [];
     return [{
       anchor,
@@ -5332,6 +5430,7 @@ export function WorkspaceView({
     }];
   }, [
     chatAboutThis,
+    conversationCreatedAt,
     coordinatedProjectId,
     currentPromotion.data,
     currentPromotion.dataUpdatedAt,
@@ -5359,7 +5458,7 @@ export function WorkspaceView({
   const questionRecords = useMemo(
     () =>
       coordinatedProjectId
-        ? closedQuestionRows(openItems.data, transcriptEvents)
+        ? closedQuestionRows(openItems.data, transcriptEvents, conversationCreatedAt)
             .filter(({ record }) => !handedOver.has(answeredItemKey(record.itemId)))
             .map(({ record, placement }) => ({
               anchor: placement,
@@ -5368,7 +5467,7 @@ export function WorkspaceView({
               element: <AnsweredQuestionCard record={record} />,
             }))
         : [],
-    [coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
+    [conversationCreatedAt, coordinatedProjectId, openItems.data, transcriptEvents, handedOver],
   );
 
   // What this session has asked the owner to do, where it asked. Its Chat about this arms the
@@ -5389,6 +5488,12 @@ export function WorkspaceView({
     startOwnerRequestChat,
   );
 
+  // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
+  // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
+  const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
@@ -5397,8 +5502,8 @@ export function WorkspaceView({
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -5598,24 +5703,7 @@ export function WorkspaceView({
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    message?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    if (!selectedId) return;
-    setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
-    try {
-      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated: untranslatedDecisions } = useApprovalDecisions(selectedId, setApprovals);
 
   // If the question the composer is replying to gets answered another way (the user picks an
   // option, an SSE approval_resolved arrives, or the confirmation is settled on a phone), drop the
@@ -5726,6 +5814,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
+          vars.optimized,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5739,15 +5828,17 @@ export function WorkspaceView({
           ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
         ];
         const queuedItem =
-          placement === 'accepted'
+          placement === 'accepted' && !res.translation
             ? undefined
             : {
                 turnId: res.turnId,
                 content,
                 shell,
-                placement,
+                // Held for its translation: on the queue, whatever its place will be once delivered.
+                placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                 ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
                 ...(attachments.length ? { attachments } : {}),
+                ...(res.translation ? { translation: res.translation } : {}),
               };
         return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
@@ -5778,17 +5869,19 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
+            vars.optimized,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                   ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5828,6 +5921,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
+            vars.optimized,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -5840,13 +5934,14 @@ export function WorkspaceView({
           // row-locked placement preserves a real queued/steer state here.
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5890,14 +5985,11 @@ export function WorkspaceView({
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
-        // A machine's first session names a folder, and the workspace is made with it, in one
-        // transaction (docs/first-workspace-contract.md §3).
-        ...(vars.firstWorkspace ? { newWorkspace: vars.firstWorkspace.folder } : { workspaceId }),
+        workspaceId,
         // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
         // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
         // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        // A workspace about to be made has nothing to inherit, so its first session always names it.
-        ...(draftHere || vars.firstWorkspace ? { engine: pickedEngine, provider: pickedProvider } : {}),
+        ...(draftHere ? { engine: pickedEngine, provider: pickedProvider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -5921,6 +6013,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
+        ...vars.optimized,
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -5929,12 +6022,11 @@ export function WorkspaceView({
         id: created.id,
         created: true,
         permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
-        madeWorkspaceId: vars.firstWorkspace ? (created.workspaceId ?? undefined) : undefined,
         clientTurnId: operation.clientTurnId,
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, permissionMode: sentMode, madeWorkspaceId, clientTurnId, routedToSessionId },
+      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId, routedToSessionId },
       vars,
     ) => {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
@@ -5968,17 +6060,11 @@ export function WorkspaceView({
       // highlight blips to that workspace until this session's fetch lands. Mirrors
       // getSession's shape; the background refetch fills in the rest.
       if (created) {
-        const inWorkspace = madeWorkspaceId ?? workspaceId;
         qc.setQueryData(sessionQuery(id).queryKey, {
           id,
           assignedRunnerId: runner.id,
-          workspace: inWorkspace ? { id: inWorkspace } : null,
+          workspace: workspaceId ? { id: workspaceId } : null,
         });
-      }
-      // The card's work is done: the machine has its workspace, and the sidebar's row changes with it.
-      if (vars.firstWorkspace) {
-        setup.finish(vars.firstWorkspace.runnerId);
-        void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
       }
       // The provider pick is deliberately not written back — see DRAFT_PROVIDER_PREFIX. The session
       // carries its own binding, and the workspace's default keeps meaning "what this project starts
@@ -6079,10 +6165,9 @@ export function WorkspaceView({
         send.mutate({ ...vars, intent: 'NEXT_TURN' });
         return;
       }
-      // Sent by itself, so it stays where it waited and says so there: it is in no composer to keep,
-      // and the toast below would be gone by the time anyone looks.
+      // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
       if (vars.held) {
-        if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
+        message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -6979,13 +7064,13 @@ export function WorkspaceView({
       : undefined;
     const rows = localStatusRows({
       surface: 'Web',
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerOnline: runner.online,
       activeSessions: runner.activeSessions,
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
       sessionStatus: selectedSession
-        ? statusLabel(selectedSession, selectedWatchingWord, machineName(runner))
+        ? statusLabel(selectedSession, selectedWatchingWord, runnerShownName)
         : selectedMissing
           ? 'not found'
           : null,
@@ -7027,40 +7112,26 @@ export function WorkspaceView({
     nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
   });
 
-  // The composer's send, on a machine's setup page. Ready, it makes the workspace with the session.
-  // Not ready, the message waits under the card (board rule 6) and leaves the composer the way a sent
-  // one does: it goes by itself once both steps are done. One waits at a time, since what is waiting
-  // is a session's first message.
+  // The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+  // name the card was given. The list then says the machine has one, and the console moves on to its new
+  // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
+  const createWorkspace = useMutation({
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+      api<{ id: string }>('/workspaces', {
+        method: 'POST',
+        body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
+      }),
+    onSuccess: async (made) => {
+      if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
+      await qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+
+  // A machine's own page sends nothing: with no workspace it is the setup card's, which makes one, and
+  // with one it is on its way to that workspace's page.
   const sendFromComposer = (vars: ComposerSendVars): void => {
-    if (!machineDraft) {
-      send.mutate(vars);
-      return;
-    }
-    // Not known yet, or on the way to the workspace it turns out to have: nothing to send it with.
-    if (!bareMachine) return;
-    if (setup.held) {
-      message.info(HELD_ALREADY_WAITING, HELD_ALREADY_WAITING_DETAIL);
-      return;
-    }
-    if (setupReady && setup.folder) {
-      send.mutate({ ...vars, firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) } });
-      return;
-    }
-    setup.hold({
-      content: vars.content,
-      ...(vars.shell ? { shell: true } : {}),
-      ...(vars.images.length > 0
-        ? {
-            attachments: vars.images.flatMap((im) =>
-              im.id ? [{ id: im.id, mime: im.mime || 'application/octet-stream', name: im.name }] : [],
-            ),
-          }
-        : {}),
-    });
-    setText('');
-    setComposerRefs({});
-    vars.images.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
-    setImages([]);
+    if (machineDraft) return;
+    send.mutate(vars);
   };
 
   const onSend = (intentOverride?: SessionTurnIntent): void => {
@@ -7224,10 +7295,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
+    // D2: still exactly what the optimizer put in the box, so it needs no translator.
+    const optimized = optimizedInsert !== null && c === optimizedInsert.text.trim() ? optimizedSendOf(optimizedInsert) : undefined;
+    setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
+      ...(optimized ? { optimized } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
@@ -7275,8 +7350,7 @@ export function WorkspaceView({
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      composerTakesWork &&
-      !managedDraftBlocked &&
+      runnerTakesWork &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -7374,6 +7448,103 @@ export function WorkspaceView({
     () => composerSlashItems(runner.commands, runner.skills, codexComposer, shownEngine, composerWorkspaceId),
     [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
+  // ── Compact and Start a new coordinator (boards 01 and 02, docs/coordinator-handoff.md) ──
+  // The handoff as the open session's detail and `session.updated` carry it: on the outgoing
+  // coordinator (`coordinatorHandoff`) and on its successor (`coordinatorHandoffReceived`).
+  const handoffRow = (selected ? (selectedSession ?? selected) : null) as any;
+  const coordinatorHandoff: SessionCoordinatorHandoff | null = handoffRow?.coordinatorHandoff ?? null;
+  const coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null =
+    handoffRow?.coordinatorHandoffReceived ?? null;
+  // What the successor does not draw — the decisions and merges stamped before it was created —
+  // counted on its note card, which links to where they are (handoff v2 §4, board 3).
+  const handoffHistory = useMemo(
+    () => recordsBeforeConversation(
+      conversationCreatedAt,
+      [
+        ...(openItems.data?.closedQuestions ?? []).map((record) => record.resolvedAt),
+        ...(criteriaDecisions.data?.settled ?? []).map((settled) => settled.decidedAt),
+        ...(pendingDecisions.data?.decided ?? []).map((decided) => decided.decidedAt),
+        acceptanceConfirmation.data?.confirmation?.confirmedAt,
+      ],
+      (mergedPromotions.data ?? []).map(promotionRecordMoment),
+    ),
+    [
+      acceptanceConfirmation.data,
+      conversationCreatedAt,
+      criteriaDecisions.data,
+      mergedPromotions.data,
+      openItems.data,
+      pendingDecisions.data,
+    ],
+  );
+  const handingOver = coordinatorHandoff?.state === 'WRITING' || coordinatorHandoff?.state === 'HANDING_OVER';
+  const coordinatorHandedOver = coordinatorHandoff?.state === 'COMPLETED';
+  const turnRunning = !!handoffRow && isGenerating(handoffRow, sessionRunStateOf(handoffRow));
+  // Only the project's current coordinator is its COORDINATOR member, and only while it is not completed.
+  const handoffProjectId: string | null =
+    handoffRow && !selectedTrashed && handoffRow.projectMembership?.role === 'COORDINATOR'
+      && sessionLifecycleStateOf(handoffRow) !== 'COMPLETED'
+      ? handoffRow.projectMembership.projectId
+      : null;
+  // Compact is the engine's own `/compact`, offered where the engine advertises it among its slash
+  // assets (Claude Code does; Cursor, Codex and the engines without a registry do not).
+  const compactOffered =
+    !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
+    && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
+  const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
+  const [followHandoff, setFollowHandoff] = useState<string | null>(null);
+  const handoffAction = useMutation({
+    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
+      coordinatorHandoffRequest(projectId, action),
+    onSuccess: (view, { sessionId, action }) => {
+      qc.invalidateQueries({ queryKey: ['session', sessionId] });
+      refreshSessionLists();
+      if (action !== 'cancel') setFollowHandoff(sessionId);
+      if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
+    },
+    onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
+  });
+  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+    const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
+    if (!projectId || !selectedId || handoffAction.isPending) return;
+    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+  };
+  useEffect(() => {
+    if (!followHandoff || followHandoff !== selectedId) return;
+    if (coordinatorHandoff?.state === 'COMPLETED' && coordinatorHandoff.handedOverToSessionId) {
+      setFollowHandoff(null);
+      navigate(sessionPath(coordinatorHandoff.handedOverToSessionId));
+    }
+  }, [followHandoff, selectedId, coordinatorHandoff?.state, coordinatorHandoff?.handedOverToSessionId]);
+  const composerContextActions: Omit<ContextActionsProps, 'pct' | 'onPicked'> | undefined =
+    compactOffered || (handoffProjectId && !coordinatorHandoff)
+      ? {
+          running: turnRunning,
+          compact: compactOffered
+            ? {
+                // Through the send path, as if typed — but by itself: whatever is in the composer stays.
+                onCompact: () => {
+                  if (send.isPending) return;
+                  pinToBottom();
+                  send.mutate({ content: '/compact', images: [], intent: 'NEXT_TURN', held: true });
+                },
+              }
+            : undefined,
+          startCoordinator:
+            // Hidden while the session carries any handoff, FAILED included: that row has its own doors.
+            handoffProjectId && !coordinatorHandoff
+              ? {
+                  onStart: () =>
+                    setHandoffConfirm({
+                      projectId: handoffProjectId,
+                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'the project',
+                      running: turnRunning,
+                    }),
+                }
+              : undefined,
+        }
+      : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -7816,15 +7987,6 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
-  // Withdraw the message waiting under the setup card: its words and files go back to the composer,
-  // the way a queued message's do, an explicit press that a draft keeps its place above.
-  const withdrawHeld = (): void => {
-    const held = setup.held;
-    if (!held) return;
-    setup.withdraw();
-    if (held.content.trim()) restoreUndelivered?.(held.shell ? `!${held.content}` : held.content, held.attachments);
-    else stageRestored(held.attachments);
-  };
   // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
   // conversation, its bar above the worktree bar, and the review drawer they open.
   const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
@@ -7890,35 +8052,6 @@ export function WorkspaceView({
     cleanUp: mainCheckoutCleanUp,
     viewChanges: viewSessionChanges,
   });
-  // Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
-  // waiting message: the send makes a workspace, so it must not go twice, and a refusal leaves it
-  // waiting on the person (`error`) rather than on another try.
-  const heldSent = useRef<HeldMessage | null>(null);
-  useEffect(() => {
-    const held = setup.held;
-    if (!held || held.error || !setupReady || !setup.folder || send.isPending || heldSent.current === held) return;
-    heldSent.current = held;
-    send.mutate({
-      content: held.content,
-      images: [],
-      attachmentIds: held.attachments?.map((attachment) => attachment.id),
-      shell: held.shell,
-      intent: 'NEXT_TURN',
-      firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) },
-      held: true,
-    });
-    // `send` is a new object every render, and its pending state is the part this reads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setup.held, setup.folder, setupReady, send.isPending]);
-  // The machine got a workspace some other way (another tab, the form on its page): the console moves
-  // on to it, and what was being set up here no longer applies. What was waiting comes back to the
-  // composer rather than vanishing.
-  useEffect(() => {
-    if (!machineDraft || !workspacesQ.isSuccess || bareMachine || send.isPending) return;
-    if (setup.held) withdrawHeld();
-    if (setup.held || setup.folder) setup.finish(runner.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineDraft, workspacesQ.isSuccess, bareMachine, send.isPending, setup.held, setup.folder]);
   // Steer is offered while a turn runs on an engine that can take a message into one (the server
   // still asks the runner, and refuses one too old).
   const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
@@ -7998,7 +8131,7 @@ export function WorkspaceView({
     () => ({
       provider: outageProvider,
       cursor: cursorQuotaHelp,
-      runnerName: runner.name,
+      runnerName: runnerShownName,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
@@ -8071,7 +8204,7 @@ export function WorkspaceView({
       // Rebuilt each render, so compared by what it says; its press only opens a draft.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       JSON.stringify(cursorQuotaHelp),
-      runner.name,
+      runnerShownName,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
@@ -8161,6 +8294,16 @@ export function WorkspaceView({
   // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
+  // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
+  // draft has none yet, so it names the workspace the composer picked.
+  const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
+    () => ({
+      ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      onInserted: setOptimizedInsert,
+    }),
+    [selectedId, shownWorkspaceId],
+  );
+  useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
   // view is locked to one workspace. In those cases the Select is dropped from the controls row
   // entirely — the workspace is already named in the header and the sidebar.
@@ -8169,7 +8312,8 @@ export function WorkspaceView({
     workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
     selected?.workspace?.name ??
     lockedWorkspace?.name;
-  const composerDisabled = selectedTrashed || selectedMissing;
+  // While the outgoing coordinator writes its note and hands over, nothing more goes to it (board 02-2).
+  const composerDisabled = selectedTrashed || selectedMissing || handingOver;
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -8179,7 +8323,7 @@ export function WorkspaceView({
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no workspace in the URL, so fall back to the open session's workspace, then runner.
   const headWorkspaceName =
-    lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
+    lockedWorkspace?.name ?? selected?.workspace?.name ?? runnerShownName;
 
   // ── Folders (docs/session-folders-move-design.md §3, §7) ──
   // In and out of a folder's page is a change of the `folder` param on whichever route the console
@@ -8585,7 +8729,7 @@ export function WorkspaceView({
     () => ({
       provider: shownProvider,
       keyName: selectedKeyName,
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerId: runner.id,
       account: signedOutAccount?.id,
       accountLabel: signedOutAccount ? accountNameOf(signedOutAccount) : null,
@@ -8635,8 +8779,7 @@ export function WorkspaceView({
       shownProvider,
       shownEngine,
       selectedKeyName,
-      runner.name,
-      runner.displayName,
+      runnerShownName,
       runner.id,
       signedOutAccount,
       runner.version,
@@ -8672,6 +8815,16 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
+  const retryCloneNow = useMutation({
+    mutationFn: (workspaceId: string) => retryClone(workspaceId),
+    onSuccess: (_answer, workspaceId) => {
+      hearClone(workspaceId, { state: 'PENDING', progress: null });
+      if (selectedId) void qc.invalidateQueries({ queryKey: sessionQuery(selectedId).queryKey });
+      refreshSessionLists();
+    },
+    onError: (e: Error) => message.error(CLONE_RETRY_FAILED, e.message),
+  });
   // What the never-started card's presses do, in either of the places it stands (see its render).
   const neverStartedActions: NeverStartedActions = {
     // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
@@ -8705,10 +8858,11 @@ export function WorkspaceView({
     // the Provider menu lists any (every row is the session's own engine's); a workspace on another
     // machine; and a check now, where this runner checks at all (`region` is null where it doesn't).
     otherProvider:
-      configEditable && !managedDraftBlocked && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
+      configEditable && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
     moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
     checkAgain: runner.region ? regionCheck.checkAgain : undefined,
-    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
+    retryClone: detailForSelected?.workspace?.cloneState === 'FAILED' ? () => retryCloneNow.mutate(detailForSelected.workspace!.id) : undefined,
+    busy: retryCloneNow.isPending || retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
     // A pick applies to this session (or draft) only: the next draft's model is the workspace's
@@ -8989,7 +9143,7 @@ export function WorkspaceView({
       ? []
       : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
   // The machine the session's engine runs on, as its sign-in group names it.
-  const runnerLabel = runner.displayName || runner.name;
+  const runnerLabel = runnerShownName;
   const listedChoices = shownProviderListed ? providerSwitchChoices : providerSwitchChoices.slice(1);
   const ownCredential = listedChoices.filter((c) => c.kind === 'login' || c.kind === 'opencode');
   // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run, so its
@@ -9186,7 +9340,13 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
+  // While a handoff note is written and the replacement runs, the outgoing coordinator's header
+  // says "Handing over" in place of the run word (board 02-2).
+  const headRunWord = !selected
+    ? ''
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, runnerShownName);
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -9201,6 +9361,14 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
+    : selected && isScheduleRun && scheduleRun
+      ? scheduleRunHeadText({
+          state: headLifecycleWord,
+          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
+          run: scheduleRun.run,
+          now: new Date(),
+        })
     : selected
       ? [
           headRunWord,
@@ -9217,13 +9385,13 @@ export function WorkspaceView({
         : '';
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.handingOver
     : selectedMissing
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedWelcome || (machineWelcome && composerTakesWork)
-          ? WELCOME_PLACEHOLDER
-        : managedDraftBlocked || !composerTakesWork
+        : !runnerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -9233,7 +9401,7 @@ export function WorkspaceView({
                 ? CURSOR_RUNNING_PLACEHOLDER
                 : 'Reply…'
               : machineDraft
-                ? composerPlaceholderFor(machineName(runner))
+                ? composerPlaceholderFor(runnerShownName)
                 : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
@@ -9244,6 +9412,7 @@ export function WorkspaceView({
     eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
     {
       idle,
+      queuedTurns: visibleQueuedTurns.length,
       draftEmpty: text === '' && images.length === 0,
       replying: !!replyTo,
       pendingApprovals: approvals.length + (waitingSummary?.pendingApprovals ?? 0),
@@ -9417,9 +9586,11 @@ export function WorkspaceView({
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
                 // A row whose line says a member is waiting on you opens that member instead, at its
-                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
-                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
-                  s.target.id !== coordinator?.id ? s.target.id : null;
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
+                // coordinator itself, waiting on you with a question, opens at that card too
+                // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session'
+                  ? s.target.id : null;
                 const opens = waiting ?? coordinator?.id;
                 setWaitingReveal(waiting);
                 if (isMobile && opens) navigateWithPaneSlide('push', () =>
@@ -9478,7 +9649,7 @@ export function WorkspaceView({
         // merged row for both status surfaces so the banner and its list warning point at
         // the same canonical obligation during that refresh gap.
         const watching = sessionWatching(watchingBySession, s.id);
-        const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
+        const line = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
         const drag = swipeDrag?.id === s.id ? swipeDrag : null;
         const swipeTx = drag
           ? drag.dx
@@ -9624,7 +9795,7 @@ export function WorkspaceView({
               style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
             >
               <span className="session-icon">
-                <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
+                <StatusIcon session={actionSession} watching={watching?.word} machine={runnerShownName} />
               </span>
               <div className="session-main">
                 {renaming ? (
@@ -9716,7 +9887,9 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
+      {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
+      {!bareMachine && <>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -9875,6 +10048,7 @@ export function WorkspaceView({
         role="separator"
         aria-orientation="vertical"
       />
+      </>}
 
       <div
         className="workspace-view"
@@ -9914,7 +10088,9 @@ export function WorkspaceView({
           )
         ) : (
         <>
-        <div className="workspace-header">
+        {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
+            header for its way back. */}
+        {(!bareMachine || isMobile) && <div className="workspace-header">
           {isMobile && (
             <button
               type="button"
@@ -9936,6 +10112,7 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
+            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10035,7 +10212,8 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
@@ -10047,7 +10225,7 @@ export function WorkspaceView({
             )}
           </div>
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
-          <RunnerUpdateIndicator runner={runner} machine={machineName(runner)} />
+          <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
             <>
               {titleBarProjectId && !selectedTrashed && (
@@ -10101,6 +10279,28 @@ export function WorkspaceView({
                           onSelect: () => {
                             setHeaderMenuOpen(false);
                             afterMenu(headerMore.current, openSessionFind);
+                          },
+                        },
+                        // What the agent here can reach in Orbit and what it was told (AgentToolsDrawer), with the
+                        // connection's word on the row so it is seen without opening it.
+                        {
+                          key: 'agent-tools',
+                          icon: <ApiOutlined />,
+                          label: (() => {
+                            const status = agentToolsMenuStatus(
+                              detailForSelected?.agentTools,
+                              detailForSelected?.engine ?? selectedSession?.engine,
+                            );
+                            return (
+                              <span className="scope-menu-row">
+                                Agent tools
+                                <span className={`scope-menu-value agent-tools-menu-status is-${status.tone}`}>{status.word}</span>
+                              </span>
+                            );
+                          })(),
+                          onSelect: () => {
+                            setHeaderMenuOpen(false);
+                            setAgentToolsOpen(true);
                           },
                         },
                         ...(sessionTags.length > 0
@@ -10271,15 +10471,25 @@ export function WorkspaceView({
               />
             </>
           )}
-        </div>
+        </div>}
 
+        {selected && !composing && (
+          <AgentToolsDrawer
+            mode="session"
+            open={agentToolsOpen}
+            onClose={() => setAgentToolsOpen(false)}
+            report={detailForSelected?.agentTools}
+            engine={detailForSelected?.engine ?? selectedSession?.engine}
+            permissionMode={effectivePermissionMode}
+          />
+        )}
         {selected && !selectedTrashed && !composing && (
           <ShareModal
             open={shareOpen}
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, machineName(runner))}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -10292,7 +10502,7 @@ export function WorkspaceView({
             onToggleTag={toggleTag}
             tagsSaving={setTagsMut.isPending}
             engineName={selectedSession?.engine ? engineTitle.name : null}
-            runnerName={runner ? machineName(runner) : null}
+            runnerName={runner ? runnerShownName : null}
             accountLabel={
               // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
               shownProviderRow?.kind === 'login'
@@ -10307,7 +10517,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, machineName(runner))}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
           />
         )}
         <SessionMoveModal
@@ -10366,11 +10576,22 @@ export function WorkspaceView({
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
             crossings={crossingCards.pointers}
+            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+            // cards from at this conversation's foot, so the line and the cards cannot disagree.
+            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+              itemId: row.itemId,
+              question: row.question?.question ?? row.title,
+              ageSeconds: (() => {
+                const at = Date.parse(row.waitingSince);
+                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+              })(),
+            })) : []}
           />
         )}
 
         {stuck && (
           <button
+            ref={stuckBarRef}
             className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
             title={stuck.text}
             onClick={() => {
@@ -10395,6 +10616,7 @@ export function WorkspaceView({
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <TranslationCtx.Provider value={translationActions}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -10422,7 +10644,7 @@ export function WorkspaceView({
                 <CreatedWorkspaceLine
                   sessionId={selectedId}
                   workspace={{ ...detailForSelected.workspace, name: detailForSelected.workspace.name }}
-                  machine={machineName(runner)}
+                  machine={runnerShownName}
                   runnerId={runner.id}
                 />
               )}
@@ -10444,9 +10666,9 @@ export function WorkspaceView({
                   {runnerUpdatingGate ? (
                     <RunnerUpdatingQueued
                       gate={runnerUpdatingGate}
-                      machine={machineName(runner)}
+                      machine={runnerShownName}
                       onOpenSession={(id) => navigate(sessionPath(id))}
-                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
                     <>
@@ -10473,6 +10695,15 @@ export function WorkspaceView({
               {/* An unvisited session's history is still in flight: hold the shape of a
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
+              {/* The successor opens with its predecessor's note and the waits that moved here (board
+                  02-3): the conversation's first lines, so drawn once its first page is. */}
+              {selected && !selectedTrashed && coordinatorHandoffReceived && !hasMoreOlder && placeholder !== 'skeleton' && (
+                <CoordinatorHandoffReceivedCard
+                  received={coordinatorHandoffReceived}
+                  history={handoffHistory}
+                  onOpenPrevious={() => navigate(sessionPath(coordinatorHandoffReceived.handoffFromSessionId))}
+                />
+              )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <QueuedFootCtx.Provider value={queuedFoot}>
@@ -10499,12 +10730,10 @@ export function WorkspaceView({
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
-                  Keyed by the session like its siblings, so a refresh in flight stays with the
-                  conversation that asked for it. */}
+                  Keyed by the session like its siblings. */}
               {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
                 <SessionRecapCard
                   key={`recap:${selectedId}`}
-                  sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
                   onHide={hideSelectedRecap}
@@ -10687,6 +10916,26 @@ export function WorkspaceView({
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
+              {/* The outgoing coordinator writing its handoff note, handing over, or failing to (board
+                  02-2, 02-5). */}
+              {selected && !selectedTrashed && coordinatorHandoff && handingOver && (
+                <CoordinatorHandoffProgress
+                  handoff={coordinatorHandoff}
+                  compacting={handoffRow?.enginePhase === 'compacting'}
+                  busy={handoffAction.isPending}
+                  onSkip={() => runHandoffAction('skip')}
+                  onCancel={() => runHandoffAction('cancel')}
+                />
+              )}
+              {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
+                <CoordinatorHandoffFailure
+                  handoff={coordinatorHandoff}
+                  busy={handoffAction.isPending}
+                  onRetry={() => runHandoffAction('retry')}
+                  onSkip={() => runHandoffAction('skip')}
+                  onKeep={() => runHandoffAction('cancel')}
+                />
+              )}
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
@@ -10697,6 +10946,7 @@ export function WorkspaceView({
                 <ApprovalPanel
                   approval={a}
                   onDecide={decide}
+                  untranslated={untranslatedDecisions[a.id]}
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
@@ -10732,6 +10982,7 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
+                        translationHeld={heldForTranslation(q.translation)}
                         held={queuedHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
@@ -10787,6 +11038,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
             // A scroller of its own, not `scrollRef`: this is no conversation, and the card is read from
@@ -10795,46 +11047,17 @@ export function WorkspaceView({
               <div className="msc-draft">
                 <MachineSetupCard
                   runner={runner}
-                  fleet={fleet}
-                  engine={pickedEngine}
-                  credential={setupCredential}
-                  folder={setup.folder}
-                  ready={setupReady}
-                  onFolder={setup.pickFolder}
-                  onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
-                  onUseApiKey={pickApiKey}
-                  welcome={machineWelcome ? { composerText: text, onExample: pickWelcomeExample } : undefined}
+                  managed={managed}
+                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  creating={createWorkspace.isPending}
+                  createError={createWorkspace.error?.message ?? null}
+                  welcome={machineWelcome}
                 />
-                {setup.held && (
-                  <HeldFirstMessage
-                    held={setup.held}
-                    machine={machineName(runner)}
-                    sending={send.isPending}
-                    onWithdraw={withdrawHeld}
-                    onRetry={setup.retryHeld}
-                  />
-                )}
                 {localStatusCards.map((card) => (
                   <RevealedOnArrival key={card.id}>
                     <SessionStatusCard card={card} />
                   </RevealedOnArrival>
                 ))}
-              </div>
-            </div>
-          ) : managedWelcome && managed ? (
-            <div key="welcome" className="workspace-sessions workspace-draft">
-              <div className="msc-draft">
-                <ManagedWelcomeCard
-                  managed={managed}
-                  runner={runner}
-                  engine={welcomeEngine}
-                  credential={welcomeCredential}
-                  composerText={text}
-                  startsNow={!managedDraftBlocked}
-                  onExample={pickWelcomeExample}
-                  onUseApiKey={pickApiKey}
-                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
-                />
               </div>
             </div>
           ) : composing ? (
@@ -10845,7 +11068,7 @@ export function WorkspaceView({
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && !managedDraftBlocked && (
+              {!machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
@@ -10890,7 +11113,8 @@ export function WorkspaceView({
           )}
         </div>
 
-      <div className="workspace-composer">
+      {/* A machine with no workspace has nothing to send to: its setup card makes the workspace. */}
+      {!bareMachine && <div className="workspace-composer">
         {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
             first member, right under the conversation and above the parking strip below
             (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
@@ -10900,7 +11124,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+        {managed && managed.display.kind !== 'available' && !(bareMachine && managedSetup) && (
           // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
           managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
             <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
@@ -11078,6 +11302,17 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* A coordinator that handed over takes nothing more: its composer's place says where the
+            project went (board 02-4). */}
+        {coordinatorHandedOver ? (
+          <CoordinatorHandedOverBanner
+            onOpen={
+              coordinatorHandoff?.handedOverToSessionId
+                ? () => navigate(sessionPath(coordinatorHandoff.handedOverToSessionId as string))
+                : undefined
+            }
+          />
+        ) : (
         <SessionComposer
           text={text}
           setText={setText}
@@ -11117,7 +11352,6 @@ export function WorkspaceView({
           permissionSemanticsFor={permissionSemanticsFor}
           shownEngine={shownEngine}
           configEditable={configEditable}
-          managedDraftBlocked={managedDraftBlocked}
           modelMenuOpen={modelMenuOpen}
           setModelMenuOpen={setModelMenuOpen}
           setProviderMenuOpen={setProviderMenuOpen}
@@ -11164,13 +11398,33 @@ export function WorkspaceView({
           configuredProviders={configuredProviders}
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
-          canSend={canSend}
+          canSend={canSend && !handingOver}
           sending={send.isPending}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
+          contextActions={composerContextActions}
+          promptOptimizer={promptOptimizerTarget}
         />
-      </div>
+        )}
+        {handoffConfirm && (
+          <CoordinatorHandoffConfirm
+            projectId={handoffConfirm.projectId}
+            projectTitle={handoffConfirm.projectTitle}
+            running={handoffConfirm.running}
+            onClose={() => setHandoffConfirm(null)}
+            onHandOver={async () => {
+              if (!selectedId) return;
+              const sessionId = selectedId;
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              setFollowHandoff(sessionId);
+              qc.invalidateQueries({ queryKey: ['session', sessionId] });
+              refreshSessionLists();
+              if (view.handedOverToSessionId) navigate(sessionPath(view.handedOverToSessionId));
+            }}
+          />
+        )}
+      </div>}
         </>
         )}
       </div>
@@ -11296,7 +11550,6 @@ export interface SessionComposerProps {
   permissionSemanticsFor: (label: string) => { shortNote?: string } | null | undefined;
   shownEngine: AgentProvider;
   configEditable: boolean | undefined;
-  managedDraftBlocked: boolean | undefined;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean) => void;
   setProviderMenuOpen: (open: boolean) => void;
@@ -11326,6 +11579,11 @@ export interface SessionComposerProps {
   onSend: (intentOverride?: SessionTurnIntent) => void;
   queueOffered: boolean;
   defaultSendIntent: SessionTurnIntent;
+  /** Compact and Start a new coordinator in the Context popover (board 01). */
+  contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
+  /** The prompt optimizer's ✦ Optimize (docs/prompt-optimizer-design.md): where the draft's context
+   *  comes from. Absent, the composer offers no optimizer. */
+  promptOptimizer?: PromptOptimizerTarget;
 }
 
 export function SessionComposer({
@@ -11367,7 +11625,6 @@ export function SessionComposer({
   permissionSemanticsFor,
   shownEngine,
   configEditable,
-  managedDraftBlocked,
   modelMenuOpen,
   setModelMenuOpen,
   setProviderMenuOpen,
@@ -11396,7 +11653,13 @@ export function SessionComposer({
   onSend,
   queueOffered,
   defaultSendIntent,
+  contextActions,
+  promptOptimizer,
 }: SessionComposerProps) {
+  // Settings › Translation (6A): the account's switch and language, for the composer's tag.
+  const navigate = useNavigate();
+  const me = useQuery(meQuery());
+  const translationIsOn = translationOn(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -11430,6 +11693,7 @@ export function SessionComposer({
     if (!queueOffered) setQueueOffer(false);
   }, [queueOffered]);
   const suggestionHintId = useId();
+  const optimizeHintId = useId();
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -11609,6 +11873,16 @@ export function SessionComposer({
   // and a reply-to-question draft resolves an approval instead), so the composer only turns
   // red when the send really would be a shell turn.
   const shellMode = shellOffered && !replyTo && text.trim().startsWith('!');
+  // ✦ Optimize (board docs/mocks/prompt-optimizer, frames 2–6).
+  const optimizer = usePromptOptimizer({
+    target: promptOptimizer,
+    text,
+    setText,
+    taRef,
+    shellMode,
+    disabled: !!composerDisabled || !!replyTo,
+    resetKey: selectedId,
+  });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   const insertShell = (): void => {
@@ -11659,6 +11933,7 @@ export function SessionComposer({
 
   return (
     <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+      {optimizer.card}
       {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
           Only shown once the box has hit its auto-grow cap or the user set a manual
           height — an empty/short composer has nothing worth resizing. */}
@@ -11843,7 +12118,7 @@ export function SessionComposer({
         maxLength={MAX_PROMPT_CHARS}
         placeholder={offeredSuggestion ? '' : composerPlaceholder}
         measureKey={measureOnPlaceholder ? composerPlaceholder : undefined}
-        aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
+        aria-describedby={offeredSuggestion ? suggestionHintId : optimizer.tabOptimizes ? optimizeHintId : undefined}
         value={text}
         disabled={composerDisabled}
         // Typing exits history recall: the next Up starts fresh from this draft.
@@ -11934,6 +12209,7 @@ export function SessionComposer({
               return;
             }
           }
+          if (optimizer.onKeyDown(e)) return;
           // Tab takes the offered suggestion. An open menu above has already had the key, and
           // with no suggestion on offer Tab moves focus as it always has.
           if (
@@ -12053,6 +12329,12 @@ export function SessionComposer({
             <span className="composer-suggestion-tab-hint"> Press Tab to use it.</span>
           </span>
         </div>
+      )}
+      {/* The box's description while Tab optimizes; a touch screen, with no Tab, hears nothing. */}
+      {optimizer.tabOptimizes && (
+        <span id={optimizeHintId} className="sr-only">
+          <span className="composer-suggestion-tab-hint">Press Tab to optimize this draft.</span>
+        </span>
       )}
       </div>
       <div className="composer-toolbar">
@@ -12214,9 +12496,6 @@ export function SessionComposer({
             way a reference composer writes "model · effort" as one button: the model in the
             label's colour, the effort after it in the secondary one. The menu behind it
             (`modelMenuItems`) keeps each field's own rules. */}
-        {/* No model to show where a first session cannot start yet: the managed default
-            workspace before its runner was ever ready (`managedDraftBlocked`). */}
-        {!managedDraftBlocked && (
           <span className="composer-pill composer-model-pill">
             <Menu
               side="top"
@@ -12264,7 +12543,6 @@ export function SessionComposer({
               }
             />
           </span>
-        )}
         {shownPool && shownPoolAccount && (
           <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
             <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
@@ -12292,7 +12570,39 @@ export function SessionComposer({
             modelCatalog={runner.modelCatalog}
             configured={configuredProviders}
             unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
+            actions={contextActions}
           />
+        )}
+        {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
+            is sent, never while it is typed. The tag opens the setting. */}
+        {translationIsOn && (
+          <button
+            type="button"
+            className="composer-translation-tag"
+            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+          >
+            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+          </button>
+        )}
+        {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
+            nothing to optimize: a button that came and went with the draft moved every control to
+            its left. Busy, the spinner takes the same slot. */}
+        {optimizer.buttonShown && (
+          <button
+            type="button"
+            className="composer-optimize"
+            onClick={optimizer.press}
+            disabled={!optimizer.buttonEnabled}
+            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}
+          >
+            {optimizer.busy ? (
+              <span className="composer-optimize-spin" aria-hidden="true" />
+            ) : (
+              <span aria-hidden="true">✦</span>
+            )}
+          </button>
         )}
         {showStop ? (
           <Button
@@ -12862,7 +13172,8 @@ export function usePendingTray({
       return {
         key: turn.turnId,
         heading: intoTurn ? 'current' : 'next',
-        text: turn.content,
+        // Translated (Settings › Translation): the words the owner wrote, not the English delivered.
+        text: turn.translation?.original ?? turn.content,
         shell: turn.shell,
         ...trayPictures(turnImages[turn.turnId], refs),
         // Held by its runner's update or by a full runner, run or batch: the tag says which, as it does
@@ -12896,13 +13207,17 @@ export function usePendingTray({
 /**
  * The composer's pictures and files (`SessionComposer`'s attachment row): checked, uploaded at once as staged chips —
  * to the session when there is one, unscoped for a message that makes one — and handed back out of a sent message by
- * their ids. The session page and the wiki chat panel each stage into a list of their own.
+ * their ids. The session page and the wiki chat panel each stage into a list of their own; the guest view stages
+ * pictures only (`imagesOnly`) and uploads them through the guest door (`upload`).
  */
 export function useComposerImages(
   canAttach: boolean | undefined,
   sessionId: string | undefined,
   setImages: Dispatch<SetStateAction<ComposerImage[]>>,
+  opts?: { upload?: (file: File) => Promise<{ id: string }>; imagesOnly?: boolean },
 ) {
+  const upload = opts?.upload;
+  const imagesOnly = opts?.imagesOnly === true;
   const message = useToast();
   const imageUid = useRef(0);
   // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
@@ -12917,6 +13232,10 @@ export function useComposerImages(
         return;
       }
       const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      if (imagesOnly && !isInlineImage) {
+        message.error(IMAGES_ONLY_REFUSED);
+        return;
+      }
       const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
       if (file.size <= 0) {
         message.error(`${file.name || 'File'} is empty`);
@@ -12933,7 +13252,7 @@ export function useComposerImages(
         { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
       ]);
       try {
-        const { id } = await uploadAttachment(file, sessionId);
+        const { id } = await (upload ? upload(file) : uploadAttachment(file, sessionId));
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
@@ -12945,7 +13264,7 @@ export function useComposerImages(
         );
       }
     },
-    [canAttach, sessionId, setImages, message],
+    [canAttach, sessionId, setImages, message, upload, imagesOnly],
   );
   // Hand attachments already on the control plane back to the composer as staged chips. There is no
   // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a

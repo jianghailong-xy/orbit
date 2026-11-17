@@ -84,7 +84,13 @@ public extension Session {
             retryAt: summary.retryAt,
             // Absent and null differ here too: a move out of a folder reaches the other clients as
             // a null, while an older control plane that never sends the key leaves the row's.
-            folderId: summary.folderId
+            folderId: summary.folderId,
+            // Owned by the summary like `retryAt`: every transition publishes `session.updated`,
+            // and the one that cancels a handoff is a null that has to take its row away.
+            coordinatorHandoff: summary.coordinatorHandoff,
+            coordinatorHandoffReceived: summary.coordinatorHandoffReceived,
+            // Owned by the summary like the handoff: the summary that ends a compaction is a null.
+            enginePhase: summary.enginePhase
         )
     }
 
@@ -117,6 +123,14 @@ public extension Session {
     func applyingProjectRelation(_ summary: ControlSessionSummary) -> Session {
         merging(projectId: summary.projectId, projectTitle: summary.projectTitle,
                 projectMembership: summary.projectMembership)
+    }
+
+    /// Apply only the coordinator handoff. Like the project relation, it has to reach a row the
+    /// Open-only merge refuses: the outgoing coordinator is completed in the same breath its handoff
+    /// turns COMPLETED, and that row is where "Handed over to a new coordinator." is drawn.
+    func applyingCoordinatorHandoff(_ summary: ControlSessionSummary) -> Session {
+        merging(coordinatorHandoff: summary.coordinatorHandoff,
+                coordinatorHandoffReceived: summary.coordinatorHandoffReceived)
     }
 
     /// Apply an `approval.requested` / `approval.resolved` pending count — the one field those
@@ -173,7 +187,11 @@ public extension Session {
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
                          retryAt: String?? = nil,
                          // Doubly optional for the same reason: `.some(nil)` is "in no folder".
-                         folderId: String?? = nil) -> Session {
+                         folderId: String?? = nil,
+                         // Doubly optional for the same reason: `.some(nil)` is "no handoff".
+                         coordinatorHandoff: SessionCoordinatorHandoff?? = nil,
+                         coordinatorHandoffReceived: SessionCoordinatorHandoffReceived?? = nil,
+                         enginePhase: String?? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
         var merged = Session(id: id,
@@ -220,6 +238,7 @@ public extension Session {
                 runningBgJobCount: runningBgJobCount,
                 // The same: the list's count, which no event carries.
                 runningSubagentCount: runningSubagentCount,
+                runningSubagentTitle: runningSubagentTitle,
                 engineTurnActive: engineTurnActive,
                 // The list's, which no event carries either.
                 activity: activity,
@@ -254,6 +273,9 @@ public extension Session {
                 projectMembership: projectMembership ?? self.projectMembership)
         // The queue's gate is the list query's alone, and no event carries it: kept while the row is
         // still queued, and dropped once it is not, so a later queue does not read an old gate.
+        merged.coordinatorHandoff = coordinatorHandoff ?? self.coordinatorHandoff
+        merged.coordinatorHandoffReceived = coordinatorHandoffReceived ?? self.coordinatorHandoffReceived
+        merged.enginePhase = enginePhase ?? self.enginePhase
         if merged.effectiveRunState == .queued {
             merged.queuedReason = queuedReason
             merged.queuedActive = queuedActive

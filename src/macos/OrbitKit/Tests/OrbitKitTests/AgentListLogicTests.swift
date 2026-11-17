@@ -160,14 +160,18 @@ final class AgentListLogicTests: XCTestCase {
         let hidden = AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
                                                     projectsWaiting: 0, wikiWaiting: 0)
         XCTAssertEqual(hidden.map(\.id), ["section:projects", "section:tasks"])
-        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
-        let withNew = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true,
-                                                     projectsWaiting: 0, wikiWaiting: 0, newWiki: true)
-        XCTAssertEqual(withNew.map(\.id), ["section:projects", "section:tasks", "section:wiki", "new-wiki"])
-        XCTAssertEqual(withNew.map(\.newWiki), [false, false, false, true])
-        XCTAssertEqual(AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
-                                                      projectsWaiting: 0, wikiWaiting: 0, newWiki: true).map(\.id),
-                       ["section:projects", "section:tasks"])
+    }
+
+    /// Scheduled sits right under Tasks on the Mac rail, with the schedules that need the owner as its count, and
+    /// only while the server serves scheduled tasks: never among the workspaces.
+    func testSidebarSectionsPutScheduledUnderTasksWithItsNeedsYouCount() {
+        let rows = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true, projectsWaiting: 1,
+                                                  wikiWaiting: 0, scheduled: true, scheduledNeedsYou: 2)
+        XCTAssertEqual(rows.map(\.id), ["section:projects", "section:tasks", "section:scheduled", "section:wiki"])
+        XCTAssertEqual(rows.map(\.waiting), [1, 0, 2, 0])
+        XCTAssertFalse(AgentListLogic.sidebarSections(AppSection.workSections, wiki: true, projectsWaiting: 0,
+                                                      wikiWaiting: 0, scheduledNeedsYou: 2)
+            .contains { $0.section == .scheduled })
     }
 
     /// An open project row: its title and the drawer's one trailing mark, duplicate ids dropped.

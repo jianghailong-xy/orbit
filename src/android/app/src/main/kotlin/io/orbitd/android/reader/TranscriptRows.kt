@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
 
@@ -46,7 +47,7 @@ internal fun contentImages(value: JsonElement?): List<String> = when (value) {
 @Immutable
 internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = null, val children: List<TranscriptRow> = emptyList(),
     val folded: List<RunEvent> = emptyList(), val steer: SteerOutcome? = null, val steps: List<TranscriptRow> = emptyList(),
-    val exchanges: List<FoldedExchange> = emptyList()) {
+    val exchanges: List<FoldedExchange> = emptyList(), val awaitsTranslation: Boolean = false) {
     val key: String get() = "event:${event.seq}"
     fun contains(seq: Long): Boolean = event.seq == seq || result?.seq == seq || folded.any { it.seq == seq } || children.any { it.contains(seq) } ||
         steps.any { it.contains(seq) } || exchanges.any { ex -> ex.rows.any { it.contains(seq) } }
@@ -76,6 +77,7 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
         }
     }
     val engine = EngineReading(events)
+    val awaiting = awaitingTranslation(events)
     val knownTools = events.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
     fun parent(event: RunEvent) = event.parent()?.takeIf(knownTools::contains)
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
@@ -104,12 +106,32 @@ internal fun transcriptRows(events: List<RunEvent>, receipts: List<JsonObject> =
             result?.let { usedResults += it.seq }
             val id = e.toolId()
             val children = if (e.type == "tool_use" && id != null && id !in visited) rows(id, visited + id) else emptyList()
-            TranscriptRow(e, result, children, steer = steer(e))
+            TranscriptRow(e, result, children, steer = steer(e), awaitsTranslation = e.seq in awaiting)
         }.let(::foldThinking)
     }
     // Results may precede calls in a restored partial window; suppress matched results independent of order.
     events.filter { it.type == "tool_use" }.forEach { e -> results[parent(e) to e.toolId()]?.let { usedResults += it.seq } }
     return rows(null, emptySet())
+}
+
+/**
+ * Settings › Translation (2A, web `awaitsTranslation`): the agent's own replies in a turn opened by a message the owner wrote with
+ * translation on, that carry no translation yet — the server translates each once its block is stored, so one is on its way. A
+ * sub-agent's report to its caller is never translated.
+ */
+internal fun awaitingTranslation(events: List<RunEvent>): Set<Long> {
+    val awaiting = mutableSetOf<Long>()
+    var translated = false
+    events.forEach { e ->
+        when (e.type) {
+            "user" -> if (e.parent().isNullOrEmpty() && e.fields["steer"] != JsonPrimitive(true)) Translation.turn(e.fields["translation"])?.let {
+                translated = it.state == Translation.TurnState.DONE || it.state == Translation.TurnState.SENT_AS_WRITTEN
+            }
+            "assistant" -> if (translated && e.parent().isNullOrEmpty() && e.fields["translation"] == null) awaiting += e.seq
+            "turn_end" -> translated = false
+        }
+    }
+    return awaiting
 }
 
 /**
@@ -140,6 +162,8 @@ internal class EngineReading(events: List<RunEvent>) {
         val retries = mutableListOf<Retry>()
         val seen = HashMap<String, Triple<Stderr, String, Int>>()
         val diagnosticsSeen = HashMap<String, Diagnostic>()
+        var legacyWithheld: RunEvent? = null
+        var legacyCount = 0
         var lastStderr: Triple<Stderr, Long, Boolean>? = null
         var lastFailure: Failure? = null
         val open = LinkedHashMap<String, String>()
@@ -168,6 +192,12 @@ internal class EngineReading(events: List<RunEvent>) {
             else -> false
         }
         events.forEach { e ->
+            val legacy = e.type == "system" && e.fields.string("subtype") == "secret_patch_withheld" &&
+                e.fields.string("path")?.let { path -> listOf(
+                    "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+                    "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+                ).any { e.fields.string("notice") == "$path: $it" } } == true
+            if (!legacy || legacyWithheld?.turnId != e.turnId) { legacyWithheld = null; legacyCount = 0 }
             // A tool call can sit between a stderr line and its continuation; anything else ends the log.
             if (e.type !in setOf("system", "tool_use", "tool_result")) { lastStderr = null; lastFailure = null }
             if (!e.parent().isNullOrEmpty() && e.type in setOf("assistant", "thinking", "tool_use", "tool_result")) {
@@ -218,10 +248,17 @@ internal class EngineReading(events: List<RunEvent>) {
                             }
                         }
                     }
-                    // A deliberate heads-up wins over stderr, one row each; a recoverable diagnostic is a calm row of its own kind.
+                    // A deliberate heads-up wins over stderr; legacy temporary secret notices fold into one row.
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {
-                        rows[e.seq] = e.row("notice") { put("text", notice) }
+                        if (legacy) {
+                            val first = legacyWithheld ?: e.also { legacyWithheld = it }
+                            legacyCount++
+                            rows[first.seq] = first.row("notice") { put("text", if (legacyCount == 1) "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it." else "Orbit held back the diffs of $legacyCount files while it checked this runner for a removed secret. No secret was found in them.") }
+                            if (first.seq != e.seq) rows[e.seq] = null
+                        } else {
+                            rows[e.seq] = e.row("notice") { put("text", notice) }
+                        }
                         if (e.fields.string("noticeKind") == "pool-member-switched") { switches += e to notice; openSwitches += e.seq }
                         lastRow = e
                         return@forEach

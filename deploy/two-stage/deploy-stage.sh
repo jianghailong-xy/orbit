@@ -12,6 +12,11 @@
 #   ORBIT_NGINX_IMAGE, ORBIT_NATS_IMAGE
 #                            the base images by digest, from that commit's deploy/two-stage/base-images.env (postgres,
 #                            pgbackup and db-proxy are pinned by deploy/postgres-pinned.yml and deploy/db-proxy.yml)
+#   ORBIT_MANAGED_RUNNER_IMAGE
+#                            the hosted runners' image by digest, <registry>/orbit-managed-runner@sha256:<64 hex>, or
+#                            empty for a release without one. Where this host runs managed runners on Kubernetes, their
+#                            profile's runner.image is set to it before the apiserver is replaced, and the apiserver's
+#                            manager moves each runner onto it once that runner is idle (rollPreviousImage)
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
 #   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
 #   ORBIT_DEPLOY_PLAN        1 prints the plan and stops there, having changed nothing (upgrade.sh --plan)
@@ -40,6 +45,7 @@ RELEASE_ENV=(
   "ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE"
   "ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE"
 )
+MR_IMAGE="${ORBIT_MANAGED_RUNNER_IMAGE:-}"
 PULL_BASE="${ORBIT_DEPLOY_PULL_BASE:-0}"
 PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
 PLAN="${ORBIT_DEPLOY_PLAN:-0}"
@@ -423,6 +429,39 @@ for service in apiserver web; do
   fi
 done
 
+# The hosted runners' image. This host runs managed runners on Kubernetes when its .env switches them on and their
+# profile (profile.json in ORBIT_MANAGED_RUNNERS_DIR, which the apiserver reads as it starts) names that backend. The
+# profile names the image in one place, runner.image; a profile that names an image anywhere else is left alone.
+env_value() { sed -n "s/^$1=//p" .env | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+MR_PROFILE=""
+MR_FROM=""
+if [ -n "$MR_IMAGE" ] && [ "$(env_value ORBIT_MANAGED_RUNNERS_ENABLED)" = true ]; then
+  mr_dir="$(env_value ORBIT_MANAGED_RUNNERS_DIR)"
+  case "$mr_dir" in
+    "") ;;
+    /*) ;;
+    *) mr_dir="$DIR/${mr_dir#./}" ;;
+  esac
+  if [ -n "$mr_dir" ] && [ -f "$mr_dir/profile.json" ] \
+    && grep -Eq '"backend"[[:space:]]*:[[:space:]]*"kubernetes"' "$mr_dir/profile.json"; then
+    if [ "$(grep -cE '"image"[[:space:]]*:' "$mr_dir/profile.json")" != 1 ]; then
+      refuse "error: $mr_dir/profile.json names an image in more than one place, so this deploy cannot tell which is" \
+        "       runner.image. Set runner.image to $MR_IMAGE by hand, or make it the only \"image\"."
+    fi
+    MR_PROFILE="$mr_dir/profile.json"
+    MR_FROM="$(sed -nE 's/.*"image"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$MR_PROFILE")"
+    echo "==> The hosted runners' image, in $MR_PROFILE"
+    if [ "$MR_FROM" = "$MR_IMAGE" ]; then
+      echo "    managed-runner   unchanged"
+    else
+      echo "    managed-runner   $MR_FROM"
+      echo "                  -> $MR_IMAGE"
+      echo "    The profile is changed before the apiserver is replaced, which reads it as it starts. Each hosted runner"
+      echo "    moves onto it once it is idle: drained, and woken at once on the new image, on the same volume."
+    fi
+  fi
+fi
+
 # Every image, before anything changes. Each comes from the registry, or this release is not one this host can run.
 while read -r image; do
   case "$image" in
@@ -455,6 +494,26 @@ if [ "$(docker compose config --hash '*' | sort)" != "$HASHES" ]; then
   echo "error: with the release's lines in .env, Compose renders something other than this release. Nothing was" >&2
   echo "       recreated; check the lines between \"$BEGIN\" and \"$END\" in .env." >&2
   exit 1
+fi
+
+# The hosted runners' profile names the release's image, by a rename, with the one it replaces kept beside it. The
+# apiserver reads it only as it starts: one this release does not replace otherwise is replaced for it.
+if [ -n "$MR_PROFILE" ] && [ "$MR_FROM" != "$MR_IMAGE" ]; then
+  backup="$MR_PROFILE.bak-$(date -u +%Y%m%dT%H%M%SZ)-before-${COMMIT:0:12}"
+  cp -p "$MR_PROFILE" "$backup"
+  cp -p "$MR_PROFILE" "$MR_PROFILE.new"
+  from_pattern="$(printf '%s' "$MR_FROM" | sed 's/[][\.*^$+?(){}]/\\&/g')"
+  sed -E "s|(\"image\"[[:space:]]*:[[:space:]]*)\"$from_pattern\"|\\1\"$MR_IMAGE\"|" "$backup" >"$MR_PROFILE.new"
+  if [ "$(grep -cF "\"$MR_IMAGE\"" "$MR_PROFILE.new")" != 1 ] || [ "$(wc -l <"$MR_PROFILE.new")" != "$(wc -l <"$backup")" ]; then
+    rm -f "$MR_PROFILE.new"
+    fail "error: $MR_PROFILE could not be set to $MR_IMAGE; it is as it was. Nothing was recreated."
+  fi
+  mv -f "$MR_PROFILE.new" "$MR_PROFILE"
+  echo "==> $MR_PROFILE names $MR_IMAGE (the one before is in $backup)"
+  if [ "${STATE[apiserver]:-create}" = unchanged ]; then
+    STATE[apiserver]=recreate
+    FORCE[apiserver]=1
+  fi
 fi
 
 # From here on, plain `docker compose`, as anyone on this host would run it.
@@ -492,7 +551,7 @@ for service in "${DEPLOYED[@]}"; do
       ;;
     apiserver)
       echo "==> apiserver: $state (it applies database migrations as it starts)"
-      up apiserver
+      up ${FORCE[apiserver]:+--force-recreate} apiserver
       retire_leftover apiserver "$(name_of "$(running apiserver)")"
       ;;
     web)

@@ -20,6 +20,9 @@ import {
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
 import { bashCommandRules } from '@orbit/shared';
+import { shownQuestions } from '../lib/translation';
+import type { HeldDecision } from '../lib/approvalDecisions';
+import { UntranslatedDecisionFoot } from './TranslationParts';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -177,6 +180,16 @@ export function offersCreateAndStart(a: ApprovalInfo): boolean {
   if (!isTaskCreate(a)) return false;
   const input = (a.input ?? {}) as { preview?: BatchPreview; acceptsStartAfterCreate?: unknown };
   return input.acceptsStartAfterCreate === true && input.preview?.needsManualStart === 1;
+}
+
+/**
+ * Whether Create and start is the card's primary answer, Enter included, with Create it beside it:
+ * whenever it is offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a
+ * hold someone asked for, and pressing Enter out of habit should not start what they held.
+ * macOS/iOS: `Approvals.createAndStartLeads`; Android: `ApprovalRules.createAndStartLeads`.
+ */
+export function createAndStartLeads(a: ApprovalInfo): boolean {
+  return offersCreateAndStart(a) && (a.input as { autoRunWhenReady?: unknown }).autoRunWhenReady !== false;
 }
 
 /** Under a new project's criteria: approving the create is not confirming them — the project's
@@ -421,7 +434,7 @@ function deleteInput(a: ApprovalInfo, now: number): DeleteInput | null {
 
 /**
  * Orbit's asks before a session writes what decides a workspace's next session (agent_create and
- * agent_update naming its variables, folder, system prompts, runner or worktree setting). The server
+ * agent_update naming its variables, folder, instructions, runner or worktree setting). The server
  * files the card with its own reading of the workspace, and writes only against a card a person
  * answered (`runner-workspace-approval.ts`), so like every ask Orbit raises for itself it is never
  * waived by a rule. It shows each variable's name and its value in full: the owner decides by reading
@@ -467,8 +480,8 @@ function workspaceWriteInput(a: ApprovalInfo): WorkspaceWriteInput | null {
   const written = (v: unknown): string => text(v) || 'Cleared';
   const fields: WorkspaceWriteInput['fields'] = [];
   if (changes.workDir !== undefined) fields.push({ caption: 'Working directory', value: written(changes.workDir) });
-  if (changes.systemPrompt !== undefined) fields.push({ caption: 'System prompt', value: written(changes.systemPrompt) });
-  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Appended system prompt', value: written(changes.appendSystemPrompt) });
+  if (changes.systemPrompt !== undefined) fields.push({ caption: 'Base instructions', value: written(changes.systemPrompt) });
+  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Runtime instructions', value: written(changes.appendSystemPrompt) });
   if (changes.runner !== undefined) fields.push({ caption: 'Runner', value: runnerName(changes.runner) });
   if (changes.enableWorktree !== undefined) {
     fields.push({
@@ -569,7 +582,7 @@ function planText(input: unknown): string {
 // repeatable. A Bash line yields one rule per distinct sub-command prefix (so `cd x && git
 // add …` remembers both, not just the leading `cd`); other tools get a single tool-wide rule
 // (no ruleContent).
-function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
+export function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // A DAG change joins questions and plans in having no repeatable form. "Always allow
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
@@ -600,6 +613,9 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
       a.input && typeof a.input === 'object'
         ? (a.input as { command?: unknown }).command
         : undefined;
+    if ((a.input as { orbitScheduleCheckOnly?: boolean })?.orbitScheduleCheckOnly === true) {
+      return typeof cmd === 'string' && cmd.trim() ? [{ toolName: 'Bash', ruleContent: cmd }] : [];
+    }
     return typeof cmd === 'string' ? bashCommandRules(cmd) : [];
   }
   return [{ toolName: a.toolName }];
@@ -627,7 +643,35 @@ type OnDecide = (
   rememberRules?: PermissionRule[],
   /** The single-task card's Create and start (`CREATE_AND_START`); every other press leaves it out. */
   startAfterCreate?: boolean,
-) => void;
+  /** Settings › Translation's Send as written, after the decision was refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean,
+) => unknown;
+
+/** "Couldn't translate, so it wasn't sent · Retry · Send as written" under a card whose decision the
+ *  server refused 422 TRANSLATION_FAILED: each press posts the held decision again. */
+function UntranslatedFoot({ id, held, onDecide }: { id: string; held: HeldDecision; onDecide: OnDecide }) {
+  const post = (sendAsWritten: boolean) => async () =>
+    onDecide(id, held.behavior, held.answers, held.message, held.rememberRules, held.startAfterCreate, sendAsWritten || undefined);
+  return <UntranslatedDecisionFoot onRetry={post(false)} onSendAsWritten={post(true)} />;
+}
+
+/** A question form's picks and typed answers seeded from a held decision's answers, so the card
+ *  that comes back after a 422 TRANSLATION_FAILED still shows what the owner answered. */
+function seededAnswers(questions: QItem[], held: HeldDecision | undefined) {
+  const sel: Record<string, string[]> = {};
+  const custom: Record<string, string> = {};
+  if (!held?.answers) return { sel, custom };
+  for (const qq of questions) {
+    const q = qq.question ?? '';
+    const given = held.answers[q];
+    if (!given) continue;
+    const labels = new Set((qq.options ?? []).map((o) => o?.label ?? ''));
+    sel[q] = given.filter((a) => labels.has(a));
+    const typed = given.filter((a) => !labels.has(a));
+    if (typed.length) custom[q] = typed.join(', ');
+  }
+  return { sel, custom };
+}
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
  *  form for AskUserQuestion, otherwise a plain allow/deny (with a rich render for plans). */
@@ -640,12 +684,15 @@ export function ApprovalPanel({
   onDecline,
   rememberable = true,
   subagent = null,
+  untranslated,
 }: {
   approval: ApprovalInfo;
   /** For a card a SubAgent asked: its delegate call's description, '' when unknown. Drawn as a grey line above the
    *  card (docs/subagent-design.md §5.3). Null for a card the session asked itself. */
   subagent?: string | null;
   onDecide: OnDecide;
+  /** The decision last pressed here, refused 422 TRANSLATION_FAILED (`useApprovalDecisions`). */
+  untranslated?: HeldDecision;
   /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
    *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
   rememberable?: boolean;
@@ -677,7 +724,13 @@ export function ApprovalPanel({
   const keys = useCardKeyClaim(armed && !isQuestion, anchor);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
-  useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false, anchor });
+  // Where Create and start leads, Enter presses it: the hint and the key go with the filled button.
+  const startLeads = createAndStartLeads(approval);
+  const startAfterCreate = () => onDecide(approval.id, 'allow', undefined, undefined, undefined, true);
+  useApproveHotkey(keys, () => (startLeads ? startAfterCreate() : onDecide(approval.id, 'allow')), {
+    requireMod: false,
+    anchor,
+  });
   useApproveHotkey(keys && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   }, { anchor });
@@ -691,10 +744,14 @@ export function ApprovalPanel({
         onDecide={onDecide}
         answerable={answerable}
         onChatAbout={onChatAbout}
+        untranslated={untranslated}
       />
     );
   }
-  const plan = isPlan(approval) ? planText(approval.input) : '';
+  // Settings › Translation (3A): the plan and a tool card's description as the owner reads them.
+  const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
+  const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
+  const translatedDescription = shown?.description;
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
@@ -749,6 +806,17 @@ export function ApprovalPanel({
                           : provider
                             ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
                             : `🔓 Approve tool call: ${approval.toolName}`;
+  const createAndStartButton = (tone: 'primary' | 'accent') => (
+    <CardActionButton
+      tone={tone}
+      disabled={!answerable}
+      title="Create the task and start its run now, so you are not asked again to start it."
+      onClick={startAfterCreate}
+    >
+      {CREATE_AND_START}
+      {keys && tone === 'primary' && <span className="approval-kbd">{ENTER_HINT}</span>}
+    </CardActionButton>
+  );
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -756,7 +824,7 @@ export function ApprovalPanel({
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
       {subagent !== null && (
-        <div className="approval-subagent">{subagent ? `SubAgent · ${subagent}` : 'SubAgent'}</div>
+        <div className="approval-subagent">{subagent ? `Agent · ${subagent}` : 'Agent'}</div>
       )}
       <div className="approval-head">
         {heading}
@@ -791,13 +859,18 @@ export function ApprovalPanel({
         ) : provider ? (
           <ProviderWriteBody input={provider} />
         ) : (
-          <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          <>
+            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
+            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          </>
         )}
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
+        {startLeads && createAndStartButton('primary')}
         <CardActionButton
-          tone="primary"
+          tone={startLeads ? 'accent' : 'primary'}
           disabled={!answerable}
           onClick={() => onDecide(approval.id, 'allow')}
         >
@@ -824,20 +897,10 @@ export function ApprovalPanel({
                             : provider
                               ? PROVIDER_ACTIONS[provider.verb]
                               : 'Approve'}
-          {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
+          {keys && !startLeads && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
-        {/* A second yes, beside the first rather than in its place: the press above stays the
-            plain create it always was, Enter included. */}
-        {offersCreateAndStart(approval) && (
-          <CardActionButton
-            tone="accent"
-            disabled={!answerable}
-            title="Create the task and start its run now, so you are not asked again to start it."
-            onClick={() => onDecide(approval.id, 'allow', undefined, undefined, undefined, true)}
-          >
-            {CREATE_AND_START}
-          </CardActionButton>
-        )}
+        {/* On a held task Create and start is still offered, but second: Create it keeps Enter. */}
+        {offersCreateAndStart(approval) && !startLeads && createAndStartButton('accent')}
         {rules.length > 0 && (
           <CardActionButton
             tone="accent"
@@ -1394,18 +1457,24 @@ function QuestionForm({
   onDecide,
   answerable,
   onChatAbout,
+  untranslated,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   answerable: boolean;
   onChatAbout?: (id: string, question: string) => void;
+  untranslated?: HeldDecision;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
-  const questions = questionsOf(approval.input);
-  const [sel, setSel] = useState<Record<string, string[]>>({});
+  // Shown in the owner's language once the server has translated the card (Settings › Translation, 3A).
+  // Answers are keyed by what is shown; the server maps them back to the English the engine asked in.
+  const questions = shownQuestions(questionsOf(approval.input), approval.translation);
+  // A card back after its answer could not be translated starts from that answer (1A).
+  const [seed] = useState(() => seededAnswers(questions, untranslated));
+  const [sel, setSel] = useState<Record<string, string[]>>(seed.sel);
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
-  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [custom, setCustom] = useState<Record<string, string>>(seed.custom);
   // "Chat about this": rather than picking an option, the user replies conversationally
   // in the main composer (handled by WorkspaceView via onChatAbout). The reply still rides back
   // as a `deny` message so claude reads it as in-turn feedback instead of a forced option.
@@ -1499,6 +1568,7 @@ function QuestionForm({
         </div>
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
         {/* Unanswered questions cannot be submitted, so the control that would submit them is not
             pressable — the same rule the decision card's Confirm is under. */}

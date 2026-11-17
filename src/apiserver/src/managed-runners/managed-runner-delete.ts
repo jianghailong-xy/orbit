@@ -6,7 +6,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 /**
  * Refuse to hard-delete a managed runner's row, whatever the switch says
  * (docs/managed-runner-design.md, "Retention explicit deletion and backup"). `workspace.runner_id`
- * cascades, so the delete would take the default workspace with it, and the mapping that records
+ * cascades, so the delete would take the runner's workspaces with it, and the mapping that records
  * the runner's data volume holds the row (ON DELETE RESTRICT). Releasing compute never needs it.
  */
 export async function refuseManagedRunnerDeletion(prisma: Pick<PrismaService, 'managedRunner'>, runnerId: string): Promise<void> {

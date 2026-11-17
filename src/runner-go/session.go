@@ -446,6 +446,27 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 	return ""
 }
 
+// moveIdleSessionToItsAccount is what a reload does for a session it finds idle, besides leaving it
+// cold: an account switch carries its conversation now, as its next spawn would, so the account it
+// left can be removed while it waits for its next message (2026-11-16). Each engine moves the way its
+// own spawn does, and records the new account only once the conversation is there. A reload that did
+// not switch accounts finds nothing to carry. Antigravity keeps no conversation in an account and
+// records its new one as it retires agy (runAntigravitySessionProcess).
+func moveIdleSessionToItsAccount(job *ClaimedSession, execDir, scratch string) {
+	switch runtimeProvider(job) {
+	case providerClaude:
+		moveIdleClaudeConversation(job, execDir, scratch)
+	case providerCodex:
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratch, execDir); err != nil {
+			logln("codex session", job.SessionID, "stays on its account: moving its thread failed:", err)
+		} else if moved {
+			logln("codex session", job.SessionID, "moved to the account it was switched to")
+		}
+	case providerKimi:
+		moveIdleKimiConversation(job, execDir, scratch)
+	}
+}
+
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
@@ -1031,11 +1052,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// The tool calls each turn has open, so a runner stop that cuts the turn answers them in the
 	// transcript before its interrupt (interrupted_tool_calls.go): every engine's events pass here.
 	toolCalls := &interruptedToolCalls{}
+	// How the turn used Orbit, in counts and codes only, filed ahead of its turn_end (agent_contract_telemetry.go).
+	contractTelemetry := newSessionAgentContractTelemetry(job)
 	// emitThrough buffers one event, filed against turnID, if gate still admits it — preceded, for a
-	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open.
+	// runner stop's interrupt, by the synthetic results of the calls that turn leaves open, and for a
+	// turn_end by the turn's agent-contract telemetry.
 	emitThrough := func(gate *eventEmissionGate, turnID, eventType string, payload map[string]interface{}) {
 		for _, result := range toolCalls.observe(turnID, eventType, payload) {
 			emitOne(gate, turnID, evToolResult, result)
+		}
+		if summary := contractTelemetry.observe(turnID, eventType, payload); summary != nil {
+			emitOne(gate, turnID, evSystem, summary)
 		}
 		emitOne(gate, turnID, eventType, payload)
 	}
@@ -1073,7 +1100,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	emit := emitOn(emissionGate)
 	// Where a file left out of a commit for holding a secret is told about (secretUnstagedWarning).
-	defer registerSecretWarnings(sessionID, emit)()
+	defer registerSecretWarnings(sessionID, emit, func() string {
+		curTurnMu.Lock()
+		defer curTurnMu.Unlock()
+		return curTurn
+	})()
 	// Where a main checkout result line the control plane queued as a `notice` turn is written (main_checkout_notice.go).
 	defer registerMainCheckoutNotices(sessionID, emitFor)()
 
@@ -1157,16 +1188,6 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is
 	// reported inside the grace the final event flush is given (eventCtx above).
 	bg.drainOnRunnerShutdown(shutdownCtx)
-	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
-	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
-	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
-	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
-	// own route (sessionNotify).
-	bg.notifyWhenCold(
-		func() bool { return pool.engineResident(live) },
-		func(message string) error { return t.sessionNotify(job.SessionID, message) },
-	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
 	// started the wait is gone. The receipt says which, for this runner's log.
@@ -1738,8 +1759,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// --resume + the new flags (already applied to job.Agent). Not a crash, so
 			// it doesn't consume the respawn budget. If the session is idle, leave it
 			// cold rather than spawning a process that owns no active permit; its next
-			// claim resumes directly with these updated flags.
+			// claim resumes directly with these updated flags. An account switch is the one
+			// change that cannot wait for that claim: the conversation is carried now, so the
+			// account the session left can be removed while it is idle.
 			if !pool.isActive(live) {
+				moveIdleSessionToItsAccount(job, execDir, scratch)
 				continue
 			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
@@ -1962,7 +1986,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false
@@ -2219,6 +2243,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			firstSpawn = true
 		}
 	}
+	// Set while the conversation this process continues was compacted or resumed and no message has carried
+	// the note that says so yet (context_reset_note.go): from the start for a resume, and on each compaction.
+	var contextReset atomic.Bool
+	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
@@ -2543,6 +2571,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
+				// A conversation compacted or resumed since the last message: this one says so first. Like the
+				// shell output, the flag is cleared only once the message is accepted below.
+				carriesReset := !steer && contextReset.Load()
+				feedText = withContextResetNote(feedText, carriesReset, job.insideRecordedWork())
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2608,6 +2640,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
 				pendingShellCtx = nil // this message carries it now
+				if carriesReset {
+					contextReset.Store(false)
+				}
 				userEv["delivery"] = string(deliveryEnqueued)
 				if steer {
 					// Which kind this message was filed as, on the one event that survives a
@@ -2993,6 +3028,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
 	// against. Empty when that result failed or closed a turn the engine started on its own.
 	var lastAnsweredTurnID string
+	// What this process's engine says about Orbit's tools, sent when it changes (agent_tools_report.go).
+	var agentTools agentToolsReporter
+	// Whether a compaction boundary has gone by since the last result: what tells a `/compact`
+	// turn's result from the resume carrier it otherwise looks exactly like.
+	var compactedThisTurn bool
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -3032,6 +3072,9 @@ scanLoop:
 		}
 		handleMessage(msg, emit, bg)
 		claudeNoteEngineMode(job, msg)
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" && msg["parent_tool_use_id"] == nil {
+			contextReset.Store(true)
+		}
 		// The init handshake is where the CLI names its own version, and it is the only place
 		// it does. One control frame has to know it — apply_flag_settings answers `success`
 		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)
@@ -3040,6 +3083,14 @@ scanLoop:
 		if msg["type"] == "system" && msg["subtype"] == "init" {
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
+			// The same frame names the MCP servers it started and the tools and skills it has: the
+			// session's Agent Tools report, in the engine's own words. A subagent's init is not the session's.
+			if msg["parent_tool_use_id"] == nil {
+				agentTools.send(claudeAgentToolsReport(job, msg), emit)
+			}
+		}
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
+			compactedThisTurn = true
 		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
@@ -3085,7 +3136,9 @@ scanLoop:
 			// the reply the user is waiting for — and leave `pending` untouched: the message
 			// that was fed is still unanswered, and the result of the work it actually starts
 			// is what acks it.
-			if isResumeCarrierResult(r, lastAssistantText) {
+			compacted := compactedThisTurn
+			compactedThisTurn = false
+			if isResumeCarrierResult(r, lastAssistantText, compacted) {
 				continue
 			}
 			var turnID string

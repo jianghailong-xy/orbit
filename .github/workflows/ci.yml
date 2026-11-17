@@ -56,6 +56,8 @@ jobs:
           fi
       - name: Test documentation checks
         run: npm run test:docs
+      - name: Test ALREADY_COORDINATING Agent interaction contract and negative outputs
+        run: node --test test/already-coordinating-eval.test.mjs
       - name: Validate public documentation
         run: npm run docs:check
       - name: Test the release identity rules
@@ -312,6 +314,24 @@ jobs:
       - name: Test runner
         working-directory: src/runner-go
         run: go test -timeout 30m ./...
+
+  # The agent-contract eval's deterministic layer (docs/agent-contract-eval.md): the Orbit Agent Contract's scenarios
+  # played by a scripted agent through the real `orbit mcp` and CLI against the eval's control plane, the graders held
+  # by an agent per forbidden move, and the report and the per-turn telemetry held to carry no credential and no
+  # person's text. The Go runner job runs these tests too, inside the whole package; this job names them, so the
+  # release gate has a check of its own to cite, and answers in about two minutes rather than the package's thirty.
+  agent-contract-eval:
+    name: Agent contract eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - name: Run the deterministic agent-contract eval
+        run: scripts/agent-eval.sh deterministic
 
   # The runner link gateway (src/link-gateway), a Go module of its own. -race because it is a server of concurrent
   # connections whose reader, writer and pinger share state.

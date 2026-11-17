@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import io.orbitd.android.cards.NeedsYouMenuIcon
+import io.orbitd.android.cards.NeedsYouToasts
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.auth.loginBackground
@@ -48,13 +50,16 @@ import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
-import io.orbitd.android.wiki.WikiDrawerNewRow
 import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
 import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.cards.WaitingOnYouDestination
+import io.orbitd.android.core.schedule.ScheduleCopy
+import io.orbitd.android.schedule.ScheduledDrawerCount
+import io.orbitd.android.schedule.ScheduledPage
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.WaitingOnYouDrawerCount
 import io.orbitd.android.cards.rememberTerminalsChanged
 import io.orbitd.android.watch.WatchStore
@@ -64,6 +69,10 @@ import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.LocalManagedRunnerStatus
+import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
@@ -179,6 +188,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
+        // Admin is a drawer row for an admin, as iOS's is, since Settings' list took the web nav's groups and lost its row.
+        var admin by remember(signedIn.handle) { mutableStateOf(false) }
+        LaunchedEffect(management) {
+            admin = try { (management.get("users/me") as? kotlinx.serialization.json.JsonObject)?.text("role") == "ADMIN" }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false }
+        }
         val scopeList = remember(api) { SessionScopeList(api) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
@@ -224,8 +239,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
         val workspaces = orderedWorkspaces(data.workspaces)
-        val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows)
-        val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows)
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready)
+        FollowManagedRunner(managedForLanding, follow = data.ready && managedForLanding.shown != null)
+        val managedStatus = managedForLanding.shown?.status
+        val managedOfferedForLanding = rememberManagedOffered(management, data.ready)
+        val managedLandingReady = managedOfferedForLanding == false || managedForLanding.loaded
+        val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows, managedStatus = managedStatus)
+        val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows, managedStatus = managedStatus)
         fun openNewSession(origin: Origin = Origin.LIST) {
             val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
             when {
@@ -235,12 +255,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }
         }
         // Rule 10 & 11: with no workspaces, an online machine lands on its new session page; if all machines are offline, lands on Machines & models.
-        LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, navigation.canGoBack, navigation.pending) {
+        LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, managedLandingReady, navigation.canGoBack, navigation.pending) {
             if (data.ready && data.workspaces.isEmpty() &&
                 route.destination == Destination.WORKSPACES && !navigation.canGoBack && navigation.pending == null) {
                 if (firstOnline != null) {
                     land(machineDraftDestination(firstOnline), OrbitRoute(Destination.DRAFT, id = firstOnline))
-                } else if (data.effectiveRunnerRows.isNotEmpty()) {
+                } else if (managedLandingReady && data.effectiveRunnerRows.isNotEmpty()) {
                     land("settings", OrbitRoute(Destination.RUNNER))
                 }
             }
@@ -263,23 +283,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             val before = navigation
             navigation = before.landHome(workspaces.map { it.id }.filterNot { ObjectId.same(it, deletedWorkspace) }, lastWorkspace.id, opened, provisionalLanding)
             if (!data.cached) provisionalLanding = null else if (navigation !== before) provisionalLanding = rootOf(navigation)
-        }
-        // A new account whose only workspace is its managed runner's default lands on that workspace's draft, where the welcome card
-        // stands (docs/mocks/new-user-onboarding; the web's DefaultLanding + WorkspaceView). Once per sign-in, over the list the launch
-        // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
-        var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
-        val onlyWorkspace = workspaces.singleOrNull()?.id
-        val managedForLanding = rememberManagedRunner(management, ask = data.ready && onlyWorkspace != null && !managedLanded)
-        val managedDefault = managedForLanding.shown?.status?.workspaceId
-            ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
-        val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
-        LaunchedEffect(newManagedAccount, managedDefault, route, navigation.canGoBack) {
-            val workspace = managedDefault ?: return@LaunchedEffect
-            if (!newManagedAccount || managedLanded || navigation.canGoBack) return@LaunchedEffect
-            if (route.destination == Destination.WORKSPACE && ObjectId.same(route.id, workspace)) {
-                managedLanded = true
-                open(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
-            }
         }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
@@ -311,7 +314,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Icon(painterResource(R.drawable.ic_search), "Search sessions")
                             }
                         }
-                        listOf(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
+                        // Scheduled (board 01 ①): account-wide, right under Tasks and nowhere in a workspace's list; away while the
+                        // server predates scheduled tasks.
+                        val scheduled = remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) }
+                        val scheduledState by scheduled.state.collectAsState()
+                        LaunchedEffect(scheduled, revision) { scheduled.load() }
+                        listOfNotNull(Triple("Projects", Destination.PROJECTS, R.drawable.ic_project), Triple("Tasks", Destination.TASKS, R.drawable.ic_task),
+                            Triple(ScheduleCopy.Nav.scheduled, Destination.SCHEDULED, R.drawable.ic_calendar).takeUnless { scheduledState.unsupported },
                             Triple("Wiki", Destination.WIKI, R.drawable.ic_wiki)).forEach { (name, dest, icon) ->
                             val row = @Composable {
                                 NavigationDrawerItem(label = { Text(name) }, selected = navigation.section == name,
@@ -323,14 +332,11 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     badge = when (dest) {
                                         Destination.WIKI -> ({ WikiDrawerCount(app, signedIn.handle) })
                                         Destination.PROJECTS -> ({ ProjectsDrawerCount(projects) })
+                                        Destination.SCHEDULED -> ({ ScheduledDrawerCount(scheduledState.needsYouCount) })
                                         else -> null
-                                    })
+                                    }, modifier = if (dest == Destination.SCHEDULED) Modifier.testTag("drawer:scheduled") else Modifier)
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
-                        }
-                        // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form; a wiki made opens in the Wiki.
-                        WikiDrawerNewRow(app, signedIn.handle, data, closeDrawer = { scope.launch { drawer.close() } }) {
-                            select("Wiki", OrbitRoute(Destination.WIKI, origin = Origin.DRAWER))
                         }
                         // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
@@ -338,6 +344,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
                             badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
+                        if (admin) NavigationDrawerItem(label = { Text("Admin") }, selected = route.destination == Destination.SETTINGS && route.id == "admin",
+                            icon = { Icon(painterResource(R.drawable.ic_admin), null) }, modifier = Modifier.testTag("drawer:admin"),
+                            onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, "admin", origin = Origin.DRAWER)) })
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))
@@ -345,8 +354,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             val runner = data.runners.firstOrNull { ObjectId.same(it.id, workspace.runnerId) }
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
-                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.name,
-                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false) "Offline" else null,
+                                label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.let { if (RunnerPage.isManaged(it.id, managed = it.managed)) RunnerCopy.MANAGED_RUNNER_LABEL else it.name },
+                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false)
+                                        ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                     sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
                                     sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }.takeIf { it > 0 }?.let { "$it running" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall) } },
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
@@ -385,7 +395,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 // keyboard — back, title and the page's buttons come back when the keyboard goes.
                 val machineName = if (route.destination == Destination.DRAFT && route.workspaceId == null && route.id != null) {
                     data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), route.id) }?.let(RunnerPage::displayName)
-                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name
+                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) }
                 } else null
                 if (!PageBar.folds(route)) TopAppBar(modifier = Modifier.testTag("app-bar"),
                     title = {
@@ -402,11 +412,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
-                            Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
+                            // The menu carries how many wait on you (needs-you-capsule/12-once).
+                            if (navigation.canGoBack) Icon(painterResource(R.drawable.ic_back), "Back") else NeedsYouMenuIcon(app, "Open navigation")
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
+                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
                         if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
                             IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
@@ -414,7 +425,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
-                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
+                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) },
+                            LocalManagedRunnerStatus provides managedForLanding.shown?.status) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
@@ -452,6 +464,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open)
+                                // The timeline (board 01 ②); a row's detail is the page's own bottom sheet, and a run's session is pushed
+                                // over the page, so Back returns to the schedule it ran for. Change… is a new conversation in its workspace.
+                                Destination.SCHEDULED -> ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
+                                    workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
+                                    openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
+                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) })
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -475,7 +493,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 openSession(session)
                                 WorktreeModel(api, session, app.processScope).resolveInSession(conflict.branch, conflict.target)
                             }
-                        }, modifier = Modifier.widthIn(max = 560.dp))
+                        }, modifier = Modifier.widthIn(max = 560.dp), needsYou = { NeedsYouToasts(app, signedIn.handle, ::open) })
                 }
             }
         }
@@ -504,10 +522,12 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
     Destination.WAITING_ON_YOU -> WAITING_ON_YOU
+    // The page draws its own large "Scheduled" (board 01 ②).
+    Destination.SCHEDULED -> ""
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
-    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
+    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) })
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

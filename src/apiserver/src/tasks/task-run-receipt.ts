@@ -387,6 +387,9 @@ export function taskRunInProgress(kind: string, token: string): ConflictExceptio
     owner: 'USER',
     requiredAction: 'retry the same request in a moment',
     triggerId: token,
+    // How long "a moment" is, in the field the recovery contract reads (docs/recovery-contract.md
+    // §3): the runner waits at least this long before it asks again under the same triggerId.
+    retryAfterSeconds: TASK_RUN_RETRY_AFTER_SECONDS,
   });
 }
 

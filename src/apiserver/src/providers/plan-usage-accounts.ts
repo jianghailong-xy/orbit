@@ -190,6 +190,8 @@ export interface AccountMove {
   /** Left because the account it was on is signed out: its runner reports it so, or it refused the
    *  session's sign-in (accountAfterSignOut). */
   signedOut?: boolean;
+  /** Left because the account it was on is being removed from its runner (moveOffRemovedAccount). */
+  removed?: boolean;
 }
 
 /**
@@ -372,6 +374,9 @@ export function accountSwitchNotice(
 ): string {
   if (move.defaultRemoved) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is no longer used by Orbit`;
+  }
+  if (move.removed) {
+    return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is being removed`;
   }
   if (move.signedOut) {
     return `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is signed out`;

@@ -551,6 +551,56 @@ final class RunnerPageFormatTests: XCTestCase {
                        "a session is running on this account")
     }
 
+    func testARefusalOverSessionsInTheAccountListsThem() throws {
+        let json = """
+        {"engine":"codex","account":"1fda3f43","status":"failed","message":"in use",
+         "sessions":[{"id":"a","title":"Fix login","status":"RUNNING"},
+                     {"id":"b","title":"  ","status":"AWAITING_INPUT"},
+                     {"id":"c","title":"Old","status":"SOMETHING_NEW"},
+                     {"title":"no id"}]}
+        """
+        let state = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(json.utf8))
+        // One this build can't read is dropped; an unknown status is nil, not a failure.
+        XCTAssertEqual(state.sessions.map(\.id), ["a", "b", "c"])
+        XCTAssertNil(state.sessions[2].status)
+
+        let removal = try XCTUnwrap(RunnerPageFormat.removal(state, engine: "codex", account: "1fda3f43"))
+        XCTAssertEqual(removal.refused,
+                       "This Codex account can’t be removed while 3 sessions on it can’t move to another account — sign in another account, or end them below; then remove the account")
+        XCTAssertEqual(removal.blocking.map(\.title), ["Fix login", "Untitled session", "Old"])
+        XCTAssertEqual(removal.blocking.map(\.label), ["Running", "Waiting for input", nil])
+        XCTAssertEqual(removal.blocking.map(\.tone), [.ok, .warn, .muted])
+
+        let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "failed", message: "in use",
+                                           sessions: [RunnerAccountRemoveSession(id: "a", title: "Fix login", status: .pending)])
+        XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.refused,
+                       "This Claude Code account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account")
+
+        // From an older server: no list, and the machine's own words.
+        let older = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
+            #"{"engine":"codex","account":"1fda3f43","status":"failed","message":"in use"}"#.utf8))
+        XCTAssertEqual(older.sessions, [])
+        XCTAssertEqual(RunnerPageFormat.removal(older, engine: "codex", account: "1fda3f43"),
+                       RunnerPageFormat.AccountRemoval(pending: false, refused: "in use"))
+    }
+
+    /// A removal under way that moved the account's sessions to another account says so while it waits
+    /// for them to leave (web `runnerAccountMovingOne`/`Many`).
+    func testARemovalWaitingOnTheSessionsItMovedSaysSo() throws {
+        let many = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
+            #"{"engine":"codex","account":"1fda3f43","status":"pending","message":null,"moving":16}"#.utf8))
+        let removal = try XCTUnwrap(RunnerPageFormat.removal(many, engine: "codex", account: "1fda3f43"))
+        XCTAssertTrue(removal.pending)
+        XCTAssertNil(removal.refused)
+        XCTAssertEqual(removal.moving,
+                       "Moving 16 sessions to another Codex account — this one is removed once they have left, after their turns if any are running")
+        let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "pending", message: nil, moving: 1)
+        XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.moving,
+                       "Moving a session to another Claude Code account — this one is removed once it has left, after its turn if one is running")
+        let none = RunnerAccountRemoveState(engine: "codex", account: "1fda3f43", status: "pending", message: nil)
+        XCTAssertNil(RunnerPageFormat.removal(none, engine: "codex", account: "1fda3f43")?.moving)
+    }
+
     func testUpdateEnginesNowSaysWhereItGot() {
         typealias Line = RunnerPageFormat.UpdateRelayLine
         let queued = RunnerInstallState(status: "pending", engine: nil, command: nil, message: nil, mode: "update")

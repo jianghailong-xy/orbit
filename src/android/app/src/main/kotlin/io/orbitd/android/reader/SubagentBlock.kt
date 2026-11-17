@@ -1,11 +1,11 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.wiki.RelativeTime
 import io.orbitd.android.wiki.WikiRunsLogic
 import java.time.Duration
-import java.util.Locale
 import kotlinx.serialization.json.*
 
 /**
@@ -52,8 +52,8 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
 /**
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as the transcript draws it (board docs/mocks/subagent/03.png, OrbitKit
  * `SubagentBlock`): the folded row's grey second line, the Background mark and the opened block's grey Why line. A phone has no room
- * for web's trailing meta, so the second line carries the type, tier and model and, once the run has ended, how long it took and
- * what it cost. A background run puts `Background` in the type's place.
+ * for web's trailing meta, so the second line carries the type, tier and model and, once the run has ended, how long it took (never
+ * what it cost). A background run puts `Background` in the type's place.
  */
 internal data class SubagentBlock(val type: String, val background: Boolean, val detailLine: String, val why: String?, val running: Boolean,
     /** What the Why line's Details open to (web `subagentWhyDetails` and its list): every reason the router gave — none when the Why
@@ -72,7 +72,6 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
                 run?.level?.ifEmpty { null }?.let(::add)
                 (run?.modelLabel?.ifEmpty { null } ?: run?.model?.ifEmpty { null })?.let(::add)
                 duration(run)?.let(::add)
-                cost(run)?.let(::add)
             }
             return SubagentBlock(type, background, parts.joinToString(" · "), why(run), run?.isRunning ?: callRunning, details(run))
         }
@@ -102,13 +101,6 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
             val start = RelativeTime.parse(run.createdAt) ?: return null
             val end = RelativeTime.parse(run.endedAt) ?: return null
             return WikiRunsLogic.duration(Duration.between(start, end).toMillis() / 1000.0)
-        }
-
-        /** What the run cost, once it has ended: `$0.03`, or `<$0.01` when it came to less than a cent. */
-        fun cost(run: SubagentRun?): String? {
-            if (run == null || run.isRunning) return null
-            if (run.costUsd < 0.01) return "<$0.01"
-            return String.format(Locale.ROOT, "$%.2f", run.costUsd)
         }
     }
 }
@@ -160,3 +152,25 @@ internal object SubagentRuns {
 
 /** The session's SubAgent runs by `delegate` call, as the reader last read them. */
 internal val LocalSubagentRuns = compositionLocalOf<Map<String, SubagentRun>> { emptyMap() }
+
+/**
+ * Each SubAgent run by the `delegate` call it was started from: run id → that call's seq, read off the call's result (a foreground call's
+ * end or a background call's launch receipt both name `runId`; web `delegateRunId`).
+ */
+internal fun delegateCallsByRun(events: List<RunEvent>): Map<String, Long> {
+    val calls = events.filter { it.type == "tool_use" && it.parent() == null &&
+        (it.fields.string("name") ?: it.fields.string("toolName")) == SubagentBlock.TOOL_NAME }.mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
+    if (calls.isEmpty()) return emptyMap()
+    return buildMap {
+        events.forEach { event ->
+            if (event.type != "tool_result") return@forEach
+            val seq = event.toolId()?.let(calls::get) ?: return@forEach
+            val text = contentText(event.fields["content"]) ?: event.fields.string("result") ?: return@forEach
+            val runId = runCatching { (Json.parseToJsonElement(text.trim()) as? JsonObject)?.string("runId") }.getOrNull()
+            if (!runId.isNullOrEmpty()) put(runId, seq)
+        }
+    }
+}
+
+/** The way back from a SubAgent's finished line to the card its run was started from, when that card is drawn; null where it is not. */
+internal val LocalSubagentCardJump = staticCompositionLocalOf<(String) -> (() -> Unit)?> { { null } }

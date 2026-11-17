@@ -364,17 +364,17 @@ struct SessionFolderPage: View {
                 }
             }
         } else if section.title == "Pinned" {
-            Section {
+            TitledListSection {
                 if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
                 }
-            } header: {
+            } title: {
                 pinnedSectionHeader(section.title)
             }
         } else {
-            Section {
+            TitledListSection {
                 ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
-            } header: {
+            } title: {
                 Text(section.title).textCase(nil)
             }
         }
@@ -465,14 +465,14 @@ struct SessionFolderPage: View {
     /// Search hits, standing in for the sections while the field has text — the workspace list's
     /// own rows and words, since the field is the app's search wherever it is typed.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             Text(contentSearched
                  ? "All sessions"
                  : "Matching names only — type more to search message text.")

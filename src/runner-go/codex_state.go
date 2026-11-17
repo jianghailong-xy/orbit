@@ -264,14 +264,15 @@ func codexSessionAccountEnv(agentEnv map[string]string, scratchDir string) map[s
 // state was first opened under, exactly as codexSessionAccountEnv resolves it, so a later claim
 // naming another account does not move it. A session on no shared CODEX_HOME — a legacy per-session
 // directory, or one whose agent env spends a key of its own — contributes nothing.
-func codexSessionAccountHomes(sessionIDs []string) map[string]bool {
-	out := map[string]bool{}
+func codexSessionAccountHomes(sessionIDs []string) accountDirSessions {
+	out := accountDirSessions{}
 	for _, id := range sessionIDs {
 		meta := readSessionMeta(filepath.Join(runDir(id), "meta.json"))
 		if meta == nil || meta.CodexStateLayout != codexStateLayoutShared || meta.CodexStateHome == "" {
 			continue
 		}
-		out[filepath.Clean(meta.CodexStateHome)] = true
+		dir := filepath.Clean(meta.CodexStateHome)
+		out[dir] = append(out[dir], id)
 	}
 	return out
 }

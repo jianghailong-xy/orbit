@@ -63,7 +63,7 @@ public struct SessionLine: Equatable, Sendable {
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
             if let n = s.runningSubagentCount, n > 0 {
-                return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
             }
             // The agent hasn't answered yet: show the message it was sent (server-kept from the moment
             // it is enqueued until a reply lands) rather than the previous turn's reply, which
@@ -86,7 +86,7 @@ public struct SessionLine: Equatable, Sendable {
         // working, so it outranks the wait it is parked on and anything it left running (web's
         // `parkedWorkLabel`, subagent first). Its turn has ended, so this is where it surfaces.
         if live, let n = s.runningSubagentCount, n > 0 {
-            return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
+            return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
         // else it left running — not a background process (contract §9.2). Said in the strip's own
@@ -98,11 +98,6 @@ public struct SessionLine: Equatable, Sendable {
         // scheduled wake-up, an armed auto-retry (web `resumeWords`).
         if live, s.resumesOnItsOwn {
             return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
-        }
-        // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
-        // not the agent working either (see the glyph): muted, not the working blue.
-        if live, let bg = s.runningBgCount, bg > 0 {
-            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
         }
         // A message that never got an answer — the turn was interrupted, or failed, before any
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
@@ -120,6 +115,12 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: r, tone: .preview)
         }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
+        // Parked (AWAITING_INPUT) but a background process is still running. It never takes the line
+        // from the unanswered message, the recap or the reply (the owner, 2026-11-16; web parity):
+        // the glyph already says a process is up, so the words only fill a row with nothing else to say.
+        if live, let bg = s.runningBgCount, bg > 0 {
+            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
+        }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened
@@ -216,6 +217,16 @@ public struct SessionLine: Equatable, Sendable {
     /// word web's `subagentRunningLabel`.
     static func subagentRunningLabel(_ n: Int) -> String {
         n > 1 ? "Running \(n) agents" : "Running Agent"
+    }
+
+    /// The row's words for the same, naming what the newest one is doing when the server knows
+    /// (`runningSubagentTitle`): "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for
+    /// several, the bare label without a title. The row only — the header and the glyph keep the
+    /// short label. Word for word web's `subagentRunningLine`.
+    static func subagentRunningLine(_ n: Int, title: String?) -> String {
+        let t = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if t.isEmpty { return "\(subagentRunningLabel(n))…" }
+        return n > 1 ? "\(subagentRunningLabel(n)) · \(t)…" : "Agent: \(t)…"
     }
 
     /// "Background process running" / "N background processes running".

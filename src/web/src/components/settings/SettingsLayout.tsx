@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
+  GithubOutlined,
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
@@ -39,7 +40,8 @@ import {
 } from '@ant-design/icons';
 import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
-import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { machineName } from '../../lib/machineSetup';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
@@ -56,6 +58,8 @@ import { useMediaQuery } from '../../lib/useMediaQuery';
 import { INTEGRATION_PAGES, PERSONAL_PAGES } from '../../pages/settings/settingsIndex';
 import { ControlPlaneProvider } from '../../lib/useControlPlane';
 import { ImpersonationBanner } from '../ImpersonationBanner';
+import { HelpDrawer } from '../HelpDrawer';
+
 import type { Runner } from '../TasksSidePanel';
 import { around, searchSettings, type SettingsHit, type SettingsHitGroup } from './settingsSearch';
 import './Settings.css';
@@ -75,6 +79,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
 /** Integrations' rows' icons, one per connected service. */
 const INTEGRATION_ICONS: Record<(typeof INTEGRATION_PAGES)[number]['path'], ReactNode> = {
   '/settings/integrations/feishu': <ApiOutlined />,
+  '/settings/integrations/github': <GithubOutlined />,
 };
 
 /** Below this width (board-6) the nav is a page of its own at /settings, and each page opens full width. */
@@ -105,9 +110,6 @@ export function byRecentUse<T extends { lastActiveAt?: string | null }>(workspac
     .sort((a, b) => at(b.w) - at(a.w) || a.index - b.index)
     .map(({ w }) => w);
 }
-
-const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
-  runner.displayName?.trim() || runner.name;
 
 /**
  * The Settings window (owner's choice A1): Settings takes over the whole window, the app's own sidebar
@@ -165,6 +167,7 @@ export function SettingsLayout() {
             </div>
           </main>
         )}
+        <HelpDrawer />
       </div>
     </ControlPlaneProvider>
   );
@@ -218,6 +221,8 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   // server offers one, then its own machine row in the shared state words. Nothing is read with the feature off.
   const { managed } = useManagedRunner();
   const managedRowFor = (runner: Runner): ManagedRunnerRow | null => managedRowOf(managed, runner.id);
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
@@ -230,6 +235,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
       nowMs,
       latestVersion,
+      managed: runner.managed === true || !!managedRowFor(runner),
     });
     return items.length > 0 ? 'attention' : 'online';
   };
@@ -239,7 +245,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
 
   const machineOf = (workspace: SettingsWorkspace): string | null => {
     const runner = runners.find((r) => r.id === workspace.runnerId) ?? workspace.runner;
-    return runner ? runner.displayName?.trim() || runner.name || null : null;
+    return runner ? machineName(runner, managedRunnerId) || null : null;
   };
 
   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
@@ -257,6 +263,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         onQuery={onQuery}
         groups={searchSettings(query, {
           runners,
+          managedRunnerId,
           keys: providers.data ?? [],
           workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
         })}
@@ -515,7 +522,8 @@ function MachineRow({
 }) {
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
-  const name = runnerName(runner);
+  // The managed runner (the one with a managed row) is Orbit Cloud.
+  const name = machineName(runner, managedRow ? runner.id : null);
   // The click a drag ends with is the drag's, not the link's. dnd-kit stops that click at the
   // document, before React's handlers, which leaves the browser to follow the link's href with a
   // full page load to the machine just moved; the window sees it first, and cancels it.

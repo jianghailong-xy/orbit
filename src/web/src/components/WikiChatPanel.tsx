@@ -35,14 +35,11 @@ import {
 import {
   api,
   completeSession,
-  decideApproval,
   deleteSession,
   interruptSession,
-  listApprovals,
   renameSession,
   restoreSession,
   updateSessionConfig,
-  type PermissionRule,
 } from '../api';
 import { Menu } from './ui/Menu';
 import { ApprovalPanel } from './ApprovalPanel';
@@ -71,7 +68,7 @@ import { composerDraftAfterSend, isCurrentWorkUnavailable } from '../lib/compose
 import { materializeReferences, type ReferenceMap } from '../lib/composerRefs';
 import { CURSOR_QUEUE_NOTE, cursorModelPick, cursorSettingRows } from '../lib/cursorRuntime';
 import { encodeId, routeId } from '../lib/idCodec';
-import { machineName } from '../lib/machineSetup';
+import { useMachineName } from '../lib/managedRunner';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
 import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
@@ -158,6 +155,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
 import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
@@ -787,7 +785,6 @@ function sharedComposerProps(
     replyTo: null,
     workspaceReadOnly: true,
     setWorkspaceId: () => undefined,
-    managedDraftBlocked: false,
     ...modelMenu,
     shownMode: toolbar.shownMode,
     onDraftMode: toolbar.onMode,
@@ -1139,6 +1136,7 @@ function WikiChatSession({
   opening: ChatOpening | null;
   onNewChat: () => void;
 }) {
+  const machineNameOf = useMachineName();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const message = useToast();
@@ -1376,12 +1374,12 @@ function WikiChatSession({
           ...previous.slice(-4),
           statusCard({
             surface: 'Web',
-            runnerName: runner ? machineName(runner) : undefined,
+            runnerName: runner ? machineNameOf(runner) : undefined,
             runnerOnline: runner?.online,
             activeSessions: runner?.activeSessions,
             maxConcurrent: runner?.maxConcurrent,
             sessionTitle: session?.title ?? null,
-            sessionStatus: session ? statusLabel(session, null, runner ? machineName(runner) : null) : null,
+            sessionStatus: session ? statusLabel(session, null, runner ? machineNameOf(runner) : null) : null,
             workspaceName: session?.workspace?.name,
             engine: ENGINE_CLI_NAMES[engine],
             provider,
@@ -1423,6 +1421,7 @@ function WikiChatSession({
   // The engine's guess at the next message, offered in an idle, empty composer as on the session page.
   const offeredSuggestion = offeredPromptSuggestion(stream.eventsSessionId === sessionId ? currentPromptSuggestion(stream.events) : null, {
     idle,
+    queuedTurns: visibleQueuedTurns.length,
     draftEmpty: draft.text === '' && draft.images.length === 0,
     replying: false,
     pendingApprovals: approvals.length + (session?.pendingApprovals ?? 0),
@@ -1442,23 +1441,7 @@ function WikiChatSession({
     }, 0);
   };
 
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    note?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    setApprovals((previous) => previous.filter((approval) => approval.id !== approvalId));
-    try {
-      await decideApproval(sessionId, approvalId, behavior, note, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(sessionId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1509,7 +1492,7 @@ function WikiChatSession({
   const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(stream.events);
   return (
     <>
-      {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineName(runner))}</div>}
+      {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineNameOf(runner))}</div>}
       <div className="wk-chat-body" ref={bodyRef}>
         <SessionConversation
           sessionId={sessionId}
@@ -1532,6 +1515,7 @@ function WikiChatSession({
               key={approval.id}
               approval={approval}
               onDecide={decide}
+              untranslated={untranslated[approval.id]}
               rememberable={approvalRememberOffered(engine ?? '')}
             />
           ))}

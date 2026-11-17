@@ -6,6 +6,35 @@ import XCTest
 /// reconciliation. This is the test that de-risks the whole native-console bet.
 final class TranscriptReducerTests: XCTestCase {
 
+
+    func testLegacySecretPatchNoticesFoldOnlyConsecutiveTemporaryNotices() {
+        var r = TranscriptReducer()
+        let pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report."
+        let unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+        func event(_ seq: Int, _ notice: String, subtype: String = "secret_patch_withheld", turn: String = "one") -> RunEvent {
+            RunEvent(seq: seq, type: .system, turnId: turn, payload: .object([
+                "subtype": .string(subtype), "path": .string("file"), "notice": .string(notice)
+            ]))
+        }
+        r.apply(event(1, "file: \(pending)"))
+        r.apply(event(2, "file: \(unreadable)"))
+        r.apply(event(3, "file holds the value of a secret"))
+        r.apply(event(4, "Unknown notice"))
+        r.apply(event(5, "Record summary", subtype: "secret_patches_withheld"))
+        r.apply(event(6, "file: \(pending)"))
+        r.apply(event(7, "file: \(pending)", turn: "two"))
+        let messages = r.state.items.compactMap { item -> String? in
+            if case .notice(_, let message, _) = item { return message }
+            return nil
+        }
+        XCTAssertEqual(messages, [
+            "Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.",
+            "file holds the value of a secret", "Unknown notice", "Record summary",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it."
+        ])
+    }
+
     /// A representative turn: user → streamed assistant text → tool call+result → more text →
     /// a resolved approval → a background process → a DUPLICATE durable event → turn end.
     private func recordedSession() -> [RunEvent] {
@@ -1360,6 +1389,57 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(bubble?.ts, "2026-06-26T10:00:00Z")
     }
 
+    /// A send guessed idle that the server `queued` (a turn was in flight that this end's status had
+    /// not caught up with) leaves the transcript for the queued tail: "Queued" with a Cancel, not
+    /// "Sending…" until its turn comes. Web parity: the receipt's placement alone decides.
+    func testServerQueuedPlacementMovesInlineSendToQueue() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "queued")
+        XCTAssertTrue(r.state.items.isEmpty)
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.queued[0].turnId, "t1")
+        XCTAssertEqual(r.state.queued[0].queued, true)
+        XCTAssertEqual(r.state.queued[0].pending, true)
+    }
+
+    /// A send the server accepted is stamped with when it was accepted, the time its bubble shows until
+    /// the echo brings the runner's own, rather than "Sending…" (web: `acceptedAt`).
+    func testAnAcceptedSendIsStampedWithItsAcceptance() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted",
+                              acceptedAt: "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.ts, "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
+    }
+
+    /// A first message held for its translation comes back `queued` with nothing ahead of it: that is
+    /// the translation hold, not a place in the queue, so it stays in the conversation (web parity).
+    func testTranslationHeldSendStaysInlineDespiteQueuedPlacement() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
+    /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
+    /// is drawn inline and offers no Cancel.
+    func testServerAcceptedPlacementMovesQueuedSendInline() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
     /// An optimistic image bubble (id-only, mime unknown) reconciles to the durable event, which
     /// supplies the real mime + a timestamp — without duplicating the bubble.
     func testOptimisticBubbleAdoptsDurableAttachmentsAndTs() {
@@ -1560,6 +1640,56 @@ final class TranscriptReducerTests: XCTestCase {
 
         XCTAssertNil(r.state.oldestSeq)
         XCTAssertFalse(r.state.hasMoreOlder, "never render a spinner whose before= cursor is nil")
+    }
+
+    /// Every tail page failed (an apiserver restart), so the stream's cursor-less replay filled the
+    /// window, starting mid-conversation. Its first event is the older edge, with history above it;
+    /// the window used to say "nothing older" and the transcript stopped there for good.
+    func testCursorlessReplayStartingMidConversationOffersOlderHistory() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 435, type: .user, payload: .object(["text": .string("mid question")])))
+        r.apply(RunEvent(seq: 436, type: .assistant, payload: .object(["text": .string("mid reply")])))
+        XCTAssertEqual(r.state.oldestSeq, 435)
+        XCTAssertTrue(r.state.hasMoreOlder, "events 1–434 are on the server")
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])),
+        ], hasMore: false))
+        XCTAssertEqual(r.state.items.first?.asUser?.text, "first question")
+        XCTAssertFalse(r.state.hasMoreOlder)
+    }
+
+    func testCursorlessReplayFromTheFirstEventHasNothingOlder() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "a new session's replay starts at its beginning")
+    }
+
+    func testATailPageDecidesTheEdgeEvenAfterAReplayWasExpected() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("hi")])),
+        ], hasMore: false))
+        r.apply(RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hello")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "the page said history starts here")
+    }
+
+    /// A snapshot the replay path wrote before the fix: a window from seq 35 claiming nothing older.
+    func testARestoredWindowThatStartsLateReopensItsOlderEdge() throws {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 35, type: .user, payload: .object(["text": .string("late start")])))
+        XCTAssertFalse(r.state.hasMoreOlder)
+        var restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
+        restored.reopenUnsettledOlderEdge()
+        XCTAssertTrue(restored.state.hasMoreOlder)
+
+        var complete = TranscriptReducer()
+        complete.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first")])))
+        complete.reopenUnsettledOlderEdge()
+        XCTAssertFalse(complete.state.hasMoreOlder, "a window holding the first event is whole")
     }
 
     func testPrependOlderGraftsHistoryInFront() {

@@ -22,8 +22,9 @@ public struct RunnerAgentFixTarget: Equatable, Sendable {
 }
 
 /// Where Fix with an agent is drawn and how (the web's and Android's same rules): on a Needs Attention
-/// card only for an engine not updating and a runner that can't update itself, and on an engine's
-/// Install failed panel — never from a server too old to send `agentFix`.
+/// card only for an engine not updating and a runner that can't update itself, on an engine's Install
+/// failed panel, and under an Update Engines Now report with a failed line
+/// (docs/mocks/engine-update-fix-with-agent/03-mobile.png) — never from a server too old to send `agentFix`.
 public enum RunnerAgentFixLogic {
     /// The warning a Needs Attention item's press fixes; nil for every kind the button is not on.
     public static func target(_ item: RunnerAttentionItem) -> RunnerAgentFixTarget? {
@@ -44,7 +45,8 @@ public enum RunnerAgentFixLogic {
     /// engine.
     public static func fixing(_ fix: RunnerAgentFix, _ target: RunnerAgentFixTarget) -> RunnerAgentFixing? {
         (fix.fixing ?? []).first { entry in
-            entry.kind == target.kind.rawValue && (target.kind == .cannotSelfUpdate || entry.engine == target.engine)
+            entry.kind == target.kind.rawValue
+                && (target.kind == .cannotSelfUpdate || target.kind == .engineUpdateFailed || entry.engine == target.engine)
         }
     }
 
@@ -67,7 +69,21 @@ public enum RunnerAgentFixLogic {
         guard MachinesAndModels.rowKind(health, install: runner.install, slug: engine) == .installFailed else {
             return nil
         }
-        if let entry = fixing(fix, RunnerAgentFixTarget(kind: .installFailed, engine: engine)) {
+        return panelState(fix, RunnerAgentFixTarget(kind: .installFailed, engine: engine))
+    }
+
+    /// Under an Update Engines Now report: nil unless the finished run has a failed line (drawn red) and the
+    /// server sends `agentFix`; then as on an Install failed panel, the engine rows being above it here too.
+    public static func engineUpdateState(_ runner: Runner) -> RunnerAgentFixState? {
+        guard let fix = runner.agentFix,
+              RunnerPageFormat.updateRelayLines(runner.install).contains(where: \.failed) else { return nil }
+        return panelState(fix, RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+    }
+
+    /// A panel's state: the fixing line, or the button — blocked with the reason (signed out adds where to
+    /// sign in, offline is a reason like the others), or ready with where the session starts.
+    private static func panelState(_ fix: RunnerAgentFix, _ target: RunnerAgentFixTarget) -> RunnerAgentFixState {
+        if let entry = fixing(fix, target) {
             return .fixing(entry)
         }
         let engineName = fix.engineName ?? fix.engine.map(RunnerPageFormat.engineName)
@@ -88,6 +104,8 @@ public enum RunnerAgentFixLogic {
             return RunnerAttentionFixRequest(latest: latest?.isEmpty == false ? latest : nil)
         case .engineNotUpdating, .installFailed:
             return RunnerAttentionFixRequest(engine: target.engine)
+        case .engineUpdateFailed:
+            return RunnerAttentionFixRequest()
         }
     }
 }

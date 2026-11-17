@@ -89,6 +89,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 	}
 	command := shellQuote(executable)
 	return agentPrimer + "\n\n" +
+		orbitSubAgentInstructions +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
@@ -96,12 +97,23 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitWaitInstructionsFor(watches) +
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
-		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
-		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
-		"the work to you; it needs `" + command + " capabilities --json` first to discover its commands, then run the " +
-		"returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; " +
-		"`--json` prints the entity alone. Do not run `" + command + " mcp` directly."
+		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
+		"no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes the work " +
+		"to you: find a command with `" + command + " guide [topic] --json` or `" + command + " capabilities --id <id> " +
+		"--json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its " +
+		"MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
+
+// orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
+// they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
+// agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
+// have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
+// was handed off, with no Orbit record and no receipt. Measured again on 2026-11-16: told "task_start if task_list shows
+// it recorded, else task_create with startNow or session_create", claude-sonnet-5-5 called no task_list in six runs of
+// six and filed the recorded work a second time, so the paragraph says to look first.
+const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
+	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
+	"task_create with startNow or session_create.\n\n"
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
@@ -159,14 +171,20 @@ func orbitWaitInstructionsFor(watches bool) string {
 // while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
 // runs on another machine, so agents called delegate only when a person asked for it. Measured 2026-11-15: 440 bytes,
 // 98 o200k tokens. ASCII like the rest of the paragraph.
+//
+// Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
+// agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
+// is another agent's name, and when delegate beats session_create.
 const orbitDelegateInstructions = "Use delegate to hand a self-contained piece of work to a cheaper or stronger model " +
-	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace), or to run an independent piece " +
-	"in the background while you go on. Prefer it to your engine's built-in subagent or Agent tool when Orbit should " +
-	"pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
+	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace: another agent's name from " +
+	"agent_list), or to run an independent piece in the background while you go on. Prefer it to session_create " +
+	"when you only need that piece's result back, and to your engine's built-in subagent or Agent tool when Orbit " +
+	"should pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
 
 // orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
-// names, is given the paragraph without it (cursorAgentInstructions).
-const orbitDelegateClaudeCodeLoad = " In Claude Code, load it first with ToolSearch select:mcp__orbit__delegate."
+// names, is given the paragraph without it (cursorAgentInstructions). Delegate is marked to load up front
+// (subagent.go), so this only matters for a Claude Code that still defers it.
+const orbitDelegateClaudeCodeLoad = " In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate."
 
 // orbitDelegateInstructionsFor is that paragraph for a top-level session, and nothing for a SubAgent, which is
 // neither offered nor served delegate (mcp.go).
@@ -248,6 +266,13 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		wt = s.Detached
 	}
 	note := checkoutInstructions(wt)
+	repo := s.WorkDir
+	if wt != nil && wt.RepoDir != "" {
+		repo = wt.RepoDir
+	}
+	if github := githubWorkspaceInstructions(repo); github != "" {
+		note = strings.TrimSpace(note + "\n\n" + github)
+	}
 	if note == "" {
 		return s.Agent.AppendSystemPrompt
 	}
@@ -276,8 +301,8 @@ func withOrbitCLIInstructions(configured, executable string, insideRecordedWork,
 	return strings.TrimRight(configured, "\r\n") + "\n\n" + orbit
 }
 
-// orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json`, and one Bash rule per
-// command the operation catalogue offers an agent's session. It is generated from the catalogue (orbitCLICommands)
+// orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json` and its graded views
+// (`capabilities *`), and one Bash rule per command the operation catalogue offers an agent's session. It is generated from the catalogue (orbitCLICommands)
 // rather than enumerated, so no command `capabilities --json` tells an agent to run is pre-approved for nobody: a
 // command missing here is one the agent hits a permission prompt for, which is what happened to every verb the
 // hand-written list fell behind on. Each rule is still one command, never `task *`, so a verb added to the CLI is
@@ -304,6 +329,10 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
+		// The graded views of the same document (--summary, --family, --id): reads of the catalogue that ask the
+		// server nothing, and where the instructions send an agent instead of the whole document. The guide is a
+		// catalogued command, so its rule comes from the loop below like every other.
+		rules = append(rules, "Bash("+command+" capabilities *)")
 		for _, cli := range orbitCLICommands() {
 			if cli.orchestration && !allowOrchestration {
 				continue
@@ -341,6 +370,47 @@ var orbitCLICommands = sync.OnceValue(func() []orbitCLICommand {
 	}
 	return commands
 })
+
+// Why a command is left out of orbitCLIAllowedTools: every `orbit` command is pre-approved there or
+// named in orbitCLIAllowlistExclusions with one of these and its reason
+// (TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason).
+const (
+	// A person's own act at their own terminal: their login, the machine's registration, credentials.
+	allowlistHumanOnly = "human_only"
+	// Started by the runner, its service manager or the engine itself, never typed into an agent's shell.
+	allowlistHeadlessOnly = "headless_only"
+	// Runs a command line of the caller's choosing, so a rule for it would pre-approve any command.
+	allowlistArbitraryCommand = "arbitrary_command"
+	// Looks after this machine's runner install rather than calling Orbit: not a catalogue operation.
+	allowlistRunnerLocal = "runner_local"
+)
+
+type orbitCLIAllowlistExclusion struct {
+	kind, reason string
+}
+
+// orbitCLIAllowlistExclusions are the `orbit` commands outside the operation catalogue, by their first
+// word, and why none is pre-approved. The catalogue's own human-only commands (HeadlessOnly) are
+// excluded by orbitCLICommands and carry their catalogue reason (catalogMCPExemptions); `capabilities`
+// is pre-approved only as `capabilities --json`.
+var orbitCLIAllowlistExclusions = map[string]orbitCLIAllowlistExclusion{
+	"register":      {allowlistHumanOnly, "registers this machine as a runner, approved in a person's browser"},
+	"unregister":    {allowlistHumanOnly, "deletes this runner and its local config"},
+	"token":         {allowlistHumanOnly, "mints, lists and revokes credentials for headless processes: a credential is the owner's to hand out"},
+	"terminal":      {allowlistHumanOnly, "approves or signs out a person's terminal in the Orbit app"},
+	"resume":        {allowlistHumanOnly, "reopens a session in the interactive Orbit terminal client"},
+	"host":          {allowlistHumanOnly, "sets the machine up for runners, as root, once per host"},
+	"upgrade":       {allowlistHumanOnly, "force-reinstalls the runner binary the session itself runs on"},
+	"run":           {allowlistHeadlessOnly, "the runner loop: the service manager starts it"},
+	"hostd":         {allowlistHeadlessOnly, "the machine broker: systemd starts it"},
+	"mcp":           {allowlistHeadlessOnly, "the MCP server the engine starts from its own configuration, never through the shell"},
+	"hook":          {allowlistHeadlessOnly, "the engine's hook entry point, run by the engine on its own events"},
+	"engine-update": {allowlistRunnerLocal, "updates this machine's coding-engine CLIs"},
+	"status":        {allowlistRunnerLocal, "shows this directory's runner status; not an Orbit operation"},
+	"doctor":        {allowlistRunnerLocal, "checks this machine's engine install and sign-in; not an Orbit operation"},
+	"version":       {allowlistRunnerLocal, "prints the binary's version, which `capabilities --json` already carries as cliVersion"},
+	"secret":        {allowlistArbitraryCommand, "`secret exec NAME -- COMMAND` runs COMMAND, so each run stays with the engine's own permission check"},
+}
 
 func shellWordSafe(value string) bool {
 	if value == "" {
@@ -397,7 +467,12 @@ func appendClaudeAgentInstructionArgs(
 	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent)); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
-	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)
+	allowed := agent.AllowedTools
+	// A scheduled CHECK_ONLY run does not get the CLI: it reads Orbit through the tools the claim allows, and its
+	// deny list names this executable (schedule_check_only.go).
+	if !agent.ScheduledCheckOnly {
+		allowed = appendUnique(allowed, orbitCLIAllowedTools(executable, allowOrchestration)...)
+	}
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	}

@@ -35,6 +35,7 @@ import {
   REPORTABLE_JOB_PHASES,
   REPORTABLE_JOB_STATES,
   checkSawTheFinishedBranch,
+  checkTimeoutSeconds,
   checksFor,
   enqueueForDoneTask,
   integrationDedupeKey,
@@ -2774,6 +2775,11 @@ export async function applyIntegrationJobResult(
             select: { sessionId: true },
           }))?.sessionId ?? null
         : null;
+      // A check the platform stopped at its budget: the limit it was stopped at, recorded on the item
+      // so its text can say it without reading a project setting that may have changed since (G6).
+      const stoppedCheckTimeoutSeconds = state === 'CHECK_FAILED' && checks.some((check) => check.timedOut)
+        ? await checkBudgetsOf(tx, job)
+        : null;
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -2796,6 +2802,7 @@ export async function applyIntegrationJobResult(
           targetSha: body.targetShaBefore ?? null,
           conflicts: body.conflicts ?? [],
           checks,
+          checkBudgets: stoppedCheckTimeoutSeconds,
           baselineRed: body.baselineRed === true,
           errorCode: body.errorCode ?? null,
           errorDetail,
@@ -3508,7 +3515,7 @@ function fullyAppliedComment(input: {
     + where;
 }
 
-/** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
+/** What a person is shown about a failure (§4.2's payload column). */export function failurePayload(
   state: string,
   detail: {
     kind: string;
@@ -3518,6 +3525,8 @@ function fullyAppliedComment(input: {
     targetSha: string | null;
     conflicts: string[];
     checks: IntegrationCheckResult[];
+    /** The budgets the checks were given, read only when one of them was stopped at its budget. */
+    checkBudgets: CheckBudgets | null;
     errorCode: string | null;
     errorDetail: Record<string, unknown> | null;
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
@@ -3583,9 +3592,11 @@ function fullyAppliedComment(input: {
   if (state === 'CHECK_FAILED') {
     const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
+    // A check stopped at its budget carries that budget, so its item says the limit it hit.
+    const budget = failed?.timedOut && detail.checkBudgets ? checkTimeoutSeconds(failed.name, detail.checkBudgets) : null;
     return {
       jobKind: detail.kind,
-      check: failed ?? null,
+      check: failed ? { ...failed, ...(budget != null ? { timeoutSeconds: budget } : {}) } : null,
       branchUnchanged: true,
       ...classified,
     };
@@ -3598,6 +3609,27 @@ function fullyAppliedComment(input: {
     ...(detail.outdatedRunner ? { outdatedRunner: detail.outdatedRunner } : {}),
     ...classified,
   };
+}
+
+type CheckBudgets = Parameters<typeof checkTimeoutSeconds>[1];
+
+/**
+ * The budgets the job's checks run under, from the same columns the claim's command reads them from
+ * (`HELD_CLAIM_COLUMNS`): the task of the job's session, and the job's codebase.
+ */
+async function checkBudgetsOf(
+  tx: Prisma.TransactionClient,
+  job: { sessionId: string | null; codebaseId: string },
+): Promise<CheckBudgets | null> {
+  const rows = await tx.$queryRaw<CheckBudgets[]>(Prisma.sql`
+    SELECT t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds"
+      FROM "project_codebase" cb
+      LEFT JOIN "session" s ON s."id" = ${job.sessionId}::uuid
+      LEFT JOIN "task" t ON t."id" = s."task_id"
+     WHERE cb."id" = ${job.codebaseId}::uuid`);
+  return rows[0] ?? null;
 }
 
 /**

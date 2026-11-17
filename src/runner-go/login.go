@@ -875,7 +875,7 @@ func (r *loginRelay) dropAddedSlot(kind accountSlotKind, slot string) bool {
 	if dir, err := kind.home(slot); err != nil || accountSignedIn(kind, dir) {
 		return false
 	}
-	var liveDirs map[string]bool
+	var liveDirs accountDirSessions
 	if r.liveSessionIDs != nil {
 		liveDirs = kind.liveDirs(r.liveSessionIDs())
 	}

@@ -22,6 +22,7 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['access-tokens', '<AccessTokensPage />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
+    ['integrations/github', '<GithubIntegrationPage />'],
   ])('routes %s to %s inside the Settings window', (slug, element) => {
     expect(block).toContain(`<Route path="${slug}" element={${element}} />`);
   });

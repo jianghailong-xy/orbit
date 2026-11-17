@@ -35,7 +35,7 @@ Usage:
   orbit task update [task-id] [options]
   orbit task reopen [task-id] [--json]
   orbit task delete [task-id] [--json]
-  orbit task start [task-id] [--json]
+  orbit task start [task-id] [--trigger-id ID] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
   orbit task request-confirmation [task-id] [--json]
   orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]
@@ -153,11 +153,11 @@ time — what you need to enumerate a list of thousands (to diff it against some
 which no --limit can do. It can be a lot of output: scope it with --status/--list-id/--project-id,
 and send it to a file or a pipe rather than into a conversation.
 
-With --all the output is line-delimited JSON — one compact task per line, written as each page
-arrives (--json is implied). A walk of tens of thousands is hundreds of requests over minutes, so
-it is built to be interrupted: pages that already printed stay printed, a failing page is retried
-for ~30s first, and if it still fails the cursor to resume from is printed to stderr. Continue
-with --cursor CURSOR and the same filters. Use ` + "`jq -s`" + ` if you want one array back.
+With --all the successful output is line-delimited JSON — one compact task per line. Without
+--json, pages stream as they arrive and already printed pages stay printed on failure. With --json,
+output is held until the walk succeeds; a failure discards partial pages and prints one recovery
+JSON document on stdout. A failing page is retried for ~30s first; if it still fails the cursor to
+resume from is printed to stderr. Continue with --cursor CURSOR and the same filters. Use ` + "`jq -s`" + ` if you want one array back.
 `,
 	"labels": `orbit task labels — per-label progress across every task
 
@@ -878,9 +878,11 @@ task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 	"start": `orbit task start — run a task on its assigned agent
 
 Usage:
-  orbit task start [task-id] [--json]
+  orbit task start [task-id] [--trigger-id ID] [--json]
 
-task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+task-id defaults to ORBIT_TASK_ID inside an Orbit task session. --trigger-id only replays a start
+whose answer was lost: pass the triggerId its answer or error named. Omitted, a new one is drawn
+and printed.
 `,
 	"comment": `orbit task comment — add a comment to a task
 
@@ -2154,9 +2156,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	cliRecord().setEntity(raw)
 	cliRecord().startOutcome(startedBy, started, deferred)
-	if deferred == "" {
-		cliRecord().note(startedAtOnceNote)
-	}
+	cliRecord().note(createStartNote(startedBy, started, deferred))
 	if err := writeCLIRawJSON(out, raw, *jsonOut); err != nil {
 		return err
 	}
@@ -2164,10 +2164,20 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		fmt.Fprintln(cliNoticeOut, "orbit task create: "+deferred)
 		return nil
 	}
+	if refusal := answerRefusal(started); refusal != nil {
+		// A 2xx answer that says it started nothing (a skipped start) is not a start.
+		fmt.Fprintln(cliNoticeOut, "orbit task create: created, but not started: "+refusal.Message)
+		return nil
+	}
 	var compact bytes.Buffer
 	if json.Compact(&compact, started) != nil {
 		compact.Reset()
 		compact.Write(started)
+	}
+	if startedBy == "owner" {
+		fmt.Fprintln(cliNoticeOut, "orbit task create: the owner answered the card with Create and start, so it was "+
+			"started at once; that is their decision, so do not clear its start or run 'orbit task start' for it: "+compact.String())
+		return nil
 	}
 	fmt.Fprintln(cliNoticeOut, "orbit task create: started at once, as 'orbit task start' would have started it: "+compact.String())
 	return nil
@@ -3027,6 +3037,7 @@ func cliTaskDelete(args []string, out io.Writer) error {
 func cliTaskStart(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task start")
+	triggerID := fs.String("trigger-id", "", "replay the run request this id names (from an earlier answer or error)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -3039,18 +3050,19 @@ func cliTaskStart(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// One name for THIS `orbit task start`, drawn once: every resend below it is the same
-	// request, and the next invocation of the command is a different one. A draw that fails stops
-	// the command rather than starting an unnamed run.
-	token, err := newRunRequestToken()
+	// One name for THIS `orbit task start`: --trigger-id when it replays an earlier one, otherwise
+	// drawn once. Every resend below it is the same request, and the next invocation without
+	// --trigger-id is a different one. A draw that fails stops the command rather than starting an
+	// unnamed run.
+	token, err := callIDOrNew(*triggerID)
 	if err != nil {
 		return fmt.Errorf("start task: %w", err)
 	}
 	raw, err := t.startTask(id, token)
 	if err != nil {
-		return fmt.Errorf("start task: %w", err)
+		return fmt.Errorf("start task: %w", taskStartReplayError(err, false, id, token))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "triggerId", token), *jsonOut)
 }
 
 func cliTaskRequestConfirmation(args []string, out io.Writer) error {
@@ -3432,6 +3444,9 @@ type cliCapability struct {
 	// (capabilityAvailability).
 	Available         bool   `json:"available"`
 	UnavailableReason string `json:"unavailableReason,omitempty"`
+	// The same reason as a stable code (capabilityUnavailableCodes), which a consumer branches on;
+	// the prose beside it is for a person and may change. Since catalogue v1.6.0.
+	UnavailableCode string `json:"unavailableCode,omitempty"`
 
 	// The operation catalogue's account of this command (operation_catalog.go). Additive to the
 	// legacy fields above: a reader that knew only those still reads the same document.
@@ -3453,6 +3468,13 @@ type cliCapability struct {
 	MutuallyExclusive [][]string `json:"mutuallyExclusive,omitempty"`
 	// What Plan mode does with the command: runs, refused, or own_gate (docs/orbit-agent-contract.md §4.1).
 	PlanMode operationPlan `json:"planMode"`
+
+	// Since catalogue v1.6.0 (capability_contract.go): the error.retry a call that got no answer
+	// carries, with and without its key; the argument that carries the key (null when the operation
+	// takes none); and who besides the caller takes part.
+	RetryPolicy    cliRetryPolicy     `json:"retryPolicy"`
+	IdempotencyArg *cliIdempotencyArg `json:"idempotencyArg"`
+	Interaction    string             `json:"interaction"`
 }
 
 type cliCapabilityContext struct {
@@ -3494,6 +3516,12 @@ type cliCapabilitiesDocument struct {
 	// with, in place of its output (cli_receipt.go): "--receipt".
 	ReceiptFlag  string          `json:"receiptFlag"`
 	Capabilities []cliCapability `json:"capabilities"`
+	// Every catalogue command this process is not offered, or is offered and cannot run: the same
+	// entry shape, available false, with unavailableCode and unavailableReason. A command listed in
+	// capabilities with available false appears here too, so this list alone answers "what can I not
+	// do here, and why". Since catalogue v1.6.0; an older consumer that never reads it sees
+	// capabilities unchanged.
+	UnavailableCapabilities []cliCapability `json:"unavailableCapabilities"`
 }
 
 func buildCLICapabilities(executable string) cliCapabilitiesDocument {
@@ -3518,7 +3546,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	if identity.Kind == identityService {
 		service = decodeServiceTokenClaims(identity.token)
 	}
-	includeOrchestration := service == nil && mcpOrchestrationEnabled() && ctx.SessionID != ""
+	includeOrchestration := identity.Kind != identityService && mcpOrchestrationEnabled() && ctx.SessionID != ""
+	scope := newCapabilityScope(identity, ctx.SessionID, includeOrchestration)
 	// The person is offered every session command, each marked by whether it runs as them.
 	asUser := identity.Kind == identityUser
 	// No session context at all => a headless process (launchd/cron), which reaches only what its
@@ -3567,6 +3596,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
+	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
@@ -3576,11 +3607,14 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		specs = append(specs, runnerCLICapabilities...)
 	} else if asUser {
 		specs = append(specs, sessionCLICapabilities...)
-	} else if includeHeadlessSession {
+	} else if includeHeadlessSession && scope.serviceCode == "" {
+		// A service token that is not one, or has expired, reaches no session command: they all send
+		// with it, and the server refuses it (scope.withheld says so for each).
 		specs = append(specs, headlessSessionCLICapabilities(headlessAllowedActions(service))...)
 	}
 	built := operationCatalog()
 	commands := make([]cliCapability, 0, len(specs))
+	unavailable := []cliCapability{}
 	for _, spec := range specs {
 		if spec.SessionOnly && ctx.SessionID == "" {
 			continue
@@ -3596,54 +3630,40 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		if spec.Tool == "session_await" && !watches {
 			continue
 		}
-		d := descriptors[spec.Tool]
-		description, _ := d["description"].(string)
-		if spec.Description != "" {
-			description = spec.Description
-		}
-		schema, _ := d["inputSchema"].(map[string]interface{})
-		if schema == nil && d == nil {
-			schema = spec.InputSchema
-		}
-		argv := append([]string{}, spec.Argv...)
-		argv[0] = executable
-		available, unavailableReason := capabilityAvailability(identity, spec.Argv)
-		arguments := append([]string{}, spec.Arguments...)
-		op := built.ByTool[spec.Tool]
-		if op != nil {
-			arguments = runtimeCLIArguments(op)
-		}
-		command := cliCapability{
-			ID:                spec.Tool,
-			Argv:              argv,
-			HelpArgv:          append(append([]string{}, argv...), "--help"),
-			Usage:             spec.Usage,
-			Arguments:         arguments,
-			Description:       description,
-			MCPInputSchema:    schema,
-			Mutates:           spec.Mutates,
-			Available:         available,
-			UnavailableReason: unavailableReason,
-		}
-		if op != nil {
-			command.Object = op.Object
-			command.Intent = op.Intent
-			command.Risk = op.Risk
-			command.Mutates = op.Mutates
-			command.Approval = op.Approval
-			command.ApprovalKey = op.ApprovalKey
-			command.ApprovalDetail = op.ApprovalDetail
-			command.Destructive = op.Destructive
-			command.Idempotency = op.Idempotency
-			command.Retry = op.Retry
-			command.SuccessEvidence = op.SuccessEvidence
-			command.NextStep = op.NextStep
-			command.Returns = op.Returns
-			command.Availability = op.availability()
-			command.MutuallyExclusive = op.Exclusive
-			command.PlanMode = op.Plan
+		command := projectCLICapability(spec, built.ByTool[spec.Tool], descriptors[spec.Tool], executable)
+		if code, reason := scope.unusable(spec); code != "" {
+			command.Available, command.UnavailableCode, command.UnavailableReason = false, code, reason
+			unavailable = append(unavailable, command)
 		}
 		commands = append(commands, command)
+	}
+	// What the loop above left out, each with why, in catalogue order. Its schema comes from the
+	// whole descriptor set, since the gated part of it is exactly what was left out.
+	listed := make(map[string]bool, len(commands))
+	for _, command := range commands {
+		listed[command.ID] = true
+	}
+	var allDescriptors map[string]map[string]interface{}
+	for _, op := range built.Ops {
+		if op.CLI == nil || listed[op.Tool] {
+			continue
+		}
+		if allDescriptors == nil {
+			allDescriptors = make(map[string]map[string]interface{})
+			for _, d := range toolDescriptors(false, true) {
+				name, _ := d["name"].(string)
+				allDescriptors[name] = d
+			}
+		}
+		command := projectCLICapability(*op.CLI, op, allDescriptors[op.Tool], executable)
+		code, reason := scope.withheld(op)
+		if code == "" {
+			// Not reachable by the rules above (TestEveryWithheldCapabilityHasAStableReason): said
+			// rather than dropped, so the list stays complete.
+			code, reason = capabilityNoSessionContext, "not offered to this process"
+		}
+		command.Available, command.UnavailableCode, command.UnavailableReason = false, code, reason
+		unavailable = append(unavailable, command)
 	}
 	registered := false
 	unavailableReason := ""
@@ -3669,21 +3689,129 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		Identity:                 identity,
 		ReceiptFlag:              "--receipt",
 		Capabilities:             commands,
+		UnavailableCapabilities:  unavailable,
 	}
+}
+
+// projectCLICapability is one command's entry: its spec, described by its catalogue row and its MCP
+// descriptor (d, nil for a command no tool stands beside), with argv[0] the absolute executable.
+func projectCLICapability(spec cliCapabilitySpec, op *operation, d map[string]interface{}, executable string) cliCapability {
+	description, _ := d["description"].(string)
+	if spec.Description != "" {
+		description = spec.Description
+	}
+	schema, _ := d["inputSchema"].(map[string]interface{})
+	if schema == nil && d == nil {
+		schema = spec.InputSchema
+	}
+	argv := append([]string{}, spec.Argv...)
+	argv[0] = executable
+	arguments := append([]string{}, spec.Arguments...)
+	if op != nil {
+		arguments = runtimeCLIArguments(op)
+	}
+	command := cliCapability{
+		ID:             spec.Tool,
+		Argv:           argv,
+		HelpArgv:       append(append([]string{}, argv...), "--help"),
+		Usage:          spec.Usage,
+		Arguments:      arguments,
+		Description:    description,
+		MCPInputSchema: schema,
+		Mutates:        spec.Mutates,
+		Available:      true,
+	}
+	if op != nil {
+		command.Object = op.Object
+		command.Intent = op.Intent
+		command.Risk = op.Risk
+		command.Mutates = op.Mutates
+		command.Approval = op.Approval
+		command.ApprovalKey = op.ApprovalKey
+		command.ApprovalDetail = op.ApprovalDetail
+		command.Destructive = op.Destructive
+		command.Idempotency = op.Idempotency
+		command.Retry = op.Retry
+		command.SuccessEvidence = op.SuccessEvidence
+		command.NextStep = op.NextStep
+		command.Returns = op.Returns
+		command.Availability = op.availability()
+		command.MutuallyExclusive = op.Exclusive
+		command.PlanMode = op.Plan
+		command.RetryPolicy = op.retryPolicy()
+		command.IdempotencyArg = op.idempotencyArg()
+		command.Interaction = op.interaction()
+	}
+	return command
+}
+
+// writeCapabilityView prints one graded view of the catalogue (operation_discovery.go).
+func writeCapabilityView(d *cliDiscovery, summary bool, family, id string, jsonOut bool, out io.Writer) error {
+	var doc interface{}
+	var text string
+	switch {
+	case summary:
+		view := d.summary()
+		doc, text = view, writeCapabilitySummaryText(view)
+	case id != "":
+		view, err := d.id(id)
+		if err != nil {
+			return err
+		}
+		doc, text = view, writeCapabilityViewText(view.Capability)
+	default:
+		if family == "" {
+			return fmt.Errorf("--family needs a family name; the families are %s", strings.Join(d.families(), ", "))
+		}
+		view, err := d.family(family)
+		if err != nil {
+			return err
+		}
+		var b strings.Builder
+		for _, capability := range view.Capabilities {
+			b.WriteString(writeCapabilityViewText(capability))
+		}
+		for _, unavailable := range view.Unavailable {
+			fmt.Fprintf(&b, "\nNot available here (%s): %s\n", unavailable.Reason, strings.Join(unavailable.IDs, ", "))
+		}
+		doc, text = view, b.String()
+	}
+	if jsonOut {
+		enc := json.NewEncoder(out)
+		enc.SetEscapeHTML(false)
+		return enc.Encode(doc)
+	}
+	_, err := io.WriteString(out, text)
+	return err
 }
 
 func cmdCapabilitiesCLI(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit capabilities")
 	jsonOut := fs.Bool("json", false, "emit JSON")
+	summary := fs.Bool("summary", false, "one row per command")
+	family := fs.String("family", "", "the commands of one family")
+	id := fs.String("id", "", "one operation in full")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := rejectTrailing(fs); err != nil {
 		return err
 	}
+	views := 0
+	for _, asked := range []bool{*summary, flagWasSet(fs, "family"), flagWasSet(fs, "id")} {
+		if asked {
+			views++
+		}
+	}
+	if views > 1 {
+		return fmt.Errorf("--summary, --family and --id each ask for one view; pass one of them")
+	}
 	executable := orbitCLIExecutable()
 	if executable == "" {
 		return fmt.Errorf("cannot resolve a safe absolute path to the Orbit executable")
+	}
+	if views == 1 {
+		return writeCapabilityView(newCLIDiscovery(executable), *summary, strings.TrimSpace(*family), strings.TrimSpace(*id), *jsonOut, out)
 	}
 	doc := buildCLICapabilities(executable)
 	if *jsonOut {

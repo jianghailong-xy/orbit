@@ -144,6 +144,11 @@ function triggers(source, name) {
       assert.ok(event, `${name}: unsupported event line ${line}`);
       events[event] = {};
       filter = null;
+    } else if (indent === 4 && event && /^    - /.test(line)) {
+      // An event that takes a list rather than filters: schedule's `- cron: '…'` entries. They say
+      // when the workflow runs, never which pushes start it.
+      (events[event].entries ??= []).push(scalar(line.replace(/^    - /, '')));
+      filter = null;
     } else if (indent === 4 && event) {
       const [, key, rest] = line.match(/^    ([a-z_-]+):\s*(.*)$/) ?? [];
       assert.ok(key, `${name}: unsupported filter line ${line}`);

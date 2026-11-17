@@ -33,6 +33,7 @@ struct ShareSheet: View {
     @State private var errorText: String?
     @State private var people: SessionGuestsPanel?
     @State private var removing = false
+    @FocusState private var emailFocused: Bool
 
     init(kind: ShareRootKind, rootID: String, baseURL: URL, tokenStore: TokenStore,
          guests: SessionGuestContext? = nil,
@@ -217,10 +218,24 @@ struct ShareSheet: View {
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         #endif
-                        .onSubmit { Task { await invite() } }
+                        .focused($emailFocused)
+                        // Return picks the suggestion ↑/↓ highlighted, and otherwise invites
+                        // what was typed, as before.
+                        .onSubmit {
+                            if self.people?.pickHighlighted() == true { emailFocused = true; return }
+                            Task { await invite() }
+                        }
+                        .onKeyPress(.upArrow) { moveHighlight(-1) }
+                        .onKeyPress(.downArrow) { moveHighlight(1) }
+                        #if os(macOS)
+                        .onExitCommand { self.people?.closeSuggestions() }
+                        #endif
                     Button(SessionGuestsCopy.invite) { Task { await invite() } }
                         .buttonStyle(.borderedProminent)
                         .disabled(!people.canInvite)
+                }
+                if emailFocused, !people.shownSuggestions.isEmpty {
+                    suggestionList(people)
                 }
                 if let error = people.error {
                     Text(error).font(.footnote).foregroundStyle(.red)
@@ -262,6 +277,65 @@ struct ShareSheet: View {
                     .foregroundStyle(people.consequence.warns ? Color.orange : Color.secondary)
             }
         }
+    }
+
+    /// The people the owner has invited before, under the focused email field (board
+    /// docs/mocks/share-links/14-guest-suggestions): a press fills the email in, and never invites.
+    @ViewBuilder
+    private func suggestionList(_ people: SessionGuestsPanel) -> some View {
+        let shown = people.shownSuggestions
+        VStack(alignment: .leading, spacing: 2) {
+            if people.trimmedEmail.isEmpty {
+                Text(SessionGuestsCopy.invitedBefore).font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, person in
+                Button {
+                    self.people?.pick(person)
+                    emailFocused = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(String(person.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(Color.accentColor))
+                        VStack(alignment: .leading, spacing: 1) {
+                            highlighted(person.name, people.email).lineLimit(1)
+                            highlighted(person.email, people.email)
+                                .font(.footnote).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer(minLength: 6)
+                        Text(SessionGuestSuggestions.date(person.lastInvitedAt))
+                            .font(.footnote).foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6)
+                    .background(RoundedRectangle(cornerRadius: 5)
+                        .fill(index == people.highlighted ? Color.secondary.opacity(0.12) : Color.clear))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(person.name + ", " + person.email)
+            }
+        }
+    }
+
+    /// A name or email with the typed query bold where it starts a word.
+    private func highlighted(_ text: String, _ query: String) -> Text {
+        var out = AttributedString()
+        for run in SessionGuestSuggestions.runs(text, query: query) {
+            var piece = AttributedString(run.text)
+            if run.bold { piece.inlinePresentationIntent = .stronglyEmphasized }
+            out.append(piece)
+        }
+        return Text(out)
+    }
+
+    private func moveHighlight(_ step: Int) -> KeyPress.Result {
+        guard let people, !people.shownSuggestions.isEmpty else { return .ignored }
+        self.people?.moveHighlight(by: step)
+        return .handled
     }
 
     // MARK: presses
@@ -307,6 +381,15 @@ struct ShareSheet: View {
         } catch {
             errorText = APIClient.failureReason(error)
         }
+        await loadSuggestions()
+    }
+
+    /// The people the owner has invited before. A failure leaves the field as it was without them:
+    /// they only save typing, so nothing is said.
+    @MainActor
+    private func loadSuggestions() async {
+        guard people != nil, let found = try? await api.sessionGuestSuggestions(rootID) else { return }
+        people?.suggestionsLoaded(found)
     }
 
     @MainActor
@@ -316,7 +399,9 @@ struct ShareSheet: View {
             people?.invited(try await api.inviteSessionGuest(rootID, email: email))
         } catch {
             people?.inviteFailed(APIClient.failureReason(error))
+            return
         }
+        await loadSuggestions()
     }
 
     @MainActor
@@ -327,8 +412,11 @@ struct ShareSheet: View {
             people?.loaded(try await api.removeSessionGuest(rootID, userID: guest.userId))
         } catch {
             errorText = SessionGuestsCopy.couldNotRemove + ": " + APIClient.failureReason(error)
+            removing = false
+            return
         }
         removing = false
+        await loadSuggestions()
     }
 
     @MainActor

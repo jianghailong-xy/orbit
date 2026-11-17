@@ -13,6 +13,7 @@ import type {
   ProjectOpenItemRow,
   ProjectOpenItemsView,
 } from '@orbit/shared';
+import { SessionLifecycleState } from '@orbit/shared';
 import { api } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { checkDuration } from '../lib/checkDuration';
@@ -29,7 +30,17 @@ import { JOB_PHASES, jobPhases, landingClockTime, landingRoundClause } from './P
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { abandonJob } from '../lib/projectMerge';
-import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
+import {
+  projectCoordinatorStatusQuery,
+  projectDetailsQuery,
+  projectIntegrationQuery,
+  projectOpenItemsQuery,
+  projectPromotionQuery,
+  workspacesQuery,
+} from '../lib/queries';
+import { CHANGE_COPY, COORDINATOR_FIX_LABEL } from '../lib/coordinatorWorkspace';
+import { CoordinatorChangeDialog, replaceProjectCoordinator } from './CoordinatorChange';
+import type { CoordinatorStatus } from './ProjectCoordinatorCard';
 import { pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBudget';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
@@ -149,6 +160,17 @@ function itemHeading(row: ProjectOpenItemRow): string {
   return ITEM_HEADING[row.kind] ?? row.title;
 }
 
+/** An escalated item's heading while its coordinator cannot be reached (`owner-item-alert.ts` sends
+ *  the same words). */
+export const ESCALATED_UNREACHABLE_HEADING = 'Now yours — the coordinator can’t take messages';
+/** The same item while its coordinator can be asked again: the clock moved it, and the heading says
+ *  so without a number — the card's one clock is the total wait at its top right (board
+ *  owner-exception-who-fixes, D3 = A), and how long the coordinator had it is in Details. */
+export const ESCALATED_REACHABLE_HEADING = 'Now yours — the coordinator didn’t get to it';
+export const COORDINATOR_ENDED_HEADING = 'Now yours — the coordinator conversation ended';
+export const HANDED_OVER_HEADING = 'Now yours — the coordinator handed it over';
+export const NO_COORDINATOR_HEADING = 'Now yours — this project has no coordinator';
+
 /** The two words each group's rows use for who has the item. */
 const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
 
@@ -172,15 +194,17 @@ function escalationHeading(row: ProjectOpenItemRow, now: number): string | null 
   }
   switch (row.assigneeReason) {
     case 'ESCALATED':
-      return `Now yours — no one acted on this for ${waitedBeforeEscalation(row)}`;
+      // The clock moved it, but with no coordinator to ask or message (the doors below already say
+      // so) "no one acted" would point the owner at somebody who cannot act. The server's reading.
+      return row.coordinatorUnreachable ? ESCALATED_UNREACHABLE_HEADING : ESCALATED_REACHABLE_HEADING;
     case 'COORDINATOR_ENDED':
-      return 'Now yours — the coordinator conversation ended';
+      return COORDINATOR_ENDED_HEADING;
     case 'CHAIN_LIMIT':
       return 'Now yours — the 3rd failure in this chain';
     case 'HANDED_OVER':
-      return 'Now yours — the coordinator handed it over';
+      return HANDED_OVER_HEADING;
     case 'NO_COORDINATOR':
-      return `Now yours — this project has no coordinator (waiting ${formatSpan(waitedMs(row, now))})`;
+      return NO_COORDINATOR_HEADING;
     default:
       return null;
   }
@@ -944,19 +968,18 @@ function RetryPress({
 function OpenTaskSessionPress({
   row,
   tier,
+  label = ACTION_LABEL.OPEN_TASK_SESSION!,
 }: {
   row: ProjectOpenItemRow;
   tier: PressTier;
+  /** The owner exception card's name for the same door: "Fix it myself". */
+  label?: string;
 }): JSX.Element {
   const navigate = useNavigate();
   // `cardActions` draws this action only where the row carries the address it reaches.
   const href = actionHref(row, 'OPEN_TASK_SESSION') as string;
   return (
-    <PressButton
-      label={ACTION_LABEL.OPEN_TASK_SESSION!}
-      tier={tier}
-      onClick={() => navigate(href)}
-    />
+    <PressButton label={label} tier={tier} onClick={() => navigate(href)} />
   );
 }
 
@@ -1450,7 +1473,18 @@ function chainStanding(failure: NonNullable<OpenItemFacts['failure']>): string {
  * A payload this build cannot read at all is not a blank card either: it keeps the one line the
  * card had before the rows existed — the server's own sentence about the fact.
  */
-function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: string }): JSX.Element | null {
+function ItemFactRows({
+  row,
+  heading,
+  folded,
+}: {
+  row: ProjectOpenItemRow;
+  heading: string;
+  /** Drawn inside the owner exception card's Details (board owner-exception-who-fixes ② 4): the
+   *  task is already on the subline, the branch is the project's by name, the files stop at five,
+   *  and "After a fix" gives way to the card's own line about how the item ends. */
+  folded?: { projectName: string | null };
+}): JSX.Element | null {
   const facts = row.facts;
   // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
   // which runner and since when, and where the runner had got to. An item an older build opened
@@ -1477,18 +1511,32 @@ function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: stri
   const check = facts.check;
   return (
     <div className="project-open-item-facts">
-      {facts.task ? <FactRow label="Task">{facts.task.title}</FactRow> : null}
+      {facts.task && !folded ? <FactRow label="Task">{facts.task.title}</FactRow> : null}
       {facts.targetRef ? (
         <FactRow label="Into">
-          <span className="project-open-item-mono">{facts.targetRef}</span>
+          {folded?.projectName ? `${folded.projectName}’s branch ` : null}
+          <span className="project-open-item-mono">
+            {folded ? shortRef(facts.targetRef) : facts.targetRef}
+          </span>
           {facts.targetSha ? ` at ${facts.targetSha.slice(0, 7)}` : null}
           {facts.nothingLanded ? ' · nothing landed' : null}
         </FactRow>
       ) : null}
       {facts.files.length > 0 ? (
-        <FactRow label="Files">
-          <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
-        </FactRow>
+        folded ? (
+          <FactRow label={`Files (${facts.files.length})`}>
+            <span className="project-open-item-mono">
+              {facts.files.slice(0, DETAIL_FILES_SHOWN).join(' · ')}
+            </span>
+            {facts.files.length > DETAIL_FILES_SHOWN
+              ? ` and ${facts.files.length - DETAIL_FILES_SHOWN} more`
+              : null}
+          </FactRow>
+        ) : (
+          <FactRow label="Files">
+            <span className="project-open-item-mono">{facts.files.join(' · ')}</span>
+          </FactRow>
+        )
       ) : null}
       {/* Only where the item is about a task: the press this sentence describes is a push to that
           task's branch, and a promotion's failure has no task branch to push to. */}
@@ -1503,7 +1551,7 @@ function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: stri
           </span>
         </FactRow>
       ) : null}
-      {facts.task && facts.files.length > 0 && !facts.review ? (
+      {facts.task && facts.files.length > 0 && !facts.review && !folded ? (
         <FactRow label="After a fix">
           push to the task branch — Orbit re-integrates and re-checks on its own
         </FactRow>
@@ -1519,11 +1567,7 @@ function ItemFactRows({ row, heading }: { row: ProjectOpenItemRow; heading: stri
           {check.outputTail.trim() !== '' ? <CheckOutputTail text={check.outputTail} /> : null}
         </>
       ) : null}
-      {facts.branchUnchanged ? (
-        <FactRow label="Branch">
-          unchanged — the task passed on its own branch; it fails only on the combined tree
-        </FactRow>
-      ) : null}
+      {facts.branchUnchanged ? <FactRow label="Branch">{branchLine(facts)}</FactRow> : null}
       {facts.failure ? (
         <>
           <FactRow label="How">{howFailed(facts.failure)}</FactRow>
@@ -1658,6 +1702,17 @@ function ItemHandlingRows({
   );
 }
 
+/** The Branch row a server older than `facts.branchLine` leaves the card to write: a task's landing. */
+export const BRANCH_UNCHANGED_LINE =
+  'unchanged — the task passed on its own branch; it fails only on the combined tree';
+
+/** What a failed check's Branch row says. The server writes it by the job the check failed in (a
+ *  task's landing, or a promotion of the project branch or of one task's branch to main), so a
+ *  promotion's card no longer claims a task passed on its own branch. */
+function branchLine(facts: OpenItemFacts): string {
+  return facts.branchLine ?? BRANCH_UNCHANGED_LINE;
+}
+
 /** The card's fact block in words, for a chat about the item: the same rows `ItemFactRows` draws,
  *  minus the check's output — a coordinator that wants it reads the item. */
 function itemFactLines(row: ProjectOpenItemRow): string[] {
@@ -1680,11 +1735,7 @@ function itemFactLines(row: ProjectOpenItemRow): string[] {
     lines.push(`Check: ${facts.check.command} · ${checkVerdict(facts.check)} after `
       + `${checkDuration(facts.check.durationMs)}`);
   }
-  if (facts.branchUnchanged) {
-    lines.push(
-      'Branch: unchanged — the task passed on its own branch; it fails only on the combined tree',
-    );
-  }
+  if (facts.branchUnchanged) lines.push(`Branch: ${branchLine(facts)}`);
   if (facts.failure) {
     lines.push(`How: ${howFailed(facts.failure)}`);
     lines.push(`Retries: ${chainStanding(facts.failure)}`);
@@ -1911,6 +1962,18 @@ export function EscalatedItemCard({
   /** The project's main branch by name, which a rerun of a merge check names. */
   main?: string;
 }): JSX.Element {
+  if (whoFixesIt(row)) {
+    return (
+      <WhoFixesItCard
+        projectId={projectId}
+        row={row}
+        now={now}
+        currentPromotionId={currentPromotionId}
+        onChat={onChat}
+        main={main}
+      />
+    );
+  }
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
@@ -2064,6 +2127,655 @@ function ItemCard({
       </div>
       <div className="project-open-item-foot">
         {tone === 'settled' ? settledLine(row, now) : ownerLine(row, now)}
+      </div>
+    </div>
+  );
+}
+
+/* ── "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A) ────────────────────
+ *
+ * The owner exception card organised around the owner's first question rather than around the
+ * mechanism: the heading is the live cause, a subline says what it is, then WHO FIXES IT? — the
+ * coordinator (why it can or cannot, and the one press that brings it back or hands this to it) and
+ * you (the task session) — then how it ends, the facts folded into Details, and after a divider the
+ * two ways to end it without fixing it. One clock: the total wait at the top right.
+ *
+ * The heading and the coordinator row are one live reading (board part 6, `readCoordinatorCause`):
+ * the server's reach (`ASK_COORDINATOR_AGAIN` drawn = askable, `coordinatorUnreachable`), the
+ * coordinator status the project page reads (`GET /projects/:id/coordinator/status`), and
+ * `assigneeReason` only where the coordinator can be asked (a hand-over says so on purpose).
+ *
+ * D1 = A: a repair press only repairs the coordinator. Once it is back the item reads askable, the
+ * card turns into the reachable card where it is, and Ask again is pressed on its own.
+ */
+
+/** Labels and sentences the card wears. The native ends copy these (OrbitKit `ExceptionCards`,
+ *  Android `ExceptionCards`), and their parity tests read them here. */
+export const WHO_FIXES_IT = 'Who fixes it?';
+export const WHO_FIXES_COORDINATOR = 'The coordinator';
+export const WHO_FIXES_YOU = 'You';
+export const FIX_IT_MYSELF = 'Fix it myself';
+export const START_NEW_COORDINATOR = 'Start a new coordinator';
+export const SET_UP_COORDINATOR = 'Set up a coordinator…';
+export const CHAT_FIRST_LINK = 'or Chat about this first';
+export const ASK_AGAIN_ONCE_BACK =
+  'Once it’s back, Ask the coordinator again hands this to it with a fresh clock.';
+export const RUNNER_DOWN_SENTENCE = 'Its runner is offline. Ask again comes back here as soon as it is.';
+export const COORDINATOR_ENDED_SENTENCE = 'Its conversation was completed.';
+export const NO_COORDINATOR_SENTENCE = 'This project isn’t coordinated.';
+export const HANDED_OVER_SENTENCE = 'it handed this to you on purpose.';
+export const CLOSES_BY_ITSELF =
+  'Closes by itself once this work lands — push a fix to the task branch and you’re done.';
+export const ALREADY_SETTLED = 'Already settled?';
+export const MARK_HANDLED_SETTLED_CONSEQUENCE = 'The work landed another way. Your reason goes on the record.';
+export const CANCEL_TASK_SETTLED_CONSEQUENCE = 'Stops the task. This item closes with it.';
+export const DETAILS_LABEL = 'Details';
+export const OPEN_LANDING_DETAIL = 'every attempt, step by step';
+/** How many files Details lists before "and N more". */
+export const DETAIL_FILES_SHOWN = 5;
+
+/** The subline's word for what kind of exception this is. */
+export const WHO_FIXES_KIND: Readonly<Record<string, string>> = {
+  INTEGRATION_CONFLICT: 'Merge conflict',
+  INTEGRATION_CHECK_FAILED: 'Checks failed',
+  INTEGRATION_ERROR: 'Integration error',
+  TASK_FAILED: 'Task failed',
+  DELIVERY_REVIEW: 'Delivery review',
+};
+
+/** What "Fix it myself" opens and what the owner does there, by kind. */
+export const FIX_IT_MYSELF_CONSEQUENCE: Readonly<Record<string, string>> = {
+  INTEGRATION_CONFLICT: 'Opens the task session. Fix the conflict there and push to the task branch.',
+  INTEGRATION_CHECK_FAILED: 'Opens the task session. Fix the check there and push to the task branch.',
+  DEFAULT: 'Opens the task session.',
+};
+
+/** Why the coordinator can or cannot take this item right now (board part 6's rows). */
+export type CoordinatorCause =
+  | 'WORKSPACE_DISABLED'
+  | 'WORKSPACE_TRASHED'
+  | 'WORKSPACE_UNBOUND'
+  | 'RUNNER_DOWN'
+  | 'COORDINATOR_ENDED'
+  | 'NO_COORDINATOR'
+  | 'ESCALATED'
+  | 'HANDED_OVER';
+
+export interface CoordinatorReading {
+  cause: CoordinatorCause;
+  workspaceId: string | null;
+  workspaceName: string | null;
+}
+
+/** The two facts of the coordinator's workspace a LIVE status does not carry (a live coordinator
+ *  in a workspace disabled underneath it still reads LIVE), from the workspace list. */
+export interface CoordinatorWorkspaceFacts {
+  enabled?: boolean;
+  runnerId?: string | null;
+}
+
+/** The kinds the "Who fixes it?" card draws, once they are the owner's by escalation, a hand-over, an
+ *  ended or missing coordinator. A failed chain's 3rd failure and a silent landing claim keep cards
+ *  of their own. */
+const WHO_FIXES_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
+  'INTEGRATION_CONFLICT',
+  'INTEGRATION_CHECK_FAILED',
+  'INTEGRATION_ERROR',
+  'TASK_FAILED',
+  'DELIVERY_REVIEW',
+]);
+
+export function whoFixesIt(row: ProjectOpenItemRow): boolean {
+  return row.assignee === 'OWNER'
+    && WHO_FIXES_KINDS.has(row.kind)
+    && row.assigneeReason !== 'CHAIN_LIMIT'
+    && row.assigneeReason !== 'DEFAULT';
+}
+
+/**
+ * The live cause, board part 6. Askable first: the server drew Ask again, so the coordinator can
+ * take it — and a hand-over says it gave it back on purpose. Otherwise what the coordinator status
+ * says is wrong: the bound workspace (UNAVAILABLE's refusal detail, or for a LIVE conversation the
+ * workspace list), no coordinator ever, a conversation that ended — and, when nothing else is wrong,
+ * its run is down. Without a status read yet, the row's own reading decides.
+ */
+export function readCoordinatorCause(
+  row: ProjectOpenItemRow,
+  status?: CoordinatorStatus | null,
+  workspace?: CoordinatorWorkspaceFacts | null,
+): CoordinatorReading {
+  const read = (cause: CoordinatorCause): CoordinatorReading => ({
+    cause,
+    workspaceId: status?.coordination.workspaceId ?? null,
+    workspaceName: status?.coordination.workspaceName ?? null,
+  });
+  if (row.actions.includes('ASK_COORDINATOR_AGAIN')) {
+    return read(row.assigneeReason === 'HANDED_OVER' ? 'HANDED_OVER' : 'ESCALATED');
+  }
+  if (status) {
+    if (status.state === 'UNAVAILABLE') {
+      const detail = status.openability.refusalDetail;
+      return read(
+        detail === 'WORKSPACE_DISABLED' || detail === 'WORKSPACE_TRASHED' || detail === 'WORKSPACE_UNBOUND'
+          ? detail
+          : 'COORDINATOR_ENDED',
+      );
+    }
+    if (status.state === 'NEVER_OPENED') return read('NO_COORDINATOR');
+    if (status.state === 'TRASHED') return read('COORDINATOR_ENDED');
+    if (status.coordination.session?.lifecycleState === SessionLifecycleState.COMPLETED) {
+      return read('COORDINATOR_ENDED');
+    }
+    // It takes a message but cannot be asked: the conversation is over (`readCoordinatorReach`).
+    if (row.coordinatorUnreachable === false) return read('COORDINATOR_ENDED');
+    if (workspace?.enabled === false) return read('WORKSPACE_DISABLED');
+    if (workspace && workspace.runnerId === null) return read('WORKSPACE_UNBOUND');
+    return read('RUNNER_DOWN');
+  }
+  if (row.assigneeReason === 'NO_COORDINATOR' || itemChat(row).refusal === 'NO_COORDINATOR') {
+    return read('NO_COORDINATOR');
+  }
+  if (row.coordinatorUnreachable === false || row.assigneeReason === 'COORDINATOR_ENDED') {
+    return read('COORDINATOR_ENDED');
+  }
+  return read('RUNNER_DOWN');
+}
+
+/** The card's heading for each cause (board part 6, first column). */
+export function whoFixesHeading(cause: CoordinatorCause): string {
+  switch (cause) {
+    case 'COORDINATOR_ENDED':
+      return COORDINATOR_ENDED_HEADING;
+    case 'NO_COORDINATOR':
+      return NO_COORDINATOR_HEADING;
+    case 'ESCALATED':
+      return ESCALATED_REACHABLE_HEADING;
+    case 'HANDED_OVER':
+      return HANDED_OVER_HEADING;
+    default:
+      return ESCALATED_UNREACHABLE_HEADING;
+  }
+}
+
+/** The coordinator row's status sentence (board part 6, second column). */
+export function coordinatorRowSentence(row: ProjectOpenItemRow, reading: CoordinatorReading): string {
+  const its = reading.workspaceName ? `Its workspace ${reading.workspaceName}` : 'Its workspace';
+  switch (reading.cause) {
+    case 'WORKSPACE_DISABLED':
+      return `${its} is disabled, so it can’t take messages.`;
+    case 'WORKSPACE_TRASHED':
+      return `${its} is in Trash, so it can’t take messages.`;
+    case 'WORKSPACE_UNBOUND':
+      return `${its} isn’t bound to a runner.`;
+    case 'RUNNER_DOWN':
+      return RUNNER_DOWN_SENTENCE;
+    case 'COORDINATOR_ENDED':
+      return COORDINATOR_ENDED_SENTENCE;
+    case 'NO_COORDINATOR':
+      return NO_COORDINATOR_SENTENCE;
+    case 'ESCALATED':
+      return `Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it.`;
+    case 'HANDED_OVER': {
+      const note = row.handoverNote?.trim();
+      return note
+        ? `“${note}” — ${HANDED_OVER_SENTENCE}`
+        : `${HANDED_OVER_SENTENCE.charAt(0).toUpperCase()}${HANDED_OVER_SENTENCE.slice(1)}`;
+    }
+  }
+}
+
+/** The coordinator row's presses (board part 6, third column), in order, with their weight. */
+export type CoordinatorRowPress =
+  | { kind: 'ASK_AGAIN'; tier: 'primary' | 'secondary' }
+  | { kind: 'CHAT_FIRST' }
+  | { kind: 'FIX'; label: string; detail: 'WORKSPACE_DISABLED' | 'WORKSPACE_TRASHED' | 'WORKSPACE_UNBOUND' }
+  | { kind: 'CHANGE_WORKSPACE'; tier: 'secondary' | 'link' }
+  | { kind: 'START_NEW_COORDINATOR' }
+  | { kind: 'SET_UP_COORDINATOR' };
+
+export function coordinatorRowPresses(reading: CoordinatorReading): CoordinatorRowPress[] {
+  switch (reading.cause) {
+    case 'WORKSPACE_DISABLED':
+    case 'WORKSPACE_TRASHED':
+    case 'WORKSPACE_UNBOUND':
+      return reading.workspaceName
+        ? [
+            { kind: 'FIX', label: COORDINATOR_FIX_LABEL[reading.cause](reading.workspaceName), detail: reading.cause },
+            { kind: 'CHANGE_WORKSPACE', tier: 'link' },
+          ]
+        : [{ kind: 'CHANGE_WORKSPACE', tier: 'secondary' }];
+    case 'RUNNER_DOWN':
+      return [{ kind: 'CHANGE_WORKSPACE', tier: 'secondary' }];
+    case 'COORDINATOR_ENDED':
+      return [{ kind: 'START_NEW_COORDINATOR' }];
+    case 'NO_COORDINATOR':
+      return [{ kind: 'SET_UP_COORDINATOR' }];
+    case 'ESCALATED':
+      return [{ kind: 'ASK_AGAIN', tier: 'primary' }, { kind: 'CHAT_FIRST' }];
+    case 'HANDED_OVER':
+      // D4 = A: the owner was handed this on purpose, so "Fix it myself" leads and Ask again is
+      // the second weight.
+      return [{ kind: 'ASK_AGAIN', tier: 'secondary' }, { kind: 'CHAT_FIRST' }];
+  }
+}
+
+/** What Ask again does, with the project's own window when the project document says it: "It goes
+ *  back to the coordinator with a fresh 2h clock." (board ②). */
+export function askAgainFreshClock(escalationSeconds: number): string {
+  return `It goes back to the coordinator with a fresh ${formatSpan(escalationSeconds * 1000)} clock.`;
+}
+
+/** The line under the coordinator row's presses. `escalationSeconds` is the project's window
+ *  (`exceptionEscalationSeconds` on the project document); without it, the sentence the door has
+ *  always worn. */
+export function coordinatorRowNote(
+  row: ProjectOpenItemRow,
+  reading: CoordinatorReading,
+  escalationSeconds?: number | null,
+): string | null {
+  switch (reading.cause) {
+    case 'ESCALATED':
+    case 'HANDED_OVER':
+      return escalationSeconds != null && escalationSeconds > 0
+        ? askAgainFreshClock(escalationSeconds)
+        : actionConsequence(row, 'ASK_COORDINATOR_AGAIN');
+    case 'RUNNER_DOWN':
+      return null;
+    default:
+      return ASK_AGAIN_ONCE_BACK;
+  }
+}
+
+/** D4 = A: a hand-over leads with the owner's own row; everything else with the coordinator's. */
+export function youLead(reading: CoordinatorReading): boolean {
+  return reading.cause === 'HANDED_OVER';
+}
+
+/** "Fix it myself" is the primary press where nothing in the coordinator row is: a hand-over, and a
+ *  run that is only down (board part 6, "You 行在视觉上成为主门"). */
+function fixItMyselfLeads(reading: CoordinatorReading): boolean {
+  return reading.cause === 'HANDED_OVER' || reading.cause === 'RUNNER_DOWN';
+}
+
+/** The green line: an integration item with a task branch closes by itself once a fix lands there
+ *  (`resolveIntegrationItemsOnLanding`). A candidate's failed check has no task branch to push to. */
+export function closesByItself(row: ProjectOpenItemRow): boolean {
+  return (row.kind === 'INTEGRATION_CONFLICT'
+    || row.kind === 'INTEGRATION_CHECK_FAILED'
+    || row.kind === 'INTEGRATION_ERROR')
+    && row.taskId != null
+    && row.promotionId == null;
+}
+
+/** "<kind> · <task title> → <project name>", from what the row carries. */
+export function whoFixesSubline(row: ProjectOpenItemRow, projectName: string | null): string {
+  const kind = row.kind === 'DELIVERY_REVIEW' ? itemHeading(row) : WHO_FIXES_KIND[row.kind] ?? row.title;
+  const task = row.facts?.task?.title ?? null;
+  if (!task) return kind;
+  return projectName ? `${kind} · ${task} → ${projectName}` : `${kind} · ${task}`;
+}
+
+/** The folded Details summary: "Details · 9 files · Open landing". */
+export function detailsSummary(row: ProjectOpenItemRow, landing: boolean): string {
+  const files = row.facts?.files.length ?? 0;
+  return [
+    DETAILS_LABEL,
+    files > 0 ? `${files} file${files === 1 ? '' : 's'}` : null,
+    landing ? ACTION_LABEL.OPEN_LANDING! : null,
+  ].filter(Boolean).join(' · ');
+}
+
+/** The "Came to you" fact: how long the coordinator had it, which the heading no longer says. */
+export function cameToYouLine(row: ProjectOpenItemRow): string | null {
+  return row.escalatedAt == null ? null : `after ${waitedBeforeEscalation(row)} with the coordinator`;
+}
+
+/** A target ref as Details draws it: the branch name, its long id cut short. */
+function shortRef(ref: string): string {
+  const name = ref.replace(/^refs\/heads\//, '');
+  return name.length > 18 ? `${name.slice(0, 16)}…` : name;
+}
+
+/** The card's one clock (D3 = A): the total wait, from `waitingSince`. */
+export function whoFixesClock(row: ProjectOpenItemRow, now: number): string {
+  return `waiting ${formatSpan(waitedMs(row, now))}`;
+}
+
+/** The status sentence with the workspace's name in bold, as the coordinator card draws it. */
+function BoldWorkspace({ sentence, name }: { sentence: string; name: string | null }): JSX.Element {
+  const at = name ? sentence.indexOf(` ${name} `) : -1;
+  if (!name || at < 0) return <>{sentence}</>;
+  return (
+    <>
+      {sentence.slice(0, at + 1)}
+      <b>{name}</b>
+      {sentence.slice(at + 1 + name.length)}
+    </>
+  );
+}
+
+/** "or Chat about this first" — only where a message can go (D2 = A): the unreachable card has no
+ *  greyed chat, because the coordinator row already says why. */
+function ChatFirstLink({
+  row,
+  onChat,
+}: {
+  row: ProjectOpenItemRow;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+}): JSX.Element | null {
+  const navigate = useNavigate();
+  const chat = itemChat(row);
+  const refusal = chat.refusal ?? (!onChat && !chat.sessionId ? 'NO_COORDINATOR' : null);
+  if (refusal != null) return null;
+  const subject: CoordinatorChatSubject = { kind: 'item', row };
+  return (
+    <Button
+      className="project-open-item-chat-first"
+      variant="link"
+      size="small"
+      onClick={() => {
+        if (onChat) onChat(subject);
+        else if (chat.sessionId) navigate(coordinatorChatPath(chat.sessionId, subject));
+      }}
+    >
+      {CHAT_FIRST_LINK}
+    </Button>
+  );
+}
+
+/** The coordinator row's repair presses. Each repairs the coordinator and nothing else (D1 = A):
+ *  the workspace fixes go where the workspace is configured, as the project page's own card does;
+ *  Change workspace… is the project page's picker; a new coordinator is the project page's replace,
+ *  without leaving this card. */
+function CoordinatorRepairPress({
+  projectId,
+  press,
+  reading,
+  status,
+}: {
+  projectId: string;
+  press: Extract<CoordinatorRowPress, { kind: 'FIX' | 'CHANGE_WORKSPACE' | 'START_NEW_COORDINATOR' | 'SET_UP_COORDINATOR' }>;
+  reading: CoordinatorReading;
+  status: CoordinatorStatus | null;
+}): JSX.Element | null {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const project = useQuery({ ...projectDetailsQuery(projectId), enabled: false });
+  const [changing, setChanging] = useState(false);
+  const replace = useMutation({
+    mutationKey: ['project', projectId, 'coordinator', 'replace'],
+    mutationFn: () => replaceProjectCoordinator(projectId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
+  });
+  switch (press.kind) {
+    case 'FIX':
+      return reading.workspaceId ? (
+        <PressButton
+          label={press.label}
+          tier="primary"
+          onClick={() => navigate(`/workspaces/${encodeURIComponent(encodeId(reading.workspaceId as string))}`)}
+        />
+      ) : null;
+    case 'START_NEW_COORDINATOR':
+      return (
+        <>
+          <PressButton
+            label={START_NEW_COORDINATOR}
+            tier="primary"
+            pending={replace.isPending}
+            onClick={() => replace.mutate()}
+          />
+          {replace.isError ? (
+            <PressError headline="No new coordinator was started" error={replace.error as Error} />
+          ) : null}
+        </>
+      );
+    case 'SET_UP_COORDINATOR':
+      return (
+        <PressButton
+          label={SET_UP_COORDINATOR}
+          tier="primary"
+          onClick={() => navigate(`/projects/${encodeURIComponent(encodeId(projectId))}`)}
+        />
+      );
+    case 'CHANGE_WORKSPACE': {
+      if (!status) return null;
+      const session = status.coordination.session;
+      return (
+        <>
+          <PressButton label={CHANGE_COPY.button} tier={press.tier} onClick={() => setChanging(true)} />
+          {changing ? (
+            <CoordinatorChangeDialog
+              projectId={projectId}
+              projectTitle={project.data?.title ?? 'This project'}
+              coordinator={{
+                sessionId: session && !session.deletedAt ? session.id : null,
+                outgoing: !session || session.deletedAt
+                  ? 'none'
+                  : session.lifecycleState === SessionLifecycleState.COMPLETED ? 'completed' : 'open',
+                workspaceId: status.coordination.workspaceId,
+                workspaceName: status.coordination.workspaceName ?? null,
+              }}
+              onClose={() => setChanging(false)}
+            />
+          ) : null}
+        </>
+      );
+    }
+  }
+}
+
+/** Details, folded (board ② 4): the facts, how long the coordinator had it, and the landing. */
+function WhoFixesDetails({
+  row,
+  heading,
+  projectName,
+  landingHref,
+}: {
+  row: ProjectOpenItemRow;
+  heading: string;
+  projectName: string | null;
+  landingHref: string | null;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const came = cameToYouLine(row);
+  return (
+    <div className={`project-open-item-details${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className="project-open-item-details-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span aria-hidden="true" className="project-open-item-details-caret">{open ? '▾' : '▸'}</span>
+        {open ? DETAILS_LABEL : detailsSummary(row, landingHref != null)}
+      </button>
+      {open ? (
+        <div className="project-open-item-details-body">
+          <ItemFactRows row={row} heading={heading} folded={{ projectName }} />
+          {came ? <FactRow label="Came to you">{came}</FactRow> : null}
+          {landingHref ? (
+            <FactRow label="Landing">
+              <Link to={landingHref}>{ACTION_LABEL.OPEN_LANDING}</Link>
+              {` — ${OPEN_LANDING_DETAIL}`}
+            </FactRow>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The owner exception card, organised around "Who fixes it?" (board owner-exception-who-fixes ②).
+ */
+export function WhoFixesItCard({
+  projectId,
+  row,
+  now,
+  currentPromotionId,
+  onChat,
+  main = DEFAULT_MAIN_BRANCH,
+}: {
+  projectId: string;
+  row: ProjectOpenItemRow;
+  now: number;
+  currentPromotionId?: string | null;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+  main?: string;
+}): JSX.Element {
+  const askable = row.actions.includes('ASK_COORDINATOR_AGAIN');
+  const status = useQuery({ ...projectCoordinatorStatusQuery(projectId), enabled: !askable });
+  const live = !askable && status.data?.state === 'LIVE';
+  const workspaces = useQuery({ ...workspacesQuery(), enabled: live });
+  // The project's name, from the project document both hosts already hold (the project page and
+  // the coordinator conversation read it under the same key): read from the cache, never fetched.
+  const project = useQuery({ ...projectDetailsQuery(projectId), enabled: false });
+  const name = project.data?.title ?? null;
+  const escalationSeconds = (project.data as { exceptionEscalationSeconds?: number } | undefined)
+    ?.exceptionEscalationSeconds ?? null;
+  const statusData = askable ? null : (status.data ?? null);
+  const workspaceId = statusData?.coordination.workspaceId ?? null;
+  const workspace = live && workspaceId
+    ? ((workspaces.data ?? []) as Array<{ id: string } & CoordinatorWorkspaceFacts>)
+      .find((w) => w.id === workspaceId) ?? null
+    : null;
+  const reading = readCoordinatorCause(row, statusData, workspace);
+  const heading = whoFixesHeading(reading.cause);
+  const actions = cardActions(row, currentPromotionId);
+  const presses = coordinatorRowPresses(reading);
+  const note = coordinatorRowNote(row, reading, escalationSeconds);
+  const landingHref = actions.includes('OPEN_LANDING') ? actionHref(row, 'OPEN_LANDING') : null;
+  const fixMyself = actions.includes('OPEN_TASK_SESSION');
+  // The owner's other ways onto the work the server listed (a failed task's Retry, say): drawn in the
+  // You row after "Fix it myself", in the second weight.
+  const youDoors = actions.filter(
+    (action) => !['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK', 'OPEN_LANDING', 'OPEN_COORDINATOR']
+      .includes(action),
+  );
+  const handClosable = HAND_CLOSABLE_KINDS.has(row.kind);
+  const cancellable = actions.includes('CANCEL_TASK');
+
+  const coordinatorRow = (
+    <div className="project-open-item-who-row" data-who="coordinator" key="coordinator">
+      <span className="project-open-item-who-name">{WHO_FIXES_COORDINATOR}</span>
+      <div className="project-open-item-who-body">
+        <p className="project-open-item-who-status">
+          <BoldWorkspace sentence={coordinatorRowSentence(row, reading)} name={reading.workspaceName} />
+        </p>
+        <div className="project-open-item-actions project-open-item-who-presses">
+          {presses.map((press) =>
+            press.kind === 'ASK_AGAIN' ? (
+              <AskCoordinatorAgainPress key="ask" row={row} projectId={projectId} tier={press.tier} />
+            ) : press.kind === 'CHAT_FIRST' ? (
+              <ChatFirstLink key="chat" row={row} onChat={onChat} />
+            ) : (
+              <CoordinatorRepairPress
+                key={press.kind}
+                projectId={projectId}
+                press={press}
+                reading={reading}
+                status={statusData}
+              />
+            ),
+          )}
+        </div>
+        {note ? <p className="project-open-item-consequence">{note}</p> : null}
+      </div>
+    </div>
+  );
+  const youRow = fixMyself || youDoors.length > 0 ? (
+    <div className="project-open-item-who-row" data-who="you" key="you">
+      <span className="project-open-item-who-name">{WHO_FIXES_YOU}</span>
+      <div className="project-open-item-who-body">
+        <div className="project-open-item-actions project-open-item-who-presses">
+          {fixMyself ? (
+            <OpenTaskSessionPress
+              row={row}
+              tier={fixItMyselfLeads(reading) ? 'primary' : 'secondary'}
+              label={FIX_IT_MYSELF}
+            />
+          ) : null}
+          {youDoors.map((action) =>
+            LEADING_ACTIONS.has(action) || WRITE_ACTIONS.has(action) ? (
+              <ItemPress key={action} row={row} action={action} projectId={projectId} tier="secondary" />
+            ) : (
+              <ItemLink key={action} row={row} action={action} quiet currentPromotionId={currentPromotionId} />
+            ),
+          )}
+        </div>
+        {fixMyself ? (
+          <p className="project-open-item-consequence">
+            {FIX_IT_MYSELF_CONSEQUENCE[row.kind] ?? FIX_IT_MYSELF_CONSEQUENCE.DEFAULT}
+          </p>
+        ) : null}
+        {youDoors.map((action) => (
+          <p className="project-open-item-consequence" key={`${action}-why`}>
+            {actionConsequence(row, action)}
+          </p>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div
+      className="approval-card project-open-item-card is-owner is-who-fixes"
+      id={`open-item-${row.itemId}`}
+      data-kind={row.kind}
+      data-open-item={row.itemId}
+      data-cause={reading.cause}
+    >
+      <div className="approval-head project-open-item-head">
+        <span className="project-open-item-heading">{heading}</span>
+        <span className="project-open-item-clock">{whoFixesClock(row, now)}</span>
+        <span className="criteria-provenance" title={FROM_ORBIT_TITLE}>
+          {FROM_ORBIT}
+        </span>
+      </div>
+      <div className="approval-body is-plan project-open-item-body">
+        <p className="project-open-item-subline">{whoFixesSubline(row, name)}</p>
+        {row.handledBy?.length ? (
+          <p className="project-open-item-handled-by">
+            {row.handledBy.map((task, index) => (
+              <span key={task.taskId}>
+                {index > 0 ? ' · ' : ''}
+                {`The coordinator is fixing this in ${task.title}.`}
+              </span>
+            ))}
+          </p>
+        ) : null}
+        <div className="project-open-item-whofixes">
+          <div className="project-open-item-who-label">{WHO_FIXES_IT}</div>
+          {youLead(reading) ? [youRow, coordinatorRow] : [coordinatorRow, youRow]}
+        </div>
+        {closesByItself(row) ? (
+          <p className="project-open-item-closes">
+            <span aria-hidden="true">✓ </span>
+            {CLOSES_BY_ITSELF}
+          </p>
+        ) : null}
+        <ItemHandlingRows row={row} now={now} main={main} />
+        <WhoFixesDetails row={row} heading={heading} projectName={name} landingHref={landingHref} />
+        {handClosable || cancellable ? (
+          <div className="project-open-item-settled">
+            <div className="project-open-item-settled-label">{ALREADY_SETTLED}</div>
+            <div className="project-open-item-actions">
+              {handClosable ? (
+                <div className="project-open-item-door">
+                  <MarkHandledPress row={row} projectId={projectId} />
+                  <span className="project-open-item-consequence">{MARK_HANDLED_SETTLED_CONSEQUENCE}</span>
+                </div>
+              ) : null}
+              {cancellable ? (
+                <div className="project-open-item-door">
+                  <CancelTaskPress row={row} projectId={projectId} />
+                  <span className="project-open-item-consequence">{CANCEL_TASK_SETTLED_CONSEQUENCE}</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -200,6 +200,8 @@ describe('feature off: no entry, and GET /managed-runner is never read', () => {
     const row = rowOf(MANAGED);
     expect(row.querySelector('.settings-managed-state')).toBeNull();
     expect(row.querySelector('.settings-dot')?.getAttribute('aria-label')).toBe('Offline');
+    // With no managed status, nothing says it is Orbit Cloud: it keeps the name it registered with.
+    expect(row.querySelector('.settings-nav-label')?.textContent).toBe('managed');
   });
 });
 
@@ -292,6 +294,8 @@ describe('with a mapping, the managed runner is one machine row with the shared 
     const managed = rowOf(MANAGED).querySelector('.settings-managed-state')!;
     expect(managed.getAttribute('data-kind')).toBe(kind);
     expect(managed.textContent).toBe(MANAGED_RUNNER_COPY.short[kind]);
+    // Named Orbit Cloud by being the managed runner, not by its stored name ('managed' here).
+    expect(rowOf(MANAGED).querySelector('.settings-nav-label')?.textContent).toBe('Orbit Cloud');
     // Never the heartbeat's Online/Offline, which an asleep runner would read as.
     expect(rowOf(MANAGED).querySelector('[aria-label="Offline"], [aria-label="Online"]')).toBeNull();
     // The account's own machines keep their heartbeat dots.

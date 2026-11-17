@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:SC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+body{margin:0;background:#eef0f3;font-family:Inter,SC,sans-serif;color:#1d1d1f;padding:28px 32px;width:1380px}
+h1{font-size:22px;margin:0 0 6px}.sub{font-size:14px;color:#555;margin-bottom:22px;line-height:1.55}
+.row{display:flex;gap:22px;margin-bottom:26px}
+.col{width:440px}
+.cap{font-size:15px;font-weight:600;margin:0 0 4px}.cap .rec{background:#2f7d4f;color:#fff;font-size:12px;border-radius:5px;padding:2px 7px;margin-left:6px}
+.note{font-size:13px;color:#555;margin:0 0 10px;line-height:1.5;min-height:58px}
+.ph{background:#fff;border-radius:22px;width:393px;padding:14px 16px 10px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.st{font-size:11px;color:#999;margin-bottom:6px}
+.u{display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:60px}
+.ub{background:#e0e6fa;border-radius:12px;padding:8px 12px;font-size:17px}
+.m{display:flex;align-items:center;gap:6px;font-size:12px;color:#8a8a8e;white-space:nowrap}
+.m a{text-decoration:underline;color:#8a8a8e}.m .dot{color:#c4c4c7}
+.ic{width:11px;height:13px;border:1.4px solid #8a8a8e;border-radius:2px;display:inline-block;position:relative;margin-right:2px}
+.ic:after{content:"";position:absolute;left:3px;top:-4px;width:9px;height:11px;border:1.4px solid #8a8a8e;border-radius:2px;background:#fff;z-index:-0}
+.w{font-size:13px;color:#999;margin-top:12px}.sp{height:10px}
+.measure{outline:1px dashed #e0533d;outline-offset:1px}
+</style>
+<h1>消息下面两行 → 一行（iPhone，已翻译的我的消息）</h1>
+<div class="sub">今天：复制+时间一行，“Translated · Show original” 再一行，同一条消息底下占两行。三端（iOS/macOS、Android、Web）走同一个改法。每格上半是默认状态，下半是点了 Show original 之后。界面文字英文，标注中文；手绘，字号/颜色取自 .orbitMeta（12pt，secondary）。</div>
+<script>
+const P=(txt,rows)=>`<div class="ph"><div class="u"><div class="ub">${txt}</div>${rows.map(r=>`<div class="m">${r}</div>`).join('')}</div><div class="w">Worked for 23s</div></div>`;
+const cp='<span class="ic"></span>', d='<span class="dot">·</span>';
+const V=[
+ ['今天',null,'两行。复制和时间一行，翻译状态另起一行。',
+  [cp+' 2m ago', 'Translated '+d+' <a>Show original</a>'],
+  [cp+' 2m ago', 'Sent to the agent in English '+d+' <a>Show translation</a>']],
+ ['A　并成一行，保留状态词',1,'复制、时间在前（和没翻译的消息位置一样），翻译跟在后面。翻转后的 “Sent to the agent in English” 太长放不进一行，缩成 “Sent in English”。',
+  [cp+' 2m ago '+d+' Translated '+d+' <a>Show original</a>'],
+  [cp+' 2m ago '+d+' Sent in English '+d+' <a>Show translation</a>']],
+ ['B　并成一行，只留按钮',0,'最短：去掉 “Translated / Sent…”，只剩能点的那个词。有 “Show original” 本身就说明翻译过了；但翻转后少了“这是发给 Agent 的英文”这句交代。',
+  [cp+' 2m ago '+d+' <a>Show original</a>'],
+  [cp+' 2m ago '+d+' <a>Show translation</a>']],
+];
+document.write('<div class="row">'+V.map(([t,rec,n,a,b])=>`<div class="col"><div class="cap">${t}${rec?'<span class="rec">建议</span>':''}</div><div class="note">${n}</div><div class="st">默认</div>${P('检查状态',a)}<div class="sp"></div><div class="st">点了 Show original（气泡换成发给 Agent 的英文）</div>${P('Check the status',b)}</div>`).join('')+'</div>');
+</script>
+<div class="sub" style="margin-top:4px">宽度：iPhone 393pt 减 16+16 边距、60 左空白 ≈ 301pt 可用。A 最长那行 “⎘ 2m ago · Sent in English · Show translation” 约 265pt，放得下；原文 “Sent to the agent in English” 版本约 340pt，放不下，所以 A 才缩词。macOS 上复制和时间仍是悬停才出现（不占位置时右对齐，翻译那段位置不动）。</div>

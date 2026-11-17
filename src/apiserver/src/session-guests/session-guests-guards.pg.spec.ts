@@ -4,7 +4,8 @@
  * migrates from empty. One named case per refusal:
  *
  *   uninvited 404, removed 404, left 404, trashed 404   every guest route answers as a session that does not exist;
- *   kind refused, attachmentIds refused, intent refused  the turn body is a whitelist;
+ *   kind refused, foreign attachmentIds refused,         the turn body is a whitelist, and its images are the
+ *   intent refused                                       guest's own (session-guests-images.pg.spec.ts holds the rest);
  *   override field <f> refused                           model, permissionMode, effort, provider, fastMode, engine,
  *                                                        account: none reaches a resume;
  *   51st message 429, two concurrent requests at 49      50 messages per guest per session per UTC day;
@@ -20,7 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
-import { toUuid } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 
 import { call, startApiserver, type Apiserver, type Reply } from '../auth/pat-test-apiserver';
@@ -29,7 +30,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
 import {
-  GUEST_DAILY_CAP_REACHED, GUEST_DAILY_TURNS, GUEST_SESSION_NOT_SHARED, guestFieldRefused,
+  GUEST_DAILY_CAP_REACHED, GUEST_DAILY_TURNS, GUEST_SESSION_NOT_SHARED, guestAttachmentRefused, guestFieldRefused,
 } from './session-guests.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -164,11 +165,11 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
   // ── The turn body is a whitelist ───────────────────────────────────────────────────────────
 
   /** A refused body: 400 naming the field, and nothing written. Sent to an ended session, so a resume is what it would reach. */
-  const refused = async (sessionId: string, extra: Record<string, unknown>, field: string) => {
+  const refused = async (sessionId: string, extra: Record<string, unknown>, field: string, expected = guestFieldRefused(field)) => {
     const before = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
     const reply = await api('POST', `/guest-sessions/${sessionId}/turns`, guestLogin, { ...message('try this'), ...extra });
     assert.equal(reply.status, 400, `${JSON.stringify(extra)} answered ${reply.status}: ${reply.text}`);
-    assert.equal(reply.json.message, guestFieldRefused(field));
+    assert.equal(reply.json.message, expected);
     assert.equal(await guestTurns(sessionId), 0, 'no turn was written');
     const after = await db.session.findUniqueOrThrow({ where: { id: sessionId } });
     assert.deepEqual(
@@ -188,9 +189,11 @@ test('session guests: guest door refusals, the daily cap and withdraw-on-remove'
     await refused(live, { kind: 'message' }, 'kind');
   });
 
-  await t.test('attachmentIds refused: a guest message is text only', async () => {
-    await refused(ended, { attachmentIds: [randomUUID()] }, 'attachmentIds');
-    await refused(live, { attachmentIds: [] }, 'attachmentIds');
+  await t.test('foreign attachmentIds refused: a guest message carries only images the guest uploaded', async () => {
+    const nobody = randomUUID();
+    await refused(ended, { attachmentIds: [nobody] }, 'attachmentIds', guestAttachmentRefused(uuidToBase62(nobody)));
+    await refused(live, { attachmentIds: [nobody] }, 'attachmentIds', guestAttachmentRefused(uuidToBase62(nobody)));
+    await refused(live, { attachmentIds: { id: nobody } }, 'attachmentIds', 'attachmentIds must be a list of attachment ids');
   });
 
   await t.test('intent refused unless it is plain routing', async () => {

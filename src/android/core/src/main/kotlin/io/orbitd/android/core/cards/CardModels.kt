@@ -2,6 +2,7 @@ package io.orbitd.android.core.cards
 
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.SessionSnapshot
+import io.orbitd.android.core.translation.Translation
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -26,7 +27,7 @@ data class CardQuestion(val question: String, val header: String? = null,
 @Serializable
 data class ApprovalDecision(val behavior: String, val message: String? = null,
     val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
-    val startAfterCreate: Boolean? = null)
+    val startAfterCreate: Boolean? = null, val sendAsWritten: Boolean? = null)
 @Serializable
 data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
 @Serializable
@@ -87,7 +88,9 @@ data class InteractionCard(
 data class CardInput(val text: String = "", val selections: Map<String, List<String>> = emptyMap(),
     val custom: Map<String, String> = emptyMap(), val ownerAnswers: List<OwnerAnswer> = emptyList(),
     val option: Int? = null, val settings: ProjectStartSettings? = null,
-    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null)
+    val edited: JsonObject? = null, val reason: String? = null, val triggerId: String? = null,
+    /** Settings › Translation (1A): the answer again, untranslated, after the server could not translate it (422 TRANSLATION_FAILED). */
+    val sendAsWritten: Boolean = false)
 
 fun approvalFamily(tool: String): CardFamily = when (tool) {
     "AskUserQuestion" -> CardFamily.QUESTION
@@ -126,10 +129,12 @@ object CardCatalog {
                 CardFamily.QUESTION -> listOf(CardVerb.ANSWER, CardVerb.CHAT)
                 CardFamily.PLAN -> listOf(CardVerb.APPROVE_PLAN, CardVerb.KEEP_PLANNING)
                 // A task nothing would start by itself, on a card whose runner can act on the choice, is offered its start in the
-                // same press, right after the plain yes.
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") listOfNotNull(CardVerb.CREATE_TASK,
-                    CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
-                    else listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                // same press, ahead of the plain yes; on a task filed held, right after it.
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") listOf(CardVerb.CREATE_PROJECT, CardVerb.CHAT)
+                    else if (ApprovalRules.createAndStartLeads(approval.toolName, approval.input))
+                        listOf(CardVerb.CREATE_AND_START, CardVerb.CREATE_TASK, CardVerb.CHAT)
+                    else listOfNotNull(CardVerb.CREATE_TASK,
+                        CardVerb.CREATE_AND_START.takeIf { ApprovalRules.offersCreateAndStart(approval.toolName, approval.input) }, CardVerb.CHAT)
                 CardFamily.BATCH -> listOf(CardVerb.CREATE_BATCH, CardVerb.CHAT)
                 CardFamily.DAG -> listOf(CardVerb.CHANGE_DAG, CardVerb.CHAT)
                 CardFamily.BLOCKER -> listOf(CardVerb.RESOLVE_BLOCKER, CardVerb.CHAT)
@@ -155,7 +160,9 @@ object CardCatalog {
                 CardFamily.PROVIDER -> ProviderWriteCards.title(approval.toolName)
                 else -> if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
             }
-            add(InteractionCard("approval:${approval.id}", family, title, raw, id, projectId, approval.id,
+            // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
+            // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.
+            add(InteractionCard("approval:${approval.id}", family, title, Translation.shownApproval(raw), id, projectId, approval.id,
                 approval.input.toString(), actions, if (unexpired) approval.status else "Expired"))
         }
         val standing = snapshot.standing
@@ -224,8 +231,8 @@ object CardCatalog {
                     "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
-        if (projectId != null) addAll(project(id, projectId, standing, answered))
-    }
+        if (projectId != null) addAll(project(id, projectId, standing, answered, detail.text("createdAt")))
+    }.filter { CoordinatorCleanStart.drawsCard(snapshot.detail.text("createdAt"), it) }
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
         InteractionCard("receipt:$family:$id:$revision", family, title, source, session, objectId = id, binding = revision, status = "Recorded")
@@ -235,7 +242,7 @@ object CardCatalog {
     private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
 
     fun project(session: String, project: String, standing: Map<String, JsonElement>,
-        answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
+        answered: Map<String, JsonObject> = emptyMap(), createdAt: String? = null): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject
         if (document == null || document.text("id") != project) return@buildList
         (standing["criteriaDecisions"] as? JsonObject)?.let { queue ->
@@ -322,7 +329,7 @@ object CardCatalog {
             add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else PromotionCards.mergeTo(PromotionCards.mainBranch(row)), row,
                 session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
-    }
+    }.filter { CoordinatorCleanStart.drawsCard(createdAt, it) }
 }
 
 /** Delivery receipts for evidence held by the coordinator. */

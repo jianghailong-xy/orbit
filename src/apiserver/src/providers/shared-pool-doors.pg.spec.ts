@@ -167,6 +167,9 @@ const doorsOver: { pools: unknown; providers: unknown; prisma: unknown } = { poo
     { provide: SharedPoolsService, useFactory: () => doorsOver.pools },
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
+    // RunnerProvidersController's quota cache (95884b154): only GET /runner/providers?workspace= reads it, which
+    // this spec does not, and a module that omitted it would fail to build the controller.
+    { provide: ProviderPlanUsageService, useValue: new ProviderPlanUsageService({} as never) },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,

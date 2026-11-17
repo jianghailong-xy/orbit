@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { workspaceCloneReason } from '../common/workspace-clone-gate';
 import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
@@ -52,6 +53,7 @@ import {
   withTransactionRetry,
   type TransactionRetryOptions,
 } from '../common/transaction-retry';
+import { codedRefusal } from '../common/refusal-recovery';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabledSql } from '../common/model-routing-switch';
 import type { AuthCredential } from '../common/current-user.decorator';
@@ -82,7 +84,7 @@ import {
   recordTaskFailure,
   sessionHasEnded,
 } from '../projects/project-open-item';
-import { branchName } from '../projects/project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, branchName } from '../projects/project-criterion-landing';
 import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
@@ -3326,7 +3328,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             take: 1,
             select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
           },
-          mergeReceipts: { select: { result: true, targetBranch: true } },
+          mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
         },
       });
       for (const row of rows) {
@@ -10715,7 +10717,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 select: { taskId: true, dependsOnTaskId: true },
               });
               if (wouldReplacementCreateCycle(edges, id, dependsOnTaskIds)) {
-                throw new BadRequestException('These dependencies would create a cycle');
+                throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_CYCLE', 'These dependencies would create a cycle', {
+                  taskId: id,
+                }));
               }
             }
             // A verdict settles its verifier, and a task reaching DONE ends the run working it, so a session
@@ -11601,6 +11605,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnerId: string | null;
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
+        cloneState: string | null;
         listId: string | null;
         dispatchEpoch: bigint | null;
         priority: number;
@@ -11611,7 +11616,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
              t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
@@ -11672,7 +11677,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
       WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
              c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
@@ -11723,6 +11728,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         workspaceId: row.workspaceId,
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
+      // A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): no run starts on it.
+      cloneHeld: workspaceCloneReason(row.cloneState) !== null,
       listId: row.listId,
       projectId: row.projectId,
       // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
@@ -11762,6 +11769,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const projectRoom = await this.projectBudget(ready.map((t) => t.projectId));
     let quotaHeld = 0;
     let diskHeld = 0;
+    let cloneHeld = 0;
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11800,6 +11808,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         diskHeld += 1;
         const e = holdFor(t.listId);
         if (e) e.disk += 1;
+        continue;
+      }
+      // The clone gate, beside the disk gate and for the same reason: the run would start in a work dir that is not
+      // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
+      if (t.cloneHeld) {
+        cloneHeld += 1;
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11846,6 +11860,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `auto-run: ${quotaHeld} ready task(s) held — provider quota exhausted, earliest reset ${resumesAt?.toISOString()}`,
       );
+    }
+    if (cloneHeld > 0) {
+      this.logger.log(`auto-run: ${cloneHeld} ready task(s) held — their GitHub workspace has not finished cloning`);
     }
     if (diskHeld > 0) {
       this.logger.log(
@@ -12970,7 +12987,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */
   async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string, actingSessionId?: string) {
-    if (taskId === dependsOnTaskId) throw new BadRequestException('A task cannot depend on itself');
+    if (taskId === dependsOnTaskId) {
+      throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_SELF', 'A task cannot depend on itself', { taskId }));
+    }
     await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
     await this.assertEdgeSparesVerifier(ownerId, taskId, actingSessionId);
     try {
@@ -12991,13 +13010,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { taskId: true, dependsOnTaskId: true },
         });
         if (wouldCreateCycle(edges, taskId, dependsOnTaskId)) {
-          throw new BadRequestException('This dependency would create a cycle');
+          throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_CYCLE', 'This dependency would create a cycle', {
+            taskId, dependsOnTaskId,
+          }));
         }
         await tx.taskDependency.create({ data: { taskId, dependsOnTaskId } });
       }, this.transientWriteRetry('tasks.addDependency'));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('This dependency already exists');
+        throw new ConflictException(codedRefusal(409, 'DEPENDENCY_DUPLICATE', 'This dependency already exists', {
+          taskId, dependsOnTaskId,
+        }));
       }
       throw e;
     }
@@ -15262,7 +15285,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (auto) {
         return this.standDownReleasing(lease, { ok: false as const, skipped: 'superseded' as const });
       }
-      throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
+      throw new ConflictException(codedRefusal(409, 'TASK_RETIRED', `task ${uuidToBase62(id)}: ${refusal}`, {
+        taskId: id,
+        supersededByTaskId: task.supersededByTaskId ?? task.verifies?.supersededByTaskId,
+      }));
     }
     // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
     // authorization commit point: after the two answers about whether this row is still the work,
@@ -15293,10 +15319,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         && task.verifiesTaskId == null
         ? 'its independent verifier'
         : `aggregating its subtasks (${task.completionPolicy})`;
-      throw new ConflictException(
+      throw new ConflictException(codedRefusal(
+        409,
+        'TASK_AGGREGATE_ONLY',
         `task ${uuidToBase62(id)}: this task is completed by ${completionOwner}, `
         + 'so it has no work of its own to run',
-      );
+        { taskId: id },
+      ));
     }
     // A cancelled project's tasks do not start, by any door (projectNotCancelledSql, which every
     // automatic scan applies before it gets here). Ahead of the prerequisites for the same reason as
@@ -15311,7 +15340,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             lease, { ok: false as const, skipped: 'project-cancelled' as const },
           );
         }
-        throw new ConflictException(projectCancelledRefusal(id, cancelled));
+        throw new ConflictException({ ...projectCancelledRefusal(id, cancelled), taskId: id, projectId: task.projectId });
       }
     }
     // Nothing automatic starts a task in a project that does not move by itself: one its owner has
@@ -15328,9 +15357,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // task in the project and outlasts them all.
     if (runnerDoor && task.projectId) {
       const awaiting = await projectAwaitingStart(this.prisma, ownerId, task.projectId);
-      if (awaiting) throw new ConflictException(projectNotStartedRefusal(id, awaiting));
+      if (awaiting) {
+        throw new ConflictException({ ...projectNotStartedRefusal(id, awaiting), taskId: id, projectId: task.projectId });
+      }
       const paused = await pausedProjectOf(this.prisma, ownerId, task.projectId);
-      if (paused) throw new ConflictException(projectPausedRefusal(id, paused));
+      if (paused) throw new ConflictException({ ...projectPausedRefusal(id, paused), taskId: id, projectId: task.projectId });
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
@@ -15339,28 +15370,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // yet" reads as a wait, and a verdict of FAIL is not one — it is a refusal with something to
       // go and do, and a person told to wait will simply click again.
       const gate = depFacts.find((fact) => fact.verificationGate != null)?.verificationGate;
-      throw new BadRequestException(
-        gate
-          ? `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`
-          : depState === 'BLOCKED_FAILED'
-            ? 'A prerequisite was cancelled — resolve it before running'
-            // §2.5 J9, said as what it is. "Prerequisites are not all complete yet" is false here —
-            // they are complete — and a person told that about a task whose prerequisite finished
-            // an hour ago goes looking for work that nobody owes.
-            : depFacts.some((fact) => fact.landed === false)
-              ? await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)
-              : 'Prerequisites are not all complete yet, cannot run',
-      );
+      // §2.5 J9, said as what it is. "Prerequisites are not all complete yet" is false when they are
+      // complete and one has not landed — and a person told that about a task whose prerequisite
+      // finished an hour ago goes looking for work that nobody owes. The code says which of the three
+      // it is: a refusal to act on (FAILED), or a wait for the system (NOT_LANDED, INCOMPLETE).
+      const [code, message] = gate
+        ? ['TASK_PREREQUISITE_FAILED', `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`]
+        : depState === 'BLOCKED_FAILED'
+          ? ['TASK_PREREQUISITE_FAILED', 'A prerequisite was cancelled — resolve it before running']
+          : depFacts.some((fact) => fact.landed === false)
+            ? ['TASK_PREREQUISITE_NOT_LANDED', await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)]
+            : ['TASK_PREREQUISITES_INCOMPLETE', 'Prerequisites are not all complete yet, cannot run'];
+      throw new BadRequestException(codedRefusal(400, code, message, { taskId: id }));
     }
     // The sweep already filters held tasks out in SQL; this is the manual button's half of the
     // same rule, so a pause cannot be quietly bypassed by clicking Run on a task inside one.
     // Reads the task's own hold, not its list's flag: the two must not be able to disagree, and
     // only one of them survives the list being deleted.
     if (task.dispatchHold) {
-      throw new BadRequestException('This task list is paused — resume it before running');
+      throw new BadRequestException(codedRefusal(400, 'TASK_LIST_PAUSED', 'This task list is paused — resume it before running', {
+        taskId: id, listId: task.listId,
+      }));
     }
-    if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
-    if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
+    if (!task.assignee) {
+      throw new BadRequestException(codedRefusal(400, 'TASK_NO_ASSIGNEE', 'Assign a responsible workspace to the task first', { taskId: id }));
+    }
+    if (!task.assignee.runnerId) {
+      throw new BadRequestException(codedRefusal(
+        400, 'TASK_ASSIGNEE_NO_RUNNER', 'The responsible workspace is not bound to a runner, cannot run',
+        { taskId: id, assigneeId: task.assignee.id },
+      ));
+    }
     // The click is itself a durable semantic request to the Project coordinator. Record it only
     // after the run exists, NOT before it.
     //

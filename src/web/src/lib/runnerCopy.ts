@@ -96,9 +96,22 @@ export function runnerDiskFree(free: string): string {
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
-/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
-export const RUNNER_MAX_CONCURRENT_HINT =
-  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Max Concurrent's dialog, opened from its `3/16`: when a change takes effect. The unit after the field says
+ *  what the number is. */
+export const RUNNER_MAX_CONCURRENT_HINT = 'Applies to the next session it picks up — no restart.';
+/** After the dialog's field: what the number counts. */
+export const RUNNER_MAX_CONCURRENT_UNIT = 'sessions at once';
+/** The dialog's − and + beside its field. */
+export const RUNNER_MAX_CONCURRENT_DECREASE = 'Decrease Max Concurrent';
+export const RUNNER_MAX_CONCURRENT_INCREASE = 'Increase Max Concurrent';
+/** At the dialog's end of the field's line, while the machine is online: its sessions running now. */
+export function runnerRunningNow(active: number): string {
+  return `${active} running`;
+}
+/** Under the field when the new limit is below what runs now: a lower limit stops nothing (session_pool.go setMax). */
+export function runnerMaxBelowRunning(active: number, max: number): string {
+  return `The ${active} running now carry on; new ones wait until fewer than ${max} are running.`;
+}
 /** Beside Max Concurrent's reading: opens its dialog. */
 export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';
@@ -140,6 +153,10 @@ export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';
 export const RUNNER_ENGINES_FOOTER =
   'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends ' +
+  'that subscription, nothing to paste.';
+/** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+export const RUNNER_ENGINES_MANAGED_FOOTER =
+  'Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends ' +
   'that subscription, nothing to paste.';
 export const RUNNER_ENGINES_OFFLINE_FOOTER = 'Signing in and updating need the runner online.';
 
@@ -229,6 +246,13 @@ export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
 export function runnerVersionUpdatingTo(version: string): string {
   return `updating to ${version}`;
 }
+/** A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the owner
+ *  renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read. */
+export const MANAGED_RUNNER_LABEL = 'Orbit Cloud';
+/** A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`). */
+export const MANAGED_RUNNER_KEPT_UP_TO_DATE = 'Kept up to date by Orbit';
+/** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
+export const MANAGED_RUNNER_UPDATED_BY_ORBIT = 'Orbit updates this machine for you.';
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
@@ -537,6 +561,10 @@ export function agentFixStartsIn(workspace: string, engine: string): string {
 /** After a signed-out reason on an Install failed panel, whose engine rows (and their Sign in) are above it. */
 export function agentFixSignInAbove(engine: string): string {
   return ` Sign in to ${engine} above to use this.`;
+}
+/** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
+export function agentFixSignInBelow(engine: string): string {
+  return ` Sign in to ${engine} below to use this.`;
 }
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 

@@ -1,3 +1,4 @@
+import { GithubModule } from '../github/github.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
 import { SessionTagsModule } from '../session-tags/session-tags.module';
@@ -8,6 +9,8 @@ import { SessionRequestService } from './session-request.service';
 import { SessionRequestsController } from './session-requests.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
+import { ViewerStreamCaps } from './viewer-stream-caps';
+import { ViewerStreamService } from './viewer-stream.service';
 
 @Module({
   // AutoRetryService announces the failure it just gave up retrying through RealtimeService,
@@ -28,18 +31,27 @@ import { SessionsService } from './sessions.service';
   // instantiate TasksModule and PushModule too, so a hand-built harness that wanted the judgment
   // wiring fails on a ConfigService that only AppModule's global ConfigModule provides. The
   // dispatcher is resolved lazily instead; see `MergeReceiptService`'s constructor.
-  imports: [SessionTagsModule, forwardRef(() => CoordinatorJudgmentModule)],
+  imports: [
+    SessionTagsModule,
+    forwardRef(() => CoordinatorJudgmentModule),
+    // A `newWorkspace.github` asks the caller's GitHub connection whether it can see the repository
+    // (docs/github-workspace-design.md §5.3). GithubModule imports nothing of this one.
+    GithubModule,
+  ],
   controllers: [SessionsController, SessionRequestsController],
   // AutoRetryService lives here rather than beside the reaper so it can depend on
   // SessionsService directly — re-sending a message is exactly resume(), and reimplementing
   // that (capability checks, the row lock, inbox fencing) is how the two would drift.
   // SessionRequestService hands a session request's outcome back to the session that asked, which is
   // a turn of that session: SessionsService again, so it lives beside it.
-  providers: [SessionsService, AutoRetryService, MergeReceiptService, SessionRequestService, SessionOwnerGuard],
+  providers: [SessionsService, AutoRetryService, MergeReceiptService, SessionRequestService, SessionOwnerGuard, ViewerStreamService,
+    { provide: ViewerStreamCaps, useValue: new ViewerStreamCaps() }],
   // Exported so the runner door and the user door write receipts through ONE instance — a second
   // provider entry would be a second object, which is how the auto-run sweep once ran twice. The
   // request service for the same reason: the runner's reply door and turn completion hand off through
-  // the one the worker uses.
-  exports: [SessionsService, MergeReceiptService, SessionRequestService],
+  // the one the worker uses. The viewer streams' body for the guest door and the public link, so their
+  // per-session head reads are gathered in one place (viewer-stream.service.ts), and the caps both doors' guards count
+  // their streams against, so the per-apiserver total is one count (viewer-stream-caps.ts).
+  exports: [SessionsService, MergeReceiptService, SessionRequestService, ViewerStreamService, ViewerStreamCaps],
 })
 export class SessionsModule {}

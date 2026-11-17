@@ -93,7 +93,11 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                                  "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
                                  "MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
                           "the page's blocks")
-        XCTAssertTrue(page.contains(".navigationTitle(AppSection.runners.title)"))
+        XCTAssertTrue(page.contains(".navigationTitle(title)"))
+        XCTAssertTrue(page.contains("case .all:       return AppSection.runners.title"))
+        // iOS Settings shows it in two halves, Machines and Providers, as the web's Settings nav groups them.
+        try assertInOrder(body, ["if part != .providers {", "ForEach(runners.runners)", "RunnerAddSection { addingRunner = true }",
+                                 "if part != .machines {", "MachinesAndModelsPoolsSection("], "the two halves")
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
         try assertInOrder(page, ["await runners.load()",
@@ -348,7 +352,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let head = try slice(try detail(), from: "private func head(now: Date) -> some View {",
                              to: "private func attentionSection(")
         for piece in ["RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))",
-                      "Text(statusLine(now: now))", "let host = RunnerPageFormat.hostLine(runner)",
+                      "Text(statusLine(now: now))", "let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)",
                       ".listRowBackground(Color.clear)"] {
             XCTAssertTrue(head.contains(piece), "the head lost \(piece)")
         }

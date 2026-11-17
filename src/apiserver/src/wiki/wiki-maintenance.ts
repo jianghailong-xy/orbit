@@ -244,6 +244,8 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       FROM "session" s
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       -- v1 feeds no scheduled task's run to the wiki (docs/scheduled-tasks-design.md §12.1).
+       AND s."run_source" <> 'SCHEDULE'
        AND s."last_turn_at" IS NOT NULL
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND ${ours(Prisma.sql`s."id"`)}
@@ -269,6 +271,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = a."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND a."decided_at" IS NOT NULL AND ${ours(Prisma.sql`s."id"`)}
        AND ((a."tool_name" = 'AskUserQuestion' AND a."status" = 'ALLOWED')
          OR (a."tool_name" = 'ExitPlanMode' AND a."status" IN ('ALLOWED', 'DENIED'))
@@ -280,6 +283,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = r."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE r."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND ${ours(Prisma.sql`s."id"`)}
        AND ${notMaintenance(Prisma.sql`t."list_id"`)} ${onOrAfter(Prisma.sql`r."created_at"`)}
     UNION ALL
@@ -320,6 +324,7 @@ export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceSco
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
        AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
        AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;

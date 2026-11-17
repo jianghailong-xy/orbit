@@ -40,6 +40,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     drainDemandRevision: null,
     stopRequestedAt: null,
     stopAcknowledgedAt: null,
+    imageRollTo: null,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -156,7 +157,7 @@ test('READY reports the runtime it was found ready with; waiting on model supply
   assert.equal(
     waiting.reason?.message,
     'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. ' +
-      'Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.',
+      'Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.',
   );
   assert.equal(waiting.reason?.retryable, true);
   assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');
@@ -199,7 +200,7 @@ test('firstSessionProvider: READY names what it was found ready with; before tha
   const status = (change: Partial<ManagedRunner>, runner: Parameters<typeof managedRunnerStatus>[0]['runner'], firstSessionKey?: typeof deepseek | null) =>
     managedRunnerStatus({ enabled: true, available: true, mapping: mapping(change), runner, firstSessionKey, now: NOW, heartbeatFreshMs: FRESH });
   const unreported = { status: 'OFFLINE' as const, lastHeartbeatAt: null, engines: null };
-  // No mapping, no default workspace: nothing to start a session in.
+  // Without a mapping there is no managed runner to offer a first-session provider.
   assert.equal(managedRunnerStatus({ enabled: true, available: true, mapping: null, runner: null, firstSessionKey: deepseek, now: NOW, heartbeatFreshMs: FRESH }).firstSessionProvider, null);
   // Found ready on a runtime or a key: that, as `initialProvider` says, asleep or awake.
   assert.equal(status({ initialProvider: 'codex' }, beat(1000)).firstSessionProvider, 'codex');
@@ -222,4 +223,13 @@ test('firstSessionProvider: READY names what it was found ready with; before tha
   assert.equal(missing.firstSessionProvider, null);
   assert.equal(status({ managementState: 'PROVISIONING' }, unreported, null).firstSessionProvider, null);
   assert.equal(status({ managementState: 'PROVISIONING' }, unreported).firstSessionProvider, null);
+});
+
+
+test('status never exposes a workspace, even for a legacy mapping that still names one', () => {
+  for (const defaultWorkspaceId of [null, 'legacy-workspace']) {
+    const status = managedRunnerStatus({ enabled: true, available: true, mapping: mapping({ defaultWorkspaceId }), runner: beat(1000), now: NOW, heartbeatFreshMs: FRESH });
+    assert.equal(status.workspaceId, null);
+    assert.equal(status.runnerId, 'r');
+  }
 });
