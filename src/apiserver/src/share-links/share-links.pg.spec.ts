@@ -63,6 +63,7 @@ import { AutoRetryService } from '../sessions/auto-retry.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SessionsService } from '../sessions/sessions.service';
+import { ViewerStreamCaps } from '../sessions/viewer-stream-caps';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -228,6 +229,8 @@ test('share links: one row per link, an owner interface for three roots, one 404
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
       // A budget no case here comes near: the budget is public-surface.pg.spec's subject, not this one's.
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },
+      // The anonymous viewer streams' caps, at their defaults: the caps are public-surface.pg.spec's subject.
+      { provide: ViewerStreamCaps, useValue: new ViewerStreamCaps() },
       // SessionsController's other dependencies: the detail route touches none of them.
       { provide: PrismaService, useValue: {} },
       { provide: RealtimeService, useValue: {} },

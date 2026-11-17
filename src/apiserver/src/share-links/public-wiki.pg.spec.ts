@@ -47,6 +47,7 @@ import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { SessionsService } from '../sessions/sessions.service';
+import { ViewerStreamCaps } from '../sessions/viewer-stream-caps';
 import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { SharedController } from '../shared/shared.controller';
 import { ViewerStreamService } from '../sessions/viewer-stream.service';
@@ -293,6 +294,8 @@ test('wiki links: a space\'s written documents, read-only, with Footnotes the on
       { provide: SessionsService, useValue: {} },
       { provide: AttachmentsService, useValue: {} },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: 100_000, windowMs: 60_000 }) },
+      // The anonymous viewer streams' caps, at their defaults: the caps are public-surface.pg.spec's subject.
+      { provide: ViewerStreamCaps, useValue: new ViewerStreamCaps() },
       JwtAuthGuard,
       Reflector,
       // `Bearer other` is the second account; any other bearer is the owner.
