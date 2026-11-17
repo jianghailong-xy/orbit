@@ -10,7 +10,9 @@ Owner requirements (2026-11-17):
 
 - the owner can **watch and take control** (WebVNC), not only read screenshots;
 - the feature **can be switched off**; it can be switched on **only for Orbit Cloud** (managed runners), and a
-  default deployment has it **off**.
+  default deployment has it **off**;
+- the owner can **open the browser themselves** and sign in to sites; those logins are kept and the agents use them;
+- the **whole runner shares one browser** (P2 = B): one Chrome, one saved profile, one session using it at a time.
 
 ## 1. Today
 
@@ -54,66 +56,83 @@ runner over the existing link, and a viewer in the client.
   dated Debian snapshot, and `@playwright/mcp` pinned like the other npm tools. Each gets a version check in the
   `tool-versions.json` step. About +350 MB. No websockify: the server side speaks WebSocket, the container only raw
   RFB on a local socket.
-- **One display per session, started on demand.** The first browser tool call of a session starts
-  `Xvfb :<n>` (1280×800), Chrome on it with a profile under the session's directory, and Chrome's DevTools port on
-  loopback. Nothing runs for a session that never uses a browser. The display stops when the session ends, or after
-  15 minutes with no tool call and no viewer.
+- **One browser per runner, started on demand.** One `Xvfb :1` (1280×800) and one Chrome, with its profile at
+  `/home/orbit/.orbit/browser/profile` on the runner's volume, so logins survive restarts and image rolls (not a
+  volume rebuild). It starts at the first browser tool call or when the owner presses **Open browser**, and stops
+  after 15 minutes with no tool call and no viewer. Nothing runs on a runner that never uses a browser.
+- **One session at a time (the browser lease).** The first session whose agent calls a browser tool holds the lease
+  until its turn ends or it has made no browser call for 5 minutes. Another session's browser call meanwhile returns a
+  tool error naming the holder ("The browser is in use by session …; try again after it finishes"), so the agent can
+  wait or do other work. The owner is never refused: taking control interrupts the holder's turn (§5).
+- **Shared state is accepted.** Sessions see each other's tabs, history and logins. Every agent on the runner can act
+  on any site the profile is signed in to; the UI says so where the owner signs in (§5).
 - **Chrome flags.** `--no-sandbox` (the container drops every capability and sets `no-new-privileges`, so Chrome's
   own sandbox cannot start; the container is the boundary), `--disable-dev-shm-usage` (small `/dev/shm` in a private
-  IPC namespace), `--user-data-dir` on the volume, not on `/tmp`, so the profile does not eat the memory limit.
-- **The agent's tool.** The runner gives each engine a `browser` MCP server (`@playwright/mcp --cdp-endpoint` at
-  that session's Chrome), the way it already gives `orbit mcp` (`claude_spawn.go`, `codex.go`, `cursor_mcp.go`,
-  `dsh_mcp.go`). Only when the switch is on.
-- **VNC.** `x11vnc -display :<n> -unixsock <session dir>/vnc.sock -shared -forever -nopw`, started with the display.
-  Unix socket only: no TCP port, not even loopback. The runner is the only thing that connects to it.
-- **Budget.** A browser is about 0.5–1.5 GiB. The profile gets `browser.maxPerRunner` (default 2) and the operator
-  raises the runner's memory limit accordingly; a third session asking for a browser gets a tool error saying all
-  browsers are in use.
+  IPC namespace). The profile on the volume, not on `/tmp`, so it does not eat the memory limit.
+- **The agent's tool.** The runner gives each engine a `browser` MCP server (`@playwright/mcp --cdp-endpoint` at the
+  runner's Chrome, behind the lease), the way it already gives `orbit mcp` (`claude_spawn.go`, `codex.go`,
+  `cursor_mcp.go`, `dsh_mcp.go`). Only when the switch is on.
+- **VNC.** `x11vnc -display :1 -unixsock /home/orbit/.orbit/browser/vnc.sock -shared -forever -nopw`, started with the
+  display. Unix socket only: no TCP port, not even loopback. The runner is the only thing that connects to it.
+- **Budget.** One Chrome, about 0.5–1.5 GiB, so the operator raises the runner's memory limit by about 1.5 GiB.
 
 ## 4. The stream
 
 ```
-owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/browser/:sessionId/vnc
-                                     │ checks: switch on, owner of the session, runner managed
+owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/browser/vnc
+                                     │ checks: switch on, owner of the runner, runner managed
                                      ▼
                                    NATS  rnr.<runnerId>  (StreamOpen, request/reply)
                                    NATS  vnc.<streamId>.down / .up  (bytes)
                                      ▼
                                    link gateway holding the runner's connection
                                      ▼  link frames: StreamOpen / StreamData / StreamCredit / StreamClose
-                                   runner ──▶ <session dir>/vnc.sock (x11vnc)
+                                   runner ──▶ ~/.orbit/browser/vnc.sock (x11vnc)
 ```
 
-- **Protocol (link minor version).** Four new `Frame` bodies: `StreamOpen{stream_id, kind: VNC, session_id}` (down),
+- **Protocol (link minor version).** Four new `Frame` bodies: `StreamOpen{stream_id, kind: VNC}` (down),
   `StreamOpened{stream_id}` or `StreamClose{stream_id, code}` (up), `StreamData{stream_id, bytes}` (both),
   `StreamCredit{stream_id, bytes}` (both). Data rides the lowest write tier, below live deltas, and never blocks
   control frames; a window of 256 KiB per stream, refilled by `StreamCredit`. A runner that did not announce the
   capability in `Hello` is never sent `StreamOpen`.
 - **Gateway.** Answers the apiserver's `StreamOpen` request on `rnr.<runnerId>` only if it holds that runner's
-  connection, then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner, 1 per
-  session. The gateway's NATS user gets `vnc.>`; nothing else changes in its permissions.
+  connection, then relays `vnc.<streamId>.*` to and from link frames. At most 2 open streams per runner (two
+  tabs or devices watching). The gateway's NATS user gets `vnc.>`; nothing else changes in its permissions.
 - **Apiserver.** A WebSocket route behind the new gate. It authenticates the owner's web session, checks the
-  session belongs to the caller and runs on their managed runner, opens the stream, and pipes bytes. A viewer that
+  runner is the caller's managed runner, opens the stream, and pipes bytes. A viewer that
   closes the tab closes the stream; the runner closes its socket connection.
 - **nginx.** An upgrade location for the route, with the long-stream settings the SSE routes needed (no
   `max_fails` on the stream upstream, long read timeout).
 
 ## 5. The viewer (web first)
 
-- A **Browser** chip in the session's outputs bar, shown only when the switch is on, the session runs on the
-  managed runner, and its display is running. It opens the existing right-side `Drawer` with a noVNC canvas
-  (`@novnc/novnc`, pinned), scaled to fit.
-- **View only by default.** Pointer and keys are not sent. A **Take control** button sends them; the drawer's
-  header then says "You are controlling the browser".
-- **Taking control interrupts the agent's turn** (the existing session interrupt), so the agent and the owner never
-  click at the same time. **Hand back** closes control and prefills the composer with "I finished in the browser.
-  Continue." for the owner to edit and send.
+Two ways in, one viewer (the existing right-side `Drawer` with a noVNC canvas, `@novnc/novnc` pinned, scaled to fit):
+
+- **From a session.** A **Browser** chip in the outputs bar, shown when the switch is on, the session runs on the
+  managed runner and the browser is running. The drawer's header says which session holds the browser.
+- **On its own.** The Orbit Cloud runner's page in Settings gets a **Browser** section: **Open browser**, which starts
+  Chrome if needed and opens the drawer already in control (the owner came to type), the saved-logins line
+  ("Sites you sign in to here stay signed in on this runner. Agents on this runner can use them."), and
+  **Clear saved logins**, which stops Chrome and deletes the profile after a confirmation.
+
+Control:
+
+- **View only by default** from a session. **Take control** sends pointer and keys; the header then says "You are
+  controlling the browser".
+- **Taking control interrupts the lease holder's turn** (the existing session interrupt), so the agent and the owner
+  never click at the same time. Opening the browser from Settings while an agent holds it asks first: "An agent is
+  using the browser. Take control and stop its turn?"
+- **Hand back** releases control. From a session it prefills the composer with "I finished in the browser.
+  Continue." for the owner to edit and send; from Settings it just closes control.
 - macOS, iOS and Android come later; they can host the same noVNC page in a web view.
 
 ## 6. Security
 
-- The stream shows whatever the agent's Chrome shows, logged-in pages included. Only the session's owner can open it
-  in v1; guests of a shared session cannot.
+- The stream shows whatever the agent's Chrome shows, logged-in pages included. Only the runner's owner can open it in
+  v1; guests of a shared session cannot.
+- Saved logins are cookies in the profile on the runner's volume. They are as safe as the volume, every agent on the
+  runner can use them, and **Clear saved logins** removes them. Passwords typed in the viewer cross the encrypted
+  stream and are not stored by Orbit.
 - No new inbound port and no firewall change. The stream comes in over the runner's own outbound link.
 - No VNC password: the socket is reachable only inside the container, and every stream is authorised by the
   apiserver before it is opened.
@@ -125,17 +144,18 @@ owner's browser ──WSS──▶ nginx ──▶ apiserver /api/runners/:id/br
 | # | Question | A | B | Recommended |
 | --- | --- | --- | --- | --- |
 | P1 | Image | one image, browser always in it, started only when on | a second `-browser` image the manager picks when on | A: one image to build and test; +350 MB once per host |
-| P2 | Display | one per session, on demand | one per runner, shared by its sessions | A: a view belongs to a session; sessions do not see each other's tabs |
+| P2 | Display | one per session, on demand | one per runner, shared by its sessions | **decided B** (owner, 2026-11-17): logins persist and agents use them |
 | P3 | Take control | interrupts the agent's turn | shared input, the agent keeps running | A: no tug of war; reuses interrupt |
-| P4 | Who can watch | the session's owner only | owner and session guests | A in v1 |
+| P4 | Who can watch | the runner's owner only | owner and session guests | A in v1 |
 | P5 | Clients in v1 | web only | web and macOS | A; the native clients host the same page later |
 
 ## 8. Phases (by cost)
 
-1. **Switch and browser in the image** — the gate, `Welcome.browser`, image packages, per-session display, the
+1. **Switch and browser in the image** — the gate, `Welcome.browser`, image packages, the runner's browser and its lease, the
    `browser` MCP server for Claude Code and Codex first. Agents can use a browser; nobody watches yet.
 2. **Stream** — the four link frames, gateway relay, apiserver WebSocket route, nginx location, runner socket bridge.
-3. **Web viewer** — Browser chip, drawer, view only, take control and hand back.
+3. **Web viewer** — Browser chip, Settings' Open browser and Clear saved logins, drawer, view only, take control
+   and hand back.
 4. **Later** — the remaining engines, native clients, guests.
 
 Each phase is tested on the managed-runner lab (`scripts/managed-runner/lab/`) with the switch on, and with it off to
