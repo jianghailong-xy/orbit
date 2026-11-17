@@ -53,6 +53,14 @@ RUN install -d /opt/orbit-engines/engines/dsh \
     fi \
  && chown -R root:root /opt/orbit-engines && chmod -R go-w /opt/orbit-engines
 
+FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS playwright-mcp
+# The browser tool server, with its exact playwright and playwright-core pins nested under it. No browser download
+# (--ignore-scripts): it drives the image's Debian Chromium. Its cli.js is run by node directly, with no npm wrapper.
+RUN test "$(node --version)" = v26.10.0 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @playwright/mcp@0.0.85 \
+ && mv /usr/local/lib/node_modules/@playwright/mcp /opt/playwright-mcp \
+ && test -x /opt/playwright-mcp/cli.js
+
 FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS downloads
 # Native builds fetched by URL, each checked against the digest its publisher's manifest gives for the pinned
 # version (pins.json names the manifests). One RUN per engine, so a new pin refetches only its own engine.
@@ -103,6 +111,10 @@ RUN mkdir -p /etc/ssl/certs \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update \
  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y \
       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini \
+ && apt-get install --no-install-recommends -y \
+      chromium=154.0.8037.57-1~deb13u1 chromium-common=154.0.8037.57-1~deb13u1 \
+      xvfb=2:21.1.16-1.3+deb13u4 x11vnc=0.9.17-1 \
+      fonts-noto-cjk=1:20240730+repack1-1 fonts-noto-color-emoji=2.051-0+deb13u1 \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 orbit \
  && useradd --uid 10001 --gid 10001 --home-dir /home/orbit --no-create-home --shell /bin/bash orbit \
@@ -112,6 +124,7 @@ COPY --from=orbit-build /usr/local/go/ /usr/local/go/
 COPY --from=codex /opt/codex/ /opt/codex/
 COPY --from=claude /opt/claude/ /opt/claude/
 COPY --from=opencode /opt/opencode/ /opt/opencode/
+COPY --from=playwright-mcp /opt/playwright-mcp/ /opt/playwright-mcp/
 COPY --from=downloads /opt/kimi-code/ /opt/kimi-code/
 COPY --from=downloads /opt/agy/ /opt/agy/
 COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
@@ -139,8 +152,9 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/opencode/bin/opencode /usr/local/bin/opencode \
  && ln -s /opt/kimi-code/bin/kimi /usr/local/bin/kimi \
  && ln -s /opt/agy/bin/agy /usr/local/bin/agy \
- && chown -R root:root /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
- && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
+ && ln -s /opt/playwright-mcp/cli.js /usr/local/bin/playwright-mcp \
+ && chown -R root:root /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
+ && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /opt/playwright-mcp /usr/local/go /usr/local/share/orbit \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
@@ -169,6 +183,12 @@ env = dict(os.environ, HOME='/tmp/orbit-version-check',
            CLAUDE_CONFIG_DIR='/tmp/orbit-version-check/.claude')
 def version(*argv):
     return subprocess.check_output(argv, env=env, text=True).strip()
+def first_line(*argv):  # Xvfb and x11vnc print their version on stderr
+    out = subprocess.run(argv, env=env, text=True, check=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT).stdout.split('\n')
+    return next(line.strip() for line in out if line.strip())
+def package(name):
+    return version('dpkg-query', '-W', '-f=${Version}', name)
 
 actual = {
     'go': version('go', 'env', 'GOVERSION'),
@@ -184,6 +204,14 @@ actual = {
     'opencode': version('opencode', '--version'),
     'kimi': version('kimi', '--version'),
     'agy': version('agy', '--version'),
+    # The browser stack (docs/runner-browser-design.md §3). Nothing here starts at boot.
+    'chromium': version('chromium', '--version'),
+    'xvfb': first_line('Xvfb', '-version'),
+    'xvfbPackage': package('xvfb'),
+    'x11vnc': first_line('x11vnc', '-version'),
+    'fontsNotoCjk': package('fonts-noto-cjk'),
+    'fontsNotoColorEmoji': package('fonts-noto-color-emoji'),
+    'playwrightMcp': version('playwright-mcp', '--version'),
 }
 # Cursor CLI and DeepSeek Harness are where the runner looks for them (ORBIT_ENGINE_STORE), on Linux x64 only.
 store = Path(os.environ['ORBIT_ENGINE_STORE'])
@@ -191,7 +219,11 @@ if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
 expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.169.0',
-                     'claude': '2.1.326 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.10'}
+                     'claude': '2.1.326 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.10',
+                     'chromium': 'Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)', 'xvfb': 'X.Org X Server 1.21.1.16',
+                     'xvfbPackage': '2:21.1.16-1.3+deb13u4', 'x11vnc': 'x11vnc: 0.9.17 lastmod: 2020-08-04',
+                     'fontsNotoCjk': '1:20240730+repack1-1', 'fontsNotoColorEmoji': '2.051-0+deb13u1',
+                     'playwrightMcp': 'Version 0.0.85'}
 if platform.machine() == 'x86_64':
     expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')
 for tool, expected in expected_versions.items():

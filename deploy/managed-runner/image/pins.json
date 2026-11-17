@@ -41,6 +41,15 @@
     ],
     "lock": "src/runner-go/dsh-install/package-lock.json"
   },
+  "playwrightMcpPackage": "@playwright/mcp@0.0.85",
+  "browserDebianPackages": {
+    "chromium": "154.0.8037.57-1~deb13u1",
+    "chromium-common": "154.0.8037.57-1~deb13u1",
+    "xvfb": "2:21.1.16-1.3+deb13u4",
+    "x11vnc": "0.9.17-1",
+    "fonts-noto-cjk": "1:20240730+repack1-1",
+    "fonts-noto-color-emoji": "2.051-0+deb13u1"
+  },
   "sources": {
     "go": "https://hub.docker.com/v2/repositories/library/golang/tags/1.27.1-trixie",
     "node": "https://hub.docker.com/v2/repositories/library/node/tags/26.10.0-trixie-slim",
@@ -50,6 +59,7 @@
     "codexLayout": "https://github.com/openai/codex/blob/rust-v0.169.0/scripts/codex_package/README.md",
     "debian": "https://snapshot.debian.org/archive/debian/20260928T000000Z/dists/trixie/Release",
     "debianSecurity": "https://snapshot.debian.org/archive/debian-security/20260928T000000Z/dists/trixie-security/Release",
+    "playwrightMcp": "https://registry.npmjs.org/@playwright/mcp/0.0.85",
     "openCode": "https://registry.npmjs.org/opencode-ai/1.19.5",
     "kimiCode": "https://code.kimi.com/kimi-code/binaries/2.6.2/manifest.json",
     "antigravityCli": "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json",
