@@ -65,6 +65,8 @@ export interface ConditionFiring {
   eventId: string;
   at: Date;
   value: number | null;
+  /** A repeat firing (§5.1): the comparison has held since the last one and the condition has not re-armed. */
+  repeat: boolean;
 }
 
 /** Where C3 and C4 start the work a firing asks for. Throwing rolls the firing back. */
@@ -81,6 +83,8 @@ export interface ConditionCreateInput {
   holdSeconds?: number;
   rearm?: { op: ConditionCompareOp; value?: number | null } | null;
   intervalSeconds?: number;
+  /** WHEN rules only: fire again every this many seconds while it still holds (§5.1). At least 900 and the interval. */
+  repeatSeconds?: number | null;
   text: string;
   unit?: string | null;
   taskId?: string | null;
@@ -92,6 +96,8 @@ export interface ConditionCreateInput {
 
 export const CONDITION_LIMIT_REACHED = 'CONDITION_LIMIT_REACHED';
 export const CONDITION_NOT_FOUND = 'CONDITION_NOT_FOUND';
+/** A repeat is at least 15 minutes (§3), and at least the condition's own interval. */
+export const CONDITION_MIN_REPEAT_SECONDS = 900;
 
 /** What became of a heartbeat's samples. */
 export interface ConditionIntake {
@@ -127,6 +133,18 @@ export async function createConditionRow(tx: Prisma.TransactionClient, input: Co
   const command = input.command.trim();
   if (!command) throw new BadRequestException('a condition needs a probe command');
   if (!input.text.trim()) throw new BadRequestException('a condition needs its text: the condition in words');
+  const intervalSeconds = input.intervalSeconds ?? 300;
+  const repeatSeconds = input.repeatSeconds ?? null;
+  if (repeatSeconds !== null) {
+    if (!input.scheduleId || input.taskId) {
+      throw new BadRequestException('only a schedule\'s WHEN condition repeats; a task\'s startWhen fires once');
+    }
+    if (!Number.isInteger(repeatSeconds) || repeatSeconds < CONDITION_MIN_REPEAT_SECONDS || repeatSeconds < intervalSeconds) {
+      throw new BadRequestException(
+        `repeatSeconds is a whole number of at least ${CONDITION_MIN_REPEAT_SECONDS} and at least the interval`,
+      );
+    }
+  }
   await assertConditionRoom(tx, input.ownerId);
   return tx.condition.create({
     data: {
@@ -139,7 +157,8 @@ export async function createConditionRow(tx: Prisma.TransactionClient, input: Co
       holdSeconds: input.holdSeconds ?? 0,
       rearmOp: input.rearm?.op ?? null,
       rearmValue: input.rearm && input.rearm.op !== 'EXIT_ZERO' ? input.rearm.value ?? null : null,
-      intervalSeconds: input.intervalSeconds ?? 300,
+      intervalSeconds,
+      repeatSeconds,
       text: input.text.trim(),
       unit: input.unit ?? null,
       approvedCommandHash: conditionCommandHash(command),
@@ -178,6 +197,7 @@ function rulesOf(c: Condition): ConditionRules {
     rearmValue: c.rearmValue,
     intervalSeconds: c.intervalSeconds,
     scheduleId: c.scheduleId,
+    repeatSeconds: c.repeatSeconds,
   };
 }
 
@@ -194,6 +214,7 @@ function machineOf(c: Condition): ConditionMachine {
     unknownReason: c.unknownReason as ConditionUnknownReason | null,
     failedChecks: c.failedChecks,
     firedAt: c.firedAt,
+    repeatFrom: c.repeatFrom,
   };
 }
 
@@ -385,6 +406,7 @@ export class ConditionsService {
       holdSeconds: c.holdSeconds,
       rearm: c.rearmOp ? { op: c.rearmOp, value: c.rearmValue } : null,
       intervalSeconds: c.intervalSeconds,
+      repeatSeconds: c.repeatSeconds,
       state: c.state,
       lastSampleAt: iso(c.lastSampleAt),
       lastValue: c.lastValue,
@@ -403,7 +425,7 @@ export class ConditionsService {
       samples: c.samples.map((s) => ({
         at: s.at.toISOString(), outcome: s.outcome, value: s.value, exitCode: s.exitCode, stderrTail: s.stderrTail,
       })),
-      events: c.events.map((e) => ({ at: e.at.toISOString(), kind: e.kind, value: e.value, runId: e.runId })),
+      events: c.events.map((e) => ({ at: e.at.toISOString(), kind: e.kind, value: e.value, runId: e.runId, repeat: e.repeat })),
     };
   }
 
@@ -437,12 +459,12 @@ export class ConditionsService {
     const now = this.clock();
     for (const event of events) {
       const row = await tx.conditionEvent.create({
-        data: { conditionId: condition.id, at: event.at, kind: event.kind, value: event.value },
+        data: { conditionId: condition.id, at: event.at, kind: event.kind, value: event.value, repeat: event.repeat ?? false },
         select: { id: true },
       });
       if (event.kind === 'FIRED') {
         for (const hook of this.hooks) {
-          await hook.onFired(tx, { condition: updated, eventId: row.id, at: event.at, value: event.value });
+          await hook.onFired(tx, { condition: updated, eventId: row.id, at: event.at, value: event.value, repeat: event.repeat ?? false });
         }
       }
     }

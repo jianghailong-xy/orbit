@@ -34,6 +34,11 @@ export interface WhenCondition {
   intervalSeconds: number;
   unit: string | null;
   timeoutSeconds: number;
+  /**
+   * Fire again every this many seconds while it still holds and has not re-armed (§5.1); null fires on the crossing
+   * only. Absent on a rule stored before it existed, which reads as null.
+   */
+  repeatSeconds?: number | null;
 }
 
 /**
@@ -54,6 +59,8 @@ export const WHEN_DEFAULT_TIMEOUT_SECONDS = 20;
 export const WHEN_MAX_TIMEOUT_SECONDS = 60;
 export const WHEN_DEFAULT_RUNS_PER_WEEK = 3;
 export const WHEN_MAX_RUNS_PER_WEEK = 7;
+/** A repeat is at least 15 minutes, and at least the interval (conditions.service.ts CONDITION_MIN_REPEAT_SECONDS). */
+export const WHEN_MIN_REPEAT_SECONDS = 900;
 const WHEN_MAX_SECONDS = 7 * 24 * 3600;
 
 const MINUTE = 60_000;
@@ -208,7 +215,7 @@ function comparison(raw: unknown, what: string): { op: WhenCompareOp; value: num
 
 /**
  * `{ kind: 'WHEN', condition: { text, command, compare, holdSeconds?, rearm?, intervalSeconds?, unit?,
- * timeoutSeconds? }, runsPerWeek?, conditionId? }`, with every default written out.
+ * timeoutSeconds?, repeatSeconds? }, runsPerWeek?, conditionId? }`, with every default written out.
  */
 function parseWhenRule(rule: Partial<Record<string, unknown>>): ScheduleRule {
   const c = rule.condition as Partial<Record<string, unknown>> | null | undefined;
@@ -222,6 +229,14 @@ function parseWhenRule(rule: Partial<Record<string, unknown>>): ScheduleRule {
   if (c.unit !== undefined && c.unit !== null && (typeof c.unit !== 'string' || c.unit.length > 20)) {
     whenInvalid("A WHEN rule's unit is how a reading is shown (\"%\", \"GiB\"), at most 20 characters.");
   }
+  const intervalSeconds = wholeNumber(
+    c.intervalSeconds, WHEN_DEFAULT_INTERVAL_SECONDS, WHEN_MIN_INTERVAL_SECONDS, WHEN_MAX_SECONDS, 'intervalSeconds',
+  );
+  let repeatSeconds: number | null = null;
+  if (c.repeatSeconds !== undefined && c.repeatSeconds !== null) {
+    repeatSeconds = wholeNumber(c.repeatSeconds, 0, WHEN_MIN_REPEAT_SECONDS, WHEN_MAX_SECONDS, 'repeatSeconds');
+    if (repeatSeconds < intervalSeconds) whenInvalid('repeatSeconds is at least the intervalSeconds it is checked at.');
+  }
   const conditionId = rule.conditionId ?? null;
   if (conditionId !== null && typeof conditionId !== 'string') whenInvalid('conditionId is set by Orbit.');
   return {
@@ -234,11 +249,10 @@ function parseWhenRule(rule: Partial<Record<string, unknown>>): ScheduleRule {
       compare: comparison(c.compare, 'compare'),
       holdSeconds: wholeNumber(c.holdSeconds, 0, 0, WHEN_MAX_SECONDS, 'holdSeconds'),
       rearm: c.rearm === undefined || c.rearm === null ? null : comparison(c.rearm, 'rearm'),
-      intervalSeconds: wholeNumber(
-        c.intervalSeconds, WHEN_DEFAULT_INTERVAL_SECONDS, WHEN_MIN_INTERVAL_SECONDS, WHEN_MAX_SECONDS, 'intervalSeconds',
-      ),
+      intervalSeconds,
       unit: typeof c.unit === 'string' && c.unit.trim() ? c.unit.trim() : null,
       timeoutSeconds: wholeNumber(c.timeoutSeconds, WHEN_DEFAULT_TIMEOUT_SECONDS, 1, WHEN_MAX_TIMEOUT_SECONDS, 'timeoutSeconds'),
+      repeatSeconds,
     },
   };
 }

@@ -1122,6 +1122,7 @@ export class SchedulesService {
         holdSeconds: c.holdSeconds,
         rearm: c.rearm,
         intervalSeconds: c.intervalSeconds,
+        repeatSeconds: c.repeatSeconds ?? null,
         text: c.text,
         unit: c.unit,
         scheduleId: schedule.id,
@@ -1162,9 +1163,11 @@ export class SchedulesService {
 
   /**
    * Keep a WHEN schedule's condition equal to its rule after a change (docs/condition-triggers-design.md §6.1): the
-   * text, comparison, hold, re-arm, interval and unit as they are now; the command once it is inside the envelope (on
-   * the owner's Create or Allow, or an Undo back to it), approved as of now; and its life: a schedule paused or ended
-   * ends its condition, so the runner stops being sent the probe, and one resumed brings it back, armed and waiting.
+   * text, comparison, hold, re-arm, interval, repeat and unit as they are now (a repeat is inside the envelope: the
+   * weekly budget already bounds how many runs it can start, so a shorter one applies at once); the command once it is
+   * inside the envelope (on the owner's Create or Allow, or an Undo back to it), approved as of now; and its life: a
+   * schedule paused or ended ends its condition, so the runner stops being sent the probe, and one resumed brings it
+   * back, armed and waiting.
    */
   private async syncCondition(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
     const rule = schedule.rule as unknown as ScheduleRule;
@@ -1185,6 +1188,7 @@ export class SchedulesService {
       rearmOp: c.rearm?.op ?? null,
       rearmValue: c.rearm?.value ?? null,
       intervalSeconds: c.intervalSeconds,
+      repeatSeconds: c.repeatSeconds ?? null,
     };
     if (hash !== condition.approvedCommandHash) {
       data.probeCommand = c.command;
@@ -1193,13 +1197,13 @@ export class SchedulesService {
     }
     const live = conditionLive(schedule.state);
     if (!live && condition.state !== 'ENDED') {
-      Object.assign(data, { state: 'ENDED', endedAt: now, trueSince: null });
+      Object.assign(data, { state: 'ENDED', endedAt: now, trueSince: null, repeatFrom: null });
       await closeUnknownItems(tx, condition.id, now);
     } else if (live && condition.state === 'ENDED') {
       await assertConditionRoom(tx, schedule.ownerId);
       Object.assign(data, {
         state: 'WAITING', armed: true, trueSince: null, unknownSince: null, unknownReason: null, failedChecks: 0,
-        endedAt: null, resumedAt: now,
+        endedAt: null, resumedAt: now, repeatFrom: null,
       });
     }
     await tx.condition.update({ where: { id: condition.id }, data });

@@ -77,7 +77,7 @@ test('a WHEN rule: defaults written out, no slot, its runs a week, a change merg
     kind: 'WHEN', conditionId: null, runsPerWeek: 3,
     condition: {
       text: 'Raw used above 90%', command: 'ceph df', compare: { op: 'GT', value: 90 }, holdSeconds: 0, rearm: null,
-      intervalSeconds: 300, unit: null, timeoutSeconds: 20,
+      intervalSeconds: 300, unit: null, timeoutSeconds: 20, repeatSeconds: null,
     },
   });
   assert.equal(nextDueAt(rule, 'UTC', new Date()), null, 'the time worker has nothing to fire');

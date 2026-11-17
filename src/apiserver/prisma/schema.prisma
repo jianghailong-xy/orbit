@@ -10227,6 +10227,12 @@ model Condition {
   unknownReason        String?                 @map("unknown_reason")
   failedChecks         Int                     @default(0) @map("failed_checks")
   firedAt              DateTime?               @map("fired_at") @db.Timestamptz(3)
+  /// WHEN rules only (migration 1050): fire again every this many seconds while the comparison still holds and it has
+  /// not re-armed. At least 900 and at least intervalSeconds; NULL fires on the crossing only.
+  repeatSeconds        Int?                    @map("repeat_seconds")
+  /// What a repeat is counted from: the last FIRED, or the sample the comparison held again on after a break. NULL
+  /// while no repeat is due (not FIRED, the comparison false, UNKNOWN, or no repeatSeconds).
+  repeatFrom           DateTime?               @map("repeat_from") @db.Timestamptz(3)
   /// When its schedule was last resumed (migration 1040): silence is counted from the newer of this and the newest sample.
   resumedAt            DateTime?               @map("resumed_at") @db.Timestamptz(3)
   approvedCommandHash  String                  @map("approved_command_hash")
@@ -10277,6 +10283,8 @@ model ConditionEvent {
   kind        ConditionEventKind
   value       Float?
   runId       String?            @map("run_id") @db.Uuid
+  /// A FIRED that is a repeat (migration 1050): the history says "Fired again".
+  repeat      Boolean            @default(false)
   createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@index([conditionId, at(sort: Desc)], map: "condition_event_condition_at_idx")

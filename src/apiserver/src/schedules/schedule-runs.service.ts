@@ -1538,7 +1538,31 @@ export class ScheduleRunsService {
         value: condition.compareOp === 'EXIT_ZERO' ? (s.outcome === 'EXIT' ? s.exitCode : null) : s.outcome === 'VALUE' ? s.value : null,
         outcome: s.outcome,
       })),
+      repeat: await this.repeatOf(tx, condition.id, run),
     };
+  }
+
+  /**
+   * A repeat firing's line (docs/condition-triggers-design.md §5.1): the crossing it follows, the newest FIRED that is
+   * not a repeat up to it, and the runs of this schedule's condition that started from then until this one. Null when
+   * the run's firing is a crossing.
+   */
+  private async repeatOf(tx: Tx, conditionId: string, run: ScheduleRun): Promise<{ firstFiredAt: Date; runsSince: number } | null> {
+    const event = await tx.conditionEvent.findFirst({ where: { conditionId, runId: run.id, kind: 'FIRED' }, select: { at: true, repeat: true } });
+    if (!event?.repeat) return null;
+    const first = await tx.conditionEvent.findFirst({
+      where: { conditionId, kind: 'FIRED', repeat: false, at: { lte: event.at } },
+      orderBy: [{ at: 'desc' }, { id: 'desc' }],
+      select: { at: true },
+    });
+    if (!first) return null;
+    const runsSince = await tx.scheduleRun.count({
+      where: {
+        scheduleId: run.scheduleId, trigger: 'CONDITION', id: { not: run.id }, startedAt: { not: null },
+        plannedAt: { gte: first.at, lt: run.plannedAt },
+      },
+    });
+    return { firstFiredAt: first.at, runsSince };
   }
 
   private openInput(schedule: Schedule, run: ScheduleRun, sessionId: string, prompt: string, plan: StartPlan): OpenRunSession {

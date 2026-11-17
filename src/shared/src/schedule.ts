@@ -466,6 +466,9 @@ export const SCHEDULE_CONDITION_COPY = {
     EQ: 'reads {value}',
     EXIT_ZERO: 'succeeds again',
   },
+  /** A repeat (§5.1): one more line under When, and the inspector's Condition block, in words. */
+  repeat: 'And again every {interval} while it stays that way.',
+  repeatUnits: { hour: 'hour', hours: '{count} hours', minute: 'minute', minutes: '{count} minutes' },
   checked: 'Checked every {interval} on {runner}, no model.',
   checkedNoRunner: 'Checked every {interval}, no model.',
   seconds: '{count} s',
@@ -493,6 +496,8 @@ export interface ScheduleWhenCondition {
   intervalSeconds: number;
   unit: string | null;
   timeoutSeconds: number;
+  /** Fire again every this many seconds while it still holds; null (or absent on an older rule) fires once. */
+  repeatSeconds?: number | null;
 }
 
 export type ScheduleRule =
@@ -956,6 +961,24 @@ export interface ScheduleWhenLines {
   detail: string;
   /** The probe command, verbatim: what Create approves. */
   command: string;
+  /** "And again every 2 hours while it stays that way."; null for a condition with no repeat. */
+  repeat: string | null;
+}
+
+/** "2 hours", "hour", "90 minutes": a repeat's interval as the sentence says it. */
+function repeatIntervalText(seconds: number): string {
+  if (seconds % 3600 === 0) return seconds === 3600 ? CC.repeatUnits.hour : scheduleFill(CC.repeatUnits.hours, { count: seconds / 3600 });
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? CC.repeatUnits.minute : scheduleFill(CC.repeatUnits.minutes, { count: minutes });
+}
+
+/**
+ * A WHEN condition's repeat in words, for the create card's When block and the inspector's Condition block:
+ * "And again every 2 hours while it stays that way."; null with no repeat.
+ */
+export function scheduleRepeatText(repeatSeconds: number | null | undefined): string | null {
+  if (repeatSeconds === null || repeatSeconds === undefined) return null;
+  return scheduleFill(CC.repeat, { interval: repeatIntervalText(repeatSeconds) });
 }
 
 export function scheduleWhenLines(condition: ScheduleWhenCondition, runner: string | null): ScheduleWhenLines {
@@ -973,7 +996,7 @@ export function scheduleWhenLines(condition: ScheduleWhenCondition, runner: stri
   const checked = runner
     ? scheduleFill(CC.checked, { interval, runner })
     : scheduleFill(CC.checkedNoRunner, { interval });
-  return { text, detail: `${rearm} ${checked}`, command: condition.command };
+  return { text, detail: `${rearm} ${checked}`, command: condition.command, repeat: scheduleRepeatText(condition.repeatSeconds) };
 }
 
 /** "7 runs a week", "1 run a week". */

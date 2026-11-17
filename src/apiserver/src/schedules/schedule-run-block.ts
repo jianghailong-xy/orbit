@@ -39,6 +39,11 @@ export interface RunBlockFiring {
   since: Date | null;
   /** Newest first, the firing sample among them. */
   samples: Array<{ at: Date; value: number | null; outcome: string }>;
+  /**
+   * A repeat firing (docs/condition-triggers-design.md §5.1): when the condition first fired, on the crossing this
+   * repeat follows, and how many runs started from it between then and this one. Null for a crossing.
+   */
+  repeat?: { firstFiredAt: Date; runsSince: number } | null;
 }
 
 /** At most this many recent samples are listed in a firing. */
@@ -90,6 +95,13 @@ export function scheduledRunTurn(input: RunBlockInput): string {
       ? ` It has held since ${utc(f.since)} (${heldFor(f.at.getTime() - f.since.getTime())}).`
       : '';
     lines.push(`Fired because: ${JSON.stringify(f.text)}. The reading was ${reading(f.value, f.unit)} at ${utc(f.at)}.${since}`);
+    if (f.repeat) {
+      const n = f.repeat.runsSince;
+      lines.push(
+        `This is a repeat: the condition first fired at ${utc(f.repeat.firstFiredAt)} and has not re-armed since. `
+          + `${n === 1 ? '1 run has' : `${n} runs have`} started from it since then, before this one.`,
+      );
+    }
     if (f.samples.length > 0) {
       lines.push('Recent samples, newest first:');
       for (const s of f.samples) {

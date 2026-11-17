@@ -391,6 +391,7 @@ test('create-card-and-views', { skip }, async () => {
     text: 'Raw used above 90% for 10 min',
     detail: 'Fires again only after it drops below 85%. Checked every 5 min on views-gpu, no model.',
     command: COMMAND,
+    repeat: null,
   });
   assert.equal(card.when?.text, 'Raw used above 90% for 10 min');
   assert.equal(card.costs?.text, 'Up to 3 runs a week, 30 min each', 'Costs still counts runs a week');
