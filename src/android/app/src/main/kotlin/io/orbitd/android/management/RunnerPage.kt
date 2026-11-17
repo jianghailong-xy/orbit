@@ -1064,24 +1064,28 @@ internal object RunnerPage {
 
     /**
      * The name a machine is shown by everywhere: its owner's own name for it, else Orbit Cloud for the account's managed runner — told
-     * by [managedRunnerId], the managed status's runnerId (by default the one the signed-in shell last read), never by its stored
-     * name — else the name it registered with (web machineName).
+     * by its row's `managed` (GET /runners), else by [managedRunnerId], the managed status's runnerId (by default the one the
+     * signed-in shell last read), never by its stored name — else the name it registered with (web machineName).
      */
     fun displayName(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
         runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() }
             ?: if (isManaged(runner, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
 
-    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner). */
-    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner).
+     *  [managed] is the row's own flag where it has one (a GET /runners row); null leaves it to the id. */
+    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): String =
         displayName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: if (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL
+            ?: if (isManaged(id, managedRunnerId, managed)) RunnerCopy.MANAGED_RUNNER_LABEL
             else name.orEmpty()
 
-    /** Whether [runner] is the account's managed runner, by id. */
-    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean {
-        val id = runner.str("id")
-        return !id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)
-    }
+    /** Whether [runner] is the account's managed runner: its row says so (`managed`), or (an older server, which sends no flag) its
+     *  id is the managed status's runnerId. */
+    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean =
+        isManaged(runner.str("id"), managedRunnerId, runner.bool("managed"))
+
+    /** The same from a runner's id and its row's flag (null where the row has none). */
+    fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
+        managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())

@@ -149,6 +149,19 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case scheduleRunStrip(runID: String)
         /// What that run reported, after its last event: placed at the run's end.
         case scheduleRunReport(runID: String)
+
+        /// Historical records obey the conversation's creation boundary when placed by moment.
+        /// A promotion approval placed by moment is a blocked candidate's record.
+        public var isRecord: Bool {
+            switch self {
+            case .criteriaDecisionReceipt, .evidenceDecisionReceipt,
+                 .acceptanceConfirmationReceipt, .ownerDecisionReceipt, .promotionReceipt,
+                 .coordinatorQuestionRecord, .promotionApproval:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -165,8 +178,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// delivery: the same moment answers "which row" on every console, and answers it again
         /// when the window has moved.
         ///
-        /// A record whose moment is older than every loaded row is drawn at the HEAD of the
-        /// window — as close to where it happened as this device can get, and it walks down into
+        /// A record since conversation creation but older than every loaded row leads at the HEAD
+        /// of the window — as close to where it happened as this device can get, and it walks into
         /// place as older pages arrive. NOT at the tail: that is where what is true NOW goes, and
         /// it is where these records used to pile up (`ReceiptAnchor.place` has the whole story).
         case at(String)
@@ -289,15 +302,11 @@ public enum ReceiptAnchor {
     public enum Placement: Equatable, Sendable {
         /// After this row: the last row whose own clock is at or before the moment.
         case after(String)
-        /// Older than every loaded row. Drawn at the HEAD of the window, above the load-earlier
-        /// row — as close to where it happened as this device can get, and it walks down into place
-        /// as older pages arrive and the window grows back past its moment.
-        ///
-        /// NOT the tail, which is the other end of the conversation: a record's own stamp on a card
-        /// sitting under everything that happened after it tells the reader the decision was made
-        /// now. Nor is it dropped, which is what the web end does and what the native end did before
-        /// — a record that disappears on a long conversation is a record the owner cannot read.
+        /// Since conversation creation but older than every loaded row. Drawn at the HEAD of
+        /// the window, and walks into place as older pages arrive.
         case beforeWindow
+        /// Older than the conversation itself. This record belongs to the previous conversation.
+        case beforeConversation
         /// A stamp nothing can parse: a record nobody can place is not drawn in the wrong one.
         case unplaceable
     }
@@ -325,8 +334,11 @@ public enum ReceiptAnchor {
 
     /// Where `stamp` sits among the rows `clocks` was read from — the whole rule, and the only place
     /// it is stated.
-    public static func place(_ clocks: Clocks, at stamp: String) -> Placement {
+    public static func place(_ clocks: Clocks, at stamp: String, since createdAt: String? = nil) -> Placement {
         guard let at = ThinkingSummary.date(stamp) else { return .unplaceable }
+        if let createdAt, let start = ThinkingSummary.date(createdAt), at < start {
+            return .beforeConversation
+        }
         var anchor: String?
         for row in clocks.rows where row.at <= at {
             anchor = row.id
@@ -550,6 +562,7 @@ public enum TranscriptRows {
                              running: Bool = false,
                              decisionCards: [DeliveredDecisionCard] = [],
                              clocks known: ReceiptAnchor.Clocks? = nil,
+                             conversationCreatedAt: String? = nil,
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
@@ -569,7 +582,7 @@ public enum TranscriptRows {
         // A delivered decision card follows `placement`: a QUESTION sits where it arrived — and one
         // whose row it cannot place trails at the TAIL rather than being lost, because it is still
         // waiting on somebody. A RECORD is resolved against the rows loaded right now, and one whose
-        // moment is above them all leads at the HEAD (see `ReceiptAnchor.Placement`).
+        // moment is since creation but above them all leads at the HEAD (see `ReceiptAnchor.Placement`).
         var anchoredDecisions: [String: [DeliveredDecisionCard]] = [:]
         var trailingDecisions: [DeliveredDecisionCard] = []
         var headRecords: [DeliveredDecisionCard] = []
@@ -596,10 +609,11 @@ public enum TranscriptRows {
             case .at(let moment):
                 let read = clocks ?? ReceiptAnchor.Clocks(state.items)
                 clocks = read
-                switch ReceiptAnchor.place(read, at: moment) {
+                switch ReceiptAnchor.place(read, at: moment,
+                                           since: card.kind.isRecord ? conversationCreatedAt : nil) {
                 case .after(let anchor): anchoredDecisions[anchor, default: []].append(card)
                 case .beforeWindow:      headRecords.append(card)
-                case .unplaceable:       break
+                case .beforeConversation, .unplaceable: break
                 }
             }
         }

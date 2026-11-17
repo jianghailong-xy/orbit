@@ -339,6 +339,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'resolvedByUserId',
   // And the one who resumed a paused coordinator (0280), which is the same kind of name.
   'resumedByUserId',
+  // The coordinator that recorded an owner ruling (0970): a session a reader opens.
+  'recordedBySessionId',
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',
