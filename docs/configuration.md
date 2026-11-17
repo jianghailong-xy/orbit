@@ -54,8 +54,12 @@ output into a public report: expanded values can contain secrets.
 | `DEEPSEEK_API_KEY` | `secret` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | `URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | `string` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
-| `APNS_KEY` | `secret` (base64) | Optional; empty disables push | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Push also needs the key/team identifiers. | Yes | Recreate API |
-| `APNS_KEY_ID` | `string` | Required when APNs is enabled; otherwise empty | Apple push authentication key identifier. | No; redact in public diagnostics | Recreate API |
+| `APNS_KEY` | `secret` (base64) | Optional; empty disables APNs unless environment keys are configured | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Default for both APNs environments; needs the key/team identifiers. | Yes | Recreate API |
+| `APNS_KEY_ID` | `string` | Required with `APNS_KEY`; otherwise empty | Default Apple push authentication key identifier. | No; redact in public diagnostics | Recreate API |
+| `APNS_SANDBOX_KEY` | `secret` (base64) | Optional; falls back to `APNS_KEY` when both sandbox settings are empty | Base64 `.p8` key authorized for sandbox APNs. Set together with `APNS_SANDBOX_KEY_ID`. | Yes | Recreate API |
+| `APNS_SANDBOX_KEY_ID` | `string` | Required with `APNS_SANDBOX_KEY`; otherwise empty | Sandbox signing key identifier. A partial override disables this environment rather than mixing credentials. | No; redact in public diagnostics | Recreate API |
+| `APNS_PRODUCTION_KEY` | `secret` (base64) | Optional; falls back to `APNS_KEY` when both production settings are empty | Base64 `.p8` key authorized for production APNs. Set together with `APNS_PRODUCTION_KEY_ID`. | Yes | Recreate API |
+| `APNS_PRODUCTION_KEY_ID` | `string` | Required with `APNS_PRODUCTION_KEY`; otherwise empty | Production signing key identifier. A partial override disables this environment rather than mixing credentials. | No; redact in public diagnostics | Recreate API |
 | `APNS_TEAM_ID` | `string` | Required when APNs is enabled; otherwise empty | Apple developer team identifier. | No; redact in public diagnostics | Recreate API |
 | `APNS_BUNDLE_ID` | `string` | Optional; `io.orbitd.app` | APNs topic matching the iOS application's bundle ID. | No | Recreate API |
 | `FCM_PROJECT_ID` | `string` | Optional; empty disables Android push | Target Firebase project with Cloud Messaging HTTP v1 enabled, independent of the APNs values. | No; redact in public diagnostics | Recreate API |
@@ -84,6 +88,19 @@ ORBIT_SOURCE_SHA="$(git rev-parse HEAD)" docker compose up -d --build web
 Keep `JWT_SECRET` and `PROVIDER_SECRET_KEY` in a protected backup alongside the database recovery plan.
 They have different jobs; generate them independently. Consult the [security policy](../SECURITY.md)
 before changing credential storage or the runner/server trust boundary.
+
+### Apple push credentials
+
+TestFlight and App Store tokens use production APNs; development builds use sandbox APNs. Apple keys
+may be restricted to one environment. Use an unrestricted default `APNS_KEY` / `APNS_KEY_ID` pair, or
+configure separate sandbox and production pairs above, all under `APNS_TEAM_ID`. The stored device
+environment selects both the host and the signing credentials; never relabel tokens to accommodate a key.
+
+An environment with incomplete credentials is skipped and warned once per API process. If Apple returns
+`403 BadEnvironmentKeyInToken`, that environment is disabled until the API restarts, with one warning
+naming the environment and host. Other environments and push channels continue; device registrations
+are preserved. Requests already in flight may also fail. The server cannot discover a key's environment
+restriction before Apple's first rejection. Correct the credentials and recreate the API to resume sends.
 
 ### Google sign-in
 
