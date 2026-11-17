@@ -1,0 +1,79 @@
+==> stub ready after 2s
+==> iPhone CDC7077E-2206-4FEC-B03A-52EB15B2CAD4: iPhone 17 Pro (CDC7077E-2206-4FEC-B03A-52EB15B2CAD4) (Shutdown) 
+Test Case '-[CtProbeUITests.ConditionShotTests test2TaskCreateCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test2TaskCreateCard]' passed (38.800 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test3ScheduleCreateCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test3ScheduleCreateCard]' passed (115.469 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' passed (37.164 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' passed (29.240 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' passed (16.828 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' passed (38.875 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' passed (18.147 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' passed (16.638 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.179) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.180) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.181) seconds
+** TEST SUCCEEDED **
+.ct-probe/run.sh: line 64:  2209 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 8208
+drwxr-xr-x  55 runner  staff    1760 Nov 17 21:13 .
+drwxr-xr-x  17 runner  staff     544 Nov 17 20:57 ..
+drwxr-xr-x  38 runner  staff    1216 Nov 17 21:13 attachments
+-rw-r--r--   1 runner  staff   14499 Nov 17 21:13 compiled-ios.txt
+-rw-r--r--   1 runner  staff     262 Nov 17 21:13 Complete Issue Description.txt
+-rw-r--r--   1 runner  staff     457 Nov 17 21:13 ConditionShotTeststest2TaskCreateCard-notes
+-rw-r--r--@  1 runner  staff     457 Nov 17 21:08 ConditionShotTeststest2TaskCreateCard-notes.txt
+-rw-r--r--   1 runner  staff     570 Nov 17 21:13 ConditionShotTeststest3ScheduleCreateCard-notes
+-rw-r--r--@  1 runner  staff     570 Nov 17 21:10 ConditionShotTeststest3ScheduleCreateCard-notes.txt
+-rw-r--r--   1 runner  staff     386 Nov 17 21:13 ConditionShotTeststest3WidenCard-notes
+-rw-r--r--@  1 runner  staff     386 Nov 17 21:11 ConditionShotTeststest3WidenCard-notes.txt
+-rw-r--r--   1 runner  staff     495 Nov 17 21:13 ConditionShotTeststest4ScheduledPage-notes
+-rw-r--r--@  1 runner  staff     495 Nov 17 21:11 ConditionShotTeststest4ScheduledPage-notes.txt
+-rw-r--r--   1 runner  staff     142 Nov 17 21:13 ConditionShotTeststest5RunHeader-notes
+-rw-r--r--@  1 runner  staff     142 Nov 17 21:11 ConditionShotTeststest5RunHeader-notes.txt
+-rw-r--r--   1 runner  staff     576 Nov 17 21:13 ConditionShotTeststest6Inspector-notes
+-rw-r--r--@  1 runner  staff     576 Nov 17 21:12 ConditionShotTeststest6Inspector-notes.txt
+-rw-r--r--   1 runner  staff     230 Nov 17 21:13 ConditionShotTeststest6WaitingOnYou-notes
+-rw-r--r--@  1 runner  staff     230 Nov 17 21:12 ConditionShotTeststest6WaitingOnYou-notes.txt
+-rw-r--r--   1 runner  staff      73 Nov 17 21:13 ConditionShotTeststest7TaskWaitingLine-notes
+-rw-r--r--@  1 runner  staff      73 Nov 17 21:13 ConditionShotTeststest7TaskWaitingLine-notes.txt
+-rw-r--r--   1 runner  staff  328938 Nov 17 21:08 ios-2-task-card.png
+-rw-r--r--   1 runner  staff  375223 Nov 17 21:10 ios-3-schedule-card.png
+-rw-r--r--   1 runner  staff  247340 Nov 17 21:11 ios-3b-widen-card.png
+-rw-r--r--   1 runner  staff  246781 Nov 17 21:11 ios-4-scheduled.png
+-rw-r--r--   1 runner  staff  389081 Nov 17 21:11 ios-5-run.png
+-rw-r--r--   1 runner  staff  252668 Nov 17 21:12 ios-6a-waiting-on-you.png
+-rw-r--r--   1 runner  staff  266469 Nov 17 21:12 ios-6b-inspector.png
+-rw-r--r--   1 runner  staff  338152 Nov 17 21:12 ios-6c-inspector-history.png
+-rw-r--r--   1 runner  staff  372731 Nov 17 21:13 ios-7-task-waiting-line.png
+-rw-r--r--   1 runner  staff   19966 Nov 17 21:13 missing-band-schedule-card
+-rw-r--r--@  1 runner  staff   19966 Nov 17 21:10 missing-band-schedule-card.txt
+-rw-r--r--   1 runner  staff    1437 Nov 17 21:13 not-served.txt
+-rw-r--r--   1 runner  staff   30895 Nov 17 21:13 requests.log
+-rw-r--r--   1 runner  staff      68 Nov 17 20:53 stub.out
+-rw-r--r--   1 runner  staff   20353 Nov 17 21:13 tree-inbox
+-rw-r--r--@  1 runner  staff   20353 Nov 17 21:12 tree-inbox.txt
+-rw-r--r--   1 runner  staff   30100 Nov 17 21:13 tree-inspector
+-rw-r--r--   1 runner  staff   30734 Nov 17 21:13 tree-inspector-history
+-rw-r--r--@  1 runner  staff   30734 Nov 17 21:12 tree-inspector-history.txt
+-rw-r--r--@  1 runner  staff   30100 Nov 17 21:12 tree-inspector.txt
+-rw-r--r--   1 runner  staff   21564 Nov 17 21:13 tree-run
+-rw-r--r--@  1 runner  staff   21564 Nov 17 21:11 tree-run.txt
+-rw-r--r--   1 runner  staff   19966 Nov 17 21:13 tree-schedule-card
+-rw-r--r--@  1 runner  staff   19966 Nov 17 21:10 tree-schedule-card.txt
+-rw-r--r--   1 runner  staff   22738 Nov 17 21:13 tree-scheduled
+-rw-r--r--@  1 runner  staff   22738 Nov 17 21:11 tree-scheduled.txt
+-rw-r--r--   1 runner  staff   21534 Nov 17 21:13 tree-task
+-rw-r--r--   1 runner  staff   20849 Nov 17 21:13 tree-task-card
+-rw-r--r--@  1 runner  staff   20849 Nov 17 21:08 tree-task-card.txt
+-rw-r--r--@  1 runner  staff   21534 Nov 17 21:13 tree-task.txt
+-rw-r--r--   1 runner  staff   18443 Nov 17 21:13 tree-widen-card
+-rw-r--r--@  1 runner  staff   18443 Nov 17 21:11 tree-widen-card.txt
+-rw-r--r--   1 runner  staff     200 Nov 17 21:13 writes.txt
+-rw-r--r--   1 runner  staff  745171 Nov 17 21:13 xcodebuild-ios.log

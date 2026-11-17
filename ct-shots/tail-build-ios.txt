@@ -1,0 +1,300 @@
+    t =    88.09s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    88.70s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    89.19s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =    89.75s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    90.28s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    90.28s     Wait for io.orbitd.ctprobe to idle
+    t =    90.28s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.32s     Check for interrupting elements affecting Window
+    t =    90.47s     Synthesize event
+    t =    90.47s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.53s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.58s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.61s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    90.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    92.17s     Wait for io.orbitd.ctprobe to idle
+    t =    93.56s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =    94.34s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    94.79s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    95.38s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =    95.71s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =    96.28s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    96.28s     Wait for io.orbitd.ctprobe to idle
+    t =    96.29s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    96.32s     Check for interrupting elements affecting Window
+    t =    96.44s     Synthesize event
+    t =    96.44s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    96.53s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    96.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    96.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    96.73s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    98.25s     Wait for io.orbitd.ctprobe to idle
+    t =   100.25s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =   100.63s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =   101.05s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =   101.48s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =   101.92s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =   102.33s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =   102.33s     Wait for io.orbitd.ctprobe to idle
+    t =   102.33s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   102.37s     Check for interrupting elements affecting Window
+    t =   102.50s     Synthesize event
+    t =   102.50s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   102.53s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   102.58s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   102.62s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   102.65s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =   104.13s     Wait for io.orbitd.ctprobe to idle
+    t =   106.07s Checking existence of `"You'll hear when it crosses 90%, and if Ceph can't be read." StaticText`
+    t =   106.70s Find the "You'll hear when it crosses 90%, and if Ceph can't be read." StaticText
+    t =   107.29s Requesting snapshot of accessibility hierarchy for app with pid 26081
+    t =   108.40s Requesting snapshot of accessibility hierarchy for app with pid 26081
+    t =   108.55s Added attachment named 'missing-band-schedule-card.txt'
+    t =   108.56s Checking existence of `Any (First Match)`
+    t =   109.26s Checking existence of `Any (First Match)`
+    t =   109.66s Checking existence of `Any (First Match)`
+    t =   109.87s Checking existence of `Any (First Match)`
+    t =   110.09s Checking existence of `Any (First Match)`
+    t =   110.51s Checking existence of `Any (First Match)`
+    t =   110.88s Checking existence of `Any (First Match)`
+    t =   111.42s Checking existence of `Any (First Match)`
+    t =   111.86s Checking existence of `Any (First Match)`
+    t =   112.35s Requesting snapshot of accessibility hierarchy for app with pid 26081
+    t =   113.11s Requesting snapshot of accessibility hierarchy for app with pid 26081
+    t =   113.27s Added attachment named 'tree-schedule-card.txt'
+    t =   114.22s Added attachment named 'ios-3-schedule-card'
+    t =   114.23s Terminate io.orbitd.ctprobe:26081
+    t =   115.26s Tear Down
+    t =   115.26s     Added attachment named 'ConditionShotTeststest3ScheduleCreateCard-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test3ScheduleCreateCard]' passed (115.469 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' started.
+    t =     0.00s Start Test at 2026-11-17 21:10:32.609
+    t =     0.04s Set Up
+2026-11-17 21:10:32.768 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:10:32.768 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.07s Open io.orbitd.ctprobe
+    t =     0.08s     Launch io.orbitd.ctprobe
+    t =     4.55s         Setting up automation session
+    t =    17.16s         Wait for io.orbitd.ctprobe to idle
+    t =    20.03s Checking existence of `Any (First Match)`
+    t =    22.31s Checking existence of `Any (First Match)`
+    t =    25.43s Checking existence of `Any (First Match)`
+    t =    31.12s Checking existence of `Any (First Match)`
+    t =    31.37s Find the Any (First Match)
+    t =    31.75s Find the "schedule-envelope-q-cmd-decline" Button
+    t =    32.11s Find the "schedule-envelope-q-cmd-decline" Button
+    t =    32.42s Checking existence of `Any (First Match)`
+    t =    32.64s Checking existence of `Any (First Match)`
+    t =    32.89s Checking existence of `Any (First Match)`
+    t =    33.25s Checking existence of `Any (First Match)`
+    t =    33.81s Checking existence of `Any (First Match)`
+    t =    34.24s Checking existence of `Any (First Match)`
+    t =    34.62s Requesting snapshot of accessibility hierarchy for app with pid 29662
+    t =    35.13s Requesting snapshot of accessibility hierarchy for app with pid 29662
+    t =    35.23s Added attachment named 'tree-widen-card.txt'
+    t =    36.05s Added attachment named 'ios-3b-widen-card'
+    t =    36.05s Terminate io.orbitd.ctprobe:29662
+    t =    37.09s Tear Down
+    t =    37.09s     Added attachment named 'ConditionShotTeststest3WidenCard-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' passed (37.164 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' started.
+    t =     0.00s Start Test at 2026-11-17 21:11:09.774
+    t =     0.03s Set Up
+2026-11-17 21:11:09.860 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:11:09.861 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.07s Open io.orbitd.ctprobe
+    t =     0.07s     Launch io.orbitd.ctprobe
+    t =     3.02s         Setting up automation session
+    t =     8.32s         Wait for io.orbitd.ctprobe to idle
+    t =    10.60s Checking existence of `Any (First Match)`
+    t =    13.93s Checking existence of `Any (First Match)`
+    t =    16.27s Checking existence of `Any (First Match)`
+    t =    19.54s Checking existence of `Any (First Match)`
+    t =    20.13s Checking existence of `Any (First Match)`
+    t =    20.50s Checking existence of `Any (First Match)`
+    t =    20.83s Checking existence of `Any (First Match)`
+    t =    21.10s Checking existence of `Any (First Match)`
+    t =    21.44s Checking existence of `Any (First Match)`
+    t =    21.77s Checking existence of `Any (First Match)`
+    t =    22.19s Checking existence of `Any (First Match)`
+    t =    22.60s Checking existence of `Any (First Match)`
+    t =    22.94s Checking existence of `Any (First Match)`
+    t =    23.27s Checking existence of `Any (First Match)`
+    t =    23.66s Checking existence of `Any (First Match)`
+    t =    24.10s Checking existence of `Any (First Match)`
+    t =    24.52s Checking existence of `Any (First Match)`
+    t =    24.98s Checking existence of `Any (First Match)`
+    t =    25.38s Find the Any (First Match)
+    t =    25.74s Find the Any (First Match)
+    t =    26.10s Find the "Waiting for a condition" StaticText
+    t =    26.34s Find the "Today" StaticText
+    t =    26.58s Requesting snapshot of accessibility hierarchy for app with pid 30790
+    t =    27.19s Requesting snapshot of accessibility hierarchy for app with pid 30790
+    t =    27.32s Added attachment named 'tree-scheduled.txt'
+    t =    28.10s Added attachment named 'ios-4-scheduled'
+    t =    28.10s Terminate io.orbitd.ctprobe:30790
+    t =    29.19s Tear Down
+    t =    29.19s     Added attachment named 'ConditionShotTeststest4ScheduledPage-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' passed (29.240 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' started.
+    t =     0.00s Start Test at 2026-11-17 21:11:39.019
+    t =     0.03s Set Up
+2026-11-17 21:11:39.105 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:11:39.105 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.08s Open io.orbitd.ctprobe
+    t =     0.08s     Launch io.orbitd.ctprobe
+    t =     1.19s         Setting up automation session
+    t =     2.90s         Wait for io.orbitd.ctprobe to idle
+    t =     5.28s Checking existence of `Any (First Match)`
+    t =     6.70s Checking existence of `Any (First Match)`
+    t =     8.19s Checking existence of `Any (First Match)`
+    t =     9.67s Checking existence of `Any (First Match)`
+    t =    12.56s Checking existence of `Any (First Match)`
+    t =    12.93s Checking existence of `Any (First Match)`
+    t =    13.35s Checking existence of `Any (First Match)`
+    t =    13.71s Checking existence of `Any (First Match)`
+    t =    14.00s Checking existence of `Any (First Match)`
+    t =    14.34s Requesting snapshot of accessibility hierarchy for app with pid 31828
+    t =    14.89s Requesting snapshot of accessibility hierarchy for app with pid 31828
+    t =    15.00s Added attachment named 'tree-run.txt'
+    t =    15.80s Added attachment named 'ios-5-run'
+    t =    15.80s Terminate io.orbitd.ctprobe:31828
+    t =    16.81s Tear Down
+    t =    16.81s     Added attachment named 'ConditionShotTeststest5RunHeader-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' passed (16.828 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' started.
+    t =     0.00s Start Test at 2026-11-17 21:11:55.847
+    t =     0.02s Set Up
+    t =     0.06s Open io.orbitd.ctprobe
+    t =     0.06s     Launch io.orbitd.ctprobe
+2026-11-17 21:11:55.923 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:11:55.923 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.34s         Setting up automation session
+    t =     2.68s         Wait for io.orbitd.ctprobe to idle
+    t =     4.68s Checking existence of `Any (First Match)`
+    t =     6.23s Checking existence of `Any (First Match)`
+    t =     9.68s Checking existence of `Any (First Match)`
+    t =    13.19s Checking existence of `Any (First Match)`
+    t =    13.78s Checking existence of `Any (First Match)`
+    t =    14.15s Checking existence of `Any (First Match)`
+    t =    14.47s Checking existence of `Any (First Match)`
+    t =    14.87s Checking existence of `Any (First Match)`
+    t =    15.20s Checking existence of `Any (First Match)`
+    t =    15.53s Checking existence of `Any (First Match)`
+    t =    15.85s Requesting snapshot of accessibility hierarchy for app with pid 32400
+    t =    16.65s Requesting snapshot of accessibility hierarchy for app with pid 32400
+    t =    16.87s Added attachment named 'tree-inspector.txt'
+    t =    17.70s Added attachment named 'ios-6b-inspector'
+    t =    17.71s Checking existence of `Any (First Match)`
+    t =    18.16s Find the Any (First Match)
+    t =    18.71s Find the "schedule-history-row" Button
+    t =    19.12s Checking existence of `"schedule-history-row" Button`
+    t =    19.60s Find the "schedule-history-row" Button
+    t =    20.09s Press Window (First Match)[0.03, 0.62] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    20.09s     Wait for io.orbitd.ctprobe to idle
+    t =    20.10s     Find the Window (First Match)
+    t =    20.11s     Check for interrupting elements affecting Window
+    t =    20.28s     Synthesize event
+    t =    20.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.36s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.38s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.40s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.89s     Wait for io.orbitd.ctprobe to idle
+    t =    22.92s Checking existence of `"schedule-history-row" Button`
+    t =    23.52s Find the "schedule-history-row" Button
+    t =    24.20s Find the "schedule-history-row" Button
+    t =    24.70s Checking existence of `"schedule-history-row" Button`
+    t =    25.30s Find the "schedule-history-row" Button
+    t =    25.94s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    25.94s     Wait for io.orbitd.ctprobe to idle
+    t =    25.95s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    25.98s     Check for interrupting elements affecting Window
+    t =    26.13s     Synthesize event
+    t =    26.15s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.18s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.21s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.22s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.26s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    27.72s     Wait for io.orbitd.ctprobe to idle
+    t =    29.28s Checking existence of `"schedule-history-row" Button`
+    t =    30.08s Find the "schedule-history-row" Button
+    t =    30.89s Find the "schedule-history-row" Button
+    t =    31.41s Find the "schedule-history-row" Button
+    t =    32.01s Checking existence of `Any (First Match)`
+    t =    32.61s Checking existence of `Any (First Match)`
+    t =    33.40s Checking existence of `Any (First Match)`
+    t =    34.37s Checking existence of `Any (First Match)`
+    t =    34.95s Checking existence of `Any (First Match)`
+    t =    35.56s Requesting snapshot of accessibility hierarchy for app with pid 32400
+    t =    36.53s Requesting snapshot of accessibility hierarchy for app with pid 32400
+    t =    36.80s Added attachment named 'tree-inspector-history.txt'
+    t =    37.66s Added attachment named 'ios-6c-inspector-history'
+    t =    37.67s Terminate io.orbitd.ctprobe:32400
+    t =    38.68s Tear Down
+    t =    38.68s     Added attachment named 'ConditionShotTeststest6Inspector-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' passed (38.875 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' started.
+    t =     0.00s Start Test at 2026-11-17 21:12:34.724
+    t =     0.03s Set Up
+    t =     0.08s Open io.orbitd.ctprobe
+    t =     0.08s     Launch io.orbitd.ctprobe
+2026-11-17 21:12:34.859 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:12:34.859 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.01s         Setting up automation session
+    t =     5.09s         Wait for io.orbitd.ctprobe to idle
+    t =     7.43s Checking existence of `Any (First Match)`
+    t =     9.70s Checking existence of `Any (First Match)`
+    t =    12.88s Checking existence of `Any (First Match)`
+    t =    13.17s Checking existence of `Any (First Match)`
+    t =    13.43s Checking existence of `Any (First Match)`
+    t =    13.69s Checking existence of `Any (First Match)`
+    t =    13.94s Checking existence of `Any (First Match)`
+    t =    14.21s Checking existence of `Any (First Match)`
+    t =    14.57s Checking existence of `Any (First Match)`
+    t =    15.26s Requesting snapshot of accessibility hierarchy for app with pid 34047
+    t =    16.10s Requesting snapshot of accessibility hierarchy for app with pid 34047
+    t =    16.26s Added attachment named 'tree-inbox.txt'
+    t =    17.05s Added attachment named 'ios-6a-waiting-on-you'
+    t =    17.05s Terminate io.orbitd.ctprobe:34047
+    t =    18.11s Tear Down
+    t =    18.11s     Added attachment named 'ConditionShotTeststest6WaitingOnYou-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' passed (18.147 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' started.
+    t =     0.00s Start Test at 2026-11-17 21:12:52.875
+    t =     0.07s Set Up
+    t =     0.10s Open io.orbitd.ctprobe
+    t =     0.10s     Launch io.orbitd.ctprobe
+2026-11-17 21:12:52.995 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-17 21:12:52.996 xcodebuild[4446:19175] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.25s         Setting up automation session
+    t =     4.42s         Wait for io.orbitd.ctprobe to idle
+    t =     6.86s Checking existence of `Any (First Match)`
+    t =     8.58s Checking existence of `Any (First Match)`
+    t =    10.35s Checking existence of `Any (First Match)`
+    t =    13.15s Checking existence of `Any (First Match)`
+    t =    13.70s Checking existence of `Any (First Match)`
+    t =    14.02s Requesting snapshot of accessibility hierarchy for app with pid 34864
+    t =    14.57s Requesting snapshot of accessibility hierarchy for app with pid 34864
+    t =    14.73s Added attachment named 'tree-task.txt'
+    t =    15.59s Added attachment named 'ios-7-task-waiting-line'
+    t =    15.59s Terminate io.orbitd.ctprobe:34864
+    t =    16.61s Tear Down
+    t =    16.61s     Added attachment named 'ConditionShotTeststest7TaskWaitingLine-notes.txt'
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' passed (16.638 seconds).
+Test Suite 'ConditionShotTests' passed at 2026-11-17 21:13:09.514.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.179) seconds
+Test Suite 'CtProbeUITests.xctest' passed at 2026-11-17 21:13:09.515.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.180) seconds
+Test Suite 'All tests' passed at 2026-11-17 21:13:09.515.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.181) seconds
+2026-11-17 21:13:51.113 xcodebuild[4446:19175] [MT] IDETestOperationsObserverDebug: 395.656 elapsed -- Testing started completed.
+2026-11-17 21:13:51.119 xcodebuild[4446:19175] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-17 21:13:51.119 xcodebuild[4446:19175] [MT] IDETestOperationsObserverDebug: 395.656 sec, +395.656 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ct-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -1,0 +1,20 @@
+Test Case '-[CtProbeUITests.ConditionShotTests test2TaskCreateCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test2TaskCreateCard]' passed (38.800 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test3ScheduleCreateCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test3ScheduleCreateCard]' passed (115.469 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test3WidenCard]' passed (37.164 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test4ScheduledPage]' passed (29.240 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test5RunHeader]' passed (16.828 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test6Inspector]' passed (38.875 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test6WaitingOnYou]' passed (18.147 seconds).
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' started.
+Test Case '-[CtProbeUITests.ConditionShotTests test7TaskWaitingLine]' passed (16.638 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.179) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.180) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 311.162 (311.181) seconds
+** TEST SUCCEEDED **
