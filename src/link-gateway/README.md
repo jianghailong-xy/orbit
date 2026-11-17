@@ -218,6 +218,7 @@ asks.
 | `Rpc` | [Forwarded](#requests), and answered with exactly one `RpcResult`. |
 | `LiveBatch` | [Published](#live-stream-and-watchers) while someone watches. |
 | `TurnPrefixResponse` | The answer to a [turn prefix request](#turn-prefixes). |
+| `StreamOpened`, `StreamData`, `StreamCredit`, `StreamClose` | Relayed on a [byte stream](#byte-streams)'s `.up` subject, or as the answer to its open request; for a stream that is not the connection's, ignored. |
 | `Chunk` | Joined, then handled as the frame it makes up. |
 | Anything else | Ignored, as the protocol asks of a body the receiver does not take. |
 
@@ -487,18 +488,42 @@ prefix, then only the live events after its `through_live_seq`. With no connecti
 the connection's end or no answer within 10s, the request is answered at once with an empty response, and the client
 gets today's behaviour.
 
+### Byte streams
+
+The managed runner browser's viewer reaches x11vnc on the runner through a byte stream
+([docs/runner-browser-design.md](../../docs/runner-browser-design.md) §4; `streams.go`). The apiserver asks for one with
+a NATS request on `rnr.<runnerId>`: a `Frame` with only `stream_open` set (a stream id, a UUID it chose, and kind VNC),
+with a reply subject. The gateway relays it to the newest connection of the runner whose Hello declared
+`link-stream-v1`, and answers the request with the runner's `StreamOpened` or `StreamClose`. It refuses at once, without
+asking the runner, a kind other than VNC (`REFUSED`), a runner with no such connection (`REFUSED`, or `CONNECTION_LOST`
+with no connection at all), and a third stream of a runner (`TOO_MANY_STREAMS`: at most 2 per runner). A runner that does
+not answer within 10s is closed `TIMEOUT`.
+
+An open stream's bytes travel on `vnc.<streamId>.down` (from the apiserver) and `vnc.<streamId>.up` (to it), each NATS
+message one binary-encoded `Frame` with only `stream_data`, `stream_credit` or `stream_close` set. Each direction has a
+window of 256 KiB: a side sends that much past what the other has credited back (`StreamCredit`) at most, and the
+gateway, which keeps both windows, closes a stream sent past its window with `FLOW_VIOLATION`, telling both sides. It
+passes the viewer's credit on to the runner 128 KiB at a time, or at once when the viewer has credited all the runner
+sent, so that credits cannot fill a slow link to the runner ahead of the stream's data. So a
+stream holds at most a window in each direction here. The viewer's `StreamData` is written to the runner in frames of
+at most 32 KiB, on the stream tier below everything else ([Writing](#writing)): with a stream sending at full credit,
+a HeartbeatAck waits for one such frame at most (`TestASaturatedStreamDoesNotDelayHeartbeatAcks`). A stream ends with
+the connection it was opened on, and the apiserver is told `CONNECTION_LOST`.
+
 ### Writing
 
-Frames are written in three tiers, a tier only while every tier above it is empty:
+Frames are written in four tiers, a tier only while every tier above it is empty:
 
 1. control: Welcome, Close, Drain, HeartbeatAck, EventAck, Credit;
-2. hints and RpcResults;
-3. the live stream's: TurnPrefixRequest.
+2. hints, RpcResults, and byte streams' StreamOpen, StreamCredit and StreamClose;
+3. the live stream's: TurnPrefixRequest;
+4. byte streams' StreamData.
 
 A frame over 256 KiB is written as `Chunk`s, one message at a time, and a frame of a higher tier is written between two
 pieces. A runner that does not read is handled as §6.1 asks:
 
 - a full live queue (64) drops the frame, and a hint finding a full queue (256) is dropped: the connection stays;
+- StreamData finding the stream queue full (4096) closes its stream, never the connection;
 - a full control queue (64), an RpcResult finding a full queue, or queued frames past 32 MiB, whatever their count,
   close the connection with `CLOSE_CODE_SLOW_CONSUMER`.
 
@@ -510,7 +535,7 @@ public half of its nkey, each allowed only what it does:
 | User | Publishes | Subscribes |
 | --- | --- | --- |
 | the apiserver | `rnr.>`: hints and turn prefix requests | `ses.*.live`, and `_INBOX.>` for its requests' answers |
-| the gateway | `ses.*.live`, and the answer to a request it received | `rnr.>` |
+| the gateway | `ses.*.live`, `vnc.>` (byte streams' `.up`), and the answer to a request it received | `rnr.>`, `vnc.>` (byte streams' `.down`) |
 
 A client without a seed cannot connect. The gateway connects with `LINK_NATS_SEED`; `link-gateway nkey` makes a pair.
 `scripts/runner-link/nats-auth-check.sh` holds a real nats-server running `nats.conf` to that table
@@ -559,7 +584,9 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_live_events_total` | counter | `result`: published, no_watchers, nats_down, publish_failed, bad_session |
 | `link_watched_sessions` | gauge | — |
 | `link_turn_prefix_requests_total` | counter | `result`: answered, timeout, dropped, no_connection, closed, superseded, unknown_answer, malformed |
-| `link_queue_full_total` | counter | `queue`: control, normal, live; `result`: closed (slow_consumer), dropped |
+| `link_queue_full_total` | counter | `queue`: control, normal, live, stream; `result`: closed (slow_consumer), dropped |
+| `link_streams_total` | counter | `result`: opened, refused, too_many, no_connection, malformed, nats_down, dropped, timeout, flow_violation, slow_runner, closed_by_runner, closed_by_viewer, connection_closed |
+| `link_open_streams` | gauge | — |
 | `link_hints_total` | counter | `kind`: inbox, claim, commands, approval, watchers, unknown; `result`: sent, no_connection, dropped, malformed, unchanged (a watchers count that did not move the sum) |
 | `link_hints_slow_total` | counter | — (hints NATS dropped because the relay was not keeping up) |
 | `link_hint_subscriptions` | gauge | — (runners whose hint subject is subscribed to) |

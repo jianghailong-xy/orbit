@@ -113,6 +113,12 @@ func samples(t *testing.T) []proto.Message {
 		ThroughLiveSeq: 8,
 	}
 	chunk := &linkpb.Chunk{FrameId: 12, Index: 1, Last: true, Data: []byte{0x0a, 0x0b, 0x0c}}
+	streamOpen := &linkpb.StreamOpen{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Kind: linkpb.StreamKind_STREAM_KIND_VNC}
+	streamOpened := &linkpb.StreamOpened{StreamId: "0190a0b0-0000-7000-8000-0000000000e1"}
+	streamData := &linkpb.StreamData{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Data: []byte("RFB 003.008\n")}
+	streamCredit := &linkpb.StreamCredit{StreamId: "0190a0b0-0000-7000-8000-0000000000e1", Bytes: 12}
+	streamClose := &linkpb.StreamClose{StreamId: "0190a0b0-0000-7000-8000-0000000000e1",
+		Code: linkpb.StreamCloseCode_STREAM_CLOSE_CODE_NORMAL, Message: "the viewer left"}
 
 	messages := []proto.Message{
 		chunk, hello, writeContract, managedInstance, resume, welcome, limits, sessionState, release,
@@ -128,6 +134,7 @@ func samples(t *testing.T) []proto.Message {
 		&linkpb.RpcResult{RequestId: "req-1", Outcome: &linkpb.RpcResult_Failure{Failure: failure}},
 		tunnelResponse, failure, heartbeat, fact, heartbeatAck, eventBatch, event, eventAck, rejected,
 		credit, liveBatch, liveEvent, turnPrefixRequest, turnPrefixResponse,
+		streamOpen, streamOpened, streamData, streamCredit, streamClose,
 	}
 
 	// One Frame per member of its body, each wrapping the first sample of that member's type.

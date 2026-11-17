@@ -110,6 +110,22 @@ func TestNATSAuthorizationOnARealServer(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 
+	// The browser's byte streams (streams.go): the gateway reads vnc.<streamId>.down and writes vnc.<streamId>.up. Its
+	// own subscription to the stream's subjects takes back what it wrote, which proves both grants on the server.
+	const stream = "0190a0b0-0000-7000-8000-0000000000e1"
+	streamMsgs, err := gateway.client.SubscribeSync("vnc." + stream + ".*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	flush(t, gateway)
+	if err := gateway.client.Publish("vnc."+stream+".up", []byte("bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := streamMsgs.NextMsg(5 * time.Second); err != nil {
+		t.Fatalf("the gateway's stream bytes did not come back through the server: %v (gateway errors %v)", err, gateway.errs)
+	}
+	_ = streamMsgs.Unsubscribe()
+
 	// Two apiserver processes: one says what it holds on api.held and answers a request on its own subject, once; the
 	// other hears it and asks.
 	const instance = "0190a0b0-0000-7000-8000-0000000000f1"
