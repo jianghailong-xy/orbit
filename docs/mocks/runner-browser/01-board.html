@@ -226,17 +226,17 @@
     </div>
 
     <div>
-      <div class="fh">⑥ 接管：agent 这一轮先停 <small>不会两个人同时点</small></div>
+      <div class="fh">⑥ 接管：agent 不停，你和它一起操作 <span class="tag">已定 B</span></div>
       <div class="win">
         <div class="top"><i></i><i></i><i></i></div>
         <div class="body">
           <div class="main" style="opacity:.55">
-            <div class="hd"><span class="tt">Check the signup form on the…</span><span class="pill p-warn">Interrupted</span></div>
-            <div class="tx"><div class="ans">Trying a longer password…</div><div class="tool">Interrupted — you took control of the browser.</div></div>
+            <div class="hd"><span class="tt">Check the signup form on the…</span><span class="pill p-run">Running</span></div>
+            <div class="tx"><div class="ans">Trying a longer password…</div><div class="tool">⌘ <b>browser_snapshot</b> staging.example.com/signup</div></div>
             <div class="composer">Reply…</div>
           </div>
           <div class="drawer">
-            <div class="ctrlbar"><b class="x xin" data-n="4">You are controlling the browser</b><span class="btn">Hand back</span></div>
+            <div class="ctrlbar"><b class="x xin" data-n="4">You are controlling the browser · the agent keeps running</b><span class="btn">Hand back</span></div>
             <div class="canvas ctl">
               <div class="cbar">◀ ▶ ⟳ <span class="url">staging.example.com/signup</span></div>
               <div class="site">
@@ -251,23 +251,23 @@
           </div>
         </div>
       </div>
-      <p class="note"><b>4</b> 点 Take control 就用现有的“中断”停掉 agent 这一轮，然后你的鼠标键盘才发过去；画布描橙边，免得忘了自己在控制。</p>
+      <p class="note"><b>4</b> 你的鼠标键盘直接发过去，agent 照常跑，下一次看页面时就能看到你改的东西。想让它停，用会话里现有的 Stop。画布描橙边，免得忘了自己在控制。</p>
     </div>
 
     <div>
-      <div class="fh">⑦ 交还：输入框里预填一句，你改完再发</div>
+      <div class="fh">⑦ 交还：只是不再发你的输入 <small>不给 agent 发任何东西</small></div>
       <div class="win">
         <div class="top"><i></i><i></i><i></i></div>
         <div class="body">
           <div class="main">
-            <div class="hd"><span class="tt">Check the signup form on the staging site</span><span class="pill p-ok">Idle</span><span class="pill p-ok">Orbit Cloud</span></div>
+            <div class="hd"><span class="tt">Check the signup form on the staging site</span><span class="pill p-run">Running</span><span class="pill p-ok">Orbit Cloud</span></div>
             <div class="tx">
               <div class="ans">Trying a longer password…</div>
-              <div class="tool">Interrupted — you took control of the browser.</div>
-              <div class="tool">You handed the browser back.</div>
+              <div class="tool">⌘ <b>browser_click</b> Create account</div>
+              <div class="ans">The account was created; the welcome page is showing.</div>
             </div>
             <div class="outbar"><span class="chip">2 files changed</span><span class="chip live">Browser</span></div>
-            <div class="composer filled x" data-n="5">I finished in the browser. Continue.</div>
+            <div class="composer x" data-n="5">Reply…</div>
           </div>
           <div class="drawer">
             <div class="dh"><span class="tt">Browser</span><span class="pill p-ok">View only</span><span class="btn pri">Take control</span><span class="cl">✕</span></div>
@@ -279,7 +279,7 @@
           </div>
         </div>
       </div>
-      <p class="note"><b>5</b> 只预填，不自动发：你可以写清楚刚才改了什么（“密码加了个符号，提交成功了”），agent 下一轮从你停下的页面接着干。</p>
+      <p class="note"><b>5</b> 交还后抽屉回到只看，会话里不多任何记录、输入框不预填。agent 自己看到页面变了就接着干；要交代什么，你照常发消息。</p>
     </div>
 
     <div>
@@ -302,7 +302,7 @@
           </div>
         </div></div>
       </div>
-      <p class="note"><b>6</b> 不用先开会话：点了就启动 Chrome，抽屉直接处于控制状态（你来就是要输入的）。若有 agent 正在用，先问 “An agent is using the browser. Take control and stop its turn?”。
+      <p class="note"><b>6</b> 不用先开会话：点了就启动 Chrome，抽屉直接处于控制状态（你来就是要输入的）。若有会话正在用，不打断也不询问，抽屉底部写明是哪个会话在用。
         <b>7</b> 就在登录入口旁边写明：登录会保存，agent 都能用。<b>8</b> 二次确认后停掉 Chrome、删除资料目录。</p>
     </div>
 
@@ -339,14 +339,14 @@
 <section class="part" id="part-3">
   <div class="two">
     <div class="sheet">
-      <h2>待定 · 要你拍板</h2>
+      <h2>已定（2026-11-17）</h2>
       <table>
         <tr><th>#</th><th style="white-space:nowrap">问题</th><th>方案 A</th><th>方案 B</th><th>建议</th></tr>
-        <tr><td>P1</td><td style="white-space:nowrap">镜像</td><td>一个镜像，浏览器一直在里面，开关开了才启动</td><td>另出一个 <code>-browser</code> 镜像，开了才用它</td><td><b>A</b>：只构建、只测一个；代价是每台主机多拉约 350 MB（默认部署也会拉到，但不运行）</td></tr>
+        <tr><td>P1</td><td style="white-space:nowrap">镜像</td><td>一个镜像，浏览器一直在里面，开关开了才启动</td><td>另出一个 <code>-browser</code> 镜像，开了才用它</td><td><span class="tag">已定 A</span> 每台主机多拉约 350 MB，默认部署不运行</td></tr>
         <tr><td>P2</td><td>显示</td><td>每个会话一个，按需启动</td><td>每台 runner 一个，会话共用</td><td><span class="tag">已定 B</span> 你登录的、agent 登录的都保存；同一时间一个会话用</td></tr>
-        <tr><td>P3</td><td>接管</td><td>中断 agent 这一轮再交给你</td><td>你和 agent 同时操作</td><td><b>A</b>：不抢鼠标；复用现有中断</td></tr>
-        <tr><td>P4</td><td style="white-space:nowrap">谁能看</td><td>只有 runner 本人</td><td>本人和会话访客</td><td><b>A</b>（v1）：画面里可能有登录态</td></tr>
-        <tr><td>P5</td><td style="white-space:nowrap">首期客户端</td><td>只做网页</td><td>网页 + macOS</td><td><b>A</b>：原生端以后用 web view 套同一个 noVNC 页</td></tr>
+        <tr><td>P3</td><td>接管</td><td>中断 agent 这一轮再交给你</td><td>你和 agent 同时操作</td><td><span class="tag">已定 B</span> 接管不停 agent；要停用会话的 Stop</td></tr>
+        <tr><td>P4</td><td style="white-space:nowrap">谁能看</td><td>只有 runner 本人</td><td>本人和会话访客</td><td><span class="tag">已定 A</span> 画面里可能有登录态</td></tr>
+        <tr><td>P5</td><td style="white-space:nowrap">首期客户端</td><td>只做网页</td><td>网页 + macOS</td><td><span class="tag">已定 A</span> 原生端以后用 web view 套同一个页</td></tr>
       </table>
       <div class="q"><b>资源：</b>整台 runner 只有一个 Chrome，约 0.5–1.5 GiB，运营方把 runner 内存上限调高约 1.5 GiB。
         <br><b>安全：</b>不开入站端口、不改防火墙；VNC 只在容器内 unix socket 上，每路流先过 apiserver 鉴权；不录屏。保存的登录在 runner 卷上，runner 上所有 agent 都能用，Settings 里可一键清除。</div>

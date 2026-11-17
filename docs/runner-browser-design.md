@@ -1,6 +1,6 @@
 # Orbit Cloud browser: design (v1)
 
-**Status:** proposal (2026-11-17), nothing built. Board: `docs/mocks/runner-browser/`.
+**Status:** **decided** (owner, 2026-11-17), nothing built. P1 A, P2 B, P3 B, P4 A, P5 A. Board: `docs/mocks/runner-browser/`.
 
 An agent on an Orbit Cloud runner (the account's managed runner) drives a real Chrome, and the owner watches that
 Chrome live in their own browser and can take control of it. When the agent's run does not go as expected, the owner
@@ -12,7 +12,8 @@ Owner requirements (2026-11-17):
 - the feature **can be switched off**; it can be switched on **only for Orbit Cloud** (managed runners), and a
   default deployment has it **off**;
 - the owner can **open the browser themselves** and sign in to sites; those logins are kept and the agents use them;
-- the **whole runner shares one browser** (P2 = B): one Chrome, one saved profile, one session using it at a time.
+- the **whole runner shares one browser** (P2 = B): one Chrome, one saved profile, one session using it at a time;
+- **taking control does not stop the agent** (P3 = B): the owner's input and the agent's run side by side.
 
 ## 1. Today
 
@@ -63,7 +64,8 @@ runner over the existing link, and a viewer in the client.
 - **One session at a time (the browser lease).** The first session whose agent calls a browser tool holds the lease
   until its turn ends or it has made no browser call for 5 minutes. Another session's browser call meanwhile returns a
   tool error naming the holder ("The browser is in use by session …; try again after it finishes"), so the agent can
-  wait or do other work. The owner is never refused: taking control interrupts the holder's turn (§5).
+  wait or do other work. The owner is never refused and never takes the lease: their input goes to the browser
+  whoever holds it (§5).
 - **Shared state is accepted.** Sessions see each other's tabs, history and logins. Every agent on the runner can act
   on any site the profile is signed in to; the UI says so where the owner signs in (§5).
 - **Chrome flags.** `--no-sandbox` (the container drops every capability and sets `no-new-privileges`, so Chrome's
@@ -115,15 +117,14 @@ Two ways in, one viewer (the existing right-side `Drawer` with a noVNC canvas, `
   ("Sites you sign in to here stay signed in on this runner. Agents on this runner can use them."), and
   **Clear saved logins**, which stops Chrome and deletes the profile after a confirmation.
 
-Control:
+Control (P3 = B, shared input):
 
 - **View only by default** from a session. **Take control** sends pointer and keys; the header then says "You are
-  controlling the browser".
-- **Taking control interrupts the lease holder's turn** (the existing session interrupt), so the agent and the owner
-  never click at the same time. Opening the browser from Settings while an agent holds it asks first: "An agent is
-  using the browser. Take control and stop its turn?"
-- **Hand back** releases control. From a session it prefills the composer with "I finished in the browser.
-  Continue." for the owner to edit and send; from Settings it just closes control.
+  controlling the browser · the agent keeps running".
+- **Taking control does not interrupt the agent.** The owner and the agent both act on the same page; the agent sees
+  the owner's changes in its next page snapshot. The owner who wants the agent to stop uses the session's existing
+  Stop. Opening the browser from Settings while a session holds it says so in the drawer's footer and asks nothing.
+- **Hand back** (from a session) or **Done** (from Settings) only stops sending input. Nothing is sent to the agent.
 - macOS, iOS and Android come later; they can host the same noVNC page in a web view.
 
 ## 6. Security
@@ -139,15 +140,15 @@ Control:
 - Chrome's egress is the runner's: public addresses only.
 - Nothing is recorded. The agent's own screenshots stay in the transcript as today.
 
-## 7. Open decisions (each with a recommendation)
+## 7. Decisions
 
-| # | Question | A | B | Recommended |
+| # | Question | A | B | Decision |
 | --- | --- | --- | --- | --- |
-| P1 | Image | one image, browser always in it, started only when on | a second `-browser` image the manager picks when on | A: one image to build and test; +350 MB once per host |
+| P1 | Image | one image, browser always in it, started only when on | a second `-browser` image the manager picks when on | **decided A** (owner, 2026-11-17) |
 | P2 | Display | one per session, on demand | one per runner, shared by its sessions | **decided B** (owner, 2026-11-17): logins persist and agents use them |
-| P3 | Take control | interrupts the agent's turn | shared input, the agent keeps running | A: no tug of war; reuses interrupt |
-| P4 | Who can watch | the runner's owner only | owner and session guests | A in v1 |
-| P5 | Clients in v1 | web only | web and macOS | A; the native clients host the same page later |
+| P3 | Take control | interrupts the agent's turn | shared input, the agent keeps running | **decided B** (owner, 2026-11-17) |
+| P4 | Who can watch | the runner's owner only | owner and session guests | **decided A** (owner, 2026-11-17) |
+| P5 | Clients in v1 | web only | web and macOS | **decided A** (owner, 2026-11-17) |
 
 ## 8. Phases (by cost)
 
@@ -155,7 +156,7 @@ Control:
    `browser` MCP server for Claude Code and Codex first. Agents can use a browser; nobody watches yet.
 2. **Stream** — the four link frames, gateway relay, apiserver WebSocket route, nginx location, runner socket bridge.
 3. **Web viewer** — Browser chip, Settings' Open browser and Clear saved logins, drawer, view only, take control
-   and hand back.
+   and hand back (shared input).
 4. **Later** — the remaining engines, native clients, guests.
 
 Each phase is tested on the managed-runner lab (`scripts/managed-runner/lab/`) with the switch on, and with it off to
