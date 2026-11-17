@@ -277,6 +277,7 @@ import {
   HELD_TURN_STATUS,
   accountAgentLanguage,
   heldTurnColumns,
+  isSlashCommand,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -1771,7 +1772,7 @@ export class SessionsService {
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
-      && !opts.externalSender && !opts.fence && dto.prompt.trim()
+      && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const session = await (newWorkspace
@@ -4293,7 +4294,9 @@ export class SessionsService {
       // background-job-activity.ts), so it cannot be a cardinality in the query.
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
-      runningSubagentCount: number;      engineTurnActive: boolean;
+      runningSubagentCount: number;
+      runningSubagentTitle: string | null;
+      engineTurnActive: boolean;
       activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
@@ -4434,6 +4437,18 @@ export class SessionsService {
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        -- What the newest of those is doing, as its launch call described it (the Agent tool's and
+        -- delegate's \`description\`): the row says "Agent: <this>…" rather than only that one runs.
+        -- Launches are appended, so the last id is the newest; an id with no described call is null
+        -- and the row keeps "Running Agent…". One indexed lookup, on the few rows with one in flight.
+        (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+          FROM tool_call tc
+          WHERE tc.session_id = s.id
+            AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+          ORDER BY tc.started_at DESC NULLS LAST
+          LIMIT 1
+        ) AS "runningSubagentTitle",
         s.engine_turn_active AS "engineTurnActive",
         -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
         -- session is still working, so no client has to rebuild it from the columns around it.
@@ -4662,6 +4677,7 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
+        runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
         activity: r.activity,
         engineStartedAt: r.engineStartedAt,
@@ -6954,9 +6970,10 @@ export class SessionsService {
     // and taken only by a chat, which is decided under the lock below.
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
-    // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    // written. Words only — a `!cmd` and a `/command` are commands, and attachments alone carry no words.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -7654,7 +7671,7 @@ export class SessionsService {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // Settings › Translation: the follow-up's words are held until translated; the interrupt is not.
-    const heldFrom = opts?.translate && content.trim() ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
+    const heldFrom = opts?.translate && content.trim() && !isSlashCommand(content) ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null : null;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
     // follow-up the server filed separately, and the flag that says this interrupt also ends the
     // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
@@ -10529,6 +10546,7 @@ export class SessionsService {
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
     const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
+      && !isSlashCommand(dto.content)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {

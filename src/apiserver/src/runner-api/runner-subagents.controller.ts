@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
+  AgentProvider,
   PermissionMode,
   type RemoteSubagentClaim,
   type RemoteSubagentEventBatch,
@@ -711,7 +712,11 @@ export class RunnerSubagentsController {
           `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
       );
     }
-    const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
+    // A read-only Claude child keeps the parent's mode: the runner withholds its edit tools, and Plan would ask
+    // about every Bash call. Every other engine keeps Plan, its read-only (Codex and DSH read their own sandboxes).
+    const childMode = (dto.readonly
+      ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
+      : dto.permissionMode ?? parentMode) as PermissionMode;
     const exec: AgentExecConfig = {
       provider,
       model: runnerModel,

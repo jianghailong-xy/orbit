@@ -63,7 +63,7 @@ class FakeDocker:
         self.ch = ch
         self.volumes_by_name = {}
         self.containers_by_name = {}
-        self.images = {IMAGE: {"Id": IMAGE, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/var/lib/orbit/home/.orbit"]}}}
+        self.images = {IMAGE: {"Id": IMAGE, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/home/orbit/.orbit"]}}}
         self.networks = {"orbit-mr-test": {"Name": "orbit-mr-test", "Driver": "bridge", "Internal": True,
                                            "Options": {"com.docker.network.bridge.enable_icc": "false"}}}
         self.sizes = {}
@@ -455,7 +455,7 @@ class TemplateTest(ChannelFixture):
         self.assertEqual((host["NanoCpus"], host["Memory"], host["MemorySwap"], host["PidsLimit"]), (10 ** 9, 2 * 2 ** 30, 2 * 2 ** 30, 1024))
         self.assertEqual(host["NetworkMode"], "orbit-mr-test")
         self.assertEqual([(m["Type"], m["Target"]) for m in host["Mounts"]],
-                         [("volume", "/var/lib/orbit"), ("volume", "/run/orbit-bootstrap"), ("tmpfs", "/tmp")])
+                         [("volume", "/home/orbit"), ("volume", "/run/orbit-bootstrap"), ("tmpfs", "/tmp")])
         # /tmp: executable (Docker keeps every tmpfs nosuid and nodev), sized, and held in the memory limit.
         self.assertEqual(host["Mounts"][2]["TmpfsOptions"], {"SizeBytes": 256 * 2 ** 20, "Mode": 0o1777, "Options": [["exec"]]})
         self.assertEqual(spec["User"], "10001:10001")
@@ -1213,7 +1213,7 @@ class ImageSwitchTest(ChannelFixture):
 
     def switch(self):
         """The channel restarted on a configuration naming the new image, built on this host."""
-        self.docker.images[self.NEW] = {"Id": self.NEW, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/var/lib/orbit/home/.orbit"]}}
+        self.docker.images[self.NEW] = {"Id": self.NEW, "Config": {"Env": ["PATH=/usr/bin:/bin", "ORBIT_HOME=/home/orbit/.orbit"]}}
         self.config = self.ch.parse_config({**self.config_value(Path(self.scratch.name)), "image": self.NEW})
         self.channel = self.ch.Channel(self.config, self.docker, TOKEN)
         self.channel.prepare()

@@ -264,7 +264,8 @@ struct AgentGroupView: View {
     }
 }
 
-/// The composer band's line for the session's Agents: how many, how many still run. No cost.
+/// The composer band's line for the session's Agents: what the running one is doing, or how many
+/// (`SubagentSessionSummary.band`). No cost.
 /// It opens their list (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
@@ -277,7 +278,7 @@ struct AgentsBandRow: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle").font(.orbitMeta).foregroundStyle(.purple)
                     Text("Agents").font(.orbitLabel.weight(.semibold))
-                    Text(line(summary)).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+                    Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
                     if summary.running > 0 { ProgressView().controlSize(.mini) }
                     Image(systemName: "chevron.right")
@@ -289,7 +290,7 @@ struct AgentsBandRow: View {
             .buttonStyle(.plain)
             .composerBandCard()
             .padding(.bottom, .composerBandGap)
-            .accessibilityLabel("Agents: \(line(summary))")
+            .accessibilityLabel("Agents: \(summary.band)")
             .sheet(isPresented: $showing) {
                 AgentsSheet(summary: summary, parentEngine: app.session(id: console.sessionID)?.engine) { id in
                     showing = false
@@ -297,12 +298,6 @@ struct AgentsBandRow: View {
                 }
             }
         }
-    }
-
-    private func line(_ summary: SubagentSessionSummary) -> String {
-        var parts = ["\(summary.count)"]
-        if summary.running > 0 { parts.append("\(summary.running) running") }
-        return parts.joined(separator: " · ")
     }
 }
 

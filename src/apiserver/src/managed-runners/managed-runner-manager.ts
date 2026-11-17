@@ -462,7 +462,8 @@ export class ManagedRunnerManager {
       take: limit,
       select: { id: true },
     });
-    // A missing volume is looked for again; a failure for want of a login is taken up again (`loginWaitResumed`).
+    // A missing volume is looked for again; a failure for want of a login is taken up again (`loginWaitResumed`),
+    // and so is a startup timeout whose instance has reported in since (`startupResumed`).
     const missing = await this.prisma.managedRunner.findMany({
       where: {
         ...scope,
@@ -470,6 +471,7 @@ export class ManagedRunnerManager {
         OR: [
           { lastError: { path: ['code'], equals: 'PVC_MISSING' } },
           { desiredState: 'RUNNING', lastError: { path: ['code'], equals: MODEL_UNAVAILABLE } },
+          { desiredState: 'RUNNING', lastError: { path: ['code'], equals: 'STARTUP_TIMEOUT' } },
         ],
       },
       orderBy: { updatedAt: 'asc' },
@@ -541,7 +543,7 @@ export class ManagedRunnerManager {
         // as a retry would (`loginWaitResumed`).
         case 'FAILED': {
           const code = (mapping.lastError as { code?: unknown } | null)?.code;
-          if (code === MODEL_UNAVAILABLE && mapping.desiredState === 'RUNNING') break;
+          if ((code === MODEL_UNAVAILABLE || code === 'STARTUP_TIMEOUT') && mapping.desiredState === 'RUNNING') break;
           if (code !== 'PVC_MISSING') return { done: mapping.desiredState === 'RUNNING' ? 'FAILED' : 'IDLE' };
           break;
         }
@@ -578,7 +580,7 @@ export class ManagedRunnerManager {
         case 'SLEEPING':
           return await this.sleeping(mapping);
         case 'FAILED':
-          return (await this.loginWaitResumed(mapping)) ?? (await this.volumeBack(mapping));
+          return (await this.loginWaitResumed(mapping)) ?? (await this.startupResumed(mapping)) ?? (await this.volumeBack(mapping));
         default:
           return await this.ready(mapping);
       }
@@ -808,6 +810,7 @@ export class ManagedRunnerManager {
     if (instance.terminated) return this.terminated(mapping, instance);
     // A released instance still being removed: wait for it to go, then the gate decides.
     if (instance.removing) return this.waitWithin(mapping);
+    if (!instance.running && instance.preparing) return this.whilePreparing(mapping, instance);
     const report = instance.running ? await this.reportSince(mapping, mapping.stateEnteredAt) : null;
     if (!report) return this.waitWithin(mapping);
     // READY needs model supply as well as a live instance: a runtime signed in on the runner, or else
@@ -2036,6 +2039,25 @@ export class ManagedRunnerManager {
     };
   }
 
+  /**
+   * The instance is still being made by its host — its image pulled, its containers created — with no error: the
+   * runner in it has had no chance to report in, so the startup deadline, which fails a silent runner, is moved on
+   * once it has passed instead (production, 2026-11-16: a node pulled a rolled image for 48 minutes against a
+   * 30-minute deadline, and both runners rolled onto it were failed while their Pods were still Pending). An error
+   * the host reports ends the wait (`preparing` is false then), and the deadline fails it as before.
+   */
+  private async whilePreparing(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step> {
+    const now = this.now();
+    if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= now) {
+      this.log.warn(
+        `managed runner ${mapping.id}: its ${this.backend.terms.instance} ${instance.uid} of generation ${mapping.generation} is still being made `
+          + `(${instance.phase ?? 'phase unknown'}) past its startup deadline ${mapping.startupDeadlineAt.toISOString()}; waiting on it, the deadline moved on`,
+      );
+      await this.commit(mapping, { startupDeadlineAt: new Date(now.getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000) });
+    }
+    return { done: 'WAITING' };
+  }
+
   /** Keep waiting, unless the startup deadline has passed. */
   private async waitWithin(mapping: ManagedRunner): Promise<Step> {
     if (mapping.startupDeadlineAt && mapping.startupDeadlineAt <= this.now()) {
@@ -2082,6 +2104,31 @@ export class ManagedRunnerManager {
         attempt: 0,
         nextAttemptAt: null,
         startupDeadlineAt: null,
+        lastError: Prisma.DbNull,
+      }),
+    };
+  }
+
+  /**
+   * FAILED with STARTUP_TIMEOUT, and the instance it timed out on has reported in since: it was slow, not silent (a
+   * version before `whilePreparing` failed a Pod whose image was still being pulled). Only the instance recorded for
+   * the generation can heartbeat at all — the runner door refuses any other (`managed-runner-instance.ts`) — so a
+   * fresh beat after the failure is that one. It goes back to STARTING on the same instance, as an owner's retry
+   * would wait on it again; `starting` then checks the instance and its report as on any start. Its compute was kept
+   * (a recorded instance keeps it). Still silent, it stays FAILED for a retry. Null for any other failure.
+   */
+  private async startupResumed(mapping: ManagedRunner): Promise<Step | null> {
+    if ((mapping.lastError as { code?: unknown } | null)?.code !== 'STARTUP_TIMEOUT' || mapping.desiredState !== 'RUNNING') return null;
+    // Strictly after the failure: a beat from before it, however close, is the silence the deadline judged.
+    const since = new Date(mapping.stateEnteredAt.getTime() + 1);
+    if (!mapping.podUid || !(await this.reportSince(mapping, since))) return { done: 'FAILED' };
+    this.log.warn(`managed runner ${mapping.id}: FAILED STARTUP_TIMEOUT, and its ${this.backend.terms.instance} ${mapping.podUid} of generation ${mapping.generation} has reported in since; starting it again`);
+    return {
+      next: await this.commit(mapping, {
+        managementState: 'STARTING',
+        stateEnteredAt: since,
+        nextAttemptAt: null,
+        startupDeadlineAt: new Date(this.now().getTime() + this.profile.lifecycle.startupDeadlineSeconds * 1000),
         lastError: Prisma.DbNull,
       }),
     };
