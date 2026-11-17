@@ -83,6 +83,7 @@ import {
   MANAGED_RUNNER_NOT_REPORTED,
   MANAGED_RUNNER_UPDATED_BY_ORBIT,
   RUNNER_ENGINES_FOOTER,
+  RUNNER_ENGINES_MANAGED_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
@@ -933,7 +934,7 @@ export function MachineSettingsPage() {
           />
         </div>
         {runner.engines && (
-          <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
+          <div className="rd-hint">{!runner.online ? RUNNER_ENGINES_OFFLINE_FOOTER : managed ? RUNNER_ENGINES_MANAGED_FOOTER : RUNNER_ENGINES_FOOTER}</div>
         )}
       </SettingsSection>
       </>

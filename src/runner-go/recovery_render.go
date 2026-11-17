@@ -624,14 +624,14 @@ var recoveryCLIOption = regexp.MustCompile(`--?[A-Za-z][A-Za-z0-9-]*`)
 
 // These local utilities deliberately are not agent capabilities, but still accept JSON.
 var recoveryUtilityCLI = []cliCapabilitySpec{
-	{Argv: []string{"orbit", "capabilities"}, Arguments: []string{"--json"}},
+	{Argv: []string{"orbit", "capabilities"}, Arguments: []string{"--json", "--summary", "--family <name>", "--id <id>"}},
 	{Argv: []string{"orbit", "token", "list"}, Arguments: []string{"--json"}},
 	{Argv: []string{"orbit", "token", "revoke"}, Arguments: []string{"[token-id]", "--json"}},
 	{Argv: []string{"orbit", "token", "mint"}, Arguments: []string{"--scope <scope>", "--workspace-id <id>", "--agent-id <id>", "--label <text>", "--ttl <duration>", "--json"}},
 }
 
 func recoveryCLISpecGroups() [][]cliCapabilitySpec {
-	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, recoveryUtilityCLI}
+	return [][]cliCapabilitySpec{baseCLICapabilities, projectCLICapabilities, sessionCLICapabilities, agentCLICapabilities, runnerCLICapabilities, providerCLICapabilities, notifyCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, fileCLICapabilities, userCLICapabilities, mergeReceiptCLICapabilities, guideCLICapabilities, recoveryUtilityCLI}
 }
 
 func recoveryCLIOptions(argv []string) (map[string]bool, int, int) {

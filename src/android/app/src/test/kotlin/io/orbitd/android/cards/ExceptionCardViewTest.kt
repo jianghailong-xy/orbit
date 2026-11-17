@@ -68,8 +68,9 @@ class ExceptionCardViewTest {
           "outputTail":"--- FAIL: TestScheduleWakeup\n    wake_test.go:88: wake not delivered\nFAIL"},"branchUnchanged":true,"errorCode":null,"failure":null}""")
 
     @Test fun itOpensWithWhatHasToHappenNextThenTheDoorsEachWithItsLine() {
+        // A chain's 3rd failure keeps this layout; an escalation draws the "Who fixes it?" card (below).
         val candidate = card(row("INTEGRATION_CHECK_FAILED", listOf("ASK_COORDINATOR_AGAIN", "RETRY", "REVIEW"), promotionId = "pr1", taskId = null,
-            sessionId = null, requiredAction = "Nothing on the project branch reaches main until this check passes.", handledBy = listOf("Fix the branch"),
+            sessionId = null, reason = "CHAIN_LIMIT", requiredAction = "Nothing on the project branch reaches main until this check passes.", handledBy = listOf("Fix the branch"),
             facts = check))
         show(candidate, mergeCard = "pr1")
         compose.onNodeWithTag("$key:title", useUnmergedTree = true).assertTextEquals("Escalated to you")
@@ -138,7 +139,7 @@ class ExceptionCardViewTest {
      * for — and sends nothing when pressed. */
     @Test fun anIntegrationCardsOpenLandingComesLastAndOnlyLooks() {
         show(card(row("INTEGRATION_CHECK_FAILED", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OPEN_LANDING"),
-            promotionId = "pr1", landingSessionId = "L1", requiredAction = "Nothing reaches main until this check passes.")))
+            promotionId = "pr1", landingSessionId = "L1", reason = "CHAIN_LIMIT", requiredAction = "Nothing reaches main until this check passes.")))
         compose.onNodeWithTag("$key:OPEN_LANDING").assertTextEquals("Open landing")
         assertTrue(top("$key:RETURN_COORDINATOR") < top("$key:OPEN_LANDING"))
         assertTrue(top("$key:OPEN_TASK_SESSION") < top("$key:OPEN_LANDING"))
@@ -146,6 +147,55 @@ class ExceptionCardViewTest {
         compose.onNodeWithTag("$key:OPEN_LANDING").performClick()
         assertEquals(listOf("orbit-session:L1"), opened)
         assertTrue("it sends nothing", pressed.isEmpty())
+    }
+
+    /** Board owner-exception-who-fixes ⑤: an escalated conflict is the "Who fixes it?" card — the coordinator row first with Ask again
+     * and the chat link, then You with Fix it myself, then Details folded, then Already settled? — and its Cancel task still asks first. */
+    @Test fun anEscalatedConflictIsTheWhoFixesItCard() {
+        val files = buildJsonObject {
+            putJsonObject("task") { put("id", "t1"); put("title", "Retry failed webhook deliveries") }
+            put("targetRef", "refs/heads/project/35aK2xQm8LrT0vHcE1pZq"); put("targetSha", "9f3c2e1aa0b1")
+            putJsonArray("files") { (1..9).forEach { add("src/f$it.ts") } }
+        }
+        show(card(row("INTEGRATION_CONFLICT", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OPEN_LANDING", "CANCEL_TASK"),
+            landingSessionId = "L1", facts = files, title = "Merge conflict: Retry failed webhook deliveries")))
+        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Now yours — the coordinator didn’t get to it")
+        compose.onNodeWithTag("$key:subline", useUnmergedTree = true).assertTextEquals("Merge conflict · Retry failed webhook deliveries")
+        compose.onNodeWithTag("$key:required", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("$key:owner", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNode(hasText("Chat about this")).assertDoesNotExist()
+        assertTrue("the coordinator row leads", top("$key:who:coordinator") < top("$key:who:you"))
+        assertTrue(top("$key:RETURN_COORDINATOR") < top("$key:OPEN_TASK_SESSION"))
+        compose.onNodeWithTag("$key:OPEN_TASK_SESSION").assertTextEquals(ExceptionCards.fixItMyself)
+        compose.onNodeWithTag("$key:OPEN_TASK_SESSION:consequence", useUnmergedTree = true)
+            .assertTextEquals("Opens the task session. Fix the conflict there and push to the task branch.")
+        compose.onNodeWithTag("$key:closes", useUnmergedTree = true).assertExists()
+        assertTrue(top("$key:who") < top("$key:details")); assertTrue(top("$key:details") < top("$key:settled"))
+        compose.onNodeWithTag("$key:MARK_HANDLED:consequence", useUnmergedTree = true).assertTextEquals(ExceptionCards.markHandledSettledConsequence)
+        compose.onNodeWithTag("$key:CANCEL_TASK:consequence", useUnmergedTree = true).assertTextEquals(ExceptionCards.cancelTaskSettledConsequence)
+        // Details, folded, then unfolded: five files and the rest counted, the landing a link.
+        compose.onNodeWithTag("$key:details", useUnmergedTree = true).assertTextEquals("› Details · 9 files · Open landing")
+        compose.onNodeWithTag("$key:fact:Files (9)", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("$key:details").performClick()
+        compose.onNodeWithTag("$key:fact:Files (9)", useUnmergedTree = true).assertExists()
+        compose.onNode(hasText("and 4 more", substring = true), useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("$key:OPEN_LANDING").performScrollTo().performClick()
+        compose.onNodeWithTag("$key:OPEN_TASK_SESSION").performScrollTo().performClick()
+        assertEquals(listOf("orbit-session:L1", "orbit-session:s9"), opened)
+        compose.onNodeWithTag("$key:CANCEL_TASK").performScrollTo().performClick()
+        assertTrue("cancelling asks first", pressed.isEmpty())
+        compose.onNodeWithTag("confirm:CANCEL_TASK").performClick()
+        assertEquals(CardVerb.CANCEL_TASK, pressed.single().first)
+    }
+
+    /** D4 = A: a hand-over puts You first, with Fix it myself in the leading weight and Ask again second. */
+    @Test fun aHandOverLeadsWithYou() {
+        show(card(row("INTEGRATION_CONFLICT", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "CANCEL_TASK"), reason = "HANDED_OVER")))
+        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Now yours — the coordinator handed it over")
+        assertTrue(top("$key:who:you") < top("$key:who:coordinator"))
+        compose.onNodeWithTag("$key:who:status", useUnmergedTree = true).assertTextEquals("It handed this to you on purpose.")
+        compose.onNodeWithTag("$key:RETURN_COORDINATOR").performScrollTo().performClick()
+        assertEquals(CardVerb.RETURN_COORDINATOR, pressed.single().first)
     }
 
     @Test fun aFailedTaskRunsAgainWithItsOwnPressAndCancelAsksFirst() {
@@ -164,21 +214,21 @@ class ExceptionCardViewTest {
 
     @Test fun theOwnersEndingKeepsItsDraftAndWaitsForAReason() {
         show(card(row("INTEGRATION_CONFLICT", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION"))))
-        compose.onNodeWithTag("$key:MARK_HANDLED").performClick()
+        compose.onNodeWithTag("$key:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithText(ExceptionCards.markHandledTitle).assertExists()
         compose.onNodeWithText(ExceptionCards.markHandledBody).assertExists()
         compose.onNodeWithTag("$key:mark-handled-confirm").assertIsNotEnabled()
         compose.onNodeWithTag("$key:reason").performTextInput("landed by hand")
         compose.onNodeWithTag("$key:mark-handled-confirm").assertIsEnabled()
-        compose.onNodeWithTag("$key:mark-handled-back").performClick()
+        compose.onNodeWithTag("$key:mark-handled-back").performScrollTo().performClick()
         compose.onNodeWithTag("$key:mark-handled-panel").assertDoesNotExist()
-        compose.onNodeWithTag("$key:MARK_HANDLED").performClick()
+        compose.onNodeWithTag("$key:MARK_HANDLED").performScrollTo().performClick()
         compose.onNodeWithTag("$key:reason").assertTextContains("landed by hand")
         compose.onNodeWithTag("$key:reason").performTextReplacement("x".repeat(2_100))
         compose.waitForIdle()
         val held = compose.onNodeWithTag("$key:reason").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
         assertEquals("the field stops where the door does", 2_000, held.length)
-        compose.onNodeWithTag("$key:mark-handled-confirm").performClick()
+        compose.onNodeWithTag("$key:mark-handled-confirm").performScrollTo().performClick()
         assertEquals(CardVerb.MARK_HANDLED, pressed.single().first)
         assertEquals(2_000, pressed.single().second.text.length)
     }

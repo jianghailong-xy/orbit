@@ -49,6 +49,10 @@ struct ConsoleView: View {
     /// and the session's workspace list the Move panel counts its folders over.
     @State private var movingSession: Session?
     @State private var moveListed: [Session] = []
+    #if os(macOS)
+    /// Agent Tools, from the window toolbar (docs/mocks/agent-tools board ⑤).
+    @State private var showAgentTools = false
+    #endif
     /// The session whose Settings sheet is open (`SessionSettingsSheet`), from Settings… in the ⋯ menu
     /// or the Mac toolbar.
     @State private var settingsSession: Session?
@@ -645,6 +649,29 @@ struct ConsoleView: View {
                     .help("Session settings: labels, public link, environment, notifications and info")
                 }
             }
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what the agent here can reach in Orbit and what
+            // it was told, read-only. None on a landing session (LS6), which runs no engine.
+            ToolbarItem(placement: .primaryAction) {
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showAgentTools = true } label: {
+                        Label(AgentToolsCopy.title, systemImage: "puzzlepiece.extension")
+                    }
+                    .help(AgentToolsCopy.sessionLead)
+                }
+            }
+        }
+        .sheet(isPresented: $showAgentTools) {
+            let session = appModel.session(id: sessionID)
+            ConsoleAgentToolsSheet(
+                worktree: registry.peek(sessionID)?.worktree,
+                engine: session?.engine,
+                // The mode the server resolves for the session: its own, else the account's default.
+                permissionMode: AgentDefaults.resolvePermissionMode(
+                    session: session?.permissionMode,
+                    accountDefault: appModel.user?.preferences?.defaultPermissionMode).rawValue,
+                // Settings' reading of the switch: absent is on.
+                orchestrationOn: appModel.user?.preferences?.enableOrchestration ?? true,
+                onDone: { showAgentTools = false })
         }
         #endif
         // Settings… (docs/mocks/session-settings native.html ①–④), on every platform.
@@ -852,6 +879,27 @@ struct ConsoleView: View {
     }
     #endif
 }
+
+#if os(macOS)
+/// The console's Agent Tools sheet. The sheet holds values only; this reads the one that moves: the session's
+/// report, off the detail (GET /sessions/:id) the worktree bar keeps current while the session runs, read once
+/// more as the sheet opens, since a settled session's bar does not poll and its runner may have reported since.
+private struct ConsoleAgentToolsSheet: View {
+    let worktree: WorktreeModel?
+    let engine: String?
+    let permissionMode: String
+    let orchestrationOn: Bool
+    let onDone: () -> Void
+
+    var body: some View {
+        AgentToolsSheet(
+            mode: .session(report: worktree?.detail?.agentTools, engine: engine, permissionMode: permissionMode,
+                           orchestrationOn: orchestrationOn, now: Date()),
+            onDone: onDone)
+            .task { await worktree?.loadDetail() }
+    }
+}
+#endif
 
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
 /// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made

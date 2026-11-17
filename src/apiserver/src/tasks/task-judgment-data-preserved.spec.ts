@@ -3082,6 +3082,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
       // DONE fence changes.
       '0930_managed_runner_no_default_workspace',
+      // 0940 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
+      // ingest), taking the lock in short tries inside one DO block as 0478 does; catalog-only, no preserved rows,
+      // triggers or DONE fence change, and no row is written. Written as 0770 on the project line, it was renumbered
+      // after main took 0770 and 0910 to 0930; it lands below main's 0950, so no number is used twice.
+      '0940_session_agent_tools',
       // 0950 adds a nullable schedule.read_back and fills it from each schedule's own create card; schedule is not one
       // of the preserved relations, and no trigger, function or DONE fence changes.
       '0950_schedule_read_back',

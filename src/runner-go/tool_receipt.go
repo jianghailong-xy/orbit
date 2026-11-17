@@ -550,6 +550,34 @@ func baseReceipt(op *operation, args map[string]interface{}) toolReceipt {
 // startedAtOnceNote is what a create that also started its task says beside the receipt.
 const startedAtOnceNote = "Started at once, as task_start would have started it, so do not call task_start for it."
 
+// startedByOwnerNote and startDeferredByOwnerNote are what a create says when the owner answered its card with
+// "Create and start": the start is the owner's own later answer, which outranks what was said before, so the agent
+// leaves it as it is. Measured by the agent-contract eval (E3-create-no-start/owner-starts, 2026-11-16): told only
+// that the task was "started at once", Codex 0.167.2 and claude-sonnet-5-5 read the run as Orbit ignoring the
+// person's "do not start it" and cleared its start.
+const (
+	startedByOwnerNote = "The owner answered the card with Create and start, so it was started at once. That is " +
+		"their decision and it outranks what was said before: do not clear its start or call task_start for it."
+	startDeferredByOwnerNote = "The owner answered the card with Create and start, and the start is deferred " +
+		"(start.deferred says why). That is their decision and it outranks what was said before: do not clear its start."
+)
+
+// createStartNote is the sentence a create that was asked to start says beside its answer, from what became of the
+// start: who started it, and that it is not to be started again or undone. A start the server did not make (a
+// deferral, or a 2xx answer that says it skipped) is not called started, as startOutcome does not call it started.
+func createStartNote(by string, started json.RawMessage, deferred string) string {
+	made := deferred == "" && len(started) > 0 && answerRefusal(started) == nil
+	switch {
+	case by == "owner" && made:
+		return startedByOwnerNote
+	case by == "owner":
+		return startDeferredByOwnerNote
+	case made:
+		return startedAtOnceNote
+	}
+	return ""
+}
+
 // callerKeyIsOptional are the caller-key operations whose key may be left out, and which fall back to
 // the server's turn-scoped deduplication without one.
 var callerKeyIsOptional = map[string]bool{"task_create": true, "task_create_batch": true}

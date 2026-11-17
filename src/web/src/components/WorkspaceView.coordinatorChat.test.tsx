@@ -19,6 +19,7 @@ import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmat
 import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { IT_IS_YOURS, SEE_THE_EXCEPTION } from './ProjectPromotionCard';
+import { CHAT_FIRST_LINK } from './ProjectProgressStatus';
 import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
 
@@ -467,9 +468,11 @@ async function blockedCard(): Promise<() => Element | null> {
   return card;
 }
 
+/** The card's chat press: "Chat about this", or on the owner exception card "or Chat about this
+ *  first" beside Ask again (board owner-exception-who-fixes, D2 = A). */
 function chatPressOn(card: Element): HTMLButtonElement {
   const press = [...card.querySelectorAll<HTMLButtonElement>('button')]
-    .find((button) => button.textContent?.trim() === CHAT_ABOUT_THIS);
+    .find((button) => [CHAT_ABOUT_THIS, CHAT_FIRST_LINK].includes(button.textContent?.trim() ?? ''));
   if (!press) throw new Error('no Chat about this on the card');
   return press;
 }
