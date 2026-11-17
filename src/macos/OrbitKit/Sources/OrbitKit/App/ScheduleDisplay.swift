@@ -129,6 +129,11 @@ public enum ScheduleDisplay {
         let short = form == .short
         let daily = short ? C.Rules.shortDaily : C.Rules.longDaily
         switch rule {
+        case .when(_, _, let condition):
+            // "Raw used above 90%" (short), "When raw used above 90%" (long): shared SCHEDULE_CONDITION_COPY.rules.
+            return short
+                ? fill(ScheduleConditionCopy.rulesShort, ["condition": condition.text])
+                : fill(ScheduleConditionCopy.rulesLong, ["condition": lowerFirst(condition.text)])
         case .once: return short ? C.Rules.shortOnce : C.Rules.longOnce
         case .daily(let time): return fill(daily, ["time": time])
         case .weekly(let time, let weekdays):
@@ -227,6 +232,11 @@ public enum ScheduleDisplay {
     }
 
     public static func createWhen(_ when: ScheduleCardWhen, now: Date, viewerTimezone: String) -> CreateWhen {
+        if case .when = when.rule {
+            // A WHEN rule has no time, so no zone and no first run: its lines are `when.condition`.
+            let rule = when.condition?.text ?? ruleText(when.rule, form: .short)
+            return CreateWhen(text: rule, rule: rule, zone: "", firstRun: nil)
+        }
         let zone = when.timezone ?? C.CreateCard.zoneFromDevice
         let rule = ruleText(when.rule, form: .short)
         let at = when.firstRunAt.flatMap(parse)
@@ -254,10 +264,13 @@ public enum ScheduleDisplay {
         public let circle: Circle
         public let mark: Mark?
         public let tag: Tag?
-        public init(_ circle: Circle, _ mark: Mark? = nil, _ tag: Tag? = nil) {
+        /// A condition's row (condition-triggers board ④ ③): a gauge in place of the circle, in the circle's tone.
+        public let gauge: Bool
+        public init(_ circle: Circle, _ mark: Mark? = nil, _ tag: Tag? = nil, gauge: Bool = false) {
             self.circle = circle
             self.mark = mark
             self.tag = tag
+            self.gauge = gauge
         }
     }
 
@@ -297,21 +310,29 @@ public enum ScheduleDisplay {
     }
 
     public static func scheduleCircle(_ schedule: ScheduleView, draft: Bool = false) -> CircleView {
-        scheduleCircle(state: schedule.state, consecutiveFailures: schedule.consecutiveFailures, draft: draft)
+        if schedule.state == "ACTIVE", schedule.consecutiveFailures == 0, schedule.condition?.cantRead == true {
+            return ConditionDisplay.circle(cantRead: true)
+        }
+        let view = scheduleCircle(state: schedule.state, consecutiveFailures: schedule.consecutiveFailures, draft: draft)
+        // A WHEN schedule keeps its gauge in every group (condition-triggers board ④ ③).
+        guard case .when = schedule.rule else { return view }
+        return CircleView(view.circle, view.mark, view.tag, gauge: true)
     }
 
-    /// Needs you: failing or held (§9.2) — also the count beside Scheduled in the drawer.
+    /// Needs you: failing or held (§9.2), or a WHEN rule whose condition cannot be read (condition-triggers §9) —
+    /// also the count beside Scheduled in the drawer.
     public static func needsYou(state: String, consecutiveFailures: Int) -> Bool {
         state == "HELD" || (state == "ACTIVE" && consecutiveFailures > 0)
     }
 
     public static func needsYou(_ schedule: ScheduleView) -> Bool {
         needsYou(state: schedule.state, consecutiveFailures: schedule.consecutiveFailures)
+            || (schedule.state == "ACTIVE" && schedule.condition?.cantRead == true)
     }
 
-    /// The drawer's number: how many schedules need you, nothing at zero.
-    public static func needsYouCount(_ schedules: [ScheduleView]) -> Int {
-        schedules.filter(needsYou).count
+    /// The drawer's number: how many schedules, and tasks waiting on a condition, need you; nothing at zero.
+    public static func needsYouCount(_ schedules: [ScheduleView], waitingTasks: [ScheduleWaitingTask] = []) -> Int {
+        schedules.filter(needsYou).count + waitingTasks.filter(\.condition.cantRead).count
     }
 
     // MARK: - A row's second line
@@ -394,18 +415,21 @@ public enum ScheduleDisplay {
 
     // MARK: - The timeline
 
-    public enum GroupKey: String, Sendable { case needsYou = "NEEDS_YOU", today = "TODAY", tomorrow = "TOMORROW",
-                                                  day = "DAY", later = "LATER", paused = "PAUSED" }
+    public enum GroupKey: String, Sendable { case needsYou = "NEEDS_YOU", condition = "CONDITION", today = "TODAY",
+                                                  tomorrow = "TOMORROW", day = "DAY", later = "LATER", paused = "PAUSED" }
 
     public enum TimelineItem: Equatable, Sendable, Identifiable {
         case schedule(ScheduleView, at: String?)
         case run(ScheduleView, ScheduleRunView, at: String)
         case draft(ScheduleCard, at: String)
+        /// A task that starts when its condition holds (condition-triggers board ④ ①).
+        case task(ScheduleWaitingTask)
 
         public var at: String? {
             switch self {
             case .schedule(_, let at): return at
             case .run(_, _, let at), .draft(_, let at): return at
+            case .task: return nil
             }
         }
 
@@ -414,6 +438,7 @@ public enum ScheduleDisplay {
             case .schedule(let s, _): return "schedule-\(s.id)"
             case .run(_, let r, _): return "run-\(r.id)"
             case .draft(let c, _): return "draft-\(c.id)"
+            case .task(let t): return "task-\(t.id)"
             }
         }
     }
@@ -430,11 +455,14 @@ public enum ScheduleDisplay {
 
     static let inProgress: Set<String> = ["QUEUED", "RUNNING", "AWAITING_APPROVAL"]
 
-    /// The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held), Today, Tomorrow,
-    /// each day of the coming week by its name, Later, Paused. A schedule appears on the day of its next run, a
-    /// draft on the day of its first; a run under way on its planned day, an ended one on today's only with
-    /// `showPastRuns`. Ended schedules appear nowhere; empty groups are left out; a day is in time order.
+    /// The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held, then a condition that
+    /// cannot be read), Waiting for a condition (WHEN schedules, then tasks waiting on their startWhen: a condition has
+    /// no day, so it is a group of its own above Today, condition-triggers §9), Today, Tomorrow, each day of the
+    /// coming week by its name, Later, Paused. A schedule appears on the day of its next run, a draft on the day of its
+    /// first; a run under way on its planned day, an ended one on today's only with `showPastRuns`. Ended schedules
+    /// appear nowhere; empty groups are left out; a day is in time order.
     public static func timeline(schedules: [ScheduleView], runs: [ScheduleRunView] = [], drafts: [ScheduleCard] = [],
+                                waitingTasks: [ScheduleWaitingTask] = [],
                                 showPastRuns: Bool = false, now: Date, timezone: String) -> [TimelineGroup] {
         let today = localParts(now, timezone: timezone).dayNumber
         var byID: [String: ScheduleView] = [:]
@@ -452,9 +480,19 @@ public enum ScheduleDisplay {
             $0.title.compare($1.title, options: [.caseInsensitive]) == .orderedAscending
         }
         let needs = schedules.filter(needsYou).sorted {
-            let a = $0.state == "HELD" ? 1 : 0, b = $1.state == "HELD" ? 1 : 0
+            func rank(_ s: ScheduleView) -> Int { s.state == "HELD" ? 1 : s.consecutiveFailures > 0 ? 0 : 2 }
+            let a = rank($0), b = rank($1)
             return a != b ? a < b : byTitle($0, $1)
         }
+        let byTaskTitle: (ScheduleWaitingTask, ScheduleWaitingTask) -> Bool = {
+            $0.title.compare($1.title, options: [.caseInsensitive]) == .orderedAscending
+        }
+        let tasksNeeding = waitingTasks.filter(\.condition.cantRead).sorted(by: byTaskTitle)
+        let waiting = schedules.filter { s in
+            if case .when = s.rule { return s.state == "ACTIVE" && !needsYou(s) }
+            return false
+        }.sorted(by: byTitle)
+        let tasksWaiting = waitingTasks.filter { !$0.condition.cantRead }.sorted(by: byTaskTitle)
         let paused = schedules.filter { $0.state == "PAUSED" }.sorted(by: byTitle)
 
         for s in schedules where s.state == "ACTIVE" {
@@ -479,9 +517,15 @@ public enum ScheduleDisplay {
             return ta != tb ? ta < tb : a.0 < b.0
         }
         var groups: [TimelineGroup] = []
-        if !needs.isEmpty {
-            groups.append(TimelineGroup(key: .needsYou, title: C.groups["NEEDS_YOU"]!, subtitle: String(needs.count),
-                                        items: needs.map { .schedule($0, at: $0.nextDueAt) }))
+        if !needs.isEmpty || !tasksNeeding.isEmpty {
+            groups.append(TimelineGroup(key: .needsYou, title: C.groups["NEEDS_YOU"]!,
+                                        subtitle: String(needs.count + tasksNeeding.count),
+                                        items: needs.map { .schedule($0, at: $0.nextDueAt) } + tasksNeeding.map { .task($0) }))
+        }
+        if !waiting.isEmpty || !tasksWaiting.isEmpty {
+            groups.append(TimelineGroup(key: .condition, title: ConditionCopy.group,
+                                        subtitle: String(waiting.count + tasksWaiting.count),
+                                        items: waiting.map { .schedule($0, at: nil) } + tasksWaiting.map { .task($0) }))
         }
         for day in days.keys.sorted() {
             let items = days[day]!.sorted(by: byTime).map(\.1)
@@ -519,6 +563,7 @@ public enum ScheduleDisplay {
         if (accessOrder[after.accessLevel] ?? 0) > (accessOrder[before.accessLevel] ?? 0) { parts.append("ACCESS_LEVEL") }
         if after.runsPerWeek > before.runsPerWeek { parts.append("RUNS_PER_WEEK") }
         if after.runLimitMinutes > before.runLimitMinutes { parts.append("RUN_LIMIT") }
+        if let hash = after.commandHash, hash != before.commandHash { parts.append("PROBE_COMMAND") }
         return parts
     }
 
@@ -531,7 +576,7 @@ public enum ScheduleDisplay {
 
     /// The part a card is about: access first, then where it runs, how often, how long.
     static func headPart(_ widens: [String]) -> String? {
-        ["ACCESS_LEVEL", "WORKSPACE", "RUNS_PER_WEEK", "RUN_LIMIT"].first(where: widens.contains)
+        ["ACCESS_LEVEL", "WORKSPACE", "PROBE_COMMAND", "RUNS_PER_WEEK", "RUN_LIMIT"].first(where: widens.contains)
     }
 
     /// An envelope card's Now and Asked lines (board 2/2 ② ③). Now names the run limit only where it differs.
@@ -544,6 +589,11 @@ public enum ScheduleDisplay {
                 let a = accessCopy(e.accessLevel)
                 let detail = isNow ? a.brief : a.detail
                 return EnvelopeSide(lead: a.label, detail: detail, text: "\(a.label)\(C.EnvelopeCard.accessJoin)\(detail)")
+            }
+            if part == "PROBE_COMMAND" {
+                // The command verbatim on both sides: what was approved, and what Allow would approve (board ⑥).
+                let command = rule?.condition?.command ?? ""
+                return EnvelopeSide(lead: command, detail: "", text: command)
             }
             let sameLimit = now?.runLimitMinutes == asked.runLimitMinutes
             let costs = isNow && sameLimit
@@ -573,12 +623,14 @@ public enum ScheduleDisplay {
         if part == "RUNS_PER_WEEK", now?.runsPerWeek == 1 { return C.keep["RUNS_PER_WEEK"]! }
         if part == "RUN_LIMIT", let now { return fill(C.keep["RUN_LIMIT"]!, ["minutes": String(now.runLimitMinutes)]) }
         if part == "WORKSPACE", let workspaceName { return fill(C.keep["WORKSPACE"]!, ["workspace": workspaceName]) }
+        if part == "PROBE_COMMAND" { return ScheduleConditionCopy.keep }
         return C.keep["other"]!
     }
 
     /// The note under an envelope card.
     public static func envelopeNote(widens: [String]) -> String {
-        widens.contains("ACCESS_LEVEL")
+        if widens.contains("PROBE_COMMAND") { return ScheduleConditionCopy.commandNote }
+        return widens.contains("ACCESS_LEVEL")
             ? "\(C.EnvelopeCard.appliesFromNextRun) \(C.EnvelopeCard.checkedEachRun)"
             : C.EnvelopeCard.appliesFromNextRun
     }
