@@ -41,6 +41,9 @@ struct WhoFixesItBody: View {
     /// The coordinator workspace's two facts a LIVE status does not carry.
     @State private var workspace: CoordinatorWorkspaceFacts?
     @State private var detailsOpen = false
+    /// The whole check output's sheet (D2 = A), on a phone.
+    @State private var outputOpen = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// A repair on its way: a new coordinator being started.
     @State private var repairing = false
     /// Change workspace…'s sheet, the row it handed back, and a move under way.
@@ -90,10 +93,20 @@ struct WhoFixesItBody: View {
                 .font(.orbitProse.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            #if os(iOS)
+            // One line, cut at its tail; the whole title leads Details (board owner-card-ios-text,
+            // rule 4).
+            Text(ExceptionCards.phoneSubline(row, projectName: projectName))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(ExceptionCards.phoneSublineLines)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            #else
             Text(ExceptionCards.whoFixesSubline(row, projectName: projectName))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            #endif
             if let fixing = ExceptionCards.handledByLine(row) {
                 Text(fixing)
                     .font(.orbitLabel)
@@ -118,9 +131,27 @@ struct WhoFixesItBody: View {
                     ForEach(handling, id: \.label) { fact in factRow(fact) }
                 }
             }
+            #if os(iOS)
+            phoneDetails
+            #else
             details
+            #endif
             if ExceptionCards.markable(row) {
                 Divider()
+                #if os(iOS)
+                // "Already settled? Mark as handled" — the question and its link-blue door on one
+                // line where they fit (board owner-card-ios-text, rule 3).
+                VStack(alignment: .leading, spacing: 3) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) { settledLine }
+                        VStack(alignment: .leading, spacing: 3) { settledLine }
+                    }
+                    Text(ExceptionCards.markHandledSettledConsequence)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                #else
                 VStack(alignment: .leading, spacing: 6) {
                     Text(ExceptionCards.alreadySettled)
                         .font(.orbitLabel).foregroundStyle(.secondary)
@@ -134,6 +165,7 @@ struct WhoFixesItBody: View {
                         .disabled(sending)
                     }
                 }
+                #endif
             }
         }
         .task(id: readKey) {
@@ -237,6 +269,10 @@ struct WhoFixesItBody: View {
         whoRow(ExceptionCards.whoFixesCoordinator) {
             sentence(reading)
                 .font(.orbitLabel)
+                #if os(iOS)
+                // A row's status sentence: 13pt, two lines at most (board owner-card-ios-text, rule 5).
+                .lineLimit(ExceptionCards.phoneStatusLines)
+                #endif
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             pressLine {
@@ -253,7 +289,7 @@ struct WhoFixesItBody: View {
             if let note = ExceptionCards.coordinatorRowNote(row, reading,
                                                              escalationSeconds: console.projectEscalationSeconds) {
                 Text(note)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .font(captionFont).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -348,13 +384,13 @@ struct WhoFixesItBody: View {
             }
             if taskSessionURL != nil {
                 Text(ExceptionCards.fixItMyselfConsequence(row))
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .font(captionFont).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             ForEach(doors) { door in
                 Text(door.press.consequence)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .font(captionFont).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -381,8 +417,9 @@ struct WhoFixesItBody: View {
         #if os(iOS)
         VStack(alignment: .leading, spacing: 3) {
             button()
+            // Captions are 12pt on a phone (board owner-card-ios-text, rule 3).
             Text(consequence)
-                .font(.orbitLabel).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -395,6 +432,15 @@ struct WhoFixesItBody: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        #endif
+    }
+
+    /// A press's line of consequence: 12pt on a phone (board owner-card-ios-text, rule 3).
+    private var captionFont: Font {
+        #if os(iOS)
+        return .caption
+        #else
+        return .orbitLabel
         #endif
     }
 
@@ -466,6 +512,154 @@ struct WhoFixesItBody: View {
         }
     }
 
+    #if os(iOS)
+    // MARK: Details on a phone (board owner-card-ios-text ③, D2 = A)
+
+    /// "Already settled?" and its link-blue Mark as handled.
+    @ViewBuilder private var settledLine: some View {
+        Text(ExceptionCards.alreadySettled)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        Button(action: markHandled) { Text(ExceptionCards.markHandled) }
+            .buttonStyle(.plain)
+            .font(.orbitLabel)
+            .foregroundStyle(.tint)
+            .disabled(sending)
+    }
+
+    /// Folded: "Details · check failed · 1 failing test". Open: the whole task title, the facts,
+    /// the check's command on one line with Copy command, how it failed, the failing lines (at
+    /// most three) in a small mono box, then "Full output (N lines)" and Open landing.
+    private var phoneDetails: some View {
+        let landing = landingURL
+        let check = row.facts?.check
+        let failing = ExceptionCards.failingLines(check?.outputTail)
+        return DisclosureGroup(isExpanded: $detailsOpen) {
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(ExceptionCards.phoneDetailRows(row, projectName: projectName), id: \.label) { fact in
+                    if fact.label == ExceptionCards.checkLabel, let copy = ExceptionCards.commandCopyValue(row) {
+                        phoneFact(fact.label) { commandLine(copy) }
+                    } else {
+                        phoneFact(fact.label) { factValue(fact) }
+                    }
+                }
+                if let failing, !failing.shown.isEmpty {
+                    failingBox(failing.shown)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) { outputLinks(failing, landing: landing, dot: true) }
+                    VStack(alignment: .leading, spacing: 4) { outputLinks(failing, landing: landing, dot: false) }
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text(detailsOpen ? ExceptionCards.detailsLabel : ExceptionCards.phoneDetailsSummary(row))
+                .font(.orbitLabel)
+                .lineLimit(1)
+        }
+        .sheet(isPresented: $outputOpen) {
+            CheckOutputSheet(lines: failing?.all ?? [])
+        }
+    }
+
+    /// One fact: its label in a narrow column, or above its value at the accessibility sizes,
+    /// where a column would leave the value a sliver.
+    @ViewBuilder private func phoneFact<Value: View>(_ label: String,
+                                                     @ViewBuilder _ value: () -> Value) -> some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                if !label.isEmpty { Text(label).font(.orbitLabel).foregroundStyle(.secondary) }
+                value()
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if !label.isEmpty {
+                    Text(label)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(width: 62, alignment: .leading)
+                }
+                value()
+            }
+        }
+    }
+
+    private func factValue(_ fact: ExceptionCards.FactRow) -> some View {
+        fact.runs.map { run -> Text in
+            switch run.face {
+            case .plain: return Text(run.text).font(.orbitLabel)
+            case .mono: return Text(run.text).font(.orbitMono)
+            case .bad: return Text(run.text).font(.orbitLabel).foregroundColor(.red)
+            }
+        }.reduce(Text("")) { $0 + $1 }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+    }
+
+    /// The command on one line, cut at its tail, and Copy command — which copies all of it.
+    private func commandLine(_ command: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(command)
+                .font(.orbitDiffLine)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            Button {
+                PlatformHaptics.tap()
+                PlatformPasteboard.copyString(command)
+            } label: { Text(ExceptionCards.copyCommand) }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(.tint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The failing lines in a small mono box, each ✖ in red.
+    private func failingBox(_ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                failingLine(line)
+                    .font(.orbitDiffLine)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .textSelection(.enabled)
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.25)) }
+    }
+
+    private func failingLine(_ line: String) -> Text {
+        guard line.hasPrefix("✖") else { return Text(line) }
+        return Text("✖").foregroundColor(.red) + Text(line.dropFirst())
+    }
+
+    /// "Full output (N lines) · Open landing".
+    @ViewBuilder private func outputLinks(_ failing: ExceptionCards.FailingLines?, landing: URL?,
+                                          dot: Bool) -> some View {
+        if let failing {
+            Button {
+                PlatformHaptics.tap()
+                outputOpen = true
+            } label: { Text(ExceptionCards.fullOutputLabel(failing.total)) }
+            .buttonStyle(.plain).font(.caption).foregroundStyle(.tint)
+        }
+        if failing != nil && landing != nil && dot {
+            Text("·").font(.caption).foregroundStyle(.secondary)
+        }
+        if let landing {
+            Button {
+                PlatformHaptics.tap()
+                openURL(landing)
+            } label: { Text(ExceptionCards.openLanding) }
+            .buttonStyle(.plain).font(.caption).foregroundStyle(.tint)
+        }
+    }
+    #endif
+
     // MARK: the repairs (D1 = A: each repairs the coordinator and nothing else)
 
     private func readStatus() async {
@@ -533,3 +727,32 @@ private struct WhoFixesYouDoor: Identifiable {
     let make: () -> Void
     var id: ProjectOpenItemAction { press.action }
 }
+
+#if os(iOS)
+/// The failed check's whole output (D2 = A: "Full output (N lines)"), in its own sheet: every line,
+/// selectable, scrolled sideways rather than wrapped, so a log reads as the terminal printed it.
+private struct CheckOutputSheet: View {
+    let lines: [String]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView([.vertical, .horizontal]) {
+                Text(lines.joined(separator: "\n"))
+                    .font(.orbitDiffLine)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .navigationTitle(ExceptionCards.outputSheetTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(ExceptionCards.doneWord) { dismiss() }
+                }
+            }
+        }
+    }
+}
+#endif
