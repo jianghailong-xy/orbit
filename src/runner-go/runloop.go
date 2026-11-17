@@ -1891,6 +1891,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		agentDirs.rescan()
 		beatNow()
 	})
+	// Condition probes (condition_probe.go): the heartbeat answer names them, each runs on its own interval, and
+	// what they read rides the next beat.
+	conditions := newConditionProber(loopCtx)
 	setOrbitGitCredentialSource(t.gitCredential)
 	defer setOrbitGitCredentialSource(nil)
 
@@ -1989,6 +1992,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			resources := machineResources(probes, machineReposRoot)
 			cloneReports, cloneSeq := clones.snapshot()
 			storage.diskResources(&resources)
+			conditionSamples := conditions.take()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -2005,8 +2009,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				SelfUpdate:           selfUpdateReport(),
 				ManagedWorkload:      workload,
 				CloneReports:         cloneReports,
+				ConditionSamples:     conditionSamples,
 			}, t.heartbeat)
 			if err != nil {
+				// Kept for the next beat (bounded per condition).
+				conditions.requeue(conditionSamples)
 				// No reconcile is coming from this beat; sessions do not wait on one (secretStore.waitReady).
 				secrets.markReady()
 				logln("heartbeat failed:", err)
@@ -2045,6 +2052,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// last found.
 			// Clones: start what is newly listed, stop what is no longer. A draining process starts none.
 			clones.reconcile(resp.CloneRequests, cloneSeq, !draining)
+			// Condition probes: start what is newly listed, stop what is no longer.
+			conditions.reconcile(resp.ConditionProbes)
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
 				// Where an owner-request secret file may not go (secret_path.go).
