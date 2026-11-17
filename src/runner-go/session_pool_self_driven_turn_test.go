@@ -50,6 +50,8 @@ type supervisedSession struct {
 	subagentsOpened int
 	// subagentProvider is the engine the server names for a SubAgent's child; "" is the parent's own, Claude.
 	subagentProvider string
+	// subagentExec, when set, is the exec the server names for a SubAgent's child, in place of the default.
+	subagentExec map[string]interface{}
 	// subagentRemote, when set, places every delegate call on that workspace (docs/subagent-design.md §10): the
 	// answer has no exec, the relayed events are remoteEvents, the run's end remoteStatus and remoteResult, and
 	// the bodies of the opening POSTs and the count of stop requests are kept.
@@ -179,6 +181,7 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 		runID := fmt.Sprintf("run-%d", s.subagentsOpened)
 		provider := firstNonEmpty(s.subagentProvider, providerClaude)
 		remote := s.subagentRemote
+		execOverride := s.subagentExec
 		if remote != "" {
 			var body map[string]interface{}
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -193,10 +196,13 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		execAnswer := map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
+			"env": map[string]string{"ANTHROPIC_API_KEY": "test"}}
+		if execOverride != nil {
+			execAnswer = execOverride
+		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
-			"exec": map[string]interface{}{"provider": provider, "model": "claude-test", "permissionMode": "acceptEdits",
-				"env": map[string]string{"ANTHROPIC_API_KEY": "test"}},
+			"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{}, "exec": execAnswer,
 		})
 		return
 	case strings.Contains(r.URL.Path, "/subagents/") && strings.HasSuffix(r.URL.Path, "/events") && r.Method == http.MethodGet:
