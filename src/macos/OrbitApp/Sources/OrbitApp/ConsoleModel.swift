@@ -56,14 +56,22 @@ struct QuestionReply: Equatable, Sendable {
         /// (`OwnerRequestCard`), talked about rather than answered, goes the same way to this session.
         case ownerItem(context: String)
 
-        /// Whether the typed sentence IS the message: the two that reach no door carry nothing but
-        /// text (an attachment cannot say what should change), so an empty composer leaves the bar
-        /// armed rather than sending the context back with no question attached.
+        /// Whether the typed sentence IS the message: a plan change carries nothing but text (an
+        /// attachment cannot say what should change), so an empty composer leaves the bar armed
+        /// rather than sending the context back with no question attached.
         var needsText: Bool {
             switch self {
-            case .planChange, .ownerItem: return true
-            case .approval, .ownerConfirmation, .evidenceDecision: return false
+            case .planChange: return true
+            case .ownerItem, .approval, .ownerConfirmation, .evidenceDecision: return false
             }
+        }
+
+        /// Whether staged attachments may go with no typed text: an owner item or request talked
+        /// about reaches no door that waits on a note, and a request may ask for a screenshot
+        /// (web: `if (!c && readyImages.length === 0) return`).
+        var sendsAttachmentsAlone: Bool {
+            if case .ownerItem = self { return true }
+            return false
         }
     }
 
@@ -2194,11 +2202,13 @@ final class ConsoleModel {
     /// readyImages.length > 0`): a screenshot on its own is a perfectly good message, and the
     /// runner builds an image-only user turn for it (no text block). That holds for a draft too:
     /// POST /sessions takes attachments alone as the opening message. A question reply keeps the
-    /// text-is-required rule, since its deny+message channel carries text only. `send` also
+    /// text-is-required rule, since its deny+message channel carries text only; an owner item or
+    /// request talked about does not (`Target.sendsAttachmentsAlone`). `send` also
     /// excludes a bare `!`, which is a shell no-op rather than a message. A new wiki chat opens with
     /// the owner's words, so its files never go alone (contract `chat.create`).
     private var canSendAttachmentsAlone: Bool {
-        replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil
+        (replyContext == nil || replyContext?.target.sendsAttachmentsAlone == true)
+            && !pendingAttachments.isEmpty && wikiChat?.create == nil
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -3072,7 +3082,8 @@ final class ConsoleModel {
             // The chips staged with the sentence go with it, as on the web: they were picked for
             // this message, and left behind they would sit in the composer looking unsent.
             case .ownerItem(let context):
-                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
+                await send(authoritative: authoritative,
+                           overrideText: text.isEmpty ? context : "\(context)\n\n\(text)",
                            takesStagedAttachments: true)
             case .planChange(let context):
                 // Says outright that it carries no attachments, rather than leaving that to how
