@@ -3106,6 +3106,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
       // fence changes.
       '0980_managed_runner_home_orbit',
+      // 0990 sets runner.min_free_disk_mb's default to 10240 (new rows only); runner is not one of the preserved
+      // relations, and no trigger, function or DONE fence changes.
+      '0990_runner_keep_free_default',
       // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
       '0990_schedule_land'],
     'a later migration exists; re-read it before trusting the assertions above');
@@ -3159,10 +3162,19 @@ test('after 0246, no migration number is used twice: a duplicate reorders the le
   // Everything at or below this number predates the rule and is exempt; the failure message says
   // why that floor cannot be lowered.
   const EXEMPT_THROUGH = '0246';
+  // One shared number above the floor, for the same reason as the ones below it: both halves were applied on
+  // production (0990_schedule_land at 2026-11-17 08:24Z, 0990_runner_keep_free_default with the 15:39Z release)
+  // before the collision was seen, so renaming either would run it again there, and 0990_schedule_land's
+  // `ALTER TYPE … ADD VALUE 'LAND'` would then fail the deploy. The two touch unrelated tables, so their order does
+  // not matter. Exactly this pair: any other number shared after 0246 still fails below.
+  const APPLIED_SHARED: Readonly<Record<string, readonly string[]>> = {
+    '0990': ['0990_runner_keep_free_default', '0990_schedule_land'],
+  };
   const byNumber = new Map<string, string[]>();
   for (const dir of dirs) {
     const number = dir.slice(0, 4);
     if (number <= EXEMPT_THROUGH) continue;
+    if (APPLIED_SHARED[number]?.includes(dir)) continue;
     byNumber.set(number, [...(byNumber.get(number) ?? []), dir]);
   }
   const shared = [...byNumber].filter(([, group]) => group.length > 1);

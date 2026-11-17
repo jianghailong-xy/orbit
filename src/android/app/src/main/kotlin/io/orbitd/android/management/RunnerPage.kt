@@ -97,8 +97,8 @@ internal object RunnerCopy {
     const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
-    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +
-        "runs stop being sent here and finished worktrees are cleaned up sooner."
+    const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and " +
+        "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
     fun gb(amount: String) = "$amount GB"
     fun diskUsed(used: String, total: String) = "$used of $total GB used"
     // Resources (web runnerCopy.ts "MARK: Resources", docs/mocks/runner-resource-monitor)
@@ -969,7 +969,7 @@ internal object RunnerPage {
         val free = formatDiskGb(disk.freeBytes); val total = formatDiskGb(disk.totalBytes)
         val summary = "Disk ${disk.usedPercent}% full"
         return AttentionItem("diskLow", "warn", summary, summary,
-            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — task runs stop being sent here until space frees up." }
+            reserve?.let { "$free GB free of $total GB, under the ${formatDiskGb(it * MIB)} GB it keeps free — new sessions and task runs wait until space frees up." }
                 ?: "$free GB free of $total GB. No reserve is set, so task runs keep landing here until the disk fills.",
             AttentionAction("setReserve"))
     }

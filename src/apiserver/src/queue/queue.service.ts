@@ -80,6 +80,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
@@ -714,6 +715,9 @@ export class QueueService {
             -- reports it READY the work dir is not there, and an engine started in it would fail. Shared with the
             -- session list, which names this gate (WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED) to the person waiting.
             AND NOT ${workspaceCloneHoldSql(Prisma.sql`s."workspace_id"`)}
+            -- Keep Free (runner-disk-gate.ts): a session that has never run waits while its workspace's disk is below the
+            -- runner's floor; one that has run takes its next message. Shared with the session list (disk_below_floor).
+            AND NOT ${sessionDiskHoldSql('s')}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use

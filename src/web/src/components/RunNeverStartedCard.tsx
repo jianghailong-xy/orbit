@@ -480,6 +480,8 @@ export function runNeverStarted(input: NeverStartedInput): NeverStartedFacts | n
   // the queued notice says, and no `error` line from an earlier run is this run's cause. A failed clone is this run's
   // cause, and its way out is the clone's Retry; the conversation's first line says why it failed.
   if (input.session.queuedReason === 'WORKSPACE_CLONING') return null;
+  // Held by Keep Free: a wait that ends once the runner reports space, which the queued notice says.
+  if (input.session.queuedReason === 'disk_below_floor') return null;
   if (input.session.queuedReason === 'WORKSPACE_CLONE_FAILED') return cloneFailed(input);
   // Nothing failed and nothing said why: a session merely waiting to be claimed is not a story, and
   // this card would be inventing one. Failed with no words at all IS the story (the engine exited

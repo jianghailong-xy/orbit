@@ -227,7 +227,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // QueuedCapacity's words; only the queued page and Later… are the update's alone.
     val runnerUpdatingGate = listRow?.takeIf {
         it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld &&
-            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate))
+            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate) ||
+                QueuedDiskLow.isDiskHeld(it.queuedGate))
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the

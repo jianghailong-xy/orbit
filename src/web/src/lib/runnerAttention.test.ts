@@ -452,7 +452,7 @@ describe('what an item says beyond the case file', () => {
   it('a disk under Keep Free says so', () => {
     const [disk] = itemsOf('Keep Free 50 GB and 40 GB free: raised, though 20% of the disk is free');
     expect(disk.detail).toBe(
-      '40 GB free of 200 GB, under the 50 GB it keeps free — task runs stop being sent here until space frees up.',
+      '40 GB free of 200 GB, under the 50 GB it keeps free — new sessions and task runs wait until space frees up.',
     );
     expect(disk.params.reserveMb).toBe(51200);
   });
@@ -604,7 +604,7 @@ describe('runnerCopy', () => {
       '11 GB free of 197 GB. No reserve is set, so task runs keep landing here until the disk fills.',
     );
     expect(copy.attentionDiskBelowReserve('9.4', '197', '10')).toBe(
-      '9.4 GB free of 197 GB, under the 10 GB it keeps free — task runs stop being sent here until space frees up.',
+      '9.4 GB free of 197 GB, under the 10 GB it keeps free — new sessions and task runs wait until space frees up.',
     );
     expect(copy.attentionCantUpdateItselfDetail('0.1.155', '0.1.197', copy.RUNNER_UPGRADE_COMMAND)).toBe(
       'It runs as a regular user, so it can’t replace its own binary — still on 0.1.155, latest is 0.1.197. ' +
