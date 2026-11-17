@@ -13,7 +13,7 @@ describe('runnerAccountCopy', () => {
         'working. Workspaces set to it run on Automatic.',
     );
     expect(copy.runnerAccountRemoveDetailAutomatic('wikova')).toBe(
-      'Its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.',
+      'Its sessions move to another account first, then its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.',
     );
     expect(copy.runnerAccountRemoveDetailLast('wikova', 'Default')).toBe(
       'Its sign-in is deleted from wikova. Without it, Orbit uses Default there again, and workspaces set to ' +

@@ -6,7 +6,7 @@ import {
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
-import { CHANGE_COPY } from '../lib/coordinatorWorkspace';
+import { CHANGE_COPY, COORDINATOR_FIX_LABEL } from '../lib/coordinatorWorkspace';
 import { CoordinatorProgressRows } from './ProjectProgressStatus';
 import { Button } from './ui/Button';
 import { Menu } from './ui/Menu';
@@ -346,17 +346,17 @@ function unavailableCopy(
     case 'WORKSPACE_DISABLED':
       return {
         sentence: <>It runs in {where}, which is disabled — and a coordinator cannot be opened anywhere else.</>,
-        fix: workspaceName ? { label: `Enable ${workspaceName}`, action: 'enable-workspace' } : null,
+        fix: workspaceName ? { label: COORDINATOR_FIX_LABEL.WORKSPACE_DISABLED(workspaceName), action: 'enable-workspace' } : null,
       };
     case 'WORKSPACE_TRASHED':
       return {
         sentence: <>It runs in {where}, which is in Trash — and a coordinator cannot be opened anywhere else.</>,
-        fix: workspaceName ? { label: `Restore ${workspaceName}`, action: 'restore-workspace' } : null,
+        fix: workspaceName ? { label: COORDINATOR_FIX_LABEL.WORKSPACE_TRASHED(workspaceName), action: 'restore-workspace' } : null,
       };
     case 'WORKSPACE_UNBOUND':
       return {
         sentence: <>It runs in {where}, which is not bound to a runner — and a coordinator cannot be opened anywhere else.</>,
-        fix: workspaceName ? { label: `Bind ${workspaceName} to a runner`, action: 'bind-workspace' } : null,
+        fix: workspaceName ? { label: COORDINATOR_FIX_LABEL.WORKSPACE_UNBOUND(workspaceName), action: 'bind-workspace' } : null,
       };
     case 'WORKSPACE_FORGOTTEN':
       return {

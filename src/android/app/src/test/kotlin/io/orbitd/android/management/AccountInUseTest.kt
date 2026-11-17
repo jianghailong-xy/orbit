@@ -25,10 +25,23 @@ class AccountInUseTest {
     }
 
     @Test fun theHeadingNamesTheEngineAsItsCliAndCountsTheSessions() {
-        assertEquals("This Claude Code account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account",
+        assertEquals("This Claude Code account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account",
             RunnerPage.inUseHeading("claude", 1))
-        assertEquals("This Codex account can’t be removed while 3 sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account",
+        assertEquals("This Codex account can’t be removed while 3 sessions on it can’t move to another account — sign in another account, or end them below; then remove the account",
             RunnerPage.inUseHeading("codex", 3))
+    }
+
+    @Test fun aRemovalWaitingOnTheSessionsItMovedSaysSo() {
+        fun pending(moving: String?, status: String = "pending") = Json.parseToJsonElement(
+            """{"engine":"codex","account":"$ACCOUNT","status":"$status","message":null${moving?.let { ""","moving":$it""" }.orEmpty()}}""").jsonObject
+        assertEquals("Moving a session to another Codex account — this one is removed once it has left, after its turn if one is running",
+            RunnerPage.movingLine(pending("1"), "codex", ACCOUNT))
+        assertEquals("Moving 16 sessions to another Codex account — this one is removed once they have left, after their turns if any are running",
+            RunnerPage.movingLine(pending("16"), "codex", ACCOUNT))
+        assertNull("an older server sends none", RunnerPage.movingLine(pending(null), "codex", ACCOUNT))
+        assertNull(RunnerPage.movingLine(pending("0"), "codex", ACCOUNT))
+        assertNull("only while under way", RunnerPage.movingLine(pending("2", "failed"), "codex", ACCOUNT))
+        assertNull("another account's", RunnerPage.movingLine(pending("2"), "codex", "other"))
     }
 
     @Test fun eachSessionSaysItsStateAndItsTitleOrUntitled() {

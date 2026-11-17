@@ -1421,6 +1421,7 @@ function WikiChatSession({
   // The engine's guess at the next message, offered in an idle, empty composer as on the session page.
   const offeredSuggestion = offeredPromptSuggestion(stream.eventsSessionId === sessionId ? currentPromptSuggestion(stream.events) : null, {
     idle,
+    queuedTurns: visibleQueuedTurns.length,
     draftEmpty: draft.text === '' && draft.images.length === 0,
     replying: false,
     pendingApprovals: approvals.length + (session?.pendingApprovals ?? 0),

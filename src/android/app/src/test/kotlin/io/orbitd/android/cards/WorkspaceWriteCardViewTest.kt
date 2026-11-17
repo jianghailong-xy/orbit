@@ -87,7 +87,7 @@ class WorkspaceWriteCardViewTest {
         says(WorkspaceWriteCards.removed)
         says("OLD_TOKEN")
         says("Working directory"); says("/srv/other")
-        says("Appended system prompt"); says("Answer in French, and keep it brief.")
+        says("Runtime instructions"); says("Answer in French, and keep it brief.")
         says("Runner"); says("gpu-2")
         says("Worktree"); says("Each session gets its own git worktree")
         says(WorkspaceWriteCards.note)

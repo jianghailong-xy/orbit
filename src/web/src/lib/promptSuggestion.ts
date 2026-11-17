@@ -32,6 +32,9 @@ export function currentPromptSuggestion(events: readonly EventLike[]): string | 
 export interface PromptSuggestionGate {
   /** No turn in flight: the last one ended and nothing has been sent since. */
   idle: boolean;
+  /** Messages already sent that wait for a turn of their own (a full runner, a translation): the
+   *  session still reads idle and no `user` event has landed, but the person has said something. */
+  queuedTurns: number;
   /** Nothing typed and nothing staged. */
   draftEmpty: boolean;
   /** A reply to a question card is armed: the box belongs to that answer. */
@@ -49,6 +52,6 @@ export interface PromptSuggestionGate {
 export function offeredPromptSuggestion(suggestion: string | null, gate: PromptSuggestionGate): string | null {
   if (!suggestion) return null;
   if (!gate.idle || !gate.draftEmpty || gate.replying || !gate.sendable || gate.failed) return null;
-  if (gate.pendingApprovals > 0 || gate.waitingKind) return null;
+  if (gate.queuedTurns > 0 || gate.pendingApprovals > 0 || gate.waitingKind) return null;
   return suggestion;
 }

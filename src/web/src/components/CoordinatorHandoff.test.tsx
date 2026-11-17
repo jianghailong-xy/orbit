@@ -69,9 +69,9 @@ describe('handoff rows (board 02)', () => {
 
 describe('the handoff note', () => {
   it('reads the four sections, headings in markdown or inline', () => {
-    expect(handoffNoteSections('## Where things stand\n- 4 of 6 done.\n**Agreed with the owner**\n* No merge before Friday.\nWaiting on: Evidence.\nNext\nNothing.')).toEqual([
+    expect(handoffNoteSections('## Where things stand\n- 4 of 6 done.\n**Rulings not yet recorded**\n* No merge before Friday.\nWaiting on: Evidence.\nNext\nNothing.')).toEqual([
       { title: 'Where things stand', items: ['4 of 6 done.'] },
-      { title: 'Agreed with the owner', items: ['No merge before Friday.'] },
+      { title: 'Rulings not yet recorded', items: ['No merge before Friday.'] },
       { title: 'Waiting on', items: ['Evidence.'] },
       { title: 'Next', items: ['Nothing.'] },
     ]);

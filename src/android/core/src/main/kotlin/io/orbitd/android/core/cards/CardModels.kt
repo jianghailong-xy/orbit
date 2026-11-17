@@ -231,8 +231,8 @@ object CardCatalog {
                     "$requestId:returned", status = "Recorded", context = ownerContext("returned", view)))
             }
         }
-        if (projectId != null) addAll(project(id, projectId, standing, answered))
-    }
+        if (projectId != null) addAll(project(id, projectId, standing, answered, detail.text("createdAt")))
+    }.filter { CoordinatorCleanStart.drawsCard(snapshot.detail.text("createdAt"), it) }
 
     private fun receipt(family: CardFamily, title: String, source: JsonObject, session: String, id: String, revision: String) =
         InteractionCard("receipt:$family:$id:$revision", family, title, source, session, objectId = id, binding = revision, status = "Recorded")
@@ -242,7 +242,7 @@ object CardCatalog {
     private fun ownerContext(kind: String, view: JsonObject) = buildJsonObject { put("ownerCard", kind); put("view", view) }
 
     fun project(session: String, project: String, standing: Map<String, JsonElement>,
-        answered: Map<String, JsonObject> = emptyMap()): List<InteractionCard> = buildList {
+        answered: Map<String, JsonObject> = emptyMap(), createdAt: String? = null): List<InteractionCard> = buildList {
         val document = standing["project"] as? JsonObject
         if (document == null || document.text("id") != project) return@buildList
         (standing["criteriaDecisions"] as? JsonObject)?.let { queue ->
@@ -329,7 +329,7 @@ object CardCatalog {
             add(InteractionCard("promotion:$promotion", CardFamily.PROMOTION, if (merging) PromotionCards.mergingTitle(row) else PromotionCards.mergeTo(PromotionCards.mainBranch(row)), row,
                 session, project, promotion, "${row.text("sourceSha")}:${row.text("state")}", actions, if (merging) PromotionCards.mergingStatusLine(row) else row.text("state")))
         }
-    }
+    }.filter { CoordinatorCleanStart.drawsCard(createdAt, it) }
 }
 
 /** Delivery receipts for evidence held by the coordinator. */

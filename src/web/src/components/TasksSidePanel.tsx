@@ -58,7 +58,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -291,6 +291,9 @@ export interface Runner {
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
   // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
   registerDir?: string | null;
+  // The account's managed runner, labelled Orbit Cloud (RunnerRowIdentity). Absent from an older server,
+  // where the managed status's runnerId says which runner it is.
+  managed?: boolean;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
@@ -598,6 +601,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
   // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
   const { managed: accountManaged } = useManagedRunner();
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -606,9 +611,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, machineName(r, accountManaged?.status.runnerId));
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, managedRunnerId));
     return m;
-  }, [runners.data, accountManaged?.status.runnerId]);
+  }, [runners.data, managedRunnerId]);
 
   // The account menu's Machines row: every machine, and how many of them are online.
   const machineList = runners.data ?? [];
@@ -976,7 +981,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
+            (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1089,7 +1094,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
+                      (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1139,7 +1144,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner, accountManaged?.status.runnerId))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, managedRunnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1295,7 +1300,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
                       return {
                         key: `machine-${runner.id}`,
-                        textValue: machineName(runner, accountManaged?.status.runnerId),
+                        textValue: machineName(runner, managedRunnerId),
                         icon: (
                           <span
                             className="tp-account-machine-dot"
@@ -1304,7 +1309,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{machineName(runner, accountManaged?.status.runnerId)}</span>
+                            <span>{machineName(runner, managedRunnerId)}</span>
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
