@@ -148,13 +148,12 @@ internal object PendingTray {
         attachments: List<JsonObject>, state: String, busy: Boolean, offersWithdraw: Boolean, offersSteer: Boolean, steer: Boolean,
         at: String?): PendingTrayRow {
         val images = attachments.filter { (it.text("mime") ?: it.text("mimeType"))?.startsWith("image/") == true }
-        val said = words.takeIf { it.isNotEmpty() }?.let { if (shell) "!$it" else it }
-        // Translated (Settings › Translation): the row says what the reader wrote, as their bubble does, not the English delivered
-        // (web `queuedRow`'s `translation?.original`, OrbitKit `PendingTray.text(of:)`).
+        // Translated (Settings › Translation): the row says, and Withdraw hands back, what the reader wrote, as their bubble shows it,
+        // not the English delivered (web `queuedRow`'s `translation?.original`, OrbitKit `PendingTray.text(of:)`/`withdrawnText`).
         val shown = TranslationShown.userWords(words, translation, flipped = false).trim().takeIf { it.isNotEmpty() }
             ?.let { if (shell) "!$it" else it }
         return PendingTrayRow(turnId, intoTurn, shown ?: summary(images.size, attachments.size - images.size), shown == null, shell,
-            images.firstOrNull()?.text("id"), state, busy, offersWithdraw, offersSteer, steer, said, at)
+            images.firstOrNull()?.text("id"), state, busy, offersWithdraw, offersSteer, steer, shown, at)
     }
 }
 
