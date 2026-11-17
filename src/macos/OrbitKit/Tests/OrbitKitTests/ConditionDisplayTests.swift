@@ -119,7 +119,7 @@ final class ConditionDisplayTests: XCTestCase {
         XCTAssertNil(ConditionDisplay.rowReading(ScheduleConditionReading(id: "c", text: "x"), now: now))
         XCTAssertEqual(ConditionDisplay.ageText(now.addingTimeInterval(-20), now: now), "just now")
         XCTAssertEqual(ConditionDisplay.ageText(now.addingTimeInterval(-3 * 3600), now: now), "3 h ago")
-        XCTAssertEqual(ConditionDisplay.ageText(now.addingTimeInterval(-3 * 86_400), now: now), "3 d ago")
+        XCTAssertEqual(ConditionDisplay.ageText(now.addingTimeInterval(-3 * 86_400), now: now), "3 days ago")
         XCTAssertEqual(ConditionDisplay.readingText(90.4, unit: "%"), "90.4%")
         XCTAssertEqual(ConditionDisplay.readingText(0.0691234, unit: nil), "0.07")
         XCTAssertEqual(ConditionDisplay.readingText(412, unit: "GiB"), "412 GiB")
@@ -149,7 +149,7 @@ final class ConditionDisplayTests: XCTestCase {
         XCTAssertEqual(bar?.rearmLabel, "85%")
         XCTAssertEqual(ConditionDisplay.repeatText(7200), "And again every 2 hours while it stays that way.")
         XCTAssertEqual(ConditionDisplay.firingLine(compare: ConditionCompare(op: "GTE", value: 3), holdSeconds: 0, unit: "in"),
-                       "Fires at or above 3 in.")
+                       "Fires at 3 in or more.")
         XCTAssertNil(ConditionDisplay.bar(value: 0, compare: ConditionCompare(op: "EXIT_ZERO", value: nil),
                                           rearm: nil, unit: nil))
     }
@@ -336,6 +336,35 @@ final class ConditionDisplayTests: XCTestCase {
             XCTFail("ScheduleConditionCopy holds \(key), which SCHEDULE_CONDITION_COPY does not")
         }
         XCTAssertTrue(text.contains("keepsAwake: CONDITION_KEEPS_AWAKE_LINE"))
+    }
+
+    /// The words the web composes from a condition's read (src/web/src/lib/conditions.ts CONDITION_COPY) are the
+    /// iPhone's, word for word: the two clients draw one board.
+    func testTheComposedWordsAreTheWebs() throws {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var source: String?
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent("src/web/src/lib/conditions.ts")
+            if let text = try? String(contentsOf: candidate, encoding: .utf8) { source = text; break }
+            dir = dir.deletingLastPathComponent()
+        }
+        let text = try XCTUnwrap(source, "src/web/src/lib/conditions.ts was not found above this test")
+        let start = try XCTUnwrap(text.range(of: "export const CONDITION_COPY = {"))
+        let end = try XCTUnwrap(text.range(of: "} as const;", range: start.upperBound..<text.endIndex))
+        let web = String(text[start.upperBound..<end.lowerBound])
+        func says(_ sentence: String) -> Bool {
+            web.contains("'\(sentence)'") || web.contains("\"\(sentence)\"")
+        }
+        let C = ConditionCopy.self
+        var ours = [C.group, C.cantRead, C.checkedAgo, C.notReadYet, C.justNow, C.minutesAgo, C.hoursAgo, C.daysAgo,
+                    C.conditionSection, C.howItChecks, C.holdFor, C.readyAgainWhenFalse, C.every, C.everyNoRunner,
+                    C.approved, C.runFired, C.runFiredAgain, C.waitingKind, C.pause, C.lookIntoIt, C.startsWhen,
+                    C.today, C.ifNever, C.chipRun, C.chipCondition, C.historyCantRead,
+                    "\(C.taskRow) · \(C.taskOnce)"]
+        ours += C.fires.values.sorted() + C.readyAgain.values.sorted()
+        for sentence in ours {
+            XCTAssertTrue(says(sentence), "the web's CONDITION_COPY does not say \(sentence)")
+        }
     }
 
     /// Every label is English (CLAUDE.md §5).

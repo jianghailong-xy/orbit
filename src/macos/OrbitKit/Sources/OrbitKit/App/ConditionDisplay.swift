@@ -57,26 +57,28 @@ public enum ConditionCopy {
     public static let justNow = "just now"
     public static let minutesAgo = "{count} min ago"
     public static let hoursAgo = "{count} h ago"
-    public static let daysAgo = "{count} d ago"
+    public static let daysAgo = "{count} days ago"
     /// The inspector's reading: "checked 1 min ago".
     public static let checkedAgo = "checked {age}"
-    public static let notReadYet = "Not read yet"
+    public static let notReadYet = "not read yet"
     public static let conditionSection = "Condition"
     public static let howItChecks = "How it checks"
     public static let every = "Every {interval} on {runner}, without a model."
     public static let everyNoRunner = "Every {interval}, without a model."
     public static let approved = "Read-only. Approved by you on {date}."
-    /// "Fires above 90% for 10 min."
-    public static let fires = "Fires {op} {value}{hold}."
-    public static let firesWhenSucceeds = "Fires when the check succeeds{hold}."
-    public static let holdFor = " for {duration}"
-    /// "Ready again below 85%."
-    public static let readyAgain = "Ready again {op} {value}."
-    public static let readyAgainWhenSucceeds = "Ready again when the check succeeds."
-    public static let readyAgainWhenFalse = "Ready again once it no longer holds."
-    public static let ops: [String: String] = [
-        "GT": "above", "GTE": "at or above", "LT": "below", "LTE": "at or below", "EQ": "at",
+    /// "Fires above 90%", then the hold (" for 10 min") and a full stop: the web's CONDITION_COPY.fires.
+    public static let fires: [String: String] = [
+        "GT": "Fires above {value}", "GTE": "Fires at {value} or more", "LT": "Fires below {value}",
+        "LTE": "Fires at {value} or less", "EQ": "Fires at {value}", "EXIT_ZERO": "Fires when the check succeeds",
     ]
+    public static let holdFor = " for {duration}"
+    /// "Ready again below 85%.": the web's CONDITION_COPY.readyAgain.
+    public static let readyAgain: [String: String] = [
+        "GT": "Ready again above {value}.", "GTE": "Ready again at {value} or more.", "LT": "Ready again below {value}.",
+        "LTE": "Ready again at {value} or less.", "EQ": "Ready again at {value}.",
+        "EXIT_ZERO": "Ready again once the check succeeds.",
+    ]
+    public static let readyAgainWhenFalse = "Ready again once it no longer holds."
     /// The history's lines and their chips.
     public static let historyFired = "Fired · {reading}{hold}"
     public static let historyFiredAgain = "Fired again · {reading}"
@@ -104,11 +106,10 @@ public enum ConditionCopy {
     /// Every sentence above, so the copy guard reads them as English.
     public static let all: [String] = [
         group, cantRead, taskRow, taskOnce, justNow, minutesAgo, hoursAgo, daysAgo, checkedAgo, notReadYet,
-        conditionSection, howItChecks, every, everyNoRunner, approved, fires, firesWhenSucceeds, holdFor, readyAgain,
-        readyAgainWhenSucceeds, readyAgainWhenFalse, historyFired, historyFiredAgain, historyReadyAgain,
+        conditionSection, howItChecks, every, everyNoRunner, approved, holdFor, readyAgainWhenFalse, historyFired, historyFiredAgain, historyReadyAgain,
         historyCantRead, historyReadAgain, historyAsked, chipRun, chipCondition, runFired, runFiredAgain, waitingKind,
         pause, lookIntoIt, keepWaiting, stop, createTaskTitle, startsWhen, today, ifNever,
-    ] + ops.values.sorted()
+    ] + fires.values.sorted() + readyAgain.values.sorted()
 }
 
 /// The rules that turn a condition's reads into what the Apple clients draw. Pure and Foundation-only, so it runs in
@@ -247,19 +248,14 @@ public enum ConditionDisplay {
     /// "Fires above 90% for 10 min."
     public static func firingLine(compare: ConditionCompare, holdSeconds: Int, unit: String?) -> String {
         let hold = holdSeconds > 0 ? fill(C.holdFor, ["duration": durationText(holdSeconds)]) : ""
-        guard compare.op != "EXIT_ZERO", let op = C.ops[compare.op], let value = compare.value else {
-            return fill(C.firesWhenSucceeds, ["hold": hold])
-        }
-        return fill(C.fires, ["op": op, "value": readingText(value, unit: unit), "hold": hold])
+        let template = C.fires[compare.op] ?? C.fires["EXIT_ZERO"]!
+        return fill(template, ["value": compare.value.map { readingText($0, unit: unit) } ?? ""]) + hold + "."
     }
 
     /// "Ready again below 85%."
     public static func rearmLine(rearm: ConditionCompare?, unit: String?) -> String {
-        guard let rearm else { return C.readyAgainWhenFalse }
-        guard rearm.op != "EXIT_ZERO", let op = C.ops[rearm.op], let value = rearm.value else {
-            return C.readyAgainWhenSucceeds
-        }
-        return fill(C.readyAgain, ["op": op, "value": readingText(value, unit: unit)])
+        guard let rearm, let template = C.readyAgain[rearm.op] else { return C.readyAgainWhenFalse }
+        return fill(template, ["value": rearm.value.map { readingText($0, unit: unit) } ?? ""])
     }
 
     /// The Condition block's lines.
