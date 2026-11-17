@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.core.cards.CoordinatorCleanStart
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.SessionHandle
@@ -33,6 +34,8 @@ import java.util.Locale
  * `src/shared/src/coordinator-handoff.ts`, which CoordinatorHandoffCopyParityTest reads them against.
  */
 internal object CoordinatorHandoffCopy {
+    const val OPEN_PREVIOUS = CoordinatorCleanStart.openPrevious
+    fun historyBefore(decisions: Int, merges: Int) = CoordinatorCleanStart.historyBefore(decisions, merges)
     // Board 03, the context dialog's action rows.
     const val COMPACT = "Compact"
     const val COMPACT_DETAIL = "Summarize earlier turns and keep going here."
@@ -67,6 +70,9 @@ internal object CoordinatorHandoffCopy {
     fun waitsMovedHere(count: Int) = if (count == 1) "1 wait moved here" else "$count waits moved here"
     /** After a paused wait's label in the moved-here list (web's `pendingWaitLabel`, OrbitKit's `pausedSuffix`). */
     const val PAUSED_SUFFIX = " (paused)"
+    /** The words after a wait's label naming its kind (`COORDINATOR_PENDING_WAIT_KIND_LABELS`); none for a watch, whose label
+     *  already says what it waits for — nor for a missing or unknown kind, which reads as a watch. */
+    val WAIT_KINDS = mapOf("SUBAGENT" to "SubAgent", "JOB" to "Background job", "WAKEUP" to "Scheduled wakeup", "LOOP" to "Wakeup loop")
     const val HANDED_OVER = "Handed over to a new coordinator."
     const val OPEN_IT = "Open it"
     const val TRY_AGAIN = "Try again"
@@ -94,10 +100,13 @@ internal data class OutgoingHandoff(val state: String, val startedAt: String?, v
     val locksComposer get() = state == "WRITING" || state == "HANDING_OVER"
 }
 
-/** One wait as the handoff names it (`CoordinatorPendingWait`). */
-internal data class HandoffWait(val id: String, val label: String, val paused: Boolean) {
-    /** The label as the moved-here list shows it. */
-    val shownLabel get() = if (paused) label + CoordinatorHandoffCopy.PAUSED_SUFFIX else label
+/** One wait as the handoff names it (`CoordinatorPendingWait`). [kind] is the server's, null from a server without it. */
+internal data class HandoffWait(val id: String, val label: String, val paused: Boolean, val kind: String? = null) {
+    /** The kind's words, null for a watch (or a missing or unknown kind). */
+    val kindLabel get() = kind?.let { CoordinatorHandoffCopy.WAIT_KINDS[it] }
+    /** The wait as the confirm and the moved-here list show it (`coordinatorPendingWaitLine`): the label, " (paused)" when
+     *  paused, then " · <kind>" unless it is a watch. */
+    val shownLabel get() = label + (if (paused) CoordinatorHandoffCopy.PAUSED_SUFFIX else "") + (kindLabel?.let { " · $it" } ?: "")
 }
 
 /** The handoff a successor opened with (`coordinatorHandoffReceived`). */
@@ -111,7 +120,7 @@ internal data class HandoffNote(val preamble: List<String>, val sections: List<N
 
 /** The rules the context dialog and the conversation read (boards 02, 03). Pure, so the unit tests pin them. */
 internal object CoordinatorHandoff {
-    val SECTIONS = listOf("Where things stand", "Agreed with the owner", "Waiting on", "Next")
+    val SECTIONS = listOf("Where things stand", "Rulings not yet recorded", "Waiting on", "Next")
 
     /** Compact is offered where the engine advertises `compact` among its slash commands (the composer's Command list). */
     fun compactOffered(slashItems: List<JsonObject>) = slashItems.any { it.text("type") == "command" && it.text("name") == "compact" }
@@ -155,7 +164,7 @@ internal object CoordinatorHandoff {
     }
 
     fun waits(value: JsonElement?): List<HandoffWait> = (value as? JsonArray).orEmpty().filterIsInstance<JsonObject>().mapNotNull { w ->
-        HandoffWait(w.text("id") ?: return@mapNotNull null, w.text("label").orEmpty(), w.flag("paused") == true)
+        HandoffWait(w.text("id") ?: return@mapNotNull null, w.text("label").orEmpty(), w.flag("paused") == true, w.text("kind"))
     }
 
     /** The FAILED row's exits: all three, but only Hand over without a note once the outgoing conversation is already completed
@@ -244,6 +253,11 @@ internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // No count while the waits are still being read, as when there are none.
                 Text(CoordinatorHandoffCopy.phoneConfirmBody(waits?.size ?: 0, running))
+                // Once any wait is more than a watch, each one on its own line with its kind (handoff v2 §1), as iOS's Alert;
+                // waits that are all watches, or from a server without `kind`, stay a count only.
+                if (waits.orEmpty().any { it.kindLabel != null }) Column(Modifier.testTag("handoff-confirm-waits")) {
+                    waits.orEmpty().forEach { Text("•  ${it.shownLabel}", style = MaterialTheme.typography.bodySmall) }
+                }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
@@ -316,7 +330,7 @@ internal fun HandedOverBanner(successor: String?, open: (String) -> Unit) {
 
 /** Board 02 ③: the note the successor opened with, its link to the previous coordinator, and the waits that moved here. */
 @Composable
-internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) {
+internal fun HandoffNoteCard(received: ReceivedHandoff, history: CoordinatorCleanStart.Counts = CoordinatorCleanStart.Counts(0, 0), open: (String) -> Unit) {
     var waitsOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("handoff-note-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))) {
@@ -332,6 +346,11 @@ internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) 
                     pushStyle(androidx.compose.ui.text.SpanStyle(color = MaterialTheme.colorScheme.primary)); append(title.removePrefix("Handoff from ")); pop()
                     time?.let { append(" · $it") }
                 }, style = MaterialTheme.typography.bodyMedium)
+            }
+            CoordinatorHandoffCopy.historyBefore(history.decisions, history.merges)?.let { line ->
+                Text("$line · ${CoordinatorHandoffCopy.OPEN_PREVIOUS}",
+                    Modifier.clickable { open(received.from) }.padding(horizontal = 12.dp, vertical = 4.dp).testTag("handoff-history"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             HorizontalDivider()
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

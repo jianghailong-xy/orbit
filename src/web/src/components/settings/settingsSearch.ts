@@ -28,6 +28,7 @@ export type SettingsSearchSources = {
     name: string;
     displayName?: string | null;
     hostname?: string | null;
+    managed?: boolean;
   }>;
   /** The account's managed runner, named Orbit Cloud (machineName). */
   managedRunnerId?: string | null;

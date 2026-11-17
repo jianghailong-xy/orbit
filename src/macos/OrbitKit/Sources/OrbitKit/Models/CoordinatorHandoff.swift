@@ -30,17 +30,38 @@ public enum CoordinatorHandoffFailureCode: String, Codable, Equatable, Sendable,
     case replaceFailed = "REPLACE_FAILED"
 }
 
-/// One wait the outgoing coordinator set, as the confirm dialog and "N waits moved here" name it.
+/// What kind of pending work a `CoordinatorPendingWait` is (`CoordinatorPendingWaitKind`).
+public enum CoordinatorPendingWaitKind: String, Codable, Equatable, Sendable, CaseIterable {
+    case watch = "WATCH"
+    case subagent = "SUBAGENT"
+    case job = "JOB"
+    case wakeup = "WAKEUP"
+    case loop = "LOOP"
+}
+
+/// One piece of pending work the outgoing coordinator had, as the confirm dialog and "N waits moved
+/// here" name it.
 public struct CoordinatorPendingWait: Codable, Equatable, Sendable, Identifiable {
     public let id: String
+    /// A server without `kind`, a handoff recorded before it, or a kind this build does not know: a watch.
+    public let kind: CoordinatorPendingWaitKind
     public let label: String
     /// A PAUSED watch: it moves and stays paused.
     public let paused: Bool
 
-    public init(id: String, label: String, paused: Bool = false) {
+    public init(id: String, kind: CoordinatorPendingWaitKind = .watch, label: String, paused: Bool = false) {
         self.id = id
+        self.kind = kind
         self.label = label
         self.paused = paused
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        kind = (try? c.decodeIfPresent(CoordinatorPendingWaitKind.self, forKey: .kind)) ?? .watch
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
     }
 }
 

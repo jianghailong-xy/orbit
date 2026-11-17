@@ -103,6 +103,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeAccountSwapCapabilityV1,
 		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
@@ -1079,6 +1080,12 @@ func (t *Transport) dirProbeResult(b RunnerDirProbeResult) error {
 // whether this machine ended up signed in.
 func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
+// claudeAccountSwapResult reports where a heartbeat-delivered Claude account swap stands
+// (claude-account-swap/v1).
+func (t *Transport) claudeAccountSwapResult(b ClaudeAccountSwapResult) error {
+	return t.do(nil, "POST", "/runner/claude-account-swap-result", b, nil, 15*time.Second)
 }
 
 // codexAccountRemoveResult reports what a heartbeat-delivered account removal came to, on the route
@@ -2125,6 +2132,19 @@ func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.R
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
 		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// recordProjectRuling records an owner ruling on the project (`project_ruling_record`, coordinator
+// handoff v2 §2). The session header is the authority: the server checks it against the project's
+// coordinator pointer and the quote against the named turn's owner text.
+func (t *Transport) recordProjectRuling(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/rulings",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
