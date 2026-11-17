@@ -96,6 +96,12 @@ type liveSession struct {
 	// held for an update (holdFollowUpForUpdate).
 	completingTurn         bool
 	startedWhileCompleting bool
+	// heldForSwap: this session's turn is held back by a Claude login swap on the folder it runs in
+	// (claude_account_swap_relay.go): its permit is here, but waitActive does not let the turn start
+	// until the swap ends, and the swap does not count it as a turn to wait for. jobAfterSwap: its
+	// claim arrived after the swap was reported, so it already names the account's new folder.
+	heldForSwap  bool
+	jobAfterSwap bool
 
 	resident         bool // an engine is starting/running/being reaped
 	engineGeneration uint64
@@ -230,6 +236,9 @@ type sessionPool struct {
 	// updateAskedByOwner: the owner pressed Update Runner Now. Their update waits only for the turns
 	// in flight, not for the quiet window (updateWhenNoTurnInFlight).
 	updateAskedByOwner bool
+	// accountSwap is the Claude login swap in progress, nil when none is: every session on one of its
+	// two folders starts no turn until it ends (claude_account_swap_relay.go).
+	accountSwap *poolAccountSwap
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -1322,6 +1331,7 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 	// running a turn here (drainClaimScope): its message waits for the update, as a held follow-up
 	// does, and the row stays RUNNING for the updated runner to reclaim.
 	s.heldForUpdate = p.drainingForUpdate
+	s.jobAfterSwap = p.accountSwap != nil && p.accountSwap.reported
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
 	s.idleGeneration++
@@ -1513,7 +1523,13 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			p.mu.Unlock()
 			return false
 		}
-		if s.active && !p.closedForUpdate && !s.heldForUpdate {
+		if s.active && !p.closedForUpdate && !s.heldForUpdate && p.accountSwapHoldsLocked(s) {
+			if !s.heldForSwap {
+				s.heldForSwap = true
+				p.signalLocked(nil) // the swap waiting on this session's turn looks again
+			}
+		} else if s.active && !p.closedForUpdate && !s.heldForUpdate {
+			s.heldForSwap = false
 			if s.completingTurn {
 				s.startedWhileCompleting = true
 			}
