@@ -157,6 +157,7 @@ import {
 import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -4579,6 +4580,10 @@ export class SessionsService {
               -- named before capacity, because a slot coming free would not start this session.
               WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
                 THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
+              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
+              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
+              WHEN ${sessionDiskHoldSql('s')}
+                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
@@ -10060,18 +10065,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
-    // only at the scheduled approval door, never exported as an engine pattern.
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {

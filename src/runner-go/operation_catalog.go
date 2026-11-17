@@ -2700,6 +2700,10 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name": "notify",
+			// Loaded up front, like delegate (subagent.go): deferred behind ToolSearch, an agent sees only the name,
+			// never the "when" below, and on 2026-11-17 one asked "tell me when the upgrade is done" answered in the
+			// conversation instead. About 330 o200k tokens per request.
+			"_meta": map[string]interface{}{"anthropic/alwaysLoad": true},
 			"description": "In a task run of an Automatic project this goes to the project's coordinator, not to the owner's devices. " +
 				"Read recipient in the result to see who got it: coordinator, or owner when Orbit fell back. " +
 				"Tell the human this session belongs to that something happened, on their phone and Mac, " +

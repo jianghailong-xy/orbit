@@ -239,6 +239,9 @@ export const RUNNER_UPDATING_TITLE = 'Runner updating';
 export const CLONE_WAIT_TITLE = 'Waiting for the clone';
 export const CLONE_FAILED_TITLE = 'Clone failed';
 export const CLONE_FAILED_WAIT = 'This session starts once the repository is cloned. Retry the clone from the conversation’s first line.';
+/** A new session held by Keep Free (queuedReason disk_below_floor): its workspace's disk is below its runner's floor. */
+export const DISK_LOW_TITLE = 'Low disk space';
+export const DISK_LOW_WAIT = 'This runner has less free disk space than its Keep Free setting. This session starts once space is freed.';
 /** The foot-row tag under a message the drain holds: `Queued · ` then this, underlined, to open why. */
 export const RUNNER_UPDATING_TAG = 'runner updating';
 
@@ -420,6 +423,9 @@ export function pendingSlotDescription(
       return `${CLONE_STARTS_WHEN_DONE}.`;
     case 'WORKSPACE_CLONE_FAILED':
       return CLONE_FAILED_WAIT;
+    // Keep Free (the claim's gate on a session that has never run): lifts when the runner reports space above its floor.
+    case 'disk_below_floor':
+      return DISK_LOW_WAIT;
     // The server checked every gate and found none: nothing is contended, it simply has not been
     // picked up yet — normally one long-poll round trip. See queuedTitle for why this may not
     // collapse into the `undefined` case below.
@@ -454,6 +460,8 @@ export function queuedTitle(gate?: QueuedGate | null): string {
       return CLONE_WAIT_TITLE;
     case 'WORKSPACE_CLONE_FAILED':
       return CLONE_FAILED_TITLE;
+    case 'disk_below_floor':
+      return DISK_LOW_TITLE;
     case null:
       return QUEUED_LABEL;
     default:
@@ -474,6 +482,8 @@ export function queuedLabel(gate?: QueuedGate | null): string {
       return CLONE_WAIT_TITLE;
     case 'WORKSPACE_CLONE_FAILED':
       return CLONE_FAILED_TITLE;
+    case 'disk_below_floor':
+      return DISK_LOW_TITLE;
     case null:
       return QUEUED_LABEL;
     default:

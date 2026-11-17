@@ -59,6 +59,11 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
         }
         if live && s.isGenerating {
+            // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names
+            // the sub-agent's work rather than the tool (web parity).
+            if let t = s.lastToolUse, subagentLaunchTools.contains(fmtTool(t)), let n = s.runningSubagentCount, n > 0 {
+                return SessionLine(text: subagentRunningLine(n, title: s.runningSubagentTitle), tone: .running)
+            }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
             // say it rather than fall through to a preview that reads as idle (web parity).
@@ -80,6 +85,8 @@ public struct SessionLine: Equatable, Sendable {
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
             // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
             if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
+            // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+            if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
@@ -206,6 +213,9 @@ public struct SessionLine: Equatable, Sendable {
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by fmtTool).
+    static let subagentLaunchTools: Set<String> = ["Task", "Agent", "Workflow", "delegate"]
 
     /// Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create; plain
     /// tool names (Bash, Read, Edit) pass through unchanged.

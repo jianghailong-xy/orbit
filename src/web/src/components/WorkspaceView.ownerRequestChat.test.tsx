@@ -27,6 +27,7 @@ vi.mock('../api', async (importOriginal) => {
     getSessionEventPage: vi.fn(),
     listApprovals: vi.fn(),
     sendTurn: vi.fn(),
+    uploadAttachment: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -34,7 +35,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listApprovals, sendTurn } = await import('../api');
+const { api, getSessionEventPage, listApprovals, sendTurn, uploadAttachment } = await import('../api');
 const apiMock = vi.mocked(api);
 const sendTurnMock = vi.mocked(sendTurn);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -248,5 +249,50 @@ describe('Chat about this on an owner request', { timeout: 60_000 }, () => {
     expect(requested.filter((r) => r.startsWith('POST /owner-requests')), 'the chat resolved the request').toEqual([]);
     expect(armedBar(), 'the bar stayed armed after the send').toBeNull();
     expect(card(), 'the card went with the chat').not.toBeNull();
+  });
+
+  it('sends a screenshot alone, behind the request — a request may ask for one', async () => {
+    vi.mocked(uploadAttachment).mockReset();
+    vi.mocked(uploadAttachment).mockResolvedValue({ id: 'att-shot' } as never);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:shot' });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: () => {} });
+    await mount(`/sessions/${SESSION_PUBLIC}`);
+    const card = (): Element | null => mounted().querySelector(`#owner-request-${REQUEST_ID}`);
+    await waitForUi(() => {
+      expect(card(), 'the request card is not drawn').not.toBeNull();
+    });
+    const press = [...card()!.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === OWNER_SEND_BACK_ACTION);
+    await act(async () => press!.click());
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${OWNER_REQUEST_CHAT_PREFIX}${REQUEST.title}`);
+    });
+
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+    const png = new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { items: [{ kind: 'file', getAsFile: () => png }] },
+    });
+    await act(async () => {
+      box.dispatchEvent(paste);
+    });
+    await waitForUi(() => {
+      expect(uploadAttachment).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {});
+    box.focus();
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => {
+      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+    });
+    const [sessionId, content, attachmentIds] = sendTurnMock.mock.calls[0]!;
+    expect(sessionId).toBe(SESSION_PUBLIC);
+    expect(content).toBe(ownerRequestChatContext(REQUEST));
+    expect(attachmentIds).toEqual(['att-shot']);
+    expect(requested.filter((r) => r.startsWith('POST /owner-requests')), 'the chat resolved the request').toEqual([]);
+    expect(armedBar(), 'the bar stayed armed after the send').toBeNull();
   });
 });
