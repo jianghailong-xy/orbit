@@ -230,6 +230,19 @@ const DONE_REQUEST_DOOR = 'src/apiserver/src/projects/project-open-item.service.
  */
 const CRITERION_MOVE = 'src/apiserver/src/projects/criterion-move.ts';
 /**
+ * The sixth reader that is not a test: the state digest a successor coordinator opens with
+ * (a5a5c1c03, 2026-11-17).
+ *
+ * WHAT IT DOES WITH THE ANSWER. `readStateDigest` reads every criterion's `satisfied` and renders it
+ * as one line of text each, `met`, `not met` or `not answered`, beside a count of the met ones.
+ * `projects.service.ts` hands that text to the new coordinator's first turn.
+ *
+ * WHY IT IS NOT A GATE. It renders a string and returns it: it writes no row, throws on no answer,
+ * and calls no `doneReadiness`. What a coordinator then does with the line is the done request's
+ * business, which the gate above already is.
+ */
+const COORDINATOR_DIGEST = 'src/apiserver/src/projects/coordinator-digest.ts';
+/**
  * Three unit specs of the same project (0545's confirmation mode and the move), each calling the
  * derivation to read the answer back rather than re-implementing it — tests, writing nothing on the
  * strength of it:
@@ -694,7 +707,7 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
       mentions,
       [MODULE, SPEC, REDECLARATION_SPEC, PENDING_JUDGMENTS_SPEC, CRITERION_READY_SPEC,
         SERVICE, SERVICE_SPEC, DONE_PROJECTION, PUBLIC_PROJECT, DONE_REQUEST, CRITERION_MOVE,
-        CRITERION_MOVE_SPEC, CHECK_ENDED_SPEC, CONFIRMATION_SPEC].sort(),
+        CRITERION_MOVE_SPEC, CHECK_ENDED_SPEC, CONFIRMATION_SPEC, COORDINATOR_DIGEST].sort(),
       'the readers of the derivation — the module itself, and every file that imports it — are '
         + 'exactly these, each named above with what it does with the answer: seven tests of it, '
         + 'two read endpoints that serve it (the owner’s project, and a shared project’s public '
@@ -702,7 +715,8 @@ test('T3: a criterion is satisfied by three clauses, and says which one is missi
         + '(since the owner’s 2026-09-08 re-deliberation of 0229), the check a coordinator’s '
         + 'done request has to pass (since the owner’s 2026-10-01 decision on how a project is '
         + 'closed), and the done card’s move of an unmet criterion to a follow-up (since the '
-        + 'owner’s 2026-11-11 decision), which refuses only to move a met one. The done request’s '
+        + 'owner’s 2026-11-11 decision), which refuses only to move a met one, and the state digest '
+        + 'a successor coordinator opens with, which renders it as text. The done request’s '
         + 'check is the one gate on a project among them, and what it refuses is the '
         + 'coordinator’s request: nothing keeps the owner from recording a project done over a '
         + 'criterion that is not met. A file arriving here is a consumer somebody has to come and '
