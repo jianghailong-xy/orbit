@@ -201,6 +201,11 @@ struct ToolApprovalCard: View {
     /// of the transcript.
     @State private var descriptionOpen = false
     @State private var criteriaOpen = false
+    /// Orbit's own cards drawn in the owner's language flip back to what the agent wrote, whole card
+    /// at once, from the foot under the body (`Approvals.orbitCardFoot`).
+    @State private var showOriginal = false
+    /// What the Orbit cards below are built from: translated, unless flipped to the original.
+    private var orbitInput: JSONValue? { Approvals.orbitCardInput(approval, showOriginal: showOriginal) }
 
     private var rememberRules: [PermissionRule] {
         // An engine that drops remember rules (Harness) gets Allow / Deny only — asked of the session's
@@ -226,23 +231,23 @@ struct ToolApprovalCard: View {
     /// the card showed a tool name and nothing else — somebody was being asked to approve fifty
     /// tasks they could not see.
     private var batch: BatchApprovalPreview? {
-        guard Approvals.isTaskBatch(toolName: approval.toolName ?? ""), let input = approval.input
+        guard Approvals.isTaskBatch(toolName: approval.toolName ?? ""), let input = orbitInput
         else { return nil }
         return Approvals.batchPreview(from: input)
     }
     private var dag: DagApprovalPreview? {
-        guard Approvals.isDagChange(toolName: approval.toolName ?? ""), let input = approval.input
+        guard Approvals.isDagChange(toolName: approval.toolName ?? ""), let input = orbitInput
         else { return nil }
         return Approvals.dagPreview(from: input)
     }
     private var create: CreateApprovalPreview? {
-        approval.input.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
+        orbitInput.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
     }
     /// Ending a project's blocker: the sentence the blocker was filed with — addressed to whoever
     /// reads this — over the agent's argument that it no longer applies. The two sentences are the
     /// decision; web renders the same pair under the same two captions.
     private var blocker: BlockerResolvePreview? {
-        approval.input.flatMap {
+        orbitInput.flatMap {
             Approvals.blockerResolvePreview(toolName: approval.toolName ?? "", from: $0)
         }
     }
@@ -381,12 +386,20 @@ struct ToolApprovalCard: View {
     }
 
     @ViewBuilder private var details: some View {
+        cardDetails
+        // A translated Orbit card's one foot: "Translated · Show original" flips the whole card.
+        TranslationFootView(parts: Approvals.orbitCardFoot(approval, showOriginal: showOriginal)) { _ in
+            showOriginal.toggle()
+        }
+    }
+
+    @ViewBuilder private var cardDetails: some View {
         if let batch {
             // No header of its own: the review's navigation bar already asks "Create 3 tasks?", and
             // the transcript's preview draws its own. The tasks are listed by level, each one push
             // from its page, which reads the full body the runner is about to send.
             BatchCreateReviewBody(batch: batch,
-                                  details: approval.input.map(Approvals.batchTaskDetails) ?? [],
+                                  details: orbitInput.map(Approvals.batchTaskDetails) ?? [],
                                   close: dismissReview)
         } else if let dag {
             ApprovalHeader(symbol: "point.3.connected.trianglepath.dotted",

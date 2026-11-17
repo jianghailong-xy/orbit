@@ -482,14 +482,45 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
     public var description: String?
     public var plan: String?
     public var questions: [TranslatedQuestion]?
+    // Orbit's own cards (orbit_task_create, orbit_task_batch, orbit_project_create,
+    // orbit_blocker_resolve, orbit_dag_change): each the input field of the same name translated,
+    // present only when the original has text; arrays go index for index with the input's.
+    /// `input.title` (orbit_task_create, orbit_project_create).
+    public var title: String?
+    /// `input.acceptanceCriteria` (orbit_task_create).
+    public var acceptanceCriteria: String?
+    /// `input.tasks` (orbit_task_batch): `tasks[i]` is `input.tasks[i]` and `input.preview.tasks[i]`.
+    public var tasks: [TranslatedTaskBody]?
+    /// `input.goal` (orbit_project_create).
+    public var goal: String?
+    /// `input.instructions` (orbit_project_create).
+    public var instructions: String?
+    /// `input.acceptanceCriteriaItems` (orbit_project_create), index for index.
+    public var acceptanceCriteriaItems: [TranslatedCriterionItem]?
+    /// `input.reason` (orbit_blocker_resolve).
+    public var reason: String?
+    /// `input.note` (orbit_dag_change).
+    public var note: String?
 
     public init(lang: TranslationLanguage, failed: Bool = false, description: String? = nil,
-                plan: String? = nil, questions: [TranslatedQuestion]? = nil) {
+                plan: String? = nil, questions: [TranslatedQuestion]? = nil,
+                title: String? = nil, acceptanceCriteria: String? = nil,
+                tasks: [TranslatedTaskBody]? = nil, goal: String? = nil, instructions: String? = nil,
+                acceptanceCriteriaItems: [TranslatedCriterionItem]? = nil,
+                reason: String? = nil, note: String? = nil) {
         self.lang = lang
         self.failed = failed
         self.description = description
         self.plan = plan
         self.questions = questions
+        self.title = title
+        self.acceptanceCriteria = acceptanceCriteria
+        self.tasks = tasks
+        self.goal = goal
+        self.instructions = instructions
+        self.acceptanceCriteriaItems = acceptanceCriteriaItems
+        self.reason = reason
+        self.note = note
     }
 
     public static func parse(_ value: JSONValue?) -> ApprovalTranslation? {
@@ -507,9 +538,29 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
                                           header: q["header"]?.stringValue, options: options)
             }
         }
+        var tasks: [TranslatedTaskBody]?
+        if case .array(let ts)? = value["tasks"] {
+            tasks = ts.map {
+                TranslatedTaskBody(title: $0["title"]?.stringValue, description: $0["description"]?.stringValue,
+                                   acceptanceCriteria: $0["acceptanceCriteria"]?.stringValue)
+            }
+        }
+        var items: [TranslatedCriterionItem]?
+        if case .array(let cs)? = value["acceptanceCriteriaItems"] {
+            items = cs.map {
+                TranslatedCriterionItem(text: $0["text"]?.stringValue,
+                                        verificationMethod: $0["verificationMethod"]?.stringValue)
+            }
+        }
         return ApprovalTranslation(lang: lang, failed: value["failed"]?.boolValue == true,
                                    description: value["description"]?.stringValue,
-                                   plan: value["plan"]?.stringValue, questions: questions)
+                                   plan: value["plan"]?.stringValue, questions: questions,
+                                   title: value["title"]?.stringValue,
+                                   acceptanceCriteria: value["acceptanceCriteria"]?.stringValue,
+                                   tasks: tasks, goal: value["goal"]?.stringValue,
+                                   instructions: value["instructions"]?.stringValue,
+                                   acceptanceCriteriaItems: items,
+                                   reason: value["reason"]?.stringValue, note: value["note"]?.stringValue)
     }
 
     /// The card's `input` as it is shown: the questions, a tool card's description and a plan in the
@@ -520,6 +571,39 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
         guard let translation, !translation.failed, case .object(var obj)? = input else { return input }
         if let d = nonEmpty(translation.description), obj["description"] != nil { obj["description"] = .string(d) }
         if let p = nonEmpty(translation.plan), obj["plan"] != nil { obj["plan"] = .string(p) }
+        // Orbit's own cards: each field over its original, and only where the original has one.
+        put(&obj, "title", translation.title)
+        put(&obj, "acceptanceCriteria", translation.acceptanceCriteria)
+        put(&obj, "goal", translation.goal)
+        put(&obj, "instructions", translation.instructions)
+        put(&obj, "reason", translation.reason)
+        put(&obj, "note", translation.note)
+        if let translated = translation.tasks {
+            // A batch card draws `preview.tasks[i]` and opens `tasks[i]`: the same task twice.
+            func tasks(_ value: JSONValue?) -> JSONValue? {
+                guard case .array(let ts)? = value else { return value }
+                return .array(ts.enumerated().map { i, t in
+                    guard i < translated.count, case .object(var to) = t else { return t }
+                    put(&to, "title", translated[i].title)
+                    put(&to, "description", translated[i].description)
+                    put(&to, "acceptanceCriteria", translated[i].acceptanceCriteria)
+                    return .object(to)
+                })
+            }
+            if obj["tasks"] != nil { obj["tasks"] = tasks(obj["tasks"]) }
+            if case .object(var preview)? = obj["preview"], preview["tasks"] != nil {
+                preview["tasks"] = tasks(preview["tasks"])
+                obj["preview"] = .object(preview)
+            }
+        }
+        if let translated = translation.acceptanceCriteriaItems, case .array(let cs)? = obj["acceptanceCriteriaItems"] {
+            obj["acceptanceCriteriaItems"] = .array(cs.enumerated().map { i, c in
+                guard i < translated.count, case .object(var co) = c else { return c }
+                put(&co, "text", translated[i].text)
+                put(&co, "verificationMethod", translated[i].verificationMethod)
+                return .object(co)
+            })
+        }
         if let translated = translation.questions, case .array(let qs)? = obj["questions"] {
             obj["questions"] = .array(qs.enumerated().map { i, q in
                 guard i < translated.count, case .object(var qo) = q else { return q }
@@ -545,6 +629,36 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
     private static func nonEmpty(_ s: String?) -> String? {
         guard let s, !s.isEmpty else { return nil }
         return s
+    }
+
+    /// `obj[key]` = `value`, when both the original and its translation have text.
+    private static func put(_ obj: inout [String: JSONValue], _ key: String, _ value: String?) {
+        if let v = nonEmpty(value), obj[key] != nil { obj[key] = .string(v) }
+    }
+}
+
+/// One task of a batch card as shown in the owner's language (`ApprovalTranslation.tasks`).
+public struct TranslatedTaskBody: Codable, Equatable, Sendable {
+    public var title: String?
+    public var description: String?
+    public var acceptanceCriteria: String?
+
+    public init(title: String? = nil, description: String? = nil, acceptanceCriteria: String? = nil) {
+        self.title = title
+        self.description = description
+        self.acceptanceCriteria = acceptanceCriteria
+    }
+}
+
+/// One of a new project's criteria as shown in the owner's language
+/// (`ApprovalTranslation.acceptanceCriteriaItems`).
+public struct TranslatedCriterionItem: Codable, Equatable, Sendable {
+    public var text: String?
+    public var verificationMethod: String?
+
+    public init(text: String? = nil, verificationMethod: String? = nil) {
+        self.text = text
+        self.verificationMethod = verificationMethod
     }
 }
 
