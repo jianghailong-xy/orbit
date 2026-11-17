@@ -160,6 +160,12 @@ func listPublishedObjects(repo, tip string, exclude ...string) ([]string, map[st
 		if ref == "" {
 			continue
 		}
+		// The removal scan can exclude objects already public on origin. This is
+		// a rev-list selector, not a revision that rev-parse can verify.
+		if ref == "--remotes=origin" {
+			not = append(not, ref)
+			continue
+		}
 		if _, err := git(repo, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil {
 			not = append(not, ref)
 		}
