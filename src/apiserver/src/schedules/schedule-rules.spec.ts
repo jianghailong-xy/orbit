@@ -99,3 +99,12 @@ test('envelope: a person narrows it, a run does not, and only the parts the chan
   assert.deepEqual(mixed.widens, ['RUN_LIMIT']);
   assert.deepEqual(mixed.next, env({ runLimitMinutes: 60, runsPerWeek: 2 }));
 });
+
+
+test('envelope order: CHECK_ONLY < OPEN_PR < LAND; widening needs Allow, narrowing is immediate', () => {
+  for (const accessLevel of ['CHECK_ONLY', 'OPEN_PR'] as const) {
+    assert.deepEqual(widenedParts(env({ accessLevel }), env({ accessLevel: 'LAND' })), ['ACCESS_LEVEL']);
+    assert.equal(judgeEnvelopeChange(env({ accessLevel }), env({ accessLevel }), env({ accessLevel: 'LAND' }), 'SESSION').inside, false);
+    assert.equal(judgeEnvelopeChange(env({ accessLevel: 'LAND' }), env({ accessLevel: 'LAND' }), env({ accessLevel }), 'SESSION').inside, true);
+  }
+});

@@ -217,6 +217,11 @@ final class ScheduleDisplayTests: XCTestCase {
                        "Weekdays at 09:00 · apiserver · Check only · draft, waiting for you")
     }
 
+    func testLandMayCopy() {
+        XCTAssertEqual(ScheduleDisplay.mayText("LAND"), "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.")
+        XCTAssertEqual(ScheduleDisplay.accessOrder["LAND"], 2)
+    }
+
     func testPastRunLines() {
         XCTAssertEqual(ScheduleDisplay.runLine(state: "FAILED", summary: nil, failureReason: "NO_REPORT", reasonText: nil),
                        "Ended without a report")

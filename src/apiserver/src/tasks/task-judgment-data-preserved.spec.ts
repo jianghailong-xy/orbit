@@ -3104,6 +3104,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
       // fence changes.
       '0980_managed_runner_home_orbit',
+      // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
+      '0990_schedule_land',
       // 1030 adds the condition, condition_sample and condition_event tables with their enum types, a nullable
       // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is

@@ -242,7 +242,7 @@ export function widenCopy(input: {
   workspaceNames: Record<string, string>;
 }): ScheduleCopy {
   const text = scheduleWidenWaitingText({ ...input, reason: input.reason ?? '' });
-  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId]);
+  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId], input.asked.accessLevel);
   return { title: line(title, 120), body: line(text), why: line(text, WHY_MAX) };
 }
 
