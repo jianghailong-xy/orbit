@@ -2077,6 +2077,16 @@ export interface AccountRemoveCommand {
   /** Identifies this removal (Runner.codexAccountRemoveAt), so a report can be matched to the
    *  request it answers. */
   attempt?: string;
+  /** While the removal waits on sessions it moved to another account: each one's new account
+   *  (`default` or a slot id), so the runner carries a session with no engine running there now
+   *  rather than at its next claim. Absent otherwise. */
+  moves?: AccountRemoveMove[];
+}
+
+/** One session of a removal under way and the account it was moved to. */
+export interface AccountRemoveMove {
+  sessionId: string;
+  account: string;
 }
 
 /** @deprecated The same command on the codex-named field; read AccountRemoveCommand, whose `engine`
