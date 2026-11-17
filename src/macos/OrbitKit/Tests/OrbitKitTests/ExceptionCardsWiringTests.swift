@@ -209,12 +209,16 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "and it wears the word every other composer handoff wears")
         XCTAssertTrue(handoff.contains(".buttonStyle(.bordered)"),
                       "the handoff is the secondary control, beside the one write")
-        // The card takes text in exactly one place — the reason the owner's own ending requires —
-        // and never for the handoff: what the coordinator is told is typed in the composer.
+        // The card takes text in exactly two places — the reason the owner's own ending requires,
+        // and the reason a Re-run or an integration Retry requires — and never for the handoff:
+        // what the coordinator is told is typed in the composer.
         XCTAssertFalse(handoff.contains("TextField"),
                        "the handoff must not take text: the composer does")
-        XCTAssertEqual(card.components(separatedBy: "TextField").count - 1, 1,
-                       "one field on this card, and it is the ending's reason (§4.7)")
+        XCTAssertEqual(card.components(separatedBy: "TextField").count - 1, 2,
+                       "two fields on this card: the ending's reason (§4.7) and the rerun's")
+        XCTAssertTrue(card.contains("TextField(ExceptionCards.markHandledReason, text: $reason")
+                      && card.contains("TextField(\"\", text: $retryReason"),
+                      "and they are those two")
         XCTAssertFalse(card.contains("confirmationDialog") || card.contains("orbitConfirmation"),
                        "and nothing to confirm: the ending asks for a reason, not for a yes")
     }
