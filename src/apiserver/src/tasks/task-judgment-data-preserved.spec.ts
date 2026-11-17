@@ -3110,7 +3110,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
       // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
       // written.
-      '1030_conditions'],
+      '1030_conditions',
+      // 1060 adds a nullable task.start_when_condition_id (FK to condition, SET NULL) with a unique index and a CHECK
+      // every stored row passes, a nullable condition.keep_waiting_since, widens owner_request_kind_chk by
+      // CONDITION_STILL_WAITING, and adds two triggers that write only `condition` and pg_notify; no task row is
+      // rewritten, and no judgment relation, function or DONE fence changes.
+      '1060_task_start_when'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

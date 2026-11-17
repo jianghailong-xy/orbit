@@ -5953,6 +5953,11 @@ model Task {
   /// migration 0001 put on the long-deleted execution `Task`: that table is gone, and this is a
   /// property of the human-facing task, not of a run.
   runAt            DateTime?   @map("run_at")
+  /// The condition that starts this task (migration 1060, docs/condition-triggers-design.md §6.2): a peer of
+  /// `runAt`, and a task has at most one of the two (`task_run_at_or_start_when_chk`). The start that keeps it
+  /// clears it, as a start clears `runAt`.
+  startWhenConditionId String?    @unique @map("start_when_condition_id") @db.Uuid
+  startWhenCondition   Condition? @relation("TaskStartWhen", fields: [startWhenConditionId], references: [id], onDelete: SetNull)
   // Per-task override for the runs this task dispatches: a built-in engine slug
   // ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the owner's configured
   // ModelProvider slugs, and a model id inside that provider's space. NULL keeps the historical
@@ -6171,7 +6176,7 @@ model Task {
   /// session at dispatch; cascade-deleted with the task.
   attachments  Attachment[]
   /// Its startWhen condition (migration 1030), when it has one.
-  conditions   Condition[]
+  conditions   Condition[] @relation("ConditionTask")
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
@@ -10225,7 +10230,9 @@ model Condition {
   approvedCommandHash  String                  @map("approved_command_hash")
   approvedAt           DateTime                @map("approved_at") @db.Timestamptz(3)
   taskId               String?                 @map("task_id") @db.Uuid
-  task                 Task?                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task                 Task?                   @relation("ConditionTask", fields: [taskId], references: [id], onDelete: Cascade)
+  /// The task this condition starts (Task.startWhenConditionId, migration 1060).
+  startsTask           Task?                   @relation("TaskStartWhen")
   scheduleId           String?                 @map("schedule_id") @db.Uuid
   schedule             Schedule?               @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   /// The conversation it was created from, where its Waiting on you item is shown. History, no FK.
@@ -10233,6 +10240,8 @@ model Condition {
   createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   endedAt              DateTime?               @map("ended_at") @db.Timestamptz(3)
+  /// When the owner last answered Keep waiting on the 30-day question (migration 1060, §6.2).
+  keepWaitingSince     DateTime?               @map("keep_waiting_since") @db.Timestamptz(3)
   samples              ConditionSample[]
   events               ConditionEvent[]
 

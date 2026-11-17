@@ -7,7 +7,7 @@
  * The item is written by the condition's own code, not asked by a session: owner-requests.service.ts delivers its
  * ending to nobody, as it does for the SCHEDULE_* kinds.
  */
-import { CONDITION_WAITING_KIND, type ConditionUnknownReason } from '@orbit/shared';
+import { CONDITION_STILL_WAITING_KIND, CONDITION_WAITING_KIND, type ConditionUnknownReason } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 
 import { CONDITION_FAILURES_TO_UNKNOWN } from './condition-evaluation';
@@ -29,8 +29,9 @@ export interface ConditionNotifier {
 
 export const CONDITION_NOTIFIER = Symbol('CONDITION_NOTIFIER');
 
+/** A condition's own items: the can't-read card (§5.3) and the 30-day question (§6.2, condition-still-waiting.ts). */
 export function isConditionItemKind(kind: string): boolean {
-  return kind === CONDITION_WAITING_KIND;
+  return kind === CONDITION_WAITING_KIND || kind === CONDITION_STILL_WAITING_KIND;
 }
 
 /** Whether entering UNKNOWN for this reason is told to the owner. */

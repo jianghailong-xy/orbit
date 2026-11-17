@@ -104,3 +104,48 @@ export interface ConditionView {
   /** Newest first. */
   events: ConditionEventView[];
 }
+
+/** The Waiting on you kind a task's condition that has not fired for 30 days files (§6.2, P3). */
+export const CONDITION_STILL_WAITING_KIND = 'CONDITION_STILL_WAITING';
+/** How long a task's condition waits before it asks, and again after each Keep waiting. */
+export const CONDITION_STILL_WAITING_DAYS = 30;
+/** The question's two answers, by option index. */
+export const CONDITION_STILL_WAITING_OPTIONS = ['Keep waiting', 'Stop'] as const;
+
+/** What a probe read when the agent ran it before filing: the card's Today line, and the first sample. */
+export interface ConditionBaseline {
+  /** The number on stdout's last line. Required unless the comparison is EXIT_ZERO. */
+  value?: number | null;
+  /** The exit code. Required under EXIT_ZERO. */
+  exitCode?: number | null;
+}
+
+/** task_create's `startWhen` (§6.2, §8): the condition, and the baseline the agent read. */
+export interface TaskStartWhenInput {
+  text: string;
+  command: string;
+  compare: ConditionCompare;
+  holdSeconds?: number;
+  intervalSeconds?: number;
+  timeoutSeconds?: number;
+  unit?: string | null;
+  baseline: ConditionBaseline;
+}
+
+/** A task's startWhen on its read: what it waits for, and the newest reading. */
+export interface TaskStartWhenView {
+  conditionId: string;
+  text: string;
+  unit: string | null;
+  state: ConditionState;
+  lastValue: number | null;
+  lastSampleAt: string | null;
+  firedAt: string | null;
+  /** "Waiting for: <text>" while the condition has not fired or ended; null otherwise. */
+  waitingLine: string | null;
+}
+
+/** The line a waiting task shows wherever a task shows why it has not started. */
+export function startWhenWaitingLine(text: string): string {
+  return `Waiting for: ${text}`;
+}

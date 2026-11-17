@@ -19,6 +19,8 @@ import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
 import { isConditionItemKind } from '../conditions/condition-attention';
+import { answerStillWaiting } from '../conditions/condition-still-waiting';
+import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import {
@@ -378,9 +380,16 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
     const option = given.option ?? undefined;
+    // The 30-day question of a task's condition (conditions/condition-still-waiting.ts): Keep waiting or Stop.
+    const stillWaiting = request.kind === CONDITION_STILL_WAITING_KIND;
+    if (stillWaiting && option === undefined) {
+      throw new BadRequestException(`a ${CONDITION_STILL_WAITING_KIND} item is answered with option 0 (Keep waiting) or 1 (Stop)`);
+    }
     if (option !== undefined) {
       const options = (request.options ?? []) as unknown as OwnerRequestOption[];
-      if (request.kind !== 'DECISION') throw new BadRequestException('only a DECISION request takes an option');
+      if (request.kind !== 'DECISION' && !stillWaiting) {
+        throw new BadRequestException('only a DECISION request takes an option');
+      }
       if (!Number.isInteger(option) || option < 0 || option >= options.length) {
         throw new BadRequestException('option must name one of the options this request offered');
       }
@@ -395,7 +404,12 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       resolvedByUserId: ownerId,
       resolvedClient: client,
       answer: json(answer),
-    });
+    }, stillWaiting
+      ? async (tx, now) => {
+        const item = await tx.ownerRequest.findUnique({ where: { id }, select: { conditionId: true } });
+        await answerStillWaiting(tx, item?.conditionId ?? null, option, now);
+      }
+      : undefined);
   }
 
   /**
@@ -550,6 +564,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     id: string,
     to: Exclude<OwnerRequestState, 'PENDING' | 'EXPIRED'>,
     data: Prisma.OwnerRequestUpdateManyMutationInput,
+    /** What the answer does, in the transaction that settles the item: only when this call settled it. */
+    effect?: (tx: Prisma.TransactionClient, now: Date) => Promise<void>,
   ): Promise<OwnerRequestView> {
     const now = new Date();
     const settled = await withTransactionRetry(this.prisma, async (tx) => {
@@ -558,6 +574,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         data: { ...data, state: to, resolvedAt: now },
       });
       if (written.count === 1) {
+        if (effect) await effect(tx, now);
         // A scheduled task's item was written by the schedule, and a condition's by the condition, not asked by a
         // session: nobody is waiting to hear.
         const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });

@@ -9919,6 +9919,13 @@ export class SessionsService {
             'create the task with the plain yes, then start it',
         );
       }
+      // A startWhen task starts when its condition fires (docs/condition-triggers-design.md §6.2); "and start" would
+      // write a runAt beside it, which a task may not have.
+      if ((asked.input as { startWhen?: unknown } | null)?.startWhen != null) {
+        throw new BadRequestException(
+          'startAfterCreate does not apply to a task that starts when its condition holds: create it with the plain yes',
+        );
+      }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
     // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).

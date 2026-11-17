@@ -71,6 +71,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // to, which the owner opens with GET /conditions/:id. An address, not a fence: the runner's sample names it only to
   // say which condition it read.
   'conditionId',
+  // `task.start_when_condition_id` (1060): the condition that starts a task, a peer of runAt. An address, not a fence.
+  'startWhenConditionId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).

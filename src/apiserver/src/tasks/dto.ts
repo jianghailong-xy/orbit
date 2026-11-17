@@ -21,7 +21,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { TaskStatus } from '@orbit/shared';
+import { CONDITION_COMPARE_OPS, TaskStatus, type ConditionCompareOp } from '@orbit/shared';
 import type { CreatorType } from '@prisma/client';
 import { IsPublicId } from '../common/public-id';
 import {
@@ -389,6 +389,37 @@ export class TaskVerificationDto {
   @IsOptional() @IsPublicId() assigneeId?: string;
 }
 
+/** A condition's comparison: the operator and, except under EXIT_ZERO, the line. */
+export class StartWhenCompareDto {
+  @IsIn([...CONDITION_COMPARE_OPS]) op!: ConditionCompareOp;
+  @IsOptional() @Type(() => Number) value?: number | null;
+}
+
+/** What the probe read when the agent ran it before filing (docs/condition-triggers-design.md §4.1, §8). */
+export class StartWhenBaselineDto {
+  @IsOptional() @Type(() => Number) value?: number | null;
+  @IsOptional() @IsInt() exitCode?: number | null;
+}
+
+/**
+ * A task's startWhen (docs/condition-triggers-design.md §6.2): the condition that starts it, in place of `runAt`.
+ * The checks the decorators cannot state (one of runAt and startWhen, a line unless EXIT_ZERO, a baseline that
+ * reads, an assignee) are `task-start-when.ts`'s.
+ */
+export class TaskStartWhenDto {
+  /** The condition in words, written by the agent: "3 or more OSDs are in". */
+  @IsString() @MinLength(1) @MaxLength(200) text!: string;
+  /** The probe: one read-only shell command, shown verbatim on the card. */
+  @IsString() @MinLength(1) @MaxLength(4000) command!: string;
+  @ValidateNested() @Type(() => StartWhenCompareDto) compare!: StartWhenCompareDto;
+  @IsOptional() @IsInt() @Min(0) @Max(30 * 86_400) holdSeconds?: number;
+  @IsOptional() @IsInt() @Min(60) @Max(86_400) intervalSeconds?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(60) timeoutSeconds?: number;
+  @IsOptional() @IsString() @MaxLength(16) unit?: string | null;
+  /** Required: the agent ran the command and passes what it read. */
+  @ValidateNested() @Type(() => StartWhenBaselineDto) baseline!: StartWhenBaselineDto;
+}
+
 /**
  * A task forked from the session making the call (SR55, docs/task-fork-from-session-design.md §2.2):
  * the snapshot `orbit mcp` took of that session's checkout. The checks are `task-fork.ts`'s.
@@ -555,6 +586,9 @@ export class CreateTaskDto {
   // One-shot. The first run actually accepted consumes it, so there is no recurrence to express
   // and no cron expression to accept.
   @IsOptional() @IsDateString() runAt?: string;
+  // The condition that starts this task, in place of runAt (docs/condition-triggers-design.md §6.2): it starts once
+  // when the condition fires, and the condition then ends. Refused beside runAt.
+  @IsOptional() @ValidateNested() @Type(() => TaskStartWhenDto) startWhen?: TaskStartWhenDto;
   // Engine/provider/model this task's runs use, overriding the assignee workspace's own
   // (docs/provider-engine-contract.md §1.2, §3.5). The engine is the CLI that runs it (`claude`,
   // `codex`, `kimi`, `antigravity`, `opencode`, `dsh`); the provider is where its credential comes
