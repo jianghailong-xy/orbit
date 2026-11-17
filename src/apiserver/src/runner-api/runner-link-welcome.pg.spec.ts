@@ -531,7 +531,9 @@ test('the link Welcome: each session\'s durable seq and lease, and the release t
           const answer = await ask();
           assert.equal(answer.status, 200, `${kind}, ${when}: ${JSON.stringify(answer.body)}`);
           assert.deepEqual(stateOf(answer), [[mine, 3, true]], `${kind}, ${when}`);
-          assert.deepEqual(Object.keys(answer.body), ['sessions'], `${kind}, ${when}: no release`);
+          // No release, and no browser for this self-managed runner (docs/runner-browser-design.md §2).
+          assert.deepEqual(Object.keys(answer.body), ['sessions', 'browser'], `${kind}, ${when}: no release`);
+          assert.equal(answer.body.browser, false, `${kind}, ${when}: no browser`);
           // The gateway gives the route 3 s; a read of /dl is never waited for.
           assert.ok(answer.ms < 1_000, `${kind}, ${when}: answered in ${answer.ms} ms`);
           const linkBeat = await send(out.linkPort, 'POST', '/api/runner/heartbeat', viaLink(), beat);
