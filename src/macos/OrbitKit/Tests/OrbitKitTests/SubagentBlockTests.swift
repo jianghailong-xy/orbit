@@ -259,7 +259,32 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
         XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
                        "no description keeps the counts")
-        XCTAssertEqual(SubagentSessionSummary.make([done, done])?.band, "2", "nothing running: the count alone")
+        XCTAssertNil(SubagentSessionSummary.make([done, one])?.last, "the spinner has the right edge while one runs")
+    }
+
+    func testTheIdleBandSaysHowTheLastRunEnded() throws {
+        let deploy = "Deploy dacad7403 to production"
+        let older = run(status: "DONE", createdAt: "2026-11-11T07:00:00.000Z", endedAt: "2026-11-11T07:01:00.000Z",
+                        description: "Audit")
+        let newest = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", endedAt: "2026-11-11T08:00:50.000Z",
+                         description: deploy)
+        let idle = try XCTUnwrap(SubagentSessionSummary.make([older, newest]))
+        XCTAssertEqual(idle.band, "2 · \(deploy)", "the newest run names the band")
+        XCTAssertEqual(idle.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
+        XCTAssertEqual(idle.last?.spoken, "done, 50s")
+
+        let failed = run(status: "FAILED", createdAt: "2026-11-11T09:00:00.000Z", endedAt: "2026-11-11T09:04:12.000Z",
+                         description: "Run the OrbitKit test suite")
+        let red = try XCTUnwrap(SubagentSessionSummary.make([older, newest, failed]))
+        XCTAssertEqual(red.band, "3 · Run the OrbitKit test suite")
+        XCTAssertEqual(red.last?.failed, true)
+        XCTAssertEqual(red.last?.spoken, "failed, 4m 12s")
+
+        // No description on the newest: the count as before, still with its outcome and time.
+        let bare = try XCTUnwrap(SubagentSessionSummary.make([older, run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z",
+                                                                          endedAt: "2026-11-11T08:00:50.000Z")]))
+        XCTAssertEqual(bare.band, "2")
+        XCTAssertEqual(bare.last, SubagentSessionSummary.LastRun(failed: false, duration: "50s"))
     }
 
     func testAnOlderServerWithoutTheNewFieldsStillDecodes() throws {

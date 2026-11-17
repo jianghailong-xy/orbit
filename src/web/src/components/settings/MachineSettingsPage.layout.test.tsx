@@ -456,8 +456,8 @@ describe('a runner’s page, laid out as web.png', () => {
     // Capacity keeps the two settings; the disk is a reading, under Resources.
     expect($$('.machine-section-capacity .settings-row-title').map(text)).toEqual(['Max Concurrent', 'Keep Free']);
     expect(text($('.machine-section-capacity .rd-hint'))).toBe(
-      'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task runs stop ' +
-        'being sent here and finished worktrees are cleaned up sooner.',
+      'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
+        'task runs wait until space frees up, and finished worktrees are cleaned up sooner.',
     );
   });
 

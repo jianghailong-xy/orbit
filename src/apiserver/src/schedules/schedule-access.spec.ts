@@ -284,7 +284,14 @@ test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; 
     assert.ok(denied.includes(tool), tool);
   }
   // Every other run keeps its mode whatever the runner says.
-  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.ACCEPT_EDITS);
+  // Editing levels on Claude Code run in Auto (owner 2026-11-18); every other engine keeps the session's mode.
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.AUTO);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', 'claude', []), PermissionMode.AUTO);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', null, []), PermissionMode.AUTO);
+  for (const engine of ['codex', 'cursor', 'kimi', 'opencode', 'antigravity', 'dsh']) {
+    assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', engine, []), PermissionMode.ACCEPT_EDITS, engine);
+    assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', engine, []), PermissionMode.ACCEPT_EDITS, engine);
+  }
   assert.equal(scheduleRunPermissionMode(PermissionMode.PLAN, 'CHECK_ONLY', 'codex', []), PermissionMode.PLAN);
   assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, null, 'claude', []), PermissionMode.DEFAULT);
 });
