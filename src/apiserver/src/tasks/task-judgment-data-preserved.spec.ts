@@ -3111,7 +3111,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0990_schedule_land',
       // 1070 adds nullable translation JSONB columns to project_open_item and owner_request (ADD COLUMN IF NOT
       // EXISTS, no default); neither is one of the preserved relations, and no trigger, function or DONE fence changes.
-      '1070_owner_card_translation'],
+      '1070_owner_card_translation',
+      // 1080 adds nullable translation JSONB columns (ADD COLUMN IF NOT EXISTS, no default) to
+      // task_completion_evidence — a preserved relation, ALTERed only by this one addition, so no existing row,
+      // `evidence` value or digest is read or rewritten — and to task_owner_confirmation_review_record and
+      // project_handoff_approval, and creates project_criteria_proposal_translation. No INSERT/UPDATE/DELETE, and
+      // no trigger, function or DONE fence changes.
+      '1080_owner_card_translation_more'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

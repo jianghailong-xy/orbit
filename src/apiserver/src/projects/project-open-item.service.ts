@@ -46,6 +46,8 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import { RealtimeService } from '../realtime/realtime.service';
 import {
   COORDINATOR_QUESTION_FIELDS,
+  DONE_REQUEST_FIELDS,
+  START_REQUEST_FIELDS,
   queueOwnerCardTranslation,
   translatedInto,
   type CardFields,
@@ -549,6 +551,8 @@ class OpenItemNoLongerOwed extends Error {}
  *  fields are the agent's words (sessions/card-translation.ts). */
 const TRANSLATED_ITEM_FIELDS: Readonly<Partial<Record<string, CardFields>>> = {
   COORDINATOR_QUESTION: COORDINATOR_QUESTION_FIELDS,
+  START_REQUEST: START_REQUEST_FIELDS,
+  DONE_REQUEST: DONE_REQUEST_FIELDS,
 };
 
 /**
@@ -984,9 +988,7 @@ export class ProjectOpenItemService {
       // R9: the question is filed and the owner is told, in that order and after the commit.
       void this.push?.notifyOwnerItem(created.id);
       // And translated for them in the background, when their translation is on (decision 1A).
-      void translationLanguages(this.prisma, ownerId)
-        .then((langs) => { if (langs) this.queueItemTranslation(ownerId, projectId, created.id, langs); })
-        .catch((error: Error) => this.logger.warn(`translating question ${created.id} failed to queue: ${error.message}`));
+      this.translateFiledItem(ownerId, projectId, created.id, 'question');
       return { itemId: created.id, state: 'OPEN' };
     }
     const already = await this.prisma.projectOpenItem.findFirst({
@@ -1009,6 +1011,14 @@ export class ProjectOpenItemService {
    * (TRANSLATED_ITEM_FIELDS), an item no longer open, or a translation of it into that language already queued,
    * translates nothing. Returns at once: true when it queued one.
    */
+  /** After an item is filed: queue its card's translation when the owner's translation is on (decision 1A). Never
+   *  awaited and never a reason the filing fails. */
+  private translateFiledItem(ownerId: string, projectId: string, itemId: string, what: string): void {
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueItemTranslation(ownerId, projectId, itemId, langs); })
+      .catch((error: Error) => this.logger.warn(`translating ${what} ${itemId} failed to queue: ${error.message}`));
+  }
+
   queueItemTranslation(ownerId: string, projectId: string, itemId: string, langs: TranslationLanguages): boolean {
     return queueOwnerCardTranslation({
       key: `open-item:${itemId}`,
@@ -1093,7 +1103,7 @@ export class ProjectOpenItemService {
         : {}),
     };
     const asking = actingSessionId?.trim();
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const filed = await withTransactionRetry(this.prisma, async (tx): Promise<ProjectStartRequestFiled> => {
       const [project] = await tx.$queryRaw<Array<{
         startedAt: Date | null;
         coordinatorSessionId: string | null;
@@ -1206,6 +1216,8 @@ export class ProjectOpenItemService {
         superseded: open ? { itemId: open.id } : null,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.requestStart'));
+    if (!filed.alreadyOpen) this.translateFiledItem(ownerId, projectId, filed.itemId, 'start request');
+    return filed;
   }
 
   /**
@@ -1243,7 +1255,7 @@ export class ProjectOpenItemService {
     if ('problem' in normalized) throw new BadRequestException(normalized.problem);
     const { gaps } = normalized;
     const asking = actingSessionId?.trim();
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const filed = await withTransactionRetry(this.prisma, async (tx): Promise<ProjectDoneRequestFiled> => {
       const [project] = await tx.$queryRaw<Array<{
         status: string;
         coordinatorSessionId: string | null;
@@ -1371,6 +1383,8 @@ export class ProjectOpenItemService {
         superseded: open ? { itemId: open.id } : null,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.requestDone'));
+    if (!filed.alreadyOpen) this.translateFiledItem(ownerId, projectId, filed.itemId, 'done request');
+    return filed;
   }
 
   /**

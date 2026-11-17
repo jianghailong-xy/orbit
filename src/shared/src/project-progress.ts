@@ -1272,7 +1272,8 @@ export interface ProjectOpenItemRow<Instant = string> {
    *  and null for every other kind. Absent from a server that predates done requests. */
   doneRequest?: DoneRequest | null;
   /** The card's agent-written words in the owner's language (Settings › Translation): a
-   *  `COORDINATOR_QUESTION`'s `question`, `options` and `ifUnanswered`. Absent until translated, on
+   *  `COORDINATOR_QUESTION`'s `question`, `options` and `ifUnanswered`; a `START_REQUEST`'s `why`; a
+   *  `DONE_REQUEST`'s `judgment` and `gaps`. Absent until translated, on
    *  every item translation was off for, and from a server that predates it. */
   translation?: OwnerCardTranslation;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a

@@ -4798,9 +4798,23 @@ model ProjectRatifiedActionIntent {
   idempotencyKey       String   @map("idempotency_key")
   commitToken          String   @unique @map("commit_token") @db.Uuid
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  translation          ProjectCriteriaProposalTranslation?
 
   @@unique([ownerId, projectId, idempotencyKey])
   @@map("project_ratified_action_intent")
+}
+
+/// Settings › Translation (migration 1080): a criteria proposal's `proposed[].text` and `verificationMethod` in the
+/// owner's language, `{ lang, failed?, proposed? }`. A table of its own because 0195 refuses every write to a filed
+/// intent; the translation is a reader's copy, never part of what is approved.
+model ProjectCriteriaProposalTranslation {
+  intentId    String                      @id @map("intent_id") @db.Uuid
+  ownerId     String                      @map("owner_id") @db.Uuid
+  translation Json
+  updatedAt   DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  intent      ProjectRatifiedActionIntent @relation(fields: [intentId], references: [id], onDelete: Cascade, map: "project_criteria_proposal_translation_intent_fkey")
+
+  @@map("project_criteria_proposal_translation")
 }
 
 model ProjectRatifiedActionCommit {
@@ -5549,6 +5563,10 @@ model ProjectHandoffApproval {
   /// (owner, subject, from, to) — which is what makes a second request for a move that is already
   /// waiting, from any session, find the first instead of filing beside it.
   requestedCriterionDefinitionId String? @map("requested_criterion_definition_id") @db.Uuid
+
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): `title` and `reason` in the
+  /// owner's language, written only while PENDING. Not one of the guarded columns. NULL when not involved.
+  translation Json?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
@@ -6402,6 +6420,9 @@ model TaskCompletionEvidence {
   evidence          Json
   evidenceDigest    String @map("evidence_digest") @db.Char(64)
   revision          BigInt
+  /// Settings › Translation (migration 1080, @orbit/shared EvidenceTranslation): the envelope's claim and gaps in
+  /// the owner's language, `{ lang, failed?, claim?, gaps? }`. `evidence` stays the agent's words. NULL when not involved.
+  translation       Json?
 
   idempotencyKeys TaskCompletionEvidenceIdempotency[]
   legacyImport TaskLegacyEvidenceImport?
@@ -6660,6 +6681,9 @@ model TaskOwnerConfirmationReviewRecord {
   /// RETURN only: the key of the turn that carries it to the run, derived from this row's id.
   returnClientTurnId String?  @map("return_client_turn_id")
   recordedAt         DateTime @map("recorded_at")
+  /// Settings › Translation (migration 1080, @orbit/shared OwnerCardTranslation): judgment and needsYou (REVIEW),
+  /// reason and problems (PROBLEMS) in the owner's language. NULL when translation was not involved.
+  translation        Json?
 
   decisions TaskOwnerDecision[]
 
