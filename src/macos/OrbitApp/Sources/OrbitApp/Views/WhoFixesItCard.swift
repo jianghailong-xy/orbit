@@ -575,7 +575,7 @@ struct WhoFixesItBody: View {
                 if !label.isEmpty {
                     Text(label)
                         .font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(width: 62, alignment: .leading)
+                        .frame(width: 84, alignment: .leading)
                 }
                 value()
             }
