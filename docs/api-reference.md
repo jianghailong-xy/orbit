@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 35 |
-| `user` | 476 |
+| `user` | 477 |
 | `admin` | 31 |
 | `runner` | 200 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **746** |
+| **Total** | **747** |
 
 ## Public routes
 
@@ -130,6 +130,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/auth/google/link` | — | `GoogleAuthController.unlink` |
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
+| `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |

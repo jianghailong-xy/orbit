@@ -259,3 +259,22 @@ func TestScheduleUpdateSendsItsReadBack(t *testing.T) {
 		t.Fatalf("calls = %+v", calls)
 	}
 }
+
+func TestScheduleAccessSchemaOffersLandWithItsLandingContract(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		name, _ := tool["name"].(string)
+		if name != "schedule_create" && name != "schedule_update" {
+			continue
+		}
+		props := tool["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		access := props["accessLevel"].(map[string]interface{})
+		if got := access["enum"].([]string); strings.Join(got, ",") != "CHECK_ONLY,OPEN_PR,LAND" {
+			t.Errorf("%s access levels: %v", name, got)
+		}
+		for _, phrase := range []string{"LAND never opens a PR", "normal merge check", "cannot release or deploy", "owner to allow it"} {
+			if !strings.Contains(access["description"].(string), phrase) {
+				t.Errorf("%s access description missing %q", name, phrase)
+			}
+		}
+	}
+}

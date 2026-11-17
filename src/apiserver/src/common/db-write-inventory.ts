@@ -1448,6 +1448,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the run session reports again, and is judged against the run as it then stands.',
   },
   {
+    at: 'schedules/schedule-runs.service.ts#settleLanding',
+    shape: 'TX_RETRIED',
+    locks: 'Per-account schedule advisory key, then schedule row FOR UPDATE; re-read the run before updating landing status/SHA and summary. A final result increments or resets consecutive_failures and files or closes the ordinary failure item, under the same lock.',
+    identity: 'Only a reported LAND run whose landing is WAITING or MERGING is settled, under the schedule lock; a repeated terminal result writes nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
+    effects: "After commit: the landing failure is pushed. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.",
+    answer: 'The worker logs the failure and retries the pending landing on its next pass.',
+  },
+  {
     at: 'schedules/schedule-runs.service.ts#runNow',
     shape: 'TX_RETRIED',
     locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then an UPDATE of its QUEUED run to SKIPPED and one MANUAL schedule_run INSERT. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
@@ -2160,6 +2171,28 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     replay: 'The fence read and the write are the same transaction, so a retry re-proves the claim before re-writing. A delivery that lost its lease between attempts fails closed rather than writing under a claim it no longer has.',
     effects: 'None. The realtime publishes and the runner nudge are outside, after the commit.',
     answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
+  },
+  {
+    at: 'conditions/conditions.service.ts#applySamples',
+    shape: 'TX_RETRIED',
+    locks: 'condition FOR UPDATE (one row, through lock), then an unlocked read of its workspace (still this runner\'s, still live), then condition_sample INSERTs ON CONFLICT DO NOTHING whose only foreign-key parent is that held condition, the UPDATE of that condition row, condition_event INSERTs under the same parent, at most one owner_request UPDATE (closeUnknownItems) and one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING (fileUnknownItem), whose foreign keys take FOR KEY SHARE on the owner user, the home session and the workspace, and last the DELETE of that condition\'s samples past the newest 1000. Unranked in lock-order.ts: the unit holds one condition row and waits on nothing that holds a condition lock.',
+    identity: 'The condition id and each sample\'s (condition_id, at): the sample insert skips a sample already stored, and the UNKNOWN item is keyed by the condition and the instant its spell began, so a replay files nothing more.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the condition and re-reads its state and the workspace inside the closure, then evaluates the batch from that state; a rolled-back attempt left no sample, event, column or item for the next one to meet.',
+    effects: 'None inside. The fire hooks run inside, on the same transaction client (C1 registers none). The UNKNOWN push is sent after commit, by intake, from the alert this unit returns.',
+    answer: 'Typed 503 on the heartbeat; the runner keeps the samples it did not see acknowledged and sends them again on its next beat.',
+  },
+  {
+    at: 'conditions/conditions.service.ts#sweep',
+    shape: 'TX_RETRIED',
+    locks: 'Per silent condition, one unit: condition FOR UPDATE (one row, through lock), an unlocked read of its workspace\'s managed_runner, the UPDATE of that condition row, condition_event INSERTs under it, and at most one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING. The 30-day sample prune after the loop is one autocommit DELETE on condition_sample, outside every unit.',
+    identity: 'The condition id and its last sample instant read under the lock: a condition that heard a sample since the candidate read is not silent any more and is left alone; the UNKNOWN item is keyed by the condition and the instant its spell began.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every attempt re-locks the condition and decides its silence again against the clock inside the closure; a condition another replica already moved to UNKNOWN does not enter it again.',
+    effects: 'None inside. The UNKNOWN pushes are sent after every unit has committed.',
+    answer: 'The worker logs it; the condition is still silent and is decided again on the next sweep.',
   },
   {
     at: 'watches/watch-evaluator.service.ts#evaluate',
@@ -2915,6 +2948,11 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'conditions/condition-attention.ts#closeUnknownItems', under: 'conditions.applySamples, through write: under the condition row FOR UPDATE it holds, one UPDATE of that condition\'s PENDING CONDITION_WAITING owner_request rows to WITHDRAWN' },
+  { at: 'conditions/condition-attention.ts#fileUnknownItem', under: 'conditions.applySamples and .sweep, through write: under the condition row FOR UPDATE they hold, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING' },
+  { at: 'conditions/conditions.service.ts#createCondition', under: 'the task and schedule units that attach a condition (C3, C4; none in C1): the per-account advisory key condition-limit:<owner> (pg_advisory_xact_lock), a count of the account\'s conditions that have not ended, then one condition INSERT only this transaction can see' },
+  { at: 'conditions/conditions.service.ts#lock', under: 'conditions.applySamples and .sweep: the condition row FOR UPDATE, the first lock each takes' },
+  { at: 'conditions/conditions.service.ts#write', under: 'conditions.applySamples and .sweep: under the condition row FOR UPDATE they hold, the UPDATE of that row, its condition_event INSERTs, the fire hooks on the same client, and the UNKNOWN item filed or closed' },
   { at: 'projects/project-ruling.ts#writeAutoRuling', under: 'projectOpenItem.answerOpenItem: after the item CAS to RESOLVED/ANSWERED, one project_ruling INSERT (ASK_OWNER, the item as its source; project_ruling_ask_owner_source_key holds it to one per question)' },
   { at: 'schedules/schedule-attention.ts#closeScheduleItems', under: "every scheduleRuns unit that ends or syncs a run, and schedules.decide, .resume and applyLocked's end: under the advisory key and the schedule row FOR UPDATE they hold, one UPDATE of that schedule's PENDING SCHEDULE_* owner_request rows to WITHDRAWN or DONE" },
   { at: 'schedules/schedule-attention.ts#fileScheduleItem', under: "scheduleRuns.report, .fail, .start, .holdRefused, .syncApprovalItems and schedules.update and .undo: under the advisory key and the schedule row FOR UPDATE they hold, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING" },

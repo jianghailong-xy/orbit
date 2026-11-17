@@ -67,6 +67,10 @@ export function toUuid(idOrPublicId: string): string {
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'consumedByPromotionId',
   'promotionRequestId',
+  // `condition_sample.condition_id`, `condition_event.condition_id` (1030): the condition a sample or an event belongs
+  // to, which the owner opens with GET /conditions/:id. An address, not a fence: the runner's sample names it only to
+  // say which condition it read.
+  'conditionId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).

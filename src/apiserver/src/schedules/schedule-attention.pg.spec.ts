@@ -97,6 +97,7 @@ before(async () => {
   sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: (input) => real.open(input),
     interrupt: async () => undefined,
     complete: async (_owner, sessionId) => {
