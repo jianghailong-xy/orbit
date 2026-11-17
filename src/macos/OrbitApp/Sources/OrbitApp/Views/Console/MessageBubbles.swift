@@ -346,9 +346,13 @@ struct UserBubbleView: View {
                 }
                 // A delivered translation's Show original / Show translation ends the copy/time line
                 // rather than taking one of its own (docs/mocks/translation-foot-one-line, B). The dot
-                // goes with the time, so on macOS at rest the press keeps its place at the edge.
+                // goes with the time, so on macOS at rest the press keeps its place at the edge. With
+                // nothing in that slot (no time, or a hold drawing its tag instead) there is no dot to
+                // hang off the copy button (web parity: its separator needs `node.ts`).
                 if delivered {
-                    Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                    if stateOrTimeDrawn {
+                        Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                    }
                     translationFoot
                 }
                 // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
@@ -395,6 +399,15 @@ struct UserBubbleView: View {
 
     /// A delivered translation, whose press rides in the meta row.
     private var delivered: Bool { bubble.translation?.state == .done }
+
+    /// Whether `meta`'s state-or-time slot draws anything — the same branches, in the same order.
+    private var stateOrTimeDrawn: Bool {
+        if bubble.undelivered || bubble.steer { return true }
+        if bubble.pending, bubble.translation?.held == true || heldFoot != nil { return false }
+        if awaitingServer { return true }
+        guard let ts = bubble.ts else { return false }
+        return RelativeTime.format(ts) != nil
+    }
 
     /// Settings › Translation: "Show original" and its flip (in the meta row, `delivered`), or on a line
     /// of its own the "Translating…" chip or "Couldn't translate, so it wasn't sent · Retry · Send as
