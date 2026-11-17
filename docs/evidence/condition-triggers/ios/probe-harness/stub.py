@@ -265,7 +265,7 @@ def widen_card():
 
 def fresh_state():
     sessions = {
-        "S-pool": {"title": "Ceph pool query", "status": "AWAITING_APPROVAL", "pending": 1,
+        "S-pool": {"title": "Ceph pool query", "status": "RUNNING", "pending": 1,
                    "events": exchange(1, "t1", "Set the kubernetes pool to 3 replicas.", before(30),
                                       "Can't do that as asked: this cluster has only **2 OSDs**, both on workstation. "
                                       "With size 3 the third copy has nowhere to go.", before(29))
@@ -281,7 +281,7 @@ def fresh_state():
         "S-cmd": {"title": "Ceph capacity guard: the check", "status": "AWAITING_INPUT", "pending": 0,
                   "events": exchange(1, "t1", "Make the guard read the raw bytes instead of the ratio.", before(4),
                                      "That changes the command the guard runs, so it needs your Allow.", before(3))},
-        "S-run": {"title": "Ceph capacity guard", "status": "AWAITING_APPROVAL", "pending": 1, "run": True,
+        "S-run": {"title": "Ceph capacity guard", "status": "RUNNING", "pending": 1, "run": True,
                   "events": exchange(1, "t1", "Run of Ceph capacity guard: raw used is 90.4%, above 90% for 10 min.",
                                      fired_at(),
                                      "Raw use went from 84% to 90.4% since the start of the week. Almost all of the "
@@ -306,7 +306,9 @@ def session_row(sid, s):
             "titleManagedByProject": False, "createdAt": s["events"][0]["ts"], "updatedAt": last["ts"],
             "lastTurnAt": last["ts"], "lastAssistantText": last["payload"].get("text", ""),
             "pendingApprovals": s["pending"], "tags": [], "folderId": None,
-            "source": "SCHEDULE" if s.get("run") else "USER"}
+            "source": "SCHEDULE" if s.get("run") else "USER",
+            # A run's session names its run (the console reads its schedule context from it).
+            "scheduleRunId": "r-guard" if s.get("run") else None}
 
 
 def approvals(sid):

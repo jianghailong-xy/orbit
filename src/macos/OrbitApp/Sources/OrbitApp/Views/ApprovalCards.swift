@@ -110,6 +110,8 @@ struct ApprovalHeader: View {
     let title: String
     let tone: Color
     var badge: String? = nil
+    /// A title that is a sentence the board draws whole ("Create task that starts on a condition?") wraps.
+    var titleLines: Int = 1
 
     var body: some View {
         HStack(spacing: 8) {
@@ -121,7 +123,8 @@ struct ApprovalHeader: View {
             Text(title)
                 .font(.orbitProse.bold())
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(titleLines)
+                .fixedSize(horizontal: false, vertical: titleLines > 1)
                 .layoutPriority(1)      // a long MCP tool name truncates; the ask never does
             Spacer(minLength: 4)
             if let badge {
@@ -410,7 +413,10 @@ struct ToolApprovalCard: View {
                            title: create.isProject
                                ? "Create project “\(create.title)”?"
                                : create.startWhen != nil ? ConditionCopy.createTaskTitle : Approvals.createHeading,
-                           tone: .orange, badge: create.isProject ? "new project" : "new task")
+                           tone: .orange,
+                           // A condition's card says what it is in its title, which needs the row (board frame 2).
+                           badge: create.isProject ? "new project" : create.startWhen != nil ? nil : "new task",
+                           titleLines: create.startWhen != nil ? 2 : 1)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(create.impactRows) { BatchImpactRowView(row: $0) }
                 if !create.detail.isEmpty {

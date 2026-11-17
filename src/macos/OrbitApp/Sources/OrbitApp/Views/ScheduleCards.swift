@@ -19,13 +19,15 @@ extension Color {
 /// One fact row of a card: a grey label column and its value (board ① "When / Runs in / May / Costs / Today").
 struct ScheduleFactRow<Value: View>: View {
     let label: String
+    /// The label column; wider on a card whose labels are longer ("Starts when", board frame 2).
+    var labelWidth: CGFloat = 72
     @ViewBuilder let value: Value
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label)
                 .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
+                .frame(width: labelWidth, alignment: .leading)
             value
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)

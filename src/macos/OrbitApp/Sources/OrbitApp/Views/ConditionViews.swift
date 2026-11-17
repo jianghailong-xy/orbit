@@ -133,7 +133,7 @@ struct StartWhenLinesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ScheduleFactRow(label: CC.startsWhen) {
+            ScheduleFactRow(label: CC.startsWhen, labelWidth: 92) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(lines.startsWhen).fontWeight(.semibold)
                     Text(lines.checked).foregroundStyle(.secondary)
@@ -141,8 +141,8 @@ struct StartWhenLinesView: View {
                     ConditionCommandBox(command: lines.command)
                 }
             }
-            ScheduleFactRow(label: CC.today) { Text(lines.today) }
-            ScheduleFactRow(label: CC.ifNever) { Text(lines.ifNever) }
+            ScheduleFactRow(label: CC.today, labelWidth: 92) { Text(lines.today) }
+            ScheduleFactRow(label: CC.ifNever, labelWidth: 92) { Text(lines.ifNever) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("start-when-lines")
