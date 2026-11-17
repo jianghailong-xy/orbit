@@ -163,13 +163,7 @@ internal class RunnersModel(private val api: ManagementApi) {
         } finally { regionChecking = regionChecking - id }
     }
     /** After Update Now went through: read again until the runner reports the restart (its next heartbeat), for up to 30 s. */
-    suspend fun awaitUpdateNowAnswer(id: String) {
-        repeat((RunnerUpdateNow.ANSWER_WAIT_MS / RunnerUpdateNow.ANSWER_POLL_MS).toInt()) {
-            if (RunnerUpdateNow.answered(runner(id))) return
-            delay(RunnerUpdateNow.ANSWER_POLL_MS)
-            load()
-        }
-    }
+    suspend fun awaitUpdateNowAnswer(id: String) = RunnerUpdateNow.awaitAnswer({ runner(id) }) { load() }
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners

@@ -11,6 +11,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -66,6 +68,15 @@ internal object RunnerUpdateNow {
     const val ANSWER_WAIT_MS = 30_000L
     /** Whether the runner has answered an Update Now: it no longer reports a release waiting, or is gone. */
     fun answered(runner: JsonObject?): Boolean = runner == null || !offered(runner)
+    /** After the press went through: [reread] the runners every [ANSWER_POLL_MS] until [current] has answered, for up to [ANSWER_WAIT_MS]. */
+    suspend fun awaitAnswer(current: () -> JsonObject?, reread: suspend () -> Unit) {
+        withTimeoutOrNull(ANSWER_WAIT_MS) {
+            while (!answered(current())) {
+                delay(ANSWER_POLL_MS)
+                reread()
+            }
+        }
+    }
 
     /** The release it would install now. */
     fun version(runner: JsonObject): String = runner.obj("selfUpdate")?.str("targetVersion").orEmpty()

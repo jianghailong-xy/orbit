@@ -60,6 +60,21 @@ class RunnerUpdateNowTest {
         assertTrue(RunnerUpdateNow.answered(null))
     }
 
+    /** Read again every 2 s until the restart is reported; give up after 30 s when it never is. */
+    @Test fun awaitsTheAnswerThenGivesUp() = kotlinx.coroutines.test.runTest {
+        var reads = 0
+        val rows = listOf(runner(report("draining")), runner(report("restarting")))
+        RunnerUpdateNow.awaitAnswer({ rows[minOf(reads, 1)] }) { reads++ }
+        assertEquals(1, reads)
+        assertEquals(RunnerUpdateNow.ANSWER_POLL_MS, testScheduler.currentTime)
+
+        reads = 0
+        val start = testScheduler.currentTime
+        RunnerUpdateNow.awaitAnswer({ runner(report("draining")) }) { reads++ }
+        assertEquals(RunnerUpdateNow.ANSWER_WAIT_MS, testScheduler.currentTime - start)
+        assertEquals((RunnerUpdateNow.ANSWER_WAIT_MS / RunnerUpdateNow.ANSWER_POLL_MS - 1).toInt(), reads)
+    }
+
     @Test fun theConfirmationReadsByHowManyTurnsItStops() {
         assertEquals("Update studio-mac now?", RunnerUpdateNow.title("studio-mac"))
         assertEquals("No turn is running. It installs 0.1.254 and restarts — usually under a minute.", RunnerUpdateNow.message("0.1.254", 0))
@@ -241,6 +256,7 @@ class RunnerUpdateNowTest {
         assertTrue(screens.contains("else if (card.phase == \"postponed\") OutlinedButton({ confirmingUpdateNow = true }"))
         assertTrue(reader.contains("runnerUpdatingRow?.takeIf(RunnerUpdateNow::offered)"))
         assertTrue(reader.contains("api.mutate(RunnerUpdateNow.path(runnerId), body = RunnerUpdateNow.request())"))
+        assertTrue(reader.contains("}) { app.realtime.rereadDirectory() }"))
         assertTrue(rows.contains("RunnerUpdateNow.isResume(shown.fields.string(\"text\"))"))
         assertTrue(rows.contains("RunnerUpdateNow.INTERRUPT_REASON -> RunnerUpdateNow.interruptedTitle(event.fields.string(\"targetVersion\"))"))
     }
