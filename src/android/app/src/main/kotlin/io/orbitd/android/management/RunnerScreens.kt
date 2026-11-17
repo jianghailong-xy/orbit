@@ -1215,6 +1215,10 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                 OutlinedButton(onClick = signIn, enabled = !signInBlocked) { Text(AccountCopy.RENEW) }
             }
         }
+        // Under way, and waiting on the sessions it moved to another account to leave this one.
+        RunnerPage.movingLine(runner.obj("accountRemove"), engine, line.id)?.let {
+            Text(it, Modifier.testTag("account-moving"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
         // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
         val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)
         if (inUse.isNotEmpty()) AccountInUse(engine, inUse, openSession)

@@ -87,6 +87,8 @@ import {
   RUNNER_DEFAULT_USE_AGAIN,
   runnerAccountInUseMany,
   runnerAccountInUseOne,
+  runnerAccountMovingMany,
+  runnerAccountMovingOne,
   runnerAccountRemoveDetailAutomatic,
   RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
@@ -1310,6 +1312,8 @@ function AccountRow({
   const refused = mine?.status === 'failed' ? mine.message : null;
   // The sessions the machine named as running in it, when that is why it refused.
   const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
+  // The sessions a removal under way moved to another account and waits on to leave this one.
+  const moving = mine?.status === 'pending' ? (mine.moving ?? 0) : 0;
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1472,6 +1476,15 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
+      {moving > 0 && (
+        <div className="re-dup">
+          <span>
+            {moving === 1
+              ? runnerAccountMovingOne(engineNameOf(engine))
+              : runnerAccountMovingMany(engineNameOf(engine), moving)}
+          </span>
+        </div>
+      )}
       {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
           <div className="re-panel-row">

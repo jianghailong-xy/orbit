@@ -1257,6 +1257,41 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertEqual(CoordinatorRowPress.chatFirst.tier, .link)
     }
 
+    /// The Branch row in Details says what the server wrote for the job the check failed in: a
+    /// task's landing keeps the task's sentence; a promotion of the project branch, or of one task's
+    /// branch, says that branch did not move and nothing reached main, and never that it passed alone.
+    func testTheBranchRowIsTheServersSentenceForTheJobTheCheckFailedIn() throws {
+        let project = "unchanged — the project branch did not move, and nothing reached main"
+        let candidate = "unchanged — this task’s branch did not move, and nothing on it reached main"
+        func branch(_ line: String?, unchanged: Bool = true, task: Bool = false) throws -> String? {
+            let item = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"01a0bb0c","kind":"INTEGRATION_CHECK_FAILED",
+             "title":"Checks failed on the combined tree: merging the project branch into main",
+             "detailLine":"", "assignee":"OWNER","assigneeReason":"ESCALATED",
+             "waitingSince":"2026-09-21T08:59:00Z","escalatedAt":"2026-09-21T11:55:00Z",
+             "taskId":\(task ? "\"35aTask00000000000001\"" : "null"),"sessionId":null,
+             "promotionId":\(task ? "null" : "\"35aPromo0000000000001\""),"fuseEpisodeId":null,
+             "delivery":{"state":"NOT_REQUIRED","sessionId":null,"at":null},
+             "actions":["ASK_COORDINATOR_AGAIN"],"question":null,
+             "facts":{"task":null,"targetRef":null,"targetSha":null,"files":[],"nothingLanded":false,
+                      "check":{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":null,
+                               "timedOut":true,"durationMs":14400000,"outputTail":""},
+                      "branchUnchanged":\(unchanged)\(line.map { ",\"branchLine\":\"\($0)\"" } ?? ""),
+                      "errorCode":null,"failure":null}}
+            """.utf8))
+            return ExceptionCards.detailRows(item, projectName: "Checkout v2")
+                .first { $0.label == ExceptionCards.branchLabel }?.value
+        }
+        XCTAssertEqual(try branch(project), project)
+        XCTAssertEqual(try branch(candidate), candidate)
+        XCTAssertFalse(try XCTUnwrap(branch(project)).contains("passed on its own branch"))
+        XCTAssertEqual(try branch(ExceptionCards.branchUnchanged, task: true),
+                       "unchanged — the task passed on its own branch; it fails only on the combined tree")
+        // A server older than `branchLine` leaves the task's sentence; no flag, no row.
+        XCTAssertEqual(try branch(nil), ExceptionCards.branchUnchanged)
+        XCTAssertNil(try branch(nil, unchanged: false))
+    }
+
     /// D3: one clock — the total wait from `waitingSince` — and no number in the heading; how long
     /// the coordinator had it is in Details as "Came to you".
     func testD3OneClock() {

@@ -9,6 +9,7 @@ import { SessionLifecycleState, type OpenItemFacts, type ProjectOpenItemRow } fr
 import { describe, expect, it, vi } from 'vitest';
 import {
   ALREADY_SETTLED,
+  BRANCH_UNCHANGED_LINE,
   ASK_AGAIN_ONCE_BACK,
   CANCEL_TASK_SETTLED_CONSEQUENCE,
   CHAT_FIRST_LINK,
@@ -448,5 +449,66 @@ describe('board part 2: the card around them', () => {
     expect(body).not.toContain('After a fix');
     await act(async () => root.unmount());
     host.remove();
+  });
+});
+
+/** The facts of a failed check as the server serves them: `branchLine` is its sentence, by job kind. */
+const RED_CHECK = {
+  name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 1, timedOut: false,
+  durationMs: 4 * HOUR, outputTail: '',
+} as NonNullable<OpenItemFacts['check']>;
+const PROJECT_LINE = 'unchanged — the project branch did not move, and nothing reached main';
+const CANDIDATE_LINE = 'unchanged — this task’s branch did not move, and nothing on it reached main';
+
+/** A failed check's card, with Details unfolded: the text of its Branch row. */
+async function branchRowOf(row: ProjectOpenItemRow): Promise<string> {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => root.render(card(row)));
+  await act(async () => host.querySelector<HTMLButtonElement>('.project-open-item-details-toggle')!.click());
+  const rows = [...host.querySelectorAll('.project-open-item-details-body .project-open-item-fact')];
+  const found = rows.find((r) => text(r.querySelector('.criteria-decision-k')) === 'Branch');
+  const branch = found ? `Branch ${text(found.querySelector('.criteria-decision-v'))}` : '';
+  await act(async () => root.unmount());
+  host.remove();
+  return branch;
+}
+
+describe('the Branch fact says what is true for the job the check failed in', () => {
+  const promotion = (branchLine: string | undefined) => conflict({
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: merging the project branch into main',
+    taskId: null,
+    promotionId: '35aPromo0000000000001',
+    facts: facts({ task: null, targetRef: null, targetSha: null, files: [], check: RED_CHECK, branchUnchanged: true, branchLine }),
+  });
+
+  it('a project-branch promotion check: the project branch did not move and nothing reached main', async () => {
+    const line = await branchRowOf(promotion(PROJECT_LINE));
+    expect(line).toBe(`Branch ${PROJECT_LINE}`);
+    expect(line).not.toContain('passed on its own branch');
+  });
+
+  it('a TASK_BRANCH promotion candidate: that task’s branch and main', async () => {
+    const line = await branchRowOf(promotion(CANDIDATE_LINE));
+    expect(line).toBe(`Branch ${CANDIDATE_LINE}`);
+    expect(line).not.toContain('passed on its own branch');
+  });
+
+  it('a LAND_TASK check keeps the task-branch sentence', async () => {
+    const row = conflict({
+      kind: 'INTEGRATION_CHECK_FAILED',
+      facts: facts({ check: RED_CHECK, branchUnchanged: true, branchLine: BRANCH_UNCHANGED_LINE }),
+    });
+    expect(await branchRowOf(row)).toBe(
+      'Branch unchanged — the task passed on its own branch; it fails only on the combined tree',
+    );
+  });
+
+  it('a server older than branchLine leaves the task-branch sentence, and an unchanged-less item draws no row', async () => {
+    expect(await branchRowOf(promotion(undefined))).toBe(`Branch ${BRANCH_UNCHANGED_LINE}`);
+    const none = conflict({ kind: 'INTEGRATION_CHECK_FAILED', facts: facts({ check: RED_CHECK }) });
+    expect(await branchRowOf(none)).toBe('');
   });
 });

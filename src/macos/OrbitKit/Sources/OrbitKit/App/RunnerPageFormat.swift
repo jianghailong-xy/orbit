@@ -714,11 +714,15 @@ public enum RunnerPageFormat {
         public let pending: Bool
         public let refused: String?
         public let blocking: [BlockingSession]
+        /// Under way and waiting on the sessions it moved to another account to leave this one (web
+        /// `runnerAccountMovingOne`/`Many`); nil otherwise.
+        public let moving: String?
 
-        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = []) {
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = [], moving: String? = nil) {
             self.pending = pending
             self.refused = refused
             self.blocking = blocking
+            self.moving = moving
         }
     }
 
@@ -759,7 +763,15 @@ public enum RunnerPageFormat {
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
-        return AccountRemoval(pending: state.status == "pending", refused: refused, blocking: blocking)
+        let pending = state.status == "pending"
+        let count = pending ? (state.moving ?? 0) : 0
+        let moving: String?
+        switch count {
+        case ..<1: moving = nil
+        case 1: moving = RunnerAccountCopy.runnerAccountMovingOne(engine: engineName(engine))
+        default: moving = RunnerAccountCopy.runnerAccountMovingMany(engine: engineName(engine), count: count)
+        }
+        return AccountRemoval(pending: pending, refused: refused, blocking: blocking, moving: moving)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
