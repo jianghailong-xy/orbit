@@ -2781,8 +2781,10 @@ export class RunnerApiController {
     }
     // Which of those cancels are a coordinator handing over (RealtimeService.keepingWork), read apart: a read that
     // fails leaves the field out and drops nothing else, and the runner still learns it from the session's end turn.
+    // A read that answers nothing at all is read as none kept, as one that throws is.
     keepWorkSessionIds = await Promise.resolve()
       .then(() => this.realtime.keepingWork(cancelSessionIds))
+      .then((ids) => (Array.isArray(ids) ? ids : []))
       .catch(() => []);
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".

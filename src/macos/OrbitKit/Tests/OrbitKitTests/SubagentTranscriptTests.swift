@@ -335,6 +335,11 @@ final class RunningSubagentStatusTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 2, title: title), live: true).text,
                        "Running 2 agents · \(title)…")
         XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 1, title: "  "), live: true).text, "Running Agent…")
+        // A foreground delegate is still the tool in flight: the row names its work, not the tool.
+        XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1, lastToolUse: "mcp__orbit__delegate", title: title),
+                                        live: true).text, "Agent: \(title)…")
+        XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1, lastToolUse: "Bash", title: title),
+                                        live: true).text, "Running Bash…")
         // The header and the glyph keep the short label.
         XCTAssertEqual(SessionHeader.statusWord(for: one), "Running Agent")
     }

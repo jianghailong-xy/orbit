@@ -70,8 +70,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_KEEP_FREE_20_GB = "20 GB"
     public static let RUNNER_KEEP_FREE_50_GB = "50 GB"
     public static let RUNNER_CAPACITY_FOOTER =
-        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task "
-        + "runs stop being sent here and finished worktrees are cleaned up sooner."
+        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and "
+        + "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
 
     public static func runnerGb(amount: String) -> String { "\(amount) GB" }
     public static func runnerDiskUsed(used: String, total: String) -> String {
@@ -412,7 +412,7 @@ public enum RunnerPageCopy {
     }
     public static func attentionDiskBelowReserve(free: String, total: String,
                                                   reserve: String) -> String {
-        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — task runs stop being sent here until space frees up."
+        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — new sessions and task runs wait until space frees up."
     }
 
     public static let ATTENTION_CANT_UPDATE_ITSELF = "Can’t update itself"

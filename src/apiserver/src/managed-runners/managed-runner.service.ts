@@ -450,6 +450,9 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
               tokenHash: sha256(generateToken(32)),
               status: 'OFFLINE',
               maxConcurrent: profile.runner.maxConcurrent,
+              // Not the column's 10 GB default: with no floor set, a managed runner keeps a share of its volume free
+              // (managed-runner-storage.ts).
+              minFreeDiskMb: null,
             },
           });
           return tx.managedRunner.create({

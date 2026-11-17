@@ -95,6 +95,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitNotifyInstructions +
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
@@ -165,6 +166,14 @@ func orbitWaitInstructionsFor(watches bool) string {
 	}
 	return orbitWaitInstructions
 }
+
+// orbitNotifyInstructions says when notify is called: when a wait the person asked to hear about ends. On
+// 2026-11-17 an agent told "tell me when the upgrade is complete" waited on a bg_run job with wakeOnExit, woke,
+// answered in the conversation and stopped: nothing in these instructions named notify, and in Claude Code its
+// description, which says exactly this, was behind ToolSearch. Every session is offered notify, so every form of
+// these instructions carries it. ASCII like the rest of the paragraph.
+const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
+	"it is: an answer in this conversation reaches them only when they next look.\n\n"
 
 // orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
 // does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,

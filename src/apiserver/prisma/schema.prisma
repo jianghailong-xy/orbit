@@ -867,11 +867,11 @@ model Runner {
   labels            String[]     @default([])
   status            RunnerStatus @default(OFFLINE)
   maxConcurrent     Int          @default(1) @map("max_concurrent")
-  // Free-space floor, in MB, below which this machine takes no new auto-run work. Null (the
-  // default) leaves the gate off, which is the behaviour every runner had before it existed.
+  // Free-space floor, in MB, below which this machine takes no new auto-run work. A new runner
+  // starts at 10 GB; null leaves the gate off (a managed runner's null keeps a share of its volume).
   // One knob per machine, but evaluated against each workspace's own measured filesystem —
   // "keep this much headroom wherever you are writing" is the same policy on every mount.
-  minFreeDiskMb     Int?         @map("min_free_disk_mb")
+  minFreeDiskMb     Int?         @default(10240) @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   // The runner's own low-frequency record of its heartbeats: written by a heartbeat at most every
