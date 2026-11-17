@@ -8,6 +8,7 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { HelpDrawerProvider } from './lib/helpDrawer';
 import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
@@ -30,6 +31,7 @@ import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
 import { AdminGithubPage } from './pages/AdminGithubPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
+import { AdminHelpFeedbackPage } from './pages/AdminHelpFeedbackPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
@@ -54,6 +56,11 @@ import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
 import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
+import { HelpLayout } from './pages/help/HelpLayout';
+import { HelpHomePage } from './pages/help/HelpHomePage';
+import { HelpArticlePage } from './pages/help/HelpArticlePage';
+import { HelpCategoryPage, HelpPlaceholderPage } from './pages/help/HelpCategoryPage';
+import { HelpQuestionPage, HelpQuestionsPage } from './pages/help/HelpQuestionsPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -197,6 +204,9 @@ export function App() {
     </DocView>
   );
   return (
+    // The help drawer's state spans every signed-in window — the app, Settings, /help — so it stays open from one to
+    // the next. Signed out it opens for nothing.
+    <HelpDrawerProvider enabled={authed}>
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
           page is drawn for what the link opens; a conversation the link opens besides its root (a
@@ -212,6 +222,27 @@ export function App() {
       {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
           same page signed out or in. */}
       <Route path="/privacy" element={<PrivacyPage />} />
+      {/* The help center (docs/mocks/help-center board 01 §3–4): its own window, drawn as Settings is, and public —
+          an article reads signed out (the sign-in page's "Can't sign in?" links to one), with no in-app buttons. */}
+      <Route path="/help" element={<HelpLayout />}>
+        <Route index element={<HelpHomePage />} />
+        <Route
+          path="whats-new"
+          element={<HelpPlaceholderPage title="What's new" text="What changed in each Orbit release will be listed here." />}
+        />
+        <Route
+          path="questions"
+          element={
+            authed ? <HelpQuestionsPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />
+          }
+        />
+        <Route
+          path="questions/:id"
+          element={authed ? <HelpQuestionPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />}
+        />
+        <Route path=":category" element={<HelpCategoryPage />} />
+        <Route path=":category/:slug" element={<HelpArticlePage />} />
+      </Route>
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}
@@ -261,6 +292,7 @@ export function App() {
             <Route path="sign-in" element={<AdminSignInPage />} />
             <Route path="email" element={<AdminEmailPage />} />
             <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="help-feedback" element={<AdminHelpFeedbackPage />} />
             <Route path="integrations/github" element={<AdminGithubPage />} />
           </Route>
           <Route path="settings" element={<SettingsLayout />}>
@@ -535,5 +567,6 @@ export function App() {
       </Route>
       {!authed && <Route path="*" element={notFound} />}
     </Routes>
+    </HelpDrawerProvider>
   );
 }

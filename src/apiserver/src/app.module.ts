@@ -7,6 +7,8 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { EventsModule } from './events/events.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
+import { HelpModule } from './help/help.module';
+import { HelpAskModule } from './help/help-ask.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -59,6 +61,9 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     EventsModule,
     MetricsModule,
     HealthModule,
+    // The help article library (docs/help), open to signed-out readers (docs/mocks/help-center board 03).
+    HelpModule,
+    HelpAskModule,
     QueueModule,
     AuthModule,
     UsersModule,

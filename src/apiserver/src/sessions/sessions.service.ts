@@ -1,5 +1,5 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { SubagentRunView } from '@orbit/shared';
+import type { HelpAskMarker, SubagentRunView } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
@@ -1202,6 +1202,12 @@ export class SessionsService {
        */
       externalSender?: ExternalTurnSender;
       /**
+       * The help center's Ask (help/help-ask.ts, migration 0850): this session answers a question read-only. Internal,
+       * set only by the Ask door, which checked the machine. It belongs to no workspace, executes no task and opens with
+       * words; `session.help_ask` is written in the row's own INSERT, and 0850's guard refuses every later write of it.
+       */
+      helpAsk?: HelpAskMarker;
+      /**
        * The owner's own door (POST /sessions): with Settings › Translation on, the opening message is
        * laid down HELD in the session's own INSERT transaction and translated before the claim may hand
        * the session out (turn-translation.ts). Words typed by a person only: a task run, a shell-first
@@ -1244,6 +1250,10 @@ export class SessionsService {
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
     if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
+    }
+    // An Ask is a question on a machine and nothing else: no workspace, no task, no shell (help/help-ask.ts).
+    if (opts?.helpAsk && (dto.taskId || dto.workspaceId || dto.newWorkspace != null || dto.shell || !dto.assignedRunnerId)) {
+      throw new Error('an Ask is a session of a machine, in no workspace, that executes no task and opens with words');
     }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
@@ -1768,11 +1778,13 @@ export class SessionsService {
         // A chat for its whole life, from this statement (wiki contract `chat.binding`); 0476's guard
         // refuses every later write of it.
         ...(wikiChat ? { wikiChatSpaceId: wikiChat.spaceId } : {}),
+        // An Ask for its whole life, from this statement (migration 0850); the guard refuses every later write of it.
+        ...(opts?.helpAsk ? { helpAsk: opts.helpAsk as unknown as Prisma.InputJsonValue } : {}),
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
-    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -4118,8 +4130,9 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+    // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
+      scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       // A scheduled task's run is reached from its schedule's history and its notification, never from a list
       // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
       // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.

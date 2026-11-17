@@ -250,6 +250,17 @@ export function scheduleProactiveRefresh(): void {
 // a browser tab left open for a month is exactly the client nothing else can see.
 declare const __APP_VERSION__: string;
 
+/** The pages a signed-out visitor may stay on: a dead session found under one is not sent to /login. */
+export function readSignedOut(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/s/') ||
+    pathname === '/help' ||
+    pathname.startsWith('/help/')
+  );
+}
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -278,9 +289,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
-    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
+    // The privacy policy, a shared link (/s/…) and the help center (/help…) are read signed out as well: a
+    // stored session found dead under one (the theme's read of the account) is cleared, and the reader stays.
+    if (!readSignedOut(location.pathname)) location.href = '/login';
   }
   return res;
 }

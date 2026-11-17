@@ -18,8 +18,8 @@
     "re2js": "^2.8.7"
   },
   "scripts": {
-    "docs:check": "node scripts/check-docs.mjs",
-    "test:docs": "node --test test/check-docs.test.mjs test/configuration-reference.test.mjs",
+    "docs:check": "node scripts/check-docs.mjs && node scripts/check-help-articles.mjs",
+    "test:docs": "node --test test/check-docs.test.mjs test/configuration-reference.test.mjs test/check-help-articles.test.mjs",
     "test:release-identity": "node --test test/release-identity.test.mjs test/release-skill.test.mjs",
     "test:supply-chain": "node --test test/supply-chain.test.mjs",
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
