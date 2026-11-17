@@ -186,8 +186,10 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{
-			"name":        "schedule_run_now",
-			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. It does not count against its runs a week.",
+			"name": "schedule_run_now",
+			"description": "Start one run of a scheduled task now, even while it is paused. Refused once it has ended. Every run started now " +
+				"counts toward its runs a week: once the runs started in the past 7 days reach that number, a run now from an agent " +
+				"session is refused with SCHEDULE_OVER_BUDGET, and only the person can still start one, from the app.",
 			"inputSchema": obj(map[string]interface{}{"scheduleId": id}, "scheduleId"),
 		},
 		{
