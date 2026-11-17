@@ -797,3 +797,161 @@ public enum SessionTranslation {
         return t
     }
 }
+
+/// An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language:
+/// a coordinator's question, start or done request (`ProjectOpenItemRow.translation`,
+/// `ProjectClosedQuestion.translation`), an owner request, an owner-confirmation review or PROBLEMS
+/// record, a crossing or a criteria-change proposal (@orbit/shared `OwnerCardTranslation`). Each field
+/// is the card's field of the same name translated, present only when the original has text; arrays go
+/// index for index with the card's. Read leniently: a field this build cannot read is a field it does
+/// not draw, never a card that fails to decode. `lang` is kept as the server spelled it, so one this
+/// build does not know is a translation that matches no owner language.
+public struct OwnerCardTranslation: Codable, Equatable, Sendable {
+    public struct Option: Codable, Equatable, Sendable {
+        public var label: String?
+        public var description: String?
+        public init(label: String? = nil, description: String? = nil) {
+            self.label = label
+            self.description = description
+        }
+    }
+    /// A step's, a PROBLEMS record's problem's or any other entry's `text`.
+    public struct Text: Codable, Equatable, Sendable {
+        public var text: String?
+        public init(text: String? = nil) { self.text = text }
+    }
+    public struct Gap: Codable, Equatable, Sendable {
+        public var title: String?
+        public var whyNotProven: String?
+        public var coordinatorChecked: String?
+        public init(title: String? = nil, whyNotProven: String? = nil, coordinatorChecked: String? = nil) {
+            self.title = title
+            self.whyNotProven = whyNotProven
+            self.coordinatorChecked = coordinatorChecked
+        }
+    }
+    public struct NeedsYou: Codable, Equatable, Sendable {
+        public var text: String?
+        public var options: [Option]?
+        public init(text: String? = nil, options: [Option]? = nil) {
+            self.text = text
+            self.options = options
+        }
+    }
+
+    public var lang: String
+    /// The card could not be translated: draw it as the agent wrote it. Nothing else is set.
+    public var failed: Bool
+    public var question: String?
+    public var options: [Option]?
+    public var ifUnanswered: String?
+    public var title: String?
+    public var why: String?
+    public var steps: [Text]?
+    public var verifyHint: String?
+    public var judgment: String?
+    public var gaps: [Gap]?
+    public var needsYou: [NeedsYou]?
+    public var reason: String?
+    public var problems: [Text]?
+    public var proposed: [TranslatedCriterionItem]?
+
+    public init(lang: String, failed: Bool = false, question: String? = nil, options: [Option]? = nil,
+                ifUnanswered: String? = nil, title: String? = nil, why: String? = nil,
+                steps: [Text]? = nil, verifyHint: String? = nil, judgment: String? = nil,
+                gaps: [Gap]? = nil, needsYou: [NeedsYou]? = nil, reason: String? = nil,
+                problems: [Text]? = nil, proposed: [TranslatedCriterionItem]? = nil) {
+        self.lang = lang
+        self.failed = failed
+        self.question = question
+        self.options = options
+        self.ifUnanswered = ifUnanswered
+        self.title = title
+        self.why = why
+        self.steps = steps
+        self.verifyHint = verifyHint
+        self.judgment = judgment
+        self.gaps = gaps
+        self.needsYou = needsYou
+        self.reason = reason
+        self.problems = problems
+        self.proposed = proposed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case lang, failed, question, options, ifUnanswered, title, why, steps, verifyHint, judgment
+        case gaps, needsYou, reason, problems, proposed
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lang = (try? c.decodeIfPresent(String.self, forKey: .lang)) ?? ""
+        failed = ((try? c.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) == true
+        question = (try? c.decodeIfPresent(String.self, forKey: .question)) ?? nil
+        options = (try? c.decodeIfPresent([Option].self, forKey: .options)) ?? nil
+        ifUnanswered = (try? c.decodeIfPresent(String.self, forKey: .ifUnanswered)) ?? nil
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+        why = (try? c.decodeIfPresent(String.self, forKey: .why)) ?? nil
+        steps = (try? c.decodeIfPresent([Text].self, forKey: .steps)) ?? nil
+        verifyHint = (try? c.decodeIfPresent(String.self, forKey: .verifyHint)) ?? nil
+        judgment = (try? c.decodeIfPresent(String.self, forKey: .judgment)) ?? nil
+        gaps = (try? c.decodeIfPresent([Gap].self, forKey: .gaps)) ?? nil
+        needsYou = (try? c.decodeIfPresent([NeedsYou].self, forKey: .needsYou)) ?? nil
+        reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
+        problems = (try? c.decodeIfPresent([Text].self, forKey: .problems)) ?? nil
+        proposed = (try? c.decodeIfPresent([TranslatedCriterionItem].self, forKey: .proposed)) ?? nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lang, forKey: .lang)
+        if failed { try c.encode(true, forKey: .failed) }
+        try c.encodeIfPresent(question, forKey: .question)
+        try c.encodeIfPresent(options, forKey: .options)
+        try c.encodeIfPresent(ifUnanswered, forKey: .ifUnanswered)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(why, forKey: .why)
+        try c.encodeIfPresent(steps, forKey: .steps)
+        try c.encodeIfPresent(verifyHint, forKey: .verifyHint)
+        try c.encodeIfPresent(judgment, forKey: .judgment)
+        try c.encodeIfPresent(gaps, forKey: .gaps)
+        try c.encodeIfPresent(needsYou, forKey: .needsYou)
+        try c.encodeIfPresent(reason, forKey: .reason)
+        try c.encodeIfPresent(problems, forKey: .problems)
+        try c.encodeIfPresent(proposed, forKey: .proposed)
+    }
+}
+
+/// A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+/// pending evidence judgment, @orbit/shared `EvidenceTranslation`). `gaps` goes index for index.
+public struct EvidenceTranslation: Codable, Equatable, Sendable {
+    public var lang: String
+    public var failed: Bool
+    public var claim: String?
+    public var gaps: [String]?
+
+    public init(lang: String, failed: Bool = false, claim: String? = nil, gaps: [String]? = nil) {
+        self.lang = lang
+        self.failed = failed
+        self.claim = claim
+        self.gaps = gaps
+    }
+
+    private enum CodingKeys: String, CodingKey { case lang, failed, claim, gaps }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lang = (try? c.decodeIfPresent(String.self, forKey: .lang)) ?? ""
+        failed = ((try? c.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) == true
+        claim = (try? c.decodeIfPresent(String.self, forKey: .claim)) ?? nil
+        gaps = (try? c.decodeIfPresent([String].self, forKey: .gaps)) ?? nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lang, forKey: .lang)
+        if failed { try c.encode(true, forKey: .failed) }
+        try c.encodeIfPresent(claim, forKey: .claim)
+        try c.encodeIfPresent(gaps, forKey: .gaps)
+    }
+}

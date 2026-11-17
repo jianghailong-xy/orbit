@@ -69,8 +69,8 @@ import Foundation
 public struct ProposedCriterion: Codable, Equatable, Sendable, Identifiable {
     public let id: String?
     public let ordinal: Int
-    public let text: String
-    public let verificationMethod: String
+    public var text: String
+    public var verificationMethod: String
     /// The reason the proposer gave, when the edit carried one. Null far more often than not.
     public let completionCriterionOverrideReason: String?
 
@@ -113,8 +113,8 @@ public enum CriteriaProposalField: String, Codable, Equatable, Sendable {
 
 /// One criterion's words, on either side of the comparison.
 public struct CriterionWording: Codable, Equatable, Sendable {
-    public let text: String
-    public let verificationMethod: String?
+    public var text: String
+    public var verificationMethod: String?
     public let completionCriterionOverrideReason: String?
 
     public init(text: String, verificationMethod: String? = nil,
@@ -170,13 +170,13 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
     /// Its place in the proposed set — or, for one being dropped, in the set on record.
     public let ordinal: Int
     /// The proposal's words. Nil for `.removed`: the proposal states none.
-    public let proposed: CriterionWording?
+    public var proposed: CriterionWording?
     /// THE WORDS IT REPLACES, off the definition in force. Nil for `.new`: it replaces nothing.
     public let onRecord: CriterionWording?
     /// Which fields differ. Empty except on `.changed`.
     public let changed: [CriteriaProposalField]
     /// Each of those fields cut into what the rewrite keeps, drops and adds, in `changed` order.
-    public let rewrites: [CriterionFieldRewrite]
+    public var rewrites: [CriterionFieldRewrite]
 
     public init(change: CriteriaProposalChange, definitionId: String? = nil, ordinal: Int,
                 proposed: CriterionWording? = nil, onRecord: CriterionWording? = nil,
@@ -217,7 +217,7 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
 /// SERVER said rather than one a collapsed list implies — otherwise "5 unchanged" would be a claim
 /// about how many rows this client chose not to draw.
 public struct CriteriaProposalDiff: Codable, Equatable, Sendable {
-    public let entries: [CriteriaProposalChangeEntry]
+    public var entries: [CriteriaProposalChangeEntry]
     public let sameCount: Int
     public let changedCount: Int
     public let newCount: Int
@@ -268,12 +268,15 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
     public let baselineSeal: String
     /// The seal standing NOW. Equal to `baselineSeal` exactly when the proposal is decidable.
     public let currentSeal: String
-    public let proposed: [ProposedCriterion]
+    public var proposed: [ProposedCriterion]
     /// The same restatement read against the criteria in force — what the card is drawn from.
-    public let diff: CriteriaProposalDiff
+    public var diff: CriteriaProposalDiff
     /// The proposal this one displaced, or nil when it displaced nothing.
     public let supersededIntentId: String?
     public let decidability: CriteriaDecisionDecidability
+    /// `proposed[].text` and `verificationMethod` in the owner's language (Settings › Translation),
+    /// index for index; nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public var id: String { intentId }
 
@@ -281,7 +284,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
                 filedAt: String, ageSeconds: Int, baselineSeal: String, currentSeal: String,
                 proposed: [ProposedCriterion], diff: CriteriaProposalDiff = .unreadable,
                 supersededIntentId: String? = nil,
-                decidability: CriteriaDecisionDecidability) {
+                decidability: CriteriaDecisionDecidability,
+                translation: OwnerCardTranslation? = nil) {
         self.intentId = intentId
         self.projectId = projectId
         self.commitToken = commitToken
@@ -294,6 +298,7 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
         self.diff = diff
         self.supersededIntentId = supersededIntentId
         self.decidability = decidability
+        self.translation = translation
     }
 }
 

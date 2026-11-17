@@ -103,11 +103,13 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     /// `PENDING`, `APPROVED`, `DENIED` or `APPLIED`.
     public let state: String
     /// What the crossing is about: the plan's title, or the task's as it was when it was asked.
-    public let title: String
-    public let reason: String?
+    public var title: String
+    public var reason: String?
     public let requestedAt: String
     public let decidedAt: String?
     public let expiresAt: String?
+    /// `title` and `reason` in the owner's language (Settings › Translation); nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public init(id: String, publicId: String? = nil, fromProjectId: String,
                 fromProjectPublicId: String? = nil, toProjectId: String?, toProjectPublicId: String? = nil,
@@ -116,7 +118,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
                 subjectTask: SubjectTask? = nil, requestedCriterion: Criterion? = nil,
                 withdrawnCriterion: Criterion? = nil, crossingKey: String, state: String, title: String,
                 reason: String? = nil, requestedAt: String, decidedAt: String? = nil,
-                expiresAt: String? = nil) {
+                expiresAt: String? = nil, translation: OwnerCardTranslation? = nil) {
         self.id = id
         self.publicId = publicId
         self.fromProjectId = fromProjectId
@@ -138,13 +140,14 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         self.requestedAt = requestedAt
         self.decidedAt = decidedAt
         self.expiresAt = expiresAt
+        self.translation = translation
     }
 
     enum CodingKeys: String, CodingKey {
         case id, publicId, fromProjectId, fromProjectPublicId, toProjectId, toProjectPublicId
         case fromProject, toProject, kind, subjectTaskId, subjectTaskPublicId, subjectTask
         case requestedCriterion, withdrawnCriterion, crossingKey, state, title, reason
-        case requestedAt, decidedAt, expiresAt
+        case requestedAt, decidedAt, expiresAt, translation
     }
 
     /// What a row cannot be answered without is required: which row, its source, what it is and
@@ -172,6 +175,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         state = try c.decode(String.self, forKey: .state)
         title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
         reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+        translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
         requestedAt = (try? c.decodeIfPresent(String.self, forKey: .requestedAt)) ?? ""
         decidedAt = try? c.decodeIfPresent(String.self, forKey: .decidedAt)
         expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
