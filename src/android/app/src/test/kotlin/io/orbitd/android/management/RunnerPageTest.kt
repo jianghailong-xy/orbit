@@ -63,6 +63,38 @@ class RunnerPageTest {
         }
     }
 
+    /** GET /runners says `managed` on the managed runner's row, so it is Orbit Cloud with no managed status read yet (or one that
+     * failed) — the drawer's Set up row included, never its stored name `orbit-managed`; the owner's name still wins, and a row marked
+     * false keeps its own name. */
+    @Test fun theRowsManagedFlagMakesItOrbitCloudWithNoManagedStatus() {
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        fun row(name: String, managed: Boolean?, displayName: String? = null, rowId: String = id) = buildJsonObject {
+            put("id", rowId); put("name", name); put("online", true); put("lastHeartbeatAt", java.time.Instant.now().toString())
+            displayName?.let { put("displayName", it) }; managed?.let { put("managed", it) }
+        }
+        val flagged = row("orbit-managed", true)
+        assertTrue(RunnerPage.isManaged(flagged, managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.displayName(flagged, managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.nameOf(id, "orbit-managed", null, managedRunnerId = null, managed = true))
+        assertEquals("Team cloud", RunnerPage.displayName(row("orbit-managed", true, "Team cloud"), managedRunnerId = null))
+        assertEquals("Team cloud", RunnerPage.nameOf(id, "orbit-managed", "Team cloud", managedRunnerId = null, managed = true))
+        val other = row("build-box", false, rowId = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e10")
+        assertFalse(RunnerPage.isManaged(other, managedRunnerId = null))
+        assertEquals("build-box", RunnerPage.displayName(other, managedRunnerId = null))
+        // An older server sends no flag: the managed status's runnerId still decides.
+        assertEquals("orbit-managed", RunnerPage.displayName(row("orbit-managed", null), managedRunnerId = null))
+        assertEquals("Orbit Cloud", RunnerPage.displayName(row("orbit-managed", null), managedRunnerId = id))
+        // The drawer's Set up rows, with the runner list in and no managed status.
+        val previous = io.orbitd.android.composer.ManagedRunnerIdentity.runnerId
+        io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = null
+        try {
+            val setUp = io.orbitd.android.composer.MachineSetup.machinesToSetUp(listOf(flagged, other), emptyList(), managedStatus = null)
+            assertEquals(listOf("Orbit Cloud", "build-box"), setUp.map { it.name })
+        } finally {
+            io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = previous
+        }
+    }
+
     /** The account's managed runner is Orbit Cloud — told by the managed status's runnerId, never by its stored name — unless its owner
      * named it; its version line is its release or that Orbit keeps it up to date, and it is never told its updates are turned off. */
     @Test fun theManagedRunnerIsOrbitCloudWithAReadableVersionAndNoUpdatesOffCard() {

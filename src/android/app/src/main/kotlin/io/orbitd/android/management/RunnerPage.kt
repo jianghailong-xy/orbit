@@ -129,11 +129,15 @@ internal object RunnerCopy {
     const val REFRESH_MODEL_LISTS = "Refresh Model Lists"
     const val ENGINES_FOOTER = "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends " +
         "that subscription, nothing to paste."
+    /** A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min. */
+    const val ENGINES_MANAGED_FOOTER = "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends " +
+        "that subscription, nothing to paste."
     const val ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
     /** DeepSeek Harness has no sign-in: its row, its page and the footer under it say what it runs on instead (board 1 ⑤⑥⑦). */
     const val USES_API_KEYS = "Uses API keys"
     const val DSH_READY = "Ready · each session uses the DeepSeek key it was started with"
     const val DSH_FOOTER = "Orbit keeps DeepSeek Harness updated every 30 min. It has no sign-in: every session runs on a DeepSeek key."
+    const val DSH_MANAGED_FOOTER = "Orbit updates DeepSeek Harness with each Orbit release. It has no sign-in: every session runs on a DeepSeek key."
     fun enginesChecked(whenText: String) = "Checked $whenText"
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
@@ -265,12 +269,13 @@ internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
     /** Removing an added account while Default is in use. */
-    const val REMOVE_DETAIL = "Workspaces using it switch to Default."
+    const val REMOVE_DETAIL = "Its sessions move to another account first. Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
     /** Removing an added account while Default is removed from Orbit, with another account left. */
-    fun removeDetailAutomatic(runner: String) = "Its sign-in is deleted from $runner. Workspaces set to this account run on Automatic."
+    fun removeDetailAutomatic(runner: String) = "Its sessions move to another account first, then its sign-in is deleted from $runner. " +
+        "Workspaces set to this account run on Automatic."
     /** Removing the last account Orbit uses while Default is removed: the removal holds only while another account is there, so Default
      * ([name]) comes back into use. */
     fun removeDetailLast(runner: String, name: String) = "Its sign-in is deleted from $runner. Without it, Orbit uses $name there again, " +
@@ -280,11 +285,15 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
-    /** Over the sessions a refused removal lists, when one session is in the account — running or between turns, either holds it;
-     * [engine] is the CLI's own name (Codex, Claude Code). */
-    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account"
-    /** The same, when several sessions are in it. */
-    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account"
+    /** Over the sessions a refused removal lists, when one session in the account can't move to another — no other account is signed in,
+     * or its runner can't carry the conversation; [engine] is the CLI's own name (Codex, Claude Code). Sessions that can move are moved. */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account"
+    /** The same, when several sessions in it can't move. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions on it can’t move to another account — sign in another account, or end them below; then remove the account"
+    /** Under an account whose removal is waiting on the one session it moved to another account to leave. */
+    fun movingOne(engine: String) = "Moving a session to another $engine account — this one is removed once it has left, after its turn if one is running"
+    /** The same, when it moved several. */
+    fun movingMany(engine: String, count: Int) = "Moving $count sessions to another $engine account — this one is removed once they have left, after their turns if any are running"
     /** Each listed session's way to it. */
     const val IN_USE_OPEN = "Open session"
     /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
@@ -1055,24 +1064,28 @@ internal object RunnerPage {
 
     /**
      * The name a machine is shown by everywhere: its owner's own name for it, else Orbit Cloud for the account's managed runner — told
-     * by [managedRunnerId], the managed status's runnerId (by default the one the signed-in shell last read), never by its stored
-     * name — else the name it registered with (web machineName).
+     * by its row's `managed` (GET /runners), else by [managedRunnerId], the managed status's runnerId (by default the one the
+     * signed-in shell last read), never by its stored name — else the name it registered with (web machineName).
      */
     fun displayName(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
         runner.str("displayName")?.trim()?.takeIf { it.isNotEmpty() }
             ?: if (isManaged(runner, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL else runner.text("name")
 
-    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner). */
-    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): String =
+    /** The same from a runner's fields, for a row that is not a runner's own JSON (a directory runner, a session's assignedRunner).
+     *  [managed] is the row's own flag where it has one (a GET /runners row); null leaves it to the id. */
+    fun nameOf(id: String?, name: String?, displayName: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): String =
         displayName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: if (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)) RunnerCopy.MANAGED_RUNNER_LABEL
+            ?: if (isManaged(id, managedRunnerId, managed)) RunnerCopy.MANAGED_RUNNER_LABEL
             else name.orEmpty()
 
-    /** Whether [runner] is the account's managed runner, by id. */
-    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean {
-        val id = runner.str("id")
-        return !id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId)
-    }
+    /** Whether [runner] is the account's managed runner: its row says so (`managed`), or (an older server, which sends no flag) its
+     *  id is the managed status's runnerId. */
+    fun isManaged(runner: JsonObject, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): Boolean =
+        isManaged(runner.str("id"), managedRunnerId, runner.bool("managed"))
+
+    /** The same from a runner's id and its row's flag (null where the row has none). */
+    fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
+        managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
@@ -1415,6 +1428,18 @@ internal object RunnerPage {
     fun inUseSessions(state: JsonObject?, engine: String, account: String): List<InUseSession> {
         if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "failed") return emptyList()
         return state.list("sessions").mapNotNull { session -> session.str("id")?.let { InUseSession(it, session.str("title").orEmpty(), session.str("status")) } }
+    }
+
+    /** Under an account whose removal is under way and waiting on the sessions it moved to another account (`moving`) to leave it;
+     * null otherwise, and from a server older than the move. */
+    fun movingLine(state: JsonObject?, engine: String, account: String): String? {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "pending") return null
+        val count = state.int("moving") ?: return null
+        return when {
+            count < 1 -> null
+            count == 1 -> RunnerAccountCopy.movingOne(engineName(engine))
+            else -> RunnerAccountCopy.movingMany(engineName(engine), count)
+        }
     }
 
     /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */

@@ -30,10 +30,12 @@ import {
   type ProjectStartRequestBody,
   type ProjectStartRequestFiled,
   type ProjectStartSettings,
+  type ProjectRulingView,
   type RequestProjectDoneBody,
 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { recordProjectRuling, writeAutoRuling } from './project-ruling';
 import { refuseProjectStatusWrite } from './coordinator-authority';
 import { settleTaskSegmentAfterHandledItem } from './landing-session';
 import { PrismaService } from '../prisma/prisma.service';
@@ -1375,6 +1377,8 @@ export class ProjectOpenItemService {
         },
       });
       if (settled.count === 0) throw notOpen();
+      // An answered question is an owner ruling (coordinator handoff v2 §2), written with the answer.
+      await writeAutoRuling(tx, ownerId, projectId, itemId, question, answer);
       const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { exceptionEscalationSeconds: true } });
       await tx.sessionRequest.updateMany({ where: { escalatedItemId: itemId, kind: 'RUN_QUESTION', state: 'OPEN' },
         data: { replyBy: new Date(Date.now() + project.exceptionEscalationSeconds * 1000) } });
@@ -1386,6 +1390,19 @@ export class ProjectOpenItemService {
       resolution: 'ANSWERED',
       delivery: await this.deliverAnswer(itemId),
     };
+  }
+
+  /**
+   * `project_ruling_record`: the project's coordinator records an owner ruling given in one of its
+   * turns (coordinator handoff v2 §2). The checks and the write are `project-ruling.ts`'s.
+   */
+  recordRuling(
+    ownerId: string,
+    projectId: string,
+    actingSessionId: string | undefined,
+    body: { ruling: string; quote: string; sourceTurnId: string; supersedes?: string | null },
+  ): Promise<ProjectRulingView> {
+    return recordProjectRuling(this.prisma, ownerId, projectId, actingSessionId, body);
   }
 
   /**
@@ -3355,6 +3372,7 @@ export class ProjectOpenItemService {
           row.kind,
           row.payload,
           row.taskId && title ? { id: row.taskId, title } : null,
+          mainBranch,
         ),
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
@@ -3450,6 +3468,7 @@ export class ProjectOpenItemService {
           row.kind,
           row.payload,
           row.taskId && title ? { id: row.taskId, title } : null,
+          mainBranch,
         ),
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,

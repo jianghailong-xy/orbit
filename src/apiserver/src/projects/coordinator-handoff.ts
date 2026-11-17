@@ -33,25 +33,33 @@ export function coordinatorHandoffTurnId(handoffId: string, attempt: number): st
 }
 
 /**
- * What the outgoing coordinator is asked, as a platform turn: a note in exactly the four sections,
- * as its whole reply. It is told what the note is for and what not to do in that turn, so the turn
- * stays a note and does not become another round of work.
+ * What the outgoing coordinator is asked, as a platform turn. Two steps, in this order: first record
+ * every owner ruling of this conversation that is not yet a project record (`project_ruling_record`,
+ * coordinator handoff v2 §2), then write a note in exactly the four sections as its final message. It
+ * is told what the note is for and what not to do in that turn, so the turn stays a note and does not
+ * become another round of work.
  */
 export function coordinatorHandoffPrompt(): string {
   const sections = COORDINATOR_HANDOFF_SECTIONS.map((title) => `${title}`).join('\n');
   return [
     COORDINATOR_HANDOFF_PROMPT_HEAD,
     'The owner is handing this project over to a new coordinator conversation. Before this one is completed, '
-      + 'write the handoff note the new coordinator will start from.',
-    'Your whole reply is the note. Use exactly these four sections, in this order, each title on a line of '
-      + 'its own followed by a few short lines:',
+      + 'do two things, in this order.',
+    'First, record the owner\'s rulings. Read project_get\'s rulings, then for every ruling the owner gave in '
+      + 'this conversation that is not there yet, call project_ruling_record with the ruling in one sentence, '
+      + 'the owner\'s own words as the quote (copied exactly from that turn), and that turn\'s id as '
+      + 'sourceTurnId. When a ruling replaces one already recorded, pass the old one\'s id as supersedes. '
+      + 'Answered ask_owner questions are recorded already.',
+    'Then write the handoff note the new coordinator will start from. Your final message is the note. Use '
+      + 'exactly these four sections, in this order, each title on a line of its own followed by a few short lines:',
     sections,
-    'Where things stand: the state of the work in a sentence or two. Agreed with the owner: decisions and '
-      + 'promises made in this conversation that are not written anywhere else. Waiting on: what you are '
-      + 'waiting for, and from whom. Next: the next step you would have taken.',
+    'Where things stand: the state of the work in a sentence or two. Rulings not yet recorded: a ruling you '
+      + 'could not record, with why; normally "Nothing.". Waiting on: what you are waiting for, and from whom. '
+      + 'Next: the next step you would have taken.',
     'The new coordinator reads project_get and task_list first, so do not copy them: write what only this '
-      + 'conversation knows. Do not start, change or file anything in this turn, and do not ask questions — '
-      + 'nobody will answer them here. If a section has nothing in it, write "Nothing." under it.',
+      + 'conversation knows. Apart from project_ruling_record, do not start, change or file anything in this '
+      + 'turn, and do not ask questions — nobody will answer them here. If a section has nothing in it, write '
+      + '"Nothing." under it.',
   ].join('\n\n');
 }
 
@@ -94,8 +102,11 @@ function failureOf(row: CoordinatorHandoffRow): { failureCode: CoordinatorHandof
   return { failureCode: code, failureReason: coordinatorHandoffFailureSentence(code) };
 }
 
+/** A handoff recorded before `kind` was added moved watches only, so a wait without one reads as WATCH. */
 function movedWaitsOf(row: CoordinatorHandoffRow): CoordinatorPendingWait[] {
-  return Array.isArray(row.movedWaits) ? (row.movedWaits as CoordinatorPendingWait[]) : [];
+  if (!Array.isArray(row.movedWaits)) return [];
+  return (row.movedWaits as Array<Omit<CoordinatorPendingWait, 'kind'> & { kind?: CoordinatorPendingWait['kind'] }>)
+    .map((wait) => ({ ...wait, kind: wait.kind ?? 'WATCH' }));
 }
 
 /** What every handoff endpoint answers. */

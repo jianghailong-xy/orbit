@@ -38,6 +38,8 @@ import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.CoordinatorDoneCard
 import io.orbitd.android.projects.CoordinatorStartCard
+import io.orbitd.android.projects.ProjectApi
+import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -104,7 +106,7 @@ class SessionCardsModel internal constructor(val handle: SessionHandle, val sess
      * not success. While reconnecting it is what it last saw. */
     fun shown(session: SessionState, current: List<InteractionCard> = current(session)): List<InteractionCard> =
         (if (session.fresh) current + previous.filter { old -> current.none { it.key == old.key } }.map(::stale) else previous.ifEmpty { current })
-            .distinctBy { it.key }.map(::withPlan)
+            .distinctBy { it.key }.filter { CoordinatorCleanStart.drawsCard(session.snapshot?.detail?.text("createdAt"), it) }.map(::withPlan)
     /** The start card reads the project's task graph beside its request (A11b). */
     fun withPlan(card: InteractionCard) =
         if (card.family == CardFamily.START && graph != null) card.copy(context = JsonObject(card.context + ("plan" to graph!!))) else card
@@ -215,6 +217,15 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
         // The merge candidate whose line this conversation draws: an exception's Review goes to it, and is drawn only while it is here.
         val mergeCard = shown.firstOrNull { it.family == CardFamily.PROMOTION && it.status != CardPreviews.stale }?.objectId
         // The main branch of the project this conversation coordinates, which an exception's rerun or observation names.
+        // The project's name, which an owner exception card's subline names, and the project page's coordinator reads and writes,
+        // which its coordinator row repairs the coordinator with (board owner-exception-who-fixes).
+        val coordinatedProject = session.snapshot?.standing?.get("project") as? JsonObject
+        val coordinatedTitle = coordinatedProject?.text("title")
+        // The project's escalation window, which Ask again's note names ("with a fresh 2h clock").
+        val escalationSeconds = (coordinatedProject?.get("exceptionEscalationSeconds") as? JsonPrimitive)?.longOrNull
+        val coordinatorDoors = remember(cards.handle) {
+            ProjectCoordinatorDoors(ProjectApi(app.session, cards.handle) { app.canWrite(cards.handle) }) { app.realtime.refreshSession() }
+        }
         val coordinatedMain = RunSettings.mainBranchName((session.snapshot?.standing?.get("project") as? JsonObject)?.obj("integration")?.text("upstreamRef"))
         shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
@@ -245,7 +256,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
-                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
+                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain,
+                        projectName = coordinatedTitle, escalationSeconds = escalationSeconds, coordinator = coordinatorDoors, submit = submit)
                     else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }
@@ -264,7 +276,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             }
         } }
         // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).
-        PromotionCards.receipts(cards.merged).forEach { receipt ->
+        PromotionCards.receipts(cards.merged).filter { CoordinatorCleanStart.drawsRecord(session.snapshot?.detail?.text("createdAt"), it.moment) }.forEach { receipt ->
             PromotionReceiptLine(receipt.promotion, "${receipt.id}:line", Modifier.testTag(receipt.id)) { cards.receipt = receipt.promotion }
         }
         // A08-6: what this conversation created is the Tasks card above the composer (`SessionTasksCard`), with what its watches wait on.

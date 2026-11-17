@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, PROVIDER_CHANGE_NOTE, PROVIDER_MODELS_REPLACE, WORKSPACE_WRITE_NOTE, contextSize, decliningPrefix } from './ApprovalPanel';
+import { ApprovalPanel, rememberRulesFor, CREATE_CRITERIA_CONFIRMED_AT_START, PROVIDER_CHANGE_NOTE, PROVIDER_MODELS_REPLACE, WORKSPACE_WRITE_NOTE, contextSize, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
@@ -397,7 +397,7 @@ describe('workspace write approval', () => {
       description: 'builds at night',
       defaultMergeTarget: 'develop',
     }));
-    for (const line of ['Working directory', '/srv/other', 'System prompt', 'Answer in French.', 'Appended system prompt',
+    for (const line of ['Working directory', '/srv/other', 'Base instructions', 'Answer in French.', 'Runtime instructions',
       'And briefly.', 'Runner', 'gpu-2', 'Worktree', 'Sessions run in the shared folder', 'Name', 'renamed', 'Description',
       'builds at night', 'Merge target', 'develop']) {
       expect(html).toContain(line);
@@ -1235,3 +1235,11 @@ describe('one waiting completion decision on the session page', () => {
 
 // The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
 vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
+
+it('shows and remembers the complete command for a check-only scheduled approval', () => {
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  const approval = { id: 'exact-card', toolName: 'Bash', input: { command, orbitScheduleCheckOnly: true }, status: 'PENDING' } as ApprovalInfo;
+  expect(rememberRulesFor(approval)).toEqual([{ toolName: 'Bash', ruleContent: command }]);
+  expect(render(approval)).toContain('print(open(&#x27;watched.txt&#x27;).read())');
+  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([{ toolName: 'Bash', ruleContent: 'python3:*' }]);
+});

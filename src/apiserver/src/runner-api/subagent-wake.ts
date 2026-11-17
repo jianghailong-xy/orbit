@@ -12,6 +12,7 @@ import {
   takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
+import { forwardedDescription, handoffSuccessorOf } from './handoff-wake-forward';
 
 /**
  * The wake a SubAgent run's end owes its parent session (docs/subagent-design.md §2, §5.2), held by the server.
@@ -80,8 +81,9 @@ function wakeOf(row: WakeRow): BackgroundWakeDto {
 /**
  * File the wake a run's end owes its parent, if it owes one that is not filed yet: as a turn of the parent, onto
  * its wake turn nobody has been handed yet, or written into the turn it is running when it can take a steer. A
- * parent that has ended is not woken, and the wake is settled as dropped. Throws only on a failure the sweep is
- * to try again.
+ * parent that ended by a COMPLETED coordinator handoff has the wake forwarded to its last successor; a parent that
+ * ended any other way is not woken, and the wake is settled as dropped. Throws only on a failure the sweep is to
+ * try again (a handoff still in flight included).
  */
 export async function fileSubagentWake(
   prisma: PrismaClient,
@@ -97,34 +99,58 @@ export async function fileSubagentWake(
   });
   if (!row || !row.wakeOwed || row.wakeFiledAt || row.status === 'RUNNING') return 'NOT_OWED';
   const wake = wakeOf(row);
-  const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${wake.wakeId}`;
   try {
-    await sessions.createTurn(
-      row.ownerId,
-      row.sessionId,
-      { clientTurnId, content: '', intent: 'NEXT_TURN' },
-      {
-        steerIfLive: true,
-        coalesce: async (tx, session, route) => {
-          if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-          if (!(await markSubagentWakeFiled(tx, row.id))) throw new SubagentWakeSettled();
-          const queued = await undeliveredWakeTurn(tx, row.sessionId, route);
-          const filedOn = queued?.clientTurnId ?? clientTurnId;
-          await fileBackgroundJobWake(tx, row.sessionId, filedOn, wake);
-          if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, row.sessionId, filedOn, wake.jobId);
-          return queued;
-        },
-      },
-    );
+    await fileWakeOn(sessions, row, row.sessionId, wake);
     return 'FILED';
   } catch (error) {
     if (error instanceof SubagentWakeSettled) return 'SETTLED_ELSEWHERE';
-    if (error instanceof SessionNotSendable || error instanceof NotFoundException) {
-      // Nobody to wake: settled, so the sweep does not come back to it.
-      return (await dropSubagentWake(prisma, row.id)) ? 'DROPPED' : 'SETTLED_ELSEWHERE';
-    }
-    throw error;
+    if (!(error instanceof SessionNotSendable || error instanceof NotFoundException)) throw error;
   }
+  // The parent has ended. One that ended by a COMPLETED coordinator handoff forwards the wake to its last
+  // successor, naming that the previous coordinator started it (docs/coordinator-handoff-v2-design.md §1); a
+  // handoff still HANDING_OVER throws HandoffInFlight, which the sweep files again.
+  const successor = await handoffSuccessorOf(prisma, row.sessionId);
+  if (successor) {
+    try {
+      await fileWakeOn(sessions, row, successor, {
+        ...wake,
+        description: forwardedDescription(row.description, 'a SubAgent run'),
+      } as BackgroundWakeDto);
+      return 'FILED';
+    } catch (error) {
+      if (error instanceof SubagentWakeSettled) return 'SETTLED_ELSEWHERE';
+      if (!(error instanceof SessionNotSendable || error instanceof NotFoundException)) throw error;
+    }
+  }
+  // Nobody to wake: settled, so the sweep does not come back to it.
+  return (await dropSubagentWake(prisma, row.id)) ? 'DROPPED' : 'SETTLED_ELSEWHERE';
+}
+
+/** File the run's wake as a turn of `sessionId`: the parent, or the successor a handoff forwards it to. */
+async function fileWakeOn(
+  sessions: Pick<SessionsService, 'createTurn'>,
+  row: WakeRow,
+  sessionId: string,
+  wake: BackgroundWakeDto,
+): Promise<void> {
+  const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${wake.wakeId}`;
+  await sessions.createTurn(
+    row.ownerId,
+    sessionId,
+    { clientTurnId, content: '', intent: 'NEXT_TURN' },
+    {
+      steerIfLive: true,
+      coalesce: async (tx, session, route) => {
+        if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+        if (!(await markSubagentWakeFiled(tx, row.id))) throw new SubagentWakeSettled();
+        const queued = await undeliveredWakeTurn(tx, sessionId, route);
+        const filedOn = queued?.clientTurnId ?? clientTurnId;
+        await fileBackgroundJobWake(tx, sessionId, filedOn, wake);
+        if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, wake.jobId);
+        return queued;
+      },
+    },
+  );
 }
 
 /** Mark a run's wake filed, inside the transaction filing it, if nothing has yet. */

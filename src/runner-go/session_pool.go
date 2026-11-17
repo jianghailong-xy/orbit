@@ -286,6 +286,16 @@ func (p *sessionPool) sessionIDs() []string {
 	return ids
 }
 
+// isCold reports whether the pool holds session id with no engine of it starting, running or being
+// reaped, no turn permit, and no takeover or reclaim under way: a session whose conversation only its
+// next claim would touch (carryColdSessionsOff).
+func (p *sessionPool) isCold(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := p.sessions[id]
+	return s != nil && !s.resident && !s.active && !s.detaching && !p.reclaiming[id]
+}
+
 func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 	state := p.worktreeOps[id]
 	if state == nil {

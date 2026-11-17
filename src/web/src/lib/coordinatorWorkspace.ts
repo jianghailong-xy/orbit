@@ -28,6 +28,15 @@ export const CHANGE_COPY = {
   startThere: 'Start a new one there',
 } as const;
 
+/** The one fix a broken coordinator workspace has, by what is wrong with it: the project page's
+ *  coordinator card (`ProjectCoordinatorCard`) and the owner exception card's coordinator row
+ *  (`ProjectProgressStatus`, board owner-exception-who-fixes part 6) wear the same words. */
+export const COORDINATOR_FIX_LABEL = {
+  WORKSPACE_DISABLED: (workspace: string) => `Enable ${workspace}`,
+  WORKSPACE_TRASHED: (workspace: string) => `Restore ${workspace}`,
+  WORKSPACE_UNBOUND: (workspace: string) => `Bind ${workspace} to a runner`,
+} as const;
+
 /** A workspace as `GET /workspaces` lists it — only what the list reads. */
 export interface PickerWorkspace {
   id: string;

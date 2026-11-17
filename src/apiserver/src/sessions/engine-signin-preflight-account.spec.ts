@@ -148,14 +148,30 @@ test('a workspace on a signed-out account is refused as an engine sign-out, nami
     // would sign Default in and leave this session exactly as refused.
     assert.ok(err.message.includes(`\`CODEX_HOME='${WORK_HOME}' codex login --device-auth\``), err.message);
     assert.ok(
-      err.message.endsWith(
+      err.message.includes(
         `Sign it in from the Machines & models page, or run \`CODEX_HOME='${WORK_HOME}' codex login --device-auth\` on that machine, then start this session again.`,
       ),
       err.message,
     );
+    assert.match(err.message, /The runner's "Default" account is signed in/);
+    assert.match(err.message, /Choose it for this session, or for new sessions in Settings > Workspaces/);
+    assert.match(err.message, /A plain `codex login` updates Default, not this account/);
     assert.ok(!err.message.includes(EMAIL), 'no email');
     assert.ok(!err.message.includes(ACCOUNT_ID), 'no account id');
   }
+});
+
+test('the refusal offers Default only when it is signed in and in use by Orbit', async () => {
+  for (const auth of ['no', 'unknown'] as const) {
+    const err = await refusal({ codexAccount: WORK, engines: codex(auth, 'no') });
+    assert.ok(!err.message.includes('Choose it for this session'), err.message);
+  }
+  const err = await refusal({
+    codexAccount: WORK,
+    engines: codex('yes', 'no'),
+    runner: { defaultRemoved: ['codex'] },
+  });
+  assert.ok(!err.message.includes('Choose it for this session'), err.message);
 });
 
 test('an account the runner reports without a name is named by its slot id', async () => {
@@ -209,6 +225,7 @@ test('an account renamed in Orbit is refused by that name — Default too', asyn
   const onWork = await refusal({ codexAccount: WORK, engines: codex('yes', 'no'), runner });
   assert.ok(isEngineSignedOut(onWork));
   assert.match(onWork.message, /^Codex account "Research" is signed out on runner "build-box"/);
+  assert.match(onWork.message, /The runner's "jianghailong\.main" account is signed in/);
 });
 
 /**
