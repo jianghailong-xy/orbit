@@ -2350,7 +2350,7 @@ private struct ContextWindowIndicator: View {
     var body: some View {
         let planRow = foldedPlanRow
         Button { showDetail.toggle() } label: {
-            HStack(spacing: gaugeShowsNumber ? 5 : 6) {
+            HStack(spacing: gaugeShowsNumber ? 5 : planRow == nil ? 6 : 3) {
                 if let planRow {
                     UsageBar(percent: planRow.percent, warn: planRow.remaining ? planRow.nearLimit : nil,
                              spent: planRow.spent)
@@ -2364,9 +2364,16 @@ private struct ContextWindowIndicator: View {
                     Text(headline).foregroundStyle(.secondary).fixedSize()
                 }
             }
+            // With the plan bar in it, the pair sits close inside a hairline capsule, so the two
+            // read as one control without a fill no other footer control has (board
+            // composer-usage-tap 03, option C).
+            .padding(.horizontal, planRow == nil ? 0 : 7)
+            .frame(height: planRow == nil ? nil : 26)
+            .overlay {
+                if planRow != nil { Capsule().strokeBorder(.separator, lineWidth: 0.5) }
+            }
             // A phone's gauge is a 32pt-tall target like + and Send beside it, never narrower than
-            // it is tall; with the plan bar in it, the pair gets an inset so its ends take taps too.
-            .padding(.horizontal, planRow == nil ? 0 : 8)
+            // it is tall.
             .frame(minWidth: gaugeShowsNumber ? nil : 32, minHeight: gaugeShowsNumber ? nil : 32)
             // The ring is only a stroke — dashed when there is no reading — and a plain button takes
             // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
