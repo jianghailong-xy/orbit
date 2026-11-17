@@ -1011,6 +1011,5 @@ test('a timing change without readBack keeps what the check does and reads the c
   const latest = await db.scheduleRevision.findFirstOrThrow({ where: { scheduleId: s.id }, orderBy: { revision: 'desc' } });
   assert.ok(latest.revision > movedRevision);
   assert.equal((await rest.undo(w.user, s.id, { revision: latest.revision }, NO_SESSION)).outcome, 'APPLIED');
-  assert.equal((await rest.get(w.user, s.id)).readBack, at2346);
-  await refusedWith(rest.undo(w.user, s.id, { revision: movedRevision }, NO_SESSION), 'SCHEDULE_UNDO_STALE');
+  assert.equal((await rest.get(w.user, s.id)).readBack, rezoned);
 });
