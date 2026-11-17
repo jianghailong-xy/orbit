@@ -55,6 +55,7 @@ export * from './wikiRepoOps';
 export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
+export * from './github';
 export * from './translation';
 export * from './prompt-optimizer';
 

@@ -119,6 +119,9 @@ type HeartbeatRequest struct {
 	// sends it; the control plane stores it only from the instance its manager authorized, and puts
 	// nothing to sleep without a fresh one.
 	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
+	// CloneReports is where each clone the control plane asked for stands (clone_workdir.go). Omitted when there
+	// is none.
+	CloneReports []CloneReport `json:"cloneReports,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -441,6 +444,10 @@ type HeartbeatResponse struct {
 	// Agent working directories to stat before the next heartbeat; answered via
 	// HeartbeatRequest.AgentDirProbes. Absent on older control planes → nothing to probe.
 	AgentDirs []AgentDirTarget `json:"agentDirs,omitempty"`
+	// The GitHub workspaces to clone (clone_workdir.go), to a runner that declares clone-workdir/v1: every one of
+	// this runner's that is PENDING or CLONING. A POINTER because only a present list states anything: absent (an
+	// older control plane, or an answer that reconciled nothing) stops nothing.
+	CloneRequests *[]CloneRequest `json:"cloneRequests,omitempty"`
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
@@ -1393,8 +1400,8 @@ type ClaimedSession struct {
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
-	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan,
-	// which every engine keeps; Codex alone reads this too, since its plan mode refuses every command and a shell
+	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan on
+	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
 	// is the only way Codex reads a repository (codexPermissionMode).
 	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.

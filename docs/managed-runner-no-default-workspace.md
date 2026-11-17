@@ -38,7 +38,7 @@ the way every machine's is, from the setup card (`docs/first-workspace-contract.
 5. `GET /api/managed-runner` keeps `workspaceId` for older clients and always sends `null`. No client reads it
    after this change.
 6. A `newFolder` on a managed runner that has never reported goes in its image's fixed repos folder,
-   `/var/lib/orbit/home/orbit-repos` (`MANAGED_RUNNER_REPOS_ROOT`), which every runner version can make a
+   `/home/orbit/orbit-repos` (`MANAGED_RUNNER_REPOS_ROOT`), which every runner version can make a
    folder in; once it has reported, the usual rule (its home on a `create-workdir/v2` runner) applies, asleep
    or not. The folder is made at claim, as for every `newFolder`.
 
@@ -56,6 +56,13 @@ the way every machine's is, from the setup card (`docs/first-workspace-contract.
    line; main's card dropped both, so they are not built.
 
 Points 8 and 9 change three clients' UI, so each needs a design board under `docs/mocks/` signed off first.
+
+### Image
+
+10. The image makes no `orbit-repos/default` (2026-11-17). The runner's work directory is the repos folder.
+    On a volume an earlier image ran on, the entrypoint moves the config and identity marker from
+    `orbit-repos/default` to `orbit-repos` and removes that folder while it is still empty
+    (`retire_legacy_workdir`); one with anything in it stays.
 
 ## Not changed
 

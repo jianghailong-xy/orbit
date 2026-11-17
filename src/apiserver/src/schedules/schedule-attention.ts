@@ -42,6 +42,7 @@ import {
   type ScheduleRule,
 } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 
 export const SCHEDULE_ITEM_KINDS = ['SCHEDULE_FAILED', 'SCHEDULE_HELD', 'SCHEDULE_APPROVAL', 'SCHEDULE_WIDEN'] as const;
 export type ScheduleItemKind = (typeof SCHEDULE_ITEM_KINDS)[number];
@@ -242,6 +243,15 @@ export function widenCopy(input: {
   const text = scheduleWidenWaitingText({ ...input, reason: input.reason ?? '' });
   const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId]);
   return { title: line(title, 120), body: line(text), why: line(text, WHY_MAX) };
+}
+
+/**
+ * The collapse id of a finding's push. The key is free text up to 200 characters, so it is digested with the
+ * schedule's id: the same key on the same schedule still collapses to one banner, and the id stays at 49 bytes,
+ * inside APNs's 64.
+ */
+export function findingCollapseId(scheduleId: string, key: string): string {
+  return `schedule-finding-${createHash('sha256').update(JSON.stringify([scheduleId, key])).digest('hex').slice(0, 32)}`;
 }
 
 export function findingCopy(title: string, summary: string): { title: string; body: string } {

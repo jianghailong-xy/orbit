@@ -317,7 +317,7 @@ out in full. A repository's `.orbit/checkout-exclude` makes checkouts smaller on
 made, what was reclaimed and why. At start the runner says whether its volume can clone; on a data root on ext4:
 
 ```text
-checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /var/lib/orbit/home/.orbit/worktrees cannot clone files, so git writes out every session checkout
+checkouts: plain: probe failed (EOPNOTSUPP): the filesystem of /home/orbit/.orbit/worktrees cannot clone files, so git writes out every session checkout
 ```
 
 Then each new checkout logs `session <id> — checkout cloned: <n> files from <the workspace's checkout>` or

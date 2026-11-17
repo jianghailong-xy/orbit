@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>iOS project sessions button: show when the project's sessions or landing are running</title>
+<style>
+  body { margin: 0; background: #ECEDF0; }
+  .m-sheet { width: 1980px; padding: 36px 48px 48px; box-sizing: border-box; background: #ECEDF0;
+             font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1C1C1E; }
+  h1 { font-size: 28px; margin: 0 0 6px; }
+  h2 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #6B6B70; margin: 0 0 22px; max-width: 1700px; }
+  section { margin-top: 30px; }
+  code { font-family: "JetBrains Mono", monospace; font-size: 13px; background: #fff; padding: 1px 5px; border-radius: 5px; }
+
+  /* the grid: one row per state, one column per option */
+  .grid { display: grid; grid-template-columns: 210px repeat(5, 1fr); gap: 14px; align-items: stretch; }
+  .hd { font-weight: 600; font-size: 16px; padding: 4px 4px 0; }
+  .hd small { display: block; font-weight: 400; color: #6B6B70; font-size: 13px; line-height: 1.45; }
+  .hd.rec { color: #1E8E3E; }
+  .tag { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 9px; background: #34C759; color: #fff; margin-left: 6px; vertical-align: 2px; }
+  .st { font-weight: 600; font-size: 15px; padding-top: 22px; }
+  .st small { display: block; font-weight: 400; color: #6B6B70; font-size: 13px; line-height: 1.45; }
+  .cell.rec { box-shadow: 0 0 0 2px #34C759; border-radius: 18px; }
+
+  /* an iPhone navigation bar, dark, as the conversation draws it on iOS 26 */
+  .bar { height: 92px; background: #000; border-radius: 18px; position: relative; overflow: hidden; }
+  .bar .txt { position: absolute; left: 16px; right: 16px; top: 0; color: #3A3A3C; font-size: 15px; line-height: 1.5; }
+  .glass { position: absolute; top: 24px; height: 44px; border-radius: 22px; background: rgba(44,44,46,.96);
+           box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); display: flex; align-items: center; color: #fff; }
+  .back { left: 14px; width: 44px; justify-content: center; }
+  .pill { right: 14px; padding: 0 16px 0 14px; gap: 18px; }
+  .btn { display: flex; align-items: center; gap: 6px; font-size: 19px; font-variant-numeric: tabular-nums; position: relative; }
+  .btn.blue { color: #0A84FF; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #0A84FF; flex: none; }
+  .corner { position: absolute; left: 15px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #0A84FF;
+            box-shadow: 0 0 0 2px rgba(44,44,46,1); }
+  .ell { font-size: 22px; letter-spacing: 1px; line-height: 1; padding-bottom: 6px; }
+
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card { background: #fff; border-radius: 14px; padding: 16px 20px; }
+  .card h3 { margin: 0 0 8px; font-size: 17px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid #E5E5EA; vertical-align: top; font-size: 14px; }
+  th { color: #6B6B70; font-weight: 600; }
+  .y { color: #0A84FF; font-weight: 600; }
+  .n { color: #8A8A8D; }
+  ol { margin: 0; padding-left: 22px; }
+  ol li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<div class="m-sheet">
+  <h1>项目会话按钮（⊞ N）显示“有东西在跑”</h1>
+  <p class="sub">所有者 2026-11-17：协调者会话标题栏上打开项目会话弹窗的按钮，看不出会话和落地正在运行。弹窗里写着 <i>6/7 done · 1 running</i>、Landing 卡在 <i>checking</i>，按钮上只有 <b>⊞ 7</b>。下面四个画法，每个都画在三种状态上。手机是画的（深色，同截图），不是截图；英文是上线文案，中文是说明。分支上已按 <b>A</b> 写了代码（<code>3552495d5</code>），选别的就改。</p>
+
+  <section id="part-1">
+    <h2>1 · 四个画法</h2>
+    <p class="sub">“按钮”是 ⋯ 左边那一格；返回键和 ⋯ 不变。</p>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section id="part-2">
+    <h2>2 · 什么时候亮</h2>
+    <div class="notes">
+      <div class="card">
+        <h3>亮：与弹窗里的“在跑”一一对应</h3>
+        <table>
+          <tr><th>项目里的</th><th>弹窗里怎么画</th><th>按钮</th></tr>
+          <tr><td>成员会话在跑（含协调者自己、它的 Agent 在跑）</td><td>行首转圈；进度行 <i>· 1 running</i></td><td class="y">亮</td></tr>
+          <tr><td>落地会话在跑</td><td>Landings 行蓝色环</td><td class="y">亮</td></tr>
+          <tr><td>落地作业在途（integrating / RUNNING）</td><td>Landing 卡，<i>checking · output 235s ago</i></td><td class="y">亮</td></tr>
+          <tr><td>合入 main 在检查、已确认在合、重查</td><td>合入卡 <i>Checking</i> / <i>Merging</i></td><td class="y">亮</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>不亮</h3>
+        <table>
+          <tr><th>项目里的</th><th>为什么</th><th>按钮</th></tr>
+          <tr><td>只有排队的作业（queued）</td><td>还没开始；弹窗也不画转圈</td><td class="n">不亮</td></tr>
+          <tr><td>停着、只开着后台进程的会话</td><td>弹窗画“呼吸”，不是转圈：说的是“有作业”，不是“在干活”</td><td class="n">不亮</td></tr>
+          <tr><td>等你决定（审批、卡片）</td><td>已经由左上角 ☰ 的橙色数字和会话自己的橙点说</td><td class="n">不亮</td></tr>
+          <tr><td>合入被挡住（Can’t merge into main yet）</td><td>在等决定，不是在跑</td><td class="n">不亮</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>怎么保持新</h3>
+        弹窗关着时，会话页按弹窗本来的节奏读：成员每 4 秒对一次本地列表；落地和合入有东西在跑时每 4 秒、否则 15 秒或有提示时读。App 在后台时都停。弹窗开着时这三项会读两遍（会话页一遍、弹窗一遍）——可以改成弹窗开着时会话页这边停。
+      </div>
+      <div class="card">
+        <h3>待定</h3>
+        <ol>
+          <li><b>画法：A / B / C / D</b>（本组推荐 A：和折叠输入条“回合在跑”的蓝点同一个记号，不动按钮本身的字形和数字，静止不耗电）。</li>
+          <li><b>只有落地在跑</b>（成员都停了）也亮吗？本组取亮——这正是截图里的情形。</li>
+          <li><b>VoiceOver</b>：值读 <i>7 sessions, Running</i>。</li>
+          <li><b>Mac 与 iPad</b>不变：它们把项目页放在自己的栏里，没有这个按钮。Web、Android 的同一个按钮要不要跟着改，另开任务。</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const GRID = (color) => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="${color}" stroke-width="1.7">
+  <rect x="2" y="2" width="6.6" height="6.6" rx="1.8"/><rect x="11.4" y="2" width="6.6" height="6.6" rx="1.8"/>
+  <rect x="2" y="11.4" width="6.6" height="6.6" rx="1.8"/><rect x="11.4" y="11.4" width="6.6" height="6.6" rx="1.8"/></svg>`;
+const SPIN = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#0A84FF" stroke-width="2.2" stroke-linecap="round">
+  <path d="M10 2.2a7.8 7.8 0 1 1-7.8 7.8"/></svg>`;
+const BACK = `<svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2L2 10l8 8"/></svg>`;
+
+// What the button draws, by option, while running or not.
+const BUTTON = {
+  now: () => `<span class="btn">${GRID('#fff')}7</span>`,
+  A: (on) => `<span class="btn">${on ? '<span class="dot"></span>' : ''}${GRID('#fff')}7</span>`,
+  B: (on) => `<span class="btn ${on ? 'blue' : ''}">${GRID(on ? '#0A84FF' : '#fff')}7</span>`,
+  C: (on) => `<span class="btn">${on ? SPIN : GRID('#fff')}7</span>`,
+  D: (on) => `<span class="btn">${GRID('#fff')}${on ? '<span class="corner"></span>' : ''}7</span>`,
+};
+const bar = (button) => `<div class="bar">
+  <div class="txt">The comparison that matters is the other direction: what this branch adds on top of main. I checked that…</div>
+  <div class="glass back">${BACK}</div>
+  <div class="glass pill">${button}<span class="ell">···</span></div></div>`;
+
+const heads = [
+  ['', ''],
+  ['现在', 'main 上：只有字形和数字'],
+  ['A · 前面一个蓝点', '折叠输入条“回合在跑”的同一个点（7pt）。分支上已是这个', true],
+  ['B · 整个按钮变蓝', '字形和数字用强调色'],
+  ['C · 字形换成转圈', '在跑时 ⊞ 换成转动的圆环'],
+  ['D · 字形右上角蓝点', '像角标，但是蓝的、没有数字'],
+];
+const states = [
+  ['都停着', '6/7 done，没有在跑的会话，没有落地', false],
+  ['会话在跑', '弹窗：6/7 done · 1 running', true],
+  ['只有落地在跑', 'Landing 卡 checking；成员都停了（截图的情形）', true],
+];
+const g = document.getElementById('grid');
+g.innerHTML = heads.map(([t, s, rec]) => `<div class="hd ${rec ? 'rec' : ''}">${t}${rec ? '<span class="tag">推荐</span>' : ''}<small>${s}</small></div>`).join('')
+  + states.map(([t, s, on]) => `<div class="st">${t}<small>${s}</small></div>`
+    + `<div class="cell">${bar(BUTTON.now())}</div>`
+    + ['A', 'B', 'C', 'D'].map((k) => `<div class="cell ${k === 'A' ? 'rec' : ''}">${bar(BUTTON[k](on))}</div>`).join('')).join('');
+</script>
+</body>
+</html>

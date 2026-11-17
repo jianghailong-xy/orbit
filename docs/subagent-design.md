@@ -65,7 +65,7 @@ delegate({
 | `description` | 给父模型看，决定是否委派 | — |
 | `model` | `inherit` = 父会话的模型；`auto` = 路由；具体 id = 点名 | 当作 `auto`，Why 里写明 |
 | `size` | Orbit 扩展：S / M / L / XL | 忽略 |
-| `readonly` | `true` → 权限模式降为只读（plan），不给编辑工具 | — |
+| `readonly` | `true` → 不给编辑工具；Claude 子 Agent 沿用父会话的权限模式，其他引擎降为 plan | — |
 | `tools` / `disallowedTools` | 原样传给支持它的引擎；不支持的引擎忽略并在 Why 里写明 | — |
 | `is_background` | 作为 `background` 的默认值 | — |
 
@@ -182,8 +182,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 
 ### 5.3 权限与审批
 
-- 权限模式：定义里 `readonly` → plan；否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
-  只读子 Agent 在各引擎上怎样读仓库：Claude、Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
+- 权限模式：定义里 `readonly` → Claude 子 Agent 与父会话相同、去掉编辑工具（Edit / MultiEdit / Write / NotebookEdit），
+  因为 plan 下每次 Bash 都要问人，父会话开 Auto 时只读子 Agent 反而最打扰人；其他引擎 → plan。否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
+  只读子 Agent 在各引擎上怎样读仓库：Claude 在父会话的模式下保留读文件工具；Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
   DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
   Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
   在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
