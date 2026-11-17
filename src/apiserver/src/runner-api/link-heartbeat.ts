@@ -175,6 +175,7 @@ export const HEARTBEAT_DELIVERIES = {
   },
   accountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
   codexAccountRemoveRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#removeAccount'], pending: 'a removal pending' },
+  claudeAccountSwapRequest: { how: 'MARKED', writers: ['runners/runners.service.ts#setDefaultAccount'], pending: 'a Set as default swap pending' },
   installRequest: {
     how: 'MARKED',
     writers: ['runners/runners.service.ts#startInstall', 'runners/runners.service.ts#startEngineUpdate'],
@@ -902,6 +903,7 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
            AND (r."login_status" IN ('pending', 'awaiting_code', 'awaiting_approval', 'cancelling')
              OR r."install_status" IN ('pending', 'installing')
              OR r."codex_account_remove_status" = 'pending'
+             OR r."claude_account_swap_status" = 'pending'
              OR r."repo_cleanup_status" = 'pending'
              OR r."claude_history_status" IN ('pending', 'scanning')
              OR r."dir_probe_status" IN ('pending', 'probing')
@@ -934,6 +936,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || answer.loginRequest !== undefined
     || answer.accountRemoveRequest !== undefined
     || answer.codexAccountRemoveRequest !== undefined
+    || answer.claudeAccountSwapRequest !== undefined
     || answer.installRequest !== undefined
     || answer.repoCleanupRequest !== undefined
     || answer.claudeHistoryRequest !== undefined

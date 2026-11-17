@@ -122,6 +122,8 @@ import {
   AccountRemoveCommand,
   AccountRemoveMove,
   AccountRemoveResult,
+  ClaudeAccountSwapCommand,
+  ClaudeAccountSwapResult,
   CodexAccountRemoveResult,
   InstallCommand,
   InstallResult,
@@ -212,6 +214,15 @@ import { TransactionSurface } from '../common/prisma-transaction-surface';
 import { PrismaService } from '../prisma/prisma.service';
 import { settleSteerWithdrawal, STEER_WITHDRAW_DELIVERY_WINDOW_MS } from '../sessions/steer-withdraw';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import {
+  CLAUDE_ACCOUNT_SWAP_NO_ANSWER,
+  CLAUDE_ACCOUNT_SWAP_TIMED_OUT,
+  CLAUDE_ACCOUNT_SWAP_TOO_OLD,
+  CLAUDE_ACCOUNT_SWAP_V1,
+  claudeSwapHolds,
+  swapForeignProcesses,
+  swapWaitingOn,
+} from '../runners/claude-account-swap';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import {
@@ -2671,6 +2682,7 @@ export class RunnerApiController {
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     let codexAccountRemoveRequest: RunnerHeartbeatResponse['codexAccountRemoveRequest'];
     let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
+    let claudeAccountSwapRequest: RunnerHeartbeatResponse['claudeAccountSwapRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
@@ -2725,6 +2737,7 @@ export class RunnerApiController {
       } else {
         accountRemoveRequest = removeRequest;
       }
+      claudeAccountSwapRequest = await this.drainClaudeAccountSwapRequest(runner.id, capabilities);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       claudeHistoryRequest = await this.drainClaudeHistoryRequest(runner.id);
@@ -2803,6 +2816,7 @@ export class RunnerApiController {
       loginRequest,
       codexAccountRemoveRequest,
       accountRemoveRequest,
+      claudeAccountSwapRequest,
       installRequest,
       agentDirs,
       repoCleanupRequest,
@@ -3900,6 +3914,131 @@ export class RunnerApiController {
            AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
     }
     return { ok: true, applied: count > 0 };
+  }
+
+  /**
+   * The Set as default swap a runner is handed on its heartbeat (docs/claude-default-swap-contract.md §5): redelivered
+   * while it is `pending`, like the removal's. Swept here rather than by a timer: past the relay window with no answer
+   * from the runner, or past 6 hours once it has answered (it waits out turns in progress), the swap fails with the
+   * words the page shows. A runner that no longer declares claude-account-swap/v1 would never answer, so it fails at
+   * once. A failure changes no record of either account.
+   */
+  private async drainClaudeAccountSwapRequest(
+    runnerId: string,
+    capabilities: string | string[] | undefined,
+  ): Promise<ClaudeAccountSwapCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: {
+        claudeAccountSwapAccount: true, claudeAccountSwapStatus: true, claudeAccountSwapAt: true, claudeAccountSwapForeign: true,
+      },
+    });
+    if (r?.claudeAccountSwapStatus !== 'pending' || !r.claudeAccountSwapAccount || !r.claudeAccountSwapAt) return undefined;
+    const fail = async (message: string) => {
+      await this.prisma.runner.updateMany({
+        where: { id: runnerId, claudeAccountSwapStatus: 'pending', claudeAccountSwapAt: r.claudeAccountSwapAt },
+        data: {
+          claudeAccountSwapStatus: 'failed',
+          claudeAccountSwapMessage: message,
+          claudeAccountSwapWaiting: [],
+          claudeAccountSwapForeign: Prisma.DbNull,
+        },
+      });
+      await this.releaseClaudeAccountSwap(runnerId);
+      return undefined;
+    };
+    if (capabilities !== undefined && !runnerSupportsCapability(capabilities, CLAUDE_ACCOUNT_SWAP_V1)) {
+      return fail(CLAUDE_ACCOUNT_SWAP_TOO_OLD);
+    }
+    // `claude_account_swap_foreign` is written (as a list, empty or not) by every pending report, so a non-null one
+    // says the runner has answered and is waiting out turns.
+    const answered = r.claudeAccountSwapForeign !== null;
+    if (Date.now() - r.claudeAccountSwapAt.getTime() > (answered ? ACCOUNT_REMOVE_MOVE_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS)) {
+      return fail(answered ? CLAUDE_ACCOUNT_SWAP_TIMED_OUT : CLAUDE_ACCOUNT_SWAP_NO_ANSWER);
+    }
+    return { account: r.claudeAccountSwapAccount, attempt: r.claudeAccountSwapAt.toISOString() };
+  }
+
+  /** Once a swap is no longer pending, the work it held goes out: the claims it held, and each held session's inbox. */
+  private async releaseClaudeAccountSwap(runnerId: string, sessionIds?: readonly string[]): Promise<void> {
+    const held = sessionIds ?? (await this.prisma.session.findMany({
+      where: {
+        assignedRunnerId: runnerId, provider: 'claude', providerBuiltin: true,
+        status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] },
+      },
+      select: { id: true },
+    })).map((row) => row.id);
+    for (const id of held) this.realtime.notifyInbox(id);
+    this.queue.notifySessionQueued(runnerId);
+  }
+
+  /**
+   * Runner → control plane: where one Set as default swap stands (docs/claude-default-swap-contract.md §5). The same
+   * body every time, the latest wins, and a report about a swap the row has moved past (another account or attempt,
+   * or one no longer pending) changes nothing.
+   *
+   * `pending` names what the swap waits on. `failed` ends it and changes no record of either account. `done` ends it
+   * and, in the same transaction, swaps every record Orbit keys by the two account ids (SessionsService
+   * .applyClaudeAccountSwap); it is applied once.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('claude-account-swap-result')
+  @HttpCode(200)
+  async claudeAccountSwapResult(@CurrentRunner() runner: { id: string }, @Body() body: ClaudeAccountSwapResult) {
+    const status = body?.status;
+    if (status !== 'pending' && status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown swap status');
+    }
+    if (!ACCOUNT_ID_PATTERN.test(String(body.account ?? '')) || body.account === 'default') {
+      throw new BadRequestException('Unknown account');
+    }
+    const attempt = new Date(String(body.attempt ?? ''));
+    if (Number.isNaN(attempt.getTime())) throw new BadRequestException('attempt must be the request this reports on');
+    const asked = {
+      id: runner.id,
+      claudeAccountSwapStatus: 'pending',
+      claudeAccountSwapAccount: body.account,
+      claudeAccountSwapAt: attempt,
+    };
+    if (status === 'pending') {
+      // Only sessions this runner runs are kept, as for the removal's.
+      const named = swapWaitingOn(body.waitingOn);
+      const waiting = named.length === 0 ? [] : (await this.prisma.session.findMany({
+        where: { id: { in: named }, assignedRunnerId: runner.id },
+        select: { id: true },
+      })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
+      const { count } = await this.prisma.runner.updateMany({
+        where: asked,
+        data: {
+          claudeAccountSwapWaiting: waiting,
+          claudeAccountSwapForeign: swapForeignProcesses(body.foreignProcesses) as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return { ok: true, applied: count > 0 };
+    }
+    if (status === 'failed') {
+      const { count } = await this.prisma.runner.updateMany({
+        where: asked,
+        data: {
+          claudeAccountSwapStatus: 'failed',
+          claudeAccountSwapMessage: typeof body.message === 'string' && body.message
+            ? body.message.replace(/\p{Cc}/gu, ' ').slice(0, 500)
+            : 'The runner could not set this account as the default.',
+          claudeAccountSwapWaiting: [],
+          claudeAccountSwapForeign: Prisma.DbNull,
+        },
+      });
+      if (count > 0) await this.releaseClaudeAccountSwap(runner.id);
+      return { ok: true, applied: count > 0 };
+    }
+    if (!this.sessions) throw new HttpException('sessions are not available', 503);
+    const applied = await this.sessions.applyClaudeAccountSwap(runner.id, body.account, attempt);
+    if (applied) {
+      this.queue.notifySessionQueued(runner.id);
+      // The page shows the exchanged accounts at once, as for a sign-in.
+      this.realtime.notifyRunnerWake(runner.id);
+    }
+    return { ok: true, applied: applied !== null };
   }
 
   /**
@@ -5237,6 +5376,10 @@ export class RunnerApiController {
     // A link call's request id, which every resend of the call keeps: a fetch sent again under the id of one that
     // handed a turn out is answered with that turn (dequeueTurn).
     const resend = link?.requestId ? { leaseOwner: link.leaseOwner, requestId: link.requestId } : undefined;
+    // Set as default for Claude Code (claude-account-swap.ts): while a swap is pending, a session on either of its
+    // accounts is handed no new turn — it would start in the folder that is about to change. What waits is delivered
+    // once the swap ends: each such session is hinted then.
+    if (await claudeSwapHolds(this.prisma, runner.id, sessionId)) return { turnId: '', seq: 0, kind: 'message' };
     // It answers at once: a hint says when there is something to fetch.
     const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared, redelivery, resend);
     return turn ?? { turnId: '', seq: 0, kind: 'message' };

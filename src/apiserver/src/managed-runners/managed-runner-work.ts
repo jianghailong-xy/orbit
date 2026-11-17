@@ -82,6 +82,7 @@ function workSql(runner: Prisma.Sql) {
     RUNNER_OPERATION: Prisma.sql`EXISTS (SELECT 1 FROM "runner" r WHERE r."id" = ${runner} AND (
       r."login_status" = ANY (${LOGIN_IN_FLIGHT}) OR r."install_status" IN ('pending', 'installing')
       OR r."repo_cleanup_status" = 'pending' OR r."codex_account_remove_status" = 'pending'
+      OR r."claude_account_swap_status" = 'pending'
       OR r."claude_history_status" = 'pending' OR r."dir_probe_status" = 'pending' OR r."model_catalog_refresh_at" IS NOT NULL
       OR r."self_update_requested_at" IS NOT NULL OR r."self_update_postpone_until" IS NOT NULL
       OR r."self_update_now_requested_at" IS NOT NULL))`,

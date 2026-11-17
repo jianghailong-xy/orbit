@@ -1468,6 +1468,10 @@ export interface RunnerHeartbeatResponse {
   /** The same request on Codex's historical field, which is all a control plane older than
    *  accounts-per-engine knows how to send. Absent from current control planes. */
   codexAccountRemoveRequest?: CodexAccountRemoveCommand;
+  /** Make an added Claude account the Default (docs/claude-default-swap-contract.md §5): swap its login
+   *  with the one in ~/.claude. Redelivered every heartbeat while the swap is pending, and only to a
+   *  runner that declares claude-account-swap/v1. Absent otherwise, and from an older control plane. */
+  claudeAccountSwapRequest?: ClaudeAccountSwapCommand;
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
   installRequest?: InstallCommand;
@@ -2112,6 +2116,42 @@ export interface AccountRemoveResult {
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
 export type CodexAccountRemoveResult = AccountRemoveResult;
 
+/**
+ * Control plane → runner: make an added Claude account the Default — swap its login with the one in
+ * ~/.claude (docs/claude-default-swap-contract.md §5, `claude-account-swap/v1`). Redelivered every
+ * heartbeat while the swap is pending, so carrying it out twice must be the same as carrying it out once.
+ */
+export interface ClaudeAccountSwapCommand {
+  /** The added account to make the Default: its slot id under claude-accounts. Never `default`. */
+  account: string;
+  /** Identifies this swap (Runner.claudeAccountSwapAt), echoed in every result. */
+  attempt: string;
+  /** The accountUuid each folder held when the server asked, as the runner last reported them. Absent
+   *  while the runner reports none; the runner then tells a redelivery from a new request by `attempt`. */
+  expect?: { defaultAccountUuid: string; accountAccountUuid: string };
+}
+
+/** A Claude process on either folder of a swap that is not an Orbit session (a terminal `claude`). */
+export interface ClaudeAccountSwapForeignProcess {
+  pid: number;
+  command: string;
+}
+
+/** Runner → control plane: where one swap stands. The same body every time; the latest wins. */
+export interface ClaudeAccountSwapResult {
+  account: string;
+  attempt: string;
+  status: 'pending' | 'done' | 'failed';
+  /** failed: the machine's own one-line reason. Omitted otherwise. */
+  message?: string;
+  /** pending: the Orbit sessions with a turn in progress on either folder, which the swap waits on. */
+  waitingOn?: string[];
+  /** pending: Claude processes on either folder that are not Orbit sessions; the swap waits for them too. */
+  foreignProcesses?: ClaudeAccountSwapForeignProcess[];
+  /** done: the accountUuid now in each folder. */
+  now?: { defaultAccountUuid: string; accountAccountUuid: string };
+}
+
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
   /** `awaiting_code` (paste-back flow) and `awaiting_approval` (device flow) carry `url`; only
@@ -2494,6 +2534,23 @@ export interface RunnerAccountRemoveSession {
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says
  *  which account store it is about. */
 export type RunnerCodexAccountRemoveState = RunnerAccountRemoveState;
+
+/**
+ * Browser-facing view of a runner's Set as default relay for Claude Code (docs/claude-default-swap-contract.md §5):
+ * which added account is becoming the Default, and where that stands.
+ */
+export interface RunnerClaudeAccountSwapState {
+  /** The added account being made the Default, or null when nothing was asked. */
+  account: string | null;
+  status: 'pending' | 'done' | 'failed' | null;
+  /** The reason it failed; null otherwise. */
+  message: string | null;
+  /** With `pending`: the sessions with a turn in progress the swap waits on ("waiting for N sessions to
+   *  finish their turns"), as far as the viewer can see them. Empty otherwise. */
+  waitingOn: RunnerAccountRemoveSession[];
+  /** With `pending`: Claude processes on either folder that are not Orbit sessions. Empty otherwise. */
+  foreignProcesses: ClaudeAccountSwapForeignProcess[];
+}
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
 export interface MergeCommand {

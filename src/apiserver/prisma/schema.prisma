@@ -1069,6 +1069,20 @@ model Runner {
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
 
+  // Making an added Claude account the Default (migration 1000, docs/claude-default-swap-contract.md §5):
+  // the runner swaps that account's login with the one in ~/.claude. The removal's relay again — one
+  // request per runner, redelivered every heartbeat while `pending`:
+  //   NULL | pending | done | failed — claudeAccountSwapMessage explains a failure
+  claudeAccountSwapAccount String?   @map("claude_account_swap_account")
+  claudeAccountSwapStatus  String?   @map("claude_account_swap_status")
+  claudeAccountSwapMessage String?   @map("claude_account_swap_message")
+  // While pending: the sessions with a turn in progress the swap waits on, as the runner last named them.
+  claudeAccountSwapWaiting String[]  @default([]) @map("claude_account_swap_waiting") @db.Uuid
+  // While pending: Claude processes on either folder that are not Orbit sessions ({ pid, command }[]).
+  claudeAccountSwapForeign Json?     @map("claude_account_swap_foreign")
+  // When it was asked: the attempt every report names, and the deadline an abandoned one is swept by.
+  claudeAccountSwapAt      DateTime? @map("claude_account_swap_at")
+
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")

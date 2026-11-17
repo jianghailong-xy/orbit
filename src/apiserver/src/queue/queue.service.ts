@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { claudeSwapHeldPending } from '../runners/claude-account-swap';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
@@ -395,7 +396,12 @@ export class QueueService {
     // Cursor CLI: the route keeps it in the request's declaration only when the runner's persisted
     // heartbeat declares it too (RunnerApiController.claim); the statement below asks the heartbeat again.
     const supportsCursor = runner.supportedProviders?.includes(AgentProvider.CURSOR) ?? false;
-    const paused = await this.pausedPendingSessions(runner.id, runner.dshUnavailable);
+    // A pending Set as default for Claude Code holds back the sessions on either of its accounts too
+    // (claude-account-swap.ts): a claim now would start one in the folder that is about to change.
+    const paused = [
+      ...await this.pausedPendingSessions(runner.id, runner.dshUnavailable),
+      ...await claudeSwapHeldPending(this.prisma, runner.id),
+    ];
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
