@@ -147,6 +147,8 @@ export interface RunnerObjects {
   reviewerSessionId: string;
   /** Wiki: a session in a workspace bound to the space. */
   wikiSessionId: string;
+  /** The help center's Ask (migration 0850): a session of this machine's in no workspace, with `help_ask` set. */
+  helpAskSessionId: string;
   /** A SECRET grant to this machine, awaiting delivery, for the machine session's PENDING request (migration 0506). */
   secretGrantId: string;
   /** A grant of this machine being removed: what `removed` confirms. */
@@ -736,6 +738,8 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /runner/help-ask/:read':
+    ':read names one of four account reads, never an object; the reads answer only an Ask session found by (the session header, the runner\'s owner, this runner) and read only that owner\'s rows (help/help-ask-reads.ts:224); help-ask.pg.spec.ts 6 sends them from another machine and another account',
   // ── scheduled tasks: a session's schedule_* tools (runner-api/runner-schedules.controller.ts) ─────────
   'GET /runner/schedules/:id':
     "read by (id, the runner's owner) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
@@ -1399,6 +1403,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/notify header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, body: { message: 'from the census' } })),
 
   // ── the wiki ────────────────────────────────────────────────────────────────────────────────────
+  // The four help reads answer an Ask session of the runner's own (help/help-ask-reads.ts): another account's Ask in the
+  // header is the 404 of an Ask that is not there.
+  'GET /runner/help-ask/:read header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    (mine) => ({ params: { read: 'machines' }, headers: calling(mine.runner.helpAskSessionId) }),
+    (of) => of.runner.helpAskSessionId,
+  ),
   'GET /runner/wiki/search header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.runner.wikiSessionId),
   'POST /runner/wiki/changesets body spaceId': {
     as: RUNNER,
@@ -1954,4 +1965,13 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /runner/wake':
     'the long poll this path was is gone. It answers every caller 426 UPGRADE_REQUIRED before it reads anything, for the '
     + 'runners of 0.1.246 that still ask once as they start — runner-api.controller.ts:3571',
+  'GET /help':
+    'the help article library\'s index, read from docs/help at boot and the same for every reader; the caller, when a '
+    + 'credential comes with the request (JwtAuthGuard, help.controller.ts:26), decides only whether the admin '
+    + 'category shows, by the caller\'s own role — help.controller.ts:50, :59',
+  'GET /help/articles/:slug':
+    'one article of the bundled library by its slug, a file name and no account\'s id; an admin-only article is the '
+    + '404 of a missing one to anyone but an administrator — help.controller.ts:62, help-library.ts:181',
+  'GET /help/search':
+    'full-text search over the bundled library alone, under the index\'s visibility rule — help.controller.ts:71',
 };
