@@ -40,21 +40,66 @@ class NeedsYouLogicTest {
 
     // swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats; OrbitKit's twin test)
 
-    /** A swipe puts away what is waiting now; only something new brings the bar back. */
-    @Test fun aSwipedBarComesBackOnlyForSomethingNew() {
-        val a = session("a", approvals = 1, lastTurnAt = "2026-11-15T01:00:00Z")
-        val b = session("b", approvals = 1, lastTurnAt = "2026-11-15T02:00:00Z")
-        val idle = session("idle", lastTurnAt = "2026-11-15T00:00:00Z")
-        val dismissed = NeedsYouLogic.dismissalKeys(listOf(a, b, idle))
-        assertEquals(setOf("a|2026-11-15T01:00:00Z", "b|2026-11-15T02:00:00Z"), dismissed)
-        assertTrue(NeedsYouLogic.isDismissed(listOf(a, b, idle), null, dismissed))
-        assertTrue("one answered: still away", NeedsYouLogic.isDismissed(listOf(a), null, dismissed))
-        assertTrue("on a conversation's page too", NeedsYouLogic.isDismissed(listOf(a, b), "a", dismissed))
-        val c = session("c", approvals = 1, lastTurnAt = "2026-11-15T03:00:00Z")
-        assertFalse("a new one", NeedsYouLogic.isDismissed(listOf(a, b, c), null, dismissed))
-        val bAgain = session("b", approvals = 1, lastTurnAt = "2026-11-15T04:00:00Z")
-        assertFalse("stopped again", NeedsYouLogic.isDismissed(listOf(a, bAgain), null, dismissed))
-        assertFalse("nothing to put away", NeedsYouLogic.isDismissed(listOf(idle), null, dismissed))
+    /** A wait is noticed once, by the conversation's name and what it waits on (the owner, 2026-11-15,
+     * docs/mocks/needs-you-capsule/12-once; OrbitKit's twin). */
+    @Test fun aWaitIsNoticedOnceByNameAndWhat() {
+        val a = session("a", 1, "w1", "orbit-develop", "Android update fails", "2026-11-15T01:00:00Z")
+        val b = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T02:00:00Z")
+        val seen = setOf(NeedsYouLogic.waitKey(a))
+        val fresh = NeedsYouLogic.newlyWaiting(listOf(a, b), seen)
+        assertEquals("only what was not waiting before", listOf("b"), fresh.map { it.target.text("id") })
+        assertEquals("Wire up Ollama", fresh.single().title)
+        assertEquals("Needs your reply · orbit-op", fresh.single().line)
+        assertEquals(NeedsYouGlyph.HAND, fresh.single().glyph)
+        val bothSeen = setOf(a, b).map(NeedsYouLogic::waitKey).toSet()
+        assertTrue("the same wait, not again", NeedsYouLogic.newlyWaiting(listOf(a, b), bothSeen).isEmpty())
+        val bAgain = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T03:00:00Z")
+        assertEquals("stopping again is a new wait", listOf("b"), NeedsYouLogic.newlyWaiting(listOf(a, bAgain), bothSeen).map { it.target.text("id") })
+        assertTrue("the conversation on screen has its own card", NeedsYouLogic.newlyWaiting(listOf(a, b), seen, "b").isEmpty())
+    }
+
+    /** An owner request stops no turn: the turns after it are the same wait, and the notice says the request's words (OrbitKit's
+     * twin). */
+    @Test fun anOwnerRequestIsNoticedOnceWhateverTurnsFollow() {
+        fun filed(lastTurnAt: String) = buildJsonObject {
+            put("id", "t"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_REQUEST")
+            put("title", "Task: Walkthrough"); put("lastTurnAt", lastTurnAt)
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting on you · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:36:15Z")), emptySet()).single().line)
+        val seen = setOf(NeedsYouLogic.waitKey(filed("2026-11-17T22:36:15Z")))
+        assertTrue("a later turn is the same wait", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:52:34Z")), seen).isEmpty())
+    }
+
+    /** Any wait the server names says the row's own words, never the tool call's "Needs your reply" (OrbitKit's twin). */
+    @Test fun aNamedWaitIsNoticedInTheRowsWords() {
+        val confirming = buildJsonObject {
+            put("id", "c"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_CONFIRMATION")
+            put("title", "Task: Ship it"); put("lastTurnAt", "2026-11-18T01:00:00Z")
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting for your confirmation · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(confirming), emptySet()).single().line)
+    }
+
+    /** The first look only takes stock; at most three notices, the rest "and N more"; a notice whose wait ended goes. */
+    @Test fun theNoticesTakeStockFirstAndShowAtMostThree() {
+        val notices = NeedsYouNotices()
+        val a = session("a", 1, lastTurnAt = "2026-11-15T01:00:00Z")
+        notices.look(listOf(a), null)
+        assertTrue("what waits at launch is not news", notices.toasts.isEmpty())
+        val more = (1..4).map { session("n$it", 1, lastTurnAt = "2026-11-15T0${it + 1}:00:00Z") }
+        notices.look(listOf(a) + more, null)
+        assertEquals(3, notices.toasts.size)
+        assertEquals(1, notices.more)
+        notices.look(listOf(a) + more.drop(1), null)
+        assertEquals("an answered wait takes its notice", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.retake()
+        notices.look(listOf(a) + more + session("late", 1, lastTurnAt = "2026-11-15T09:00:00Z"), null)
+        assertEquals("back in the foreground: stock again", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.dismiss("n2|2026-11-15T03:00:00Z")
+        notices.dismiss("n3|2026-11-15T04:00:00Z")
+        assertTrue(notices.toasts.isEmpty())
+        assertEquals(0, notices.more)
     }
 
     // banner

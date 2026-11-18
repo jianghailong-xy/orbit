@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,8 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.management.CodexSignInText
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -66,7 +69,12 @@ internal fun RunSettingsSection(state: ProjectPageState, doc: JsonObject, now: I
                 AutomaticSetting(view, doc, enabled, main, automatic)
                 HorizontalDivider()
                 AtMostSetting(state, doc, enabled, stepConcurrency)
-                if (!marked) { HorizontalDivider(); MergeCheckSetting(view, doc, enabled, main, editMergeCheck) }
+                if (!marked) {
+                    HorizontalDivider()
+                    LandingCheckSetting(view, enabled, integration)
+                    HorizontalDivider()
+                    MergeCheckSetting(view, doc, enabled, main, editMergeCheck)
+                }
                 view.number("escalationSeconds")?.let { seconds -> HorizontalDivider(); EscalationSetting(view, seconds, enabled, integration) }
                 HorizontalDivider()
                 val paused = doc.text("pausedAt") != null
@@ -446,6 +454,8 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
     var held by remember { mutableStateOf<JsonObject?>(null) }
     var edited by remember { mutableStateOf<StartProjectCopy.Draft?>(null) }
     var starting by remember { mutableStateOf(false) }
+    // The coordinator's why in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    var showOriginal by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // Why the last round could not read the document or the open items, said with Retry until a round does; Retry asks at once.
     var failure by remember { mutableStateOf<String?>(null) }
@@ -475,7 +485,9 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                 val cancel: @Composable () -> Unit = { TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-request-cancel")) { Text("Cancel") } }
                 val doc = document
                 val row = doc?.let { StartProjectCopy.live(openItems, ProjectDoc.started(it)) } ?: held
-                val request = StartProjectCopy.request(row)
+                val owner = LocalTranslation.current.cardLanguage
+                val translated = row?.let { OwnerCardTranslation.openItem(it, owner) }
+                val request = StartProjectCopy.request(if (translated != null && !showOriginal) translated else row)
                 if (doc != null && confirmation != null && row != null && request != null && integrationAnswered) {
                     LaunchedEffect(row) { if (held == null) held = row }
                     val draft = edited ?: StartProjectCopy.Draft.of(request.settings, integration)
@@ -498,7 +510,9 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                                 }
                             }
                         }, onViewTasks = viewTasks, branches = ProjectMainBranch.branches(integration), lastChoice = ProjectMainBranch.lastChoice(integration),
-                        graph = parsed, trailing = cancel)
+                        graph = parsed, trailing = cancel, translationFoot = if (translated != null) ({
+                            CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+                        }) else null)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("▶ ${StartProjectCopy.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
@@ -548,8 +562,13 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
         try { error = write(refusal, body); return error == null } finally { writing = false }
     }
     val itemId = row?.text("itemId")
-    val notYet: (suspend (String) -> Boolean)? = if (itemId == null) null else { note ->
-        press("${ProjectDone.notDeclined} — ") { api.declineDone(id, itemId, note) }.also { if (it) close() }
+    // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
+    var notTranslated by remember { mutableStateOf(false) }
+    val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
+        press("${ProjectDone.notDeclined} — ") {
+            try { api.declineDone(id, itemId, note, asWritten); notTranslated = false }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); throw failure }
+        }.also { if (it) close() else if (notTranslated) error = null }
     }
     Dialog(onDismissRequest = { if (!writing) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.94f).testTag("project-done-sheet"), shape = MaterialTheme.shapes.large) {
@@ -562,7 +581,7 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
                         var answer: JsonObject? = null
                         if (body != null && press("${ProjectDone.notRecorded} — ") { answer = api.done(id, body) }) record = answer ?: buildJsonObject { put("status", "DONE") }
                     },
-                    onNotYet = notYet,
+                    onNotYet = notYet, notTranslated = notTranslated,
                     onReopen = { if (press("${ProjectDone.notReopened} — ") { api.setStatus(id, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; close() } },
                     trailing = { TextButton(onClick = close, enabled = !writing, modifier = Modifier.testTag("project-done-cancel")) {
                         Text(if (record == null) "Cancel" else "Done") } })
@@ -570,4 +589,48 @@ internal fun ProjectDoneSheet(api: ProjectApi, id: String, state: ProjectPageSta
             }
         }
     }
+}
+
+/** Landing settings use the same integration PATCH as merge settings. Null inherits independently. */
+@Composable
+private fun LandingCheckSetting(view: JsonObject, enabled: Boolean, write: (JsonObject?) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().testTag("project-landing-check"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(LandingCheckCopy.label)
+        if (view.text("line") == "MAIN") Note(LandingCheckCopy.main) else {
+            TextButton(onClick = { editing = true }, enabled = enabled) {
+                Text(view.text("landingCheckCommand") ?: LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+            }
+            Note(view.number("landingCheckTimeoutSeconds")?.let { "$it seconds" }
+                ?: LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            Note(LandingCheckCopy.hint)
+        }
+    }
+    if (editing) {
+        var command by remember { mutableStateOf(view.text("landingCheckCommand").orEmpty()) }
+        var timeout by remember { mutableStateOf(view.number("landingCheckTimeoutSeconds")?.toString().orEmpty()) }
+        val valid = timeout.isEmpty() || (timeout.toIntOrNull() ?: 0) > 0
+        AlertDialog(onDismissRequest = { editing = false }, title = { Text(LandingCheckCopy.label) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(command, { command = it }, label = { Text(LandingCheckCopy.command) },
+                    placeholder = { Text(LandingCheckCopy.commandPlaceholder) }, modifier = Modifier.testTag("landing-check-command"))
+                if (command.isBlank()) Note(LandingCheckCopy.inheritedCommand(view.text("mergeCheckCommand")))
+                OutlinedTextField(timeout, { timeout = it }, label = { Text(LandingCheckCopy.timeout) },
+                    placeholder = { Text(LandingCheckCopy.timeoutPlaceholder) }, modifier = Modifier.testTag("landing-check-timeout"))
+                Note(LandingCheckCopy.timeoutHint)
+                if (timeout.isEmpty()) Note(LandingCheckCopy.inheritedTimeout(view.number("mergeCheckTimeoutSeconds")))
+            } }, confirmButton = { TextButton(onClick = {
+                write(landingCheckWrite(view, command, timeout.toIntOrNull())); editing = false
+            }, enabled = enabled && valid && landingCheckWrite(view, command, timeout.toIntOrNull()) != null) { Text(RunSettings.save) } },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } })
+    }
+}
+
+internal fun landingCheckWrite(view: JsonObject, command: String, timeout: Int?): JsonObject? {
+    val next = command.takeIf { it.isNotBlank() }
+    val body = buildJsonObject {
+        if (next != view.text("landingCheckCommand")) put("landingCheckCommand", next?.let(::JsonPrimitive) ?: JsonNull)
+        if (timeout != view.number("landingCheckTimeoutSeconds")) put("landingCheckTimeoutSeconds", timeout?.let(::JsonPrimitive) ?: JsonNull)
+    }
+    return body.takeIf { it.isNotEmpty() }
 }

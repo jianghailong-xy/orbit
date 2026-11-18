@@ -34,13 +34,20 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
-import io.orbitd.android.core.cards.withoutWakeBlocks
+import io.orbitd.android.core.cards.BackgroundWakeCard
+import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.cards.OrbitEventLine
+import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.BilingualEnglish
+import io.orbitd.android.translation.BilingualShown
+import io.orbitd.android.translation.InterleavedReply
+import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.translation.ReplyTranslationFoot
 import io.orbitd.android.translation.ShownOriginals
 import io.orbitd.android.translation.TranslationShown
@@ -59,6 +66,9 @@ internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
 /** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
  * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
 internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
+/** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
+private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
@@ -93,16 +103,52 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // The turns Orbit opens for its own news — a SubAgent's end, a background job's news or a wakeup coming due, a watch's wake — are lines
+    // in the agent's stream (owner 2026-11-16: they must not look like something the reader sent): no "Orbit" heading, no row tint, no Copy
+    // message — the lines are the whole row, as on the web and iOS.
+    // A turn carrying only Orbit's blocks that no line knows is the generic From Orbit line, never the reader's row (OrbitEvent).
+    if (event.type == "user") {
+        val note = shown.fields.string("controlPlaneNote")
+        val words = shown.personWords()
+        val wakeLines = cards.isNotEmpty() && cards.all { card -> WAKE_LINE_KEYS.any { card.key.endsWith(it) } } &&
+            (words.isBlank() || cards.any { it.key.endsWith(":watch") })
+        val orbitOnly = cards.isEmpty() && OrbitEvent.draws(words, note, (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
+        if (wakeLines || orbitOnly) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (orbitOnly) {
+                    val delivery = event.turnId?.let { LocalSteerDeliveries.current[it] } ?: shown.fields.string("delivery")
+                    val undelivered = delivery == "failed"
+                    OrbitEventLine(note!!.trim(), event.ts, BackgroundWakeCard.steerReceipt(
+                        BackgroundWakeCard.steerState(shown.fields["steer"] == JsonPrimitive(true), delivery, undelivered)), undelivered)
+                } else {
+                    cards.forEach { TranscriptCardView(it, open, shown) }
+                }
+            }
+            return
+        }
+    }
+    // A note-only turn with no card draws nothing, including no row padding.
+    val loneNote = shown.fields.string("controlPlaneNote")
+    if (event.type == "user" && cards.isEmpty() && shown.fields["sessionMessage"] !is JsonObject &&
+        BackgroundWakeCard.drawsNoteAlone(shown.personWords(), (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty(), loneNote, queued = false)) {
+        return
+    }
     // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current
     val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
-    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
+    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.shownReply(shown.fields["translation"], shown.body()) else null
     val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
-    val flipped = shownOriginals?.has(translationKey) == true
+    // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
+    val bilingual = LocalTranslation.current.bilingual
+    val flipped = !bilingual && shownOriginals?.has(translationKey) == true
+    // "Hide original" leaves this message's own language alone (docs/mocks/translation-hide-original); per message, never kept.
+    val hiddenKey = ShownOriginals.hidden(translationKey)
+    val originalHidden = bilingual && shownOriginals?.has(hiddenKey) == true
+    val showsBoth = bilingual && !originalHidden
     fun shownWords(source: RunEvent): String = when {
         source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
-        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
+        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.shownReply(source.fields["translation"], source.body()), flipped)
         else -> source.body()
     }
     // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
@@ -189,8 +235,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         if (updateResume) {
             Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            // What delivery appended — the background jobs that ended while the runner was away — rides under it.
-            shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
             return@Column
         }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
@@ -314,34 +358,37 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
         } else {
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
-            // What delivery appended is not the person's: their row holds their words, and one line at its foot names the rest.
-            // Another session's message: its own block only tells the agent what the card shows, so it is not folded again (SessionMessageNote).
+            // Delivery's appended note stays out of the person's words and is never rendered separately.
             val sessionNote = if (shown.fields["sessionMessage"] is JsonObject) SessionMessageNote.split(shown.fields.string("controlPlaneNote")) else null
-            val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
-                // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
-                ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = shownWords(shown)
             // A reply still to be translated is the English greyed, with its chip under it (2A).
             val pendingReply = replyTranslation == null && row.awaitsTranslation
-            cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, note?.trim(), revealed = highlighted) else TranscriptCardView(it, open, shown) }
-            if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) {
-                if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+            cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, revealed = highlighted) else TranscriptCardView(it, open, shown) }
+            if (cards.isEmpty() && !attachmentOnly) { if (shown.fields.string("controlPlaneNote").isNullOrBlank() || words.isNotBlank()) {
+                // Both languages, block by block, when the reply pairs with its translation (03-interleaved.png).
+                val pairs = if (event.type == "assistant") BilingualShown.replyPairs(shown.body(), replyTranslation, showsBoth) else null
+                if (pairs != null) InterleavedReply(pairs, open)
+                else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
+                (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth)
+                    else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, showsBoth) else null)
+                    ?.let { BilingualEnglish(it, collapsible = event.type == "assistant") }
             } }
-            // Another session's words, and what delivery attached, are its bubble's.
-            else if (bubble != null) Unit
-            else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             val doors = console?.composer
             val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }
+            val hide = shownOriginals?.let { { it.toggle(hiddenKey) } }
             turnTranslation?.let { turn ->
                 val turnId = event.turnId
                 UserTranslationFoot(turn, flipped, toggle,
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
-                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null)
+                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
             }
             if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
-                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null)
+                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,
+                bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
@@ -360,8 +407,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
             }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
-            // Last, in the meta voice of the steer's line above it: the person's words stay what the eye lands on.
-            if (bubble == null) note?.let { AttachedNoteEntry(it.trim()) }
         }
     }
     copyOverflow?.let { LongTextDialog(it) { copyOverflow = null } }

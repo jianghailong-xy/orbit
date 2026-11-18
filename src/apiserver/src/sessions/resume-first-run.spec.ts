@@ -70,6 +70,8 @@ function makeService(
         },
         session: sessionDelegate,
         conversationTurn: conversationTurnDelegate,
+        // A runner whose merge still holds turns back: it declares nothing.
+        runner: { findUnique: async () => ({ capabilities: [] }) },
       }),
   } as never;
   const queue = {

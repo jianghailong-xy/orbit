@@ -119,6 +119,7 @@ class EntrypointFixture(unittest.TestCase):
         self.assertEqual(env["CODEX_HOME"], str(self.runner.paths()[0] / ".codex"))
         self.assertEqual(env["ORBIT_NO_SELFUPDATE"], "1")
         self.assertEqual(env["ORBIT_NO_ENGINE_UPDATE"], "1")
+        self.assertEqual(env["ORBIT_ENGINE_STORE"], "/opt/orbit-engines")
         self.assertFalse(any(key.startswith("ORBIT_RUNNER_") for key in env))
         for key in ("ORBIT_SESSION_ID", "ORBIT_SERVICE_TOKEN", "KUBECONFIG", "DOCKER_HOST"):
             self.assertNotIn(key, env)
@@ -155,10 +156,10 @@ class EntrypointTest(EntrypointFixture):
     def test_rebuild_preserves_identity_credentials_and_all_local_state_bytes(self):
         self.start()
         retained = [self.config, self.orbit / "container-identity.json"]
-        for relative in ("home/.orbit/runs/session/meta.json", "home/.orbit/worktrees/session/work.txt",
-                         "home/.orbit/uploads/session/attachment.bin", "home/.orbit/codex-state/partition/state.sqlite",
-                         "home/.codex/sessions/session.jsonl", "home/.claude/projects/session.jsonl",
-                         "home/orbit-repos/default/project.txt"):
+        for relative in (".orbit/runs/session/meta.json", ".orbit/worktrees/session/work.txt",
+                         ".orbit/uploads/session/attachment.bin", ".orbit/codex-state/partition/state.sqlite",
+                         ".codex/sessions/session.jsonl", ".claude/projects/session.jsonl",
+                         "orbit-repos/default/project.txt"):
             path = self.runner.ROOT / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"fixture-state:" + relative.encode())
@@ -245,6 +246,18 @@ class EntrypointTest(EntrypointFixture):
     def test_missing_config_with_another_retained_repository_never_registers(self):
         self.runner.prepare()
         (self.runner.paths()[0] / "orbit-repos" / "existing-repository").mkdir()
+        self.assert_refused()
+
+    def test_an_ext4_volumes_lost_and_found_in_home_still_registers(self):
+        # The volume's root is home, so an ext4 claim's lost+found sits beside .orbit.
+        self.runner.prepare()
+        (self.runner.paths()[0] / "lost+found").mkdir()
+        self.start()
+        self.popen.assert_called_once()
+
+    def test_missing_config_with_another_folder_in_home_never_registers(self):
+        self.runner.prepare()
+        (self.runner.paths()[0] / "existing-project").mkdir()
         self.assert_refused()
 
     def test_failed_or_uncertain_registration_is_never_repeated(self):
@@ -359,6 +372,77 @@ class EntrypointTest(EntrypointFixture):
 
 
 
+class LegacyWorkDirTest(EntrypointFixture):
+    """An earlier image made an empty `orbit-repos/default` for the managed default workspace and named it as the
+    runner's work directory; this one names the repos folder and makes no project folder of its own."""
+
+    def legacy_volume(self, project=None):
+        """A volume an earlier image ran on: config and identity marker name `orbit-repos/default`."""
+        self.runner.prepare()
+        legacy = self.runner.legacy_workdir()
+        legacy.mkdir(mode=0o700)
+        if project:
+            (legacy / project).write_text("somebody's work")
+        self.write_config(workDir=str(legacy))
+        (self.orbit / "container-identity.json").write_text(json.dumps(
+            {"layoutVersion": 1, "runnerId": "fixture-runner-id", "serverUrl": "https://control.example.test",
+             "workDir": str(legacy)}, sort_keys=True))
+        (self.orbit / "container-identity.json").chmod(0o600)
+        os.environ.pop("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE")
+        return legacy
+
+    def test_a_fresh_volume_has_no_project_folder_and_names_the_repos_folder(self):
+        self.start()
+        repos = self.runner.paths()[0] / "orbit-repos"
+        self.assertEqual(self.runner.paths()[2], repos)
+        self.assertTrue(repos.is_dir())
+        self.assertEqual(list(repos.iterdir()), [])
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], str(repos))
+        argv = self.popen.call_args.args[0]
+        self.assertEqual(argv[argv.index("--workdir") + 1], str(repos))
+
+    def test_an_earlier_volume_moves_to_the_repos_folder_and_loses_the_empty_default(self):
+        legacy = self.legacy_volume()
+        self.start()
+        self.popen.assert_not_called()
+        repos = str(self.runner.paths()[2])
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], repos)
+        self.assertEqual(json.loads((self.orbit / "container-identity.json").read_text())["workDir"], repos)
+        self.assertFalse(legacy.exists())
+        # The next start reads the moved volume as its own.
+        self.start()
+        self.popen.assert_not_called()
+
+    def test_a_default_folder_with_anything_in_it_stays(self):
+        legacy = self.legacy_volume(project="notes.txt")
+        self.start()
+        self.assertEqual((legacy / "notes.txt").read_text(), "somebody's work")
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], str(self.runner.paths()[2]))
+
+    def test_check_reads_an_earlier_volume_without_changing_it(self):
+        legacy = self.legacy_volume()
+        before = self.config.read_bytes()
+        with redirect_stdout(io.StringIO()) as out:
+            self.runner.main(["check"])
+        self.assertEqual(json.loads(out.getvalue())["workDir"], str(self.runner.paths()[2]))
+        self.assertEqual(self.config.read_bytes(), before)
+        self.assertTrue(legacy.is_dir())
+
+    def test_a_first_start_takes_the_earlier_image_s_empty_default_for_nothing(self):
+        self.runner.prepare()
+        self.runner.legacy_workdir().mkdir(mode=0o700)
+        self.start()
+        self.popen.assert_called_once()
+        self.assertFalse(self.runner.legacy_workdir().exists())
+
+    def test_another_retained_marker_is_still_refused(self):
+        self.legacy_volume()
+        (self.orbit / "container-identity.json").write_text(json.dumps(
+            {"layoutVersion": 1, "runnerId": "another-runner", "serverUrl": "https://control.example.test",
+             "workDir": str(self.runner.legacy_workdir())}, sort_keys=True))
+        self.assert_refused()
+
+
 RUNNER_ID = "0b6f5f6e-6f0a-4c5e-9b9e-2a3c4d5e6f70"
 POD_UID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
 
@@ -416,7 +500,7 @@ class ManagedBootstrapTest(ManagedBootstrapFixture):
 
     def test_the_next_generation_replaces_only_the_credential(self):
         self.started_env()
-        state = self.runner.ROOT / "home/.orbit/worktrees/session/work.txt"
+        state = self.runner.ROOT / ".orbit/worktrees/session/work.txt"
         state.parent.mkdir(parents=True, exist_ok=True)
         state.write_text("retained")
         before = json.loads(self.config.read_text())

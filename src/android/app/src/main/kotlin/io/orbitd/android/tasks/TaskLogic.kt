@@ -721,7 +721,9 @@ object TaskDetailLogic {
      * and not from a row that does not carry its prerequisites. */
     fun runNowHint(task: JsonObject): String? = TaskDetailCopy.nothingStartsThisTask.takeIf {
         task.text("status") == "OPEN" && task.text("projectId") == null && (task["dependsOn"] as? JsonArray)?.isEmpty() == true &&
-            task.text("runAt").isNullOrEmpty()
+            task.text("runAt").isNullOrEmpty() &&
+            // A startWhen starts it, as a runAt does (docs/condition-triggers-design.md §6.2).
+            io.orbitd.android.core.schedule.TaskStartWhenView.parse(task["startWhen"])?.waitingLine == null
     }
 
     fun scheduleValue(runAt: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String {

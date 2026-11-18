@@ -10,6 +10,7 @@ import {
   type RunnerEngineHealth,
 } from '@orbit/shared';
 import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
+import { sessionRecoveryBody } from './session-recovery';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
@@ -191,7 +192,8 @@ export class EngineSignedOutConflict extends ConflictException {
       runnerId,
       ...(signIn ? { signIn } : {}),
     };
-    super(body);
+    // The recovery block beside it (session-recovery.ts): a person signs the engine in, never the caller.
+    super({ ...sessionRecoveryBody(ENGINE_SIGNED_OUT, message, { resources: [{ type: 'RUNNER', id: runnerId }] }), ...body });
   }
 }
 
@@ -285,9 +287,15 @@ export function signedOutEngineRefusal(args: {
       login.dir && varName
         ? `${varName}='${login.dir.replace(/'/g, `'"'"'`)}' ${LOGIN_COMMANDS[runtime]}`
         : LOGIN_COMMANDS[runtime];
+    const defaultAccount = runtime === 'codex' && login.dir
+      ? health.accounts?.find((account) => account.id === DEFAULT_ACCOUNT && account.auth === 'yes')
+      : undefined;
+    const alternative = defaultAccount
+      ? ` The runner's "${defaultAccount.name || 'Default'}" account is signed in. Choose it for this session, or for new sessions in Settings > Workspaces. A plain \`codex login\` updates Default, not this account.`
+      : '';
     return (
       `${label} account ${login.name} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
-      `Sign it in from the Machines & models page, or run \`${command}\` on that machine, then start this session again.`
+      `Sign it in from the Machines & models page, or run \`${command}\` on that machine, then start this session again.${alternative}`
     );
   }
   return (

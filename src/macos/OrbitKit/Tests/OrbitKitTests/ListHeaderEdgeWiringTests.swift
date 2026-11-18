@@ -96,17 +96,12 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertFalse(console.contains("softTopEdgeEffect"), "the transcript keeps the 11-11 rule")
     }
 
-    /// The needs-you bar over the Sessions list floats (the owner, 2026-11-15, 04-floating.html,
-    /// which took back 11-12's option B of 02-board.html): no soft edge of its own carried on down
-    /// under it — the rows go on behind the capsule, under the nav bar's own soft edge.
-    func testTheNeedsYouBarOverTheListFloats() throws {
-        let sessions = section(try source(views + "AgentsView.swift"),
-                               from: ".topInsetClearOfRefresh {", to: "#endif")
-        XCTAssertTrue(sessions.contains("overList: true"), "the Sessions list mounts it over the list")
-        let banner = try source(views + "NeedsYouBannerView.swift")
-        let surface = section(banner, from: "@ViewBuilder private var surface", to: "\n    }")
-        XCTAssertTrue(surface.contains("if overList {"))
-        XCTAssertFalse(banner.contains("SoftEdgeLayer"))
+    /// No needs-you bar stands over the Sessions list (the owner, 2026-11-15, 12-once.html): what
+    /// starts waiting is noticed once by the toast host, so the list keeps no gap of its own for it.
+    func testNoNeedsYouBarStandsOverTheList() throws {
+        let sessions = try source(views + "AgentsView.swift")
+        XCTAssertFalse(sessions.contains("NeedsYouBannerView"))
+        XCTAssertFalse(sessions.contains("needsYouClearance"))
     }
 
     /// The iPhone drawer, the same treatment (the owner, 2026-11-12, 03-board.html, D1–D3 = A): its
@@ -127,8 +122,7 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(title.contains(".font(.title2.weight(.bold))"), "the drawer's title stays bold")
     }
 
-    /// The drawer's soft edge: a blur fading to nothing. (The needs-you bar stood on it too until it
-    /// floated, 2026-11-15 — see `testTheNeedsYouBarOverTheListFloats`.)
+    /// The drawer's soft edge: a blur fading to nothing.
     func testTheDrawersSoftEdgeIsABlurThatFades() throws {
         let identity = try source(views + "AgentIdentity.swift")
         let layer = section(identity, from: "struct SoftEdgeLayer: View {", to: "\n}\n")

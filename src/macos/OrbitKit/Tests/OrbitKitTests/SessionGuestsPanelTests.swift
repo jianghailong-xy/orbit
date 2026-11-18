@@ -110,5 +110,79 @@ final class SessionGuestsPanelTests: XCTestCase {
         XCTAssertTrue(sheet.contains("api.inviteSessionGuest(rootID, email: email)"))
         XCTAssertTrue(sheet.contains("api.removeSessionGuest(rootID, userID: guest.userId)"))
         XCTAssertTrue(sheet.contains("if people.needsAcknowledge {"))
+        XCTAssertTrue(sheet.contains("api.sessionGuestSuggestions(rootID)"))
+        XCTAssertTrue(sheet.contains("self.people?.pick(person)"))
+    }
+
+    // MARK: suggestions (board docs/mocks/share-links/14-guest-suggestions)
+
+    private let invitedBefore = [
+        SessionGuestSuggestion(name: "Alice Chen", email: "alice@example.com", lastInvitedAt: "2026-11-16T03:00:00.000Z"),
+        SessionGuestSuggestion(name: "Paula Ortiz", email: "paula.ortiz@example.com", lastInvitedAt: "2026-11-13T09:00:00.000Z"),
+        SessionGuestSuggestion(name: "Sam Wu", email: "sam@example.org", lastInvitedAt: "2026-11-09T09:00:00.000Z"),
+        SessionGuestSuggestion(name: "Pat Lee", email: "patlee@example.net", lastInvitedAt: "2026-10-30T09:00:00.000Z"),
+        SessionGuestSuggestion(name: "Jo Park", email: "jo@example.com", lastInvitedAt: "2026-10-20T09:00:00.000Z"),
+        SessionGuestSuggestion(name: "Max Bell", email: "max@example.com", lastInvitedAt: "2026-10-10T09:00:00.000Z"),
+    ]
+
+    func testAnEmptyFieldOffersTheFiveNewest() {
+        XCTAssertEqual(SessionGuestSuggestions.matching("  ", in: invitedBefore).map(\.name),
+                       ["Alice Chen", "Paula Ortiz", "Sam Wu", "Pat Lee", "Jo Park"])
+    }
+
+    func testTypingKeepsWhoseNameOrEmailHasAWordStartingWithIt() {
+        XCTAssertEqual(SessionGuestSuggestions.matching("pa", in: invitedBefore).map(\.name),
+                       ["Paula Ortiz", "Pat Lee", "Jo Park"], "a name word, an email start")
+        XCTAssertEqual(SessionGuestSuggestions.matching("ORTIZ", in: invitedBefore).map(\.name), ["Paula Ortiz"],
+                       "case does not matter; an email word after the dot")
+        XCTAssertEqual(SessionGuestSuggestions.matching("org", in: invitedBefore).map(\.name), ["Sam Wu"], "the last word of an email")
+        XCTAssertEqual(SessionGuestSuggestions.matching("lice", in: invitedBefore), [], "the middle of a word is no match")
+        XCTAssertEqual(SessionGuestSuggestions.matching("zz", in: invitedBefore), [])
+        XCTAssertEqual(SessionGuestSuggestions.matching("Alice@Example.com", in: invitedBefore), [],
+                       "nothing left to fill in")
+    }
+
+    func testTheQueryIsBoldWhereItStartsAWord() {
+        typealias R = SessionGuestSuggestions.Run
+        XCTAssertEqual(SessionGuestSuggestions.runs("Paula Ortiz", query: "pa"), [R("Pa", bold: true), R("ula Ortiz", bold: false)])
+        XCTAssertEqual(SessionGuestSuggestions.runs("paula.ortiz@example.com", query: "or"),
+                       [R("paula.", bold: false), R("or", bold: true), R("tiz@example.com", bold: false)])
+        XCTAssertEqual(SessionGuestSuggestions.runs("Jo Park", query: ""), [R("Jo Park", bold: false)])
+    }
+
+    func testTheDateSaysTodayOrTheDay() {
+        let utc = TimeZone(identifier: "UTC")!
+        let now = ISO8601DateFormatter().date(from: "2026-11-16T12:00:00Z")!
+        XCTAssertEqual(SessionGuestSuggestions.date("2026-11-16T03:00:00.000Z", now: now, timeZone: utc), "Today")
+        XCTAssertEqual(SessionGuestSuggestions.date("2026-11-13T09:00:00.000Z", now: now, timeZone: utc), "Nov 13")
+    }
+
+    func testPickingFillsTheEmailAndNeverInvites() {
+        var panel = SessionGuestsPanel(context: SessionGuestContext(runnerName: "workstation-gpu", permissionMode: "auto"))
+        panel.loaded([])
+        panel.suggestionsLoaded(invitedBefore)
+        panel.editEmail("pa")
+        XCTAssertFalse(panel.pickHighlighted(), "no row highlighted yet: Return invites what was typed")
+        panel.moveHighlight(by: 1)
+        XCTAssertEqual(panel.highlighted, 0, "↓ goes to the first row")
+        panel.moveHighlight(by: 5)
+        XCTAssertEqual(panel.highlighted, 2, "the highlight stays within the list")
+        panel.moveHighlight(by: -1)
+        XCTAssertTrue(panel.pickHighlighted())
+        XCTAssertEqual(panel.email, "patlee@example.net")
+        XCTAssertEqual(panel.shownSuggestions, [], "the list closes")
+        XCTAssertFalse(panel.inviting)
+        XCTAssertFalse(panel.canInvite, "a session in Auto still needs the tick")
+        XCTAssertFalse(panel.pickHighlighted(), "Return with the list closed invites as before")
+        panel.editEmail("")
+        XCTAssertEqual(panel.shownSuggestions.count, 5, "editing opens it again")
+        panel.closeSuggestions()
+        XCTAssertEqual(panel.shownSuggestions, [], "Esc")
+    }
+
+    func testTheSuggestionsDecodeAsTheServerAnswers() throws {
+        let json = #"{"people":[{"name":"Alice Chen","email":"alice@example.com","lastInvitedAt":"2026-11-16T03:00:00.000Z"}]}"#
+        let list = try JSONDecoder().decode(SessionGuestSuggestionList.self, from: Data(json.utf8))
+        XCTAssertEqual(list.people, [invitedBefore[0]])
     }
 }

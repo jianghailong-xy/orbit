@@ -193,7 +193,9 @@ private struct RunnerEngineContent: View {
                 // Install failed: an agent can be sent to fix it, under the failure; Retry stays as it is.
                 if let fix = RunnerAgentFixLogic.installFailedState(runner, engine: engine) {
                     VStack(alignment: .leading, spacing: 6) {
-                        RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixInstall() }
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                            fixWithAnAgent(RunnerAgentFixTarget(kind: .installFailed, engine: engine))
+                        }
                         RunnerAgentFixLine(state: fix) { openSession($0) }
                     }
                 }
@@ -367,8 +369,19 @@ private struct RunnerEngineContent: View {
                     }
                 }
             }
+            // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+            if let fix = RunnerAgentFixLogic.engineUpdateState(runner) {
+                VStack(alignment: .leading, spacing: 6) {
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                        fixWithAnAgent(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+                    }
+                    RunnerAgentFixLine(state: fix) { openSession($0) }
+                }
+            }
         } footer: {
             Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER
+                 : RunnerPageFormat.isManaged(runner)
+                     ? (engine == "dsh" ? DshRuntime.managedEnginePageFooter : RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER)
                  : engine == "dsh" ? DshRuntime.enginePageFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
         }
     }
@@ -464,10 +477,23 @@ private struct RunnerEngineContent: View {
                         .disabled(offline || removal?.pending == true)
                 }
             }
+            if let moving = removal?.moving {
+                Text(moving)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
             if let refused = removal?.refused {
                 Text(refused)
                     .font(.orbitLabel)
                     .foregroundStyle(RunnerInk.red)
+            }
+            // Refused because sessions are running in it: which ones, each a way to it (web parity).
+            if let blocking = removal?.blocking, !blocking.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(blocking) { session in
+                        blockingSessionRow(session)
+                    }
+                }
             }
             if signingIn == line.id {
                 RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,
@@ -511,6 +537,33 @@ private struct RunnerEngineContent: View {
         .onChange(of: foldsBack(line, now: now)) { _, fold in
             if fold { closeSignIn() }
         }
+    }
+
+    /// One session a refused removal lists: its dot, its title as a link, where it stands, and Open
+    /// session — the whole row a press that opens it.
+    private func blockingSessionRow(_ session: RunnerPageFormat.BlockingSession) -> some View {
+        Button { openSession(session.id) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Circle()
+                    .fill(RunnerInk.status(session.tone))
+                    .frame(width: 6, height: 6)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                Text(session.title)
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let label = session.label {
+                    Text(label)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer(minLength: 8)
+                Text("\(RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_OPEN) →")
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(.orbitLabel)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The row with its presses: its long-press menu, and its left swipe — on a phone (iOS 26,
@@ -870,11 +923,10 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// Fix with an agent on the failed install: one press, no sheet; the list read after it turns the
-    /// button into the fixing line, and the page stays. A refusal is the server's own sentence.
-    private func fixInstall() {
+    /// Fix with an agent on a failed install or engine update: one press, no sheet; the list read after it
+    /// turns the button into the fixing line, and the page stays. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
         let id = runner.id
-        let target = RunnerAgentFixTarget(kind: .installFailed, engine: engine)
         fixPressing = true
         Task {
             if let failure = await runners.fixAttention(id, target: target) {

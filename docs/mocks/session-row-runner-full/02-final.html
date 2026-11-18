@@ -1,0 +1,95 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>定稿 · 排队行</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f2f2f4;color:#1c1c1e;width:1680px;padding:0}
+.b-part{font:15px/1.6 Inter,"Noto Sans SC",sans-serif;padding:32px 40px;background:#f2f2f4}
+h1{font-size:26px;margin-bottom:6px}
+h2{font-size:20px;margin:0 0 10px}
+.lead{font-size:15.5px;color:#444;max-width:1560px}
+.lead b{color:#000}
+.grid{display:grid;grid-template-columns:repeat(2,770px);gap:28px 60px}
+.stage .ttl{font-size:16px;font-weight:700;margin-bottom:8px}
+.stage .ttl .rec{background:#2e7d32;color:#fff;border-radius:6px;padding:1px 8px;font-size:13px;margin-left:8px}
+.cap{font-size:14.5px;color:#333;margin-top:10px;line-height:1.6}
+.good{color:#2e7d32}.bad{color:#c62828}.mid{color:#a15c00}
+/* desktop sidebar list, drawn after the owner's screenshot */
+.pane{width:560px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);position:relative}
+.r{display:flex;gap:12px;padding:11px 14px 12px;border-radius:9px;align-items:flex-start;position:relative}
+.r.sel{background:#e9effd}
+.r .ic{width:20px;height:20px;margin-top:3px;flex:none}
+.r .tx{flex:1;min-width:0}
+.r .t{font-size:16px;color:#1c1c1e;display:flex;justify-content:space-between;gap:10px}
+.r .t span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .t .when{font-size:14px;color:#a1a1a6;flex:none}
+.r .l{font-size:14.5px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.l .run{color:#0a6cff}
+.l .q{color:#8e8e93}
+.l .qs{color:#6e6e73;font-weight:500}
+.l .sep{color:#c7c7cc;margin:0 5px}
+.hl{outline:2.5px solid #ff9f0a;outline-offset:2px;border-radius:5px}
+.pin{position:absolute;background:#ff9f0a;color:#000;font:700 12px/20px Inter,sans-serif;border-radius:10px;width:20px;text-align:center}
+.tip{position:absolute;left:150px;top:118px;width:360px;background:#2c2c2e;color:#f2f2f7;border-radius:10px;padding:11px 13px;font-size:13.5px;line-height:1.5;box-shadow:0 10px 26px rgba(0,0,0,.28);z-index:3}
+.tip b{display:block;font-size:14.5px;margin-bottom:3px}
+.tip .w{color:#aeaeb2;margin-top:4px}
+table{border-collapse:collapse;font-size:14.5px;width:1600px;background:#fff;border-radius:12px;overflow:hidden}
+th,td{border-bottom:1px solid #ececf0;padding:9px 12px;text-align:left;vertical-align:top}
+th{background:#fafafa;font-weight:600}
+.box{background:#fff;border-radius:12px;padding:18px 24px;max-width:1600px;font-size:15px;line-height:1.75}
+.box li{margin-left:22px}
+code{font-family:"JetBrains Mono",monospace;font-size:13px;background:#f0f0f3;border-radius:4px;padding:0 4px}
+</style><style>
+.ntip{position:absolute;background:#f6f6f6;color:#1c1c1e;border:1px solid #c9c9cc;border-radius:5px;padding:6px 9px;font-size:12.5px;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,.18);width:330px;z-index:3;white-space:pre-line}
+.cursor{position:absolute;width:14px;height:20px;z-index:4}
+.phone{width:393px;background:#fff;border-radius:40px;border:8px solid #1c1c1e;padding:52px 0 18px;position:relative}
+.phone .hdr{font:700 28px/1.2 Inter,"Noto Sans SC",sans-serif;padding:0 18px 10px}
+.phone .r{border-radius:0;padding:11px 18px;border-bottom:1px solid #efeff2}
+.phone .r .t{font-size:16px}
+.chg{display:grid;grid-template-columns:260px 1fr 1fr;font-size:14.5px;background:#fff;border-radius:12px;overflow:hidden;width:1600px}
+.chg div{padding:9px 12px;border-bottom:1px solid #ececf0}
+.chg .h{background:#fafafa;font-weight:600}
+.same{color:#8e8e93}
+</style></head><body><svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="#b8b8bd" stroke-width="1.6"/><path d="M10 5.5V10l3 2" fill="none" stroke="#b8b8bd" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#d6e4ff" stroke-width="2"/><path d="M10 2.5a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="#0a6cff" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="idle" viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="#c7c7cc"/></symbol>
+</svg>
+<section class="b-part" id="part-1">
+  <h1>定稿 · runner 满了时，会话列表这一行怎么显示</h1>
+  <p class="lead">你选的是 <b>C · 只写大白话</b>：第二行写 <b>Waiting for a free slot</b>，不带时长。右上角的时间从排进队列那一刻开始算（<code>lastTurnAt</code>），所以它本身就是“已经等了多久”。
+  Web 和 macOS 鼠标悬停在这一行上，会出系统原生的提示框，里面是会话弹框的原话加等待时长；iOS 和 Android 没有悬停提示。Run full、Batch full 的写法完全一样。会话标题和消息都是示例。</p>
+</section>
+<section class="b-part" id="part-2">
+  <h2>Web / macOS · 改前和改后</h2>
+  <div class="grid">
+    <div class="stage"><div class="ttl">① 改前</div>
+      <div class="pane"><div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run" >Running Edit SettingsView.swift…</span></div></div></div><div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">3m</span></div><div class="l"><span class="q" >Runner full</span></div></div></div><div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div></div>
+      <p class="cap">只写 runner 那边的状态，看不出这条消息会自己发出去。</p></div>
+    <div class="stage"><div class="ttl">② 改后（鼠标悬停时）</div>
+      <div class="pane" style="height:300px"><div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run" >Running Edit SettingsView.swift…</span></div></div></div><div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">3m</span></div><div class="l"><span class="q" >Waiting for a free slot</span></div></div></div><div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div>
+        <svg class="cursor" viewBox="0 0 14 20" style="left:230px;top:104px"><path d="M1 1v16l4-4 3 6 2.5-1-3-6h5.5z" fill="#000" stroke="#fff" stroke-width="1.2"/></svg>
+        <div class="ntip" style="left:236px;top:128px">Runner full
+HPC is using all 16 slots: 10 sessions are running a turn and 6 hold a slot with a background job. This message is sent as soon as one frees up.
+Waiting 3 min</div>
+      </div>
+      <p class="cap">第二行是大白话，右上角 <b>3m</b> 就是已经等了多久。悬停提示分三行：哪一个满了、位置被谁占着、等了多久，用的都是会话弹框里现成的文字（<code>capacityHeldHint</code> / <code>QueuedCapacity.rowHint</code>）。</p></div>
+  </div>
+</section>
+<section class="b-part" id="part-3">
+  <h2>iOS / Android</h2>
+  <div class="row" style="display:flex;gap:60px;align-items:flex-start">
+    <div class="phone"><div class="hdr">Sessions</div><div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run" >Running Edit SettingsView.swift…</span></div></div></div><div class="r"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">3m</span></div><div class="l"><span class="q" >Waiting for a free slot</span></div></div></div><div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div></div>
+    <p class="cap" style="max-width:640px">同样的一行字，没有悬停提示。想看为什么，就点进会话：消息下面那行 <code>Queued · runner full</code> 一点就是原来的弹框（这部分没改）。</p>
+  </div>
+</section>
+<section class="b-part" id="part-4">
+  <h2>改了什么、没改什么</h2>
+  <div class="chg">
+    <div class="h">位置</div><div class="h">改前</div><div class="h">改后</div>
+    <div>会话列表第二行（runner / run / batch 满）</div><div>Runner full / Run full / Batch full</div><div><b>Waiting for a free slot</b></div>
+    <div>列表行悬停（Web、macOS）</div><div>无</div><div><b>三行提示：哪个满了 · 位置怎么被占 · 等了多久</b></div>
+    <div>列表右上角时间</div><div class="same">从排队开始计</div><div class="same">不变</div>
+    <div>会话顶部的状态词</div><div class="same">Runner full</div><div class="same">不变</div>
+    <div>消息下面的标签和弹框</div><div class="same">Queued · runner full → 弹框</div><div class="same">不变</div>
+    <div>其他排队状态</div><div class="same">Runner offline / Runner updating / Low disk space / Queued</div><div class="same">不变（你选的“只改 full 三种”）</div>
+  </div>
+</section>
+</body></html>

@@ -34,6 +34,7 @@ Usage:
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
   orbit session merge-receipts SESSION_ID [--limit N] [--json]
   orbit session end SESSION_ID [--json]
+  orbit session move SESSION_ID [--workspace-id ID] [--folder-id ID | --no-folder] [--json]
   orbit session complete SESSION_ID [--json]
   orbit session delete SESSION_ID [--json]
 
@@ -132,7 +133,11 @@ Options:
                            that watch under "watch" instead of losing it. If no watch could be
                            recorded, a session that has not settled carries why under "watch"
                            instead and stderr says so in one line, and a watch the server
-                           refuses ends the wait at once
+                           refuses ends the wait at once. Once the session exists the command
+                           never fails: a read of it that fails, or a wait that runs out, is
+                           under "wait" with the session id and "orbit session get" as the next step
+  --request-id ID          Only to repeat a create whose answer you never saw: the id its failure
+                           named. The same id answers with the session it created, or creates it once
   --json
 
 --engine and --provider together must be a pair that runs: a provider names the engines it
@@ -238,6 +243,22 @@ default target, as a pick there does.
 
 Usage:
   orbit session end SESSION_ID [--json]
+`,
+	"move": `orbit session move — file a session in a folder, or move it to another workspace
+
+Usage:
+  orbit session move SESSION_ID [--workspace-id ID] [--folder-id ID | --no-folder] [--json]
+
+Options:
+  --workspace-id ID   move the session to this workspace (an id from 'orbit agent list')
+  --folder-id ID      file it in this folder of its workspace (of the new one with --workspace-id)
+  --no-folder         take it out of its folder
+  --json              emit compact JSON
+
+The Move panel's rules apply. Only an ended session can change workspace: end it first
+('orbit session end'), which is also what commits what it left uncommitted. A move to
+another workspace without --folder-id lands in no folder. A move the rules refuse is
+answered 409 with the reason, and nothing is moved.
 `,
 	"complete": `orbit session complete — move a session to Completed
 
@@ -384,6 +405,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionMergeReceipts(args[1:], out, ctx)
 	case "end":
 		return cliSessionEnd(args[1:], out, ctx)
+	case "move":
+		return cliSessionMove(args[1:], out, ctx)
 	case "complete":
 		return cliSessionComplete(args[1:], out, ctx)
 	case "delete":
@@ -575,6 +598,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
 	noWorktree := fs.Bool("no-worktree", false, "run in the agent's own checkout, with no branch and no worktree")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
+	requestIDFlag := fs.String("request-id", "", "repeat a create whose answer you never saw: the request id its failure named")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -655,17 +679,24 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	if err != nil {
 		return err
 	}
-	cliRecord().sentBody(body)
-	raw, err := t.createSession(ctx.sessionID, ctx.token, body)
+	requestID, err := createRequestID(*requestIDFlag)
 	if err != nil {
-		return fmt.Errorf("create session: %w", err)
+		return err
+	}
+	cliRecord().sentBody(body)
+	raw, err := t.createSession(ctx.sessionID, ctx.token, requestID, body)
+	if err != nil {
+		return describeCreateFailure("session", "`orbit session create` (--request-id)", "`orbit session list`", requestID, err)
 	}
 	if *wait {
-		result, err := waitForSessionDurably(t, ctx, raw)
-		if err != nil {
-			return fmt.Errorf("wait for session: %w", err)
-		}
+		// Never an error once the session exists (session_wait.go): a failed read or a wait that ran out
+		// is the answer's "wait", which names the session and `orbit session get` as the next step.
+		result := waitForSessionDurably(t, ctx, raw)
 		raw = result.json()
+		if result.outcome == waitOutcomeGetFailed && result.watch == nil {
+			fmt.Fprintln(os.Stderr, "orbit session create: session "+result.sessionID+" was created, but reading it while "+
+				"waiting failed ("+result.getError+"); it exists, so do not create it again: `orbit session get "+result.sessionID+"`")
+		}
 		if result.unbacked() {
 			// Said on stderr as well as under "watch", and still exit 0 as session_create(wait) answers without
 			// isError: the session exists, and a failed exit reads as a create to try again.
@@ -711,7 +742,7 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if !claudeSessionUUID.MatchString(claudeID) {
 		return fmt.Errorf("claude session id must be a UUID, e.g. 4e453ab7-f37c-494d-8017-bb4e9beffeef")
 	}
-	if flagWasSet(fs, "workspace") {
+	if flagWasSet(fs, "workspace-id") {
 		if err := validatePathSegmentID(*workspace); err != nil {
 			return fmt.Errorf("workspace %w", err)
 		}
@@ -744,7 +775,7 @@ func cliSessionImport(args []string, out io.Writer, ctx cliOrchestrationContext)
 		return err
 	}
 	body := map[string]interface{}{"claudeSessionId": claudeID, "sourceCwd": sourceCwd}
-	if flagWasSet(fs, "workspace") {
+	if flagWasSet(fs, "workspace-id") {
 		body["workspaceId"] = *workspace
 	}
 	raw, err := t.importSession(ctx.sessionID, ctx.token, body)
@@ -935,10 +966,12 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err != nil {
 		return err
 	}
-	body := map[string]interface{}{"message": messageText}
-	if key := strings.TrimSpace(*clientTurnID); key != "" {
-		body["clientTurnId"] = key
+	// Keyed per invocation (call_identity.go): --client-turn-id when it replays one, otherwise new.
+	key, err := callIDOrNew(*clientTurnID)
+	if err != nil {
+		return fmt.Errorf("send session message: %w", err)
 	}
+	body := map[string]interface{}{"message": messageText, "clientTurnId": key}
 	// Sent only when asked. Omitted, the request is byte-for-byte the one every installed client
 	// sends, so an old server cannot read a field it does not know about as anything.
 	if *resumeIfEnded {
@@ -947,11 +980,14 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err := request.apply(body); err != nil {
 		return err
 	}
-	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
+	raw, err := deliverKeyed(func() (json.RawMessage, error) {
+		return t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
+	}, isUnansweredSessionWrite)
 	if err != nil {
-		return fmt.Errorf("send session message: %w", err)
+		return fmt.Errorf("send session message: %w",
+			messageReplayError(err, false, "orbit session send", "", id, body))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
@@ -976,21 +1012,29 @@ func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrch
 	if err != nil {
 		return err
 	}
-	// A plain interrupt stays a bodyless POST, exactly as it was; the follow-up only rides
-	// along when there is one.
-	var body interface{}
-	if follow := strings.TrimSpace(messageText); follow != "" {
-		req := map[string]interface{}{"message": follow}
-		if key := strings.TrimSpace(*clientTurnID); key != "" {
-			req["clientTurnId"] = key
+	// A plain interrupt stays a bodyless POST, exactly as it was, and is not resent.
+	follow := strings.TrimSpace(messageText)
+	if follow == "" {
+		raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, nil)
+		if err != nil {
+			return fmt.Errorf("interrupt session: %w", err)
 		}
-		body = req
+		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
-	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, body)
+	// With a follow-up it is keyed like `session send`.
+	key, err := callIDOrNew(*clientTurnID)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	body := map[string]interface{}{"message": follow, "clientTurnId": key}
+	raw, err := deliverKeyed(func() (json.RawMessage, error) {
+		return t.interruptSession(ctx.sessionID, ctx.token, id, body)
+	}, isUnansweredSessionWrite)
+	if err != nil {
+		return fmt.Errorf("interrupt session: %w",
+			messageReplayError(err, false, "orbit session interrupt", "", id, body))
+	}
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) error {
@@ -1027,7 +1071,7 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	if err != nil {
 		return fmt.Errorf("merge session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withMergePendingCall(raw), *jsonOut)
 }
 
 // stringList collects a repeatable flag. One --conflict per path rather than a comma-joined
@@ -1166,6 +1210,52 @@ func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) er
 		return fmt.Errorf("end session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, jsonOut)
+}
+
+func cliSessionMove(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session move")
+	workspace := fs.String("workspace-id", "", "move the session to this workspace")
+	folder := fs.String("folder-id", "", "file the session in this folder")
+	noFolder := fs.Bool("no-folder", false, "take the session out of its folder")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	body := map[string]interface{}{}
+	if flagWasSet(fs, "workspace-id") {
+		if strings.TrimSpace(*workspace) == "" {
+			return fmt.Errorf("--workspace-id cannot be empty")
+		}
+		body["workspaceId"] = strings.TrimSpace(*workspace)
+	}
+	if flagWasSet(fs, "folder-id") {
+		if *noFolder {
+			return fmt.Errorf("--folder-id and --no-folder cannot be used together")
+		}
+		if strings.TrimSpace(*folder) == "" {
+			return fmt.Errorf("--folder-id cannot be empty; pass --no-folder to take the session out of its folder")
+		}
+		body["folderId"] = strings.TrimSpace(*folder)
+	} else if *noFolder {
+		body["folderId"] = nil
+	}
+	if len(body) == 0 {
+		return fmt.Errorf("orbit session move needs --workspace-id, --folder-id or --no-folder")
+	}
+	t, err := sessionCommandTransport(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := t.moveSession(ctx.sessionID, ctx.token, id, body)
+	if err != nil {
+		return fmt.Errorf("move session: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContext) error {

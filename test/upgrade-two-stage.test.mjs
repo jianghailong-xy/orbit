@@ -63,9 +63,29 @@ case "$side $*" in
   "build manifest inspect --insecure "*)
     grep -qxF "$4" "$FAKE_REGISTRY" 2>/dev/null && exit 0
     echo "no such manifest: $4" >&2; exit 1 ;;
+  # The digest the registry serves an image under: here, the sha256 of its name.
+  "build manifest inspect -v --insecure "*)
+    grep -qxF "$5" "$FAKE_REGISTRY" 2>/dev/null || { echo "no such manifest: $5" >&2; exit 1; }
+    printf '{\n  "Ref": "%s",\n  "Descriptor": {\n    "digest": "sha256:%s"\n  }\n}\n' "$5" "$(printf %s "$5" | sha256sum | cut -c1-64)" ;;
   "build info --format "*) [ -n "${'$'}{FAKE_UNTRUSTED:-}" ] || echo "$FAKE_REGISTRY_NAME false"; echo "docker.io true" ;;
   "build inspect --format {{.Image}} orbit-web") echo "sha256:${'0'.repeat(64)}" ;;
   "build push "*) echo "$2" >>"$FAKE_REGISTRY" ;;
+  # The build host's disk, where a case gives it one: its images (FAKE_LOCAL_IMAGES), the ones a container uses
+  # (FAKE_IN_USE), and its free KiB (FAKE_FREE_KB), which each removal and prune adds to as the case says.
+  "build image ls --format "*) cat "$FAKE_LOCAL_IMAGES" 2>/dev/null || true ;;
+  "build rmi "*)
+    if grep -qxF "$2" "${'$'}{FAKE_IN_USE:-/dev/null}"; then echo "conflict: a container is using $2" >&2; exit 1; fi
+    grep -vxF "$2" "$FAKE_LOCAL_IMAGES" >"$FAKE_LOCAL_IMAGES.new" || true
+    mv "$FAKE_LOCAL_IMAGES.new" "$FAKE_LOCAL_IMAGES"
+    echo $(($(cat "$FAKE_FREE_KB") + ${'$'}{FAKE_RMI_FREES_KB:-0})) >"$FAKE_FREE_KB" ;;
+  "build builder prune "*)
+    [ -z "${'$'}{FAKE_FREE_KB:-}" ] || echo $(($(cat "$FAKE_FREE_KB") + ${'$'}{FAKE_PRUNE_FREES_KB:-0})) >"$FAKE_FREE_KB" ;;
+  "build system df") echo "TYPE TOTAL ACTIVE SIZE RECLAIMABLE" ;;
+  # The target's images (FAKE_TARGET_IMAGES) and the ones a container uses (FAKE_TARGET_IN_USE), where a case gives them.
+  "target image ls --format "*) cat "${'$'}{FAKE_TARGET_IMAGES:-/nonexistent}" 2>/dev/null || true ;;
+  "target rmi "*)
+    if grep -qxF "$2" "${'$'}{FAKE_TARGET_IN_USE:-/dev/null}"; then echo "conflict: a container is using $2" >&2; exit 1; fi
+    [ -z "${'$'}{FAKE_TARGET_IMAGES:-}" ] || { grep -vxF "$2" "$FAKE_TARGET_IMAGES" >"$FAKE_TARGET_IMAGES.new" || true; mv "$FAKE_TARGET_IMAGES.new" "$FAKE_TARGET_IMAGES"; } ;;
   "target ps -aq "*)
     service="$(printf '%s\n' "$@" | sed -n 's/^label=com.docker.compose.service=//p')"
     [ ! -e "$state/$service" ] || echo "c-$service" ;;
@@ -139,6 +159,11 @@ mkdir -p "$FAKE_TARGET_TMP"
 cd "$FAKE_TARGET_HOME" && exec env -i PATH="$PATH" HOME="$HOME" FAKE_SIDE=target TMPDIR="$FAKE_TARGET_TMP" \
   $(env | grep -E '^FAKE_[A-Z_]+=' | grep -v '^FAKE_SIDE=') bash -c "$*"
 `;
+// df answers from FAKE_FREE_KB where a case sets one, and with a terabyte free where none does.
+const FAKE_DF = String.raw`#!/usr/bin/env bash
+kb="$(cat "${'$'}{FAKE_FREE_KB:-/nonexistent}" 2>/dev/null || echo 1073741824)"
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nfake 0 0 %s 0%% /\n' "$kb"
+`;
 // The boot check, as CI runs it: what it was asked to boot is all a case needs.
 const FAKE_BOOT_CHECK = '#!/usr/bin/env bash\nprintf "build\\t-\\tboot-check %s %s\\n" "$ORBIT_APISERVER_IMAGE" "$ORBIT_WEB_IMAGE" >>"$FAKE_DOCKER_LOG"\n';
 // A plain-HTTP registry answers here only where a case says so.
@@ -159,7 +184,7 @@ function makeFixture(t) {
   writeFileSync(path.join(checkout, '.env'), 'JWT_SECRET=build\nPROVIDER_SECRET_KEY=build\nRUNNER_LINK_SIGNING_KEY=build\n');
   const bin = path.join(root, 'bin');
   mkdirSync(bin);
-  for (const [name, body] of [['docker', FAKE_DOCKER], ['ssh', FAKE_SSH], ['curl', FAKE_CURL]]) {
+  for (const [name, body] of [['docker', FAKE_DOCKER], ['ssh', FAKE_SSH], ['curl', FAKE_CURL], ['df', FAKE_DF]]) {
     writeFileSync(path.join(bin, name), body);
     chmodSync(path.join(bin, name), 0o755);
   }
@@ -665,6 +690,105 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   assert.equal(upped(run)[0], 'postgres');
 });
 
+test('a build short of room removes earlier release images, then prunes, and stops if that is not enough', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const GiB = 1024 * 1024;
+  const old = fixture.commit('an earlier release');
+  const commit = fixture.commit('this release');
+  const disk = (free, images, inUse = []) => {
+    const files = { FAKE_FREE_KB: path.join(fixture.root, 'free'), FAKE_LOCAL_IMAGES: path.join(fixture.root, 'images'), FAKE_IN_USE: path.join(fixture.root, 'in-use') };
+    writeFileSync(files.FAKE_FREE_KB, `${free * GiB}\n`);
+    writeFileSync(files.FAKE_LOCAL_IMAGES, `${images.join('\n')}\n`);
+    writeFileSync(files.FAKE_IN_USE, `${inUse.join('\n')}\n`);
+    return files;
+  };
+  const earlier = [`${REGISTRY}/orbit-apiserver:${old}`, `${REGISTRY}/orbit-web:${old}`, `${REGISTRY}/orbit-managed-runner:${old}`];
+  const running = `${REGISTRY}/orbit-apiserver:${'1'.repeat(40)}`;
+  const linkImage = `${REGISTRY}/orbit-link-gateway:${fixture.linkTag()}`;
+  const others = ['orbit-web:previous-release', 'postgres:16-alpine', 'unrelated:latest'];
+  const rmis = (run) => run.build.filter((call) => call.args.startsWith('rmi ')).map((call) => call.args.slice(4));
+  const prunes = (run) => run.build.filter((call) => /^(builder|image) prune/.test(call.args)).map((call) => call.args);
+
+  // Room enough: nothing is removed or pruned.
+  let files = disk(40, [...earlier, linkImage]);
+  let run = fixture.run(upgrade, ['--build-only'], files);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), []);
+  assert.deepEqual(prunes(run), []);
+
+  // 3 GiB free, 5 GiB back per image: the earlier release images go, and that is enough. This release's images, one a
+  // container uses, and images that are not the registry's releases stay; nothing is pruned.
+  writeFileSync(fixture.registry, '');
+  files = disk(3, [...earlier, running, linkImage, ...others], [running]);
+  run = fixture.run(upgrade, ['--build-only'], { ...files, FAKE_RMI_FREES_KB: `${5 * GiB}` });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), [...earlier, running]);
+  assert.deepEqual(readFileSync(files.FAKE_LOCAL_IMAGES, 'utf8').trim().split('\n'), [running, linkImage, ...others]);
+  assert.deepEqual(prunes(run), []);
+  assert.match(run.stdout, /3 GiB free on .* under the 15 GiB a build needs: making room/);
+  assert.match(run.stdout, /18 GiB free: room made/);
+  assert.match(run.stdout, new RegExp(`✓ Release ${commit} is in`));
+  const rmiAt = run.build.findIndex((call) => call.args.startsWith('rmi '));
+  const buildAt = run.build.findIndex((call) => call.args.startsWith('compose build'));
+  assert.ok(rmiAt >= 0 && rmiAt < buildAt, 'room is made before the build');
+
+  // No release images to remove: dangling images, then week-old build cache, then all of it.
+  writeFileSync(fixture.registry, '');
+  files = disk(2, others);
+  run = fixture.run(upgrade, ['--build-only'], { ...files, FAKE_PRUNE_FREES_KB: `${7 * GiB}` });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(prunes(run), ['image prune -f', 'builder prune -f --filter until=168h', 'builder prune -af']);
+
+  // Still short after all of it: stopped before anything is built or pushed.
+  writeFileSync(fixture.registry, '');
+  files = disk(2, others);
+  run = fixture.run(upgrade, ['--build-only'], files);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /2 GiB free on .* under the\s+15 GiB a build needs[^]*Nothing was built/);
+  assert.ok(!run.build.some((call) => /^(compose build|build |push )/.test(call.args)), run.output);
+  assert.equal(readFileSync(fixture.registry, 'utf8'), '');
+
+  // The threshold is the host's to set.
+  run = fixture.run(upgrade, ['--build-only'], { ...files, ORBIT_BUILD_MIN_FREE_GB: '1' });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), []);
+});
+
+test('a deploy keeps the last 3 releases\' images on the target and removes the earlier ones', { skip: !compose && 'needs docker compose' }, (t) => {
+  // Production, 2026-11-18: every release's apiserver and web image stayed on the target, 77 of each, 137 GB, until its
+  // disk had 6.6 GB left. The deploy now removes them itself, keeping the last 3 releases' for a quick rollback.
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const commit = fixture.commit('this release');
+  const link = fixture.linkTag();
+  const [a, b, c] = ['a', 'b', 'c'].map((ch) => ch.repeat(40));
+  const [linkA, linkB] = ['d', 'e'].map((ch) => ch.repeat(40));
+  mkdirSync(path.join(fixture.target, '.upgrade'), { recursive: true });
+  writeFileSync(path.join(fixture.target, '.upgrade/history'),
+    `2026-11-01T00:00:00Z ${a} link-gateway=${linkA}\n2026-11-02T00:00:00Z ${b} link-gateway=${linkB}\n2026-11-03T00:00:00Z ${c} link-gateway=${link}\n`);
+  const image = (repo, tag) => `${REGISTRY}/orbit-${repo}:${tag}`;
+  const older = 'f'.repeat(40);
+  const kept = [image('apiserver', commit), image('web', commit), image('apiserver', b), image('web', b),
+    image('apiserver', c), image('web', c), image('link-gateway', link), image('link-gateway', linkB)];
+  const removable = [image('apiserver', a), image('web', a), image('apiserver', older), image('web', older), image('link-gateway', linkA)];
+  const inUse = image('web', older);
+  const others = [`${REGISTRY}/library/postgres:16.14`, `${REGISTRY}/orbit-managed-runner:${a}`, 'unrelated:latest'];
+  const images = path.join(fixture.root, 'target-images');
+  const inUseFile = path.join(fixture.root, 'target-in-use');
+  writeFileSync(images, `${[...kept, ...removable, ...others].join('\n')}\n`);
+  writeFileSync(inUseFile, `${inUse}\n`);
+
+  const run = fixture.run(upgrade, [], { FAKE_TARGET_IMAGES: images, FAKE_TARGET_IN_USE: inUseFile });
+  assert.equal(run.status, 0, run.output);
+  const rmis = run.target.filter((call) => call.args.startsWith('rmi ')).map((call) => call.args.slice(4));
+  assert.deepEqual(rmis.sort(), [...removable].sort(), 'only images outside the last 3 releases are asked to go');
+  assert.deepEqual(readFileSync(images, 'utf8').trim().split('\n').sort(), [...kept, inUse, ...others].sort(),
+    'the last 3 releases\' images, one a container uses, and images that are not releases stay');
+  assert.match(run.stdout, /Earlier release images: 4 removed; the last 3 releases' kept/);
+  assert.equal(readFileSync(path.join(fixture.target, '.upgrade/history'), 'utf8').trim().split('\n').at(-1).split(' ')[1], commit);
+});
+
 test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the release and left as they are', { skip: !compose && 'needs docker compose' }, (t) => {
   const fixture = makeFixture(t);
   const upgrade = UPGRADES[1];
@@ -742,4 +866,93 @@ test('a plan prints what the deploy would change, and changes nothing on the tar
   assert.deepEqual(table(run.stdout), table(plan.stdout));
   assert.ok(ups(run).includes('compose up -d --wait --no-deps --no-build --force-recreate db-proxy'), ups(run).join('\n'));
   assert.ok(!upped(run).includes('postgres'), ups(run).join('\n'));
+});
+
+test('the hosted runners\' image is built when the runner changed, and their profile follows the release', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const digestOf = (image) => `${image.slice(0, image.lastIndexOf(':'))}@sha256:${execFileSync('sha256sum', { input: image, encoding: 'utf8' }).slice(0, 64)}`;
+  const OLD = `docker.io/library/orbit-managed-runner@sha256:${'a'.repeat(64)}`;
+  // The runner's sources and the image's directory, as the build reads them; a test of the runner is not one of them.
+  const write = (relative, text) => {
+    mkdirSync(path.dirname(path.join(fixture.checkout, relative)), { recursive: true });
+    writeFileSync(path.join(fixture.checkout, relative), text);
+  };
+  write('src/runner-go/main.go', 'package main\n');
+  write('src/runner-go/go.mod', 'module orbit\n');
+  write('deploy/managed-runner/image/Dockerfile', 'FROM scratch\n');
+  // The target runs managed runners on Kubernetes: its .env switches them on, and their profile names the image.
+  appendFileSync(path.join(fixture.target, '.env'), 'ORBIT_MANAGED_RUNNERS_ENABLED=true\nORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners\n');
+  const profilePath = path.join(fixture.target, 'data/managed-runners/profile.json');
+  mkdirSync(path.dirname(profilePath), { recursive: true });
+  const profileText = (image) => `{\n  "backend": "kubernetes",\n  "runner": {\n    "image": "${image}",\n    "maxConcurrent": 2\n  }\n}\n`;
+  writeFileSync(profilePath, profileText(OLD), { mode: 0o600 });
+  const profile = () => readFileSync(profilePath, 'utf8');
+  const backups = () => readdirSync(path.dirname(profilePath)).filter((name) => name.startsWith('profile.json.bak-')).sort();
+  const imageBuilds = (run) => run.build.filter((call) => call.args.includes('-f deploy/managed-runner/image/Dockerfile'));
+
+  // The first release: the image is built from this checkout, tagged by the last commit of the runner's sources, and
+  // pushed; the profile names it by its digest, before the apiserver is replaced, with the one before kept beside it.
+  const first = fixture.commit('the first release');
+  const firstImage = `${REGISTRY}/orbit-managed-runner:${first}`;
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(imageBuilds(run).map((call) => call.args),
+    [`build --provenance=false -f deploy/managed-runner/image/Dockerfile --build-arg ORBIT_SOURCE_SHA=${first} -t ${firstImage} .`]);
+  assert.ok(readFileSync(fixture.registry, 'utf8').split('\n').includes(firstImage), 'and pushed');
+  assert.match(run.stdout, new RegExp(` {4}managed-runner +${OLD.replace(/[.]/g, '\\.')}\n {18}-> ${digestOf(firstImage).replace(/[.]/g, '\\.')}\n`));
+  assert.equal(profile(), profileText(digestOf(firstImage)), 'the profile names the image by digest, and is otherwise as it was');
+  assert.equal(statSync(profilePath).mode & 0o777, 0o600);
+  assert.equal(backups().length, 1);
+  assert.equal(readFileSync(path.join(path.dirname(profilePath), backups()[0]), 'utf8'), profileText(OLD));
+  assert.ok(run.stdout.indexOf('names ' + digestOf(firstImage)) < run.stdout.indexOf('==> apiserver:'), 'before the apiserver is replaced');
+
+  // A release that does not change the runner builds no image, and leaves the profile as it is.
+  write('src/runner-go/main_test.go', 'package main\n');
+  write('docs/notes.md', 'a change elsewhere\n');
+  const second = fixture.commit('the second release');
+  run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(imageBuilds(run), [], 'a runner test and a document are not what the image is built from');
+  assert.match(run.stdout, new RegExp(`orbit-managed-runner:${first} is in the registry already`));
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
+  assert.equal(profile(), profileText(digestOf(firstImage)));
+  assert.equal(backups().length, 1);
+
+  // A release that changes the runner: a plan says so and changes nothing; the deploy moves the profile on.
+  write('src/runner-go/main.go', 'package main\n\n// a change of the third release\n');
+  const third = fixture.commit('the third release');
+  const thirdImage = `${REGISTRY}/orbit-managed-runner:${third}`;
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(imageBuilds(run).length, 1);
+  const plan = fixture.run(upgrade, ['--plan', third]);
+  assert.equal(plan.status, 0, plan.output);
+  assert.match(plan.stdout, new RegExp(`-> ${digestOf(thirdImage).replace(/[.]/g, '\\.')}\n`));
+  assert.equal(profile(), profileText(digestOf(firstImage)), 'a plan changes nothing');
+  run = fixture.run(upgrade, ['--deploy', third]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(thirdImage)));
+  assert.equal(backups().length, 2);
+
+  // The rollback: the second release names the first's image again, and builds nothing.
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(run.build.filter((call) => /^(compose build|build|push) /.test(call.args)), [], run.output);
+  assert.equal(profile(), profileText(digestOf(firstImage)));
+
+  // The same release again: the apiserver, otherwise unchanged, is not replaced for the profile, which is unchanged too.
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, / {4}managed-runner +unchanged\n/);
+  assert.ok(!ups(run).some((call) => call.includes('--force-recreate')), ups(run).join('\n'));
+
+  // The profile changed by hand while the release stays: the deploy sets it back, and replaces the unchanged apiserver,
+  // which reads it only as it starts.
+  writeFileSync(profilePath, profileText(OLD));
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.equal(profile(), profileText(digestOf(firstImage)));
+  assert.deepEqual(handover(run).slice(0, 5), WITHOUT_A_GAP.slice(0, 5), 'the apiserver is handed over, as for a new image');
+  assert.match(run.stdout, /==> apiserver: recreate, without a gap/);
 });

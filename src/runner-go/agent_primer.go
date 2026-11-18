@@ -31,11 +31,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.0.1"
+const agentPrimerVersion = "1.4.1"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.6.0"
+const agentContractVersion = "1.11.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -47,8 +47,12 @@ const agentPrimerMaxBytes = 3200
 // orbitInstructionsMaxBytes is the most the instructions the runner writes into an engine may take,
 // the primer included (orbitCLIInstructions, in its longest shape: a task's session with Watch on). Raised from
 // 6,400 on 2026-11-15, with the owner's agreement, for the delegate paragraph (orbitDelegateInstructions, 440
-// bytes): the longest shape was already 6,309 bytes without it.
-const orbitInstructionsMaxBytes = 7000
+// bytes): the longest shape was already 6,309 bytes without it. On the project line Agent Contract 1.9.0 had
+// raised it to 6,656 for the paragraph on an engine's own sub-agents (orbitSubAgentInstructions), which the
+// agent-contract eval measured agents need. Merged in contract 1.10.0, the instructions carry both paragraphs and
+// the longest shape is 7,178 bytes, so the budget is 7,424 (7.25 KiB); reconciling the two paragraphs, which both
+// speak of handing work to another agent, is P2-01's follow-up, not the merge's.
+const orbitInstructionsMaxBytes = 7424
 
 // The primer, one rule set per paragraph. The first states the choices an agent gets wrong most
 // often (contract §8.3: S1-S4), and every later one is one or two of §0's ten rules.
@@ -61,14 +65,14 @@ const (
 		"task. No returned id, no claim."
 
 	agentPrimerObjects = "Pick the object by the question it answers. Project: the whole goal and what settles it. " +
-		"Task: one durable piece of work. Task list: how a class of work is dispatched (a concurrency cap, a pause, " +
-		"standing instructions), not a plan or a folder. Session: one execution running now. Agent: where work runs " +
-		"and under which identity. Never file what this session is already doing as another task or session."
+		"Task: one durable piece of work. Task list: how a class of work is dispatched, " +
+		"not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. " +
+		"Never file what this session is already doing as another task or session. Unsure which fits, or how to call " +
+		"it? Call guide: no arguments for the routes, a topic for the recipe."
 
 	agentPrimerStart = "Start is its own decision: task_start runs recorded work, task_create with startNow: true " +
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
-		"until they say so, pass autoRunWhenReady: false and do not call task_start; left out, an assigned task can " +
-		"start by itself once it is ready (prerequisites DONE, project started)."
+		"until they say so, pass autoRunWhenReady: false and do not call task_start."
 
 	agentPrimerCards = "A create, a batch, a project, a provider change or an agent change puts a confirmation card " +
 		"in front of the user and writes nothing until they confirm it, so first say in a sentence or two what you " +
@@ -90,8 +94,9 @@ const (
 		"`[title](orbit-wiki:<id>)`."
 
 	agentPrimerOrchestration = "Session, agent and runner tools exist only while the account's Session " +
-		"orchestration switch is on. Without session_* tools, do not try `orbit session`: record the work as a task, " +
-		"tell the user the switch is in Settings -> Session orchestration, and never claim a delegation."
+		"orchestration switch is on. Without session_* tools, do not try `orbit session`: task_start the work if " +
+		"task_list shows it recorded, else record it as a task, tell the user the switch is in Settings -> Session " +
+		"orchestration, and never claim a delegation."
 
 	agentPrimerRederive = "After compaction or a resume, read before you act -- task_get with no id reads this " +
 		"session's task -- and never rebuild an id, a status or an approval from memory or a summary."

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release"). The build stage runs here: it
 # builds the apiserver, web and link gateway images from this checkout, boots the apiserver and web images as CI does,
-# and pushes all three to ORBIT_REGISTRY, each tagged by the commit it was built from. The deploy stage runs on
+# and pushes all three to ORBIT_REGISTRY, each tagged by the commit it was built from, with the hosted runners' image
+# (deploy/managed-runner/image) whenever the runner's sources changed. The deploy stage runs on
 # ORBIT_DEPLOY_HOST, driven from here over ssh: deploy/two-stage/deploy-stage.sh pulls those images there and recreates
 # what changed, and builds nothing. That host holds no checkout: this script ships it the release's Compose file and the
 # few files it mounts, taken from the commit, never from the working tree.
@@ -24,6 +25,8 @@
 #   ORBIT_REGISTRY      the registry both hosts' Docker pull from and this one pushes to, host[:port] (required)
 #   ORBIT_DEPLOY_HOST   the ssh destination of the host that runs the deployment, such as root@10.66.0.4 (required to deploy)
 #   ORBIT_DEPLOY_DIR    the deployment's directory there (default /root/orbit)
+#   ORBIT_BUILD_MIN_FREE_GB  the room a build needs on this host's Docker disk, in GiB (default 15); below it the build
+#                       stage makes room first (make_room)
 set -euo pipefail
 
 MODE=release
@@ -61,6 +64,10 @@ DIR="${ORBIT_DEPLOY_DIR:-/root/orbit}"
 # entry. test/upgrade-two-stage.test.mjs holds this list to those files.
 RELEASE_FILES=(docker-compose.yml gateway scripts/pg-archive-wal.sh scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link
   deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy)
+# What the hosted runners' image is built from, as deploy/managed-runner/image/Dockerfile.dockerignore admits it: the
+# runner's Go sources but its tests, its module files, DeepSeek Harness's lockfile, and the image's own directory.
+MANAGED_RUNNER_INPUTS=(':(glob)src/runner-go/*.go' ':(glob,exclude)src/runner-go/*_test.go' src/runner-go/go.mod src/runner-go/go.sum
+  src/runner-go/dsh-install/package.json src/runner-go/dsh-install/package-lock.json deploy/managed-runner/image)
 
 # Every value that reaches the other host's shell is one of these shapes, so none of them needs quoting there.
 if ! [[ "$REGISTRY" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]]; then
@@ -117,6 +124,14 @@ release_of() {
     exit 1
   fi
   LINK_IMAGE="$REGISTRY/orbit-link-gateway:$LINK_TAG"
+  # The hosted runners' image is named by the last commit that changed what it is built from, so a release that did not
+  # change the runner builds none and moves no hosted runner. A commit without deploy/managed-runner/image has none.
+  MR_TAG=""
+  MR_IMAGE=""
+  if git cat-file -e "$1:deploy/managed-runner/image/Dockerfile" 2>/dev/null; then
+    MR_TAG="$(git log -1 --format=%H "$1" -- "${MANAGED_RUNNER_INPUTS[@]}")"
+    MR_IMAGE="$REGISTRY/orbit-managed-runner:$MR_TAG"
+  fi
   base="$(git show "$1:deploy/two-stage/base-images.env")"
   for name in ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE; do
     value="$(printf '%s\n' "$base" | sed -n "s/^$name=//p" | tail -n 1)"
@@ -137,6 +152,18 @@ in_registry() {
   esac
   echo "error: could not ask $REGISTRY about $1: $out" >&2
   exit 1
+}
+
+# The image by the digest the registry serves it under, <repository>@sha256:<64 hex>: how a hosted runner's profile names
+# it (runner.image is pinned by digest), and what the node pulls.
+registry_digest() {
+  local digest
+  digest="$(docker manifest inspect -v --insecure "$1" | grep -m1 -oE '"digest": *"sha256:[0-9a-f]{64}"' | grep -oE 'sha256:[0-9a-f]{64}' || true)"
+  if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "error: $REGISTRY did not say which digest $1 has" >&2
+    exit 1
+  fi
+  printf '%s@%s\n' "${1%:*}" "$digest"
 }
 
 # A registry served over plain HTTP, as one reached only over a private network may be, takes a push from a Docker
@@ -174,11 +201,73 @@ previous_release() {
   fi
 }
 
+# GiB free on the filesystem that holds Docker's data, or / where Docker does not say.
+free_gb() {
+  local root
+  root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null | head -n 1 || true)"
+  [ -d "$root" ] || root=/
+  df -Pk "$root" | awk 'NR == 2 { print int($4 / 1048576) }'
+}
+
+# The build stage's room. A release build needs about ORBIT_BUILD_MIN_FREE_GB on Docker's disk: the hosted runners' image
+# alone is about 4.4 GiB, and the build cache behind it several times that. Below it, room is made before anything is
+# built, in this order, each step only while the disk is still short:
+#   1. the registry's release images on this host, but for this release's own: every one is in the registry, which is
+#      where a deploy and a rollback pull from, so nothing needs the copy here. One a container uses is kept (rmi
+#      refuses it), and so is orbit-web:previous-release, which the next web image is built from.
+#   2. dangling images;
+#   3. build cache older than a week, then all of it, so the next build starts cold.
+# Still short, the build stops before it starts, saying what fills the disk.
+make_room() {
+  local need="${ORBIT_BUILD_MIN_FREE_GB:-15}" free ref removed=0 keep
+  if ! [[ "$need" =~ ^[0-9]+$ ]]; then
+    echo "error: ORBIT_BUILD_MIN_FREE_GB must be a whole number of GiB (it is \"$need\")" >&2
+    exit 2
+  fi
+  free="$(free_gb)"
+  if [ "$free" -ge "$need" ]; then return 0; fi
+  echo "==> $free GiB free on $(hostname)'s Docker disk, under the $need GiB a build needs: making room"
+  keep=" $APISERVER_IMAGE $WEB_IMAGE $LINK_IMAGE ${MR_IMAGE} "
+  while IFS= read -r ref; do
+    case "$ref" in "$REGISTRY"/orbit-*:*) ;; *) continue ;; esac
+    case "$keep" in *" $ref "*) continue ;; esac
+    if docker rmi "$ref" >/dev/null 2>&1; then
+      echo "    removed $ref (it is in $REGISTRY)"
+      removed=$((removed + 1))
+    fi
+  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
+  echo "    $removed earlier release image(s) removed"
+  free="$(free_gb)"
+  if [ "$free" -lt "$need" ]; then
+    echo "==> $free GiB free: pruning dangling images"
+    docker image prune -f >/dev/null
+    free="$(free_gb)"
+  fi
+  if [ "$free" -lt "$need" ]; then
+    echo "==> $free GiB free: pruning build cache older than a week"
+    docker builder prune -f --filter until=168h >/dev/null
+    free="$(free_gb)"
+  fi
+  if [ "$free" -lt "$need" ]; then
+    echo "==> $free GiB free: pruning all build cache (this build starts cold)"
+    docker builder prune -af >/dev/null
+    free="$(free_gb)"
+  fi
+  if [ "$free" -lt "$need" ]; then
+    echo "error: $free GiB free on $(hostname)'s Docker disk after removing earlier release images and pruning, under the" >&2
+    echo "       $need GiB a build needs. Something besides Docker's images and build cache fills it: see df -h and" >&2
+    echo "       docker system df there. Nothing was built." >&2
+    docker system df >&2 || true
+    exit 1
+  fi
+  echo "==> $free GiB free: room made"
+}
+
 build_stage() {
   local absent=() image flags=()
   release_of "$COMMIT"
   echo "==> Build stage, on $(hostname): release $COMMIT for $REGISTRY"
-  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE"; do
+  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE" ${MR_IMAGE:+"$MR_IMAGE"}; do
     if in_registry "$image"; then
       echo "    $image is in the registry already, and a tag names one build: it is kept"
     else
@@ -190,6 +279,7 @@ build_stage() {
     return 0
   fi
   push_preflight
+  make_room
   if [ "$NO_CACHE" -eq 1 ]; then flags+=(--no-cache); fi
   # Compose names the images it builds by these, as the deployment's host will name the ones it pulls.
   export ORBIT_IMAGE_TAG="$COMMIT" ORBIT_LINK_GATEWAY_TAG="$LINK_TAG"
@@ -204,6 +294,12 @@ build_stage() {
     # Without a provenance attestation, as a single host builds it: an image of the same content keeps its ID.
     echo "==> Building $LINK_IMAGE from src/link-gateway"
     docker build ${flags[@]+"${flags[@]}"} --provenance=false --build-arg "ORBIT_SOURCE_SHA=$LINK_TAG" -t "$LINK_IMAGE" src/link-gateway
+  fi
+  if [ -n "$MR_IMAGE" ] && [[ " ${absent[*]} " == *" $MR_IMAGE "* ]]; then
+    # From this checkout, whose runner sources are those of the commit that names it. The runner reports managed-<tag>.
+    echo "==> Building $MR_IMAGE, the hosted runners' image, from deploy/managed-runner/image"
+    docker build ${flags[@]+"${flags[@]}"} --provenance=false -f deploy/managed-runner/image/Dockerfile \
+      --build-arg "ORBIT_SOURCE_SHA=$MR_TAG" -t "$MR_IMAGE" .
   fi
   for image in "${absent[@]}"; do
     echo "==> Pushing $image"
@@ -224,19 +320,22 @@ deploy_stage() {
   else
     echo "==> Deploy stage, on $HOST in $DIR: release $COMMIT"
   fi
-  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE"; do
+  for image in "$APISERVER_IMAGE" "$WEB_IMAGE" "$LINK_IMAGE" ${MR_IMAGE:+"$MR_IMAGE"}; do
     if ! in_registry "$image"; then
       echo "error: $image is not in $REGISTRY. Build the release first, on a checkout of $COMMIT:" >&2
       echo "       upgrade.sh --build-only. Nothing was changed on $HOST." >&2
       exit 1
     fi
   done
+  # A hosted runner's profile on the target names this image by digest, and its runners move onto it once idle.
+  MR_REF=""
+  if [ -n "$MR_IMAGE" ]; then MR_REF="$(registry_digest "$MR_IMAGE")"; fi
   echo "==> Shipping $COMMIT's Compose file and the files it mounts (${RELEASE_FILES[*]}), and the deploy stage"
   git archive --format=tar --prefix="$stage/" "$COMMIT" -- "${RELEASE_FILES[@]}" \
     | on_target "mkdir -p $DIR/.upgrade && cd $DIR && rm -rf $stage && tar -x"
   on_target "cat > $DIR/.upgrade/deploy-stage.sh" <deploy/two-stage/deploy-stage.sh
   on_target "ORBIT_DEPLOY_DIR=$DIR ORBIT_RELEASE_COMMIT=$COMMIT ORBIT_REGISTRY=$REGISTRY ORBIT_LINK_GATEWAY_TAG=$LINK_TAG \
-ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE \
+ORBIT_NGINX_IMAGE=$ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE=$ORBIT_NATS_IMAGE ORBIT_MANAGED_RUNNER_IMAGE=$MR_REF \
 ORBIT_DEPLOY_PULL_BASE=$PULL_BASE ORBIT_DEPLOY_PRUNE=$PRUNE ORBIT_DEPLOY_PLAN=$plan ORBIT_DEPLOY_STOP_THEN_START=$STOP_THEN_START \
 bash $DIR/.upgrade/deploy-stage.sh" || status=$?
   if [ "$status" -eq 255 ]; then

@@ -89,7 +89,7 @@ class RemoveDefaultTest {
 
     @Test fun removingAnAddedAccountWhileDefaultIsRemovedSaysAutomaticOrThatOrbitGoesBackToDefault() {
         val automatic = question(removed(work(), personal()), 1)
-        assertEquals("Remove Personal?" to "Its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.", automatic)
+        assertEquals("Remove Personal?" to "Its sessions move to another account first, then its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.", automatic)
         val last = question(removed(work(), name = "jianghailong.main"), 0)
         assertEquals("Remove Work?" to "Its sign-in is deleted from wikova. Without it, Orbit uses jianghailong.main there again, and " +
             "workspaces set to this account run on it.", last)
@@ -97,9 +97,8 @@ class RemoveDefaultTest {
         assertEquals(RunnerAccountCopy.removeDetailLast("wikova", "Default"),
             question(removed(work(), personal(), accountRemove = leaving(PERSONAL, "pending")), 0).second)
         for (said in listOf(automatic, last)) assertFalse(said.second, said.second.contains("run on Default"))
-        // While Default is in use, an added account's question is the page's own, as it was.
-        assertEquals("Remove “Work” from wikova?" to "~/.orbit/codex-accounts/$WORK goes from this machine, and sessions stop running on it. " +
-            "Default is untouched.", question(withDefault(work()), 1))
+        // While Default is in use, an added account's workspaces switch to Default.
+        assertEquals("Remove Work?" to "Its sessions move to another account first. Workspaces using it switch to Default.", question(withDefault(work()), 1))
     }
 
     @Test fun theRemovedStateListsTheAccountsThatRemainEachWithItsOwnStateThenDefaultsLine() {

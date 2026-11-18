@@ -29,7 +29,7 @@ import io.orbitd.android.text.CodeText
 import io.orbitd.android.ui.LocalOrbitColors
 
 /** The agent tone iOS draws the SubAgent's rail and ✦ in (`ToolTone.agent`). */
-private val AgentTone = Color(0xFFAF52DE)
+internal val AgentTone = Color(0xFFAF52DE)
 
 /**
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as one folded block (board docs/mocks/subagent/03.png, iOS `ToolCardView`'s
@@ -70,7 +70,7 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                 Text("›", Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics { }, color = MaterialTheme.colorScheme.outline,
                     style = MaterialTheme.typography.titleMedium)
                 Text("✦", Modifier.clearAndSetSemantics { }, color = AgentTone, style = MaterialTheme.typography.labelLarge)
-                Text("SubAgent", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                Text("Agent", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                 description?.let { Text(it, Modifier.weight(1f, fill = false), color = grey, fontWeight = FontWeight.Normal,
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1, overflow = TextOverflow.Ellipsis) }

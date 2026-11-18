@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Every signed-in account gets its managed runner — decisions D1–D4</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --mute:#677086; --line:#d9dde5; --blue:#2f6fed; --blue-bg:#eaf1ff;
+          --green:#1f9d55; --green-bg:#e7f6ee; --amber:#b7791f; --amber-bg:#fdf3e1; --red:#c53030; --red-bg:#fdecec; --grey-bg:#eef0f4; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 Inter, "Noto Sans SC", sans-serif; }
+  .b-part { width:1400px; padding:36px 44px 40px; background:var(--bg); }
+  .b-part + .b-part { border-top:1px solid var(--line); }
+  h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:22px; margin:0 0 4px; }
+  .b-sub { color:var(--mute); margin:0 0 22px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .b-col { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; }
+  .b-col.b-rec { border:2px solid var(--blue); }
+  .b-col h3 { margin:0 0 14px; font-size:17px; display:flex; gap:10px; align-items:center; }
+  .b-tag { font-size:12px; font-weight:600; padding:2px 8px; border-radius:99px; background:var(--grey-bg); color:var(--mute); }
+  .b-rec .b-tag { background:var(--blue); color:#fff; }
+  /* flow */
+  .b-flow { display:flex; flex-direction:column; gap:0; }
+  .b-box { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:#fff; }
+  .b-box small { display:block; color:var(--mute); font-size:13px; }
+  .b-box.b-srv { background:var(--blue-bg); border-color:#c6d7fb; }
+  .b-box.b-db { background:var(--grey-bg); }
+  .b-box.b-ok { background:var(--green-bg); border-color:#b9e3c9; }
+  .b-box.b-warn { background:var(--amber-bg); border-color:#f1d9a8; }
+  .b-box.b-bad { background:var(--red-bg); border-color:#f3c0c0; }
+  .b-arrow { align-self:center; color:var(--mute); font-size:13px; padding:4px 0; text-align:center; }
+  .b-arrow::before { content:"↓"; display:block; font-size:18px; line-height:1; color:#9aa3b5; }
+  .b-row { display:flex; gap:10px; align-items:stretch; }
+  .b-row > * { flex:1; }
+  .b-notes { margin:14px 0 0; padding-left:20px; color:var(--ink); }
+  .b-notes li { margin:4px 0; }
+  .b-plus { color:var(--green); font-weight:600; } .b-minus { color:var(--red); font-weight:600; }
+  code { font:13px "JetBrains Mono", monospace; background:var(--grey-bg); padding:1px 5px; border-radius:4px; }
+  /* timeline */
+  .b-tl { position:relative; display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin:8px 0 6px; }
+  .b-tl::before { content:""; position:absolute; left:0; right:0; top:15px; height:2px; background:var(--line); }
+  .b-ev { position:relative; padding-top:30px; }
+  .b-ev::before { content:""; position:absolute; top:8px; left:0; width:16px; height:16px; border-radius:50%; background:#fff; border:3px solid #9aa3b5; }
+  .b-ev.b-key::before { border-color:var(--blue); }
+  .b-ev.b-miss::before { border-color:var(--red); }
+  .b-ev b { display:block; } .b-ev span { color:var(--mute); font-size:13px; }
+  .b-lane { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 22px; margin-bottom:16px; }
+  .b-lane h3 { margin:0 0 6px; font-size:16px; }
+  /* people */
+  .b-dots { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 12px; }
+  .b-dot { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; border:2px solid transparent; }
+  .b-d-has { background:var(--grey-bg); color:var(--mute); }
+  .b-d-new { background:var(--green-bg); color:var(--green); border-color:var(--green); }
+  .b-d-skip { background:var(--amber-bg); color:var(--amber); border:2px dashed var(--amber); }
+  .b-d-none { background:#fff; color:#9aa3b5; border:2px dashed var(--line); }
+  .b-legend { display:flex; gap:18px; flex-wrap:wrap; color:var(--mute); font-size:13px; margin-bottom:18px; }
+  .b-legend i { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:-2px; margin-right:6px; }
+  /* sidebar */
+  .b-side { width:300px; border:1px solid var(--line); border-radius:12px; background:#fbfbfc; padding:12px; font-size:14px; }
+  .b-side .b-h { color:var(--mute); font-size:12px; text-transform:uppercase; letter-spacing:.04em; margin:8px 4px 4px; }
+  .b-side .b-it { padding:6px 8px; border-radius:7px; }
+  .b-side .b-it.b-added { background:var(--green-bg); outline:2px solid var(--green); }
+  .b-side .b-it.b-btn { background:var(--blue-bg); color:var(--blue); font-weight:600; }
+  /* slots */
+  .b-slots { display:flex; gap:10px; margin:8px 0 6px; }
+  .b-slot { width:120px; height:74px; border-radius:10px; border:2px solid var(--line); display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:13px; text-align:center; }
+  .b-slot.b-used { background:var(--grey-bg); }
+  .b-slot.b-run { background:var(--green-bg); border-color:var(--green); }
+  .b-slot.b-extra { border-style:dashed; border-color:var(--blue); background:var(--blue-bg); }
+  .b-queue { display:flex; gap:10px; margin-top:6px; }
+  .b-q { width:120px; height:56px; border-radius:10px; border:2px dashed var(--amber); background:var(--amber-bg); color:var(--amber); display:flex; align-items:center; justify-content:center; font-size:13px; text-align:center; }
+  .b-cap { color:var(--mute); font-size:13px; margin:10px 0 4px; }
+  table.b-t { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .b-t th, .b-t td { text-align:left; padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .b-t th { background:var(--grey-bg); font-size:13px; color:var(--mute); }
+  .b-t tr:last-child td { border-bottom:0; }
+  .b-t td:first-child { font-weight:600; white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<!-- Part 1: why it happens, and the four decisions at a glance -->
+<section class="b-part" id="part-1">
+  <h1>Every signed-in account gets its managed runner</h1>
+  <p class="b-sub">docs/managed-runner-signed-in-accounts-design.md · production numbers read on 2026-11-16 · the sample account is the one that only refreshed since 11-09</p>
+
+  <div class="b-lane">
+    <h3>Today: only a sign-in creates one, and this account never signs in again</h3>
+    <div class="b-tl">
+      <div class="b-ev"><b>11-09</b><span>Google sign-in (a real sign-in, but the switch is off)</span></div>
+      <div class="b-ev"><b>11-13</b><span>App opened: token refresh. Not a sign-in</span></div>
+      <div class="b-ev b-key"><b>11-15 23:34</b><span>Switch turned on. Nobody signed in is visited</span></div>
+      <div class="b-ev"><b>11-16</b><span>Their Mac runner is online, the app refreshes again</span></div>
+      <div class="b-ev b-miss"><b>Result</b><span>No managed runner until they sign in again or press Set up</span></div>
+    </div>
+  </div>
+  <div class="b-lane" style="border:2px solid var(--blue)">
+    <h3>Proposal: a server pass visits every signed-in account</h3>
+    <div class="b-tl">
+      <div class="b-ev"><b>11-09</b><span>Sign-in (switch off)</span></div>
+      <div class="b-ev"><b>11-13</b><span>Refresh, as today</span></div>
+      <div class="b-ev b-key"><b>Switch on</b><span>The apiserver runs a pass at once</span></div>
+      <div class="b-ev b-key"><b>≤ 5 min</b><span>Live login session, no managed runner → one is created</span></div>
+      <div class="b-ev" style="--x:1"><b>Result</b><span>"Managed runner" appears in their machines and sidebar</span></div>
+    </div>
+  </div>
+
+  <table class="b-t">
+    <tr><th>Decision</th><th>A (recommended)</th><th>B</th><th>What changes between them</th></tr>
+    <tr><td>D1 What creates it</td><td>A server pass every 5 min</td><td>The status read a client makes</td><td>Who triggers it: the server alone, or whichever app screen happens to be open</td></tr>
+    <tr><td>D2 Who counts as signed in</td><td>Any live login session: 6 accounts</td><td>Used in the last 7 days: 5 accounts</td><td>One account, idle 7–30 days, gets it now (A) or at its next use (B)</td></tr>
+    <tr><td>D3 Accounts with their own machines</td><td>Included</td><td>Left on the Set up button</td><td>One account today (the sample account, with a Mac): a workspace appears unasked (A) or not (B)</td></tr>
+    <tr><td>D4 Production capacity</td><td>Deploy as is: 2 start, 4 wait</td><td>Raise the pool limit first</td><td>Whether 4 people see "Waiting for capacity" for up to a day</td></tr>
+  </table>
+</section>
+
+<!-- Part 2: D1 -->
+<section class="b-part" id="part-2">
+  <h2>D1 · What creates the runner for someone already signed in</h2>
+  <p class="b-sub">Both end in the same <code>createMapping</code> a sign-in uses today; they differ in what starts it</p>
+  <div class="b-cols">
+    <div class="b-col b-rec">
+      <h3>A · A server pass <span class="b-tag">Recommended</span></h3>
+      <div class="b-flow">
+        <div class="b-box b-srv"><b>apiserver timer</b><small>Once when the switch is on at start, then every 5 min. No timer at all while off</small></div>
+        <div class="b-arrow">one query</div>
+        <div class="b-box b-db"><b>PostgreSQL</b><small>Not disabled · a live refresh token · no managed_runner row (any state)</small></div>
+        <div class="b-arrow">for each, up to 50 a pass</div>
+        <div class="b-box b-ok"><b>createMapping</b><small>Runner + default workspace + mapping, then the worker provisions it</small></div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-plus">+</span> Reaches an account whether or not any app is open</li>
+        <li><span class="b-plus">+</span> <code>GET /managed-runner</code> stays a read; refresh and login are untouched</li>
+        <li><span class="b-minus">−</span> Up to 5 minutes' delay for an account that only refreshes</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <h3>B · The status read creates it <span class="b-tag">Not recommended</span></h3>
+      <div class="b-flow">
+        <div class="b-row">
+          <div class="b-box b-ok"><b>Web</b><small>Most screens read it every 30 s</small></div>
+          <div class="b-box b-warn"><b>iPhone / Mac / Android</b><small>Only while Machines or the welcome card is open</small></div>
+          <div class="b-box b-bad"><b>PAT, old app versions</b><small>A token with runners:read could create one</small></div>
+        </div>
+        <div class="b-arrow"><code>GET /managed-runner</code></div>
+        <div class="b-box b-srv"><b>apiserver</b><small>The read now writes: no mapping → create one</small></div>
+        <div class="b-arrow">only if someone looked</div>
+        <div class="b-box b-ok"><b>createMapping</b><small>Same as A</small></div>
+      </div>
+      <ul class="b-notes">
+        <li><span class="b-plus">+</span> Instant for someone on the Web app</li>
+        <li><span class="b-minus">−</span> A frequently polled GET becomes a write, and a PAT can reach it although <code>ensure</code> forbids PATs</li>
+        <li><span class="b-minus">−</span> A phone-only user who never opens Machines is never reached</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Part 3: D2 -->
+<section class="b-part" id="part-3">
+  <h2>D2 · Which accounts count as "signed in"</h2>
+  <p class="b-sub">The 12 accounts on production today. A login session lives 30 days and renews each time the app refreshes</p>
+  <div class="b-legend">
+    <span><i style="background:var(--grey-bg)"></i>Already has a managed runner</span>
+    <span><i style="background:var(--green-bg);border:2px solid var(--green)"></i>Gets one from the first pass</span>
+    <span><i style="background:var(--amber-bg);border:2px dashed var(--amber)"></i>Skipped for now; gets one at its next use</span>
+    <span><i style="background:#fff;border:2px dashed var(--line)"></i>No live session: gets one at its next sign-in (both options)</span>
+  </div>
+  <div class="b-cols">
+    <div class="b-col b-rec">
+      <h3>A · Any live login session <span class="b-tag">Recommended</span></h3>
+      <div class="b-dots">
+        <div class="b-dot b-d-has">has</div>
+        <div class="b-dot b-d-new">1</div><div class="b-dot b-d-new">2</div><div class="b-dot b-d-new">3</div><div class="b-dot b-d-new">4</div><div class="b-dot b-d-new">5</div>
+        <div class="b-dot b-d-new">6</div>
+        <div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div>
+      </div>
+      <ul class="b-notes">
+        <li><b>6 created.</b> Account 6 last used Orbit 7–30 days ago; its session has not expired</li>
+        <li>Dormant accounts drop out by themselves when their 30-day session expires</li>
+        <li>One rule to explain: "signed in" means the same as it does for the app</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <h3>B · Used in the last 7 days <span class="b-tag">Narrower</span></h3>
+      <div class="b-dots">
+        <div class="b-dot b-d-has">has</div>
+        <div class="b-dot b-d-new">1</div><div class="b-dot b-d-new">2</div><div class="b-dot b-d-new">3</div><div class="b-dot b-d-new">4</div><div class="b-dot b-d-new">5</div>
+        <div class="b-dot b-d-skip">6</div>
+        <div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div><div class="b-dot b-d-none"></div>
+      </div>
+      <ul class="b-notes">
+        <li><b>5 created.</b> Account 6 waits until it next opens the app (a refresh moves it into the window)</li>
+        <li>Saves one volume reservation today, and more on a deployment with many idle accounts</li>
+        <li>A second clock (7 days) next to the session's 30 days</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Part 4: D3 -->
+<section class="b-part" id="part-4">
+  <h2>D3 · Accounts that already run their own machine</h2>
+  <p class="b-sub">Of the 6, five have no machine and no workspace, and get one either way. This decides the sixth: the sample account, with one Mac and 2 workspaces</p>
+  <div class="b-cols">
+    <div class="b-col b-rec">
+      <h3>A · Included <span class="b-tag">Recommended</span></h3>
+      <div style="display:flex;gap:22px;align-items:flex-start">
+        <div class="b-side">
+          <div class="b-h">Machines</div>
+          <div class="b-it">Their MacBook · Online</div>
+          <div class="b-it b-added">Managed runner · Starting</div>
+          <div class="b-h">Workspaces</div>
+          <div class="b-it">Their workspace 1</div>
+          <div class="b-it">Their workspace 2</div>
+          <div class="b-it b-added">Managed runner workspace</div>
+        </div>
+        <ul class="b-notes" style="margin:0">
+          <li>Appears within 5 minutes without being asked</li>
+          <li>Same as what a sign-in already does to them today, so both paths agree</li>
+          <li>Their own Mac and workspaces are not touched</li>
+          <li><span class="b-minus">−</span> Reverses the 11-14 choice that an existing account confirms first; no client can remove a managed runner yet</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b-col">
+      <h3>B · Only accounts with no machine <span class="b-tag">Keeps the 11-14 confirmation</span></h3>
+      <div style="display:flex;gap:22px;align-items:flex-start">
+        <div class="b-side">
+          <div class="b-h">Machines</div>
+          <div class="b-it b-btn">Managed runner · Set up</div>
+          <div class="b-it">Their MacBook · Online</div>
+          <div class="b-h">Workspaces</div>
+          <div class="b-it">Their workspace 1</div>
+          <div class="b-it">Their workspace 2</div>
+        </div>
+        <ul class="b-notes" style="margin:0">
+          <li>Nothing appears by itself; they keep the Set up entry and its confirmation</li>
+          <li>The pass and a sign-in would disagree unless sign-in is narrowed too</li>
+          <li><span class="b-minus">−</span> The case you asked about stays manual</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Part 5: D4 -->
+<section class="b-part" id="part-5">
+  <h2>D4 · Capacity on production when the 6 arrive</h2>
+  <p class="b-sub">Pool orbit-ws03 / orbit-managed: 3 active users, 4 Pods, 6 CPU, 48 GiB memory; 1 user in use. An idle runner sleeps after 24 h and frees its slot</p>
+  <div class="b-cols">
+    <div class="b-col b-rec">
+      <h3>A · Deploy as is <span class="b-tag">Recommended</span></h3>
+      <div class="b-cap">Active-user slots (3)</div>
+      <div class="b-slots">
+        <div class="b-slot b-used"><b>in use</b>existing runner</div>
+        <div class="b-slot b-run"><b>Starting</b>account 1</div>
+        <div class="b-slot b-run"><b>Starting</b>account 2</div>
+      </div>
+      <div class="b-cap">Waiting for capacity (starts by itself when a slot frees)</div>
+      <div class="b-queue"><div class="b-q">account 3</div><div class="b-q">account 4</div><div class="b-q">account 5</div><div class="b-q">account 6</div></div>
+      <ul class="b-notes">
+        <li>No operator change; the wait is shown in their app with today's words</li>
+        <li><span class="b-minus">−</span> If the first ones keep working, the rest can wait a day or more</li>
+      </ul>
+    </div>
+    <div class="b-col">
+      <h3>B · Raise the pool first <span class="b-tag">Operator change, your approval</span></h3>
+      <div class="b-cap">Active-user slots (raised, e.g. to 7, with Pods, CPU and memory to match)</div>
+      <div class="b-slots" style="flex-wrap:wrap">
+        <div class="b-slot b-used"><b>in use</b>existing runner</div>
+        <div class="b-slot b-run"><b>Starting</b>account 1</div>
+        <div class="b-slot b-run"><b>Starting</b>account 2</div>
+        <div class="b-slot b-extra"><b>Starting</b>account 3</div>
+        <div class="b-slot b-extra"><b>Starting</b>account 4</div>
+        <div class="b-slot b-extra"><b>Starting</b>account 5</div>
+        <div class="b-slot b-extra"><b>Starting</b>account 6</div>
+      </div>
+      <ul class="b-notes">
+        <li>Everyone starts at once</li>
+        <li><span class="b-minus">−</span> An edit to <code>profile.json</code> on 10.66.0.4 and more load on orbit-ws03 (each runner holds ~2 CPU / 4 GiB while awake)</li>
+        <li>Independent of D1–D3: it can be done later, once the wait is seen</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

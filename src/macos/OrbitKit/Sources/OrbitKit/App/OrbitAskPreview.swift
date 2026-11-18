@@ -48,6 +48,9 @@ public struct BatchPreviewTask: Equatable, Sendable {
     /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
     /// picture without being one overall, and the row says so.
     public let dependsOnTaskIds: [String]?
+    /// A task that starts when its condition holds: the card's Starts when, Today and If never (condition-triggers
+    /// board frame 2). Nil on a task without one.
+    public var startWhen: StartWhenCardLines? = nil
 }
 
 public struct BatchApprovalPreview: Equatable, Sendable {
@@ -117,6 +120,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
         isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
     }
 
+    /// A task that starts when its condition holds: the server's Starts when, Today and If never lines (condition-
+    /// triggers board frame 2). Nil for a project or a task without one.
+    public var startWhen: StartWhenCardLines? {
+        isProject ? nil : preview?.tasks.first?.startWhen
+    }
+
     /// The noun the fold's label names, so a project's goal is never called a description.
     public var foldNoun: String { isProject ? "goal" : "description" }
 }
@@ -156,6 +165,7 @@ public struct BlockerResolvePreview: Equatable, Sendable {
 /// (`runner-go/mcp.go`, `projectMergeCheckCard`), and the server writes only what this card carried —
 /// so the two commands are the whole decision. Web draws the same pair (`MergeCheckChangeBody`).
 public struct MergeCheckChangePreview: Equatable, Sendable {
+    public let snapshot: JSONValue
     public let projectTitle: String
     /// The check as the project stands, or nil when it has none.
     public let current: String?
@@ -166,12 +176,27 @@ public struct MergeCheckChangePreview: Equatable, Sendable {
     /// The budget the proposal names, in seconds; nil leaves it as it is.
     public let timeoutSeconds: Int?
 
+    public func value(_ key: String, after: Bool) -> JSONValue? {
+        if after, let proposed = snapshot[key] { return proposed }
+        return snapshot["current" + key.prefix(1).uppercased() + key.dropFirst()]
+    }
+    public func commandLine(_ layer: String, after: Bool) -> String {
+        if let command = value(layer + "CheckCommand", after: after)?.stringValue { return command }
+        return layer == "landing" ? LandingCheckCopy.inheritedCommand(value("mergeCheckCommand", after: after)?.stringValue)
+            : "no check configured"
+    }
+    public func budgetLine(_ layer: String, after: Bool) -> String {
+        if let seconds = value(layer + "CheckTimeoutSeconds", after: after)?.intValue { return "\(seconds) seconds" }
+        return layer == "landing" ? LandingCheckCopy.inheritedTimeout(value("mergeCheckTimeoutSeconds", after: after)?.intValue)
+            : "3600 seconds"
+    }
+
     /// The header holds one line beside its badge, so the project's name takes the row under it.
-    public static let heading = "Change the merge check?"
+    public static let heading = LandingCheckCopy.confirmTitle
     public var projectLine: String { projectTitle.isEmpty ? "This project" : projectTitle }
     public static let note = "Run on the combined tree before this project's work lands. "
         + "Nothing else about the project's integration line changes."
-    public static let action = "Change the check"
+    public static let action = LandingCheckCopy.confirmAction
     /// An empty line reads as a loading state, so a missing check is said in words.
     public var currentLine: String { current ?? "no check configured" }
     public var nextLine: String {
@@ -340,8 +365,8 @@ public extension Approvals {
             }
         }
         written("workDir", "Working directory")
-        written("systemPrompt", "System prompt")
-        written("appendSystemPrompt", "Appended system prompt")
+        written("systemPrompt", "Base instructions")
+        written("appendSystemPrompt", "Runtime instructions")
         if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
         if let worktree = changes?["enableWorktree"]?.boolValue {
             fields.append(.init(caption: "Worktree", value: worktree
@@ -468,6 +493,13 @@ public extension Approvals {
         return batchPreview(from: input)?.needsManualStart == 1
     }
 
+    /// Whether Create and start is the card's filled answer, with Create it beside it: whenever it is
+    /// offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a hold
+    /// someone asked for, so the prominent press does not start it. Web's `createAndStartLeads`.
+    static func createAndStartLeads(toolName: String, input: JSONValue?) -> Bool {
+        offersCreateAndStart(toolName: toolName, input: input) && input?["autoRunWhenReady"]?.boolValue != false
+    }
+
     /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
     /// remember rules, none of which a create card carries.
     static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
@@ -508,6 +540,7 @@ public extension Approvals {
             return s
         }
         return MergeCheckChangePreview(
+            snapshot: input,
             projectTitle: input["projectTitle"]?.stringValue ?? "",
             current: command("currentMergeCheckCommand"),
             next: command("mergeCheckCommand"),
@@ -574,7 +607,8 @@ public extension Approvals {
             }
             return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
                                     dependsOnRefs: strings("dependsOnRefs"),
-                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"),
+                                    startWhen: StartWhenCardLines(json: t["startWhen"]))
         }
     }
 

@@ -11,6 +11,8 @@ import {
 import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow } from '../components/CoordinatorQuestionCard';
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
 import { TerminalApproveCard } from '../components/TerminalApproveCard';
+import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
+import { isConditionWaitingKind } from '../components/ConditionWaitingCard';
 import { Spinner } from '../components/ui/Spinner';
 import { formatSpan, ago } from '../lib/watches';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -21,6 +23,7 @@ import {
   projectsWithQuestions,
   useSnoozes,
   useWaitingOnYouCount,
+  type AgentRequestKind,
   type OwnerRequest,
 } from '../lib/ownerRequests';
 import { decisionReceiptTime } from '../components/EvidenceDecisionCard';
@@ -40,7 +43,7 @@ const isTab = (value: string | null): value is InboxTab => TABS.some((tab) => ta
 
 const DAY = 86_400_000;
 
-const ACTION: Readonly<Record<OwnerRequest['kind'], string>> = {
+const ACTION: Readonly<Record<AgentRequestKind, string>> = {
   DECISION: 'Answer',
   SECRET: 'Provide',
   MANUAL_STEP: 'Open steps',
@@ -48,7 +51,7 @@ const ACTION: Readonly<Record<OwnerRequest['kind'], string>> = {
   WIKI_CREATE: 'Review',
 };
 
-const ICON: Readonly<Record<OwnerRequest['kind'], ReactNode>> = {
+const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
   DECISION: <QuestionOutlined />,
   SECRET: <KeyOutlined />,
   MANUAL_STEP: <OrderedListOutlined />,
@@ -114,6 +117,11 @@ type OpenRow =
   | { at: string; request: OwnerRequest }
   | { at: string; project: SidebarProject; question: ProjectOpenItemRow };
 
+/** A scheduled task's or a condition's item: drawn whole, with its own doors, above the folded rows. */
+function drawnWhole(kind: string): boolean {
+  return isScheduleWaitingKind(kind) || isConditionWaitingKind(kind);
+}
+
 /**
  * Everything agents have asked the owner to do, in one place: owner requests, and the questions
  * coordinators filed through `ask_owner`, which stay on their own table but are one list to the owner.
@@ -137,8 +145,15 @@ export function WaitingOnYouPage(): JSX.Element {
   const titleOf = (projectId: string | null): string | undefined =>
     projects.data?.find((project) => project.id === projectId)?.title;
 
+  // A scheduled task's items are drawn whole, as the board draws them (docs/mocks/scheduled-tasks/web/02-board.png ④):
+  // each is a card with its own doors, newest first.
+  const scheduleItems = (open.data?.requests ?? [])
+    .filter((request) => drawnWhole(request.kind))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const rows: OpenRow[] = [
-    ...(open.data?.requests ?? []).map((request) => ({ at: request.createdAt, request })),
+    ...(open.data?.requests ?? [])
+      .filter((request) => !drawnWhole(request.kind))
+      .map((request) => ({ at: request.createdAt, request })),
     ...asking.flatMap((project, index) =>
       coordinatorQuestions(items[index]?.data).map((question) => ({ at: question.waitingSince, project, question }))),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -146,7 +161,9 @@ export function WaitingOnYouPage(): JSX.Element {
   const current = TABS.find((candidate) => candidate.key === tab)!;
   const loading = tab === 'open' ? open.isLoading : ended.isLoading;
   const endedRows = ended.data?.requests ?? [];
-  const empty = !loading && (tab === 'open' ? rows.length === 0 && terminals.length === 0 : endedRows.length === 0);
+  const empty = !loading && (tab === 'open'
+    ? rows.length === 0 && terminals.length === 0 && scheduleItems.length === 0
+    : endedRows.length === 0);
 
   return (
     <div className="owner-inbox">
@@ -175,6 +192,11 @@ export function WaitingOnYouPage(): JSX.Element {
           {terminals.map((request) => <TerminalApproveCard key={request.id} request={request} now={now} />)}
         </div>
       ) : null}
+      {tab === 'open' && scheduleItems.length > 0 ? (
+        <div className="sched-waiting-list" data-schedule-waiting="">
+          {scheduleItems.map((request) => <OwnerRequestCard key={request.id} request={request} now={now} />)}
+        </div>
+      ) : null}
       {tab === 'open' && rows.length > 0 ? (
         <ul className="owner-inbox-list">
           {rows.map((row) => {
@@ -185,14 +207,14 @@ export function WaitingOnYouPage(): JSX.Element {
               return (
                 <InboxRow
                   key={request.id}
-                  icon={ICON[request.kind]}
+                  icon={ICON[request.kind as AgentRequestKind]}
                   title={request.title}
                   detail={[project, requestDetail(request)].filter(Boolean).join(' · ')}
                   overdue={holdsText(request, now)}
                   age={until > now
                     ? `Reminder ${decisionReceiptTime(new Date(until).toISOString(), new Date(now))}`
                     : ago(request.createdAt, now)}
-                  action={ACTION[request.kind]}
+                  action={ACTION[request.kind as AgentRequestKind]}
                 >
                   <OwnerRequestCard request={request} now={now} />
                 </InboxRow>

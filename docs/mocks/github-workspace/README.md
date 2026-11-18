@@ -9,6 +9,7 @@
 | [`01-web-setup-card.png`](01-web-setup-card.png) | 今天的 Folder 步骤和它的问题；方案 P1–P4（未连接 → 搜索仓库 → 选中 → 就绪）；P5 会话第一行（cloning / done / 三种失败）；没画成帧的边界状态 |
 | [`02-web-settings.png`](02-web-settings.png) | 用户：Settings → Integrations 加一行 GitHub，Manage 页（账号、App 装在哪、哪些 workspace 来自 GitHub）；管理员：Integrations 加 GitHub App 卡片和在 GitHub 上注册 App 的步骤 |
 | [`03-rules.png`](03-rules.png) | 已定的项、10 条规则、各层改动清单、分期（P0 / P1 / P1r / P2 / P3）、待你定 |
+| [`04-setup-card-after-main.png`](04-setup-card-after-main.png) | main 11-16 把 Folder 步骤改成只有一个目录名、Web 卡片自己 Create workspace 以后，From GitHub 放哪：A（输入框下一条 or 分隔线 + From GitHub 一行）和 B（两段开关），各三个状态，Web + 手机；所有者 2026-11-16 选 A，取代上面第 1 项的位置 |
 
 **界面细节四项**：2026-11-11 所有者定为都按推荐（A），01 和 02 画的就是 A。
 

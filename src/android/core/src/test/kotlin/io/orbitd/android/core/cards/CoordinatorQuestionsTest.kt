@@ -144,6 +144,15 @@ class CoordinatorQuestionsTest {
     private fun catalog(openItems: JsonObject, answered: Map<String, JsonObject> = emptyMap()) = CardCatalog.project("s1", "p1",
         mapOf("project" to buildJsonObject { put("id", "p1") }, "openItems" to openItems), answered)
 
+    @Test fun cleanStartHidesOldRecordsAndKeepsOldOpenQuestions() {
+        val read = items(open = listOf(openQuestion("still-open"), openQuestion()), closed = listOf(record()))
+        val standing = mapOf("project" to buildJsonObject { put("id", "p1") }, "openItems" to read)
+        val cards = CardCatalog.project("s1", "p1", standing, createdAt = "2026-10-10T00:00:00Z")
+        assertEquals(listOf("item:still-open"), cards.map { it.key })
+        assertEquals(CardFamily.OWNER_QUESTION, cards.single().family)
+        assertEquals(2, CardCatalog.project("s1", "p1", standing, createdAt = "unknown").size)
+    }
+
     /** The read is newest first; records are drawn oldest first, so two answered seconds apart read in the order they were answered. */
     @Test fun recordsAreDrawnInTheOrderTheyEnded() {
         val read = items(closed = listOf(record("second", resolvedAt = "2026-10-09T00:29:36.000Z"), record("first", resolvedAt = "2026-10-09T00:29:23.000Z"),

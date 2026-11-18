@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import type { TranslationLanguage } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import { readBlockSender } from '../sessions/session-message';
@@ -146,7 +147,15 @@ export class EvidenceReviewService {
    * `fromSessionId` is the session that decided, and null for the account owner's press in the app:
    * the block names it and its mode, as a session's message says who sent it (session-message.ts).
    */
-  async deliverSendBack(ownerId: string, taskId: string, decisionId: string, fromSessionId: string | null): Promise<void> {
+  async deliverSendBack(
+    ownerId: string,
+    taskId: string,
+    decisionId: string,
+    fromSessionId: string | null,
+    /** The owner's note in the agent language, when Settings › Translation translated it at the door: what the run
+     *  receives, the row's own note staying the owner's words, which the transcript shows. */
+    translated?: { note: string; from: TranslationLanguage },
+  ): Promise<void> {
     const decision = await this.prisma.taskEvidenceDecision.findFirst({
       where: { id: decisionId, taskId, ownerId },
       select: {
@@ -171,23 +180,27 @@ export class EvidenceReviewService {
       return;
     }
     const from = fromSessionId ? await readBlockSender(this.prisma, ownerId, fromSessionId, runSessionId) : null;
+    const message = (note: string): string => evidenceSendBackMessage({
+      taskId,
+      taskTitle: decision.task.title,
+      revision: decision.evidence.revision.toString(),
+      decidedByType: decision.decidedByType,
+      note,
+      from,
+    });
     try {
       await this.sessions.createTurn(
         ownerId,
         runSessionId,
         {
           clientTurnId: evidenceSendBackTurnId(decisionId),
-          content: evidenceSendBackMessage({
-            taskId,
-            taskTitle: decision.task.title,
-            revision: decision.evidence.revision.toString(),
-            decidedByType: decision.decidedByType,
-            note: decision.note,
-            from,
-          }),
+          content: message(decision.note),
           intent: 'NEXT_TURN',
         },
-        { steerIfLive: true },
+        {
+          steerIfLive: true,
+          ...(translated ? { translated: { content: message(translated.note), from: translated.from } } : {}),
+        },
       );
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ConflictException

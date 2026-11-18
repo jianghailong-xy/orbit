@@ -14,6 +14,7 @@ import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
 import { webShowsEngine } from '../lib/runnerEngines';
 import { brandForProvider, ENGINE_PRESET } from '../lib/sessionProviderChoices';
+import { useMachineName } from '../lib/managedRunner';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name — and
  *  what it declares, which says whether Cursor CLI is drawn at all (webShowsEngine). */
@@ -159,9 +160,11 @@ function connectedCounts(rows: readonly ProviderRow[]): Map<string, number> {
 export function ProviderGallery() {
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   const runners = useQuery(runnersQuery());
+  const machineNameOf = useMachineName();
   const connected = connectedCounts(providers.data ?? []);
   // Three of these vendors are also engines the user may already be signed into on a machine of
   // their own. Say so on the card: buying a key for a subscription you already pay for is the one
@@ -173,7 +176,7 @@ export function ProviderGallery() {
       const preset = ENGINE_PRESET[engine.engine];
       if (!preset || signedInOn.has(preset)) continue;
       if (engine.installed && engine.auth === 'yes') {
-        signedInOn.set(preset, runner.displayName || runner.name);
+        signedInOn.set(preset, machineNameOf(runner));
       }
     }
   }

@@ -343,8 +343,7 @@ func (f *agentMcpEngine) withUncommittedWork(t *testing.T) string {
 
 // A merge takes only what the branch has committed, replayed in a scratch worktree, so a
 // runner-hosted job still running in the checkout neither holds it up nor is stopped for it. The
-// merge lands on the target, the job is still running once it is over, and the receipt names the
-// job it ran beside.
+// merge lands on the target and the job is still running once it is over.
 func TestMergeProceedsBesideLiveBackgroundJob(t *testing.T) {
 	f := newAgentMcpEngine(t, "jobmerge", nil)
 	job := f.startLiveJob(t)
@@ -363,14 +362,12 @@ func TestMergeProceedsBesideLiveBackgroundJob(t *testing.T) {
 	if _, err := git(f.repo, "cat-file", "-e", "main:work.txt"); err != nil {
 		t.Fatalf("main does not carry the session's work after a merge that reported merged: %v", err)
 	}
-	if !strings.Contains(res.Message, job.JobID) {
-		t.Fatalf("the merge's receipt does not name the job %s it ran beside: %q", job.JobID, res.Message)
-	}
 	f.assertJobOutlived(t, "merge", job, runningAsItRan)
 }
 
-// The same for a commit, which writes only the index and refs: the branch advances with the
-// checkout's work, the job is still running, and the receipt names it.
+// A background job is a test run, a build or a dev server, not an edit of the work, so a commit
+// runs beside one: the branch advances with the checkout's work, the job is still running, and the
+// receipt names it.
 func TestCommitProceedsBesideLiveBackgroundJob(t *testing.T) {
 	f := newAgentMcpEngine(t, "jobcommit", nil)
 	before := f.withUncommittedWork(t)

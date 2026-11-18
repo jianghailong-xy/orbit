@@ -98,7 +98,7 @@ TOKEN_SHAPE = re.compile(r"^[\x21-\x7e]{16,512}\Z")
 NETWORK_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 
 RUNNER_USER = "10001:10001"
-DATA_MOUNT = "/var/lib/orbit"
+DATA_MOUNT = "/home/orbit"
 BOOT_MOUNT = "/run/orbit-bootstrap"
 TMP_MOUNT = "/tmp"
 RUNNER_NAME = "orbit-managed"

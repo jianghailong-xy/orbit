@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -92,6 +93,66 @@ func TestAttachLocalReplyFilesUploadsAndRewrites(t *testing.T) {
 	}
 }
 
+// An agent asked to change a mock redraws it under the same name and links it again, in a later turn
+// of the same warm run. That reply must carry the new drawing: the memo that spares a retried batch
+// a second upload knows the path, but the bytes behind it are not the ones it uploaded.
+func TestAttachLocalReplyFilesUploadsAMockRedrawnInPlace(t *testing.T) {
+	dir := t.TempDir()
+	mock := filepath.Join(dir, "set-as-default-prototype.png")
+	if err := os.WriteFile(mock, []byte("\x89PNG\r\n\x1a\nfirst"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("upload without a file part: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		var body strings.Builder
+		if _, err := io.Copy(&body, file); err != nil {
+			t.Error(err)
+		}
+		mu.Lock()
+		bodies = append(bodies, body.String())
+		n := len(bodies)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":"att-%d"}`, n)
+	}))
+	defer srv.Close()
+	transport := NewTransport(srv.URL, "token")
+	memo := newReplyAttachmentIDs()
+	reply := func() string {
+		events := []RunEvent{{Seq: 1, Type: evAssistant, Payload: map[string]interface{}{"text": "![prototype](" + mock + ")"}}}
+		attachLocalReplyFiles(context.Background(), transport, "s1", events, []string{dir}, memo)
+		return events[0].Payload["text"].(string)
+	}
+
+	if got := reply(); got != "![prototype](orbit-attachment:att-1)" {
+		t.Fatalf("first reply = %q", got)
+	}
+	if err := os.WriteFile(mock, []byte("\x89PNG\r\n\x1a\nsecond, redrawn"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := reply(); got != "![prototype](orbit-attachment:att-2)" {
+		t.Fatalf("reply after the redraw = %q, want the redrawn file's own attachment", got)
+	}
+	// Linked again unchanged, it is the same bytes: no third upload.
+	if got := reply(); got != "![prototype](orbit-attachment:att-2)" {
+		t.Fatalf("reply linking the unchanged redraw = %q", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != 2 || !strings.HasSuffix(bodies[1], "second, redrawn") {
+		t.Fatalf("uploaded bodies = %q, want the first drawing then the redrawn one", bodies)
+	}
+}
+
 func cancelledCtx() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -99,7 +160,7 @@ func cancelledCtx() context.Context {
 }
 
 // A reply that names a file this runner does not have — or one the server refuses — keeps the path
-// the agent wrote. Rewriting it to an attachment id that does not exist would hide the line
+// the agent wrote (a missing one with a line saying it does not exist). Rewriting it to an attachment id that does not exist would hide the line
 // entirely; the chip it renders as at least says which file it was.
 func TestAttachLocalReplyFilesLeavesUnreachablePaths(t *testing.T) {
 	dir := t.TempDir()
@@ -132,7 +193,8 @@ func TestAttachLocalReplyFilesLeavesUnreachablePaths(t *testing.T) {
 	}
 	attachLocalReplyFiles(context.Background(), NewTransport(srv.URL, "token"), "s1",
 		events, []string{dir}, newReplyAttachmentIDs())
-	if got := events[0].Payload["text"]; got != "![gone]("+missing+")" {
+	gone := "![gone](" + missing + ")\n\n_Not attached: `" + missing + "` does not exist in this session's working directory or uploads directory._"
+	if got := events[0].Payload["text"]; got != gone {
 		t.Fatalf("missing file = %q", got)
 	}
 	if got := events[1].Payload["text"]; got != "![here](orbit-attachment:att-1)" {
@@ -295,5 +357,75 @@ func TestAttachLocalReplyFilesNotesFilesOutsideTheSession(t *testing.T) {
 	defer mu.Unlock()
 	if strings.Join(uploaded, ",") != "a.png,b.png" {
 		t.Fatalf("uploaded = %v, want [a.png b.png] (nothing outside the session)", uploaded)
+	}
+}
+
+// Session 34yKMcwK61DDADUoAXnk5: told it may link a file in its working directory or its uploads
+// directory, the agent saved its mock in uploads and linked it by name. A relative link was only
+// looked for in the working directory, so the reply carried a dead image and nothing said why.
+// Now a relative link is looked for in each directory, the working directory first; a local link
+// found in none says so, and a place in code or an Orbit link is no file it misses.
+func TestAttachLocalReplyFilesFindsRelativeLinksInUploads(t *testing.T) {
+	workDir := t.TempDir()
+	uploadsDir := t.TempDir()
+	for _, f := range []string{
+		filepath.Join(uploadsDir, "secrets-page-mockup.png"),
+		filepath.Join(uploadsDir, "secrets-page-mockup.html"),
+		filepath.Join(workDir, "both.png"),
+		filepath.Join(uploadsDir, "both.png"),
+	} {
+		if err := os.WriteFile(f, []byte("\x89PNG\r\n\x1a\n…"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "both.png"), []byte("\x89PNG\r\n\x1a\nworkdir"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("upload form: %v", err)
+		}
+		name, body := "", ""
+		for _, files := range r.MultipartForm.File {
+			name = files[0].Filename
+			f, _ := files[0].Open()
+			buf := make([]byte, 64)
+			n, _ := f.Read(buf)
+			body = string(buf[:n])
+			f.Close()
+		}
+		mu.Lock()
+		bodies = append(bodies, body)
+		id := len(bodies)
+		mu.Unlock()
+		fmt.Fprintf(w, `{"id":"att-%d-%s"}`, id, name)
+	}))
+	defer srv.Close()
+
+	reply := "![Secrets page mockup](secrets-page-mockup.png)\n" +
+		"[secrets-page-mockup.html](secrets-page-mockup.html)\n" +
+		"![both](both.png)\n" +
+		"![never](never-written.png)\n" +
+		"[the lookup](codex_artifacts.go:77) [task](orbit-task:34xGMBOf31IJy137P02PT)"
+	events := []RunEvent{{Seq: 1, Type: evAssistant, Payload: map[string]interface{}{"text": reply}}}
+	attachLocalReplyFiles(context.Background(), NewTransport(srv.URL, "token"), "s1",
+		events, []string{workDir, uploadsDir}, newReplyAttachmentIDs())
+
+	want := "![Secrets page mockup](orbit-attachment:att-1-secrets-page-mockup.png)\n" +
+		"[secrets-page-mockup.html](orbit-attachment:att-2-secrets-page-mockup.html \"secrets-page-mockup.html\")\n" +
+		"![both](orbit-attachment:att-3-both.png)\n" +
+		"![never](never-written.png)\n" +
+		"[the lookup](codex_artifacts.go:77) [task](orbit-task:34xGMBOf31IJy137P02PT)" +
+		"\n\n_Not attached: `never-written.png` does not exist in this session's working directory or uploads directory._"
+	if got := events[0].Payload["text"]; got != want {
+		t.Fatalf("reply =\n%q\nwant\n%q", got, want)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != 3 || !strings.HasSuffix(bodies[2], "workdir") {
+		t.Fatalf("uploads = %q, want 3 with both.png from the working directory", bodies)
 	}
 }

@@ -549,6 +549,9 @@ test('the landing line describes running work before the queue, on real PostgreS
             startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
             runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
             retryable: false,
+            // The fixture's project runs no landing check, so there is none to skip.
+            skippable: false,
+            skipCheck: null,
             // A row claimed before the progress protocol existed — which is every fixture here — is
             // a legacy claim (§2.2 J-T4). The optional field travels on the wire from 0434.
             progressProtocol: null,
@@ -947,6 +950,9 @@ test('the landing line describes running work before the queue, on real PostgreS
           // This fixture writes its jobs directly, with no landing subject beside them.
           landingSessionId: null,
           liveness: 'LIVE', blockingReason: null, retryable: false,
+          // The fixture's project runs no landing check, so there is none to skip.
+          skippable: false,
+          skipCheck: null,
         });
         const promotion = view.inFlightJobs?.find((entry) => entry.kind === 'LAND_PROMOTION');
         assert.equal(promotion?.promotionId, promotionId);

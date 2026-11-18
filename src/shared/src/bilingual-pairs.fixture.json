@@ -1,0 +1,270 @@
+{
+  "about": [
+    "\"Show both languages\", interleaved (docs/mocks/session-translation/03-interleaved.png): how an agent",
+    "reply and its translation pair block by block. One set of cases every client is proved against:",
+    "@orbit/shared walks it through `bilingualPairs` (translation.spec.ts), OrbitKit through",
+    "`BilingualPairs.pairs` (BilingualPairsFixtureTests) and Android core through",
+    "`Translation.bilingualPairs` (BilingualPairsTest). A rule change starts here and lands everywhere.",
+    "",
+    "Each case: `translation` (the reply in the owner's language), `original` (what the agent wrote) and",
+    "`pairs` — the translation's blocks in order, each {kind, depth, marker?, text, original?}, or null",
+    "when the two do not split into the same pairable blocks and the message is drawn whole (frame 4)."
+  ],
+  "cases": [
+    {
+      "name": "plain paragraphs",
+      "translation": "我查过了：弹窗被 Safari 拦下了。\n\n它只放行由点击直接打开的窗口。\n第二行仍属同一段。\n\n我改成了在点击时先打开窗口。",
+      "original": "I checked: Safari blocked the popup.\n\nIt only allows windows opened directly by a click.\nThe second line is the same paragraph.\n\nI changed it to open the window on the click first.",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "我查过了：弹窗被 Safari 拦下了。",
+          "original": "I checked: Safari blocked the popup."
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "它只放行由点击直接打开的窗口。\n第二行仍属同一段。",
+          "original": "It only allows windows opened directly by a click.\nThe second line is the same paragraph."
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "我改成了在点击时先打开窗口。",
+          "original": "I changed it to open the window on the click first."
+        }
+      ]
+    },
+    {
+      "name": "headings and bullet lists (the board reply)",
+      "translation": "“显示两种语言”现在已在 main 上，生产环境升级正在进行中。\n\n**将其合并到 main：**\n\n- 在你发消息之前，main 尚未更新。那里唯一相关的提交是设计板图片（`54452c4f7`）。\n- 追赶任务已完成 19 个冲突的解决。我已批准。\n- Orbit 自身的合并步骤因重放旧冲突而失败。我用普通推送将 main 快进到 `ca1a6516b`。\n\n## 升级\n\n- 生产环境原为 `c6dfc627e`，落后 main 11 个提交。没有数据库迁移，因此不停机替换。",
+      "original": "Show both languages is on main now, and the production upgrade is running.\n\n**Getting it onto main:**\n\n- Main wasn't updated before your message. The only related commit there was the design board image (`54452c4f7`).\n- The catch-up task finished resolving the 19 conflicts. I approved it.\n- Orbit's own merge step failed by replaying the old conflicts. I fast-forwarded main to `ca1a6516b` with a plain push.\n\n## Upgrade ##\n\n- Production was on `c6dfc627e`, 11 commits behind main. No database migrations, so it's replaced without downtime.",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "“显示两种语言”现在已在 main 上，生产环境升级正在进行中。",
+          "original": "Show both languages is on main now, and the production upgrade is running."
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "**将其合并到 main：**",
+          "original": "**Getting it onto main:**"
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "在你发消息之前，main 尚未更新。那里唯一相关的提交是设计板图片（`54452c4f7`）。",
+          "marker": "-",
+          "original": "Main wasn't updated before your message. The only related commit there was the design board image (`54452c4f7`)."
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "追赶任务已完成 19 个冲突的解决。我已批准。",
+          "marker": "-",
+          "original": "The catch-up task finished resolving the 19 conflicts. I approved it."
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "Orbit 自身的合并步骤因重放旧冲突而失败。我用普通推送将 main 快进到 `ca1a6516b`。",
+          "marker": "-",
+          "original": "Orbit's own merge step failed by replaying the old conflicts. I fast-forwarded main to `ca1a6516b` with a plain push."
+        },
+        {
+          "kind": "heading",
+          "depth": 0,
+          "text": "## 升级",
+          "original": "Upgrade"
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "生产环境原为 `c6dfc627e`，落后 main 11 个提交。没有数据库迁移，因此不停机替换。",
+          "marker": "-",
+          "original": "Production was on `c6dfc627e`, 11 commits behind main. No database migrations, so it's replaced without downtime."
+        }
+      ]
+    },
+    {
+      "name": "nested lists, ordered and continued",
+      "translation": "计划：\n\n1. 先修复服务器\n   - 加上重试\n   - 记录日志\n     并在失败时告警\n2) 再更新客户端\n\n   这一段属于第二项。\n\n* 收尾",
+      "original": "The plan:\n\n1. Fix the server first\n   - Add a retry\n   - Log it\n     and alert on failure\n2) Then update the clients\n\n   This paragraph belongs to the second item.\n\n* Wrap up",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "计划：",
+          "original": "The plan:"
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "先修复服务器",
+          "marker": "1.",
+          "original": "Fix the server first"
+        },
+        {
+          "kind": "item",
+          "depth": 1,
+          "text": "加上重试",
+          "marker": "-",
+          "original": "Add a retry"
+        },
+        {
+          "kind": "item",
+          "depth": 1,
+          "text": "记录日志\n并在失败时告警",
+          "marker": "-",
+          "original": "Log it\nand alert on failure"
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "再更新客户端",
+          "marker": "2)",
+          "original": "Then update the clients"
+        },
+        {
+          "kind": "paragraph",
+          "depth": 1,
+          "text": "这一段属于第二项。",
+          "original": "This paragraph belongs to the second item."
+        },
+        {
+          "kind": "item",
+          "depth": 0,
+          "text": "收尾",
+          "marker": "*",
+          "original": "Wrap up"
+        }
+      ]
+    },
+    {
+      "name": "code blocks and a table between paragraphs",
+      "translation": "运行这个：\n\n```sh\nnpm test\n```\n\n结果如下：\n\n| 平台 | 结果 |\n| --- | --- |\n| web | 通过 |\n\n~~~\n输出\n~~~\n\n> 注意：需要重启。\n\n完成。",
+      "original": "Run this:\n\n```sh\nnpm test\n```\n\nThe result:\n\n| Platform | Result |\n| --- | --- |\n| web | pass |\n\n~~~\noutput\n~~~\n\n> Note: it needs a restart.\n\nDone.",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "运行这个：",
+          "original": "Run this:"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "```sh\nnpm test\n```"
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "结果如下：",
+          "original": "The result:"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "| 平台 | 结果 |\n| --- | --- |\n| web | 通过 |"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "~~~\n输出\n~~~"
+        },
+        {
+          "kind": "quote",
+          "depth": 0,
+          "text": "注意：需要重启。",
+          "original": "Note: it needs a restart."
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "完成。",
+          "original": "Done."
+        }
+      ]
+    },
+    {
+      "name": "mismatch: the translation merged two paragraphs",
+      "translation": "我合并了两段：原文三段，译文写成了两段。\n\n所以这一条按今天的方式显示。",
+      "original": "The original has three paragraphs.\n\nThe translation merged two of them.\n\nSo this message falls back to today's layout.",
+      "pairs": null
+    },
+    {
+      "name": "mismatch: a list item became a paragraph",
+      "translation": "要点：\n\n第一点和第二点",
+      "original": "Points:\n\n- first\n- second",
+      "pairs": null
+    },
+    {
+      "name": "mismatch: nesting differs",
+      "translation": "- 甲\n- 乙",
+      "original": "- A\n  - B",
+      "pairs": null
+    },
+    {
+      "name": "nothing to pair: code only",
+      "translation": "```\nls\n```",
+      "original": "```\nls\n```",
+      "pairs": null
+    },
+    {
+      "name": "an image stands alone, a break is not a list",
+      "translation": "截图：\n\n![截图](https://example.com/a.png)\n\n---\n\n* * *\n\n看起来正常。",
+      "original": "Screenshot:\n\n![screenshot](https://example.com/a.png)\n\n---\n\nLooks right.",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "截图：",
+          "original": "Screenshot:"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "![截图](https://example.com/a.png)"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "---"
+        },
+        {
+          "kind": "other",
+          "depth": 0,
+          "text": "* * *"
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "看起来正常。",
+          "original": "Looks right."
+        }
+      ]
+    },
+    {
+      "name": "an unclosed fence is prose, windows line endings",
+      "translation": "第一段\r\n\r\n```\r\n未闭合",
+      "original": "First\r\n\r\n```\r\nunclosed",
+      "pairs": [
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "第一段",
+          "original": "First"
+        },
+        {
+          "kind": "paragraph",
+          "depth": 0,
+          "text": "```\n未闭合",
+          "original": "```\nunclosed"
+        }
+      ]
+    }
+  ]
+}

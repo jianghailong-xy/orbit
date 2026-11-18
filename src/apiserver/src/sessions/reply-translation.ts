@@ -1,18 +1,21 @@
 import { UnprocessableEntityException } from '@nestjs/common';
 import {
-  AGENT_LANGUAGE,
   RunEventType,
+  TRANSLATED_ORBIT_CARDS,
   TRANSLATION_FAILED_CODE,
   type ApprovalTranslation,
   type NormalizedRunEvent,
+  type OwnerWordsTranslation,
   type QuestionAnswers,
   type ReplyTranslation,
   type TranslatedQuestion,
+  type TranslatedTaskBody,
   type TranslationEventPayload,
-  type TranslationLanguage,
 } from '@orbit/shared';
 import { AsyncWorkQueue } from '../common/async-work-queue';
+import { cardTranslationSettled } from './card-translation-wait';
 import { translate, TranslationFailed } from './translation';
+import type { TranslationLanguages } from './turn-translation';
 
 /**
  * Settings › Translation, what the agent says (task A2, decisions 2A and 3A; wire shapes in @orbit/shared
@@ -27,11 +30,15 @@ import { translate, TranslationFailed } from './translation';
  *    the runner sends again is still the same event.
  *  - Approval cards. What a card shows the owner is translated after it is published, kept beside its input in
  *    approval.translation (0550), and the card published again with it.
- *  - Answers. A decision's options come back to their original English (`englishDecision`), and the owner's own
- *    words are translated into English, refused whole when that fails (1A).
+ *  - Answers. A decision's options come back to the card's original words (`agentDecision`), and the owner's own
+ *    words are translated into the account's agent language, refused whole when that fails (1A).
+ *
+ * Every translation runs between the two languages `translationLanguages` reads (turn-translation.ts): replies and
+ * cards from the agent's language into the owner's, answers the other way. When the two are the same that read is
+ * null, and nothing here runs — as with translation off.
  *
  * Best-effort like the recap and the suggestion pass: nothing here may fail the ingest or the card that started
- * it, and a lost job (a restart) only leaves the English on screen — a reply with no `translation` key, which a
+ * it, and a lost job (a restart) only leaves the agent's own words on screen — a reply with no `translation` key, which a
  * client draws as it is.
  */
 
@@ -84,6 +91,12 @@ function track(run: Promise<unknown>): void {
   inFlight.add(settled);
 }
 
+/** Run `job` on the same bounded queue as replies and cards, tracked by `replyTranslationsSettled`. Returns at once;
+ *  `job` must catch what it can fail with (a rejection is swallowed). For card-translation.ts. */
+export function queueTranslation(job: () => Promise<unknown>): void {
+  track(queue.run(job));
+}
+
 /** Resolves once every translation this process has started so far has settled. For specs. */
 export async function replyTranslationsSettled(): Promise<void> {
   while (inFlight.size > 0) await Promise.all([...inFlight]);
@@ -91,38 +104,39 @@ export async function replyTranslationsSettled(): Promise<void> {
 
 /**
  * After an ingest committed: queue a translation for each translatable event among `events` (what the batch
- * stored), when the owner's translation is on (`lang`, ownerTranslationLanguage). Returns at once.
+ * stored), when the owner's translation is on (`langs`, translationLanguages). Returns at once.
  */
 export function translateStoredEvents(
   deps: TranslationDeps,
   sessionId: string,
-  lang: TranslationLanguage | null,
+  langs: TranslationLanguages | null,
   events: ReadonlyArray<{ seq: number; type: string; payload?: unknown }>,
 ): void {
-  if (!lang) return;
+  if (!langs) return;
   for (const event of events) {
     if (translatableText(event.type, event.payload) === null) continue;
-    track(queue.run(() => translateEvent(deps, sessionId, event.seq, lang)));
+    track(queue.run(() => translateEvent(deps, sessionId, event.seq, langs)));
   }
 }
 
 /** Queue one event's translation again (Retry). The caller has checked the owner and the event. */
-export function retranslateEvent(deps: TranslationDeps, sessionId: string, seq: number, lang: TranslationLanguage): void {
-  track(queue.run(() => translateEvent(deps, sessionId, seq, lang, { again: true })));
+export function retranslateEvent(deps: TranslationDeps, sessionId: string, seq: number, langs: TranslationLanguages): void {
+  track(queue.run(() => translateEvent(deps, sessionId, seq, langs, { again: true })));
 }
 
 /**
- * One event's translation: written into its payload as `translation` and published as a TRANSLATION. An
- * event already translated into `lang` is left alone unless `again` (the same batch sent twice must not
+ * One event's translation, from the agent's language into the owner's (`langs`): written into its payload as
+ * `translation` and published as a TRANSLATION. An event already translated into the owner's language is left alone unless `again` (the same batch sent twice must not
  * translate twice). Null when there is nothing to translate.
  */
 export async function translateEvent(
   deps: TranslationDeps,
   sessionId: string,
   seq: number,
-  lang: TranslationLanguage,
+  langs: TranslationLanguages,
   opts: { again?: boolean } = {},
 ): Promise<ReplyTranslation | null> {
+  const lang = langs.owner;
   const where = { sessionId_seq: { sessionId, seq } };
   const row = await deps.db.runEvent.findUnique({ where, select: { type: true, payload: true, turnId: true } });
   if (!row) return null;
@@ -133,7 +147,7 @@ export async function translateEvent(
   if (!opts.again && prior?.lang === lang && typeof prior.text === 'string') return prior;
   let result: ReplyTranslation;
   try {
-    result = { lang, text: await translate(text, AGENT_LANGUAGE, lang) };
+    result = { lang, text: await translate(text, langs.agent, lang) };
   } catch {
     result = { lang, failed: true };
   }
@@ -178,17 +192,67 @@ type CardQuestion = { question?: unknown; header?: unknown; options?: Array<{ la
 
 const str = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value : undefined);
 
-/** Whether a card's input shows the owner anything translatable. */
-export function cardHasText(input: unknown): boolean {
+/** The agent-written fields an Orbit card (TRANSLATED_ORBIT_CARDS) shows beyond `description`, by tool. */
+type OrbitCardInput = {
+  title?: unknown;
+  acceptanceCriteria?: unknown;
+  tasks?: unknown;
+  goal?: unknown;
+  instructions?: unknown;
+  acceptanceCriteriaItems?: unknown;
+  reason?: unknown;
+  note?: unknown;
+};
+
+const isOrbitCard = (toolName: string | null | undefined): boolean =>
+  (TRANSLATED_ORBIT_CARDS as readonly string[]).includes(toolName ?? '');
+
+const records = (value: unknown): Array<Record<string, unknown>> =>
+  Array.isArray(value) ? value.map((v) => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})) : [];
+
+/** Whether a card's input shows the owner anything translatable. `toolName` names the card: Orbit's own
+ *  create, blocker and DAG-change cards show more of their input than a tool card's `description`. */
+export function cardHasText(input: unknown, toolName?: string | null): boolean {
   const i = input as { description?: unknown; plan?: unknown; questions?: unknown } | null;
-  return Boolean(str(i?.description) || str(i?.plan) || (Array.isArray(i?.questions) && i.questions.length > 0));
+  if (str(i?.description) || str(i?.plan) || (Array.isArray(i?.questions) && i.questions.length > 0)) return true;
+  if (!isOrbitCard(toolName)) return false;
+  const o = (input ?? {}) as OrbitCardInput;
+  return Boolean(
+    str(o.title) ||
+      str(o.acceptanceCriteria) ||
+      str(o.goal) ||
+      str(o.instructions) ||
+      str(o.reason) ||
+      str(o.note) ||
+      records(o.tasks).some((t) => str(t.title) || str(t.description) || str(t.acceptanceCriteria)) ||
+      records(o.acceptanceCriteriaItems).some((c) => str(c.text) || str(c.verificationMethod)),
+  );
 }
 
-/** Translate what a card shows. Throws TranslationFailed when any piece fails: a card is shown whole in one
- *  language or the other, never half. */
-export async function translateCard(input: unknown, lang: TranslationLanguage): Promise<ApprovalTranslation> {
+/** How many of one card's pieces are sent to the translator at once: a batch of fifty tasks is up to a
+ *  hundred and fifty pieces, and firing them together would trip the provider's rate limit. */
+const CARD_PIECES_AT_ONCE = 6;
+
+/** `fn` over `items` in order, at most CARD_PIECES_AT_ONCE at a time. */
+export async function mapBounded<T, R>(items: readonly T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const at = next++;
+      out[at] = await fn(items[at]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CARD_PIECES_AT_ONCE, items.length) }, worker));
+  return out;
+}
+
+/** Translate what a card shows, from the agent's language into the owner's. Throws TranslationFailed when any
+ *  piece fails: a card is shown whole in one language or the other, never half. */
+export async function translateCard(input: unknown, langs: TranslationLanguages, toolName?: string | null): Promise<ApprovalTranslation> {
+  const lang = langs.owner;
   const i = input as { description?: unknown; plan?: unknown; questions?: unknown } | null;
-  const into = (text: string) => translate(text, AGENT_LANGUAGE, lang);
+  const into = (text: string) => translate(text, langs.agent, lang);
   const maybe = (value: unknown) => (str(value) ? into(value as string) : Promise.resolve(undefined));
   const questions = Array.isArray(i?.questions) ? (i.questions as CardQuestion[]) : undefined;
   const [description, plan, translated] = await Promise.all([
@@ -217,7 +281,48 @@ export async function translateCard(input: unknown, lang: TranslationLanguage): 
     ...(description !== undefined ? { description } : {}),
     ...(plan !== undefined ? { plan } : {}),
     ...(translated !== undefined ? { questions: translated } : {}),
+    ...(isOrbitCard(toolName) ? await translateOrbitCard(input, maybe) : {}),
   };
+}
+
+/** The fields an Orbit card shows beyond `description` (ApprovalTranslation, board 04-owner-cards part 2),
+ *  each present only when its original has text; arrays index for index with the input's. */
+async function translateOrbitCard(
+  input: unknown,
+  maybe: (value: unknown) => Promise<string | undefined>,
+): Promise<Partial<ApprovalTranslation>> {
+  const o = (input ?? {}) as OrbitCardInput;
+  const defined = <T extends object>(fields: T): Partial<T> =>
+    Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) as Partial<T>;
+  const tasks = records(o.tasks);
+  const items = records(o.acceptanceCriteriaItems);
+  // One flat queue of pieces for the whole card, so a big batch is bounded as one.
+  type Piece = { value: unknown; put: (text: string | undefined) => void };
+  const out: Partial<ApprovalTranslation> = {};
+  const translatedTasks: TranslatedTaskBody[] = tasks.map(() => ({}));
+  const translatedItems: Array<{ text?: string; verificationMethod?: string }> = items.map(() => ({}));
+  const pieces: Piece[] = [
+    ...(['title', 'acceptanceCriteria', 'goal', 'instructions', 'reason', 'note'] as const).map(
+      (key): Piece => ({ value: o[key], put: (text) => { if (text !== undefined) out[key] = text; } }),
+    ),
+    ...tasks.flatMap((t, at) =>
+      (['title', 'description', 'acceptanceCriteria'] as const).map(
+        (key): Piece => ({ value: t[key], put: (text) => { if (text !== undefined) translatedTasks[at][key] = text; } }),
+      ),
+    ),
+    ...items.flatMap((c, at) =>
+      (['text', 'verificationMethod'] as const).map(
+        (key): Piece => ({ value: c[key], put: (text) => { if (text !== undefined) translatedItems[at][key] = text; } }),
+      ),
+    ),
+  ];
+  const results = await mapBounded(pieces.filter((p) => str(p.value)), async (p) => ({ p, text: await maybe(p.value) }));
+  for (const { p, text } of results) p.put(text);
+  return defined({
+    ...out,
+    tasks: tasks.length > 0 ? translatedTasks : undefined,
+    acceptanceCriteriaItems: items.length > 0 ? translatedItems : undefined,
+  });
 }
 
 /** After a card was published to the owner: translate it, store it, publish it again. Returns at once. */
@@ -226,26 +331,29 @@ export function translateApprovalCard(
   sessionId: string,
   approvalId: string,
   input: unknown,
-  lang: TranslationLanguage | null,
+  langs: TranslationLanguages | null,
+  toolName?: string | null,
 ): void {
-  if (!lang || !cardHasText(input)) return;
-  track(queue.run(() => translateCardNow(deps, sessionId, approvalId, lang)));
+  if (!langs || !cardHasText(input, toolName)) return;
+  // The Feishu card waiting for this translation (decision 3A) reads the approval again once it was tried.
+  track(queue.run(() => translateCardNow(deps, sessionId, approvalId, langs)
+    .finally(() => cardTranslationSettled(`approval:${approvalId}`, langs.owner))));
 }
 
 export async function translateCardNow(
   deps: TranslationDeps,
   sessionId: string,
   approvalId: string,
-  lang: TranslationLanguage,
+  langs: TranslationLanguages,
 ): Promise<ApprovalTranslation | null> {
   const where = { id: approvalId, sessionId, status: 'PENDING' as const };
   const card = await deps.db.approval.findFirst({ where });
   if (!card) return null;
   let translation: ApprovalTranslation;
   try {
-    translation = await translateCard(card.input, lang);
+    translation = await translateCard(card.input, langs, card.toolName);
   } catch {
-    translation = { lang, failed: true };
+    translation = { lang: langs.owner, failed: true };
   }
   // Only a card still asking: an answered one is off every screen.
   const written = await deps.db.approval.updateMany({ where, data: { translation: translation as never } });
@@ -264,29 +372,41 @@ export function decisionNotTranslated(): UnprocessableEntityException {
 }
 
 /**
+ * Words the owner typed, as an agent is to read them (OwnerWordsTranslation): translated from the owner's language
+ * into the agent's when translation is on (`langs`) and they did not ask to send as written. Null when there is
+ * nothing to translate — translation off, Send as written, or no words — and the words go as they are. Throws
+ * decisionNotTranslated when the translation fails: the door that called this refuses the answer whole and records
+ * nothing, which is why every such door calls it before its first write.
+ */
+export async function ownerWordsForAgent(
+  text: string | null | undefined,
+  langs: TranslationLanguages | null,
+  sendAsWritten?: boolean,
+): Promise<OwnerWordsTranslation | null> {
+  if (!langs || sendAsWritten === true || !text?.trim()) return null;
+  try {
+    return { lang: langs.agent, text: await translate(text, langs.owner, langs.agent) };
+  } catch (error) {
+    if (error instanceof TranslationFailed) throw decisionNotTranslated();
+    throw error;
+  }
+}
+
+/**
  * A decision as the engine reads it: every question and option the owner answered with in their language
- * mapped back to the card's original English, and their own words (a typed answer, `message`) translated into
- * English when translation is on (`lang`) and they did not ask to send as written. Throws
+ * mapped back to the card's original words, and their own words (a typed answer, `message`) translated from the
+ * owner's language into the agent's when translation is on (`langs`) and they did not ask to send as written. Throws
  * decisionNotTranslated when a translation fails. With no stored translation and translation off, the
  * decision comes back exactly as it was given.
  */
-export async function englishDecision(
+export async function agentDecision(
   input: unknown,
   translation: ApprovalTranslation | null | undefined,
   dto: { message?: string; answers?: QuestionAnswers; sendAsWritten?: boolean },
-  lang: TranslationLanguage | null,
+  langs: TranslationLanguages | null,
 ): Promise<{ message?: string; answers?: QuestionAnswers }> {
-  const freeText = lang && dto.sendAsWritten !== true ? lang : null;
-  const toEnglish = async (text: string): Promise<string> => {
-    if (!freeText || !text.trim()) return text;
-    try {
-      return await translate(text, freeText, AGENT_LANGUAGE);
-    } catch (error) {
-      if (error instanceof TranslationFailed) throw decisionNotTranslated();
-      throw error;
-    }
-  };
-  const message = dto.message === undefined ? undefined : await toEnglish(dto.message);
+  const toAgent = async (text: string): Promise<string> => (await ownerWordsForAgent(text, langs, dto.sendAsWritten))?.text ?? text;
+  const message = dto.message === undefined ? undefined : await toAgent(dto.message);
   if (!dto.answers || typeof dto.answers !== 'object') return { message, answers: dto.answers };
   const questions = (input as { questions?: CardQuestion[] } | null)?.questions;
   const originals = Array.isArray(questions) ? questions : [];
@@ -296,16 +416,16 @@ export async function englishDecision(
     let index = originals.findIndex((q) => q?.question === key);
     if (index < 0) index = shown.findIndex((q) => q.question === key);
     const question = index >= 0 ? originals[index] : undefined;
-    const englishKey = typeof question?.question === 'string' ? question.question : key;
+    const originalKey = typeof question?.question === 'string' ? question.question : key;
     const options = Array.isArray(question?.options) ? question.options : [];
     const shownOptions = index >= 0 ? (shown[index]?.options ?? []) : [];
-    answers[englishKey] = await Promise.all(
+    answers[originalKey] = await Promise.all(
       (Array.isArray(labels) ? labels : []).map(async (label) => {
         if (options.some((o) => o?.label === label)) return label;
         const at = shownOptions.findIndex((o) => o.label === label);
         if (at >= 0 && typeof options[at]?.label === 'string') return options[at].label as string;
         // Not one of the options: the owner's own words (the card's "Other").
-        return typeof label === 'string' ? toEnglish(label) : label;
+        return typeof label === 'string' ? toAgent(label) : label;
       }),
     );
   }

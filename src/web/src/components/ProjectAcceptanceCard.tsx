@@ -16,6 +16,7 @@ import { Card } from './ui/Card';
 import { Skeleton } from './ui/Skeleton';
 import { Menu } from './ui/Menu';
 import { ConfirmCriterionDialog } from './ConfirmCriterionDialog';
+import { PROJECT_RULING_COPY, type ProjectRulingView } from '@orbit/shared';
 import {
   ACCEPTANCE_NOTE_MIXED,
   ACCEPTANCE_STANDING_MIXED,
@@ -202,6 +203,8 @@ interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
   /** The criteria this project moved out to a follow-up (board 02 G). */
   criteriaMovedOut?: CriterionMovedOut[];
+  /** The owner rulings still live, oldest first (coordinator handoff v2 §2). */
+  rulings?: ProjectRulingView[];
   /** The settings half of the project's integration line, which this document already carries: the
    *  branch a criterion's work can be met ON without being on main (§7.4 V11), and the project's main
    *  branch, which the landings name. */
@@ -797,6 +800,33 @@ export function MovedOutLines({ movedOut, className = 'acceptance-moved-out' }: 
   );
 }
 
+/**
+ * The owner rulings still live, under the criteria (coordinator handoff v2 §2, board 2): each one's
+ * sentence, the owner's own words, and where they were said. Rulings are not criteria and nothing
+ * evaluates them; they are what the coordinator was told. Nothing is drawn when there are none.
+ */
+export function OwnerRulings({ rulings }: { rulings: readonly ProjectRulingView[] }) {
+  if (rulings.length === 0) return null;
+  return (
+    <section className="acceptance-rulings" aria-label={PROJECT_RULING_COPY.title}>
+      <h4 className="acceptance-rulings-title">{PROJECT_RULING_COPY.title}</h4>
+      <ul>
+        {rulings.map((ruling) => {
+          const when = formatDoneDate(ruling.createdAt);
+          const source = ruling.sourceKind === 'ASK_OWNER' ? PROJECT_RULING_COPY.fromQuestion : PROJECT_RULING_COPY.fromConversation;
+          return (
+            <li key={ruling.id} className="acceptance-ruling">
+              <span className="acceptance-ruling-text">{ruling.ruling}</span>
+              <q className="acceptance-ruling-quote">{ruling.quote}</q>
+              <span className="acceptance-ruling-meta">{when ? `${source} · ${when}` : source}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 /** The card's bottom line, in every loaded state: what the two numbers on this page mean, so the
  *  task tally is not read as the answer. */
 function OutcomeNote({ mixed = false }: { mixed?: boolean }) {
@@ -848,6 +878,7 @@ export function ProjectAcceptanceCard({
 }) {
   const detail = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectAcceptanceDetail>(`/projects/${encodeURIComponent(projectId)}`),
     enabled: Boolean(projectId),
   });
@@ -859,6 +890,7 @@ export function ProjectAcceptanceCard({
       error={detail.isError ? detail.error : null}
       criteria={Array.isArray(detail.data?.acceptanceCriteriaItems) ? detail.data.acceptanceCriteriaItems : []}
       movedOut={Array.isArray(detail.data?.criteriaMovedOut) ? detail.data.criteriaMovedOut : []}
+      rulings={Array.isArray(detail.data?.rulings) ? detail.data.rulings : []}
       integrationRef={detail.data?.integration?.ref ?? null}
       mainBranch={mainBranchName(detail.data?.integration?.upstreamRef)}
     />
@@ -879,8 +911,11 @@ export function AcceptanceCriteriaCard({
   error = null,
   action,
   movedOut = [],
+  rulings = [],
 }: {
   criteria: AcceptanceCriterionItem[];
+  /** The owner rulings still live (coordinator handoff v2 §2); the project's own page only. */
+  rulings?: readonly ProjectRulingView[];
   /** The criteria this project moved out to a follow-up (board 02 G); the project's own page only. */
   movedOut?: readonly CriterionMovedOut[];
   integrationRef: string | null;
@@ -928,6 +963,7 @@ export function AcceptanceCriteriaCard({
             No criteria are stated for this project.
           </div>
           {projectId ? <MovedOutLines movedOut={movedOut} /> : null}
+          {projectId ? <OwnerRulings rulings={rulings} /> : null}
         </>
       ) : (
         <>
@@ -982,6 +1018,7 @@ export function AcceptanceCriteriaCard({
             </div>
           ) : null}
           {projectId ? <MovedOutLines movedOut={movedOut} /> : null}
+          {projectId ? <OwnerRulings rulings={rulings} /> : null}
           <OutcomeNote mixed={confirmed > 0} />
         </>
       )}

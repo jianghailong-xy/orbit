@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.OwnerCardTranslation
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
@@ -38,7 +40,10 @@ import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.cards.TerminalRequest
 import io.orbitd.android.directory.rememberDirectoryData
 import io.orbitd.android.management.Terminals
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.text.MarkdownText
+import io.orbitd.android.translation.AnswerNotTranslated
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.wiki.WikiCreateCardCopy
 import io.orbitd.android.wiki.WikiCreateSheet
 import io.orbitd.android.wiki.WikiStartCopy
@@ -58,9 +63,15 @@ import kotlinx.coroutines.launch
  * to; the inbox has none, so its cards offer no Chat about this.
  */
 @Composable
-fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
+fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
     now: Instant = Instant.now(), focusInput: Boolean = false, discuss: ((String) -> Unit)? = null) {
-    if (!request.pending) { OwnerRequestResolved(request, store, runner, now); return }
+    if (!asked.pending) { OwnerRequestResolved(asked, store, runner, now); return }
+    // The agent's words in the owner's language (Settings › Translation), flipped whole to its own words by the foot; the doors
+    // take the request's id and option indexes, which a translation does not change.
+    var showOriginal by remember(asked.id) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.ownerRequest(asked, owner) }
+    val request = if (translated != null && !showOriginal) translated else asked
     val state by store.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -77,6 +88,8 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
     var reason by remember(request.id) { mutableStateOf("") }
     var busy by remember(request.id) { mutableStateOf(false) }
     var failure by remember(request.id) { mutableStateOf<String?>(null) }
+    // The owner's words were refused untranslated (422 TRANSLATION_FAILED): the press to send again, as written or not.
+    var untranslated by remember(request.id) { mutableStateOf<((Boolean) -> Unit)?>(null) }
     var later by remember(request.id) { mutableStateOf(false) }
     LaunchedEffect(request.kind) { if (request.kind == OwnerRequests.SECRET) store.loadSavedSecrets() }
 
@@ -87,8 +100,20 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
     val failed = grant?.state == "REMOVED" && grant.endReason == "DELIVERY_FAILED"
     val ready = OwnerRequests.ready(request, value, save, saveAs, savedId, chosen, text)
     fun press(door: suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) {
-        busy = true; failure = null
+        busy = true; failure = null; untranslated = null
         scope.launch { failure = store.act(door); busy = false }
+    }
+    /** A press that carries the owner's words: refused untranslated, it is offered again with Retry and Send as written. */
+    fun pressWords(door: (Boolean) -> suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) {
+        fun send(asWritten: Boolean) {
+            busy = true; failure = null; untranslated = null
+            scope.launch {
+                val error = store.attempt(door(asWritten))
+                if (Translation.refused(error)) untranslated = ::send else failure = error?.let(OwnerRequestStore::message)
+                busy = false
+            }
+        }
+        send(false)
     }
     fun pressPrimary() {
         when (request.kind) {
@@ -98,7 +123,7 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
                 value = ""; save = false; savedId = null
                 press { if (saved != null) provideSaved(request.id, saved) else provide(request.id, typed, name) }
             }
-            OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; press { done(request.id, chosen, words) } }
+            OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; pressWords { asWritten -> { done(request.id, chosen, words, asWritten) } } }
             else -> press { done(request.id) }
         }
     }
@@ -217,6 +242,8 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error) }
+        untranslated?.let { again -> AnswerNotTranslated({ again(false) }, { again(true) }, !busy && !closed, Modifier.testTag("$tag:translation-failed")) }
+        if (translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal }, Modifier.testTag("$tag:translation-foot"))
 
         if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateActions(request, store, tag, enabled = !busy && !closed, focus,
             chat = discuss?.takeIf { !closed }?.let { { it(OwnerRequests.chatContext(request) + "\n\n") } }) { door -> press(door) }
@@ -224,7 +251,7 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             OutlinedTextField(reason, { reason = it.take(2000) }, Modifier.fillMaxWidth().testTag("$tag:reason"),
                 placeholder = { Text(OwnerRequests.declineReason) }, minLines = 2, maxLines = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { val why = reason.trim(); press { decline(request.id, why) } }, Modifier.testTag("$tag:decline-send"),
+                Button(onClick = { val why = reason.trim(); pressWords { asWritten -> { decline(request.id, why, asWritten) } } }, Modifier.testTag("$tag:decline-send"),
                     enabled = reason.isNotBlank() && !busy && !closed) { Text(OwnerRequests.decline) }
                 TextButton(onClick = { declining = false }) { Text(OwnerRequests.keepIt) }
             }

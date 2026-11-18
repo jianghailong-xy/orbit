@@ -38,7 +38,7 @@ extension View {
     /// is the bare inset.
     func topInsetClearOfRefresh<Bands: View>(@ViewBuilder _ bands: () -> Bands) -> some View {
         #if os(iOS)
-        return modifier(TopInsetClearOfRefresh(bands: bands(), floating: EmptyView()))
+        return modifier(TopInsetClearOfRefresh(bands: bands()))
         #else
         let content = bands()
         return safeAreaInset(edge: .top, spacing: 0) { content }
@@ -47,21 +47,8 @@ extension View {
 }
 
 #if os(iOS)
-extension View {
-    /// The same, with `floating` hung under the bands over the list rather than inset above it
-    /// (the needs-you capsule, the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats):
-    /// the list's sticky section headers pin under the bands, so they — and the rows — pass behind
-    /// it. It still counts for the pull's spinner, which comes out under it as under the bands. The
-    /// list keeps it clear at rest itself (a first row of its height).
-    func topInsetClearOfRefresh<Bands: View, Floating: View>(@ViewBuilder _ bands: () -> Bands,
-                                                             @ViewBuilder floating: () -> Floating) -> some View {
-        modifier(TopInsetClearOfRefresh(bands: bands(), floating: floating()))
-    }
-}
-
-private struct TopInsetClearOfRefresh<Bands: View, Floating: View>: ViewModifier {
+private struct TopInsetClearOfRefresh<Bands: View>: ViewModifier {
     let bands: Bands
-    let floating: Floating
     /// UIKit's side of this, which nothing on screen reads: a reference SwiftUI doesn't observe,
     /// so a change to it is a transform on the control and never a body pass.
     @State private var placement = RefreshControlPlacement()
@@ -78,16 +65,6 @@ private struct TopInsetClearOfRefresh<Bands: View, Floating: View>: ViewModifier
                 // too: an `if` with nothing to show has no geometry to report, and the last frame
                 // would go on moving the control for bands no longer there.
                 VStack(spacing: 0) { bands }
-                    // Hung from the bands' lower edge, over the list: no part of the inset, so the
-                    // list's sticky headers pin above it and pass behind it. Its height joins the
-                    // bands' for the spinner (`floatingHeight`).
-                    .overlay(alignment: .bottom) {
-                        floating
-                            .alignmentGuide(.bottom) { $0[.top] }
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
-                                placement.floatingHeight = $0
-                            }
-                    }
                     // Back up where they rest while a refresh has iOS lay them out a band lower,
                     // worked out from the frame this same layout gave them: state set from it
                     // would only arrive a frame late, with the bar a band too low for that frame.
@@ -128,9 +105,6 @@ private final class RefreshControlPlacement: NSObject {
     /// ends, which is when the end is seen. Nothing on the way down a pull moves it, and UIKit
     /// leaves the shift alone meanwhile.
     var bands: CGRect = .zero { didSet { place() } }
-    /// The height of what hangs under the bands over the list (the needs-you capsule): the spinner
-    /// comes out under it too.
-    var floatingHeight: CGFloat = 0 { didSet { place() } }
     /// Where the modifier keeps the control's resting band, for the bands to be drawn back up by.
     var restingBand: Binding<CGRect?>? { didSet { place() } }
     /// Whether the control was refreshing when last placed. The bands move as a refresh ends, so
@@ -154,7 +128,7 @@ private final class RefreshControlPlacement: NSObject {
         }
         let shift = CGFloat(RefreshControlClearance.shift(
             bandTop: band.minY, bandBottom: band.maxY,
-            bandsTop: bands.minY, bandsBottom: bands.maxY + floatingHeight))
+            bandsTop: bands.minY, bandsBottom: bands.maxY))
         guard control.transform.ty != shift else { return }
         control.transform = CGAffineTransform(translationX: 0, y: shift)
     }

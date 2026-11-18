@@ -218,7 +218,7 @@ describe('SessionSettingsDrawer', () => {
 
   it('writes the notification choices and the mute switch', async () => {
     await mount(detail());
-    expect([...select('When a turn finishes').options].map((o) => o.textContent)).toEqual([
+    expect([...select('When the session finishes').options].map((o) => o.textContent)).toEqual([
       'As in Settings (Notify)',
       'Notify',
       "Don't notify",

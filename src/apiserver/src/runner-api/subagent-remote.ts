@@ -5,6 +5,9 @@ import {
   PermissionMode,
   RunEventType,
   type RemoteSubagentEvent,
+  type SubagentCandidateTarget,
+  type SubagentDecision,
+  type SubagentRunCreateRequest,
   type SubagentWorkspaceChoice,
 } from '@orbit/shared';
 import { Prisma, RunStatus } from '@prisma/client';
@@ -17,22 +20,28 @@ import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
+import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
 import { engineState, taskRouteReads } from '../tasks/task-route-decision';
 import { normalizeRepoUrl } from '../wiki/wiki.service';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { stripNul } from './strip-nul';
+import { appliedDecision, fallbackCandidates, noProviderMessage } from './subagent-run';
+import { subagentRouteInput, type SubagentPlanUsageReader } from './subagent-route';
 
 /**
  * Cross-workspace SubAgents (docs/subagent-design.md §10): a delegate call that runs on another workspace of the
- * parent's repository, on that workspace's own runner, and returns text only.
+ * owner's account, on that workspace's own runner, and returns text only.
  *
  *   - Which workspace (§10.1): the one the call names, or, for `needs`, the owner's enabled workspaces of the
  *     parent's repository whose runner is online and reports every needed capability, the one with the most quota
  *     headroom first, then the Agents list's order; otherwise the parent's own machine.
+ *   - What it runs on (§10.3, planRemoteSubagent): judged on the target runner's engines, logins and quota — a named
+ *     model as named or refused, else the target workspace's default engine while it is usable, else routed there.
  *   - The hand-over (§10.2): the run is written with `target_runner_id`, that runner's heartbeat lists it, and the
- *     runner claims it for the target workspace's own default engine and model, in the shape a session claim has.
+ *     runner claims it for the candidate the run was opened on, in the shape a session claim has.
  *   - The events (§10.3): only the target runner may relay them. They are stored rewritten — nested under the
  *     delegate call, child tool ids prefixed with the run id — and the parent's runner emits them into the parent's
  *     stream, which only it numbers.
@@ -83,11 +92,8 @@ export function neededCapabilities(needs: readonly string[] | undefined): string
 }
 
 /** What one workspace lacks for this SubAgent, English, in the order a person would fix them. */
-function lacksOf(row: CandidateRow, parentRepo: string | null, needs: readonly string[], now: number): string[] {
+function lacksOf(row: CandidateRow, needs: readonly string[], now: number): string[] {
   const lacks: string[] = [];
-  const repo = repoOf(row.repoUrl);
-  if (!parentRepo || !repo) lacks.push(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
-  else if (repo !== parentRepo) lacks.push(`it works on another repository (${repo})`);
   if (row.workDirIsGit === false) lacks.push('its work directory is not a git repository');
   if (!row.subagentsEnabled) lacks.push('SubAgents are turned off for it');
   if (!row.runner || !runnerIsOnline(row.runner, now)) lacks.push('its runner is offline');
@@ -124,10 +130,6 @@ export async function chooseSubagentWorkspace(
   const needs = neededCapabilities(args.needs);
   if (!named && needs.length === 0) return { kind: 'local', reason: null };
   const now = args.now ?? new Date();
-  const parent = args.parentWorkspaceId
-    ? await db.workspace.findUnique({ where: { id: args.parentWorkspaceId }, select: { repoUrl: true, name: true } })
-    : null;
-  const parentRepo = repoOf(parent?.repoUrl);
   const needText = needs.join(', ');
 
   if (named) {
@@ -141,15 +143,6 @@ export async function chooseSubagentWorkspace(
     }
     if (row.id === args.parentWorkspaceId) {
       return { kind: 'local', reason: null };
-    }
-    const repo = repoOf(row.repoUrl);
-    if (!parentRepo || !repo || repo !== parentRepo) {
-      throw refusal(
-        HttpStatus.CONFLICT,
-        'SUBAGENT_WORKSPACE_REPO_MISMATCH',
-        `${row.name} works on ${repo ?? 'no repository URL'}, and this session's workspace on ${parentRepo ?? 'no repository URL'}. ` +
-          'A SubAgent runs only on a workspace of the same repository; use session_create for work in another one.',
-      );
     }
     if (row.workDirIsGit === false) {
       throw refusal(
@@ -171,7 +164,7 @@ export async function chooseSubagentWorkspace(
     if (!row.runner || !row.runnerId || !runnerIsOnline(row.runner, now.getTime())) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_OFFLINE', `${row.name}'s runner is offline.`);
     }
-    const lacks = lacksOf(row, parentRepo, needs, now.getTime());
+    const lacks = lacksOf(row, needs, now.getTime());
     if (lacks.length) {
       throw refusal(HttpStatus.CONFLICT, 'SUBAGENT_WORKSPACE_LACKS_NEEDS', `${row.name} cannot run this SubAgent: ${lacks.join('; ')}.`);
     }
@@ -182,6 +175,11 @@ export async function chooseSubagentWorkspace(
     };
   }
 
+  const parent = args.parentWorkspaceId
+    ? await db.workspace.findUnique({ where: { id: args.parentWorkspaceId }, select: { repoUrl: true, name: true } })
+    : null;
+  const parentRepo = repoOf(parent?.repoUrl);
+
   // By capability: the owner's enabled workspaces in the Agents list's order (position, then creation).
   const rows = await db.workspace.findMany({
     where: { ownerId: args.ownerId, enabled: true, deletedAt: null },
@@ -190,7 +188,10 @@ export async function chooseSubagentWorkspace(
   });
   const candidates: WorkspaceCandidate[] = [];
   for (const row of rows) {
-    const lacks = lacksOf(row, parentRepo, needs, now.getTime());
+    const lacks = lacksOf(row, needs, now.getTime());
+    const repo = repoOf(row.repoUrl);
+    if (!parentRepo || !repo) lacks.unshift(repo ? "this session's workspace has no repository URL" : 'it has no repository URL');
+    else if (repo !== parentRepo) lacks.unshift(`it works on another repository (${repo})`);
     candidates.push({
       id: row.id,
       name: row.name,
@@ -237,6 +238,8 @@ export interface SubagentRemoteFacts {
   readonly?: boolean;
   permissionMode?: string;
   needs?: string[];
+  /** The earlier remote run whose conversation this one continues (§10.2). */
+  resumeOf?: string;
 }
 
 export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
@@ -246,14 +249,25 @@ export function remoteFactsOf(value: unknown): SubagentRemoteFacts {
     ...(facts.readonly === true ? { readonly: true } : {}),
     ...(typeof facts.permissionMode === 'string' ? { permissionMode: facts.permissionMode } : {}),
     ...(Array.isArray(facts.needs) ? { needs: facts.needs.filter((n): n is string => typeof n === 'string') } : {}),
+    ...(typeof facts.resumeOf === 'string' ? { resumeOf: facts.resumeOf } : {}),
   };
 }
 
+/** What remoteSubagentExec answers: the claim-shaped config and what it resolved to, or why it cannot be built. */
+export interface RemoteSubagentExec {
+  exec?: AgentExecConfig;
+  engine?: string;
+  provider?: string;
+  model?: string;
+  effort?: string | null;
+  refusal?: string;
+}
+
 /**
- * How the target runner runs a remote SubAgent (§10.2; in this phase routing does not apply to it): the target
- * workspace's own default engine and credential — the provider its last session ran on — on the runtime's default
- * model, its effort and tool rules, in the permission mode the parent's allows. The shape a session claim hands the
- * runner. `refusal` when nothing can run it there.
+ * How the target runner runs a remote SubAgent (§10.2): by default the target workspace's own default engine and
+ * credential — the provider its last session ran on — on the runtime's default model; with `target`, the candidate
+ * planRemoteSubagent chose on that runner instead (§10.3). Its effort and tool rules, in the permission mode the
+ * parent's allows. The shape a session claim hands the runner. `refusal` when nothing can run it there.
  */
 export async function remoteSubagentExec(
   tx: Prisma.TransactionClient,
@@ -261,8 +275,9 @@ export async function remoteSubagentExec(
     workspaceId: string;
     parentSessionId: string;
     facts: Pick<SubagentRemoteFacts, 'readonly' | 'permissionMode'>;
+    target?: SubagentCandidateTarget;
   },
-): Promise<{ exec?: AgentExecConfig; engine?: string; provider?: string; model?: string; effort?: string | null; refusal?: string }> {
+): Promise<RemoteSubagentExec> {
   const workspace = await tx.workspace.findUnique({
     where: { id: args.workspaceId },
     select: {
@@ -279,15 +294,26 @@ export async function remoteSubagentExec(
   if (!workspace?.runner) return { refusal: 'the target workspace has no runner' };
   const parent = await tx.session.findUnique({
     where: { id: args.parentSessionId },
-    select: { engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } } },
+    select: {
+      engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } },
+      scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+    },
   });
   if (!parent) return { refusal: 'the parent session is gone' };
-  const seed = await agentProviderSeed(tx, workspace.id);
-  if (!seed.engine) return { refusal: `${workspace.name}'s default provider ${seed.provider} is gone` };
+  const target = args.target;
+  const seed = target
+    ? {
+      engine: target.engine as AgentProvider,
+      provider: target.provider,
+      providerBuiltin: (Object.values(AgentProvider) as string[]).includes(target.provider),
+    }
+    : await agentProviderSeed(tx, workspace.id);
+  const whose = target ? `${workspace.name}'s` : `${workspace.name}'s default`;
+  if (!seed.engine) return { refusal: `${whose} provider ${seed.provider} is gone` };
   const builtin = isBuiltinProvider(seed.provider, seed.providerBuiltin);
   const keyRow = await dispatchKeyRow(tx, { ownerId: workspace.ownerId, provider: seed.provider, providerBuiltin: seed.providerBuiltin }, workspace.env);
   if (!builtin && !keyRow) {
-    return { refusal: `${workspace.name}'s default provider ${seed.provider} is an account pool, which a remote SubAgent cannot run on yet` };
+    return { refusal: `${whose} provider ${seed.provider} is an account pool, which a remote SubAgent cannot run on yet` };
   }
   let resolved: ReturnType<typeof resolveProviderExec>;
   try {
@@ -296,8 +322,8 @@ export async function remoteSubagentExec(
       declaredProvider: seed.provider,
       declaredProviderBuiltin: seed.providerBuiltin,
       customRow: keyRow,
-      sessionModel: null,
-      usesRuntimeDefaultModel: true,
+      sessionModel: target?.model ?? null,
+      usesRuntimeDefaultModel: !target,
       runtimeDefaultModels: workspace.runner.runtimeDefaultModels,
       workspaceModel: workspace.model,
       modelCatalog: workspace.runner.modelCatalog,
@@ -324,16 +350,25 @@ export async function remoteSubagentExec(
     && !isWiderThanParent({ mode: parentMode, engine: parentEngine }, args.facts.permissionMode, provider)
     ? args.facts.permissionMode
     : null;
-  const childMode = (args.facts.readonly ? PermissionMode.PLAN : asked ?? parentMode) as PermissionMode;
-  const effort = normalizeEffortForRuntimeModel(provider, workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels);
+  // A read-only Claude child keeps the parent's mode, its edit tools withheld; any other engine reads in Plan.
+  const childMode = (args.facts.readonly
+    ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
+    : asked ?? parentMode) as PermissionMode;
+  const effort = normalizeEffortForRuntimeModel(
+    provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
+  );
+  // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials on
+  // every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
+  const level = runAccessLevel(parent.scheduleRun);
   return {
     exec: {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace.permissionRules ?? []),
-      disallowedTools: (workspace.disallowedTools as string[] | null) ?? [],
+      disallowedTools: scheduleRunDisallowedTools((workspace.disallowedTools as string[] | null) ?? [], level, provider),
       permissionMode: normalizeBuiltinPermissionMode(
-        provider, runnerModel, childMode, keyRow?.enabled === true, workspace.runner.runsAsRoot, catalog,
+        provider, runnerModel, scheduleRunPermissionMode(childMode, level, provider), keyRow?.enabled === true,
+        workspace.runner.runsAsRoot, catalog,
       ),
       effort,
       env: resolved.env,
@@ -344,6 +379,153 @@ export async function remoteSubagentExec(
     effort: effort ?? null,
   };
 }
+
+function describeTarget(c: { provider: string; engine: string | null }): string {
+  return `${c.provider}${c.engine && c.engine !== c.provider ? ` (${c.engine})` : ''}`;
+}
+
+/**
+ * Where a remote SubAgent runs on its target workspace (docs/subagent-design.md §10.3), judged on the TARGET runner's
+ * report — its engines, logins and quota — and the owner's SubAgent block list (§4.2):
+ *
+ *   - A named model (§4.1 row 1) runs as named, on the first provider × engine of the target that offers it and can
+ *     start; none is 409 SUBAGENT_TARGET_CANNOT_RUN, naming why each offer is out and what the workspace can run.
+ *     Never another model.
+ *   - Otherwise the workspace's own default engine and model, while that engine passes the filters and can start.
+ *     When it does not, the run goes where routeSubagent would send it on the target runner, the default skipped
+ *     with its reason in the decision; nothing usable is 409 NO_SUBAGENT_PROVIDER with each provider's reason. Never
+ *     the parent's model.
+ *
+ * Reads only. Throws the refusal; answers the decision, the candidate and its claim-shaped config.
+ */
+export async function planRemoteSubagent(
+  tx: Prisma.TransactionClient,
+  args: {
+    ownerId: string;
+    sessionId: string;
+    dto: SubagentRunCreateRequest;
+    facts: SubagentRemoteFacts;
+    pick: Extract<SubagentWorkspacePick, { kind: 'remote' }>;
+    planUsage?: SubagentPlanUsageReader | null;
+  },
+): Promise<{ decision: SubagentDecision; target: SubagentCandidateTarget; built: RemoteSubagentExec }> {
+  const { pick, facts } = args;
+  const ws = pick.workspace;
+  const seed = await agentProviderSeed(tx, ws.id);
+  const named = args.dto.model?.trim() || null;
+  const input = await subagentRouteInput(tx, {
+    ownerId: args.ownerId,
+    workspaceId: ws.id,
+    runnerId: ws.runnerId,
+    // The definition's model is read on the parent's machine; the target routes on the caller's word alone.
+    dto: { ...args.dto, model: named ?? undefined, definitionModel: undefined },
+    // Never run on: a named model is strict, and no other row of §4.1 picks the parent's model.
+    parent: { engine: seed.engine ?? seed.provider, provider: seed.provider, model: '', effort: null },
+    planUsage: args.planUsage ?? null,
+    runnerLabel: `${ws.name}'s runner`,
+    strictNamedModel: true,
+  });
+  const build = (target?: SubagentCandidateTarget) =>
+    remoteSubagentExec(tx, { workspaceId: ws.id, parentSessionId: args.sessionId, facts, ...(target ? { target } : {}) });
+  const placed = {
+    workspace: workspaceChoice(ws, pick.reason),
+    ...(args.dto.readonly ? { readonly: true } : {}),
+  };
+  /** The first candidate that can start on the target, and the ones passed over with why. */
+  const firstThatStarts = async (candidates: SubagentCandidateTarget[]) => {
+    const passedOver: Array<{ target: SubagentCandidateTarget; reason: string }> = [];
+    for (const target of candidates) {
+      const built = await build(target);
+      if (built.exec) return { chosen: { target, built }, passedOver };
+      passedOver.push({ target, reason: built.refusal ?? 'it cannot be started there' });
+    }
+    return { chosen: null, passedOver };
+  };
+  const passedLine = (p: { target: SubagentCandidateTarget; reason: string }) =>
+    `${describeTarget(p.target)}, ${p.target.model}: ${p.reason}`;
+
+  if (named) {
+    const route = routeSubagent(input);
+    const { chosen, passedOver } = await firstThatStarts(fallbackCandidates(route));
+    if (!chosen) {
+      const why = [
+        ...route.candidates.map((c) => `${describeTarget(c)}: ${c.reason}`),
+        ...passedOver.map(passedLine),
+      ];
+      const runnable = subagentRunnableModels(input).map((r) => `${describeTarget(r)}: ${r.models.join(', ')}`);
+      throw refusal(
+        HttpStatus.CONFLICT,
+        'SUBAGENT_TARGET_CANNOT_RUN',
+        `${ws.name} cannot run ${named}, the model this delegate call named` +
+          (why.length ? `: ${why.join('; ')}.` : ': no usable provider there offers it.') +
+          (runnable.length
+            ? ` What ${ws.name} can run:\n- ${runnable.join('\n- ')}`
+            : ` ${ws.name} has no usable provider to run anything on.`),
+      );
+    }
+    const decision = appliedDecision(route, chosen.target, passedOver);
+    return {
+      decision: { ...decision, reasons: [pick.reason, ...decision.reasons], ...placed },
+      target: chosen.target,
+      built: chosen.built,
+    };
+  }
+
+  // The workspace's own default, while its engine passes the filters on its runner and can start there.
+  let skipped = seed.engine ? subagentCandidateRefusal(input, seed.provider, seed.engine) : null;
+  if (!skipped) {
+    const built = await build();
+    if (built.exec) {
+      const target = { engine: built.engine!, provider: built.provider!, model: built.model!, effort: built.effort ?? null };
+      return {
+        decision: {
+          level: null,
+          tierSource: 'not-routed',
+          optimizeFor: null,
+          ...target,
+          reasons: [pick.reason, `Runs on ${ws.name}'s own default engine and model, ${target.model}`],
+          candidates: [],
+          policyVersion: SUBAGENT_REMOTE_POLICY_VERSION,
+          applied: true,
+          ...placed,
+        },
+        target,
+        built,
+      };
+    }
+    skipped = built.refusal ?? 'it cannot be started there';
+  }
+  // Routed on the target runner, past the default it just judged.
+  const route = routeSubagent(input);
+  const isDefault = (c: { provider: string; engine: string | null }) => c.provider === seed.provider && c.engine === seed.engine;
+  const defaultLine = `${ws.name}'s default ${describeTarget({ provider: seed.provider, engine: seed.engine })}: ${skipped}`;
+  const { chosen, passedOver } = await firstThatStarts(fallbackCandidates(route).filter((c) => !isDefault(c)));
+  if (!chosen) {
+    throw refusal(
+      HttpStatus.CONFLICT,
+      'NO_SUBAGENT_PROVIDER',
+      `On ${ws.name}: ` + noProviderMessage(route, [], [defaultLine, ...passedOver.map(passedLine)]),
+    );
+  }
+  const decision = appliedDecision(route, chosen.target, passedOver);
+  const recorded = decision.candidates.some((c) => isDefault(c) && c.model === null);
+  return {
+    decision: {
+      ...decision,
+      reasons: [pick.reason, `Skipped ${defaultLine}`, ...decision.reasons],
+      candidates: recorded
+        ? decision.candidates
+        : [{ provider: seed.provider, engine: seed.engine ?? null, model: null, effort: null, reason: `${ws.name}'s default: ${skipped}` },
+          ...decision.candidates],
+      ...placed,
+    },
+    target: chosen.target,
+    built: chosen.built,
+  };
+}
+
+/** What a remote decision that ran on the target workspace's own default was made under (§10.3). */
+export const SUBAGENT_REMOTE_POLICY_VERSION = 'subagent-remote-v2';
 
 /** The child events the parent's stream carries; the rest (deltas, system frames, background lifecycle) are dropped. */
 const RELAYED_EVENT_TYPES = new Set<string>([

@@ -98,24 +98,4 @@ final class WelcomeAPIClientTests: XCTestCase {
         } catch {}
     }
 
-    /// The managed default workspace's draft, from the shared fixture's mapping, under either spelling.
-    func testTheManagedDefaultDraftIsTheStatusWorkspace() throws {
-        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        var source: URL?
-        for _ in 0..<12 {
-            let candidate = directory.appendingPathComponent("src/shared/src/managed-runner-states.fixture.json")
-            if FileManager.default.fileExists(atPath: candidate.path) { source = candidate; break }
-            directory.deleteLastPathComponent()
-        }
-        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: XCTUnwrap(source))) as? [String: Any]
-        let states = try XCTUnwrap(object?["states"] as? [[String: Any]])
-        let entry = try XCTUnwrap(states.first { $0["name"] as? String == "preparing: requested" })
-        let status = try JSONDecoder().decode(ManagedRunnerStatus.self,
-                                              from: JSONSerialization.data(withJSONObject: XCTUnwrap(entry["status"])))
-        let workspace = try XCTUnwrap(status.workspaceId)
-        XCTAssertTrue(Welcome.isManagedDefaultDraft(status: status, workspaceID: workspace))
-        XCTAssertFalse(Welcome.isManagedDefaultDraft(status: status, workspaceID: "another"))
-        XCTAssertFalse(Welcome.isManagedDefaultDraft(status: status, workspaceID: nil))
-        XCTAssertFalse(Welcome.isManagedDefaultDraft(status: nil, workspaceID: workspace))
-    }
 }

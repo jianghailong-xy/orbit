@@ -3,8 +3,8 @@ import XCTest
 @testable import OrbitKit
 
 /// The rules of a machine's first workspace, from docs/mocks/first-workspace-in-conversation/04-rules:
-/// the same cases as the web's `lib/machineSetup.test.ts`, and the waiting message the web holds in its
-/// page (`WorkspaceView.machineSetup.test.tsx`), which is a value here.
+/// the same cases as the web's `lib/machineSetup.test.ts`, and the setup card's folder, name and Create
+/// workspace (docs/mocks/new-folder-in-home/workspace-card-with-name; web `MachineSetupCard.test.tsx`).
 final class MachineSetupTests: XCTestCase {
 
     private func probe(path: String = "/home/orbit/code/app", exists: Bool = true, isDir: Bool = true,
@@ -27,42 +27,6 @@ final class MachineSetupTests: XCTestCase {
         ProviderChoice(slug: slug, label: label, kind: kind, brandKey: nil, modelLabel: "")
     }
 
-    // MARK: rule 2: the folder orbit register ran in is a suggestion
-
-    func testARegisterDirIsNotAskedAboutWhenThePathAloneIsTheAnswer() {
-        for dir in [nil, "", "   ", "~", "/", "~/", "//", " ~ "] {
-            XCTAssertNil(MachineSetup.registerDirToProbe(dir), String(describing: dir))
-        }
-    }
-
-    func testARegisterDirIsAskedAboutAsItWasReportedTidied() {
-        XCTAssertEqual(MachineSetup.registerDirToProbe("/home/orbit/code/app"), "/home/orbit/code/app")
-        XCTAssertEqual(MachineSetup.registerDirToProbe(" ~/code/app/ "), "~/code/app")
-        XCTAssertEqual(MachineSetup.registerDirToProbe("relative/dir"), "relative/dir")
-    }
-
-    func testAFolderIsOfferedOnlyWhenItIsThereAndNeitherHomeNorTheRoot() {
-        XCTAssertTrue(MachineSetup.isOfferedFolder(probe()))
-        XCTAssertTrue(MachineSetup.isOfferedFolder(probe(isGit: false, branch: nil)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(exists: false, isDir: false)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(isDir: false)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(isHome: true)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(path: "/")))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(error: "permission denied")))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(nil))
-    }
-
-    func testTheSuggestionIsTheDefaultOnlyWhenItIsAGitRepository() {
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(), offersNewFolder: true), .suggested)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(isGit: false), offersNewFolder: true), .new)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: nil, offersNewFolder: true), .new)
-    }
-
-    func testOnAMachineThatCantMakeAFolderWhatIsLeftIsTheDefault() {
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(isGit: false), offersNewFolder: false), .suggested)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: nil, offersNewFolder: false), .other)
-    }
-
     // MARK: what a machine declares
 
     func testAMachineIsAskedAboutAPathOnlyIfItSaysItAnswers() throws {
@@ -79,6 +43,29 @@ final class MachineSetupTests: XCTestCase {
             #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"  "}"#)))
         XCTAssertFalse(MachineSetup.makesNewFolders(try runner(
             #"{"id":"r","name":"m","capabilities":[],"reposRoot":"/home/orbit/orbit-repos"}"#)))
+    }
+
+    func testANewFolderGoesInTheReposFolderOnARunnerThatOnlyMakesThemThere() {
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos", capabilities: ["create-workdir/v1"]),
+                       "/root/orbit-repos")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos/", capabilities: nil), "/root/orbit-repos")
+    }
+
+    func testANewFolderGoesInHomeTheDirectoryTheReposFolderSitsInOnARunnerThatDeclaresV2() {
+        let v2 = ["create-workdir/v1", "create-workdir/v2"]
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos", capabilities: v2), "/root")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/Users/austin/orbit-repos/", capabilities: v2), "/Users/austin")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "C:\\Users\\orbit\\orbit-repos", capabilities: v2),
+                       "C:\\Users\\orbit")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/orbit-repos", capabilities: v2), "/")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "C:\\orbit-repos", capabilities: v2), "C:\\")
+    }
+
+    func testAMachinesNewFolderRootIsReadFromWhatItReports() throws {
+        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}"#)), "/root")
+        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}"#)), "/root/orbit-repos")
     }
 
     func testAMachineTooOldToAnswerGetsThereByItselfUnlessItsUpdaterSaysItCant() throws {
@@ -126,13 +113,13 @@ final class MachineSetupTests: XCTestCase {
     }
 
     func testANewFolderLandsUnderTheMachinesReposFolderHoweverThatWasReported() {
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos", name: "app"),
                        "/home/orbit/orbit-repos/app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos/", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos/", name: "app"),
                        "/home/orbit/orbit-repos/app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "C:\\Users\\orbit\\orbit-repos", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "C:\\Users\\orbit\\orbit-repos", name: "app"),
                        "C:\\Users\\orbit\\orbit-repos\\app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos", name: ""),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos", name: ""),
                        "/home/orbit/orbit-repos/")
     }
 
@@ -141,24 +128,29 @@ final class MachineSetupTests: XCTestCase {
         probe(path: "/home/orbit/orbit-repos/app", exists: exists, isDir: isDir, isGit: isGit, branch: branch, error: error)
     }
 
-    func testANewFolderWithNothingThereStartsEmptyAsTheBoardSays() {
+    func testANameWithNothingThereIsANewFolderMadeAsTheSessionStarts() {
         XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(), machine: "orbit@austin"),
-                       FolderVerdict(tone: .ok, text: "Starts empty. Ask for a clone or a new project in your first message.",
+                       FolderVerdict(tone: .ok, text: "New folder · created as the session starts.",
                                      short: "new folder · created as the session starts", usable: true))
-        XCTAssertEqual(MachineSetup.newFolderPick(inReposFolder(), name: "app", reposRoot: "/home/orbit/orbit-repos",
+        XCTAssertEqual(MachineSetup.newFolderPick(inReposFolder(), name: "app", root: "/home/orbit/orbit-repos",
                                                   machine: "orbit@austin"),
                        .new(name: "app", path: "/home/orbit/orbit-repos/app"))
     }
 
-    func testANewFolderThatIsThereAlreadyIsUsedWithWhatIsInItAsThatFolder() {
+    func testANameThatIsAFolderAlreadyReadsAsAnyFolderAndIsUsedAsThatFolder() {
         let there = inReposFolder(exists: true, isDir: true, isGit: true, branch: "main")
         XCTAssertEqual(MachineSetup.newFolderVerdict(there, machine: "orbit@austin"),
-                       FolderVerdict(tone: .warn, text: "This folder already exists on orbit@austin. Sessions will use what’s in it.",
+                       FolderVerdict(tone: .ok, text: "Found · git repository · main",
                                      short: "git repository · main", usable: true))
-        XCTAssertEqual(MachineSetup.newFolderPick(there, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"),
+        XCTAssertEqual(MachineSetup.newFolderVerdict(there, machine: "orbit@austin"),
+                       MachineSetup.folderVerdict(there, machine: "orbit@austin"))
+        XCTAssertEqual(MachineSetup.newFolderPick(there, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"),
                        .existing(path: "/home/orbit/orbit-repos/app", note: "git repository · main"))
-        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(exists: true, isDir: true), machine: "orbit@austin").short,
-                       "not a git repository — sessions will share it instead of isolating.")
+        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(exists: true, isDir: true), machine: "orbit@austin"),
+                       FolderVerdict(tone: .warn,
+                                     text: "Found · not a git repository — sessions will share it instead of isolating.",
+                                     short: "not a git repository — sessions will share it instead of isolating.",
+                                     usable: true))
     }
 
     func testANewFolderOverAFileCantBeAndSaysWhy() {
@@ -166,14 +158,14 @@ final class MachineSetupTests: XCTestCase {
         let text = "There’s already a file with this name on orbit@austin. Pick another name."
         XCTAssertEqual(MachineSetup.newFolderVerdict(file, machine: "orbit@austin"),
                        FolderVerdict(tone: .bad, text: text, short: text, usable: false))
-        XCTAssertNil(MachineSetup.newFolderPick(file, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
+        XCTAssertNil(MachineSetup.newFolderPick(file, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"))
     }
 
     func testANewFolderTheRunnerCouldNotLookAtHasNothingToPick() {
         let failed = inReposFolder(error: "permission denied")
         XCTAssertEqual(MachineSetup.newFolderVerdict(failed, machine: "orbit@austin").text,
                        "Couldn’t check on orbit@austin: permission denied")
-        XCTAssertNil(MachineSetup.newFolderPick(failed, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
+        XCTAssertNil(MachineSetup.newFolderPick(failed, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"))
     }
 
     // MARK: rule 4: how a checked path reads
@@ -214,7 +206,7 @@ final class MachineSetupTests: XCTestCase {
         XCTAssertFalse(refused.usable)
     }
 
-    // MARK: what POST /sessions is told
+    // MARK: what the workspace's create is told
 
     func testANewFolderGoesByItsNameAnExistingOneByThePathTheRunnerResolved() {
         XCTAssertEqual(PickedFolder.new(name: "app", path: "/home/orbit/orbit-repos/app").newWorkspace,
@@ -223,13 +215,27 @@ final class MachineSetupTests: XCTestCase {
                        NewWorkspaceRequest(workDir: "/home/orbit/code/app"))
     }
 
-    func testTheWorkspaceNameAFolderGivesAsTheServerDerivesIt() {
-        XCTAssertEqual(MachineSetup.folderName("/home/orbit/code/app"), "app")
-        XCTAssertEqual(MachineSetup.folderName("/home/orbit/code/app/"), "app")
-        XCTAssertEqual(MachineSetup.folderName("C:\\work\\app"), "app")
-        XCTAssertEqual(MachineSetup.folderName("/"), "/")
-        XCTAssertEqual(PickedFolder.existing(path: "/home/orbit/code/app", note: "").workspaceName, "app")
-        XCTAssertEqual(PickedFolder.new(name: "payments", path: "/r/payments").workspaceName, "payments")
+    private func body(_ request: CreateAgentRequest) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+    }
+
+    /// POST /workspaces: the workspace alone, under its trimmed name, on the machine, in a folder that is there.
+    func testCreateMakesTheWorkspaceInAFolderThatIsThereByItsPath() throws {
+        let sent = try body(MachineSetup.createRequest(
+            folder: .existing(path: "/home/orbit/app", note: "git repository · main"), name: "  My app  ", runnerID: "r1"))
+        XCTAssertEqual(Set(sent.keys), ["name", "runnerId", "workDir"])
+        XCTAssertEqual(sent["name"] as? String, "My app")
+        XCTAssertEqual(sent["runnerId"] as? String, "r1")
+        XCTAssertEqual(sent["workDir"] as? String, "/home/orbit/app")
+    }
+
+    /// …and a folder that isn't there yet by its name, made with the workspace.
+    func testCreateMakesANewFolderByItsName() throws {
+        let sent = try body(MachineSetup.createRequest(folder: .new(name: "app", path: "/home/orbit/app"),
+                                                       name: "app", runnerID: "r1"))
+        XCTAssertEqual(Set(sent.keys), ["name", "runnerId", "newFolder"])
+        XCTAssertEqual(sent["name"] as? String, "app")
+        XCTAssertEqual(sent["newFolder"] as? String, "app")
     }
 
     // MARK: which engine a machine's first draft starts on
@@ -301,31 +307,6 @@ final class MachineSetupTests: XCTestCase {
         XCTAssertEqual(MachineSetup.credential(runner: google, engine: "antigravity", provider: nil), .signedIn)
     }
 
-    func testReadyIsBothStepsAndTheMachineHere() {
-        let folder = PickedFolder.new(name: "app", path: "/r/app")
-        XCTAssertTrue(MachineSetup.isReady(bare: true, folder: folder, online: true, credential: .signedIn))
-        XCTAssertTrue(MachineSetup.isReady(bare: true, folder: folder, online: true, credential: .onKey(label: "k", pool: false)))
-        XCTAssertFalse(MachineSetup.isReady(bare: true, folder: nil, online: true, credential: .signedIn))
-        XCTAssertFalse(MachineSetup.isReady(bare: true, folder: folder, online: true, credential: .signIn))
-        XCTAssertFalse(MachineSetup.isReady(bare: true, folder: folder, online: true, credential: .notInstalled))
-        XCTAssertFalse(MachineSetup.isReady(bare: true, folder: folder, online: false, credential: .signedIn))
-        XCTAssertFalse(MachineSetup.isReady(bare: false, folder: folder, online: true, credential: .signedIn))
-    }
-
-    func testUseXInsteadIsTheOtherSignInsInstalledHere() throws {
-        let row = try machineRunner([engine("claude", "no"), engine("codex", "no"), engine("kimi", "no", installed: false),
-                                     engine("opencode", "unknown")])
-        XCTAssertEqual(MachineSetup.otherEngines(on: row, than: "claude", fleet: [row]), [.codex])
-        XCTAssertEqual(MachineSetup.otherEngines(on: row, than: "codex", fleet: [row]), [.claude])
-    }
-
-    func testCursorIsOfferedOnlyOnceTheFleetKnowsIt() throws {
-        let row = try machineRunner([engine("claude", "no"), engine("cursor", "no")])
-        let older = try machineRunner([engine("claude", "no")])
-        XCTAssertEqual(MachineSetup.otherEngines(on: row, than: "claude", fleet: [row]), [.cursor])
-        XCTAssertEqual(MachineSetup.otherEngines(on: row, than: "claude", fleet: [older]), [])
-    }
-
     private func engineChoice(_ slug: String, _ providers: [ProviderChoice]) -> EngineChoice {
         EngineChoice(slug: slug, label: slug, brandKey: nil, providers: providers, provider: providers.first)
     }
@@ -347,109 +328,123 @@ final class MachineSetupTests: XCTestCase {
         XCTAssertNil(MachineSetup.firstKey(in: [], preferring: "claude"))
     }
 
-    func testAMachinesDraftStandsOnNoWorkspace() {
-        let draft = Agent.machineDraft(runnerID: "austin", name: "orbit@austin", engine: .codex)
-        XCTAssertTrue(draft.standsInForMachine)
-        XCTAssertEqual(draft.runnerId, "austin")
-        XCTAssertEqual(draft.name, "orbit@austin")
-        XCTAssertEqual(draft.defaultProvider, "codex", "it starts on the machine's engine")
-        XCTAssertEqual(draft.defaultEngine(configured: []), "codex")
-        XCTAssertFalse(try! JSONDecoder().decode(Agent.self, from: Data(#"{"id":"w","name":"a"}"#.utf8)).standsInForMachine)
+    // MARK: the card: what the folder says
+
+    private func folderLine(_ folder: String, createError: String? = nil, found: DirProbe? = nil,
+                            unanswered: Bool = false) -> SetupFolderLine {
+        MachineSetup.folderLine(folder: folder, createError: createError, found: found, unanswered: unanswered,
+                                machine: "orbit@austin")
     }
 
-    // MARK: rule 6: the message waiting
-
-    private let folder = PickedFolder.existing(path: "/home/orbit/code/app", note: "git repository · main")
-    private let message = HeldMessage(content: "Fix the flaky login test")
-
-    func testReadyTheSendMakesTheWorkspace() {
-        let state = MachineSetupState(folder: folder)
-        XCTAssertEqual(state.send(bare: true, ready: true),
-                       .create(NewWorkspaceRequest(workDir: "/home/orbit/code/app")))
+    func testNothingTypedSaysWhatTheFieldDoes() {
+        XCTAssertEqual(folderLine(""), .meta("Uses this folder if it exists, otherwise creates it."))
     }
 
-    func testNotReadyTheMessageWaits() {
-        XCTAssertEqual(MachineSetupState().send(bare: true, ready: false), .hold)
-        XCTAssertEqual(MachineSetupState(folder: folder).send(bare: true, ready: false), .hold)
+    func testANameTheServerWouldRefuseSaysWhy() {
+        XCTAssertEqual(folderLine("my app"),
+                       .verdict("Use letters, digits, dots, dashes and underscores, up to 64 characters.", .bad))
     }
 
-    func testOneWaitsAtATime() {
-        XCTAssertEqual(MachineSetupState(folder: folder, held: message).send(bare: true, ready: true), .alreadyWaiting)
-        XCTAssertEqual(MachineSetupState(held: message).send(bare: true, ready: false), .alreadyWaiting)
+    func testNothingThereIsANewFolderMadeWithTheWorkspace() {
+        XCTAssertEqual(folderLine("app", found: inReposFolder()), .meta("New folder · created with the workspace."))
     }
 
-    func testAMachineNotKnownToBeBareSendsNothing() {
-        XCTAssertEqual(MachineSetupState(folder: folder).send(bare: false, ready: false), .nothing)
+    func testAFolderThereSaysWhatItIsInItsTone() {
+        XCTAssertEqual(folderLine("app", found: inReposFolder(exists: true, isDir: true, isGit: true, branch: "main")),
+                       .verdict("Found · git repository · main", .ok))
+        XCTAssertEqual(folderLine("app", found: inReposFolder(exists: true, isDir: true)),
+                       .verdict("Found · not a git repository — sessions will share it instead of isolating.", .warn))
     }
 
-    func testBothStepsDoneItGoesWithNobodyPressingAnythingOnce() throws {
-        var state = MachineSetupState(folder: folder, held: message)
-        let sent = try XCTUnwrap(state.takeHeldToSend(ready: true, busy: false))
-        XCTAssertEqual(sent.message, message)
-        XCTAssertEqual(sent.folder, NewWorkspaceRequest(workDir: "/home/orbit/code/app"))
-        XCTAssertTrue(state.sendingHeld)
-        XCTAssertNil(state.takeHeldToSend(ready: true, busy: false), "a send makes a workspace: it must not go twice")
+    func testAFileThereAndACheckThatFailedAreRefusals() {
+        XCTAssertEqual(folderLine("app", found: inReposFolder(exists: true)),
+                       .verdict("There’s already a file with this name on orbit@austin. Pick another name.", .bad))
+        XCTAssertEqual(folderLine("app", found: inReposFolder(error: "permission denied")),
+                       .verdict("Couldn’t check on orbit@austin: permission denied", .bad))
     }
 
-    func testItWaitsForTheStepsAndForASendAlreadyOut() {
-        var state = MachineSetupState(folder: folder, held: message)
-        XCTAssertNil(state.takeHeldToSend(ready: false, busy: false))
-        XCTAssertNil(state.takeHeldToSend(ready: true, busy: true))
-        var noFolder = MachineSetupState(held: message)
-        XCTAssertNil(noFolder.takeHeldToSend(ready: true, busy: false))
-        var nothing = MachineSetupState(folder: folder)
-        XCTAssertNil(nothing.takeHeldToSend(ready: true, busy: false))
-        XCTAssertFalse(state.sendingHeld)
+    func testNoAnswerYetIsCheckingAndNoneAtAllSaysSo() {
+        XCTAssertEqual(folderLine("app"), .checking)
+        XCTAssertEqual(folderLine("app", unanswered: true), .noAnswer)
     }
 
-    func testARefusalStaysSayingWhyUntilItIsTriedAgain() throws {
-        var state = MachineSetupState(folder: folder, held: message)
-        _ = try XCTUnwrap(state.takeHeldToSend(ready: true, busy: false))
-        state.failHeld("Claude Code isn’t signed in")
-        XCTAssertEqual(state.held?.error, "Claude Code isn’t signed in")
-        XCTAssertFalse(state.sendingHeld)
-        XCTAssertNil(state.takeHeldToSend(ready: true, busy: false), "it waits on the person, not on another try")
-
-        state.retryHeld()
-        XCTAssertNil(state.held?.error)
-        XCTAssertEqual(state.takeHeldToSend(ready: true, busy: false)?.message, message)
+    /// A refused Create workspace says why on the folder's line, over whatever the folder would say.
+    func testARefusedCreateSaysWhyInsteadUntilTheNextTry() {
+        XCTAssertEqual(folderLine("app", createError: "A workspace with that name exists", found: inReposFolder()),
+                       .createFailed("Couldn’t create the workspace: A workspace with that name exists"))
+        XCTAssertEqual(folderLine("", createError: "no"), .createFailed("Couldn’t create the workspace: no"))
     }
 
-    func testWithdrawnItComesBackAndNothingIsLeftWaiting() throws {
-        var state = MachineSetupState(folder: folder, held: message)
-        XCTAssertEqual(state.withdraw(), message)
-        XCTAssertNil(state.held)
-        XCTAssertEqual(state.folder, folder, "the folder stays answered")
-        XCTAssertNil(state.withdraw())
+    // MARK: the card: the name
+
+    func testTheNameFollowsTheFolderUntilItIsEdited() {
+        var field = WorkspaceNameField()
+        XCTAssertEqual(field.shown(folder: ""), "")
+        XCTAssertEqual(field.shown(folder: "app"), "app")
+        XCTAssertEqual(field.name(folder: "app"), "app")
+        XCTAssertFalse(field.missing(folder: ""), "not edited is not missing: Create waits on the folder")
+        XCTAssertEqual(field.line(folder: "app").text, "Same as the folder unless you change it. Shown in the sidebar.")
+        XCTAssertFalse(field.line(folder: "app").bad)
+
+        field.edit("My app", folder: "app")
+        XCTAssertEqual(field.shown(folder: "app"), "My app")
+        XCTAssertEqual(field.shown(folder: "payments"), "My app", "once edited it stays, whatever the folder")
+        XCTAssertEqual(field.line(folder: "payments").text, "Shown in the sidebar. You can rename it later.")
     }
 
-    func testAMessageOnItsWayCantBeWithdrawn() throws {
-        var state = MachineSetupState(folder: folder, held: message)
-        _ = try XCTUnwrap(state.takeHeldToSend(ready: true, busy: false))
-        XCTAssertNil(state.withdraw())
-        XCTAssertEqual(state.held, message)
+    func testANameEditedToNothingStaysEmptyAndSaysSo() {
+        var field = WorkspaceNameField()
+        field.edit("ap", folder: "app")
+        field.edit("", folder: "app")
+        XCTAssertEqual(field.shown(folder: "app"), "", "never filled again from the folder")
+        XCTAssertEqual(field.shown(folder: "other"), "")
+        XCTAssertTrue(field.missing(folder: "app"))
+        XCTAssertEqual(field.line(folder: "app").text, "Give the workspace a name.")
+        XCTAssertTrue(field.line(folder: "app").bad)
+        field.edit("   ", folder: "app")
+        XCTAssertTrue(field.missing(folder: "app"), "blank after trimming is no name")
     }
 
-    func testAMessageAlreadyRefusedCanBeWithdrawn() throws {
-        var state = MachineSetupState(folder: folder, held: message)
-        _ = try XCTUnwrap(state.takeHeldToSend(ready: true, busy: false))
-        state.failHeld("no")
-        XCTAssertEqual(state.withdraw()?.content, message.content)
+    /// A text field writing back the text it shows, while it follows the folder, has not been edited.
+    func testTheFoldersOwnTextWrittenBackIsNoEdit() {
+        var field = WorkspaceNameField()
+        field.edit("app", folder: "app")
+        XCTAssertNil(field.edited)
+        XCTAssertEqual(field.shown(folder: "payments"), "payments")
     }
 
-    func testChangingTheFolderKeepsTheMessageWaiting() {
-        var state = MachineSetupState(folder: folder, held: message)
-        state.pick(nil)
-        XCTAssertNil(state.folder)
-        XCTAssertEqual(state.held, message)
-        var picked = state
-        XCTAssertNil(picked.takeHeldToSend(ready: true, busy: false), "no folder, nothing to send it with")
+    func testAnyNameGoesAndIsSentTrimmed() {
+        var field = WorkspaceNameField()
+        field.edit("  Payments (prod) ✨ ", folder: "app")
+        XCTAssertEqual(field.name(folder: "app"), "Payments (prod) ✨")
     }
 
-    func testAMachineWithAWorkspaceHasNothingLeftToRemember() {
-        var state = MachineSetupState(folder: folder, held: message)
-        state.finish()
-        XCTAssertEqual(state, MachineSetupState())
+    func testThePlaceholderIsTheFolderOrSaysItFollowsIt() {
+        XCTAssertEqual(WorkspaceNameField.placeholder(folder: ""), "Same as the folder")
+        XCTAssertEqual(WorkspaceNameField.placeholder(folder: "app"), "app")
+    }
+
+    // MARK: the card: Create workspace
+
+    func testCreateNeedsAFolderANameAndAMachineThatCanMakeIt() {
+        let pick = PickedFolder.new(name: "app", path: "/home/orbit/app")
+        XCTAssertTrue(MachineSetup.canCreate(pick: pick, name: "app", online: true, checksFolders: true, creating: false))
+        XCTAssertFalse(MachineSetup.canCreate(pick: nil, name: "app", online: true, checksFolders: true, creating: false),
+                       "no answer to make it in yet")
+        XCTAssertFalse(MachineSetup.canCreate(pick: pick, name: "  ", online: true, checksFolders: true, creating: false))
+        XCTAssertFalse(MachineSetup.canCreate(pick: pick, name: "app", online: false, checksFolders: true, creating: false))
+        XCTAssertFalse(MachineSetup.canCreate(pick: pick, name: "app", online: true, checksFolders: false, creating: false))
+        XCTAssertFalse(MachineSetup.canCreate(pick: pick, name: "app", online: true, checksFolders: true, creating: true),
+                       "one create at a time")
+    }
+
+    func testAMachineChecksFoldersOnlyIfItAnswersAndMakesThem() throws {
+        XCTAssertTrue(MachineSetup.checksFolders(try runner(
+            #"{"id":"r","name":"m","capabilities":["dir-probe/v1","create-workdir/v1"],"reposRoot":"/home/orbit/orbit-repos"}"#)))
+        XCTAssertFalse(MachineSetup.checksFolders(try runner(
+            #"{"id":"r","name":"m","capabilities":["dir-probe/v1"],"reposRoot":"/home/orbit/orbit-repos"}"#)))
+        XCTAssertFalse(MachineSetup.checksFolders(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/home/orbit/orbit-repos"}"#)))
     }
 
     // MARK: the directory probe relay
@@ -504,17 +499,6 @@ final class MachineSetupTests: XCTestCase {
         let script = Script([DirProbeAnswer(path: "p", status: "pending"), DirProbeAnswer(path: "p", status: "idle")])
         let outcome = try await run(script)
         XCTAssertEqual(outcome, .replaced)
-    }
-
-    /// One question at a time per machine: the register directory's, replaced by a path asked before it was answered,
-    /// is asked again once nothing else waits, and only while the machine can be asked.
-    func testAReplacedRegisterQuestionIsAskedAgainOnceNothingElseWaits() {
-        XCTAssertTrue(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: false))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: true))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: false, otherWaiting: false), "offline, what is stored is all")
-        XCTAssertFalse(DirProbeRelay.asksAgain(nil, online: true, otherWaiting: false), "still asking")
-        XCTAssertFalse(DirProbeRelay.asksAgain(.unanswered, online: true, otherWaiting: false))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.answered(probe()), online: true, otherWaiting: false))
     }
 
     func testAMachineThatNeverAnswersIsSaidToHaveNot() async throws {

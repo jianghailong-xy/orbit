@@ -24,22 +24,14 @@ class WelcomeCopyParityTest {
     private val kotlinNames = mapOf(
         "WELCOME_LEAD" to WelcomeCopy.WELCOME_LEAD,
         "WELCOME_COMPUTER" to WelcomeCopy.WELCOME_COMPUTER,
-        "WELCOME_COMPUTER_MANAGED" to WelcomeCopy.WELCOME_COMPUTER_MANAGED,
         "WELCOME_COMPUTER_OWN" to WelcomeCopy.WELCOME_COMPUTER_OWN,
-        "WELCOME_OWN_INSTEAD" to WelcomeCopy.WELCOME_OWN_INSTEAD,
-        "WELCOME_COMPUTER_DONE" to WelcomeCopy.WELCOME_COMPUTER_DONE,
         "WELCOME_WAITING_CONNECT" to WelcomeCopy.WELCOME_WAITING_CONNECT,
         "WELCOME_HAVING_TROUBLE" to WelcomeCopy.WELCOME_HAVING_TROUBLE,
         "WELCOME_MODEL" to WelcomeCopy.WELCOME_MODEL,
         "WELCOME_MODEL_HELP" to WelcomeCopy.WELCOME_MODEL_HELP,
-        "WELCOME_MODEL_DONE" to WelcomeCopy.WELCOME_MODEL_DONE,
-        "WELCOME_AFTER_COMPUTER" to WelcomeCopy.WELCOME_AFTER_COMPUTER,
         "WELCOME_AFTER_STEP_ONE" to WelcomeCopy.WELCOME_AFTER_STEP_ONE,
         "WELCOME_FIRST" to WelcomeCopy.WELCOME_FIRST,
         "WELCOME_FIRST_HELP" to WelcomeCopy.WELCOME_FIRST_HELP,
-        "WELCOME_FOOT_WAIT" to WelcomeCopy.WELCOME_FOOT_WAIT,
-        "WELCOME_FOOT_SEND_NOW" to WelcomeCopy.WELCOME_FOOT_SEND_NOW,
-        "WELCOME_FOOT_READY" to WelcomeCopy.WELCOME_FOOT_READY,
         "WELCOME_PLACEHOLDER" to WelcomeCopy.WELCOME_PLACEHOLDER,
     )
 
@@ -57,12 +49,10 @@ class WelcomeCopyParityTest {
 
     @Test fun theTemplatesMatchTheWeb() {
         assertTrue("welcomeTitle changed in welcomeCopy.ts", webSource.contains("return first ? `Welcome to Orbit, \${first}` : 'Welcome to Orbit';"))
-        assertTrue("welcomeComputerReady changed in welcomeCopy.ts", webSource.contains("welcomeComputerReady = (machine: string) => `\${machine} is ready`"))
         assertEquals("Welcome to Orbit, Mia", WelcomeCopy.welcomeTitle("Mia Chen"))
         assertEquals("Welcome to Orbit, Mia", WelcomeCopy.welcomeTitle("  Mia  "))
         assertEquals("Welcome to Orbit", WelcomeCopy.welcomeTitle(""))
         assertEquals("Welcome to Orbit", WelcomeCopy.welcomeTitle(null))
-        assertEquals("managed-mia is ready", WelcomeCopy.welcomeComputerReady("managed-mia"))
     }
 
     @Test fun bothFilesDeclareTheSameNames() {

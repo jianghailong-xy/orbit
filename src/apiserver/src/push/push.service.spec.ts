@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
 import { PushService } from './push.service';
+import { findingCollapseId, findingCopy } from '../schedules/schedule-attention';
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
@@ -910,7 +911,8 @@ test('the shared Android fixture carries what notifyClaudeRegionBlocked sends, k
   assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
 });
 
-function wakeupMissedHarness(deliver?: () => Promise<void>) {
+/** The owner's devices, as the alerts below reach them: one registered token, each send recorded. */
+function deviceAlertHarness(deliver?: () => Promise<void>) {
   const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
   const service = new PushService(prisma as any, enabledConfig());
   (service as any).authToken = () => 'auth-token';
@@ -922,8 +924,19 @@ function wakeupMissedHarness(deliver?: () => Promise<void>) {
   return { service, sent };
 }
 
-test('a silent wakeup loop is announced under its session, collapsing on that one silence', async () => {
-  const { service, sent } = wakeupMissedHarness();
+/** A wakeup that failed is Orbit's own housekeeping: it goes to Feishu when one is bound, never to a device. */
+function wakeupMissedHarness() {
+  const service = new PushService({} as any, enabledConfig());
+  const devices: unknown[] = [];
+  const cards: any[] = [];
+  (service as any).channels = async () => ({ tokens: [{ token: 'device-1' }], feishu: { appId: 'app-1' } });
+  (service as any).deliver = async (...args: unknown[]) => { devices.push(args); };
+  (service as any).feishuOther = async (_feishu: unknown, input: unknown) => { cards.push(input); return true; };
+  return { service, devices, cards };
+}
+
+test('a silent wakeup loop reaches Feishu under its session, collapsing on that one silence, and no device', async () => {
+  const { service, devices, cards } = wakeupMissedHarness();
   const alertedAt = new Date('2026-11-01T10:20:00.000Z');
 
   await service.notifyLoopMissed({
@@ -933,76 +946,48 @@ test('a silent wakeup loop is announced under its session, collapsing on that on
     missed: { loopId: 'loop-1', ticks: 3, alertedAt },
     reason: 'RUNNER_OFFLINE',
   });
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(sent.length, 1);
-  const { payload, collapseId } = sent[0];
-  assert.equal(payload.aps.alert.title, 'Migrate the archive');
-  assert.equal(payload.aps.alert.body, 'Wakeup loop missed 3 ticks: the runner is offline.');
-  assert.deepEqual([payload.kind, payload.sessionID, payload.aps['thread-id']], ['loop-missed', 's-1', 's-1']);
-  // Nobody's reply is waiting on it, so it must not move the "needs you" count.
-  assert.equal(payload.aps.badge, undefined);
-  assert.equal(collapseId, `loop-loop-1-${alertedAt.getTime()}`);
+  assert.equal(devices.length, 0);
+  assert.deepEqual(cards, [{
+    kind: 'loop-missed', title: 'Migrate the archive', body: 'Wakeup loop missed 3 ticks: the runner is offline.',
+    collapseId: `loop-loop-1-${alertedAt.getTime()}`, sessionId: 's-1',
+  }]);
 });
 
 test('each reason a loop is silent reads as English, and one tick is not "1 ticks"', async () => {
-  const { service, sent } = wakeupMissedHarness();
+  const { service, cards } = wakeupMissedHarness();
   for (const reason of ['SESSION_FAILED', 'TURN_QUEUED'] as const) {
     await service.notifyLoopMissed({
       ownerId: 'owner-1', sessionId: 's-1', title: null, missed: { loopId: 'loop-1', ticks: 1, alertedAt: new Date() }, reason,
     });
   }
-  assert.deepEqual(sent.map((s) => [s.payload.aps.alert.title, s.payload.aps.alert.body]), [
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(cards.map((c) => [c.title, c.body]), [
     ['Orbit', 'Wakeup loop missed 1 tick: the session failed.'],
     ['Orbit', 'Wakeup loop missed 1 tick: its turn is queued and has not started.'],
   ]);
 });
 
-test('a one-shot wakeup dropped with its FAILED session is announced once, under the wakeup', async () => {
-  const { service, sent } = wakeupMissedHarness();
+test('a one-shot wakeup dropped with its FAILED session reaches Feishu once, under the wakeup, and no device', async () => {
+  const { service, devices, cards } = wakeupMissedHarness();
 
   await service.notifyLoopMissed({
     ownerId: 'owner-1', sessionId: 's-1', title: 'Watch the deploy', missed: { wakeupId: 'wakeup-1' }, reason: 'SESSION_FAILED',
   });
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(sent.length, 1);
-  const { payload, collapseId } = sent[0];
-  assert.deepEqual(
-    [payload.aps.alert.title, payload.aps.alert.body, payload.kind, payload.sessionID],
-    ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1'],
-  );
-  assert.equal(collapseId, 'wakeup-wakeup-1');
-});
-
-// The shared Android fixture's two samples are these sends: fcm-transport.spec converts each to the FCM data it
-// holds, and Android's PushAuthorityTest parses that data, so the wire shape is pinned on both sides.
-test('the shared Android fixture carries what notifyLoopMissed sends, key for key', async () => {
-  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
-  const session = '019a0000-0000-7000-8000-000000000002';
-  const sends = [
-    ['loop-missed', {
-      ownerId: 'owner-1', sessionId: session, title: 'Migrate the archive', reason: 'RUNNER_OFFLINE',
-      missed: { loopId: '019a0000-0000-7000-8000-000000000009', ticks: 3, alertedAt: new Date('2026-11-01T10:20:00.000Z') },
-    }],
-    ['wakeup-dropped', {
-      ownerId: 'owner-1', sessionId: session, title: 'Watch the deploy', reason: 'SESSION_FAILED',
-      missed: { wakeupId: '019a0000-0000-7000-8000-00000000000a' },
-    }],
-  ] as const;
-  for (const [name, input] of sends) {
-    const { service, sent } = wakeupMissedHarness();
-    await service.notifyLoopMissed(input);
-    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
-    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
-    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
-    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
-  }
+  assert.equal(devices.length, 0);
+  assert.deepEqual(cards.map((c) => [c.title, c.body, c.kind, c.sessionId, c.collapseId]), [
+    ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1', 'wakeup-wakeup-1'],
+  ]);
 });
 
 // A terminal asking to be approved (docs/terminal-session-design.md): the owner's devices ring with the machine and the
 // code, collapsed per request. The shared Android fixture's `terminal-login` sample is this send, so Android's
 // PushMessage parses exactly what is sent (PushAuthorityTest) and fcm-transport.spec converts it to the data it holds.
 function terminalLoginHarness(status = 'PENDING') {
-  const { service, sent } = wakeupMissedHarness();
+  const { service, sent } = deviceAlertHarness();
   (service as any).prisma.terminalLogin = {
     findUnique: async () => ({
       ownerId: 'owner-1', runnerId: '019a0000-0000-7000-8000-00000000000c', machineName: 'dev-laptop', userCode: '7KQ-4MZ', status,
@@ -1038,7 +1023,7 @@ test('a terminal request already decided rings nothing', async () => {
 // the shared Android fixture's `project-orphan` sample is this send, so Android's parser is held to what the server sends.
 test('the orphan push names its project, collapses on its one notice, and is the shared Android fixture key for key', async () => {
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
-  const { service, sent } = wakeupMissedHarness();
+  const { service, sent } = deviceAlertHarness();
   await service.notifyProjectOrphan({
     ownerId: 'owner-1',
     projectId: '019a0000-0000-7000-8000-000000000004',
@@ -1058,16 +1043,15 @@ test('the orphan push names its project, collapses on its one notice, and is the
   assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
 });
 
-test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {
-  const { service, sent } = wakeupMissedHarness(async () => {
-    throw new Error('APNs went away');
-  });
+test('a wakeup-missed alert that fails is logged, never thrown at the worker', async () => {
+  const { service, cards } = wakeupMissedHarness();
+  (service as any).channels = async () => { throw new Error('the database went away'); };
 
   await service.notifyLoopMissed({
     ownerId: 'owner-1', sessionId: 's-1', title: 'Migrate the archive', missed: { loopId: 'loop-1', ticks: 2, alertedAt: new Date() }, reason: 'TURN_QUEUED',
   });
 
-  assert.equal(sent.length, 0);
+  assert.equal(cards.length, 0);
 });
 
 
@@ -1268,4 +1252,130 @@ test('the turn-finished and needs-you switches do not touch agent messages', asy
   });
   assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
   assert.equal(sent.length, 1);
+});
+
+// ── only sessions the owner started ring when they settle ─────────────────
+
+test('a session an agent, a task list or a coordinator started settles without ringing', async () => {
+  for (const over of [
+    { parentSessionId: 'parent-1' },
+    { runSource: 'TASK_LIST_AUTO' },
+    { runSource: 'PROJECT_COORDINATOR' },
+    { coordinatorForProject: { id: 'project-1' } },
+    { task: { project: { coordinatorEnabled: true } } },
+  ]) {
+    const { service, sent } = settleHarness(settledSession(over));
+    await service.notifySessionSettled('s-1');
+    assert.equal(sent.length, 0, JSON.stringify(over));
+  }
+});
+
+test('a session the owner started rings, and a session switched on rings whoever started it', async () => {
+  const mine = settleHarness(settledSession({ runSource: 'MANUAL', task: { project: { coordinatorEnabled: false } } }));
+  await mine.service.notifySessionSettled('s-1');
+  assert.equal(mine.sent.length, 1);
+
+  const askedFor = settleHarness(settledSession({ parentSessionId: 'parent-1', notifyTurnFinished: 'on' }));
+  await askedFor.service.notifySessionSettled('s-1');
+  assert.equal(askedFor.sent.length, 1);
+});
+
+test('an escalated item whose coordinator cannot be reached says so, not "no one acted on this"', async () => {
+  // 2026-11-15: the banner and the card said nobody acted while the card's own doors could not
+  // reach the coordinator. The push reads the project page's own answer (`readCoordinatorReach`).
+  const escalated = (session: Record<string, unknown>) => openItem({
+    kind: 'INTEGRATION_CONFLICT',
+    assigneeReason: 'ESCALATED',
+    title: 'Merge conflict: Add the landing receipt',
+    payload: {},
+    waitingSince: new Date('2026-09-13T10:00:00Z'),
+    escalatedAt: new Date('2026-09-13T12:56:00Z'),
+    project: { title: 'Integration line', coordinatorSessionId: 'coordinator', coordinatorSession: session },
+  });
+  const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const cases = [
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'reachable', session: live, blocked: null, title: 'Now yours — no one acted on this for 2h 56m' },
+  ];
+  for (const { what, session, blocked, title } of cases) {
+    const { service, sent } = ownerItemHarness(escalated(session));
+    (service as any).moduleRef = { get: () => ({ receiveBlockedReasonFor: async () => blocked }) };
+    await service.notifyOwnerItem('item-1');
+    assert.equal(sent.length, 1, what);
+    const payload = JSON.parse(sent[0].body);
+    assert.equal(payload.kind, 'escalated-to-you', what);
+    assert.equal(payload.aps.alert.title, title, what);
+  }
+});
+
+// A scheduled task's push (docs/scheduled-tasks-design.md §7.3): a failure opens the run's session, a hold the schedule, and
+// each names the Waiting on you item it filed. The shared Android fixture's `schedule-failed` and `schedule-held` samples are
+// these sends, so Android's PushMessage parses exactly what is sent (ScheduleAppTest) and fcm-transport.spec converts each
+// to the data it holds.
+test('a scheduled task pushes its failure and its hold as the shared Android fixture holds them, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const schedule = '019a0000-0000-7000-8000-000000000010';
+  const sends = [
+    { name: 'schedule-failed', alert: { kind: 'FAILED', opens: { sessionId: '019a0000-0000-7000-8000-000000000012' },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000013', title: 'Nightly pg spec sweep failed 3 runs in a row',
+      body: 'The last run ended without a report. It keeps running until you pause it.',
+      collapseId: 'schedule-failed-019a0000-0000-7000-8000-000000000011' } },
+    { name: 'schedule-held', alert: { kind: 'HELD', opens: { scheduleId: schedule },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000015', title: 'Weekly dependency audit is held',
+      body: 'It could not start on Monday 09:00: the agent "auditor" in workspace web is disabled. Nothing runs until it is enabled and you resume.',
+      collapseId: 'schedule-held-019a0000-0000-7000-8000-000000000014' } },
+  ];
+  for (const { name, alert } of sends) {
+    const { service, sent } = deviceAlertHarness();
+    await service.notifySchedule({ ownerId: 'owner-1', scheduleId: schedule, ...alert });
+    assert.equal(sent.length, 1, name);
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
+    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
+});
+
+// A condition (docs/condition-triggers-design.md §5.3, §6.1): one that cannot be read rings as `condition`, naming the condition,
+// the conversation it came from and its Waiting on you item; one that fires starts a run, whose report rings as the schedule's
+// FINDING. The shared Android fixture's `condition-unknown` and `schedule-finding` samples are these sends, so Android's
+// PushMessage parses exactly what is sent (ConditionPushTest) rather than dropping an unknown kind.
+test('a condition that cannot be read, and the run a firing started, push as the shared Android fixture holds them', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const sample = (name: string) => {
+    const found = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(found, `the shared Android fixture has no ${name} sample`);
+    return found;
+  };
+  const condition = '019a0000-0000-7000-8000-000000000020';
+  {
+    const { service, sent } = deviceAlertHarness();
+    await service.notifyCondition({
+      ownerId: 'owner-1', conditionId: condition, sessionId: '019a0000-0000-7000-8000-000000000021',
+      ownerRequestId: '019a0000-0000-7000-8000-000000000022', title: "Can't read: Root disk below 5%",
+      body: 'The check timed out 3 times in a row. The last reading was 5%, 16 minutes ago.',
+      collapseId: `condition-unknown:${condition}:2026-11-17T03:40:00.000Z`,
+    });
+    assert.equal(sent.length, 1);
+    const expected = sample('condition-unknown');
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(expected.source));
+    assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
+  }
+  {
+    const schedule = '019a0000-0000-7000-8000-000000000023';
+    const { service, sent } = deviceAlertHarness();
+    await service.notifySchedule({
+      kind: 'FINDING', ownerId: 'owner-1', scheduleId: schedule, opens: { sessionId: '019a0000-0000-7000-8000-000000000024' },
+      ownerRequestId: null, ...findingCopy('Ceph capacity guard',
+        'Raw used 90.4%. Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you.'),
+      collapseId: findingCollapseId(schedule, 'above-90@2026-11-21'),
+    });
+    assert.equal(sent.length, 1);
+    const expected = sample('schedule-finding');
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(expected.source));
+    assert.deepEqual([expected.pushType, expected.collapseId], ['alert', sent[0].collapseId]);
+  }
 });

@@ -18,6 +18,9 @@ internal object QueuedCapacity {
     const val RUN_FULL_TAG = "run full"
     const val BATCH_FULL_TITLE = "Batch full"
     const val BATCH_FULL_TAG = "batch full"
+    /** The session list's line for any of the three (board session-row-runner-full, the owner's pick C; web `CAPACITY_HELD_LINE`). The
+     * row's own time already counts the wait, so the line adds no clock. */
+    const val CAPACITY_HELD_LINE = "Waiting for a free slot"
 
     /** Whether a full runner, run or batch holds this queued session (web `isCapacityHeld`). */
     fun isCapacityHeld(gate: QueuedGate?): Boolean = gate?.queuedReason in REASONS

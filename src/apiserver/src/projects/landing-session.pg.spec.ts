@@ -52,7 +52,7 @@ import {
 import { ensureLandingSession } from './landing-session';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
-import { ProjectOpenItemService } from './project-open-item.service';
+import { IntegrationSkipChecked, ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -544,7 +544,7 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
         { userId: w.ownerId, email: `${w.ownerId}@landing.invalid` },
         w.projectId, task.taskId,
         { reason: 'the check cannot run on this machine' },
-      );
+      ) as IntegrationSkipChecked;
       const skippedSubject = await subjectOfJob(stack.db, skipped.jobId);
       assert.equal(skippedSubject.job.state, 'QUEUED', 'the skip is queued, not claimed yet');
       assert.equal(skippedSubject.job.skipMergeCheck, true);
@@ -1190,12 +1190,18 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
       const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
       await stack.openItems.deliverForItems([failedId]);
       for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
-        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status } });
+        // A FAILED coordinator still takes the turn only with an auto-retry pending.
+        const retryAt = status === RunStatus.FAILED ? new Date(Date.now() + 60 * 60_000) : null;
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status, retryAt } });
         assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
           `${status}: an unread coordinator item is not an owner-facing landing todo`);
         assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
           `${status}: the unread item does not mark the landing as awaiting a decision`);
       }
+      // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, retryAt: null } });
+      assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'an item its coordinator cannot take is an owner-facing landing todo');
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
       await receiveOpenItem(stack.db, failedId);
 

@@ -8,13 +8,18 @@ import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.realtime.ReconnectPolicy
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.realtime.SseFrame
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -33,13 +38,15 @@ import org.junit.Test
 class GuestSessionsTest {
     private val handle = SessionHandle(AccountKey("https://orbit.example/", "bo"))
 
-    private class Sent(val method: HttpMethod, val path: String, val query: List<Pair<String, String>>, val body: String)
+    private class Sent(val method: HttpMethod, val path: String, val query: List<Pair<String, String>>, val body: String,
+        val contentType: String = "")
 
     /** Answers [answer] for every request, and keeps what was asked. */
     private class Door(var answer: (ApiRequest) -> Pair<Int, String>) : OrbitApi {
         val sent = mutableListOf<Sent>()
         override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
-            sent += Sent(request.method, request.path.joinToString("/"), request.query, request.body?.decodeToString().orEmpty())
+            sent += Sent(request.method, request.path.joinToString("/"), request.query, request.body?.decodeToString().orEmpty(),
+                request.contentType)
             val (status, body) = answer(request)
             return ApiResponse(status, body.encodeToByteArray()).requireSuccess()
         }
@@ -119,16 +126,38 @@ class GuestSessionsTest {
         assertEquals("guest-sessions/34A/events/8", full.sent[0].path)
     }
 
-    @Test fun aMessageIsTextOnly() = runTest {
+    @Test fun aMessageWithoutImagesIsItsKeyAndWords() = runTest {
         val door = door("""{"turnId":"T9","revived":true}""", 201)
         val accepted = door.sendGuestTurn(handle, "34A", "k1", "Please run the tests")
         assertEquals("T9", accepted.turnId)
         assertTrue(accepted.revived)
         assertEquals(HttpMethod.POST, door.sent[0].method)
         assertEquals("guest-sessions/34A/turns", door.sent[0].path)
-        // Nothing but the key and the words: no mode, model, effort or attachment.
+        // Nothing but the key and the words: no mode, model or effort, and no attachmentIds while no image goes with it.
         val body = Wire.json.parseToJsonElement(door.sent[0].body) as JsonObject
         assertEquals(mapOf("clientTurnId" to JsonPrimitive("k1"), "content" to JsonPrimitive("Please run the tests")), body.toMap())
+    }
+
+    @Test fun aMessageCarriesTheIdsOfItsImagesAndMayHaveNoWords() = runTest {
+        val door = door("""{"turnId":"T9","revived":false}""", 201)
+        door.sendGuestTurn(handle, "34A", "k1", "", listOf("A1", "A2"))
+        val body = Wire.json.parseToJsonElement(door.sent[0].body) as JsonObject
+        assertEquals("guest-sessions/34A/turns", door.sent[0].path)
+        assertEquals(JsonPrimitive(""), body["content"])
+        assertEquals(JsonArray(listOf(JsonPrimitive("A1"), JsonPrimitive("A2"))), body["attachmentIds"])
+    }
+
+    @Test fun anImageIsUploadedThroughTheGuestDoorAsOneFilePart() = runTest {
+        val door = door("""{"id":"A1"}""", 201)
+        assertEquals("A1", door.uploadGuestAttachment(handle, "34A", "shot.png", "image/png", byteArrayOf(1, 2, 3)))
+        val sent = door.sent.single()
+        assertEquals(HttpMethod.POST, sent.method)
+        // The guest's own route, never the owner's `attachments?sessionId=`.
+        assertEquals("guest-sessions/34A/attachments", sent.path)
+        assertEquals(emptyList<Pair<String, String>>(), sent.query)
+        assertTrue(sent.contentType.startsWith("multipart/form-data; boundary="))
+        assertTrue(sent.body.contains("""Content-Disposition: form-data; name="file"; filename="shot.png""""))
+        assertTrue(sent.body.contains("Content-Type: image/png"))
     }
 
     @Test fun notSharedIsTheDoorsOne404() = runTest {
@@ -229,8 +258,9 @@ class GuestSessionsTest {
 
     // The guest view's follow loop and its message
 
-    private fun event(seq: Long, type: String, text: String, guest: String? = null) = buildJsonObject {
+    private fun event(seq: Long, type: String, text: String, guest: String? = null, turnId: String? = null) = buildJsonObject {
         put("seq", seq); put("type", type)
+        if (turnId != null) put("turnId", turnId)
         putJsonObject("payload") {
             put("text", text)
             if (guest != null) putJsonObject("externalSender") { put("source", "ORBIT_GUEST"); put("name", guest) }
@@ -243,7 +273,20 @@ class GuestSessionsTest {
         var runState = "ENDED"
         var shared = true
         val asked = mutableListOf<String>()
+        /** Off: the send is accepted, and the runner writes its echo only once [echo] is called (production: ~0.7 s later). */
+        var echoesAtOnce = true
+        var refuse: Pair<Int, String>? = null
+        var held: String? = null
     }
+
+    /** The runner writes a sent message's echo, under the turn the door answered with, and starts answering it. */
+    private fun echo(session: Session, content: String) {
+        val next = (session.events.size + 1).toLong()
+        session.events += event(next, "user", content, guest = "Bo", turnId = "T")
+        session.events += event(next + 1, "assistant", "On it.")
+    }
+
+    private fun echoHeld(session: Session) { session.held?.let { echo(session, it) }; session.held = null }
 
     private fun conversationDoor(session: Session) = Door { request ->
         val path = request.path.joinToString("/")
@@ -254,10 +297,9 @@ class GuestSessionsTest {
             "waitingOnOwner":false,"events":${events.joinToString(",", "[", "]")}"""
         when {
             request.method == HttpMethod.POST -> {
+                session.refuse?.let { return@Door it }
                 val content = (Wire.json.parseToJsonElement(request.body!!.decodeToString()) as JsonObject)["content"]!!.let { (it as JsonPrimitive).content }
-                val next = (session.events.size + 1).toLong()
-                session.events += event(next, "user", content, guest = "Bo")
-                session.events += event(next + 1, "assistant", "On it.")
+                if (session.echoesAtOnce) echo(session, content) else session.held = content
                 session.runState = "RUNNING"
                 201 to """{"turnId":"T","revived":true}"""
             }
@@ -296,6 +338,49 @@ class GuestSessionsTest {
         val reads = session.asked.size
         advanceTimeBy(4_001)
         assertEquals(reads + 1, session.asked.size)
+        follow.cancel()
+    }
+
+    @Test fun aSentMessageIsDrawnAtOnceAndAskedForEveryHalfSecondUntilItsEchoReplacesIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; echoesAtOnce = false; events += event(1, "user", "hi", guest = "Cy") }
+        val view = GuestConversation(conversationDoor(session), handle, "34A", "Bo", backgroundScope) { "k1" }
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        // Before the door has answered: the composer is empty and the words are in the conversation, headed as the reader's.
+        assertEquals("", view.state.value.draft)
+        val drawn = view.state.value.events.last()
+        assertEquals("Ship it on Friday", drawn.text)
+        assertEquals(buildJsonObject { put("source", "ORBIT_READER") }, drawn.fields["externalSender"])
+        runCurrent()
+        // Accepted, but the runner has not written it yet (production 11-16): still drawn, and asked for again within half a second.
+        assertEquals("guest-sessions/34A/events?after=1", session.asked.last())
+        assertEquals(listOf("hi", "Ship it on Friday"), view.state.value.events.map { it.text })
+        val reads = session.asked.size
+        echoHeld(session)
+        advanceTimeBy(501)
+        assertEquals(reads + 1, session.asked.size)
+        // The echo replaces it: one message, the runner's own.
+        assertEquals(listOf(1L, 2L, 3L), view.state.value.events.map { it.seq })
+        assertEquals(listOf("hi", "Ship it on Friday", "On it."), view.state.value.events.map { it.text })
+        // Echoed: back on the 4 s clock.
+        advanceTimeBy(3_000)
+        assertEquals(reads + 1, session.asked.size)
+        follow.cancel()
+    }
+
+    @Test fun aSendTheDoorRefusesTakesItsMessageAwayAndPutsTheWordsBack() = runTest {
+        val session = Session().apply { runState = "RUNNING"; refuse = 409 to """{"message":"The runner is offline."}""" }
+        val view = GuestConversation(conversationDoor(session), handle, "34A", "Bo", backgroundScope) { "k1" }
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        runCurrent()
+        assertEquals("Ship it on Friday", view.state.value.draft)
+        assertEquals(emptyList<RunEvent>(), view.state.value.events)
+        assertEquals("The runner is offline.", view.state.value.sendError)
         follow.cancel()
     }
 
@@ -340,4 +425,310 @@ class GuestSessionsTest {
     }
 
     private val RunEvent.text get() = (fields["text"] as? JsonPrimitive)?.content
+
+    // The guest view's images
+
+    /** A guest door whose uploads wait for [release], answering `A1`, `A2`… in the order they were asked; it keeps every turn's body. */
+    private class ImageDoor : OrbitApi {
+        val release = CompletableDeferred<Unit>()
+        val uploads = mutableListOf<String>()
+        val turns = mutableListOf<JsonObject>()
+        var uploadStatus = 201
+        override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
+            val path = request.path.joinToString("/")
+            return when (path) {
+                "guest-sessions/34A/attachments" -> {
+                    uploads += path
+                    val n = uploads.size
+                    release.await()
+                    if (uploadStatus == 201) ApiResponse(201, """{"id":"A$n"}""".encodeToByteArray())
+                    else ApiResponse(uploadStatus, """{"message":"Image exceeds the 5MB limit"}""".encodeToByteArray()).requireSuccess()
+                }
+                "guest-sessions/34A/turns" -> {
+                    turns += Wire.json.parseToJsonElement(request.body!!.decodeToString()) as JsonObject
+                    ApiResponse(201, """{"turnId":"T","revived":false}""".encodeToByteArray())
+                }
+                else -> ApiResponse(200, """{"events":[],"hasMore":false}""".encodeToByteArray())
+            }
+        }
+    }
+
+    @Test fun imagesAloneSendOnceTheirUploadsFinishAndARemovedOneIsLeftOut() = runTest {
+        val door = ImageDoor()
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope) { "k1" }
+        assertFalse(view.state.value.canSend)
+        view.attach("a.png", "image/png", byteArrayOf(1))
+        view.attach("b.jpg", "image/jpeg", byteArrayOf(2))
+        view.attach("c.webp", "image/webp", byteArrayOf(3))
+        runCurrent()
+        assertEquals(3, door.uploads.size)
+        // No words, only images: Send is offered.
+        assertTrue(view.state.value.canSend)
+        assertTrue(view.state.value.uploading)
+        view.removeImage(view.state.value.images[1].id)
+        assertEquals(listOf("a.png", "c.webp"), view.state.value.images.map { it.name })
+        view.send()
+        runCurrent()
+        // Pressed while uploads run, the message waits for them.
+        assertTrue(view.state.value.sending)
+        assertEquals(emptyList<JsonObject>(), door.turns)
+        door.release.complete(Unit)
+        runCurrent()
+        val body = door.turns.single()
+        assertEquals(JsonPrimitive(""), body["content"])
+        assertEquals(JsonArray(listOf(JsonPrimitive("A1"), JsonPrimitive("A3"))), body["attachmentIds"])
+        assertEquals(emptyList<GuestImage>(), view.state.value.images)
+        assertFalse(view.state.value.sending)
+    }
+
+    @Test fun anImageTheDoorWouldRefuseIsNotStagedAndAFailedUploadHoldsTheMessage() = runTest {
+        val door = ImageDoor().apply { release.complete(Unit) }
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope) { "k1" }
+        view.attach("x.svg", "image/svg+xml", byteArrayOf(1))
+        assertEquals(GuestImages.WRONG_TYPE, view.state.value.sendError)
+        view.attach("big.png", "image/png", ByteArray(GuestImages.MAX_BYTES + 1))
+        assertEquals(GuestImages.TOO_LARGE, view.state.value.sendError)
+        runCurrent()
+        assertEquals(emptyList<GuestImage>(), view.state.value.images)
+        assertEquals(emptyList<String>(), door.uploads)
+
+        door.uploadStatus = 413
+        view.attach("ok.png", "image/png", byteArrayOf(1))
+        runCurrent()
+        assertEquals("Image exceeds the 5MB limit", view.state.value.images.single().error)
+        view.edit("look")
+        view.send()
+        runCurrent()
+        assertEquals(GuestImages.FAILED_UPLOADS, view.state.value.sendError)
+        assertEquals(emptyList<JsonObject>(), door.turns)
+        view.removeImage(view.state.value.images.single().id)
+        view.send()
+        runCurrent()
+        assertEquals(JsonPrimitive("look"), door.turns.single()["content"])
+        assertNull(door.turns.single()["attachmentIds"])
+    }
+
+    @Test fun anUploadTheDoorAnswers404IsTheNotSharedState() = runTest {
+        val door = ImageDoor().apply { release.complete(Unit); uploadStatus = 404 }
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope)
+        view.attach("a.png", "image/png", byteArrayOf(1))
+        runCurrent()
+        assertTrue(view.state.value.gone)
+    }
+
+    // The guest stream (docs/session-viewer-stream-design.md §3–§5)
+
+    /** The guest stream, scripted: every open is one connection the test feeds frames into, drops or ends. */
+    private class Stream : GuestStream {
+        /** The cursor each open asked from. */
+        val opened = mutableListOf<Long>()
+        /** Thrown before the headers: the stream cannot be opened. */
+        var refuse: Exception? = null
+        var open = false
+        private var connection = Channel<Any>(Channel.UNLIMITED)
+        override suspend fun open(id: String, sinceSeq: Long, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
+            opened += sinceSeq
+            refuse?.let { throw it }
+            connection = Channel(Channel.UNLIMITED)
+            open = true
+            try {
+                onOpen()
+                for (item in connection) when (item) {
+                    is String -> onFrame(SseFrame(item, null, null))
+                    is Exception -> throw item
+                    else -> return
+                }
+            } finally { open = false }
+        }
+        fun frame(json: String) { connection.trySend(json) }
+        fun drop() { connection.trySend(IllegalStateException("dropped")) }
+        fun end() { connection.trySend(Unit) }
+    }
+
+    private fun streamed(session: Session, stream: Stream, scope: kotlinx.coroutines.CoroutineScope) =
+        GuestConversation(conversationDoor(session), handle, "34A", "Bo", scope, newTurnId = { "k1" }, stream = stream,
+            reconnect = ReconnectPolicy { 0.0 })
+
+    private fun frame(seq: Long, type: String, text: String, turnId: String? = null, guest: String? = null) =
+        event(seq, type, text, guest, turnId).toString()
+
+    private fun delta(text: String) = """{"seq":0,"type":"text_delta","payload":{"delta":"$text"}}"""
+
+    private fun headFrame(runState: String, waitingOnOwner: Boolean = false, title: String = "Fix it") =
+        """{"seq":0,"type":"head","payload":{"title":"$title","runState":"$runState","lifecycleState":"OPEN","waitingOnOwner":$waitingOnOwner}}"""
+
+    @Test fun theStreamIsAskedFromTheNewestSeqWithTheListedPayloadCap() {
+        assertEquals(listOf("guest-sessions", "34A", "stream"), guestStreamRequest("34A", 7).path)
+        assertEquals(listOf("sinceSeq" to "7", "maxPayload" to "2048"), guestStreamRequest("34A", 7).query)
+        // Nothing read yet: the server replays the newest page.
+        assertEquals(listOf("maxPayload" to "2048"), guestStreamRequest("34A", 0).query)
+    }
+
+    @Test fun deltasAreTypedOutUntilTheBlockTheyBecomeIsReadAndNothingIsPolled() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(listOf(1L), stream.opened)
+        stream.frame(delta("Hel")); stream.frame(delta("lo, "))
+        runCurrent()
+        assertEquals(mapOf("" to "Hello, "), view.state.value.textDrafts)
+        stream.frame("""{"seq":0,"type":"thinking_delta","payload":{"delta":"hmm","parentToolUseId":"tu1"}}""")
+        runCurrent()
+        assertEquals(mapOf("tu1" to "hmm"), view.state.value.thinkingDrafts)
+        // The block read in full replaces its draft, and is drawn in its place.
+        stream.frame(frame(2, "assistant", "Hello, Cy."))
+        runCurrent()
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        assertEquals(listOf("hi", "Hello, Cy."), view.state.value.events.map { it.text })
+        // A replayed event already held is not drawn twice.
+        stream.frame(frame(2, "assistant", "Hello, Cy."))
+        runCurrent()
+        assertEquals(listOf(1L, 2L), view.state.value.events.map { it.seq })
+        // The stream carries everything: the door is never polled while it is up.
+        advanceTimeBy(120_000)
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun aSentMessageIsDrawnAtOnceAndItsEchoOnTheStreamReplacesIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; echoesAtOnce = false; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        assertEquals(listOf("hi", "Ship it on Friday"), view.state.value.events.map { it.text })
+        runCurrent()
+        stream.frame(frame(2, "user", "Ship it on Friday", turnId = "T", guest = "Bo"))
+        runCurrent()
+        assertEquals(listOf(1L, 2L), view.state.value.events.map { it.seq })
+        assertEquals(buildJsonObject { put("source", "ORBIT_READER") }, view.state.value.events.last().fields["externalSender"])
+        // Only the send went to the door; the echo came over the stream.
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A/turns"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun headFramesUpdateTheStateTheTitleAndTheWaitingLine() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(GuestCopy.runsOn("Ana"), view.state.value.state.hint("Ana"))
+        stream.frame(headFrame("AWAITING_INPUT", waitingOnOwner = true, title = "Fix the redirect"))
+        runCurrent()
+        assertTrue(view.state.value.state.waiting)
+        assertEquals(GuestCopy.WAITS_ITS_TURN, view.state.value.state.hint("Ana"))
+        assertEquals("Fix the redirect", view.state.value.title)
+        // A run that ended takes its half-typed reply with it, and the next message restarts the session.
+        stream.frame(delta("Half a"))
+        stream.frame(headFrame("ENDED"))
+        runCurrent()
+        assertEquals(GuestRunState.ENDED, view.state.value.state.resolvedRunState)
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        assertEquals(GuestCopy.restarts("Ana"), view.state.value.state.hint("Ana"))
+        follow.cancel()
+    }
+
+    @Test fun aGoneFrameIsTheNotSharedStateAndNothingIsAskedAfterIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame("""{"type":"gone"}""")
+        runCurrent()
+        assertTrue(view.state.value.gone)
+        assertFalse(follow.isActive)
+        advanceTimeBy(120_000)
+        assertEquals(listOf(1L), stream.opened)
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+    }
+
+    @Test fun aDroppedOrEndedStreamReconnectsFromTheNewestSeqRead() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame(frame(5, "assistant", "first"))
+        stream.frame(delta("sec"))
+        stream.drop()
+        runCurrent()
+        // Dropped: the draft goes (the server types the turn's prefix out again), and it reconnects after the first backoff.
+        assertFalse(stream.open)
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        advanceTimeBy(801)
+        assertEquals(listOf(1L, 5L), stream.opened)
+        stream.frame(frame(6, "assistant", "second"))
+        stream.end()
+        runCurrent()
+        // Ended cleanly (an apiserver stopping): it reconnects at once from where it got to.
+        advanceTimeBy(301)
+        assertEquals(listOf(1L, 5L, 6L), stream.opened)
+        assertEquals(listOf(1L, 5L, 6L), view.state.value.events.map { it.seq })
+        // A gap too long to replay: the newest page is read again, and the stream reopens after it.
+        session.events += event(9, "assistant", "ninth")
+        stream.frame("""{"seq":0,"type":"resync"}""")
+        runCurrent()
+        advanceTimeBy(801)
+        assertEquals(listOf(1L, 5L, 6L, 9L), stream.opened)
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun theStreamClosesWhenThePageStopsFollowingAndReopensFromWhereItGot() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        var follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame(frame(3, "assistant", "x"))
+        runCurrent()
+        assertTrue(stream.open)
+        // The page leaves STARTED: its follow is cancelled, and the connection with it.
+        follow.cancel()
+        runCurrent()
+        assertFalse(stream.open)
+        follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertTrue(stream.open)
+        assertEquals(listOf(1L, 3L), stream.opened)
+        // The root is not read again.
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun aStreamThatCannotOpenFallsBackToPollingEveryFourSeconds() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream().apply { refuse = ApiError.parse(429, """{"code":"VIEWER_STREAM_CAPPED"}""".encodeToByteArray()) }
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(listOf(1L), stream.opened)
+        session.events += event(2, "assistant", "polled")
+        advanceTimeBy(4_001)
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A/events?after=1"), session.asked)
+        assertEquals(listOf("hi", "polled"), view.state.value.events.map { it.text })
+        follow.cancel()
+    }
+
+    @Test fun aStream404FromAServerWithoutTheRouteFallsBackAndTheDoorDecidesNotShared() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream().apply { refuse = ApiError.parse(404, "{}".encodeToByteArray()) }
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        // Polling: the door still shares it, so the view follows by reading.
+        advanceTimeBy(4_001)
+        assertFalse(view.state.value.gone)
+        assertEquals("guest-sessions/34A/events?after=1", session.asked.last())
+        session.shared = false
+        advanceTimeBy(4_001)
+        assertTrue(view.state.value.gone)
+        assertFalse(follow.isActive)
+    }
 }

@@ -6,6 +6,7 @@ import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.NetworkException
+import io.orbitd.android.core.net.scheduledSessions
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.*
@@ -17,6 +18,8 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
 
     suspend fun search(query: String): SearchResults = read(listOf("sessions", "search"), SearchResults.serializer(),
         listOf("q" to query, "limit" to "100"))
+    suspend fun scheduledSessions(workspaceId: String, view: SessionView): List<DirectorySession> =
+        api.scheduledSessions(handle, workspaceId, view.query, DirectorySession.serializer())
     suspend fun moveTargets(id: String): MoveTargets = read(listOf("sessions", id, "move-targets"), MoveTargets.serializer())
     suspend fun objectRead(path: List<String>): JsonObject = read(path, JsonObject.serializer())
     /** A file's bytes, bounded by the server's 25 MiB upload limit. */
@@ -32,9 +35,6 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     /** Complete on a DONE or CANCELLED project's row (docs/session-list-projects-design.md §3.6): its coordinator and its members
      * still in Open, in every workspace, move to Completed together. An OPEN project is refused 409 PROJECT_STILL_OPEN. */
     suspend fun completeProject(projectId: String) { mutate(listOf("projects", projectId, "sessions", "complete")) }
-    /** Write the session's recap again now, past the settle hooks' two-minute window: the conversation's Recap card's refresh.
-     * Answers once the pass has finished, with what it did. */
-    suspend fun refreshRecap(id: String): RecapOutcome = Wire.decode(mutate(listOf("sessions", id, "recap")), RecapOutcome.serializer())
     suspend fun restore(id: String) { mutate(listOf("sessions", id, "restore")) }
     suspend fun delete(id: String, permanent: Boolean) { mutate(listOf("sessions", id) + if (permanent) listOf("purge") else emptyList(), HttpMethod.DELETE) }
     suspend fun end(id: String) { mutate(listOf("sessions", id, "end")) }
@@ -90,6 +90,7 @@ data class DirectoryData(
                     put("id", r.id)
                     put("name", r.name)
                     r.displayName?.let { put("displayName", it) }
+                    r.managed?.let { put("managed", it) }
                     r.status?.let { put("status", it) }
                     r.online?.let { put("online", it) }
                     r.lastHeartbeatAt?.let { put("lastHeartbeatAt", it) }

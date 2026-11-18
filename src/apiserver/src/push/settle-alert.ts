@@ -100,3 +100,26 @@ function failureLine(error: string | null | undefined): string {
     line.length > MAX_ERROR_CHARS ? `${line.slice(0, MAX_ERROR_CHARS - 1).trimEnd()}…` : line;
   return `Failed · ${excerpt}`;
 }
+
+/** The session fields `ownerStarted` reads. */
+export interface StarterInput {
+  runSource?: string | null;
+  parentSessionId?: string | null;
+  coordinatorForProject?: { id: string } | null;
+  task?: { project: { coordinatorEnabled: boolean } | null } | null;
+}
+
+/**
+ * Whether the session's owner started it themselves — the only kind whose settling is worth their
+ * phone by default. A session another session's agent spawned is read by that agent; a task run a
+ * task list or a coordinator dispatched, a coordinator itself, and any task run in a project with a
+ * coordinator are read by the coordinator, and the project ending is told once by `notifyProjectDone`.
+ * Ten task runs in a project were ten banners for one thing the owner was waiting on.
+ */
+export function ownerStarted(s: StarterInput): boolean {
+  if (s.runSource === 'TASK_LIST_AUTO' || s.runSource === 'PROJECT_COORDINATOR' || s.runSource === 'SCHEDULE') return false;
+  if (s.parentSessionId) return false;
+  if (s.coordinatorForProject) return false;
+  if (s.task?.project?.coordinatorEnabled) return false;
+  return true;
+}

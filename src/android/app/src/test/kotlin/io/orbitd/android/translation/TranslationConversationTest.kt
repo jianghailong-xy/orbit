@@ -14,7 +14,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Settings › Translation in an Android conversation (docs/mocks/session-translation/01-board.png, frames 4–6 and 10), in the production
  * shell over [ComposerShell]: the owner's message shown as they wrote it and the agent's reply in their language, each with its own
- * Show original; the composer's "Chinese → English" tag; a message held while it is translated and one that failed, with Retry and
+ * Show original; the composer's "<Language> → <Agent language>" tag ("Chinese → English", or "Chinese → Japanese"); a message held while it is translated and one that failed, with Retry and
  * Send as written; a reply streaming, one waiting for its translation, one whose translation failed with Retry, and the live
  * translation landing. The NATIVE frames go under `src/android/build/evidence/session-translation-android/` beside their semantics.
  */
@@ -72,12 +72,17 @@ class TranslationConversationTest : ComposerShellTest() {
         assertTrue(has(text("原因找到了") and row(2), unmerged = true))
         assertFalse("the English is not drawn", has(text("does nothing in Safari"), unmerged = true))
         assertFalse(has(text("Safari blocks popups"), unmerged = true))
-        assertTrue(has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
+        assertFalse("the owner's message has the press alone", has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 2), unmerged = true))
         // Frame 10's composer: the tag says which way the words go.
         assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → English"), unmerged = true))
         shot("1-conversation-translated")
+        // Like the placeholder, the tag gives way once the owner types, and comes back when the box is empty.
+        compose.onNodeWithTag("composer-input").performTextInput("hi")
+        await { !has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
 
         // Frame 10: the reply flipped to the English the agent wrote — "Original · Show translation" — and only that one.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 2), useUnmergedTree = true).performClick()
@@ -91,7 +96,7 @@ class TranslationConversationTest : ComposerShellTest() {
         // The owner's message flips to what reached the agent.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 1), useUnmergedTree = true).performClick()
         await { has(text("does nothing in Safari") and row(1), unmerged = true) }
-        assertTrue(has(text(TranslationCopy.SENT_IN_ENGLISH) and row(1), unmerged = true))
+        assertTrue(has(action(TranslationCopy.SHOW_TRANSLATION, 1), unmerged = true))
         // And back.
         compose.onNode(action(TranslationCopy.SHOW_TRANSLATION, 2), useUnmergedTree = true).performClick()
         await { has(text("原因找到了") and row(2), unmerged = true) }
@@ -175,6 +180,18 @@ class TranslationConversationTest : ComposerShellTest() {
         await { has(text("改好了") and row(5), unmerged = true) }
         assertFalse(has(text(TranslationCopy.REPLY_FAILED) and row(5), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 5), unmerged = true))
+    }
+
+    @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
+        translatedConversation()
+        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","translationAgentLanguage":"ja"},
+            "translationAvailable":true}""".encodeToByteArray()) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → Japanese"), unmerged = true))
+        assertFalse(has(hasText("Chinese → English"), unmerged = true))
+        shot("9-composer-tag-japanese")
     }
 
     @Test fun withTranslationOffNothingIsTaggedOrGreyed() {

@@ -106,7 +106,7 @@ describe('another session’s message', () => {
     // of its own (docs/mocks/session-message-bubble).
     expect(head?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
     expect(head?.querySelector('.smc-not-you')?.textContent).toBe('Sent by another Orbit session, not by you');
-    // The foot row is one grey line: the time, the sender's task, what Orbit attached.
+    // The foot row is one grey line: the time and the sender's task.
     const meta = el!.querySelector('.smc-meta');
     expect(meta?.textContent).not.toContain('Sent by another Orbit session');
     expect(meta!.querySelector('a')?.getAttribute('href')).toBe(`/tasks/${uuidToBase62(CARD.fromTaskId!)}`);
@@ -118,13 +118,15 @@ describe('another session’s message', () => {
     expect(el!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
   });
 
-  it('folds only what else delivery appended beside the block', async () => {
+  it('omits the appended blocks while keeping the sending session’s message', async () => {
     const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
     await mount([sent(CARD, { controlPlaneNote: `${NOTE}\n\n${board}`, text: `${SENT}${NOTE}\n\n${board}` })]);
     const el = card()!;
-    expect(el.querySelector('.chat-injected-head')?.textContent).toBe('⊕ Orbit attached: list conditions');
-    await act(async () => (el.querySelector('.chat-injected-head') as HTMLButtonElement).click());
-    expect(el.querySelector('.chat-injected-panel')?.textContent).not.toContain('orbit-session-message');
+    expect(el.querySelector('.chat-injected')).toBeNull();
+    expect(el.textContent).toContain(SENT);
+    expect(el.textContent).not.toContain('Orbit attached');
+    expect(el.textContent).not.toContain('Quota held dispatch');
+    expect(el.textContent).not.toContain('orbit-session-message');
   });
 
   it('says on the card when the sender runs narrower than this session', async () => {

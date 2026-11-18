@@ -194,17 +194,6 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// alone says where the person's words end. Nil when the event carried no note, and then the
     /// bubble is exactly what the runner echoed — nothing is read out of the text.
     public var note: String?
-    /// What delivery appended, as the one entry the view draws in the bubble under the person's
-    /// words — named for its kind, and opening to the text the model read. Nil when the event
-    /// carried no note, so nothing is drawn as Orbit's own. Nil too when the note names nothing: a
-    /// wiki chat's first message sent with neither page nor selection carries only the chat's words
-    /// to its agent, which the person did not attach, so no line is drawn (web parity: `UserBubble`,
-    /// C15).
-    public var attached: (kind: String, text: String)? {
-        guard let note else { return nil }
-        let kind = describeNote(note)
-        return kind.isEmpty ? nil : (kind, note)
-    }
     /// An exception item's delivery, when the control plane recorded the item's own fields beside
     /// this turn's echo (`openItemDelivery`, see `OpenItemDelivery.parse`). This turn is nobody's
     /// message: the console draws the card instead of the bubble, with `text` — the paragraph
@@ -633,11 +622,15 @@ public struct PendingApproval: Equatable, Sendable, Identifiable, Codable {
     /// Settings › Translation (3A): what the card shows in the owner's language. Draw `shownInput`;
     /// `input` stays the English the engine sent.
     public var translation: ApprovalTranslation?
+    /// The engine's call it asks about, where the server named it: an answered question's record
+    /// keeps the card's translation under it.
+    public var toolUseId: String?
     /// `input` as the card shows it — translated where the server translated it.
     public var shownInput: JSONValue? { ApprovalTranslation.shownInput(input, translation) }
     public init(id: String, kind: Kind, toolName: String?, input: JSONValue?,
-                translation: ApprovalTranslation? = nil) {
+                translation: ApprovalTranslation? = nil, toolUseId: String? = nil) {
         self.translation = translation
+        self.toolUseId = toolUseId
         self.id = id
         self.kind = kind
         self.toolName = toolName

@@ -370,15 +370,16 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(activity, "aria-label={wikiWaitingOnYou(waiting)}", in: Self.activity)
     }
 
-    /// One space is a label and several a picker (§12.3.4, mock 31 ④), by the same names; the rules for
+    /// The space is a picker however many there are (§12.3.4, mock 31 ④; board 47), by the same names; the rules for
     /// names, which space opens and what waits are held to the one fixture both ends read.
     func testTheSpaceRulesAreTheWebs() throws {
         let page = try source(Self.page)
         let head = try slice(page, from: "function WikiHeadSpace(", to: "/** The status row")
-        assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);", "if (spaces.length < 2) {",
-                           "<span className=\"wk-space-tag\"", "textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),",
+        assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);",
+                           "textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),",
                            "{ key: 'manage', label: WIKI_MANAGE_SPACES,"],
-                    "the head's space: a label alone, a menu among several ending at Manage spaces (board docs/mocks/wiki-space-menu)")
+                    "the head's space: a menu ending at Manage spaces (board docs/mocks/wiki-space-menu)")
+        XCTAssertFalse(head.contains("spaces.length < 2"), "one space is a menu too, as on this end (board 47)")
         assertSays(page, "wikiDefaultSpace(spaces.data ?? [], { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() })",
                    in: Self.page)
         let rules = try source(Self.spaceLib)

@@ -14,13 +14,22 @@ import XCTest
 /// Swift constant to the web declaration of the same name, and renders every Swift template with
 /// sentinel values to compare the whole sentence.
 ///
-/// Names correspond one to one: a sentence added at one end and not the other fails here too.
+/// Names correspond one to one: a sentence added at one end and not the other fails here too,
+/// unless it is named below as a sentence only one client has.
 /// Shaped after `EvidenceDecisionCopyParityTests`, including that a missing counterpart is a failure
 /// and never an `XCTSkip`.
 final class RunnerPageCopyParityTests: XCTestCase {
 
     private static let webCopy = "src/web/src/lib/runnerCopy.ts"
     private static let swiftCopy = "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift"
+
+    /// Sentences only the browser's machine page says, so there is nothing on this side to hold them
+    /// to. `MANAGED_RUNNER_NOT_REPORTED` is the web's pre-report state of a managed runner: its
+    /// Resources and Engines each say this one line, and no update badges or engine rows are drawn
+    /// (`MachineSettingsPage`'s `managedWaiting`, web commit 1c28b3603). These clients' machine page
+    /// has no managed-row state — a runner that has not reported keeps its Resources tiles and says
+    /// "This runner hasn’t reported its engines yet." under Engines — so this client never says it.
+    private static let webOnly: Set<String> = ["MANAGED_RUNNER_NOT_REPORTED"]
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -103,10 +112,17 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_RESOURCES_DISK_ONLY", RunnerPageCopy.RUNNER_RESOURCES_DISK_ONLY),
         ("RUNNER_RESOURCES_UPDATE", RunnerPageCopy.RUNNER_RESOURCES_UPDATE),
         ("RUNNER_RESOURCES_NO_READING", RunnerPageCopy.RUNNER_RESOURCES_NO_READING),
+        ("MANAGED_RUNNER_NOT_REPORTED", RunnerPageCopy.MANAGED_RUNNER_NOT_REPORTED),
+        ("MANAGED_RUNNER_LABEL", RunnerPageCopy.MANAGED_RUNNER_LABEL),
+        ("MANAGED_RUNNER_KEPT_UP_TO_DATE", RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE),
+        ("MANAGED_RUNNER_UPDATED_BY_ORBIT", RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT),
         ("RUNNER_RESOURCES_MEMORY_FULL", RunnerPageCopy.RUNNER_RESOURCES_MEMORY_FULL),
         ("RUNNER_CPU_ONE_CORE", RunnerPageCopy.RUNNER_CPU_ONE_CORE),
         ("RUNNER_MAX_CONCURRENT", RunnerPageCopy.RUNNER_MAX_CONCURRENT),
         ("RUNNER_MAX_CONCURRENT_HINT", RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT),
+        ("RUNNER_MAX_CONCURRENT_UNIT", RunnerPageCopy.RUNNER_MAX_CONCURRENT_UNIT),
+        ("RUNNER_MAX_CONCURRENT_DECREASE", RunnerPageCopy.RUNNER_MAX_CONCURRENT_DECREASE),
+        ("RUNNER_MAX_CONCURRENT_INCREASE", RunnerPageCopy.RUNNER_MAX_CONCURRENT_INCREASE),
         ("RUNNER_EDIT", RunnerPageCopy.RUNNER_EDIT),
         ("RUNNER_DISK", RunnerPageCopy.RUNNER_DISK),
         ("RUNNER_KEEP_FREE", RunnerPageCopy.RUNNER_KEEP_FREE),
@@ -123,6 +139,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_ENGINE_NO_QUOTA_LIMIT", RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA_LIMIT),
         ("RUNNER_ENGINE_COULDNT_CHECK", RunnerPageCopy.RUNNER_ENGINE_COULDNT_CHECK),
         ("RUNNER_ENGINE_NO_READING", RunnerPageCopy.RUNNER_ENGINE_NO_READING),
+        ("RUNNER_ENGINE_NO_PROVIDER_KEY", RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY),
         ("RUNNER_SIGN_IN", RunnerPageCopy.RUNNER_SIGN_IN),
         ("RUNNER_UPDATE_ENGINES_NOW", RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW),
         ("RUNNER_ENGINE_UPDATE_DISMISS", RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS),
@@ -131,6 +148,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("AGENT_FIX_FAILED", RunnerPageCopy.AGENT_FIX_FAILED),
         ("RUNNER_REFRESH_MODEL_LISTS", RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS),
         ("RUNNER_ENGINES_FOOTER", RunnerPageCopy.RUNNER_ENGINES_FOOTER),
+        ("RUNNER_ENGINES_MANAGED_FOOTER", RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER),
         ("RUNNER_ENGINES_OFFLINE_FOOTER", RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER),
         ("RUNNER_ENGINE_RENEW", RunnerPageCopy.RUNNER_ENGINE_RENEW),
         ("RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE", RunnerPageCopy.RUNNER_ENGINE_ACCOUNT_SIGNED_OUT_NOTE),
@@ -292,6 +310,9 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("runnerCpuCores", RunnerPageCopy.runnerCpuCores(count: "${count}")),
         ("runnerCpuLoad", RunnerPageCopy.runnerCpuLoad(load: "${load}")),
         ("runnerDiskFree", RunnerPageCopy.runnerDiskFree(free: "${free}")),
+        ("runnerRunningNow", put(RunnerPageCopy.runnerRunningNow(active: 90_001), [90_001: "active"])),
+        ("runnerMaxBelowRunning", put(RunnerPageCopy.runnerMaxBelowRunning(active: 90_001, max: 90_002),
+                                      [90_001: "active", 90_002: "max"])),
         ("runnerEnginesChecked", RunnerPageCopy.runnerEnginesChecked(when: "${when}")),
         ("runnerEnginesReported", RunnerPageCopy.runnerEnginesReported(when: "${when}")),
         ("runnerEngineAccountsSignedIn", put(RunnerPageCopy.runnerEngineAccountsSignedIn(count: 90_001),
@@ -404,6 +425,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
         ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
         ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
+        ("agentFixSignInBelow", RunnerPageCopy.agentFixSignInBelow(engine: "${engine}")),
     ]
 
     // MARK: the words
@@ -473,7 +495,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         XCTAssertEqual(tableConstants.count, Self.constants.count, "a constant is listed twice above")
         XCTAssertEqual(listedTemplates.count, Self.templates.count, "a template is listed twice above")
         XCTAssertTrue(listedTemplates.isDisjoint(with: branchingNames), "a template is listed as choosing too")
-        for name in Set(webConstants.keys).subtracting(swiftConstants).sorted() {
+        for name in Set(webConstants.keys).subtracting(swiftConstants).subtracting(Self.webOnly).sorted() {
             XCTFail("runnerCopy.ts declares \(name), which RunnerPageCopy does not")
         }
         for name in swiftConstants.subtracting(webConstants.keys).sorted() {

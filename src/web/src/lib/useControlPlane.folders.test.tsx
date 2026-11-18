@@ -34,10 +34,17 @@ const SESSIONS: QueryKey = ['sessions'];
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
+/** Seeds a cached read with the declaration its real counterpart makes: the stream selects on
+ *  `meta.entities`, and a bare `setQueryData` creates an entry that declares nothing. */
+function seed(client: QueryClient, key: QueryKey, entities: string[]): void {
+  client.getQueryCache().build(client, { queryKey: key, meta: { entities } });
+  client.setQueryData(key, []);
+}
+
 async function mount(keys: QueryKey[]): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Seeded rather than fetched: a read with no observer is only marked by an invalidation.
-  for (const key of keys) client.setQueryData(key, []);
+  for (const key of keys) seed(client, key, key[0] === 'session-folders' ? ['folder'] : ['session', 'workspace', 'tag', 'folder', 'project']);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
