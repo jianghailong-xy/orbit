@@ -475,7 +475,11 @@ async function escalate(stack: Stack, itemId: string): Promise<void> {
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${itemId}::uuid`,
   );
+  // A live coordinator retains a taken ITEM. Switching off Automatic makes this fixture eligible.
+  const target = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: itemId } });
+  await stack.db.project.update({ where: { id: target.projectId }, data: { coordinatorEnabled: false } });
   const swept = await stack.escalation.sweep();
+  await stack.db.project.update({ where: { id: target.projectId }, data: { coordinatorEnabled: true } });
   assert.ok(swept.some((row) => row.itemId === itemId), 'the clock handed the item to the owner');
 }
 
