@@ -16,6 +16,21 @@ struct ScheduleCircleGlyph: View {
     var size: CGFloat = 22
 
     var body: some View {
+        if view.gauge {
+            // A condition's row (condition-triggers board ④ ③): a gauge in place of the circle, amber when it
+            // cannot be read, faint when paused.
+            Image(systemName: "gauge.with.dots.needle.33percent")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(view.circle == .held ? Color.orange
+                                 : view.circle == .paused ? Color.secondary.opacity(0.5) : Color.accentColor)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        } else {
+            circleBody
+        }
+    }
+
+    private var circleBody: some View {
         ZStack {
             switch view.circle {
             case .open:
@@ -116,6 +131,8 @@ struct ScheduleRowModel: Identifiable {
     let paused: Bool
     /// The schedule this row opens, for the Mac's selected row; nil for a draft.
     var scheduleID: String? = nil
+    /// A condition's row: the newest reading and its age, where a timed row shows its time (board ④ ②).
+    var reading: ConditionDisplay.RowReading? = nil
     let open: () -> Void
 }
 
@@ -124,9 +141,17 @@ struct ScheduleRowModel: Identifiable {
 enum ScheduleTimelineRows {
     @MainActor
     static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
-                     wide: Bool) -> [ScheduleRowModel] {
+                     wide: Bool, openTask: @escaping (String) -> Void = { _ in }) -> [ScheduleRowModel] {
         group.items.map { item -> ScheduleRowModel in
             switch item {
+            case .task(let t):
+                return ScheduleRowModel(
+                    id: "\(group.id)-\(item.id)",
+                    circle: ConditionDisplay.circle(cantRead: t.condition.cantRead),
+                    title: t.title, line: ConditionDisplay.taskRowLine(t), repeats: false, time: "",
+                    draft: false, paused: false,
+                    reading: t.condition.cantRead ? nil : ConditionDisplay.rowReading(t.condition, now: now),
+                    open: { openTask(t.id) })
             case .draft(let card, let at):
                 let rule = card.when?.rule ?? .daily(time: "")
                 let accessLevel = card.may?.accessLevel ?? "CHECK_ONLY"
@@ -189,6 +214,21 @@ enum ScheduleTimelineRows {
                 else if let at, !inNeeds && !inPaused { time = scheduleClock(at) }
                 else { time = "" }
                 let pausedAt = s.pausedAt.flatMap(ScheduleDisplay.parse) ?? Self.pausedAt(scheduled.detail(s.id))
+                if case .when = s.rule {
+                    // A WHEN rule (condition-triggers board ④): "↻ When raw used above 90% · HPC", a gauge, and the
+                    // newest reading with its age where a timed row has its time; "Can't read" under Needs you.
+                    var parts = [ScheduleDisplay.ruleText(s.rule, form: .long)]
+                    if let name = s.workspaceName, !name.isEmpty { parts.append(name) }
+                    if s.accessLevel != "CHECK_ONLY" { parts.append(ScheduleDisplay.accessCopy(s.accessLevel).label) }
+                    let cantRead = s.condition?.cantRead == true
+                    return ScheduleRowModel(
+                        id: "\(group.id)-\(item.id)",
+                        circle: ScheduleDisplay.scheduleCircle(s),
+                        title: s.title, line: parts.joined(separator: SC.separator), repeats: true,
+                        time: failing ? time : "", draft: false, paused: inPaused, scheduleID: s.id,
+                        reading: cantRead || inPaused || failing ? nil : s.condition.flatMap { ConditionDisplay.rowReading($0, now: now) },
+                        open: { Self.select(s.id, scheduled) })
+                }
                 return ScheduleRowModel(
                     id: "\(group.id)-\(item.id)",
                     circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
@@ -332,7 +372,7 @@ struct ScheduledPage: View {
                           now: Date) -> [PageRow] {
         var out: [PageRow] = [.header]
         let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
-            && scheduled.workspaceFilter == nil
+            && scheduled.shownWaitingTasks.isEmpty && scheduled.workspaceFilter == nil
         if empty {
             out += [.lead, .quickAdd] + SC.Empty.examples.map(PageRow.example)
         } else {
@@ -354,7 +394,7 @@ struct ScheduledPage: View {
                     .font(.largeTitle.weight(.bold))
                     .foregroundStyle(Color.accentColor)
                 Spacer()
-                Text("\(scheduled.shownSchedules.count)")
+                Text("\(scheduled.shownSchedules.count + scheduled.shownWaitingTasks.count)")
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("scheduled-count")
@@ -396,7 +436,8 @@ struct ScheduledPage: View {
 
     private func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel,
                       now: Date) -> [ScheduleRowModel] {
-        ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: false)
+        ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: false,
+                                  openTask: { id in model.route(to: .task(id)) })
     }
 
     private func rowView(_ row: ScheduleRowModel) -> some View {
@@ -416,7 +457,14 @@ struct ScheduledPage: View {
                             if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
                                 Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
                             }
-                            if !row.time.isEmpty {
+                            if let reading = row.reading {
+                                // "6.9% · 1 min ago": how far from firing, and whether the probe is still alive.
+                                (Text(reading.value).font(.orbitLabel.weight(.semibold)).foregroundColor(.primary)
+                                 + Text(reading.age.map { "\(SC.separator)\($0)" } ?? "").font(.orbitLabel)
+                                    .foregroundColor(.secondary))
+                                    .monospacedDigit()
+                                    .accessibilityIdentifier("schedule-row-reading")
+                            } else if !row.time.isEmpty {
                                 Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
                             }
                         }
@@ -564,7 +612,10 @@ extension ScheduleDetailPanel {
         let now = Date()
         let lastRun = detail?.lastRun ?? s.lastRun
         let lastFacts = lastRun.map { ScheduleDisplay.runFindingFacts($0, findings: detail?.findings ?? []) }
-        let meta = [ScheduleDisplay.ruleText(s.rule, form: .short), s.timezone, s.workspaceName,
+        let conditionID = s.rule.conditionId ?? s.condition?.id
+        let condition = scheduled.condition(conditionID)
+        // A WHEN rule has no time, so its zone says nothing.
+        let meta = [ScheduleDisplay.ruleText(s.rule, form: .short), conditionID == nil ? s.timezone : nil, s.workspaceName,
                     ScheduleDisplay.accessCopy(s.accessLevel).label]
             .compactMap { $0 }.joined(separator: SC.separator)
         let next: String = s.nextDueAt.flatMap(ScheduleDisplay.parse)
@@ -588,12 +639,25 @@ extension ScheduleDetailPanel {
                     }
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 }
-                block {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(SC.Inspector.nextRun).font(.orbitLabel).foregroundStyle(.secondary)
-                        Text(next).font(.title2.weight(.bold))
-                        if let lastLine {
-                            Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary)
+                if conditionID != nil {
+                    // A WHEN rule (condition-triggers board ⑥ ② ③): how far the reading is from firing, and how it
+                    // is checked, in place of the next run.
+                    if let condition {
+                        ConditionBlocksView(condition: condition, timezone: zone, now: now)
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity)
+                    }
+                    if let lastLine {
+                        Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary).padding(.leading, 4)
+                    }
+                } else {
+                    block {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(SC.Inspector.nextRun).font(.orbitLabel).foregroundStyle(.secondary)
+                            Text(next).font(.title2.weight(.bold))
+                            if let lastLine {
+                                Text(lastLine).font(.orbitLabel).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -653,10 +717,11 @@ extension ScheduleDetailPanel {
                             .font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
-                historySection(scheduled, s, detail, now: now, zone: zone)
+                historySection(scheduled, s, detail, condition: condition, now: now, zone: zone)
             }
             .padding(16)
         }
+        .task(id: conditionID) { if let conditionID { await scheduled.loadCondition(conditionID) } }
         .background(Color.schedulePanelFill)
         .accessibilityIdentifier("schedule-detail-panel")
     }
@@ -698,28 +763,38 @@ extension ScheduleDetailPanel {
     private enum HistoryEntry: Identifiable {
         case run(ScheduleRunView)
         case record(ScheduleChangeRecord)
+        /// A condition's line (board ⑥ ③): Fired, Ready again; a FIRED's run is drawn by its line, not twice.
+        case event(ConditionEventView, ConditionDisplay.HistoryLine, index: Int)
         var id: String {
             switch self {
             case .run(let r): return "run-\(r.id)"
             case .record(let r): return "rev-\(r.revision)"
+            case .event(let e, _, let index): return "event-\(index)-\(e.at)"
             }
         }
         var at: String {
             switch self {
             case .run(let r): return r.startedAt ?? r.plannedAt
             case .record(let r): return r.createdAt
+            case .event(let e, _, _): return e.at
             }
         }
     }
 
     private func historySection(_ scheduled: ScheduledModel, _ s: ScheduleView, _ detail: ScheduleDetailResponse?,
-                                now: Date, zone: String) -> some View {
-        let entries = ((detail?.recentRuns ?? []).map(HistoryEntry.run) + (detail?.history ?? []).map(HistoryEntry.record))
+                                condition: ConditionView?, now: Date, zone: String) -> some View {
+        let events: [HistoryEntry] = (condition?.events ?? []).enumerated().compactMap { index, e in
+            condition.flatMap { ConditionDisplay.historyLine(e, condition: $0) }.map { HistoryEntry.event(e, $0, index: index) }
+        }
+        let firedRuns = Set((condition?.events ?? []).compactMap { $0.runId.map(PublicID.storageKey) })
+        let runs = (detail?.recentRuns ?? []).filter { !firedRuns.contains(PublicID.storageKey($0.id)) }
+        let entries = (runs.map(HistoryEntry.run) + events + (detail?.history ?? []).map(HistoryEntry.record))
             .sorted { (ScheduleDisplay.parse($0.at) ?? .distantPast) > (ScheduleDisplay.parse($1.at) ?? .distantPast) }
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                     historyRow(entry, scheduled: scheduled, s: s, detail: detail, now: now, zone: zone)
+                        .accessibilityIdentifier("schedule-history-row")
                         .padding(.top, index > 0 ? 16 : 0)
                         .overlay(alignment: .top) { Divider().padding(.top, 8).opacity(index > 0 ? 1 : 0) }
                 }
@@ -732,6 +807,39 @@ extension ScheduleDetailPanel {
                             detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
+        case .event(let event, let line, _):
+            let run = line.runId.flatMap { id in
+                detail?.recentRuns.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }
+            }
+            let at = ScheduleDisplay.parse(event.at).map {
+                "\(ScheduleDisplay.dateText($0, timezone: zone)) \(ScheduleDisplay.localParts($0, timezone: zone).time)"
+            } ?? ""
+            let sub = [at, run.map { ScheduleDisplay.capitalizedRunOf(plannedAt: $0.plannedAt, timezone: zone) }]
+                .compactMap { $0 }.joined(separator: SC.separator)
+            Button {
+                if let session = run?.sessionId {
+                    scheduled.inspectedID = nil
+                    model.openScheduleRun(sessionID: session, scheduleID: s.id)
+                }
+            } label: {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.text).font(.orbitSubtext)
+                        Text(sub).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 6)
+                    if line.runId != nil {
+                        Text(line.chip).font(.orbitMeta.weight(.medium)).foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    } else {
+                        chip(line.chip, tone: .mute)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(run?.sessionId == nil)
         case .run(let run):
             let facts = ScheduleDisplay.runFindingFacts(run, findings: detail?.findings ?? [])
             let view = ScheduleDisplay.runCircle(state: run.state, newFinding: facts.newFinding)

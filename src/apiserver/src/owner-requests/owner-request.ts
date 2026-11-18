@@ -353,14 +353,17 @@ const ENDING_MEANING: Readonly<Record<Exclude<OwnerRequestState, 'PENDING'>, str
  * typed: no value reaches a turn, and neither does a free-text answer the value could have been pasted into.
  */
 export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Record<string, unknown> {
-  const answer = (request.answer ?? {}) as { option?: number; text?: string };
+  const answer = (request.answer ?? {}) as { option?: number; text?: string; translation?: { text?: string } };
+  // The owner's words as the session reads them: their translation into the agent language when Settings ›
+  // Translation made one (the done text's, or a decline's reason's), else as they typed them.
+  const translated = typeof answer.translation?.text === 'string' ? answer.translation.text : undefined;
   const payload: Record<string, unknown> = {
     requestId: request.id,
     kind: request.kind,
     outcome: request.state,
     title: request.title,
     resolvedAt: request.resolvedAt?.toISOString() ?? null,
-    reason: request.resolutionNote,
+    reason: request.state === 'DECLINED' && translated !== undefined ? translated : request.resolutionNote,
   };
   if (request.kind === 'SECRET') {
     const spec = (request.secretSpec ?? {}) as Partial<OwnerRequestSecretSpec>;
@@ -398,7 +401,7 @@ export function ownerRequestResolutionPayload(request: EndedOwnerRequest): Recor
     const options = (request.options ?? []) as OwnerRequestOption[];
     payload.chosenOption = { index: answer.option, label: options[answer.option]?.label ?? null };
   }
-  if (answer.text !== undefined) payload.answerText = answer.text;
+  if (answer.text !== undefined) payload.answerText = translated ?? answer.text;
   return payload;
 }
 

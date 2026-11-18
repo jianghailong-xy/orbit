@@ -1,0 +1,11 @@
+schedule-card: no window after launch; File > New Window
+schedule-card: never in the band 140.0–640.0; last frame (missing)
+schedule-card: Ceph capacity guard shown
+schedule-card: Raw used above 90% shown
+schedule-card:  for 10 min shown
+schedule-card: Fires again only after it drops below 85%. Checked every 5 min on workstation-gpu, no model. shown
+schedule-card: ceph df -f json | jq .stats.total_used_raw_ratio shown
+schedule-card: 6.9%. Nothing to report. shown
+schedule-card: HPC · Claude agent shown
+schedule-card: Up to  shown
+schedule-card: 3 runs a week shown

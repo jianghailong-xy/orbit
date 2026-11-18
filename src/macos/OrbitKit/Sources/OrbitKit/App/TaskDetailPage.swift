@@ -421,8 +421,9 @@ public enum TaskDetailLogic {
     /// The reasons a Run cannot be taken come first, as on the web: the page asks this only of a Run
     /// it can take.
     public static func runNowHint(_ task: TaskItem) -> String? {
+        // A startWhen starts it, as a runAt does (docs/condition-triggers-design.md §6.2).
         guard task.status == .open, task.projectId == nil, task.dependsOn?.isEmpty == true,
-              (task.runAt ?? "").isEmpty else { return nil }
+              (task.runAt ?? "").isEmpty, task.startWhen?.waitingLine == nil else { return nil }
         return TaskDetailCopy.nothingStartsThisTask
     }
 

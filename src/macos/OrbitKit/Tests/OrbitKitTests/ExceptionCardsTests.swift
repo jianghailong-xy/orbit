@@ -1166,7 +1166,7 @@ final class ExceptionCardsTests: XCTestCase {
                     },
                     status: nil,
                     heading: "Now yours — the coordinator handed it over",
-                    sentence: "“The conflict is in your retry policy” — it handed this to you on purpose.",
+                    sentence: "It handed this to you on purpose.",
                     presses: ["Ask the coordinator again", "or Chat about this first"], leads: nil)
         // With no note it still says it was on purpose.
         XCTAssertEqual(ExceptionCards.coordinatorRowSentence(conflict { $0.assigneeReason = .handedOver },
@@ -1434,6 +1434,7 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertEqual(ExceptionCards.coordinatorEndedSentence, try declaration(web, "COORDINATOR_ENDED_SENTENCE"))
         XCTAssertEqual(ExceptionCards.noCoordinatorSentence, try declaration(web, "NO_COORDINATOR_SENTENCE"))
         XCTAssertEqual(ExceptionCards.handedOverSentence, try declaration(web, "HANDED_OVER_SENTENCE"))
+        XCTAssertEqual(ExceptionCards.handoverNoteCaption, try declaration(web, "HANDOVER_NOTE_CAPTION"))
         XCTAssertEqual(ExceptionCards.closesByItselfLine, try declaration(web, "CLOSES_BY_ITSELF"))
         XCTAssertEqual(ExceptionCards.alreadySettled, try declaration(web, "ALREADY_SETTLED"))
         XCTAssertEqual(ExceptionCards.markHandledSettledConsequence,

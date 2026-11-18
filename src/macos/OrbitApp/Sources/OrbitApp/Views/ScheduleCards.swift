@@ -19,13 +19,15 @@ extension Color {
 /// One fact row of a card: a grey label column and its value (board ① "When / Runs in / May / Costs / Today").
 struct ScheduleFactRow<Value: View>: View {
     let label: String
+    /// The label column; wider on a card whose labels are longer ("Starts when", board frame 2).
+    var labelWidth: CGFloat = 72
     @ViewBuilder let value: Value
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label)
                 .foregroundStyle(.secondary)
-                .frame(width: 72, alignment: .leading)
+                .frame(width: labelWidth, alignment: .leading)
             value
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -108,7 +110,9 @@ struct ScheduleCreateCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
                 Label { Text(SC.CreateCard.title).font(.orbitControl.weight(.semibold)) } icon: {
-                    Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+                    // A WHEN rule's card carries the gauge (condition-triggers board ③).
+                    Image(systemName: conditionLines == nil ? "calendar" : "gauge.with.dots.needle.33percent")
+                        .foregroundStyle(Color.scheduleAccent)
                 }
                 if !panel, let title = card.title {
                     Text(title).font(.orbitControl.weight(.semibold))
@@ -117,7 +121,22 @@ struct ScheduleCreateCardView: View {
                     Text(readBack).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    if let when {
+                    if let lines = conditionLines {
+                        // When, for a WHEN rule (board ③): the condition in bold with its hold, the re-arm and how it
+                        // is checked, the repeat, and the command verbatim — what Create approves.
+                        let parts = ConditionDisplay.whenTextParts(lines, condition: card.when?.rule.condition)
+                        ScheduleFactRow(label: SC.CreateCard.when) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(parts.bold).fontWeight(.semibold) + Text(parts.rest)
+                                if let again = lines.repeat { Text(again).foregroundStyle(.secondary) }
+                                Text(lines.detail).foregroundStyle(.secondary)
+                                if let awake = lines.awake { Text(awake).foregroundStyle(.secondary) }
+                                ConditionCommandBox(command: lines.command)
+                            }
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("schedule-create-when-condition")
+                    } else if let when {
                         ScheduleFactRow(label: SC.CreateCard.when) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text([when.rule, when.zone].joined(separator: SC.separator))
@@ -165,6 +184,12 @@ struct ScheduleCreateCardView: View {
         .accessibilityIdentifier("schedule-create-card")
     }
 
+    /// A WHEN rule's When lines: the server's, else worked out from the rule.
+    private var conditionLines: ScheduleWhenLines? {
+        guard let when = card.when, let condition = when.rule.condition else { return nil }
+        return when.condition ?? ConditionDisplay.whenLines(condition, runner: nil)
+    }
+
     private func press(_ allow: Bool) {
         busy = true
         Task { @MainActor in
@@ -198,10 +223,19 @@ struct ScheduleEnvelopeCardView: View {
                         Image(systemName: "exclamationmark.triangle").foregroundStyle(Color.scheduleWarn)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        if let now = text.now {
-                            ScheduleFactRow(label: SC.EnvelopeCard.now) { Text(now.text) }
+                        if card.envelope?.widens.contains("PROBE_COMMAND") == true {
+                            // A new probe command (condition-triggers board ⑥ ③): both commands verbatim, since
+                            // changing the command is changing what was approved.
+                            if let now = text.now {
+                                ScheduleFactRow(label: SC.EnvelopeCard.now) { ConditionCommandBox(command: now.text) }
+                            }
+                            ScheduleFactRow(label: SC.EnvelopeCard.asked) { ConditionCommandBox(command: text.asked.text) }
+                        } else {
+                            if let now = text.now {
+                                ScheduleFactRow(label: SC.EnvelopeCard.now) { Text(now.text) }
+                            }
+                            ScheduleFactRow(label: SC.EnvelopeCard.asked) { askedText(text.asked) }
                         }
-                        ScheduleFactRow(label: SC.EnvelopeCard.asked) { askedText(text.asked) }
                     }
                     Text(text.note).font(.orbitLabel).foregroundStyle(.secondary)
                     if let said {
@@ -321,21 +355,41 @@ struct ScheduleRunStripView: View {
             if !head.isEmpty {
                 Text(head).font(.orbitLabel).foregroundStyle(.secondary)
             }
-            Label {
-                Text(ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
-                                                  accessLevel: schedule.accessLevel, timezone: zone))
-                    .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+            if fired {
+                // A run its condition started names the firing, not a planned time (condition-triggers board ⑤ ②).
+                Label {
+                    Text(ConditionDisplay.runFiredText(run: run, condition: appModel.scheduled?.condition(conditionID),
+                                                       accessLevel: schedule.accessLevel, timezone: zone))
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "gauge.with.dots.needle.33percent").foregroundStyle(Color.scheduleAccent)
+                }
+                .font(.orbitSubtext)
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("schedule-run-fired")
+            } else {
+                Label {
+                    Text(ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
+                                                      accessLevel: schedule.accessLevel, timezone: zone))
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+                }
+                .font(.orbitSubtext)
+                .foregroundStyle(.secondary)
             }
-            .font(.orbitSubtext)
-            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .task(id: conditionID) {
+            if fired, let conditionID { await appModel.scheduled?.loadCondition(conditionID) }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("schedule-run-strip")
     }
+
+    private var fired: Bool { run.trigger == "CONDITION" }
+    private var conditionID: String? { schedule.rule.conditionId ?? schedule.condition?.id }
 }
 
 /// What the run reported (board 02 ④, 01 ⑦ ②): "Reported: Changed · codex@0.49.0", its summary and its links; a run
