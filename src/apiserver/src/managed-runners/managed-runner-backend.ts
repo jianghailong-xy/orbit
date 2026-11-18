@@ -271,8 +271,9 @@ export interface ManagedRunnerBackend {
   recheckReachability?(): Promise<void>;
   /**
    * The image a READY instance of a previous image (`previousImage`) is moved onto once it is idle: drained and woken
-   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`. Absent on a
-   * backend whose instances keep their image until they next sleep (Docker).
+   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`; Docker: the
+   * image new containers are made from (the profile's, or the channel's on a profile that adopts it). Absent on a
+   * backend whose instances keep their image until they next sleep, or while that image is not known yet.
    */
   readonly rollImage?: string;
 

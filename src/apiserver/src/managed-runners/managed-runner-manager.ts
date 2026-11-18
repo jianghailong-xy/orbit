@@ -144,7 +144,7 @@ import { RUNNER_BEATS, RUNNER_SILENT_AFTER_MS, runnerLastBeatAt } from '../runne
  *     reports every stop (`stopSilentPrevious`, Docker); the host's report of that stop starts the next
  *     generation from the current image, as after a crash. Silence alone, on the current image, still
  *     authorizes nothing.
- *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes), a READY instance
+ *   - On a backend that moves instances onto its current image (`rollImage`, Kubernetes and Docker), a READY instance
  *     of a previous image is drained as for sleep once it is idle, and woken at once as the next generation
  *     on the current image (`rollPreviousImage`): an upgrade's new runner image reaches every runner
  *     without cutting short anything in flight.
@@ -874,7 +874,7 @@ export class ManagedRunnerManager {
 
   /**
    * A READY instance made from a previous image (`previousImage`) on a backend that moves such instances onto the
-   * image it makes them from now (`rollImage`, Kubernetes): once it is idle — by its own fresh report and by the
+   * image it makes them from now (`rollImage`, Kubernetes and Docker): once it is idle — by its own fresh report and by the
    * records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep, marked as a
    * roll (`imageRollTo`). Demand calls the roll off like any drain, and the next idle pass tries again. Once the
    * instance has stopped and the mapping falls asleep, the mark wakes it at once: the next generation is made from

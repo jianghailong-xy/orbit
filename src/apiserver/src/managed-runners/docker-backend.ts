@@ -54,6 +54,9 @@ import { isByteCount, type VolumeFigures } from './managed-runner-storage';
  * the image ID the channel reports against the profile's) that a link-only server has long stopped
  * hearing. Asking is never the proof: the gate still waits for Docker's report of the exit and the
  * container's removal.
+ *
+ * A READY container of a previous image that is idle is drained as for sleep and woken at once on the
+ * current image (`rollImage`, the manager's image roll), as on Kubernetes; demand calls that roll off.
  */
 
 const TERMS: ManagedRunnerBackendTerms = {
@@ -260,6 +263,16 @@ export class DockerBackend implements ManagedRunnerBackend {
     if (this.profile.runner.image !== DOCKER_IMAGE_FROM_CHANNEL) return this.profile.runner.image;
     if (fresh || !this.adopted || this.now() - this.adopted.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
     return this.adopted!.image;
+  }
+
+  /**
+   * The image a READY instance of a previous image is moved onto once it is idle (the manager's image roll): the one
+   * new containers are made from now — the profile's, or on a profile that adopts the channel's, the one last read
+   * from the channel (`readInstance` reads it on every pass before the roll is considered). Absent until that first
+   * reading, so nothing rolls on an image the backend has not seen.
+   */
+  get rollImage(): string | undefined {
+    return this.profile.runner.image === DOCKER_IMAGE_FROM_CHANNEL ? this.adopted?.image : this.profile.runner.image;
   }
 
   /** The source commit the image new containers are made from was built from, as the channel reports it: read
