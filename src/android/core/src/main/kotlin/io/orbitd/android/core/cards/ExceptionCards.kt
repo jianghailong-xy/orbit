@@ -557,7 +557,9 @@ object ExceptionCards {
     const val runnerDownSentence = "Its runner is offline. Ask again comes back here as soon as it is."
     const val coordinatorEndedSentence = "Its conversation was completed."
     const val noCoordinatorSentence = "This project isn’t coordinated."
-    const val handedOverSentence = "it handed this to you on purpose."
+    const val handedOverSentence = "It handed this to you on purpose."
+    /** The web's `HANDOVER_NOTE_CAPTION`: the caption over the coordinator's hand-over note, in the coordinator row. */
+    const val handoverNoteCaption = "Why the coordinator handed it over"
     const val closesByItself = "Closes by itself once this work lands — push a fix to the task branch and you’re done."
     const val alreadySettled = "Already settled?"
     const val markHandledSettledConsequence = "The work landed another way. Your reason goes on the record."
@@ -682,8 +684,8 @@ object ExceptionCards {
             CoordinatorCause.COORDINATOR_ENDED -> coordinatorEndedSentence
             CoordinatorCause.NO_COORDINATOR -> noCoordinatorSentence
             CoordinatorCause.ESCALATED -> "Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it."
-            CoordinatorCause.HANDED_OVER -> row.text("handoverNote")?.trim()?.takeIf { it.isNotEmpty() }?.let { "“$it” — $handedOverSentence" }
-                ?: handedOverSentence.replaceFirstChar { it.uppercaseChar() }
+            // The coordinator's own note is drawn under its caption (OwnerCardTranslation.handoverNote), not in here.
+            CoordinatorCause.HANDED_OVER -> handedOverSentence
         }
     }
 

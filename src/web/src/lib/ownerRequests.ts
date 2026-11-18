@@ -1,4 +1,4 @@
-import { SCHEDULE_COPY } from '@orbit/shared';
+import { SCHEDULE_COPY, type OwnerCardTranslation } from '@orbit/shared';
 import { CONDITION_COPY } from './conditions';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -103,6 +103,8 @@ export interface OwnerRequest {
   answer: { option?: number; text?: string; spaceId?: string; name?: string } | null;
   /** The client that ended it, from `X-Orbit-Client`. Not served yet: without it the summary names no device. */
   resolvedClient?: string | null;
+  /** The agent-written fields in the owner's language (Settings › Translation); null or absent until translated. */
+  translation?: OwnerCardTranslation | null;
   createdAt: string;
 }
 

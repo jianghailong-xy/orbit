@@ -339,8 +339,8 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
-import { TranslationCtx, type TranslationActions } from './TranslationParts';
+import { agentLanguageOf, answerRefusedUntranslated, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -5115,11 +5115,13 @@ export function WorkspaceView({
   // presses, and re-reads the same views after it; it lives here rather than in the card because
   // the press that finishes it happens at the composer, after the card armed it.
   const ownerDecision = useMutation({
-    mutationFn: (press: { taskId: string; requestId: string; decision: 'SEND_BACK'; note: string }) =>
-      sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note),
+    mutationFn: (press: { taskId: string; requestId: string; decision: 'SEND_BACK'; note: string; sendAsWritten?: boolean }) =>
+      sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note, undefined, press.sendAsWritten),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
-    // reader told only "it failed" has been told the button is broken.
+    // reader told only "it failed" has been told the button is broken. A note the server could not
+    // translate is said above the composer instead, with Retry and Send as written (RefusedSendBack).
     onError: (error: Error) => {
+      if (answerRefusedUntranslated(error)) return;
       const refusal = ownerDecisionRefusal(error);
       message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
     },
@@ -5138,10 +5140,12 @@ export function WorkspaceView({
       taskId: string;
       evidenceRevision: string;
       note: string;
-    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note),
+      sendAsWritten?: boolean;
+    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note, press.sendAsWritten),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
     onError: (error: Error) => {
+      if (answerRefusedUntranslated(error)) return;
       const refusal = evidenceDecisionRefusal(error);
       message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
     },
@@ -11273,6 +11277,8 @@ export function WorkspaceView({
           }
         />
         </MainCheckoutCtx.Provider>
+        <RefusedSendBack mutation={ownerDecision} when={(press) => press.taskId === selectedTaskId} />
+        <RefusedSendBack mutation={evidenceDecision} when={(press) => press.sessionId === selectedId} />
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>

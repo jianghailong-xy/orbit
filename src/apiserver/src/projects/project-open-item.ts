@@ -9,6 +9,7 @@ import {
   OpenItemStage,
   OwnerAnswerCard,
   OwnerItemKind,
+  OwnerWordsTranslation,
   SessionLifecycleState,
   SessionRunState,
   deriveSessionLifecycleState,
@@ -646,7 +647,10 @@ export interface CoordinatorQuestion {
 /** How the owner answered: an option, free text, or both. */
 export interface OwnerAnswer {
   option?: number;
+  /** The owner's words, as they typed them: what every card shows. */
   text?: string;
+  /** `text` in the agent language, when Settings › Translation translated it: what the coordinator is told. */
+  translation?: OwnerWordsTranslation;
   answeredByUserId: string;
 }
 
@@ -749,8 +753,10 @@ export function ownerAnswerMessage(
   redelivered?: { stillBlocks: boolean },
 ): string {
   const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
+  // The owner's words as the agent reads them: their translation into the agent language when one was made.
+  const words = answer.translation?.text ? { ...answer, text: answer.translation.text } : answer;
   const told = `From Orbit · owner answer: ${asked} "${question.question}". `
-    + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+    + `The owner answered: ${answerInWords(question, words)} (${answeredAt.toISOString()}).`;
   if (!redelivered) return told;
   return told + (redelivered.stillBlocks
     ? ' That question still blocks unfinished tasks.'

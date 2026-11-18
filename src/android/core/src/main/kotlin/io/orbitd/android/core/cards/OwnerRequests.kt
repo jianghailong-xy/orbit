@@ -66,6 +66,8 @@ data class OwnerRequest(
     val resolutionNote: String? = null,
     val answer: OwnerRequestAnswer? = null,
     val resolvedClient: String? = null,
+    /** The agent-written fields in the owner's language (Settings › Translation; `OwnerCardTranslation`); absent until translated. */
+    val translation: JsonElement? = null,
     val createdAt: String,
 ) {
     val pending get() = state == OwnerRequests.PENDING
@@ -290,6 +292,9 @@ object OwnerRequests {
             (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
     }
 
+    /** The row's title: the request's, in [owner]'s language when its card would be drawn translated ([OwnerCardTranslation.ownerRequest]). */
+    fun rowTitle(request: OwnerRequest, owner: String?): String = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
+
     /** The row's detail line: the kind's own words, then what it holds up. */
     fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
 
@@ -365,6 +370,11 @@ object OwnerRequests {
         return byId.values.sortedBy { parse(it.createdAt) ?: Instant.MIN }
     }
 
+    /** The request a press on a session's needs-you notice opens: the oldest it asked that is still pending, or null when this
+     * device holds none of them yet (OrbitKit `oldestPending`). */
+    fun oldestPending(sessionId: String, vararg lists: List<OwnerRequest>): OwnerRequest? =
+        forSession(sessionId, *lists).firstOrNull { it.pending }
+
     /**
      * Where each request goes in a conversation (web `decisionReceiptAnchor`): after the last row stamped at or before it was filed,
      * by the row's index, or -1 ahead of every row. Requests with no readable moment are left out.
@@ -427,11 +437,14 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
     suspend fun get(id: String): OwnerRequest =
         Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests", id))).requireSuccess().body, OwnerRequest.serializer())
 
-    suspend fun done(id: String, option: Int? = null, text: String? = null): OwnerRequest = post(id, listOf("done"), buildJsonObject {
-        option?.let { put("option", it) }; text?.let { put("text", it) }
+    /** [sendAsWritten]: the owner's words again, untranslated, after the door refused them 422 TRANSLATION_FAILED (Settings › Translation). */
+    suspend fun done(id: String, option: Int? = null, text: String? = null, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("done"), buildJsonObject {
+        option?.let { put("option", it) }; text?.let { put("text", it) }; if (sendAsWritten) put("sendAsWritten", true)
     })
 
-    suspend fun decline(id: String, reason: String): OwnerRequest = post(id, listOf("decline"), buildJsonObject { put("reason", reason) })
+    suspend fun decline(id: String, reason: String, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("decline"), buildJsonObject {
+        put("reason", reason); if (sendAsWritten) put("sendAsWritten", true)
+    })
 
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import type { OwnerCardTranslation } from '@orbit/shared';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -11,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { copyText } from '../lib/clipboard';
 import { rehypeCodeWords } from '../lib/codeWords';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
@@ -50,6 +52,7 @@ import { NOTE_PROMPT, OWN_ANSWER_PROMPT, YOUR_ANSWER, QuestionOptions, optionInd
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import Markdown from './Markdown';
 import type { TranscriptInsert } from './Transcript';
+import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Checkbox } from './ui/Checkbox';
 import { Input } from './ui/Input';
@@ -70,10 +73,31 @@ import { useMachineName } from '../lib/managedRunner';
  */
 
 type Ending =
-  | { to: 'done'; body: { option?: number; text?: string } }
-  | { to: 'decline'; body: { reason: string } }
+  | { to: 'done'; body: { option?: number; text?: string; sendAsWritten?: true } }
+  | { to: 'decline'; body: { reason: string; sendAsWritten?: true } }
   // WIKI_CREATE's Create wiki: the owner's door that makes the wiki and settles the card (design §3.6).
   | { to: 'create-wiki'; body: Record<string, never> };
+
+/**
+ * A request's agent-written words as the card draws them: translated while it is shown translated
+ * (board 04-owner-cards.html); a step's command and link, and the option picked, stay the original's.
+ */
+function shownRequest(request: OwnerRequest, t: OwnerCardTranslation | undefined): OwnerRequest {
+  if (!t) return request;
+  return {
+    ...request,
+    title: t.title || request.title,
+    why: t.why || request.why,
+    ifUnanswered: request.ifUnanswered ? t.ifUnanswered || request.ifUnanswered : request.ifUnanswered,
+    verifyHint: request.verifyHint ? t.verifyHint || request.verifyHint : request.verifyHint,
+    options: request.options ? request.options.map((o, i) => {
+      const to = t.options?.[i];
+      if (!to) return o;
+      return { ...o, label: to.label || o.label, ...(o.description !== undefined ? { description: to.description || o.description } : {}) };
+    }) : request.options,
+    steps: request.steps ? request.steps.map((step, i) => ({ ...step, text: t.steps?.[i]?.text || step.text })) : request.steps,
+  };
+}
 
 const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
   DECISION: 'Send answer',
@@ -391,7 +415,8 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
 }): JSX.Element {
   const qc = useQueryClient();
   const door = useSecretDoor(given);
-  const request = door.current;
+  const translated = useOwnerCardTranslation(door.current.translation);
+  const request = shownRequest(door.current, translated.shown);
   const [draft, setDraft] = useState<SecretDraft>(() => emptyDraft(request.secretSpec));
   const [chosen, setChosen] = useState<Choice>(request.recommendedOption ?? null);
   const [text, setText] = useState('');
@@ -521,11 +546,21 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
           </div>
         ) : null}
         {request.verifyHint ? <p className="owner-request-hint">{`How to check: ${request.verifyHint}`}</p> : null}
+        {translated.foot}
 
         {failed ? (
           <Alert type="error" title={`The key did not reach ${runner}`} description={grant.removalNote ?? 'Enter it again.'} />
         ) : null}
-        {end.isError || door.failure ? (
+        {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' ? (
+          <RefusedAnswerFoot
+            resend={(sendAsWritten) => {
+              const ending = end.variables!;
+              return end.mutateAsync(
+                sendAsWritten ? ({ ...ending, body: { ...ending.body, sendAsWritten: true } } as Ending) : ending,
+              );
+            }}
+          />
+        ) : end.isError || door.failure ? (
           <Alert type="error" title="That was not recorded" description={door.failure ?? (end.error as Error).message} />
         ) : null}
 

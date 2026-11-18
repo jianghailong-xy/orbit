@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { OwnerCardTranslation } from '@orbit/shared';
 import { Alert } from './ui/Alert';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -176,6 +178,9 @@ export interface PendingCriteriaDecisionRow {
   /** The proposal this one displaced, or null when it displaced nothing. */
   supersededIntentId: string | null;
   decidability: CriteriaDecisionDecidability;
+  /** `proposed[].text` and `verificationMethod` in the owner's language (Settings › Translation);
+   *  absent until translated, on every proposal translation is off for, and from older servers. */
+  translation?: OwnerCardTranslation | null;
 }
 
 /** What an answered proposal did to one criterion, in the vocabulary both ends say it in. */
@@ -716,6 +721,41 @@ function ChangedCriterion({ entry }: { entry: CriteriaProposalChangeEntry }): JS
 }
 
 /**
+ * The diff as the card draws it in the owner's language (board 04-owner-cards.html): each proposed
+ * criterion's words translated, found by its place in the proposed set. A word-level cut is of the
+ * agent's own words and cannot be laid over a translation, so a translated rewrite is drawn whole.
+ * The words on record were not written by the agent and stay as they are.
+ */
+export function translatedDiff(row: PendingCriteriaDecisionRow, t: OwnerCardTranslation | undefined): CriteriaProposalDiff {
+  if (!t?.proposed) return row.diff;
+  const said = t.proposed;
+  return {
+    ...row.diff,
+    entries: row.diff.entries.map((entry) => {
+      if (!entry.proposed) return entry;
+      const at = row.proposed.findIndex((criterion) => criterion.ordinal === entry.ordinal);
+      const tp = at >= 0 ? said[at] : undefined;
+      if (!tp) return entry;
+      const proposed = {
+        ...entry.proposed,
+        text: tp.text || entry.proposed.text,
+        verificationMethod: entry.proposed.verificationMethod ? tp.verificationMethod || entry.proposed.verificationMethod : entry.proposed.verificationMethod,
+      };
+      const translatable = (f: CriteriaProposalField): f is 'text' | 'verificationMethod' =>
+        f === 'text' || f === 'verificationMethod';
+      return {
+        ...entry,
+        proposed,
+        rewrites: [
+          ...(entry.rewrites ?? []).filter((cut) => !translatable(cut.field)),
+          ...entry.changed.filter(translatable).map((f) => ({ field: f, segments: [{ side: 'KEPT' as const, text: proposed[f] ?? '' }] })),
+        ],
+      };
+    }),
+  };
+}
+
+/**
  * The proposal as a DIFF: the criteria it moves, and a count of the ones it leaves alone.
  *
  * `<details>` and not a piece of state, because there is nothing to remember: a card that is
@@ -781,6 +821,9 @@ export function CriteriaDecisionCard({
   const stale = staleExplanation(standing);
   const row =
     standing.state === 'DECIDABLE' || standing.state === 'BASE_SEAL_MOVED' ? standing.row : null;
+  // The proposed criteria are the agent's words: one flip for the card (board 04-owner-cards.html).
+  const translated = useOwnerCardTranslation(row?.translation);
+  const diff = row ? translatedDiff(row, translated.shown) : null;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim((!narrow || reviewOpen) && answerable && !busy, anchor);
   useApproveHotkey(keys, () => onDecide('APPROVE'), { anchor });
@@ -821,12 +864,13 @@ export function CriteriaDecisionCard({
                   already on when they meet the first one. */}
               <span className="criteria-decision-v">
                 {changeSummary(row.diff)}
-                {hasRewrite(row.diff)
+                {hasRewrite(row.diff) && !translated.shown
                   ? <span className="criteria-decision-legend">{INLINE_DIFF_LEGEND}</span>
                   : null}
               </span>
             </div>
-            <ProposedChanges diff={row.diff} />
+            <ProposedChanges diff={diff ?? row.diff} />
+            {translated.foot}
             <p className="criteria-decision-hold">{NOTHING_IS_ON_HOLD}</p>
           </>
         ) : standing.state === 'UNREAD' ? null : (

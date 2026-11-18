@@ -967,9 +967,9 @@ public final class APIClient: @unchecked Sendable {
     /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
     /// the owner's note goes to the coordinator conversation with the card's facts.
     public func declineDoneRequest(projectID: String, itemID: String,
-                                   note: String) async throws -> ProjectDoneRequestDeclined {
+                                   note: String, sendAsWritten: Bool = false) async throws -> ProjectDoneRequestDeclined {
         try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
-                       body: ProjectDoneDeclineBody(note: note))
+                       body: ProjectDoneDeclineBody(note: note, sendAsWritten: sendAsWritten))
     }
 
     // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
@@ -1034,8 +1034,9 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/done", body: OwnerRequestDoneBody(option: option))
     }
 
-    public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
-        try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    public func declineOwnerRequest(_ id: String, reason: String, sendAsWritten: Bool = false) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/decline",
+                       body: OwnerRequestDeclineBody(reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
