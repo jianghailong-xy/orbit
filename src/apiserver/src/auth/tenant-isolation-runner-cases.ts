@@ -1489,7 +1489,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   // ── the managed runner browser (docs/runner-browser-design.md §5) ─────────────────────────────────────
   'POST /runner/heartbeat body browser.holderSessionId':
     "the runner's own word about which of its sessions holds its browser, stored as text in the calling runner's own "
-    + 'runner.browser_state and shown only to that runner\'s owner (managed-runners/browser-state.ts); no session is '
+    + 'runner.browser_state (runner-api/runner-api.controller.ts:2285) and shown only to that runner\'s owner (managed-runners/browser-state.ts:122); no session is '
     + 'read, written or authorized by it, so another account\'s session id there names nothing of anybody\'s',
   // ── conditions (docs/condition-triggers-design.md §4.2) ──────────────────────────────────────────
   'POST /runner/heartbeat body conditionSamples[].conditionId':

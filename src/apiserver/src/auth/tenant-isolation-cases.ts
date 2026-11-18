@@ -883,12 +883,12 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /runners/:id/browser':
     'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
     + '(runner id, the caller) through its managed_runner row before anything else, and another account\'s runner, a '
-    + 'self-managed one or a guest\'s view is 404 (managed-runners/browser-state.ts, ownManagedRunner); '
+    + 'self-managed one or a guest\'s view is 404 (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as another account, a session guest and the owner on a self-managed runner',
   'POST /runners/:id/browser/clear':
     'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
     + '(runner id, the caller) through its managed_runner row before anything is written, and another account\'s runner, '
-    + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts, ownManagedRunner); '
+    + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts:122); '
     + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
   // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
   'GET /help/ask/:id/stuck':
