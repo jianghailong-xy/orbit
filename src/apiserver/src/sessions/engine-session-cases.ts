@@ -395,6 +395,7 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /runner/sessions/:id/merge-receipts': 'MergeReceiptService.record',
   'POST /runner/sessions/:id/end': 'SessionsService.getSendable',
   'POST /runner/sessions/:id/complete-session': 'SessionsService.transitionEnd',
+  'POST /runner/sessions/:id/move': 'SessionsService.move',
   'DELETE /runner/sessions/:id': 'SessionsService.transitionEnd',
   'POST /runner/sessions/:id/archive': 'SessionsService.transitionEnd',
 };

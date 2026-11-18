@@ -67,6 +67,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"session_interrupt": true,
 		"session_merge":     true,
 		"session_end":       true,
+		"session_move":      true,
 		"session_complete":  true,
 		"session_delete":    true,
 	}
@@ -79,10 +80,11 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"interrupt": {"[session-id]", "--json"},
 		"merge":     {"[session-id]", "--target-branch", "--json"},
 		"end":       {"[session-id]", "--json"},
+		"move":      {"[session-id]", "--workspace-id", "--folder-id", "--no-folder", "--json"},
 		"complete":  {"[session-id]", "--json"},
 		"delete":    {"[session-id]", "--json"},
 	}
-	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete", "delete"} {
+	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "move", "complete", "delete"} {
 		id := "session_" + action
 		capability := sessionCLICapabilityByID(on.Capabilities, id)
 		if capability == nil {
@@ -248,6 +250,20 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			args:       []string{"end", "child-session", "--json"},
 			method:     http.MethodPost,
 			requestURI: "/api/runner/sessions/child-session/end",
+		},
+		{
+			name:       "move to a workspace",
+			args:       []string{"move", "child-session", "--workspace-id", "target-workspace", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions/child-session/move",
+			wantBody:   map[string]interface{}{"workspaceId": "target-workspace"},
+		},
+		{
+			name:       "move out of its folder",
+			args:       []string{"move", "child-session", "--no-folder", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions/child-session/move",
+			wantBody:   map[string]interface{}{"folderId": nil},
 		},
 		{
 			name:       "complete",
@@ -705,7 +721,7 @@ func TestSessionCLIServiceTokenAuthorizesCreateAndGatesTheRest(t *testing.T) {
 		}
 	}
 	// A verb no token may hold says so, instead of pointing at a scope that does not exist.
-	for _, action := range []string{"end", "interrupt", "merge", "complete", "delete", "search"} {
+	for _, action := range []string{"end", "move", "interrupt", "merge", "complete", "delete", "search"} {
 		args := []string{action, "spawned", "--json"}
 		if action == "search" {
 			args = []string{action, "--query", "x", "--json"}
@@ -806,6 +822,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 		{"interrupt", "child", "--json"},
 		{"merge", "child", "--json"},
 		{"end", "child", "--json"},
+		{"move", "child", "--no-folder", "--json"},
 		{"complete", "child", "--json"},
 		{"delete", "child", "--json"},
 	}
@@ -841,10 +858,13 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	// explicit id avoids accidentally interrupting, merging, ending, completing, or deleting the caller.
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete", "delete"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "move", "complete", "delete"} {
 		args := []string{action, "--json"}
 		if action == "send" {
 			args = append(args, "--message", "hello")
+		}
+		if action == "move" {
+			args = append(args, "--no-folder")
 		}
 		var out bytes.Buffer
 		err := cmdSessionCLI(args, strings.NewReader(""), &out)
@@ -892,11 +912,14 @@ func TestSessionCLIPathIDsCannotEscapeSessionRoute(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
 
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete", "delete"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "move", "complete", "delete"} {
 		for _, id := range []string{"../tasks", "..%2Ftasks", "a/b", `a\b`, "a?query"} {
 			args := []string{action, id, "--json"}
 			if action == "send" {
 				args = append(args, "--message", "hello")
+			}
+			if action == "move" {
+				args = append(args, "--no-folder")
 			}
 			var out bytes.Buffer
 			err := cmdSessionCLI(args, strings.NewReader(""), &out)
@@ -1067,4 +1090,28 @@ func TestSessionCLICreateSendsTheEngineOnlyWhenNamed(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+// A move names where to: a bare `orbit session move ID` would take the session out of its folder
+// without saying so, and two folder flags at once say two things.
+func TestSessionMoveRefusesAnUnsaidOrContradictoryDestination(t *testing.T) {
+	configureCLITestRunner(t, "http://127.0.0.1:1")
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "parent-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"move", "child", "--json"}, "needs --workspace-id, --folder-id or --no-folder"},
+		{[]string{"move", "child", "--folder-id", "F1", "--no-folder"}, "cannot be used together"},
+		{[]string{"move", "child", "--folder-id", " "}, "--folder-id cannot be empty"},
+		{[]string{"move", "child", "--workspace-id", ""}, "--workspace-id cannot be empty"},
+	} {
+		var out bytes.Buffer
+		err := cmdSessionCLI(tc.args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v error = %v, want %q", tc.args, err, tc.want)
+		}
+	}
 }
