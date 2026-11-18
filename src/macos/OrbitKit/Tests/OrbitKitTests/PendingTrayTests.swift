@@ -336,6 +336,19 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertEqual(rows.map(\.text), ["lfs 属于另一个仓库", "lfs 属于另一个仓库"])
     }
 
+    /// Withdraw hands back the words the reader wrote, as the row shows them, not the English the
+    /// engine was given; and still nothing for a turn nobody typed (`restorableText`).
+    func testWithdrawHandsBackWhatTheReaderWrote() {
+        var translated = queuedBubble("q", text: "lfs belongs to another repository")
+        translated.translation = TurnTranslation(state: .done, from: .zhHans, original: "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: translated), "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: queuedBubble("p", text: " and update the changelog ")),
+                       "and update the changelog")
+        var orbit = translated
+        orbit.authoredByOrbit = true
+        XCTAssertNil(ComposerLogic.withdrawnText(of: orbit))
+    }
+
     // MARK: - sent the other way
 
     func testQueueingForTheNextTurnSaysSoAndASendOtherwiseLeavesItToTheServer() throws {

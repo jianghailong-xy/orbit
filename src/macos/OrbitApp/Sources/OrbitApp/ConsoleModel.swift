@@ -4027,7 +4027,7 @@ final class ConsoleModel {
             // bytes), matching interrupt. Except a turn nobody typed — a wake, a delivery — which
             // would land in the composer as though the user had written it
             // (`ComposerLogic.restorableText`).
-            if let words = ComposerLogic.restorableText(of: bubble) {
+            if let words = ComposerLogic.withdrawnText(of: bubble) {
                 let body = bubble.shell ? "!" + words : words
                 composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? body : composerText + "\n\n" + body
@@ -4096,7 +4096,7 @@ final class ConsoleModel {
             try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
             reducer.removeWithdrawnSteer(turnId: turnId)
             publishStateNow()
-            if let body = ComposerLogic.restorableText(of: bubble) {
+            if let body = ComposerLogic.withdrawnText(of: bubble) {
                 composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? body : composerText + "\n\n" + body
             }
