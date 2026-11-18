@@ -399,23 +399,24 @@ final class ProjectDetailModel {
     /// "Not yet…" on the coordinator's request: the note goes to the coordinator, and the request
     /// ends. Nil when it went through; otherwise the sentence to show.
     func declineDone(itemID: String, note: String, sendAsWritten: Bool = false) async -> String? {
-        var untranslated = false
+        var untranslated: [SessionTranslation.FootPart]? = nil
         let refused = await runWrite(ProjectDone.notDeclined) {
             do {
                 _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note,
                                                           sendAsWritten: sendAsWritten)
             } catch {
                 untranslated = OwnerCardTranslations.refused(error)
+                    ? SessionTranslation.refusedAnswerFoot(after: error) : nil
                 throw error
             }
         }
         doneDeclineRefusedUntranslated = untranslated
-        return untranslated ? nil : refused
+        return untranslated != nil ? nil : refused
     }
 
-    /// The last Not yet… note was refused with 422 TRANSLATION_FAILED and not sent: the card offers
-    /// Retry and Send as written.
-    var doneDeclineRefusedUntranslated = false
+    /// The last Not yet… note was refused with 422 TRANSLATION_FAILED and not sent: the line the card
+    /// draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     // MARK: the done card's follow-ups
 
