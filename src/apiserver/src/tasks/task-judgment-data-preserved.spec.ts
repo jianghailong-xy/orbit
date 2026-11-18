@@ -3135,7 +3135,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `evidence` value or digest is read or rewritten — and to task_owner_confirmation_review_record and
       // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
       // no trigger, function or DONE fence changes.
-      '1080_owner_card_translation_more'],
+      '1080_owner_card_translation_more',
+      // 1090 adds nullable managed_runner.image_outdated_since and current_image_sha (no default); `managed_runner`
+      // is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
+      '1090_managed_runner_image_outdated'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
