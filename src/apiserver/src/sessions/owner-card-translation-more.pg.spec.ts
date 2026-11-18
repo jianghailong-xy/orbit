@@ -159,6 +159,7 @@ test('six more owner cards are translated, once, whole or failed', { skip, concu
     asked.length = 0;
     published.length = 0;
     failing = false;
+    resetTranslationBreaker();
   };
   const storedIn = async (table: string, id: string, key = 'id') =>
     (await sql.query(`SELECT translation FROM ${table} WHERE ${key} = $1`, [id])).rows[0]?.translation ?? null;
@@ -458,9 +459,11 @@ test('six more owner cards are translated, once, whole or failed', { skip, concu
       await reset();
       await prefer(ON);
       failing = true;
+      resetTranslationBreaker();
       const id = await kind.file();
       await settle();
       failing = false;
+      resetTranslationBreaker();
       assert.deepEqual(await kind.stored(id), { lang: 'zh-Hans', failed: true });
       assert.deepEqual(await kind.served(id), { lang: 'zh-Hans', failed: true });
       assert.deepEqual(await kind.original(id), kind.originalValue, 'the original, untouched');

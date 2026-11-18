@@ -150,6 +150,7 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
     asked.length = 0;
     feishuReplies.length = 0;
     failing = which === 'failed';
+    resetTranslationBreaker();
     await prefer(which === 'off' ? OFF : ON);
   };
   const session = (title: string, taskId: string | null = null) => newSession(db, a, title, taskId);

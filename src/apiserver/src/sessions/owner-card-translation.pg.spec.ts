@@ -140,6 +140,7 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     asked.length = 0;
     published.length = 0;
     failing = false;
+    resetTranslationBreaker();
     gate = null;
   };
   const ask = async (key: string) =>
@@ -217,10 +218,12 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     await reset();
     await prefer(ON);
     failing = true;
+    resetTranslationBreaker();
     const itemId = await ask('b');
     const decision = await requests.file(p.ownerId, p.workerSessionId, { ...DECISION, clientRequestId: 'b-decision' });
     await settle();
     failing = false;
+    resetTranslationBreaker();
 
     assert.deepEqual(await stored('project_open_item', itemId), { lang: 'zh-Hans', failed: true });
     const row = await openRow(itemId);

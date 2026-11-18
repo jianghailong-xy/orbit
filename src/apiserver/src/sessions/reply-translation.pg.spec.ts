@@ -93,6 +93,7 @@ before(async () => {
 
 afterEach(async () => {
   failing = false;
+  resetTranslationBreaker();
   asked = 0;
   published.length = 0;
   await replyTranslationsSettled();
@@ -192,12 +193,14 @@ scenario('a failed reply translation is stored as failed, and Retry writes the t
   const sessionId = await liveSession();
   const events = await store(sessionId, [{ seq: 4, type: RunEventType.ASSISTANT, payload: { text: 'Done.' } }]);
   failing = true;
+  resetTranslationBreaker();
   translateStoredEvents(deps, sessionId, await languages(), events);
   await replyTranslationsSettled();
   const failed = await prisma.runEvent.findUnique({ where: { sessionId_seq: { sessionId, seq: 4 } } });
   assert.deepEqual((failed!.payload as { translation?: unknown }).translation, { lang: 'zh-Hans', failed: true });
 
   failing = false;
+  resetTranslationBreaker();
   assert.deepEqual(await sessions.retryReplyTranslation(ownerId, sessionId, 4), { of: 4, lang: 'zh-Hans' });
   await replyTranslationsSettled();
   const page = await sessions.getEventPage(ownerId, sessionId, { tail: 10 });
