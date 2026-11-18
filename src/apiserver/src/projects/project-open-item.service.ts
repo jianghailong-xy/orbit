@@ -272,13 +272,10 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
 };
 
 /**
- * How many already-answered questions one binding reconsiders (§5.2 R11).
+ * How many unread answers one binding delivers at most (§5.2 R11).
  *
- * A cap on the READ, not on the guarantee: an answer is redelivered while the work it unblocks is
- * still open, or to the one generation that replaced an asker it never reached, and both of those are
- * self-limiting.
- * This only keeps a project with years of answered questions from re-reading all of them every time
- * a coordinator is bound.
+ * A cap on the READ, not on the guarantee: an answer is redelivered only until a coordinator's engine
+ * takes it, so the set drains itself; the next binding, or the next turn end, picks up the rest.
  */
 const ANSWERS_RECONSIDERED_PER_BINDING = 50;
 
@@ -700,9 +697,9 @@ export class ProjectOpenItemService {
    * Items whose task has meanwhile moved on are resolved first, so a coordinator bound to a project
    * with a long history is not handed a queue of answered questions.
    */
-  async deliverOwed(projectId: string, replacedSessionId?: string): Promise<void> {
+  async deliverOwed(projectId: string): Promise<void> {
     await this.guarded('deliverOwed', async () => {
-      await this.deliverAnsweredQuestions(projectId, replacedSessionId);
+      await this.deliverAnsweredQuestions(projectId);
       const owed = await this.prisma.projectOpenItem.findMany({
         where: { projectId, state: 'OPEN', assignee: 'COORDINATOR' },
         select: { id: true, assignedAt: true, taskId: true },
@@ -966,7 +963,7 @@ export class ProjectOpenItemService {
     }
     // The tasks a question blocks are the account's own. Any other id is refused as one that names
     // nothing — and is never stored on the question, from where every coordinator rotation would read
-    // whether that task is still open (`blocksUnsettledWork`).
+    // whether that task is still open (`unsettledBlockedTasks`).
     if (question.blocksTaskIds.length > 0) {
       const own = await this.prisma.task.count({ where: { id: { in: question.blocksTaskIds }, ownerId } });
       if (own !== question.blocksTaskIds.length) {
@@ -3031,7 +3028,7 @@ export class ProjectOpenItemService {
     const question = item.payload as unknown as CoordinatorQuestion;
     // §5.2 R11: told to a conversation that did not ask, it says who did and whether it still blocks.
     const redelivered = item.askedBySessionId && item.askedBySessionId !== sessionId
-      ? { stillBlocks: await this.blocksUnsettledWork(item.ownerId, question.blocksTaskIds) }
+      ? { stillBlocks: await this.unsettledBlockedTasks(item.ownerId, question.blocksTaskIds) }
       : undefined;
     const content = ownerAnswerMessage(
       question,
@@ -3142,63 +3139,58 @@ export class ProjectOpenItemService {
   }
 
   /**
-   * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
-   * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
-   * conversation it just replaced that it never received, which would otherwise have been answered to
-   * nobody.
+   * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers no
+   * coordinator has read: answered while nobody coordinated, or queued to a conversation that ended
+   * before its engine took the turn (a turn is read once `delivered_at` is set; an ANSWERED turn
+   * without it was drained, not read).
    *
-   * Not every answer this project ever got: an answer is context for work still in front of the new
-   * coordinator, and replaying a year of settled questions is noise, not a guarantee. An answer the
-   * replaced conversation already read was acted on there; each one replayed is a whole-context turn
-   * the new coordinator spends saying so (33 of them on one rotation, 2026-11-12).
+   * Not an answer an earlier generation already read, however much work it still blocks: it was acted
+   * on there, and each one replayed is a whole-context turn the new coordinator spends saying so (33
+   * on one rotation, 2026-11-12; 29 on a workspace switch, 2026-11-18, one of them read by four
+   * generations before). What a successor needs of those is in its opening's state digest
+   * (coordinator-digest.ts, "Owner answers in force"), read once and never as a turn.
    */
-  private async deliverAnsweredQuestions(
-    projectId: string,
-    replacedSessionId?: string,
-  ): Promise<void> {
+  private async deliverAnsweredQuestions(projectId: string): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { coordinatorSessionId: true, ownerId: true },
+      select: { coordinatorSessionId: true },
     });
     const sessionId = project?.coordinatorSessionId ?? null;
-    if (!project || !sessionId) return;
-    const answered = await this.prisma.projectOpenItem.findMany({
-      where: {
-        projectId,
-        kind: 'COORDINATOR_QUESTION',
-        state: 'RESOLVED',
-        resolution: 'ANSWERED',
-        deliveries: { none: { sessionId, purpose: 'ANSWER' } },
-      },
-      select: {
-        id: true,
-        payload: true,
-        askedBySessionId: true,
-        // Whether the replaced conversation was told it; read only when there is one.
-        deliveries: {
-          where: { sessionId: replacedSessionId ?? sessionId, purpose: 'ANSWER' },
-          select: { itemId: true },
-        },
-      },
-      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
-      take: ANSWERS_RECONSIDERED_PER_BINDING,
-    });
-    for (const item of answered.reverse()) {
-      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId
-        && item.deliveries.length === 0;
-      const question = item.payload as unknown as CoordinatorQuestion;
-      if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
-      await this.deliverAnswer(item.id);
-    }
+    if (!sessionId) return;
+    const unread = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT i."id"
+        FROM "project_open_item" i
+       WHERE i."project_id" = ${projectId}::uuid
+         AND i."kind" = 'COORDINATOR_QUESTION'
+         AND i."state" = 'RESOLVED'
+         AND i."resolution" = 'ANSWERED'
+         AND NOT EXISTS (
+               SELECT 1 FROM "project_open_item_delivery" d
+                WHERE d."item_id" = i."id" AND d."purpose" = 'ANSWER' AND d."session_id" = ${sessionId}::uuid)
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM "project_open_item_delivery" d
+                 JOIN "conversation_turn" t
+                   ON t."session_id" = d."session_id" AND t."client_turn_id" = d."client_turn_id"
+                WHERE d."item_id" = i."id" AND d."purpose" = 'ANSWER' AND t."delivered_at" IS NOT NULL)
+       ORDER BY i."resolved_at" DESC, i."id" DESC
+       LIMIT ${ANSWERS_RECONSIDERED_PER_BINDING}
+    `);
+    for (const item of unread.reverse()) await this.deliverAnswer(item.id);
   }
 
-  /** Whether any of these tasks of the account's is still somebody's to do. */
-  private async blocksUnsettledWork(ownerId: string, taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
+  /** The tasks of the account's among these that are still somebody's to do, as a message names them. */
+  private async unsettledBlockedTasks(
+    ownerId: string,
+    taskIds: ReadonlyArray<string> | undefined,
+  ): Promise<Array<{ title: string; status: string }>> {
     const ids = unique(taskIds ?? []);
-    if (ids.length === 0) return false;
-    return (await this.prisma.task.count({
+    if (ids.length === 0) return [];
+    return this.prisma.task.findMany({
       where: { id: { in: ids }, ownerId, status: { notIn: ['DONE', 'CANCELLED'] } },
-    })) > 0;
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { title: true, status: true },
+    });
   }
 
   /** The answer's own ledger row, written in the turn's transaction under the Session lock (G6). */

@@ -743,14 +743,15 @@ export function answerInWords(question: CoordinatorQuestion, answer: OwnerAnswer
  * version of the same answer.
  *
  * `redelivered` is set when the conversation told is not the one that asked (§5.2 R11): "you asked"
- * would be false there, and the new coordinator needs to know whether the answer still holds work up.
- * Whether it still blocks is read at delivery, once per conversation; the asker's words never carry it.
+ * would be false there, and the new coordinator needs to know which work the answer still holds up,
+ * named, so it can act on it without a read first. Which tasks still block is read at delivery, once
+ * per conversation; the asker's words never carry it.
  */
 export function ownerAnswerMessage(
   question: CoordinatorQuestion,
   answer: OwnerAnswer,
   answeredAt: Date,
-  redelivered?: { stillBlocks: boolean },
+  redelivered?: { stillBlocks: ReadonlyArray<{ title: string; status: string }> },
 ): string {
   const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
   // The owner's words as the agent reads them: their translation into the agent language when one was made.
@@ -758,10 +759,15 @@ export function ownerAnswerMessage(
   const told = `From Orbit · owner answer: ${asked} "${question.question}". `
     + `The owner answered: ${answerInWords(question, words)} (${answeredAt.toISOString()}).`;
   if (!redelivered) return told;
-  return told + (redelivered.stillBlocks
-    ? ' That question still blocks unfinished tasks.'
-    : ' That question no longer blocks any unfinished task.');
+  const blocking = redelivered.stillBlocks;
+  if (blocking.length === 0) return told + ' That question no longer blocks any unfinished task.';
+  const named = blocking.slice(0, BLOCKING_TASKS_NAMED).map((task) => `"${task.title}" (${task.status})`);
+  const more = blocking.length > BLOCKING_TASKS_NAMED ? ` and ${blocking.length - BLOCKING_TASKS_NAMED} more` : '';
+  return told + ` That question still blocks unfinished tasks: ${named.join(', ')}${more}.`;
 }
+
+/** How many still-blocked tasks a redelivered answer names before counting the rest. */
+const BLOCKING_TASKS_NAMED = 5;
 
 /** The columns "has this conversation ended" is decided from. */
 export const SESSION_ENDING_SELECT = {
