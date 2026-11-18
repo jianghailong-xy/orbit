@@ -879,6 +879,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── the managed runner browser (docs/runner-browser-design.md §5, §6) ──────────────────────────────────
+  'GET /runners/:id/browser':
+    'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
+    + '(runner id, the caller) through its managed_runner row before anything else, and another account\'s runner, a '
+    + 'self-managed one or a guest\'s view is 404 (managed-runners/browser-state.ts, ownManagedRunner); '
+    + 'browser-state.pg.spec.ts section 2 sends it as another account, a session guest and the owner on a self-managed runner',
+  'POST /runners/:id/browser/clear':
+    'behind the browser switch, which the census server leaves off (every caller 404 there); on, the runner is read by '
+    + '(runner id, the caller) through its managed_runner row before anything is written, and another account\'s runner, '
+    + 'a self-managed one or a guest\'s view is 404 with no row written (managed-runners/browser-state.ts, ownManagedRunner); '
+    + 'browser-state.pg.spec.ts section 2 sends it as each and checks browser_clear_requested_at stayed NULL',
   // ── Still stuck (help center board 02 ②): the id is an Ask, which the census's fixture account has none of ──
   'GET /help/ask/:id/stuck':
     'the Ask is read by (id, the caller, help_ask set, not deleted) before anything else, so another account\'s Ask answers 404 (help/help-ask.ts:207, :238); help-ask-stuck.pg.spec.ts "another account" sends it with the owner\'s Ask',
