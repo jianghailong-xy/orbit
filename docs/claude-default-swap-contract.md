@@ -220,8 +220,20 @@ owner chose to name the former Default by it.
   had one live `claude` process during the run. That was safe only because both tokens had about
   110 minutes left and the window was about a second. The runner must not rely on this (§2.1).
 - **macOS: measured (longdeMac-mini.local), 2026-11-18, Claude Code 2.1.327.** Mixed layout —
-  Default Keychain-backed, added folder file-backed — is the case this Mac had, and the one the
-  runner already prefers when `<dir>/.credentials.json` exists (`claudeKeychainCredentials`).
+  Default Keychain-backed, added folder file-backed — is the case this Mac had.
+
+  **Storage rule (per folder; what the runner's `claudeKeychainCredentials` does).** A folder whose
+  Keychain item (`claudeKeychainService(dir)`) exists keeps its login in that item. A folder without
+  one keeps it in `<dir>/.credentials.json`. Claude Code reads its Keychain primary first and the
+  file only as the fallback, so when a folder has both, the item is the login and the file is stale
+  and is left untouched. The two folders are looked up separately, and any pair can occur:
+  Keychain↔Keychain, Keychain↔file, file↔file. The swap moves `claudeAiOauth` between whatever the
+  two are, and each folder keeps its own storage. An item is only ever updated (`-U`, under the
+  account the item already has), never created or deleted, so no folder's storage changes. Backup,
+  rollback and verify read and write through the same rule. A `security` lookup that fails other
+  than "not found" (exit 44), or that blocks past 30 s, fails the swap. It is never taken to mean
+  the folder uses the file. The script below checks for the file first instead. On the measured
+  layout the two orders agree, because neither folder had both.
 
   **Storage layout**
   - Default (`~/.claude`, CLAUDE_CONFIG_DIR unset): login-Keychain generic password, service
@@ -243,7 +255,7 @@ owner chose to name the former Default by it.
     (`Claude Code-credentials` created 2026-11-18T11:25:19Z).
 
   **Mixed-case procedure** (script [`claude-default-swap-mac.py`](claude-default-swap-mac.py)):
-  detect file vs Keychain per folder the way the runner does; back up both credential blobs and
+  detect file vs Keychain per folder; back up both credential blobs and
   both `oauthAccount` values; exchange only `claudeAiOauth` (leave `mcpOAuth`); exchange only
   `oauthAccount` in `$HOME/.claude.json` and `<dir>/.claude.json`; every `security` call under a
   30 s timeout; restore from backup on any failure; swap back and require identity equality.
