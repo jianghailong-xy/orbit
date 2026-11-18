@@ -92,6 +92,11 @@ export enum ControlEventType {
    *  `ControlResourceChanged` naming the request or credential and NOTHING else: a nudge to re-read
    *  `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals). */
   TERMINALS_CHANGED = 'terminals.changed',
+  /** Owner → agent translation became temporarily unavailable or available again (the translator circuit
+   *  breaker opened, opened again or closed; MeTranslation.translationUnavailableUntil). USER-SCOPED (see
+   *  above), sent to every user. `data` is a `ControlResourceChanged` whose id is `translation` and nothing
+   *  else: a nudge to read `GET /users/me` again. Shipped clients treat it as an unknown type. */
+  TRANSLATION_STATUS_CHANGED = 'translation.status_changed',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -114,7 +119,7 @@ export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
    *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
-   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `sessions.list_changed`), which belong to the owner, not to any
+   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `translation.status_changed` / `sessions.list_changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;

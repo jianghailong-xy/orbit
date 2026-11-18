@@ -4353,8 +4353,8 @@ private struct CoordinatorQuestionCardView: View {
                 .background(Color.blue.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
             // Frame 4, mark B: the owner's words could not be translated, so nothing was sent.
-            if console.answersRefusedUntranslated.contains(row.itemId) {
-                TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+            if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {
+                TranslationFootView(parts: refusedFoot) { action in
                     if let original = row.question {
                         send(row, original, sendAsWritten: action == .sendAsWritten)
                     }

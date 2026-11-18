@@ -90,6 +90,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     var failure by remember(request.id) { mutableStateOf<String?>(null) }
     // The owner's words were refused untranslated (422 TRANSLATION_FAILED): the press to send again, as written or not.
     var untranslated by remember(request.id) { mutableStateOf<((Boolean) -> Unit)?>(null) }
+    // Why (board frame 7): the reason and, beside HTTP, the translator's status; null draws the generic line.
+    var untranslatedWhy by remember(request.id) { mutableStateOf<Pair<Translation.FailureReason, Int?>?>(null) }
     var later by remember(request.id) { mutableStateOf(false) }
     LaunchedEffect(request.kind) { if (request.kind == OwnerRequests.SECRET) store.loadSavedSecrets() }
 
@@ -109,7 +111,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
             busy = true; failure = null; untranslated = null
             scope.launch {
                 val error = store.attempt(door(asWritten))
-                if (Translation.refused(error)) untranslated = ::send else failure = error?.let(OwnerRequestStore::message)
+                if (Translation.refused(error)) { untranslated = ::send; untranslatedWhy = Translation.refusalReason(error) }
+                else failure = error?.let(OwnerRequestStore::message)
                 busy = false
             }
         }
@@ -242,7 +245,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error) }
-        untranslated?.let { again -> AnswerNotTranslated({ again(false) }, { again(true) }, !busy && !closed, Modifier.testTag("$tag:translation-failed")) }
+        untranslated?.let { again -> AnswerNotTranslated({ again(false) }, { again(true) }, !busy && !closed, Modifier.testTag("$tag:translation-failed"),
+            untranslatedWhy?.first, untranslatedWhy?.second) }
         if (translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal }, Modifier.testTag("$tag:translation-foot"))
 
         if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateActions(request, store, tag, enabled = !busy && !closed, focus,

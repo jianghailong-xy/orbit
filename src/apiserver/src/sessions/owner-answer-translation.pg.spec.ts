@@ -27,9 +27,10 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 
-import { UnprocessableEntityException } from '@nestjs/common';
+import { Logger, UnprocessableEntityException } from '@nestjs/common';
 import { CreatorType, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -52,6 +53,9 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import { replyTranslationsSettled } from './reply-translation';
 import { SessionsService } from './sessions.service';
 
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
+
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 process.env.PROVIDER_SECRET_KEY ??= 'owner-answer-translation-pg-spec-key';
@@ -62,6 +66,8 @@ const OFF = { translationEnabled: false, translationLanguage: 'zh-Hans' };
 /** What the translator was asked, in order, and how it answers: `AGENT[text]`, or a 500 while `failing`. */
 const asked: string[] = [];
 let failing = false;
+/** How the translator fails while `failing`: an HTTP status (500 by default, after its retries), or another way. */
+let failure: number | 'NETWORK' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'HANG' = 500;
 const realFetch = globalThis.fetch;
 const realKey = process.env.DEEPSEEK_API_KEY;
 
@@ -93,8 +99,16 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
     const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
     const text = body.messages.find((m) => m.role === 'user')!.content;
     asked.push(text);
-    if (failing) return { ok: false, status: 500, body: null } as Response;
-    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: agent(text) } }] }) } as Response;
+    const answer = (choice: unknown) => ({ ok: true, json: async () => ({ choices: [choice] }) }) as Response;
+    if (failing) {
+      if (typeof failure === 'number') return { ok: false, status: failure, body: null } as Response;
+      if (failure === 'NETWORK') throw new TypeError('fetch failed');
+      if (failure === 'HANG') return new Promise<Response>(() => undefined);
+      if (failure === 'EMPTY') return answer({ finish_reason: 'stop', message: { content: '' } });
+      if (failure === 'TRUNCATED') return answer({ finish_reason: 'length', message: { content: 'Ship on' } });
+      return answer({ finish_reason: 'stop', message: { content: 'Ship \u27e64\u27e7' } });
+    }
+    return answer({ finish_reason: 'stop', message: { content: agent(text) } });
   }) as typeof fetch;
   t.after(async () => {
     globalThis.fetch = realFetch;
@@ -138,6 +152,7 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
     asked.length = 0;
     feishuReplies.length = 0;
     failing = which === 'failed';
+    resetTranslationBreaker();
     await prefer(which === 'off' ? OFF : ON);
   };
   const session = (title: string, taskId: string | null = null) => newSession(db, a, title, taskId);
@@ -169,7 +184,10 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
   )).rows;
   const refusedUntranslated = (error: unknown) => {
     assert.ok(error instanceof UnprocessableEntityException, `a 422, not ${String(error)}`);
-    assert.equal((error.getResponse() as { code?: string }).code, 'TRANSLATION_FAILED');
+    // The translator answered 500 three times: the refusal says so (TranslationFailedBody).
+    assert.deepEqual(error.getResponse(), {
+      code: 'TRANSLATION_FAILED', message: "Couldn't translate, so it wasn't sent.", failureReason: 'HTTP', httpStatus: 500,
+    });
     return true;
   };
   /** What a delivered turn must say for `which`: the agent-language words, or the owner's own, never both. */
@@ -451,6 +469,65 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
       assert.equal(turns.length, 1);
       deliveredFor(which, turns[0].content);
       assert.equal(turns[0].displayPrompt, which === 'translated' ? WORDS : null, 'the transcript shows the owner\'s words');
+    });
+  }
+
+  // Translation failure policy B, criterion 1: the 422 says why the words could not be translated, each failure is
+  // logged once with its reason, HTTP status and duration (never the words), and Send as written then delivers them.
+  const REASONS: Array<{ reason: string; httpStatus: number | null; failure: typeof failure }> = [
+    { reason: 'TIMEOUT', httpStatus: null, failure: 'HANG' },
+    { reason: 'NETWORK', httpStatus: null, failure: 'NETWORK' },
+    { reason: 'HTTP', httpStatus: 401, failure: 401 },
+    { reason: 'HTTP', httpStatus: 503, failure: 503 },
+    { reason: 'EMPTY', httpStatus: null, failure: 'EMPTY' },
+    { reason: 'TRUNCATED', httpStatus: null, failure: 'TRUNCATED' },
+    { reason: 'MANGLED', httpStatus: null, failure: 'MANGLED' },
+  ];
+  for (const { reason, httpStatus, failure: how } of REASONS) {
+    const name = httpStatus ? `${reason} ${httpStatus}` : reason;
+    await t.test(`coordinator question answer refused ${name}: the 422 says why, one log line, Send as written delivers`, async () => {
+      const coordinator = await session(`coordinator ${name}`);
+      const projectId = await project(`reason project ${name}`, coordinator);
+      const { itemId } = await items.askOwner(a.ownerId, projectId, coordinator, {
+        question: 'When do we ship?', options: [{ label: 'Today' }, { label: 'Later' }], blocksTaskIds: [],
+        clientQuestionId: `q-reason-${name}`,
+      });
+      const before = (await turnsOn(coordinator)).length;
+      await begin('failed');
+      failure = how;
+      const lines: string[] = [];
+      const realWarn = Logger.prototype.warn;
+      Logger.prototype.warn = function (this: Logger, message: unknown, ...rest: unknown[]) {
+        if (String(message).startsWith('owner translation failed:')) lines.push(String(message));
+        else return (realWarn as (...args: unknown[]) => void).call(this, message, ...rest);
+      } as typeof realWarn;
+      let body: unknown;
+      try {
+        await assert.rejects(items.answerOpenItem(a.ownerId, projectId, itemId, { option: 1, text: WORDS }), (error: unknown) => {
+          assert.ok(error instanceof UnprocessableEntityException, `a 422, not ${String(error)}`);
+          body = error.getResponse();
+          return true;
+        });
+      } finally {
+        Logger.prototype.warn = realWarn;
+        failure = 500;
+      }
+      assert.deepEqual(body, {
+        code: 'TRANSLATION_FAILED', message: "Couldn't translate, so it wasn't sent.",
+        failureReason: reason, ...(httpStatus ? { httpStatus } : {}),
+      });
+      assert.equal(lines.length, 1, lines.join(' | '));
+      assert.match(lines[0], new RegExp(`\\breason=${reason}\\b`));
+      assert.match(lines[0], new RegExp(`\\bhttpStatus=${httpStatus ?? '-'}(\\s|$)`));
+      assert.match(lines[0], /\bdurationMs=\d+\b/);
+      if (reason === 'TIMEOUT') assert.match(lines[0], /durationMs=(1999\d|2\d{4})\b/);
+      assert.ok(!lines[0].includes(WORDS), 'no message text');
+      assert.equal((await turnsOn(coordinator)).length, before, 'nothing was recorded');
+
+      await items.answerOpenItem(a.ownerId, projectId, itemId, { option: 1, text: WORDS, sendAsWritten: true });
+      const turns = await turnsOn(coordinator);
+      assert.equal(turns.length, before + 1);
+      assert.ok(turns.at(-1)!.content?.includes(WORDS), 'Send as written delivers the owner\'s words');
     });
   }
 });

@@ -18,6 +18,10 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
     /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
     public let translationAvailable: Bool?
+    /// Translation is temporarily unavailable until this ISO-8601 instant (MeTranslation, policy board frame 6): the
+    /// server's translator circuit breaker is skipping a failing translator, so a message sent now is held with reason
+    /// UNAVAILABLE. Nil while the translator is in use, from an older server, and in login's user payload.
+    public let translationUnavailableUntil: String?
     /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
     /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
     public let promptOptimizerAvailable: Bool?

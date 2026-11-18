@@ -53,16 +53,21 @@ val LocalPromptOptimizerChanged = staticCompositionLocalOf<(Boolean) -> Unit> { 
 data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE,
     val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE,
     /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows the agent-language text. */
-    val bilingual: Boolean = false) {
+    val bilingual: Boolean = false,
+    /** `translationUnavailableUntil` (board docs/ux/translation-failure-policy.html, frame 6): until when the server skips a failing
+     *  translator and holds every message at once. Null while it is in use. The server does not say when it passes: see [unavailableAt]. */
+    val unavailableUntil: java.time.Instant? = null) {
     /** The owner's messages are being translated now: switched on, and the server able to. */
     val on: Boolean get() = enabled && available
     /** The language an owner card's translation must be in to be drawn ([OwnerCardTranslation][io.orbitd.android.core.cards.OwnerCardTranslation]):
      *  the owner's while their translation is [on], none otherwise (web `ownerLanguageTranslation`, iOS `OwnerCardTranslations.ownerLanguage`). */
     val cardLanguage: String? get() = language.takeIf { on }
+    /** Whether a message sent at [now] waits: [unavailableUntil] is still ahead. */
+    fun unavailableAt(now: java.time.Instant): Boolean = unavailableUntil?.isAfter(now) == true
     companion object {
         fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
             AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),
-                Translation.bilingual(it))
+                Translation.bilingual(it), Translation.unavailableUntil(user))
         }
     }
 }
@@ -83,6 +88,9 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     val live by remember(app) { app.realtime.state.map { it.handle to it.controlConnects }.distinctUntilChanged() }
         .collectAsState(null to 0L)
     val revision = if (live.first === handle) live.second else 0L
+    // `translation.status_changed`: the server opened, reopened or closed its skip of a failing translator — read `users/me` again.
+    val translationStatus by remember(app) { app.realtime.state.map { it.accountEvents[Translation.STATUS_CHANGED_EVENT] ?: 0L }.distinctUntilChanged() }
+        .collectAsState(0L)
     var theme by remember(handle) { mutableStateOf("system") }
     var smartSelection by remember(handle) { mutableStateOf(false) }
     var sessionRecaps by remember(handle) { mutableStateOf(true) }
@@ -101,7 +109,7 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(handle, resume, revision) {
+    LaunchedEffect(handle, resume, revision, translationStatus) {
         if (handle != null) {
             // What the first frame draws in (iOS `LaunchSnapshot.user`): what this phone last knew, until the read below answers.
             if (!restored) {
