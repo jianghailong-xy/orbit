@@ -38,7 +38,8 @@ async function shot(name, path, ready) {
   await page.goto(`${base}${path}`, { waitUntil: 'networkidle' });
   await page.waitForSelector(ready, { timeout: 60_000 });
   await page.waitForTimeout(3000);
-  await page.screenshot({ path: `${out}/${name}.png` });
+  // The whole page: the Settings Browser section would sit below Engines, out of a viewport's frame.
+  await page.screenshot({ path: `${out}/${name}.png`, fullPage: true });
   return {
     path,
     ready,
@@ -57,6 +58,17 @@ const result = { ok: false };
 try {
   result.session = await shot('session-page', `/sessions/${sessionId}`, 'textarea');
   result.settings = await shot('settings-runner-page', `/settings/machines/${runnerId}`, '.machine-section-engines');
+  // Where the Browser section would be drawn: between Engines and Capacity, scrolled into view.
+  await page.evaluate(() => document.querySelector('.machine-section-engines')?.lastElementChild?.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: `${out}/settings-engines-to-capacity.png` });
+  result.settings.betweenEnginesAndCapacity = await page.evaluate(() => {
+    const engines = document.querySelector('.machine-section-engines');
+    const capacity = document.querySelector('.machine-capacity');
+    const between = [];
+    for (let el = engines?.nextElementSibling; el && el !== capacity; el = el.nextElementSibling) between.push(el.className);
+    return { engines: !!engines, capacity: !!capacity, siblingsBetween: between };
+  });
   result.ok = true;
 } catch (error) {
   result.error = String(error?.message ?? error).slice(0, 400);
