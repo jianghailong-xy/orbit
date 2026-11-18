@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -109,8 +111,9 @@ internal fun NonCodeBanner(doc: JsonObject, tag: String, change: (() -> Unit)?) 
     }
 }
 
-/** One criterion on the done card: its number and words, who confirmed it, and its state — met in green, not met in red, a
- * branchless or stale one in amber — with Confirm… on an unmet criterion met by confirmation. */
+/** One criterion on the done card: its number and words, its state on a line under them — met in green, not met in red, a
+ * branchless or stale one in amber — who confirmed it, and Confirm… on an unmet criterion met by confirmation (iOS `criterionRow`).
+ * The words show three lines until pressed: a criterion can run to a paragraph (docs/mocks/project-done-card-criteria-ios, A). */
 @Composable
 internal fun DoneCriterionRow(doc: JsonObject, criterion: ProjectDone.Criterion, ordinal: String, nonCode: Boolean, main: String, tag: String,
     confirm: ((JsonObject) -> Unit)?) {
@@ -118,17 +121,21 @@ internal fun DoneCriterionRow(doc: JsonObject, criterion: ProjectDone.Criterion,
     val byConfirmation = DoneFollowUps.byConfirmation(criterion.derived)
     val ink = when { state.warn -> LocalOrbitColors.current.needsYou; criterion.satisfied -> LocalOrbitColors.current.success
         else -> MaterialTheme.colorScheme.error }
+    var expanded by rememberSaveable(tag) { mutableStateOf(false) }
+    val glyph = when { state.warn -> "!"; criterion.satisfied -> "✓"; else -> "○" }
     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp).testTag(tag), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(ordinal, Modifier.width(14.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(criterion.text, style = MaterialTheme.typography.bodySmall)
+        Text(ordinal, Modifier.width(14.dp).alignByBaseline(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f).alignByBaseline(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(criterion.text, Modifier.clickable(role = Role.Button) { expanded = !expanded }.testTag("$tag-text"),
+                style = MaterialTheme.typography.bodySmall, maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(glyph, Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+                Text(state.text.replaceFirstChar { it.uppercaseChar() }, Modifier.testTag("$tag-state"), style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold, color = ink)
+            }
             if (byConfirmation && criterion.satisfied) DoneFollowUps.confirmationLine(criterion.derived.obj("confirmation")?.obj("current"))?.let {
                 Text(it, Modifier.testTag("$tag-confirmed"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(state.text, Modifier.widthIn(max = 150.dp).testTag("$tag-state"), style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold, color = ink, textAlign = TextAlign.End)
             if (byConfirmation && !criterion.satisfied && confirm != null && criterion.item != null)
                 SmallPress(if (criterion.derived.obj("confirmation")?.text("state") == "STALE") DoneCopy.CRITERION_CONFIRM_AGAIN else DoneCopy.CRITERION_CONFIRM,
                     "$tag-confirm") { confirm(criterion.item) }

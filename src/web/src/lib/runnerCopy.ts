@@ -148,6 +148,8 @@ export const RUNNER_ENGINE_NO_QUOTA_LIMIT = 'No quota limit';
 export const RUNNER_ENGINE_COULDNT_CHECK = 'Couldn’t check';
 /** The quota column when the sign-in check gave no answer — no reading at all, rather than a zero. */
 export const RUNNER_ENGINE_NO_READING = 'No reading';
+/** OpenCode's Unknown line when its CLI listed no provider key at all. */
+export const RUNNER_ENGINE_NO_PROVIDER_KEY = 'no provider key found';
 export const RUNNER_SIGN_IN = 'Sign In';
 export const RUNNER_UPDATE_ENGINES_NOW = 'Update Engines Now';
 export const RUNNER_REFRESH_MODEL_LISTS = 'Refresh Model Lists';

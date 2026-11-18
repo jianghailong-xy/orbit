@@ -58,6 +58,10 @@ import { EvidenceReviewService } from './evidence-review.service';
 import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
 import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
+import {
+  resolveUndecidedEvidenceOnDecision,
+  resolveUndecidedEvidenceOnRevision,
+} from '../projects/evidence-undecided';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { refreshProjectDone } from '../projects/project-done-request';
 import { deliveredIdentityAtDone, enqueueForDoneTask } from '../projects/project-integration-job';
@@ -455,6 +459,8 @@ export class TaskCompletionEvidenceService {
           },
           include: evidenceInclude,
         });
+        // A newer revision supersedes the owner's item about an older one that waited undecided (1110).
+        await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
         // Each cited file, and each file of a cited bundle, names the newest revision citing it. That is what says it
         // is evidence at all (`FilesService.readableInSession`) and which revision's fate is its own (§2.8). A file with a
         // tombstone is no longer one a version can hold, so it is refused whole, with these rows locked: the sweep waits
@@ -729,6 +735,7 @@ export class TaskCompletionEvidenceService {
         },
         include: evidenceInclude,
       });
+      await resolveUndecidedEvidenceOnRevision(tx, taskId, evidence.id);
       await settleCitedFileExpiry(tx, { ownerId, taskId });
       await tx.taskCompletionEvidenceIdempotency.create({
         data: { id: randomUUID(), taskId, idempotencyKey, evidenceId: evidence.id },
@@ -934,6 +941,10 @@ export class TaskCompletionEvidenceService {
         },
         include: decisionInclude,
       });
+      // The owner's item about this revision waiting undecided ends with the decision (1110).
+      await resolveUndecidedEvidenceOnDecision(tx, taskId, latest.id, actor.type === CreatorType.USER
+        ? { resolvedBy: 'USER', resolvedByUserId: actor.id }
+        : { resolvedBy: 'COORDINATOR', resolvedBySessionId: decidingSession.id });
       // A send-back starts the 30 days of what this version cites, and a CONFIRM holds it until the task goes (§2.8).
       await settleCitedFileExpiry(tx, { ownerId, taskId });
 

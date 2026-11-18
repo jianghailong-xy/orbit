@@ -96,6 +96,7 @@ export type ConditionRead = ConditionView & { runnerName?: string | null };
 export const conditionQuery = (id: string) =>
   queryOptions({
     queryKey: ['conditions', id] as const,
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ConditionRead>(`/conditions/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });

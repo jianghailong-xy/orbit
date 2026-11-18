@@ -3405,6 +3405,13 @@ final class AppModel {
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
     }
 
+    /// "Land without the check" on a landing in flight (§2.4 J-S5), from the landing card. Throws
+    /// what the server answered, for the card to say; the page reads its line again itself.
+    func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+    }
+
     /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out
     /// doors and the landing page. The page re-reads what it drew from afterwards.
     func abandonIntegrationJob(_ projectID: String, jobID: String) async throws {

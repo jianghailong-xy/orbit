@@ -3138,7 +3138,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1090 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
       // so queued send-backs retain their translated text. No constraints or defaults are added,
       // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
-      '1090_evidence_send_back_translation'],
+      '1090_evidence_send_back_translation',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

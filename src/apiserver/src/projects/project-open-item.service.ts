@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 
 import {
@@ -33,6 +34,8 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectSignInWait,
+  type TaskSignInHold,
   RunEventType,
 } from '@orbit/shared';
 
@@ -54,6 +57,7 @@ import {
 } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { ownerWordsForAgent } from '../sessions/reply-translation';
+import { EVIDENCE_UNDECIDED_KIND, evidenceUndecidedDetailLine } from './evidence-undecided';
 import {
   AskedQuestion,
   CoordinatorQuestion,
@@ -101,12 +105,14 @@ import { COORDINATOR_PAUSE_SELECT, conversationIsPaused } from './coordinator-ev
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
 import {
-  RetryableLandingFailureClass,
+  LandingRetryFailureClass,
   SkippedMergeCheckRecord,
   endTimedOutLanding,
   enqueueForDoneTask,
   pushBoundaryPassed,
+  RetryableLandingFailureClass,
   queueLandingRetry,
+  readLandingSourceTip,
 } from './project-integration-job';
 import {
   ProjectIntegrationView,
@@ -133,7 +139,9 @@ import {
 } from './project-integration-retry';
 import {
   INTEGRATION_SKIP_CHECK_NOT_THIS_PROJECT,
+  SKIP_CHECK_STOP_CAUSE,
   decideIntegrationSkipCheck,
+  inFlightSkipRefusal,
   isApprovalId,
   notAnApprovalId,
 } from './project-integration-skip-check';
@@ -270,13 +278,10 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
 };
 
 /**
- * How many already-answered questions one binding reconsiders (§5.2 R11).
+ * How many unread answers one binding delivers at most (§5.2 R11).
  *
- * A cap on the READ, not on the guarantee: an answer is redelivered while the work it unblocks is
- * still open, or to the one generation that replaced an asker it never reached, and both of those are
- * self-limiting.
- * This only keeps a project with years of answered questions from re-reading all of them every time
- * a coordinator is bound.
+ * A cap on the READ, not on the guarantee: an answer is redelivered only until a coordinator's engine
+ * takes it, so the set drains itself; the next binding, or the next turn end, picks up the rest.
  */
 const ANSWERS_RECONSIDERED_PER_BINDING = 50;
 
@@ -449,8 +454,11 @@ export interface IntegrationRetried {
   landingSessionId: string | null;
   /** The failed generation it reruns, and what that one failed of. */
   retryOfJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  failureClass: LandingRetryFailureClass;
   reason: string;
+  /** What this rerun does differently, when it is not the plain one: a MAIN_SYNC conflict whose
+   *  branch now carries both tips lands by a merge (§3.1 M3). */
+  message?: string;
   /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
@@ -482,6 +490,26 @@ export interface IntegrationSkipChecked extends IntegrationRetried {
   skippedCheck: SkippedMergeCheckRecord;
 }
 
+/**
+ * The owner skipped the landing check of a landing that was still in flight (§2.4 J-S5): the
+ * generation in flight was stopped, and the next one lands without the check.
+ */
+export interface InFlightLandingSkipped {
+  taskId: string;
+  /** The generation that was in flight, and was stopped for this. */
+  stoppedJobId: string;
+  /** QUEUED: the stopped generation ended on the spot and the one without the check is queued.
+   *  STOPPING: its runner was asked to stop, and the one without the check is queued when it
+   *  answers — unless that answer is that it landed. */
+  state: 'QUEUED' | 'STOPPING';
+  /** The generation without the check, once queued; null while STOPPING. */
+  jobId: string | null;
+  generation: number | null;
+  landingSessionId: string | null;
+  reason: string;
+  skippedCheck: SkippedMergeCheckRecord;
+}
+
 /** A blocked candidate's check the coordinator ran again (§4.7 H1), as `integration_retry` with a
  *  `promotionId` answers it. */
 export interface PromotionCheckRetried {
@@ -494,7 +522,7 @@ export interface PromotionCheckRetried {
   landingSessionId: string | null;
   /** The failed job it reruns — the candidate's check or its landing — and what that one failed of. */
   retryOfJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  failureClass: LandingRetryFailureClass;
   reason: string;
   /** The coordinator's open items about the candidate, now being handled by this check. */
   handlingItemIds: string[];
@@ -533,6 +561,42 @@ export interface ProjectOpenItems {
   closedQuestions: ProjectClosedQuestion<Date>[];
   /** The main branch a row's merge into main goes into; null with no repository bound. */
   mainBranch: string | null;
+  /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
+  signIns: ProjectSignInWait[];
+}
+
+/** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
+export interface SignInHoldReader {
+  signInHolds(ownerId: string, scope: Prisma.Sql): Promise<Map<string, TaskSignInHold>>;
+}
+
+/**
+ * The project's sign-in holds as its Needs you rows: one per runner and engine, its tasks in the order
+ * the sweep offers them, "N tasks wait for a sign-in" over "Claude Code is signed out on mac".
+ */
+export function projectSignInWaits(holds: ReadonlyMap<string, TaskSignInHold>): ProjectSignInWait[] {
+  const byPair = new Map<string, ProjectSignInWait>();
+  for (const [taskId, hold] of holds) {
+    const key = `${hold.runnerId}\u0000${hold.engine}`;
+    let wait = byPair.get(key);
+    if (!wait) {
+      wait = {
+        engine: hold.engine,
+        engineLabel: hold.engineLabel,
+        runnerId: hold.runnerId,
+        runnerName: hold.runnerName,
+        taskIds: [],
+        title: '',
+        detailLine: `${hold.engineLabel} is signed out on ${hold.runnerName}`,
+      };
+      byPair.set(key, wait);
+    }
+    wait.taskIds.push(taskId);
+  }
+  return [...byPair.values()].map((wait) => {
+    const n = wait.taskIds.length;
+    return { ...wait, title: n === 1 ? '1 task waits for a sign-in' : `${n} tasks wait for a sign-in` };
+  });
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -595,7 +659,36 @@ export class ProjectOpenItemService {
     /** Tells the owner's clients to read the project's items again once a card's translation is stored.
      *  Optional for the reason `push` is: a translation is a reader of an item, never a condition of it. */
     @Optional() private readonly realtime?: RealtimeService,
+    /** How the running server finds TasksService for the sign-in holds (`signIns`) without this module importing
+     *  TasksModule, which imports this one's slices: resolved at call time, as MergeReceiptService resolves it. */
+    @Optional() private readonly moduleRef?: ModuleRef,
+    /** A pg fixture's own reader of the holds; the running server's is TasksService, through `moduleRef`. */
+    @Optional() private readonly signInHoldReader?: SignInHoldReader,
   ) {}
+
+  /**
+   * The auto-run sweep's sign-in holds among the owner's tasks `scope` names (TasksService.signInHolds), for the
+   * project's reads: none when no reader is reachable (a build without TasksModule).
+   */
+  async signInHolds(ownerId: string, scope: Prisma.Sql): Promise<Map<string, TaskSignInHold>> {
+    let reader = this.signInHoldReader;
+    if (!reader) {
+      try {
+        // Loaded at call time: tasks.service imports this file, so a static import would be a cycle
+        // that leaves one of the two classes undefined while the other's metadata is written.
+        const { TasksService } = await import('../tasks/tasks.service.js');
+        reader = this.moduleRef?.get(TasksService, { strict: false });
+      } catch {
+        reader = undefined;
+      }
+    }
+    return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** The project's sign-in waits, one per runner and engine. */
+  private async signInWaits(ownerId: string, projectId: string): Promise<ProjectSignInWait[]> {
+    return projectSignInWaits(await this.signInHolds(ownerId, Prisma.sql`t.project_id = ${projectId}::uuid`));
+  }
 
   /**
    * §4.4 X-D4 (1): the transaction that opened items about these tasks has committed.
@@ -678,9 +771,9 @@ export class ProjectOpenItemService {
    * Items whose task has meanwhile moved on are resolved first, so a coordinator bound to a project
    * with a long history is not handed a queue of answered questions.
    */
-  async deliverOwed(projectId: string, replacedSessionId?: string): Promise<void> {
+  async deliverOwed(projectId: string): Promise<void> {
     await this.guarded('deliverOwed', async () => {
-      await this.deliverAnsweredQuestions(projectId, replacedSessionId);
+      await this.deliverAnsweredQuestions(projectId);
       const owed = await this.prisma.projectOpenItem.findMany({
         where: { projectId, state: 'OPEN', assignee: 'COORDINATOR' },
         select: { id: true, assignedAt: true, taskId: true },
@@ -935,7 +1028,7 @@ export class ProjectOpenItemService {
     }
     // The tasks a question blocks are the account's own. Any other id is refused as one that names
     // nothing — and is never stored on the question, from where every coordinator rotation would read
-    // whether that task is still open (`blocksUnsettledWork`).
+    // whether that task is still open (`unsettledBlockedTasks`).
     if (question.blocksTaskIds.length > 0) {
       const own = await this.prisma.task.count({ where: { id: { in: question.blocksTaskIds }, ownerId } });
       if (own !== question.blocksTaskIds.length) {
@@ -1643,6 +1736,17 @@ export class ProjectOpenItemService {
     // §10.7: the owner's from birth and never delivered to a coordinator — it asks about authority,
     // which no conversation holds — so there is nowhere to send it either. Undoing the work is a
     // task the coordinator files when asked in "Chat about this", not this door.
+    // 1110: the coordinator already had this evidence and did not decide it; the item is the owner's.
+    // To ask the coordinator again, "Chat about this" sends it a message.
+    if (item.kind === EVIDENCE_UNDECIDED_KIND) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_RETURNABLE,
+        message:
+          'this item is never delivered to a coordinator conversation: the coordinator was already '
+          + 'handed this evidence and has not decided it. Review the evidence and confirm it or send '
+          + 'it back, or use Chat about this to ask the coordinator to decide.',
+      });
+    }
     if (item.kind === LANDED_WITHOUT_CONFIRMATION_KIND) {
       throw new ConflictException({
         code: OPEN_ITEM_NOT_RETURNABLE,
@@ -2224,7 +2328,9 @@ export class ProjectOpenItemService {
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true },
+        select: {
+          id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true, sourceSha: true,
+        },
       });
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({
@@ -2253,6 +2359,15 @@ export class ProjectOpenItemService {
         newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
         openItems,
         ownerBlockers,
+        // §3.1 M3: only a MAIN_SYNC conflict reads the branch tips, and only facts already on record.
+        ...(newestLanding?.state === 'CONFLICT' && newestLanding.phase === 'MAIN_SYNC'
+          ? {
+            sourceTips: {
+              conflicted: newestLanding.sourceSha,
+              current: await readLandingSourceTip(tx, { ownerId, projectId, taskId }),
+            },
+          }
+          : {}),
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
       if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent, 'RETRY') : null) === null) {
@@ -2267,13 +2382,20 @@ export class ProjectOpenItemService {
         ownerId,
         projectId,
         taskId,
-        retry: {
-          ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
-          reason,
-          requestedBySessionId: ownerRequester ? undefined : asking!,
-          requestedByUserId: ownerRequester ?? undefined,
-        },
+        // A MAIN_SYNC conflict rerun after its branch moved is a new look at new commits, queued like
+        // one: the retry columns' class check admits only the retryable failures (0344/0513), so the
+        // row carries none, and who asked and why are kept on the items it handles below.
+        ...(decision.failureClass === 'CONFLICT'
+          ? { cause: 'RETRY' as const }
+          : {
+            retry: {
+              ofJobId: decision.retryOfJobId,
+              failureClass: decision.failureClass,
+              reason,
+              requestedBySessionId: ownerRequester ? undefined : asking!,
+              requestedByUserId: ownerRequester ?? undefined,
+            },
+          }),
       });
       if (!queued) {
         throw new ConflictException({
@@ -2298,6 +2420,7 @@ export class ProjectOpenItemService {
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,
+        ...(decision.message ? { message: decision.message } : {}),
         handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
@@ -2528,6 +2651,23 @@ export class ProjectOpenItemService {
    * all. The check is skipped, never passed: the row says so, and so does any item the landing goes
    * on to open.
    */
+  // The coordinator's door only ever answers a failed landing; the owner's may also answer one in
+  // flight (`skipInFlightLandingCheck`), so only the owner's call is typed with both answers.
+  skipIntegrationMergeCheck(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string; approvalId?: string },
+    actingSessionId: string | undefined,
+  ): Promise<IntegrationSkipChecked>;
+  skipIntegrationMergeCheck(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string; approvalId?: string },
+    actingSessionId: string | undefined,
+    requester: { userId: string },
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped>;
   async skipIntegrationMergeCheck(
     ownerId: string,
     projectId: string,
@@ -2535,7 +2675,7 @@ export class ProjectOpenItemService {
     given: { reason?: string; approvalId?: string },
     actingSessionId: string | undefined,
     requester?: { userId: string },
-  ): Promise<IntegrationSkipChecked> {
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped> {
     const reason = rerunReason(given);
     const approvalId = typeof given?.approvalId === 'string' ? given.approvalId.trim() : '';
     const project = await this.prisma.project.findFirst({
@@ -2581,6 +2721,12 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
+      if (ownerRequester && newestLanding
+        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        return this.skipInFlightLandingCheck(tx, {
+          ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
+        });
+      }
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -2645,7 +2791,8 @@ export class ProjectOpenItemService {
         taskId,
         retry: {
           ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
+          // Only `retryIntegration` hands a decision the branch tips, so only it can answer CONFLICT.
+          failureClass: decision.failureClass as RetryableLandingFailureClass,
           reason,
           requestedBySessionId: ownerRequester ? undefined : asking!,
           requestedByUserId: ownerRequester ?? undefined,
@@ -2689,14 +2836,116 @@ export class ProjectOpenItemService {
     }, loggedRetry(this.logger, 'projectOpenItem.skipIntegrationMergeCheck'));
   }
 
-  /** The account owner's user-channel door for skipping one landing's merge check. */
+  /**
+   * The account owner's user-channel door for skipping one landing's merge check — a failed one, as
+   * the coordinator's card-gated door does, or one still in flight (`skipInFlightLandingCheck`).
+   */
   async skipIntegrationMergeCheckAsOwner(
     ownerId: string,
     projectId: string,
     taskId: string,
     given: { reason?: string },
-  ): Promise<IntegrationSkipChecked> {
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped> {
     return this.skipIntegrationMergeCheck(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
+  }
+
+  /**
+   * The owner's "Land without the check" on a landing still in flight (§2.4 J-S5): the same skip
+   * as after a failed check, asked before the check has answered — the check is long, and the owner
+   * has decided this landing does not wait for it.
+   *
+   * J3 allows one landing of a task in flight, so the generation in flight is stopped first, by the
+   * stop every door uses (`stopInFlightJob`, J-T8). A QUEUED one, or one whose runner went silent
+   * past its limit, ends on the spot, and the generation without the check is queued here. A live
+   * claim is only ASKED, and the stop's own line carries the skip: the result transaction queues the
+   * generation without the check once the runner has answered (`queueSkippedLandingAfterStop`).
+   *
+   * Refused when the landing is past the push (it may already have landed), already asked to stop,
+   * already the generation without the check, or when the project runs no landing check at all —
+   * the same rule (`inFlightSkipRefusal`) that decides whether the landing card offers the button.
+   * The owner's press is the approval: no card, and the skip columns name them.
+   */
+  private async skipInFlightLandingCheck(
+    tx: Prisma.TransactionClient,
+    input: {
+      ownerId: string; projectId: string; taskId: string; taskStatus: string; jobId: string; reason: string;
+    },
+  ): Promise<InFlightLandingSkipped> {
+    const { ownerId, projectId, taskId, reason } = input;
+    if (input.taskStatus !== 'DONE') {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: `this task is ${input.taskStatus}, not DONE, so its landing is about to be stopped `
+          + 'anyway: its next DONE lands the work.',
+      });
+    }
+    // Rank 55 before the job row's rank-60 write, as the stop door takes it: this orders the stop
+    // against a result or a DONE that would queue the next generation.
+    const [codebase] = await tx.$queryRaw<Array<{
+      landingCheckCommand: string | null; mergeCheckCommand: string | null;
+    }>>(Prisma.sql`
+      SELECT "landing_check_command" AS "landingCheckCommand",
+             "merge_check_command" AS "mergeCheckCommand"
+        FROM "project_codebase"
+       WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
+         FOR UPDATE`);
+    const job = await tx.projectIntegrationJob.findUnique({
+      where: { id: input.jobId },
+      select: {
+        id: true, kind: true, state: true, phase: true, cancelRequestedAt: true, skipMergeCheck: true,
+        progressProtocol: true, pushReportedGeneration: true, claimGeneration: true,
+      },
+    });
+    if (!job) throw new NotFoundException('landing not found');
+    const refusal = inFlightSkipRefusal({
+      ...job,
+      landingCheckCommand: codebase?.landingCheckCommand ?? null,
+      mergeCheckCommand: codebase?.mergeCheckCommand ?? null,
+    });
+    if (refusal) throw new ConflictException(refusal);
+
+    const skippedCheck = { reason, approvedByUserId: ownerId, approvalId: null };
+    const stopped = await stopInFlightJob(tx, {
+      projectId,
+      jobId: job.id,
+      now: new Date(),
+      cause: SKIP_CHECK_STOP_CAUSE,
+      actor: { type: 'OWNER', userId: ownerId },
+      reason,
+      data: { skip: { reason, approvedByUserId: ownerId } },
+    });
+    if (stopped.outcome === 'NONE') {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'this landing moved on while the skip was being decided — it was claimed, finished '
+          + 'or stopped by another press. Read the landing again.',
+      });
+    }
+    if (stopped.outcome === 'STOP_REQUESTED') {
+      return {
+        taskId, stoppedJobId: job.id, state: 'STOPPING',
+        jobId: null, generation: null, landingSessionId: null, reason, skippedCheck,
+      };
+    }
+    // A stopped generation releases the enqueue a reopened task's second DONE was owed (J-T8),
+    // exactly as the stop door does; that generation is the new work's, and it runs the check.
+    await this.queueDeferredDoneAfterStop(tx, ownerId, taskId);
+    const queued = await queueLandingRetry(tx, {
+      ownerId, projectId, taskId, skipMergeCheck: skippedCheck,
+    });
+    if (!queued) {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'the landing was stopped but could not be queued again: the task has no work branch '
+          + 'to hand the line, the project no longer integrates on a branch of its own, or another '
+          + 'landing of this task was queued first.',
+      });
+    }
+    return {
+      taskId, stoppedJobId: job.id, state: 'QUEUED',
+      jobId: queued.jobId, generation: queued.generation, landingSessionId: queued.landingSessionId,
+      reason, skippedCheck,
+    };
   }
 
   /**
@@ -2795,7 +3044,8 @@ export class ProjectOpenItemService {
         promotionId,
         retry: {
           ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
+          // Only `retryIntegration` hands a decision the branch tips, so only it can answer CONFLICT.
+          failureClass: decision.failureClass as RetryableLandingFailureClass,
           reason,
           requestedBySessionId: ownerRequester ? undefined : asking!,
           requestedByUserId: ownerRequester ?? undefined,
@@ -2872,7 +3122,7 @@ export class ProjectOpenItemService {
     const question = item.payload as unknown as CoordinatorQuestion;
     // §5.2 R11: told to a conversation that did not ask, it says who did and whether it still blocks.
     const redelivered = item.askedBySessionId && item.askedBySessionId !== sessionId
-      ? { stillBlocks: await this.blocksUnsettledWork(item.ownerId, question.blocksTaskIds) }
+      ? { stillBlocks: await this.unsettledBlockedTasks(item.ownerId, question.blocksTaskIds) }
       : undefined;
     const content = ownerAnswerMessage(
       question,
@@ -2983,63 +3233,58 @@ export class ProjectOpenItemService {
   }
 
   /**
-   * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
-   * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
-   * conversation it just replaced that it never received, which would otherwise have been answered to
-   * nobody.
+   * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers no
+   * coordinator has read: answered while nobody coordinated, or queued to a conversation that ended
+   * before its engine took the turn (a turn is read once `delivered_at` is set; an ANSWERED turn
+   * without it was drained, not read).
    *
-   * Not every answer this project ever got: an answer is context for work still in front of the new
-   * coordinator, and replaying a year of settled questions is noise, not a guarantee. An answer the
-   * replaced conversation already read was acted on there; each one replayed is a whole-context turn
-   * the new coordinator spends saying so (33 of them on one rotation, 2026-11-12).
+   * Not an answer an earlier generation already read, however much work it still blocks: it was acted
+   * on there, and each one replayed is a whole-context turn the new coordinator spends saying so (33
+   * on one rotation, 2026-11-12; 29 on a workspace switch, 2026-11-18, one of them read by four
+   * generations before). What a successor needs of those is in its opening's state digest
+   * (coordinator-digest.ts, "Owner answers in force"), read once and never as a turn.
    */
-  private async deliverAnsweredQuestions(
-    projectId: string,
-    replacedSessionId?: string,
-  ): Promise<void> {
+  private async deliverAnsweredQuestions(projectId: string): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { coordinatorSessionId: true, ownerId: true },
+      select: { coordinatorSessionId: true },
     });
     const sessionId = project?.coordinatorSessionId ?? null;
-    if (!project || !sessionId) return;
-    const answered = await this.prisma.projectOpenItem.findMany({
-      where: {
-        projectId,
-        kind: 'COORDINATOR_QUESTION',
-        state: 'RESOLVED',
-        resolution: 'ANSWERED',
-        deliveries: { none: { sessionId, purpose: 'ANSWER' } },
-      },
-      select: {
-        id: true,
-        payload: true,
-        askedBySessionId: true,
-        // Whether the replaced conversation was told it; read only when there is one.
-        deliveries: {
-          where: { sessionId: replacedSessionId ?? sessionId, purpose: 'ANSWER' },
-          select: { itemId: true },
-        },
-      },
-      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
-      take: ANSWERS_RECONSIDERED_PER_BINDING,
-    });
-    for (const item of answered.reverse()) {
-      const replaced = !!replacedSessionId && item.askedBySessionId === replacedSessionId
-        && item.deliveries.length === 0;
-      const question = item.payload as unknown as CoordinatorQuestion;
-      if (!replaced && !(await this.blocksUnsettledWork(project.ownerId, question.blocksTaskIds))) continue;
-      await this.deliverAnswer(item.id);
-    }
+    if (!sessionId) return;
+    const unread = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT i."id"
+        FROM "project_open_item" i
+       WHERE i."project_id" = ${projectId}::uuid
+         AND i."kind" = 'COORDINATOR_QUESTION'
+         AND i."state" = 'RESOLVED'
+         AND i."resolution" = 'ANSWERED'
+         AND NOT EXISTS (
+               SELECT 1 FROM "project_open_item_delivery" d
+                WHERE d."item_id" = i."id" AND d."purpose" = 'ANSWER' AND d."session_id" = ${sessionId}::uuid)
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM "project_open_item_delivery" d
+                 JOIN "conversation_turn" t
+                   ON t."session_id" = d."session_id" AND t."client_turn_id" = d."client_turn_id"
+                WHERE d."item_id" = i."id" AND d."purpose" = 'ANSWER' AND t."delivered_at" IS NOT NULL)
+       ORDER BY i."resolved_at" DESC, i."id" DESC
+       LIMIT ${ANSWERS_RECONSIDERED_PER_BINDING}
+    `);
+    for (const item of unread.reverse()) await this.deliverAnswer(item.id);
   }
 
-  /** Whether any of these tasks of the account's is still somebody's to do. */
-  private async blocksUnsettledWork(ownerId: string, taskIds: ReadonlyArray<string> | undefined): Promise<boolean> {
+  /** The tasks of the account's among these that are still somebody's to do, as a message names them. */
+  private async unsettledBlockedTasks(
+    ownerId: string,
+    taskIds: ReadonlyArray<string> | undefined,
+  ): Promise<Array<{ title: string; status: string }>> {
     const ids = unique(taskIds ?? []);
-    if (ids.length === 0) return false;
-    return (await this.prisma.task.count({
+    if (ids.length === 0) return [];
+    return this.prisma.task.findMany({
       where: { id: { in: ids }, ownerId, status: { notIn: ['DONE', 'CANCELLED'] } },
-    })) > 0;
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { title: true, status: true },
+    });
   }
 
   /** The answer's own ledger row, written in the turn's transaction under the Session lock (G6). */
@@ -3627,6 +3872,7 @@ export class ProjectOpenItemService {
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
+      signIns: await this.signInWaits(ownerId, projectId),
     };
   }
 
@@ -4104,6 +4350,7 @@ function detailLine(kind: string, payload: unknown): string {
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind === LANDING_UNOBSERVED_KIND) return landingUnobservedDetailLine(payload);
   if (kind === LANDED_WITHOUT_CONFIRMATION_KIND) return landedWithoutConfirmationDetailLine(payload);
+  if (kind === EVIDENCE_UNDECIDED_KIND) return evidenceUndecidedDetailLine(payload);
   // §10.5 O-L8: what the error code alone would have a reader conclude about the task is not so.
   const outdatedRunner = outdatedRunnerOf(payload);
   if (kind === 'INTEGRATION_ERROR' && outdatedRunner) {

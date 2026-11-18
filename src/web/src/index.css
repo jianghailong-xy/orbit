@@ -1363,6 +1363,17 @@ button.toast--pill:focus-visible {
 .tp-account-machine-dot[data-online='true'] {
   background: var(--success-solid);
 }
+/* Orbit Cloud, pinned first in that level (docs/mocks/orbit-cloud-pinned, A): its cloud in the brand colour and
+   its name in semibold. */
+.tp-account-machine-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.tp-account-machine-cloud > .anticon {
+  color: var(--brand);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -5448,6 +5459,28 @@ button.toast--pill:focus-visible {
 .session-project-landing .spl-error {
   flex-basis: 100%;
   color: var(--error);
+}
+/* "Land without the check", asked once before it stops anything: the sentence takes the whole line,
+   and the two answers sit under it. */
+.session-project-landing .spl-confirm {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.session-project-landing .spl-confirm-text {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+/* What a skip of this landing's check has started: in the note's place, in the note's ink, because
+   it is a fact about the landing rather than something wanted of the reader. */
+.session-project-landing .spl-skip {
+  color: var(--text-2);
+}
+/* A refusal under the foot says something is wrong; "Nothing to do" above it would say the opposite. */
+.session-project-landing:has(.spl-error) .spl-note {
+  display: none;
 }
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
@@ -29107,4 +29140,36 @@ button.agent-progress-agent:hover {
    `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
 .approval-card.coordinator-question {
   border: 1.5px solid var(--warning-solid);
+}
+
+/* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
+   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   then its facts. */
+.ag-head {
+  flex: none;
+}
+/* The Agent tone's purple, as Apple draws the band's sparkle. */
+.bg-tray-ico.ag-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .bg-tray-ico.ag-mark {
+  color: #a78bfa;
+}
+.ag-band {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-section {
+  flex: none;
+  padding: 4px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ag-row .ag-title {
+  font-family: inherit;
 }

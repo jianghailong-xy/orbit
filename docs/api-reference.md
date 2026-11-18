@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 478 |
 | `admin` | 31 |
-| `runner` | 201 |
+| `runner` | 202 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **751** |
+| **Total** | **752** |
 
 ## Public routes
 
@@ -734,6 +734,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `RunnerSessionsController.recordMergeReceipt` |
 | `POST` | `/api/runner/sessions/:id/merge-result` | body `Object`; path `id` | `RunnerApiController.mergeResult` |
 | `GET` | `/api/runner/sessions/:id/meta` | path `id` | `RunnerApiController.getSessionMeta` |
+| `POST` | `/api/runner/sessions/:id/move` | body `MoveSessionDto`; path `id` | `RunnerSessionsController.moveSession` |
 | `POST` | `/api/runner/sessions/:id/naming` | body `SessionNamingDto`; path `id` | `RunnerApiController.sessionNaming` |
 | `POST` | `/api/runner/sessions/:id/notify` | body `NotifyDto`; path `id` | `RunnerApiController.sessionNotify` |
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |

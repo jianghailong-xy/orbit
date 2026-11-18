@@ -121,6 +121,7 @@ export function GuestSessionView({ sessionId }: { sessionId: string }) {
 export const guestSessionQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['guest-session', sessionId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => getGuestSession(sessionId, TAIL_PAGE),
     retry: false,
     staleTime: Infinity,

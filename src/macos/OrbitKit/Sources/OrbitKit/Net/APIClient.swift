@@ -1273,6 +1273,14 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
     }
 
+    /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
+    /// and lands it again with the landing check not run, recorded as skipped by the owner. The
+    /// answer is not read: the card redraws from the integration view read again.
+    public func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        try await postRaw("projects/\(projectID)/tasks/\(taskID)/integration/skip-merge-check",
+                          body: ["reason": ProjectPage.landingSkipCheckReason])
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {
@@ -2002,8 +2010,8 @@ public final class APIClient: @unchecked Sendable {
         try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
     }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
-    /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
-    /// server now orders it (omitted runners appended, foreign ids dropped).
+    /// Persist the list's drag order. The server answers with the full order, with omitted runners
+    /// appended and foreign ids dropped.
     @discardableResult
     public func reorderRunners(_ ids: [String]) async throws -> [Runner] {
         try await post("runners/reorder", body: ReorderRunnersRequest(ids: ids))

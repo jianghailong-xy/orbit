@@ -182,7 +182,11 @@ export function ScheduledPage(): JSX.Element {
 
   const list = useQuery(schedulesQuery(workspaceFilter));
   const drafts = useQuery(scheduleDraftsQuery());
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<WorkspaceRow[]>('/workspaces'),
+  });
   // One read draws the whole timeline: the rows, the runs of the shown window and their findings (the list's
   // timeline part). A schedule's detail is read only when it is opened in the inspector.
   const schedules = useMemo(() => list.data?.schedules ?? [], [list.data]);
@@ -653,6 +657,7 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
   // same door, but this needs the title alone.
   const asked = useQuery({
     queryKey: ['schedules', 'asked-in', s.createdFromSessionId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<{ title?: string | null }>(`/sessions/${encodeURIComponent(s.createdFromSessionId!)}`),
     enabled: Boolean(s.createdFromSessionId),
     staleTime: 300_000,

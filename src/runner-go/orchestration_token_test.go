@@ -111,6 +111,15 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			},
 		},
 		{
+			name:   "session move",
+			method: http.MethodPost,
+			path:   "/api/runner/sessions/child-session/move",
+			call: func(transport *Transport) error {
+				_, err := transport.moveSession("caller-session", "session-token", "child-session", map[string]interface{}{"workspaceId": "W1"})
+				return err
+			},
+		},
+		{
 			name:   "session complete",
 			method: http.MethodPost,
 			path:   "/api/runner/sessions/child-session/complete-session",

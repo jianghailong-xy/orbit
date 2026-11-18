@@ -22,10 +22,13 @@ const READ_FIRST =
  */
 const READ_FIRST_FROM_DIGEST =
   'Where things stand: the state digest below is what Orbit’s records said about this project when this '
-  + 'conversation was opened — its acceptance criteria and whether each is met, the owner rulings in force, the open '
-  + 'items and every task’s status — so you do not need project_get or task_list before your first report. Start with '
-  + 'a short report of where things stand. Read project_get, task_list or task_get when you need detail the digest '
-  + 'leaves out, such as the project’s goal and instructions. The digest is dated and the handoff note is the previous '
+  + 'conversation was opened — its acceptance criteria and whether each is met, the owner rulings in force, the '
+  + 'owner’s answers to earlier coordinators’ questions that are still in force, the open items and every task’s '
+  + 'status — so you do not need project_get or task_list before your first report. Take those answers as decided, '
+  + 'not as new work: one that no coordinator has read yet also arrives as its own message after this one, and that '
+  + 'message is the one to act on. Start with a short report of '
+  + 'where things stand. Read project_get, task_list or task_get when you need detail the digest leaves out, such as '
+  + 'the project’s goal and instructions. The digest is dated and a handoff note, when there is one, is the previous '
   + 'conversation’s own words: where a later read disagrees with either, the later read wins.\n\n';
 
 /**
@@ -355,9 +358,9 @@ export function buildCoordinatorDeliveryContextKey(
     .digest('hex');
 }
 
-/** What a replacement that completes a handoff puts into its successor's opening. */
+/** What a replacement puts into its successor's opening: the digest always, a handoff's note when it has one. */
 export interface CoordinatorOpeningHandoff {
-  /** The previous coordinator's note; null when the handoff was skipped. */
+  /** The previous coordinator's note; null when the handoff was skipped or there was no handoff. */
   note: string | null;
   /** `readStateDigest`'s rendering, as of the swap. */
   digest: string;
@@ -366,8 +369,9 @@ export interface CoordinatorOpeningHandoff {
 /**
  * The first user message for a coordinator created from the project page.
  *
- * A first coordinator (no handoff) gets the standing instructions alone, unchanged. A successor gets
- * them with the read-first paragraph that points at the digest, then the digest, then the note.
+ * A project's first coordinator gets the standing instructions alone, unchanged. A successor — by a
+ * handoff, the owner's replace, a workspace switch or a recovery — gets them with the read-first
+ * paragraph that points at the digest, then the digest, then the note when a handoff wrote one.
  */
 export function buildCoordinatorOpening(
   title: string,
