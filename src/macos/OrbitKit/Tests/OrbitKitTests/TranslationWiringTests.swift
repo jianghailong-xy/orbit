@@ -94,7 +94,17 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(composer.contains("ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),"))
         XCTAssertTrue(composer.contains("agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),"))
         let tag = try source(app + "Views/Console/TranslationViews.swift")
-        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage))"), "the tag names the agent language")
+        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage, unavailable: unavailable))"),
+                      "the tag names the agent language, and says when messages will wait")
+        // Frame 6 of docs/ux/translation-failure-policy.html: the tag reads the account's skip, redraws when it
+        // passes, and the account is read again when the server announces a change.
+        XCTAssertTrue(composer.contains("unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),"))
+        XCTAssertTrue(tag.contains("TimelineView(.explicit([until])) { context in"))
+        let appModel = try source(app + "AppModel.swift")
+        XCTAssertTrue(appModel.contains("case .account:\n            Task { @MainActor [weak self] in\n                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\\.user, me) }"))
+        // A refused card answer draws the reason its 422 gave.
+        XCTAssertTrue(cards.contains("if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {"))
+        XCTAssertTrue(tag.contains("TranslationFootView(parts: held.foot) { action in"))
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .general)"))
     }
 
