@@ -5,8 +5,8 @@ import OrbitKit
 // The Scheduled section on the Mac (docs/mocks/scheduled-tasks/web/01-board.png, 02-board.png ⑤): the Mac follows the
 // WEB board, not the phone's. The session column holds the timeline — "Scheduled 7", the workspace filter and Show
 // past runs, the groups with the web's long row line, and the line at the end — and the detail column is the
-// right-hand panel: a row's detail, a draft's create card, or a run's own session with Scheduled still lit in the
-// sidebar. Every rule and word is OrbitKit's (ScheduleDisplay, ScheduleCopy); the rows, detail panel, draft panel
+// right-hand panel: a row's detail or a draft's create card. Every rule and word is OrbitKit's
+// (ScheduleDisplay, ScheduleCopy); the rows, detail panel, draft panel
 // and cards are I1's views, shared with the phone (ScheduledPage.swift, ScheduleCards.swift).
 
 private typealias SC = ScheduleCopy
@@ -144,10 +144,7 @@ struct ScheduledMacPage: View {
     /// One row: the state circle, the title with its tag and time at the end, and the long line under it. The row a
     /// panel is open for is tinted, as the web's selected row.
     private func rowView(_ row: ScheduleRowModel, selected: Bool) -> some View {
-        Button {
-            model.closeScheduleRun()
-            row.open()
-        } label: {
+        Button(action: row.open) {
             HStack(alignment: .top, spacing: 10) {
                 ScheduleCircleGlyph(view: row.circle, size: 18).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 2) {
@@ -223,7 +220,6 @@ struct ScheduledMacPage: View {
                             typed = ""
                             chosenWorkspace = workspace.id
                             scheduled.inspectedID = nil
-                            model.closeScheduleRun()
                         }
                         asking = false
                     }
@@ -255,17 +251,12 @@ struct ScheduledMacPage: View {
     }
 }
 
-/// The detail column beside the timeline: a run's session when one is open over the page, else the panel a row
-/// opened — a schedule's detail (web board 01 ②) or a draft's create card (④) — else nothing chosen.
+/// The detail column beside the timeline shows a schedule's detail or a draft's create card.
 struct ScheduledMacDetail: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let sessionID = model.focusedConsoleSessionID, let registry = model.consoleRegistry {
-            // A run's session (web board 02 ⑤): its strip, crumb and head line are the transcript's first card
-            // (`ScheduleRunStripView`), and the report its last. Not a row of any workspace's list (§7.4).
-            ConsoleView(sessionID: sessionID, agentID: model.agentID(for: sessionID), registry: registry)
-        } else if let scheduled = model.scheduled, let id = scheduled.inspectedID {
+        if let scheduled = model.scheduled, let id = scheduled.inspectedID {
             ScheduleDetailPanel(scheduleID: id)
                 .id(id)
         } else if let scheduled = model.scheduled, let panel = scheduled.draftPanel {

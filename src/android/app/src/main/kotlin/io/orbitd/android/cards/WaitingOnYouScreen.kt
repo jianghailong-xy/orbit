@@ -60,14 +60,14 @@ internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = 
  * coordinator in the session list, on the project's root page. */
 @Composable
 fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, data: DirectoryData, revision: Long,
-    open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit, openRun: (String) -> Unit) {
     val store = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
     val links = rememberReaderLinkHandler(LocalReaderResources.current ?: return, open)
     // A terminal asked to be approved, or one was decided elsewhere: its cards are read again, and nothing else.
     val terminalsChanged = rememberTerminalsChanged(app, handle)
     LaunchedEffect(store, terminalsChanged) { if (terminalsChanged > 0) store.loadTerminalRequests() }
     val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
-    WaitingOnYouScreen(store, data.runners, route.id, revision, links, scheduled = scheduled) { question ->
+    WaitingOnYouScreen(store, data.runners, route.id, revision, links, scheduled = scheduled, openRun = openRun) { question ->
         val coordinator = data.sessions["open"].orEmpty().firstOrNull {
             it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, question.projectId)
         }
@@ -86,7 +86,8 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
  */
 @Composable
 fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>, focused: String?, revision: Long, open: (String) -> Unit,
-    scheduled: ScheduledStore? = null, answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
+    scheduled: ScheduledStore? = null, openRun: (String) -> Unit = { open("orbit-session:$it") },
+    answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(WaitingTab.OPEN) }
@@ -134,7 +135,7 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
             }
             if (scheduled != null) items(scheduleItems, key = { "schedule:${it.id}" }) { item ->
                 val openSchedule: (String) -> Unit = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") }
-                ScheduleWaitingCard(item, scheduled, openSession = { open("orbit-session:$it") }, openSchedule = openSchedule,
+                ScheduleWaitingCard(item, scheduled, openSession = openRun, openSchedule = openSchedule,
                     openAgentSettings = { openSchedule(item.scheduleId) }, answered = { store.load(OwnerRequestStore.OPEN) })
             }
             items(rows, key = { row -> when (row) { is OwnerRequests.OpenRow.Request -> row.request.id; is OwnerRequests.OpenRow.Question -> "question:${row.question.itemId}" } }) { row ->
