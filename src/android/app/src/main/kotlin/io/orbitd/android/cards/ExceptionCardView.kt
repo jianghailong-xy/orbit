@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.projects.CoordinatorChange
 import io.orbitd.android.projects.CoordinatorChangeSheet
@@ -355,6 +357,8 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
         ExceptionCards.WorkspaceFacts.of(workspaces?.firstOrNull { it.text("id") == parsed.workspaceId }) else null
     val reading = ExceptionCards.readCoordinatorCause(row, parsed, workspace)
     val drawn = ExceptionCards.drawn(row, mergeCard)
+    val owner = LocalTranslation.current.cardLanguage
+    var showOriginalNote by remember(key) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var repairing by remember(key) { mutableStateOf(false) }
     var repairFailed by remember(key) { mutableStateOf<String?>(null) }
@@ -395,6 +399,18 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
                     append(sentence.substring(at + 1 + name.length))
                 }
             }, Modifier.testTag("$key:who:status"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            // The coordinator's hand-over note under its caption, in the owner's language with its own flip while a usable translation exists.
+            if (reading.cause == ExceptionCards.CoordinatorCause.HANDED_OVER) {
+                OwnerCardTranslation.handoverNote(row, owner, showOriginalNote)?.let { note ->
+                    Column(Modifier.testTag("$key:who:handover"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(ExceptionCards.handoverNoteCaption, Modifier.testTag("$key:who:handover:caption"),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = secondary)
+                        Text(note, Modifier.testTag("$key:who:handover:note"), style = MaterialTheme.typography.bodySmall)
+                        if (OwnerCardTranslation.handoverNoteTranslates(row, owner))
+                            CardTranslationFoot(showOriginalNote, { showOriginalNote = !showOriginalNote }, Modifier.testTag("$key:who:handover:foot"))
+                    }
+                }
+            }
             ExceptionCards.coordinatorRowPresses(reading).forEach { press ->
                 val tag = "$key:who:${press.kind.name}"
                 when (press.kind) {

@@ -9,6 +9,7 @@ import type {
   OpenItemFacts,
   OpenItemHandling,
   OpenItemKind,
+  OwnerCardTranslation,
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
@@ -58,7 +59,7 @@ import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
-import { useOwnerLanguageTranslation } from './TranslationParts';
+import { useOwnerCardTranslation, useOwnerLanguageTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -2164,7 +2165,9 @@ export const ASK_AGAIN_ONCE_BACK =
 export const RUNNER_DOWN_SENTENCE = 'Its runner is offline. Ask again comes back here as soon as it is.';
 export const COORDINATOR_ENDED_SENTENCE = 'Its conversation was completed.';
 export const NO_COORDINATOR_SENTENCE = 'This project isn’t coordinated.';
-export const HANDED_OVER_SENTENCE = 'it handed this to you on purpose.';
+export const HANDED_OVER_SENTENCE = 'It handed this to you on purpose.';
+/** The caption over the coordinator's hand-over note (`row.handoverNote`), in the coordinator row. */
+export const HANDOVER_NOTE_CAPTION = 'Why the coordinator handed it over';
 export const CLOSES_BY_ITSELF =
   'Closes by itself once this work lands — push a fix to the task branch and you’re done.';
 export const ALREADY_SETTLED = 'Already settled?';
@@ -2316,13 +2319,26 @@ export function coordinatorRowSentence(row: ProjectOpenItemRow, reading: Coordin
       return NO_COORDINATOR_SENTENCE;
     case 'ESCALATED':
       return `Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it.`;
-    case 'HANDED_OVER': {
-      const note = row.handoverNote?.trim();
-      return note
-        ? `“${note}” — ${HANDED_OVER_SENTENCE}`
-        : `${HANDED_OVER_SENTENCE.charAt(0).toUpperCase()}${HANDED_OVER_SENTENCE.slice(1)}`;
-    }
+    case 'HANDED_OVER':
+      // The coordinator's own note is drawn under its caption (`handoverNoteShown`), not in here.
+      return HANDED_OVER_SENTENCE;
   }
+}
+
+/**
+ * The coordinator's hand-over note as the coordinator row draws it under HANDOVER_NOTE_CAPTION: its
+ * translation while the card is drawn translated (`translated`, the card's flip), the note as written
+ * otherwise, and null when the item was not handed over or carries no note.
+ */
+export function handoverNoteShown(
+  row: ProjectOpenItemRow,
+  reading: CoordinatorReading,
+  translated: OwnerCardTranslation | undefined,
+): string | null {
+  if (reading.cause !== 'HANDED_OVER') return null;
+  const note = row.handoverNote?.trim();
+  if (!note) return null;
+  return translated?.handoverNote?.trim() || note;
 }
 
 /** The coordinator row's presses (board part 6, third column), in order, with their weight. */
@@ -2646,6 +2662,9 @@ export function WhoFixesItCard({
   const actions = cardActions(row, currentPromotionId);
   const presses = coordinatorRowPresses(reading);
   const note = coordinatorRowNote(row, reading, escalationSeconds);
+  // The coordinator's hand-over note is agent text: drawn translated with the card's one flip.
+  const translated = useOwnerCardTranslation(row.translation?.handoverNote ? row.translation : null);
+  const handover = handoverNoteShown(row, reading, translated.shown);
   const landingHref = actions.includes('OPEN_LANDING') ? actionHref(row, 'OPEN_LANDING') : null;
   const fixMyself = actions.includes('OPEN_TASK_SESSION');
   // The owner's other ways onto the work the server listed (a failed task's Retry, say): drawn in the
@@ -2664,6 +2683,13 @@ export function WhoFixesItCard({
         <p className="project-open-item-who-status">
           <BoldWorkspace sentence={coordinatorRowSentence(row, reading)} name={reading.workspaceName} />
         </p>
+        {handover ? (
+          <div className="project-open-item-handover">
+            <span className="project-open-item-handover-caption">{HANDOVER_NOTE_CAPTION}</span>
+            <p className="project-open-item-handover-note">{handover}</p>
+            {translated.foot}
+          </div>
+        ) : null}
         <div className="project-open-item-actions project-open-item-who-presses">
           {presses.map((press) =>
             press.kind === 'ASK_AGAIN' ? (
