@@ -1,0 +1,274 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Scheduled runs as a group under their workspace</title>
+<style>
+:root{--bg:#fff;--hover:#f5f6f7;--line:#eceef1;--t1:#1f2329;--t2:#4b5059;--t3:#80868f;--t4:#a8acb3;--blue:#2f6bf0;--org:#f08c00;--orgbg:#fff6e8;--red:#e5484d;--grn:#2f9e6b}
+*{box-sizing:border-box}
+body{margin:0;background:#e9ebef;font-family:-apple-system,Inter,'Noto Sans SC',sans-serif;color:var(--t1)}
+.board{width:2040px;padding:36px;background:#e9ebef}
+h1{font-size:28px;margin:0 0 6px}
+.lede{font-size:15px;color:var(--t2);margin:0 0 26px;max-width:1500px;line-height:1.5}
+.row{display:flex;gap:28px;margin-bottom:28px;align-items:flex-start}
+.frame{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.12);overflow:hidden;flex:none}
+.cap{font-size:15px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:50%;background:#1f2329;color:#fff;font-size:13px;align-items:center;justify-content:center}
+.capnote{font-size:13px;color:var(--t2);margin:-4px 0 10px;max-width:960px;line-height:1.45}
+.app{display:flex;height:640px;font-size:14px}
+/* left drawer */
+.drawer{width:250px;border-right:1px solid var(--line);padding:14px 10px;background:#fbfbfc;flex:none}
+.brand{font-weight:700;font-size:18px;padding:2px 8px 12px}
+.nav{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:7px;color:var(--t1)}
+.nav .ic{width:16px;height:16px;border:1.5px solid var(--t3);border-radius:4px;flex:none}
+.nav .ct{margin-left:auto;font-size:12px;color:#b26a00;background:#fdf1dc;border-radius:9px;padding:1px 7px}
+.nav.sel{background:#eaf1ff;color:var(--blue)}
+.sect{font-size:13px;color:var(--t3);padding:14px 8px 6px}
+.ws{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:7px}
+.ws .fold{width:15px;height:12px;border:1.5px solid var(--t3);border-radius:2px;flex:none}
+.ws .k{margin-left:auto;font-size:12px;color:var(--t4)}
+.ws.sel{background:#eaf1ff;color:var(--blue)}
+.ws.sub{height:30px;padding-left:34px;font-size:13px;color:var(--t2)}
+.ws.sub .clk{width:13px;height:13px;border:1.5px solid var(--t3);border-radius:50%;flex:none;position:relative}
+.ws.sub.sel{background:#eaf1ff;color:var(--blue)}
+.ws.sub.sel .clk{border-color:var(--blue)}
+.dotw{width:7px;height:7px;border-radius:50%;background:var(--org);margin-left:auto}
+/* list column */
+.list{width:340px;border-right:1px solid var(--line);padding:12px 12px;flex:none;position:relative}
+.lhead{display:flex;align-items:center;gap:8px;padding:2px 2px 10px;font-weight:600}
+.lhead .scope{margin-left:auto;font-size:12.5px;color:var(--t3);font-weight:500}
+.back{font-size:16px;color:var(--t3);width:20px}
+.lsub{font-size:12px;color:var(--t3);font-weight:500;display:block}
+.sh{font-size:12px;font-weight:600;color:var(--t4);padding:10px 2px 4px}
+.srow{display:flex;align-items:center;gap:12px;height:64px;padding:0 8px;border-bottom:1px solid var(--hover)}
+.srow.sel{background:#eef3ff;border-radius:8px}
+.av{width:30px;height:30px;border-radius:50%;background:#eef0f3;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--t3)}
+.av.run{background:#fff3e0}
+.av.cal::before{content:"";width:13px;height:12px;border:1.6px solid var(--t3);border-top-width:3px;border-radius:2px}
+.st{flex:1;min-width:0}
+.tt{display:flex;gap:6px;align-items:center}
+.tt b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;font-size:14px}
+.tm{font-size:12.5px;color:var(--t4);flex:none}
+.sb{font-size:12.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;display:flex;gap:6px;align-items:center}
+.pill{font-size:11.5px;border-radius:5px;padding:0 6px;line-height:18px;flex:none}
+.p-wait{background:var(--orgbg);color:#b26a00}
+.p-fail{background:#fdecec;color:#c4373b}
+.p-chg{background:#eaf1ff;color:var(--blue)}
+.p-ok{background:#eaf6ef;color:var(--grn)}
+.frow{display:flex;align-items:center;gap:12px;height:44px;padding:0 8px;border-bottom:1px solid var(--hover)}
+.frow .fi{width:30px;display:flex;justify-content:center}
+.frow .fi i{width:16px;height:13px;border:1.5px solid var(--t3);border-radius:2px;display:block}
+.frow .fi i.c{border-radius:50%;width:15px;height:15px}
+.frow .n{flex:1}
+.frow .c{font-size:12.5px;color:var(--t4)}
+.frow .chev{color:var(--t4);font-size:13px}
+.frow.hl{outline:2px dashed var(--org);outline-offset:-2px;border-radius:8px}
+/* session pane */
+.pane{flex:1;padding:16px 22px;min-width:0}
+.crumb{font-size:13px;color:var(--blue)}
+.crumb span{color:var(--t3)}
+.ptitle{font-size:18px;font-weight:700;margin:4px 0 2px}
+.pmeta{font-size:12.5px;color:var(--t3);margin-bottom:12px}
+.strip{border:1px solid var(--line);background:#fafbfc;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t2);margin-bottom:8px}
+.strip.new{border-color:#ffd8a0;background:#fffaf2}
+.strike{text-decoration:line-through;color:var(--t4)}
+.wait{border:1px solid #ffd59a;border-radius:10px;overflow:hidden;margin-top:14px}
+.wait .wh{background:var(--orgbg);color:#b26a00;font-weight:600;font-size:13.5px;padding:8px 12px}
+.wait .wb{padding:10px 12px;font-size:13px;color:var(--t2);line-height:1.5}
+.btn{display:inline-block;padding:5px 12px;border-radius:7px;font-size:13px;margin-top:8px;margin-right:6px;border:1px solid var(--line)}
+.btn.pri{background:var(--blue);color:#fff;border-color:var(--blue)}
+.ghost{color:var(--t4);font-size:13px;line-height:1.6}
+/* marks */
+.mark{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--org);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px #fff}
+.rel{position:relative}
+/* notes */
+.notes{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.12);padding:20px 24px;font-size:13.5px;line-height:1.55;flex:1;min-width:0}
+.notes h3{margin:0 0 8px;font-size:15px}
+.notes ol,.notes ul{margin:0;padding-left:20px}
+.notes li{margin-bottom:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--t3);font-weight:600;font-size:12px}
+code{font-family:'JetBrains Mono',monospace;font-size:12px;background:#f2f3f5;padding:0 4px;border-radius:4px}
+.y{color:var(--grn);font-weight:700}.n{color:#c4373b;font-weight:700}
+.decide{border-left:4px solid var(--org)}
+</style></head>
+<body><div class="board">
+<h1>Scheduled runs as a group under their workspace</h1>
+<p class="lede">Today a scheduled run opens an ordinary session in its workspace, but every list filters it out (<code>run_source &lt;&gt; 'SCHEDULE'</code>), so it is reachable only from Scheduled and from the notification. Proposal: each workspace that has runs gets one <b>Scheduled runs</b> group. It is a folder-style page that reuses the session list, the row and the session page unchanged. The only new thing is the filter: <code>runSource=SCHEDULE</code> instead of <code>≠</code>.</p>
+
+<!-- ① today -->
+<div class="row">
+<div>
+<div class="cap"><span class="num">1</span>Today: the EU_TTP run is nowhere in its workspace</div>
+<div class="capnote">tea-cli @ EU_TTP shows its people's sessions only. The run on Nov 18 that sat for 2 h on an unanswered approval is reachable only from Scheduled → history, or from the Waiting on you item.</div>
+<div class="frame"><div class="app" style="width:1180px">
+  <div class="drawer">
+    <div class="brand">Orbit</div>
+    <div class="nav"><i class="ic"></i>Projects</div>
+    <div class="nav"><i class="ic"></i>Tasks</div>
+    <div class="nav"><i class="ic"></i>Scheduled<span class="ct">7</span></div>
+    <div class="nav"><i class="ic"></i>Waiting on you<span class="ct">32</span></div>
+    <div class="sect">Workspaces 33</div>
+    <div class="ws"><i class="fold"></i>tea-cli @ SG<span class="k">6</span></div>
+    <div class="ws"><i class="fold"></i>tea-cli @ US_TTP<span class="k">5</span></div>
+    <div class="ws sel"><i class="fold"></i>tea-cli @ EU_TTP<span class="k">⌘3</span></div>
+    <div class="ws"><i class="fold"></i>tea-cli @ NonTT<span class="k">⌘4</span></div>
+    <div class="ws"><i class="fold"></i>tea-cli @ sglark<span class="k">⌘5</span></div>
+  </div>
+  <div class="list">
+    <div class="lhead">tea-cli @ EU_TTP<span class="scope">Open ▾</span></div>
+    <div class="sh">Today</div>
+    <div class="srow"><div class="av">EU</div><div class="st"><div class="tt"><b>Backfill olap_info for app 311</b><span class="tm">4:02 PM</span></div><div class="sb">Done: 3 partitions rebuilt</div></div></div>
+    <div class="sh">Yesterday</div>
+    <div class="srow"><div class="av">EU</div><div class="st"><div class="tt"><b>Why is serve URL pointing at SG</b><span class="tm">Tue</span></div><div class="sb">Switched the profile to EU serve</div></div></div>
+    <div class="srow"><div class="av">EU</div><div class="st"><div class="tt"><b>Rotate the ModelHub token</b><span class="tm">Tue</span></div><div class="sb">Token refreshed</div></div></div>
+    <div class="ghost" style="padding:18px 8px">No trace of the 18:00 check here.</div>
+  </div>
+  <div class="pane">
+    <div class="crumb">Scheduled › [EU-TTP] app_id=270 ready-day 18:00 check <span>› run of Nov 18</span></div>
+    <div class="ptitle">[EU-TTP] app_id=270 ready-day 18:00 check</div>
+    <div class="pmeta">Open · Claude agent · 127 min</div>
+    <div class="strip">Scheduled run · planned 18:00, started 18:00 · access Open a PR · <b>this session is not in your session list</b></div>
+    <div class="ghost">… transcript …</div>
+    <div class="wait"><div class="wh">● Waiting on you</div><div class="wb">The last run waited 2 hours for an approval with no answer (Nov 18, 18:00).<br><span class="btn pri">Open run</span><span class="btn">Pause schedule</span></div></div>
+  </div>
+</div></div>
+</div>
+<div class="notes" style="margin-top:58px">
+<h3>Why it is like this</h3>
+<ul>
+<li>The owner ruled on 2026-11-14 (<code>docs/scheduled-tasks-design.md</code>) that run sessions stay out of the session list, so that a daily schedule does not add a session to its workspace every day.</li>
+<li>Server: <code>schedule-run-sessions.ts</code> opens the session with the schedule's <code>workspaceId</code>, <code>runSource = SCHEDULE</code>, <code>openedBy = SCHEDULE</code>.</li>
+<li>Every list query filters it out: <code>SessionsService.list</code>, <code>listOpenSince</code>, <code>search</code>, <code>workspaceSessionCounts</code>, <code>listForOrchestration</code>, folder counts, realtime <code>session.created</code>, <code>workspace-usage.ts</code>.</li>
+<li>Cost seen today: a run that is waiting on an approval is hard to find from the workspace you work in.</li>
+</ul>
+</div>
+</div>
+
+<!-- ② proposal -->
+<div class="row">
+<div>
+<div class="cap"><span class="num">2</span>Proposal: a <i>Scheduled runs</i> row under the workspace, opening a folder-style list</div>
+<div class="capnote">Placement A, your wording "below the workspace": one indented row under a workspace in the left drawer, shown only when that workspace has run sessions. It carries an orange dot while a run waits on you. Clicking it opens the workspace's list scoped to its runs. That is the same page a session folder opens: back arrow, title, Open / Completed / Trash, Today / Yesterday sections.</div>
+<div class="frame"><div class="app" style="width:1180px">
+  <div class="drawer rel">
+    <div class="brand">Orbit</div>
+    <div class="nav"><i class="ic"></i>Projects</div>
+    <div class="nav"><i class="ic"></i>Tasks</div>
+    <div class="nav"><i class="ic"></i>Scheduled<span class="ct">7</span></div>
+    <div class="nav"><i class="ic"></i>Waiting on you<span class="ct">32</span></div>
+    <div class="sect">Workspaces 33</div>
+    <div class="ws"><i class="fold"></i>tea-cli @ SG<span class="k">6</span></div>
+    <div class="ws sub"><i class="clk"></i>Scheduled runs</div>
+    <div class="ws"><i class="fold"></i>tea-cli @ US_TTP<span class="k">5</span></div>
+    <div class="ws sub"><i class="clk"></i>Scheduled runs</div>
+    <div class="ws"><i class="fold"></i>tea-cli @ EU_TTP<span class="k">⌘3</span></div>
+    <div class="ws sub sel"><i class="clk"></i>Scheduled runs<span class="dotw"></span></div>
+    <div class="ws"><i class="fold"></i>tea-cli @ NonTT<span class="k">⌘4</span></div>
+    <div class="ws"><i class="fold"></i>tea-cli @ sglark<span class="k">⌘5</span></div>
+    <div class="mark" style="left:6px;top:378px">1</div>
+  </div>
+  <div class="list rel">
+    <div class="lhead"><span class="back">‹</span><span>Scheduled runs<span class="lsub">tea-cli @ EU_TTP</span></span><span class="scope">Open ▾</span></div>
+    <div class="sh">Today</div>
+    <div class="srow sel"><div class="av run cal"></div><div class="st"><div class="tt"><b>[EU-TTP] app_id=270 ready-day 18:00 check</b><span class="tm">6:00 PM</span></div><div class="sb"><span class="pill p-wait">Waiting on you</span>run of Nov 18</div></div></div>
+    <div class="srow"><div class="av run cal"></div><div class="st"><div class="tt"><b>[EU-TTP] nightly partition audit</b><span class="tm">2:00 AM</span></div><div class="sb"><span class="pill p-chg">Changed</span>2 partitions late</div></div></div>
+    <div class="sh">Yesterday</div>
+    <div class="srow"><div class="av run cal"></div><div class="st"><div class="tt"><b>[EU-TTP] app_id=270 ready-day 18:00 check</b><span class="tm">Tue</span></div><div class="sb"><span class="pill p-fail">Failed</span>serve URL pointed at SG</div></div></div>
+    <div class="ghost" style="padding:10px 8px">No change runs complete their session, so they sit under <b>Completed ▾</b>, as today.</div>
+    <div class="mark" style="left:-12px;top:4px">2</div>
+    <div class="mark" style="left:-12px;top:84px">3</div>
+  </div>
+  <div class="pane rel">
+    <div class="crumb">tea-cli @ EU_TTP › Scheduled runs <span>› run of Nov 18</span></div>
+    <div class="ptitle">[EU-TTP] app_id=270 ready-day 18:00 check</div>
+    <div class="pmeta">Open · Claude agent · 127 min</div>
+    <div class="strip new">Scheduled run · planned 18:00, started 18:00 · access Open a PR · <a style="color:var(--blue)">Open schedule</a> <span class="strike">· this session is not in your session list</span></div>
+    <div class="ghost">… transcript, composer, approvals: the session page as it is …</div>
+    <div class="mark" style="left:640px;top:96px">4</div>
+  </div>
+</div></div>
+</div>
+<div class="notes" style="margin-top:58px">
+<h3>Marks</h3>
+<ol>
+<li>The drawer row appears only for a workspace with at least one run session that is not in the Trash. It is indented and smaller than a workspace and shows no count. The orange dot is the same "waiting on you" signal a session row carries.</li>
+<li>Folder-style header: back arrow, title, the workspace under it, and the same Open / Completed / Trash scope menu.</li>
+<li>Rows use the ordinary session row. The title is the schedule's name. The second line starts with the run's result (<i>Waiting on you / Changed / Failed</i>), then "run of Nov 18" or the run's note.</li>
+<li>The strip drops "not in your session list" and gains "Open schedule". The breadcrumb names the workspace group.</li>
+</ol>
+<h3 style="margin-top:14px">What does <u>not</u> change</h3>
+<ul>
+<li>The workspace's own list (Open, Completed, search, the drawer's count) still leaves runs out. You see them in their group, not mixed into Today.</li>
+<li><code>openedBy = SCHEDULE</code> stays, so a run never becomes the workspace default.</li>
+<li>Scheduled (left drawer) and its history stay the main home of schedules.</li>
+</ul>
+</div>
+</div>
+
+<!-- ③ alternative B -->
+<div class="row">
+<div>
+<div class="cap"><span class="num">3</span>Alternative B: the group as a row inside the workspace's list</div>
+<div class="capnote">Instead of a drawer row, a pinned folder-style row at the top of the workspace's list, beside your folders. It opens the same page as ② (mark 2 onwards). The drawer stays as it is today.</div>
+<div class="frame"><div class="app" style="width:600px">
+  <div class="list rel" style="width:600px;border-right:0">
+    <div class="lhead">tea-cli @ EU_TTP<span class="scope">Open ▾</span></div>
+    <div class="frow hl"><span class="fi"><i class="c"></i></span><span class="n">Scheduled runs</span><span class="dotw" style="margin-left:0"></span><span class="c">3</span><span class="chev">›</span></div>
+    <div class="frow"><span class="fi"><i></i></span><span class="n">olap backfills</span><span class="c">5</span><span class="chev">›</span></div>
+    <div class="sh">Today</div>
+    <div class="srow"><div class="av">EU</div><div class="st"><div class="tt"><b>Backfill olap_info for app 311</b><span class="tm">4:02 PM</span></div><div class="sb">Done: 3 partitions rebuilt</div></div></div>
+    <div class="sh">Yesterday</div>
+    <div class="srow"><div class="av">EU</div><div class="st"><div class="tt"><b>Why is serve URL pointing at SG</b><span class="tm">Tue</span></div><div class="sb">Switched the profile to EU serve</div></div></div>
+  </div>
+</div></div>
+</div>
+<div class="notes">
+<h3>A vs B</h3>
+<table>
+<tr><th></th><th>A: drawer row (②)</th><th>B: row in the list (③)</th></tr>
+<tr><td>Seen without opening the workspace</td><td class="y">yes</td><td class="n">no</td></tr>
+<tr><td>Drawer length</td><td>+1 line per workspace with runs (here 3 of 33)</td><td>unchanged</td></tr>
+<tr><td>Reuses an existing component</td><td>drawer row is new; the page is the folder page</td><td>the folder row and the folder page, both as they are</td></tr>
+<tr><td>Phone (iOS / Android)</td><td>needs a new row in the workspace picker</td><td>same as folders already do</td></tr>
+<tr><td>Build size</td><td>larger</td><td>smaller</td></tr>
+</table>
+<p style="margin:10px 0 0">My recommendation is <b>B</b>: it is pure reuse (a folder whose members are chosen by <code>runSource</code>) and works the same on every client. A is better only if you want runs visible without opening the workspace. The orange dot in Waiting on you already covers that case.</p>
+</div>
+</div>
+
+<!-- ④ reuse -->
+<div class="row">
+<div class="notes" style="flex:1.2">
+<h3>Can it reuse the ordinary session logic? Yes, almost all of it</h3>
+<table>
+<tr><th>Piece</th><th>Reused as is</th><th>Change</th></tr>
+<tr><td>List query <code>GET /sessions</code></td><td>views, sections, paging, delta (<code>listOpenSince</code>)</td><td>one new filter <code>runSource=schedule</code>. The default keeps <code>≠ SCHEDULE</code>, so the main list is unchanged</td></tr>
+<tr><td>Row, selection, keyboard, menus</td><td class="y">yes</td><td>second line shows the run's result pill (from <code>scheduleRunId</code> → run state)</td></tr>
+<tr><td>Session page, composer, approvals</td><td class="y">yes, already used today when a run is opened by id</td><td>strip copy + breadcrumb</td></tr>
+<tr><td>Folder page (back, title, scope)</td><td class="y">yes</td><td>a built-in "folder" with no edit/rename/move</td></tr>
+<tr><td>Realtime <code>session.created</code></td><td>same push</td><td>send run sessions too; the client puts them in the group, never in the main list</td></tr>
+<tr><td>Complete / Trash / Delete</td><td class="y">yes</td><td>none (runs keep their row when their session goes, as today)</td></tr>
+<tr><td>Move to a folder / project</td><td></td><td>refused for run sessions, so the group stays the single home</td></tr>
+<tr><td>Search, <code>session_list</code> (agents), workspace count</td><td></td><td>stay filtered (open point 3)</td></tr>
+</table>
+</div>
+<div class="notes decide">
+<h3>For you to decide</h3>
+<ol>
+<li><b>Placement:</b> A (drawer row under the workspace) or B (row in the workspace's list). Recommended: B.</li>
+<li>This <b>reverses part of the 11-14 ruling</b> "nothing about them appears in a workspace's session list". OK to amend the design doc to "runs appear only in their workspace's Scheduled runs group"?</li>
+<li><b>Search</b>: should session search find run transcripts? Recommended: yes, labelled "Scheduled run". Agents' <code>session_list</code> stays as it is.</li>
+<li>Clients: web first, then iOS / Android in the same change? Recommended: all three, since B is the existing folder UI on each.</li>
+</ol>
+<h3 style="margin-top:14px">Files it would touch</h3>
+<ul>
+<li><code>apiserver/src/sessions/sessions.service.ts</code>: list filter + realtime</li>
+<li><code>web/src/components/WorkspaceView.tsx</code>, <code>index.css</code></li>
+<li><code>shared/src/schedule.ts</code>: strip copy</li>
+<li>OrbitKit / Android session list</li>
+<li><code>docs/scheduled-tasks-design.md</code> §7.4, §12.1</li>
+</ul>
+</div>
+</div>
+
+</div></body></html>

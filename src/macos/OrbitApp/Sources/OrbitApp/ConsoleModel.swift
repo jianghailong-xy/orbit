@@ -1106,6 +1106,11 @@ final class ConsoleModel {
     /// starts or ends (`SubagentRuns.signature`); empty for a session that never delegated.
     private(set) var subagentRuns: [String: SubagentRunView] = [:]
     private var subagentRunsSignature = ""
+    /// Settings › Translation (3A) after the answer: the owner-language text of the session's question
+    /// cards, by the call's tool_use id, so an answered question's record shows what its card showed.
+    /// A card leaves `pendingApprovals` once decided, so its translation is kept as it passes; the
+    /// ones decided before this console opened are read once on open (web: `useQuestionTranslations`).
+    private(set) var questionTranslations: [String: ApprovalTranslation] = [:]
     private var subagentRunsFetch: Task<Void, Never>?
 
     /// The sticky error line above the composer. Errors only — it's about the message you just tried
@@ -1433,6 +1438,8 @@ final class ConsoleModel {
         // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
         let approvalsSeed = Task { [weak self] in await self?.refreshApprovals() }
         defer { approvalsSeed.cancel() }
+        let questionTranslationsSeed = Task { [weak self] in await self?.loadQuestionTranslations() }
+        defer { questionTranslationsSeed.cancel() }
         // Still-PENDING turns likewise have no replayable `user` event until the runner leases them.
         // Fetch the durable queue so a follow-up sent from web is visible when this console opens.
         let queuedTurnsSeed = Task { [weak self] in await self?.refreshQueuedTurns() }
@@ -1734,10 +1741,26 @@ final class ConsoleModel {
         trimWindow()
         stateRevision &+= 1
         state = reducer.state
+        keepQuestionTranslations()
         refreshSubagentRunsIfNeeded()
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
         followPendingWaitingCard()
+    }
+
+    /// Keep each live question card's translation under its call, before the card is decided and goes.
+    private func keepQuestionTranslations() {
+        for a in state.pendingApprovals where a.kind == .question {
+            guard let id = a.toolUseId, let t = a.translation, questionTranslations[id] != t else { continue }
+            questionTranslations[id] = t
+        }
+    }
+
+    private func loadQuestionTranslations() async {
+        guard let cards = try? await api.questionApprovals(sessionID: sessionID) else { return }
+        for (id, t) in ApprovalTranslation.byToolUse(cards) where questionTranslations[id] != t {
+            questionTranslations[id] = t
+        }
     }
 
     /// Read the session's SubAgent runs whenever a `delegate` call starts or ends (web parity:
@@ -6577,7 +6600,8 @@ final class ConsoleModel {
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
                             toolName: $0.toolName, input: $0.input,
-                            translation: ApprovalTranslation.parse($0.translation))
+                            translation: ApprovalTranslation.parse($0.translation),
+                            toolUseId: $0.toolUseId)
         }, knownBefore: knownBefore)
         publishStateNow()
     }

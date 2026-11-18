@@ -761,6 +761,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Every AskUserQuestion card of the session, decided or not: an answered question's record
+    /// shows the questions as its card did, in the owner's language (web: `listQuestionApprovals`).
+    public func questionApprovals(sessionID: String) async throws -> [ApprovalInfo] {
+        try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "toolName", value: "AskUserQuestion")])
+    }
+
     /// Prompt optimizer: DeepSeek improves a composer draft (docs/prompt-optimizer-design.md). One call
     /// per press; 409 PROMPT_OPTIMIZER_OFF, 404, 400 and 422 PROMPT_OPTIMIZATION_FAILED throw.
     public func optimizePrompt(_ req: PromptOptimizationRequest) async throws -> PromptOptimization {

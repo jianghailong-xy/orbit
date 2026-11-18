@@ -622,11 +622,15 @@ public struct PendingApproval: Equatable, Sendable, Identifiable, Codable {
     /// Settings › Translation (3A): what the card shows in the owner's language. Draw `shownInput`;
     /// `input` stays the English the engine sent.
     public var translation: ApprovalTranslation?
+    /// The engine's call it asks about, where the server named it: an answered question's record
+    /// keeps the card's translation under it.
+    public var toolUseId: String?
     /// `input` as the card shows it — translated where the server translated it.
     public var shownInput: JSONValue? { ApprovalTranslation.shownInput(input, translation) }
     public init(id: String, kind: Kind, toolName: String?, input: JSONValue?,
-                translation: ApprovalTranslation? = nil) {
+                translation: ApprovalTranslation? = nil, toolUseId: String? = nil) {
         self.translation = translation
+        self.toolUseId = toolUseId
         self.id = id
         self.kind = kind
         self.toolName = toolName

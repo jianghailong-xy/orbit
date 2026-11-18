@@ -20,6 +20,7 @@ import { dispatchAllowedTools } from '../common/permission-rules';
 import { normalizeBuiltinPermissionMode, normalizeEffortForRuntimeModel } from '../common/runtime-provider';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import type { PrismaService } from '../prisma/prisma.service';
 import { runnerIsOnline, runnerOfflineSql } from '../runners/runner-presence';
 import { routeSubagent, subagentCandidateRefusal, subagentRunnableModels } from '../tasks/model-routing';
@@ -293,7 +294,10 @@ export async function remoteSubagentExec(
   if (!workspace?.runner) return { refusal: 'the target workspace has no runner' };
   const parent = await tx.session.findUnique({
     where: { id: args.parentSessionId },
-    select: { engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } } },
+    select: {
+      engine: true, provider: true, permissionMode: true, owner: { select: { preferences: true } },
+      scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+    },
   });
   if (!parent) return { refusal: 'the parent session is gone' };
   const target = args.target;
@@ -353,14 +357,18 @@ export async function remoteSubagentExec(
   const effort = normalizeEffortForRuntimeModel(
     provider, (target ? target.effort : null) ?? workspace.effort ?? undefined, runnerModel, catalog, resolved.reasoningLevels,
   );
+  // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials on
+  // every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
+  const level = runAccessLevel(parent.scheduleRun);
   return {
     exec: {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace.permissionRules ?? []),
-      disallowedTools: (workspace.disallowedTools as string[] | null) ?? [],
+      disallowedTools: scheduleRunDisallowedTools((workspace.disallowedTools as string[] | null) ?? [], level, provider),
       permissionMode: normalizeBuiltinPermissionMode(
-        provider, runnerModel, childMode, keyRow?.enabled === true, workspace.runner.runsAsRoot, catalog,
+        provider, runnerModel, scheduleRunPermissionMode(childMode, level, provider), keyRow?.enabled === true,
+        workspace.runner.runsAsRoot, catalog,
       ),
       effort,
       env: resolved.env,
