@@ -330,7 +330,7 @@ public enum ScheduleCopy {
     public enum RunSession {
         public static let crumb = "Scheduled"
         public static let runOf = "run of {date}"
-        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         public static let reported = "Reported: {state}"
         public static let agent = "{engine} agent"
         public static let duration = "{minutes} min"

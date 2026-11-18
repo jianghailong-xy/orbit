@@ -938,7 +938,7 @@ public enum ScheduleDisplay {
 
     // MARK: - A run's session
 
-    /// "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list".
+    /// "Scheduled run · planned 10:00, started 10:01 · access Check only".
     public static func runStripText(plannedAt: String, startedAt: String?, accessLevel: String,
                                     timezone: String) -> String {
         fill(C.RunSession.strip, [

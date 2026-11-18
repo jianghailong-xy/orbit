@@ -41,7 +41,8 @@ data class OwnerAnswer(val key: String, val option: Int? = null, val text: Strin
 @Serializable
 data class ProjectStartSettings(val line: String, val automatic: Boolean, val maxConcurrentTasks: Int,
     val mergeCheckCommand: String?, val projectBranchName: String? = null, val upstreamRef: String? = null,
-    val deliveryMode: String? = null)
+    val deliveryMode: String? = null, val landingCheckCommand: String? = null,
+    val landingCheckTimeoutSeconds: Int? = null, val mergeCheckTimeoutSeconds: Int? = null)
 
 enum class CardFamily {
     TOOL, QUESTION, PLAN, CREATE, BATCH, DAG, BLOCKER, PROVIDER, DELETE, WORKSPACE_WRITE,
@@ -163,7 +164,7 @@ object CardCatalog {
                 CardFamily.DELETE -> DeleteCards.title(approval.toolName)
                 CardFamily.WORKSPACE_WRITE -> WorkspaceWriteCards.title(approval.toolName)
                 CardFamily.PROVIDER -> ProviderWriteCards.title(approval.toolName)
-                else -> if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
+                else -> if (approval.toolName == ApprovalRules.mergeCheckChange) LandingCheckCopy.confirmTitle else if (approval.toolName == SkipMergeCheckCards.tool) SkipMergeCheckCards.heading else approval.toolName
             }
             // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
             // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.

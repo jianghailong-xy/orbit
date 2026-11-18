@@ -85,6 +85,8 @@ final class AgentsModel {
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    private var scheduledSnapshot: (address: SessionFolderAddress, sessions: [Session])?
+    private var scheduledRequest = 0
     /// Sessions being moved to Trash from this device (`AppModel.deleteSession`), kept out of this
     /// pane's own Completed / Trash reads until the move has settled: a read already on the wire when
     /// Delete was pressed — this pane's poll, or the re-read a delete just before it started — would
@@ -486,6 +488,7 @@ final class AgentsModel {
     /// list may otherwise retain a tappable ghost row until its next successful polling response.
     func discardSession(_ id: String) {
         agentSessions = SessionFilter.removing(id, from: agentSessions)
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     /// Take a row being moved to Trash out of this pane's lists on the tap, and keep it out of the
@@ -494,10 +497,31 @@ final class AgentsModel {
         trashing.insert(id)
         agentSessions = SessionFilter.removing(id, from: agentSessions)
         allSessions = SessionFilter.removing(id, from: allSessions)
+        scheduledSnapshot?.sessions.removeAll { $0.id == id }
     }
 
     func revealTrashedSession(_ id: String) {
         trashing.remove(id)
+    }
+
+    func scheduledRuns(in address: SessionFolderAddress) -> [Session]? {
+        guard let snapshot = scheduledSnapshot, snapshot.address == address else { return nil }
+        return snapshot.sessions
+    }
+
+    func scheduledRunSession(id: String) -> Session? {
+        scheduledSnapshot?.sessions.first { $0.id == id }
+    }
+
+    func loadScheduledRuns(_ address: SessionFolderAddress) async {
+        scheduledRequest += 1
+        let request = scheduledRequest
+        guard let rows = try? await api.listScheduledRuns(workspaceID: address.agentID, view: address.view),
+              !Task.isCancelled, request == scheduledRequest else { return }
+        let sessions = SessionFilter.removing(trashing, from: rows)
+        if scheduledRuns(in: address) != sessions {
+            scheduledSnapshot = (address, sessions)
+        }
     }
 
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to

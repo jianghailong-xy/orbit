@@ -10,6 +10,7 @@ import Foundation
 /// One finished check of the current attempt, in the runner's own result shape. Only the fields a
 /// page prints are typed; the rest of the object is read past.
 public struct LandingCheckResult: Codable, Equatable, Sendable {
+    public let scope: String?
     public let name: String?
     public let command: String?
     public let exitCode: Int?
@@ -20,7 +21,8 @@ public struct LandingCheckResult: Codable, Equatable, Sendable {
 
     public init(name: String? = nil, command: String? = nil, exitCode: Int? = nil,
                 expectedExitCode: Int? = nil, timedOut: Bool? = nil, durationMs: Int? = nil,
-                outputTail: String? = nil) {
+                outputTail: String? = nil, scope: String? = nil) {
+        self.scope = scope
         self.name = name
         self.command = command
         self.exitCode = exitCode
@@ -38,6 +40,7 @@ public struct LandingCheckResult: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        scope = try? c.decodeIfPresent(String.self, forKey: .scope)
         name = try? c.decodeIfPresent(String.self, forKey: .name)
         command = try? c.decodeIfPresent(String.self, forKey: .command)
         exitCode = try? c.decodeIfPresent(Int.self, forKey: .exitCode)

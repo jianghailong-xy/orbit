@@ -246,7 +246,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus()
-            navigation = navigation.select(key, root) { id -> data.folders.any { ObjectId.same(it.id, id) } }
+            navigation = navigation.select(key, root) { id ->
+                id == ScheduledRunsFolder.ID || data.folders.any { ObjectId.same(it.id, id) }
+            }
             scope.launch { drawer.close() }
         }
         // A page sending the reader to a destination: its root, whatever was showing.
@@ -544,7 +546,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
 private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (route.destination) {
     Destination.WORKSPACES -> ""
     Destination.WORKSPACE -> data.workspaces.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Workspace"
-    Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
+    Destination.FOLDER -> if (route.id == ScheduledRunsFolder.ID) ScheduledRunsFolderCopy.TITLE
+        else data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.PROJECT_SESSIONS -> "Project"

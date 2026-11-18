@@ -43,9 +43,8 @@ import { factsSql, wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
 import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/workspace-usage';
 import {
   CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
-  CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
+  CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS,
   CHECK_ONLY_REFUSED_MESSAGE,
-  CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   runAccessLevel,
   SCHEDULE_CHECK_ONLY_RULE_REFUSED,
   scheduleRunAgentFields,
@@ -480,8 +479,8 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   const w = await world('s2e-check-only');
   const { schedule } = await created(w);
   const { run, sessionId } = await nextRun(schedule.id);
-  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).permissionMode, PermissionMode.DEFAULT,
-    'CHECK_ONLY on Claude Code runs in Default, where a shell command that is not read-only asks');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).permissionMode, PermissionMode.AUTO,
+    'CHECK_ONLY on Claude Code is opened in Auto, the mode its claim hands the runner (schedule-access.ts)');
   await heldByRunner(w, sessionId);
   const door = approvalDoor();
   const ask = (toolName: string, input: Record<string, unknown>, extra: Record<string, string> = {}) =>
@@ -573,7 +572,7 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   // the reclaim in RunnerApiController; schedule-access.spec.ts pins them in their source).
   const next = await nextRun(schedule.id);
   const lists = await claimLists(next.sessionId);
-  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.equal(lists.permissionMode, PermissionMode.AUTO, 'claimed in Auto, as every scheduled run on Claude Code is');
   assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
     'the run\'s allow list and the rule a scheduled card wrote; not python:*, Edit, bg_run, the whole shell or mcp__orbit__*');
   for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
@@ -592,7 +591,7 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
 });
 
 /** What both claim paths hand the runner for a session claimed by a runner with these capabilities. */
-async function claimLists(sessionId: string, runnerCapabilities: readonly string[] = [CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1]) {
+async function claimLists(sessionId: string, runnerCapabilities: readonly string[] = []) {
   const dispatched = await db.session.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
@@ -604,14 +603,12 @@ async function claimLists(sessionId: string, runnerCapabilities: readonly string
   const level = runAccessLevel(dispatched.scheduleRun);
   const rules = dispatched.workspace?.permissionRules ?? [];
   return {
-    permissionMode: scheduleRunPermissionMode(dispatched.permissionMode as PermissionMode, level, provider, runnerCapabilities),
+    permissionMode: scheduleRunPermissionMode(dispatched.permissionMode as PermissionMode, level, provider),
     level,
     allowed: scheduleRunAllowedTools(
       dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, rules), level, provider, rules, runnerCapabilities,
     ),
-    denied: scheduleRunDisallowedTools(
-      (dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider, runnerCapabilities,
-    ),
+    denied: scheduleRunDisallowedTools((dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider),
     agentFields: scheduleRunAgentFields(level),
   };
 }
@@ -661,7 +658,7 @@ test('§6.2 S2e H6: a check is held to the level it started with when the schedu
   assert.equal(door.pushed.length, 0, 'and nothing was pushed');
 });
 
-test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and a runner without the capability gets Don\'t Ask', { skip }, async () => {
+test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and a check runs in Auto on any runner', { skip }, async () => {
   alerts = [];
   at('2026-11-14T00:00:00Z');
   const w = await world('s2e-open-pr-rule');
@@ -682,15 +679,15 @@ test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and
   const check = await created(w);
   const checkRun = await nextRun(check.schedule.id);
   const lists = await claimLists(checkRun.sessionId);
-  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.equal(lists.permissionMode, PermissionMode.AUTO, 'every scheduled run on Claude Code runs in Auto');
   assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS], 'git:* from the OPEN_PR card is not carried');
 
-  // The same check claimed by a runner that does not advertise the capability: S2b's Don't Ask, nothing asks.
+  // Any runner, whatever it advertises: Auto, and the full deny list, since Auto runs what is not denied.
   const old = await claimLists(checkRun.sessionId, ['claude-account-move/v1']);
-  assert.equal(old.permissionMode, PermissionMode.DONT_ASK);
+  assert.equal(old.permissionMode, PermissionMode.AUTO);
   assert.deepEqual(old.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
-  assert.deepEqual(old.denied, [...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS]);
-  assert.ok(old.denied.includes('EnterWorktree') && old.denied.includes('CronCreate'));
+  assert.deepEqual(old.denied, [...CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS]);
+  assert.ok(old.denied.includes('EnterWorktree') && old.denied.includes('mcp__orbit__bg_run'));
   assert.deepEqual(old.agentFields, { scheduledCheckOnly: true });
 });
 
@@ -865,7 +862,7 @@ test('Waiting on you: the owner ending a schedule closes what waited on it, and 
 // §7.4 / §12.1 — run sessions are in none of the session queries
 // =============================================================================================================
 
-test('§7.4/§12.1 a run\'s session is in no list, search, count, orchestration list, folder count or session.created push; the run names it', { skip }, async () => {
+test('§7.4/§12.1 a run\'s session is in no list but its Scheduled runs folder, no search, count, orchestration list, folder count or session.created push; the run names it', { skip }, async () => {
   alerts = [];
   at('2026-11-14T00:00:00Z');
   const w = await world('hidden');
@@ -878,6 +875,10 @@ test('§7.4/§12.1 a run\'s session is in no list, search, count, orchestration 
   assert.ok(ids(open).includes(manual) && ids(open).includes(from), 'the people\'s conversations are listed');
   assert.ok(!ids(open).includes(sessionId), 'list (Open) leaves the run out');
   assert.ok(!ids(await sessionsService.list(w.ownerId, { view: 'open', workspaceId: w.workspaceId })).includes(sessionId), 'the workspace\'s list too');
+  assert.deepEqual(ids(await sessionsService.list(w.ownerId, { view: 'open', workspaceId: w.workspaceId, scheduled: true })),
+    [sessionId], 'the workspace\'s Scheduled runs folder lists the run, and only runs');
+  assert.equal((await sessionsService.list(w.ownerId, { view: 'open', workspaceId: w.workspaceId, scheduled: true }))[0]?.runSource,
+    'SCHEDULE', 'a row says it is a run, which every client\'s folder keeps by');
 
   const delta = await sessionsService.listOpenSince(w.ownerId, {}, undefined);
   assert.equal(delta.full, true);
@@ -934,6 +935,8 @@ test('§7.4/§12.1 a run\'s session is in no list, search, count, orchestration 
   await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
   assert.ok(!ids(await sessionsService.list(w.ownerId, { view: 'completed' })).includes(sessionId), 'list (Completed)');
+  assert.deepEqual(ids(await sessionsService.list(w.ownerId, { view: 'completed', workspaceId: w.workspaceId, scheduled: true })),
+    [sessionId], 'the Scheduled runs folder\'s Completed lists it');
   assert.deepEqual((await runs.history(w.ownerId, schedule.id)).find((h) => h.id === run.id)?.session, { id: sessionId, state: 'COMPLETED' });
 });
 
@@ -947,6 +950,8 @@ test('§7.4 trashing or purging a run\'s session keeps the run, which says its s
 
   await db.session.update({ where: { id: sessionId }, data: { deletedAt: clockNow } });
   assert.ok(!(await sessionsService.list(w.ownerId, { view: 'trash' })).some((r) => r.id === sessionId), 'not in Trash either');
+  assert.ok((await sessionsService.list(w.ownerId, { view: 'trash', scheduled: true })).some((r) => r.id === sessionId),
+    'but in the Scheduled runs folder\'s Trash');
   let h = (await runs.history(w.ownerId, schedule.id)).find((r) => r.id === run.id)!;
   assert.deepEqual(h.session, { id: sessionId, state: 'TRASH' });
 

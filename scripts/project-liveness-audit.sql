@@ -123,6 +123,7 @@ SELECT item."project_id"                                       AS project_id,
   JOIN "project" proj ON proj."id" = item."project_id"
  WHERE item."state" = 'OPEN'
    AND NOT (CASE
+      WHEN "item"."kind" = 'INTEGRATION_CHECK_FAILED' AND "item"."dedupe_key" LIKE 'ICB:%' THEN true
       WHEN "item"."kind" = 'LANDING_UNOBSERVED' THEN EXISTS (
         SELECT 1 FROM "task" owed_task
          WHERE owed_task."id" = "item"."task_id"
@@ -181,6 +182,21 @@ SELECT item."project_id"                                       AS project_id,
          WHERE owed_task."id" = "item"."task_id"
            AND owed_task."status" <> 'CANCELLED'
            AND owed_task."superseded_by_task_id" IS NULL))
+      WHEN "item"."kind" = 'EVIDENCE_UNDECIDED' THEN EXISTS (
+        SELECT 1 FROM "task_completion_evidence" owed_evidence
+          JOIN "task" owed_task ON owed_task."id" = owed_evidence."task_id"
+         WHERE owed_evidence."id" = ("item"."payload"->>'evidenceId')::uuid
+           AND owed_task."id" = "item"."task_id"
+           AND owed_task."project_id" = "item"."project_id"
+           AND owed_task."completion_criterion" = 'EVIDENCE_JUDGMENT'
+           AND owed_task."status" IN ('OPEN', 'IN_PROGRESS')
+           AND NOT EXISTS (
+             SELECT 1 FROM "task_evidence_decision" owed_decision
+              WHERE owed_decision."evidence_id" = owed_evidence."id")
+           AND NOT EXISTS (
+             SELECT 1 FROM "task_completion_evidence" owed_newer
+              WHERE owed_newer."task_id" = owed_evidence."task_id"
+                AND owed_newer."revision" > owed_evidence."revision"))
       WHEN "item"."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
         SELECT 1 FROM "project_integration_job" owed_job
          WHERE owed_job."id" = "item"."integration_job_id"
