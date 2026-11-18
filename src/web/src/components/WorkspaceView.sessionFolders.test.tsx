@@ -398,7 +398,10 @@ describe('folders in the session list', { timeout: 60_000 }, () => {
     folders = [ELSEWHERE];
     await mount(`/sessions/${LOOSE.id}`, () => expect(sessionTitles()).toHaveLength(4));
     expect(folderRows()).toHaveLength(0);
-    expect(listCalls.every((p) => p.includes('limit=40'))).toBe(true);
+    // The Scheduled runs folder's own read is whole: a workspace's runs, not its list.
+    const pagedReads = listCalls.filter((p) => !p.includes('scheduled=1'));
+    expect(pagedReads.length).toBeGreaterThan(0);
+    expect(pagedReads.every((p) => p.includes('limit=40'))).toBe(true);
   });
 
   it('opens a folder’s page in place, and its back button returns to the list', async () => {

@@ -190,8 +190,9 @@ import {
   DEFAULT_AGENT_LANGUAGE,
   type BilingualPair,
 } from '@orbit/shared';
-import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import { replyTranslationOf, shownQuestions, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
+  QuestionTranslationsCtx,
   ReplyTranslationFoot,
   ShownOriginalProvider,
   TranslationCtx,
@@ -4663,6 +4664,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
     [questions, answer, node.result?.isError],
   );
+  // The answer is read off the engine's words; the record then shows the questions as the card did,
+  // in the owner's language where the server translated them (options keep their index).
+  const questionTranslation = useContext(QuestionTranslationsCtx).get(node.id);
+  const shown = useMemo(() => shownQuestions(questions, questionTranslation), [questions, questionTranslation]);
   // A result this client cannot read, once it is whole: its own words are then the only answer
   // there is, so the card opens on them, as it always did.
   const questionUnread =
@@ -4679,8 +4684,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
-    () => describeTool(node.name, input, isShell, outcome),
-    [node.name, input, isShell, outcome],
+    () => describeTool(node.name, input, isShell, outcome, shown),
+    [node.name, input, isShell, outcome, shown],
   );
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
@@ -4765,7 +4770,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
-            questions={questions}
+            questions={shown}
             outcome={outcome}
             onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
           />
@@ -5158,7 +5163,13 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
+function describeTool(
+  name: string,
+  input: any,
+  isShell?: boolean,
+  outcome?: QuestionOutcome | null,
+  questions?: AskedQuestion[],
+): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -5314,7 +5325,7 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
       // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
       // card (header · question · options, the pick ticked) instead of the nested questions array
       // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
-      const qs = askedQuestions(i);
+      const qs = questions ?? askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,

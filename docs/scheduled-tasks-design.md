@@ -6,7 +6,8 @@ Owner decisions of 2026-11-14, all kept:
 
 - no deploy level in v1;
 - repeated failures notify and never pause the schedule by themselves;
-- run sessions stay out of the session list, and a run that finds nothing new completes its session;
+- run sessions stay out of the session list, and a run that finds nothing new completes its session (amended
+  2026-11-18: they are listed in their workspace's built-in **Scheduled runs** folder, and nowhere else; §7.4);
 - scheduled tasks live in the left drawer, next to Projects, Tasks, Waiting on you and Wiki, across every workspace;
   nothing about them appears in a workspace's session list;
 - there is no form: a person says what they want and an agent fills in the schedule;
@@ -555,8 +556,14 @@ run (`LANDING_FAILED`) with its reason, through the same push and **Waiting on y
 
 ### 7.4 The run's session afterwards
 
-- Run sessions do not appear in the session list. They are reached from the schedule's history and from the
-  notification.
+- Run sessions do not appear among a workspace's own sessions. They are reached from the schedule's history, from
+  the notification, and (owner 2026-11-18, board `docs/mocks/scheduled-run-sessions-group/`) from the workspace's
+  built-in **Scheduled runs** folder: a folder row at the top of the workspace's list, shown while the view has a run,
+  whose page lists that workspace's run sessions in the view it was opened from (`GET /sessions?scheduled=1`, the
+  only read that includes them). Search, counts, `session_list` and `session.created` still leave them out.
+- Every run on Claude Code runs in Auto, whatever its access level (owner 2026-11-18), and so do the SubAgents it
+  starts: a run waits on no card nobody is there to answer. The level's deny lists still apply in Auto. Other
+  engines keep the level's mode: their Auto has no classifier.
 - A NO_CHANGE run completes its session. CHANGED and FAILED runs leave it open for follow-up questions.
 - Archiving or deleting a run's session keeps the run row; the run shows its session as gone.
 

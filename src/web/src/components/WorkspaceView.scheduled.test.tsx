@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 /**
  * WHERE SCHEDULED TASKS MEET THE CONSOLE (docs/mocks/scheduled-tasks/web/02-board.png).
  *
- * The owner's ruling: Scheduled lives in the left navigation only. A workspace's session list carries nothing of it —
- * no entry, no run sessions — and a run's session is reached from its schedule. What the conversation does draw is
- * read from the composition, as the landing's place is (WorkspaceView.landingSession.test.tsx): the cards and change
+ * The owner's rulings: Scheduled lives in the left navigation. A workspace's session list draws no run session among
+ * its own; since 2026-11-18 its runs' sessions are listed in one built-in folder, Scheduled runs, and nowhere else.
+ * What the conversation does draw is read from the composition, as the landing's place is (WorkspaceView.landingSession.test.tsx): the cards and change
  * lines a session put up, and in a run's session the crumb, the strip, the report and no session column.
  */
 
@@ -14,16 +14,23 @@ const SOURCE = readFileSync(new URL('./WorkspaceView.tsx', import.meta.url), 'ut
 const CSS = readFileSync(new URL('./Scheduled.css', import.meta.url), 'utf8');
 
 describe('a workspace’s session list', () => {
-  it('draws no run session, even one a server sent', () => {
-    expect(SOURCE).toContain("const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');");
+  it('draws run sessions only on the Scheduled runs folder’s page, even ones a server sent elsewhere', () => {
+    expect(SOURCE).toContain("const onScheduledRuns = !listProjectId && searchParams.get('folder') === SCHEDULED_RUNS_FOLDER;");
+    expect(SOURCE).toContain("const rows = (sessionsQ.data ?? []).filter((row) => (row.runSource === 'SCHEDULE') === onScheduledRuns);");
+    expect(SOURCE).toContain('scheduled: onScheduledRuns,');
     // Every list the column draws comes from those rows; nothing re-reads the raw answer for rows.
     expect(SOURCE).not.toMatch(/sessionsQ\.data \?\? \[\]\)\.slice\(\)/);
   });
 
-  it('has no Scheduled entry of its own', () => {
-    const column = SOURCE.slice(SOURCE.indexOf('<aside className={`session-col'), SOURCE.indexOf('<div className="workspace-header">'));
-    expect(column.length).toBeGreaterThan(0);
-    expect(column).not.toMatch(/Schedul|SCHEDULE_COPY/);
+  it('has one Scheduled runs row on the list, only while the view has a run, and no folder rows on its page', () => {
+    expect(SOURCE).toContain('{!listProjectId && !openFolder && !onScheduledRuns && scheduledRuns.length > 0 && scheduledRunsRowView()}');
+    expect(SOURCE).toContain('{!listProjectId && !onScheduledRuns && folderListing?.folders.map((row) =>');
+    // A run's start reaches no list's stream, so the row's read polls.
+    expect(SOURCE).toMatch(/sessionsQuery\(\{ runnerId: runner\.id, workspaceId: scopeWorkspaceId, view: effectiveView, scheduled: true \}\),\n\s+enabled: [^\n]+,\n\s+refetchInterval: 30_000,/);
+  });
+
+  it('keeps the folder’s page when the folder is no folder of the workspace’s', () => {
+    expect(SOURCE).toContain('if (listProjectId || !folderParam || openFolder || onScheduledRuns || !foldersQ.isSuccess || !scopeWorkspaceId) return;');
   });
 });
 
@@ -58,8 +65,8 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: scheduleRunAgentName\(scheduleRun, ENGINE_CLI_NAMES\[selectedEngine\] \?\? null\),/);
   });
 
-  it('folds the session column away', () => {
-    expect(SOURCE).toContain("${isScheduleRun && !composing ? ' is-schedule-run' : ''}");
+  it('folds the session column away, unless it was opened from the Scheduled runs folder', () => {
+    expect(SOURCE).toContain("${isScheduleRun && !composing && !onScheduledRuns ? ' is-schedule-run' : ''}");
     expect(CSS).toContain('.workspace-split.is-schedule-run > .session-col { display: none; }');
   });
 });

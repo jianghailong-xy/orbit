@@ -986,6 +986,11 @@ export interface ApprovalInfo {
 export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
 
+/** Every AskUserQuestion card of the session, decided or not: an answered question's record shows
+ *  the questions as its card did, in the owner's language (`translation`). */
+export const listQuestionApprovals = (sessionId: string) =>
+  api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?toolName=AskUserQuestion`);
+
 /** A claude permission rule so future "same kind" calls are auto-allowed
  *  (mirrors PermissionRule in @orbit/shared). */
 export interface PermissionRule {
