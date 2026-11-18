@@ -25,6 +25,7 @@ import { shownQuestions } from '../lib/translation';
 import type { HeldDecision } from '../lib/approvalDecisions';
 import { CardTranslationFoot, UntranslatedDecisionFoot } from './TranslationParts';
 import { CONDITION_COPY } from '../lib/conditions';
+import { ToolCallBody, toolCallHeading, toolCallSummary } from './ToolCallBody';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -855,6 +856,9 @@ export function ApprovalPanel({
           : writing
             ? (writing.name || 'this workspace')
             : null;
+  // A plain tool call: none of the shapes above, so the card reads the call itself (ToolCallBody).
+  const plainCall = !isPlan(approval) && !dag && !batch && !create && !blocker && !skipCheck && !mergeCheck
+    && !deleting && !writing && !provider;
   const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
@@ -881,7 +885,7 @@ export function ApprovalPanel({
                           ? `⚙️ Confirm: ${writing.creating ? 'create' : 'change'} workspace “${writing.name || 'this workspace'}”?`
                           : provider
                             ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
-                            : `🔓 Approve tool call: ${approval.toolName}`;
+                            : toolCallHeading(approval.toolName, approval.input);
   const createAndStartButton = (tone: 'primary' | 'accent') => (
     <CardActionButton
       tone={tone}
@@ -895,7 +899,7 @@ export function ApprovalPanel({
   );
   return (
     <ReviewCard enabled={compact} title={heading}
-      summary={markdownToPlainLines(plan || create?.prose || '')}
+      summary={plainCall ? toolCallSummary(approval.toolName, approval.input) : markdownToPlainLines(plan || create?.prose || '')}
       meta={!answerable ? 'No longer waiting for an answer' : undefined}
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
@@ -904,9 +908,10 @@ export function ApprovalPanel({
       )}
       <div className="approval-head">
         {heading}
+        {plainCall && approval.toolName && <span className="approval-tool-chip">{approval.toolName}</span>}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider || plainCall ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -935,10 +940,7 @@ export function ApprovalPanel({
         ) : provider ? (
           <ProviderWriteBody input={provider} />
         ) : (
-          <>
-            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
-            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
-          </>
+          <ToolCallBody toolName={approval.toolName} input={approval.input} translatedDescription={translatedDescription} />
         )}
         {cardTranslation && (
           <CardTranslationFoot flipped={cardOriginal} onFlip={() => setCardOriginal((v) => !v)} />

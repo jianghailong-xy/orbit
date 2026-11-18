@@ -47,6 +47,7 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
             val input = row.obj("input") ?: JsonObject(emptyMap())
             if (row.text("toolName") == ApprovalRules.mergeCheckChange) { IntegrationCheckBody(input); return }
             if (row.text("toolName") == SkipMergeCheckCards.tool) { SkipMergeCheckCardBody(SkipMergeCheckCards.read(input), open); return }
+            if (ToolCalls.plain(row.text("toolName").orEmpty())) { ToolCallBody(card, open); return }
             input.text("command")?.let { CodeText(it, "sh") }
             if (input.text("command") == null) listOf("file_path", "notebook_path", "url", "pattern", "path").firstNotNullOfOrNull { input.text(it) }?.let { Text(it) }
             DetailFold("Tool parameters") { CodeText(input.toString(), "json") }
