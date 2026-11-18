@@ -542,6 +542,7 @@ struct ComposerView: View {
                         if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
                                                    agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
+                                                   unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),
                                                    open: openTranslationSettings)
                             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }

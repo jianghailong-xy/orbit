@@ -1503,6 +1503,12 @@ final class AppModel {
         case .tags:
             Task { await loadSessionTags() }
             scheduleControlRefresh()
+        // The translator started or stopped being skipped: the composer's language tag reads the account's
+        // `translationUnavailableUntil`, so the account is read again.
+        case .account:
+            Task { @MainActor [weak self] in
+                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
+            }
         // The reserved `notification` channel, and any type this client does not know: nothing to read.
         case .nothing:
             break

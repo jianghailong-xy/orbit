@@ -1148,6 +1148,8 @@ final class ConsoleModel {
         let behavior: ApprovalBehavior
         let answers: [String: [String]]?
         let remember: Bool
+        /// The line the card draws: why (the 422's `failureReason`), then Retry and Send as written.
+        let foot: [SessionTranslation.FootPart]
     }
 
     /// An approval as it was answered here: the card as it was asked, and the press that answered
@@ -4391,7 +4393,8 @@ final class ConsoleModel {
             // back with Retry / Send as written rather than a failure line.
             approvalAnswers[approval.id] = nil
             untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
-                                                                      remember: remember)
+                                                                      remember: remember,
+                                                                      foot: SessionTranslation.refusedAnswerFoot(after: error))
             await refreshApprovals()
         }
         catch {
@@ -6213,7 +6216,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
@@ -6223,18 +6226,19 @@ final class ConsoleModel {
             // Words that could not be translated were not sent (decision 2A): the card offers Retry and
             // Send as written in place of a failure line.
             if OwnerCardTranslations.refused(error) {
-                answersRefusedUntranslated.insert(row.itemId)
+                answersRefusedUntranslated[row.itemId] = SessionTranslation.refusedAnswerFoot(after: error)
                 return nil
             }
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
 
-    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
-    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
-    var answersRefusedUntranslated: Set<String> = []
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED, with the
+    /// line their card shows: why ("…, so your answer wasn't sent", or the generic "Couldn't translate,
+    /// so it wasn't sent"), then Retry and Send as written.
+    var answersRefusedUntranslated: [String: [SessionTranslation.FootPart]] = [:]
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and
