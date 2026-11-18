@@ -1336,6 +1336,41 @@ export interface ProjectClosedQuestion<Instant = string> {
   translation?: OwnerCardTranslation;
 }
 
+/**
+ * Why the auto-run sweep holds a task that otherwise reads Ready (`hold` on the task read): the engine
+ * its run would start on is signed out on its runner, so the run could not be created. Computed by the
+ * sweep's own rule (TasksService.signInHolds), so the row and the sweep agree; it lifts once the
+ * runner's heartbeat reports the engine signed in. Null on every task the sweep does not hold so.
+ */
+export interface TaskSignInHold {
+  kind: 'ENGINE_SIGNED_OUT';
+  /** The engine slug (`claude`, `codex`, …): what the machine's Sign in opens. */
+  engine: string;
+  /** Its product name, as copy says it: "Claude Code". */
+  engineLabel: string;
+  runnerId: string;
+  /** The runner as it is named to people: its display name, else its name. */
+  runnerName: string;
+}
+
+/**
+ * One runner-and-engine sign-in this project's held tasks wait for (`signIns` on the open-items read):
+ * a Needs you row, "N tasks wait for a sign-in", present exactly while the sweep holds at least one of
+ * the project's tasks for it, and gone on the read after that engine is signed in.
+ */
+export interface ProjectSignInWait {
+  engine: string;
+  engineLabel: string;
+  runnerId: string;
+  runnerName: string;
+  /** The held tasks, oldest first. */
+  taskIds: string[];
+  /** "2 tasks wait for a sign-in". */
+  title: string;
+  /** "Claude Code is signed out on mac". */
+  detailLine: string;
+}
+
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
@@ -1378,6 +1413,12 @@ export interface ProjectOpenItemsView<Instant = string> {
    * a row's merge into main is a merge into. Null when the project has no repository bound.
    */
   mainBranch?: string | null;
+  /**
+   * The sign-ins this project's held tasks wait for, one per runner and engine (`ProjectSignInWait`),
+   * drawn in Needs you. Derived on every read, never stored: empty once each engine is signed in.
+   * Absent from a server that predates it.
+   */
+  signIns?: ProjectSignInWait[];
 }
 
 /**

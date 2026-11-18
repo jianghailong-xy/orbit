@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 
 import {
@@ -33,6 +34,8 @@ import {
   type ProjectRulingView,
   type RequestProjectDoneBody,
   type OwnerCardTranslation,
+  type ProjectSignInWait,
+  type TaskSignInHold,
   RunEventType,
 } from '@orbit/shared';
 
@@ -552,6 +555,42 @@ export interface ProjectOpenItems {
   closedQuestions: ProjectClosedQuestion<Date>[];
   /** The main branch a row's merge into main goes into; null with no repository bound. */
   mainBranch: string | null;
+  /** The sign-ins the project's held tasks wait for, one per runner and engine (`projectSignInWaits`). */
+  signIns: ProjectSignInWait[];
+}
+
+/** The one read of TasksService this service makes: the sweep's signed-out holds (TasksService.signInHolds). */
+export interface SignInHoldReader {
+  signInHolds(ownerId: string, scope: Prisma.Sql): Promise<Map<string, TaskSignInHold>>;
+}
+
+/**
+ * The project's sign-in holds as its Needs you rows: one per runner and engine, its tasks in the order
+ * the sweep offers them, "N tasks wait for a sign-in" over "Claude Code is signed out on mac".
+ */
+export function projectSignInWaits(holds: ReadonlyMap<string, TaskSignInHold>): ProjectSignInWait[] {
+  const byPair = new Map<string, ProjectSignInWait>();
+  for (const [taskId, hold] of holds) {
+    const key = `${hold.runnerId}\u0000${hold.engine}`;
+    let wait = byPair.get(key);
+    if (!wait) {
+      wait = {
+        engine: hold.engine,
+        engineLabel: hold.engineLabel,
+        runnerId: hold.runnerId,
+        runnerName: hold.runnerName,
+        taskIds: [],
+        title: '',
+        detailLine: `${hold.engineLabel} is signed out on ${hold.runnerName}`,
+      };
+      byPair.set(key, wait);
+    }
+    wait.taskIds.push(taskId);
+  }
+  return [...byPair.values()].map((wait) => {
+    const n = wait.taskIds.length;
+    return { ...wait, title: n === 1 ? '1 task waits for a sign-in' : `${n} tasks wait for a sign-in` };
+  });
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
@@ -614,7 +653,36 @@ export class ProjectOpenItemService {
     /** Tells the owner's clients to read the project's items again once a card's translation is stored.
      *  Optional for the reason `push` is: a translation is a reader of an item, never a condition of it. */
     @Optional() private readonly realtime?: RealtimeService,
+    /** How the running server finds TasksService for the sign-in holds (`signIns`) without this module importing
+     *  TasksModule, which imports this one's slices: resolved at call time, as MergeReceiptService resolves it. */
+    @Optional() private readonly moduleRef?: ModuleRef,
+    /** A pg fixture's own reader of the holds; the running server's is TasksService, through `moduleRef`. */
+    @Optional() private readonly signInHoldReader?: SignInHoldReader,
   ) {}
+
+  /**
+   * The auto-run sweep's sign-in holds among the owner's tasks `scope` names (TasksService.signInHolds), for the
+   * project's reads: none when no reader is reachable (a build without TasksModule).
+   */
+  async signInHolds(ownerId: string, scope: Prisma.Sql): Promise<Map<string, TaskSignInHold>> {
+    let reader = this.signInHoldReader;
+    if (!reader) {
+      try {
+        // Loaded at call time: tasks.service imports this file, so a static import would be a cycle
+        // that leaves one of the two classes undefined while the other's metadata is written.
+        const { TasksService } = await import('../tasks/tasks.service.js');
+        reader = this.moduleRef?.get(TasksService, { strict: false });
+      } catch {
+        reader = undefined;
+      }
+    }
+    return reader ? reader.signInHolds(ownerId, scope) : new Map();
+  }
+
+  /** The project's sign-in waits, one per runner and engine. */
+  private async signInWaits(ownerId: string, projectId: string): Promise<ProjectSignInWait[]> {
+    return projectSignInWaits(await this.signInHolds(ownerId, Prisma.sql`t.project_id = ${projectId}::uuid`));
+  }
 
   /**
    * §4.4 X-D4 (1): the transaction that opened items about these tasks has committed.
@@ -3787,6 +3855,7 @@ export class ProjectOpenItemService {
       settled: settledView,
       closedQuestions: await this.closedQuestions(projectId),
       mainBranch,
+      signIns: await this.signInWaits(ownerId, projectId),
     };
   }
 

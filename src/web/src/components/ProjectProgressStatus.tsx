@@ -13,6 +13,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectSignInWait,
 } from '@orbit/shared';
 import { SessionLifecycleState } from '@orbit/shared';
 import { api } from '../api';
@@ -62,6 +63,7 @@ import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import { useOwnerCardTranslation, useOwnerLanguageTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
+import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 
@@ -3069,6 +3071,31 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
   );
 }
 
+/**
+ * One sign-in the project's held tasks wait for (`signIns`): "2 tasks wait for a sign-in", which engine on
+ * which machine, and Sign in into that machine's sign-in. Derived by the server on each read, so it goes
+ * once the engine is signed in.
+ */
+export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner" data-kind="SIGN_IN_WAIT">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
+        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+      </div>
+      <div className="project-open-item-press">
+        <Link className="project-open-item-action is-primary" to={signInHref(wait)}>
+          Sign in
+        </Link>
+      </div>
+    </li>
+  );
+}
+
 /** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
 function DoneRequestRowView({
   row,
@@ -3209,11 +3236,12 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
+  const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3221,18 +3249,21 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart || ownDone ? (
+      {needsYou.length > 0 || signIns.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
             {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
+            {signIns.map((wait) => (
+              <SignInWaitRowView key={`${wait.runnerId}:${wait.engine}`} wait={wait} />
+            ))}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView
