@@ -151,7 +151,11 @@ object CardCatalog {
             val title = when (family) {
                 CardFamily.QUESTION -> "Your input is needed"
                 CardFamily.PLAN -> "Plan ready for review"
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") "Create this task?" else "Create this project?"
+                // A task that starts on a condition says so in its title (condition-triggers board frame 2).
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") "Create this project?"
+                    else if (io.orbitd.android.core.schedule.StartWhenCardLines.ofCreateInput(approval.input) != null)
+                        io.orbitd.android.core.schedule.ConditionCopy.createTaskTitle
+                    else "Create this task?"
                 CardFamily.BATCH -> "Create these tasks?"
                 CardFamily.DAG -> "Change dependencies?"
                 CardFamily.BLOCKER -> "Resolve this blocker?"

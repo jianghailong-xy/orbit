@@ -407,12 +407,21 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
 
     /** The list, and apart from it the scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which no session
      * files and [OwnerRequest] does not draw: they are answered at the schedule's own doors (docs/scheduled-tasks-design.md §6.4). */
-    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> {
+    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> =
+        listWithConditions(state).let { it.first to it.second }
+
+    /** A condition's two kinds off the same list (CONDITION_UNKNOWN, CONDITION_STILL_WAITING): written by the condition, drawn by
+     * its own card, answered at its own doors (docs/condition-triggers-design.md §5.3, §6.2). */
+    suspend fun listWithConditions(state: String): Triple<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>,
+        List<io.orbitd.android.core.schedule.ConditionWaitingItem>> {
         val body = api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body
         val requests = Wire.decode(body, OwnerRequestList.serializer()).requests
-        val rows = (Wire.decode(body, JsonObject.serializer())["requests"] as? JsonArray).orEmpty()
-        return requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS } to
-            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) }
+        val list = Wire.decode(body, JsonObject.serializer())
+        val rows = (list["requests"] as? JsonArray).orEmpty()
+        return Triple(requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS ||
+            it.kind in io.orbitd.android.core.schedule.ConditionWaitingItem.KINDS },
+            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) },
+            io.orbitd.android.core.schedule.ConditionWaitingItem.fromRequestList(list))
     }
 
     suspend fun get(id: String): OwnerRequest =
