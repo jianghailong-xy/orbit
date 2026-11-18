@@ -364,7 +364,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/sessions/:id` | body `Object`; path `id` | `SessionsController.rename` |
 | `PATCH` | `/api/sessions/:id/account` | body `Object`; path `id` | `SessionsController.switchAccount` |
 | `POST` | `/api/sessions/:id/adopt-branch` | path `id` | `SessionsController.adoptWorktreeBranch` |
-| `GET` | `/api/sessions/:id/approvals` | path `id`; query `status` | `SessionsController.approvals` |
+| `GET` | `/api/sessions/:id/approvals` | path `id`; query `status`, `toolName` | `SessionsController.approvals` |
 | `POST` | `/api/sessions/:id/approvals/:approvalId/decision` | body `Object`; path `approvalId`, `id` | `SessionsController.decideApproval` |
 | `POST` | `/api/sessions/:id/archive` | path `id` | `SessionsController.archiveCompatibility` |
 | `GET` | `/api/sessions/:id/artifacts` | path `id`; query `path` | `SessionsController.artifact` |
