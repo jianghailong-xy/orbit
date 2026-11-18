@@ -81,6 +81,11 @@ case "$side $*" in
   "build builder prune "*)
     [ -z "${'$'}{FAKE_FREE_KB:-}" ] || echo $(($(cat "$FAKE_FREE_KB") + ${'$'}{FAKE_PRUNE_FREES_KB:-0})) >"$FAKE_FREE_KB" ;;
   "build system df") echo "TYPE TOTAL ACTIVE SIZE RECLAIMABLE" ;;
+  # The target's images (FAKE_TARGET_IMAGES) and the ones a container uses (FAKE_TARGET_IN_USE), where a case gives them.
+  "target image ls --format "*) cat "${'$'}{FAKE_TARGET_IMAGES:-/nonexistent}" 2>/dev/null || true ;;
+  "target rmi "*)
+    if grep -qxF "$2" "${'$'}{FAKE_TARGET_IN_USE:-/dev/null}"; then echo "conflict: a container is using $2" >&2; exit 1; fi
+    [ -z "${'$'}{FAKE_TARGET_IMAGES:-}" ] || { grep -vxF "$2" "$FAKE_TARGET_IMAGES" >"$FAKE_TARGET_IMAGES.new" || true; mv "$FAKE_TARGET_IMAGES.new" "$FAKE_TARGET_IMAGES"; } ;;
   "target ps -aq "*)
     service="$(printf '%s\n' "$@" | sed -n 's/^label=com.docker.compose.service=//p')"
     [ ! -e "$state/$service" ] || echo "c-$service" ;;
@@ -748,6 +753,40 @@ test('a build short of room removes earlier release images, then prunes, and sto
   run = fixture.run(upgrade, ['--build-only'], { ...files, ORBIT_BUILD_MIN_FREE_GB: '1' });
   assert.equal(run.status, 0, run.output);
   assert.deepEqual(rmis(run), []);
+});
+
+test('a deploy keeps the last 3 releases\' images on the target and removes the earlier ones', { skip: !compose && 'needs docker compose' }, (t) => {
+  // Production, 2026-11-18: every release's apiserver and web image stayed on the target, 77 of each, 137 GB, until its
+  // disk had 6.6 GB left. The deploy now removes them itself, keeping the last 3 releases' for a quick rollback.
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const commit = fixture.commit('this release');
+  const link = fixture.linkTag();
+  const [a, b, c] = ['a', 'b', 'c'].map((ch) => ch.repeat(40));
+  const [linkA, linkB] = ['d', 'e'].map((ch) => ch.repeat(40));
+  mkdirSync(path.join(fixture.target, '.upgrade'), { recursive: true });
+  writeFileSync(path.join(fixture.target, '.upgrade/history'),
+    `2026-11-01T00:00:00Z ${a} link-gateway=${linkA}\n2026-11-02T00:00:00Z ${b} link-gateway=${linkB}\n2026-11-03T00:00:00Z ${c} link-gateway=${link}\n`);
+  const image = (repo, tag) => `${REGISTRY}/orbit-${repo}:${tag}`;
+  const older = 'f'.repeat(40);
+  const kept = [image('apiserver', commit), image('web', commit), image('apiserver', b), image('web', b),
+    image('apiserver', c), image('web', c), image('link-gateway', link), image('link-gateway', linkB)];
+  const removable = [image('apiserver', a), image('web', a), image('apiserver', older), image('web', older), image('link-gateway', linkA)];
+  const inUse = image('web', older);
+  const others = [`${REGISTRY}/library/postgres:16.14`, `${REGISTRY}/orbit-managed-runner:${a}`, 'unrelated:latest'];
+  const images = path.join(fixture.root, 'target-images');
+  const inUseFile = path.join(fixture.root, 'target-in-use');
+  writeFileSync(images, `${[...kept, ...removable, ...others].join('\n')}\n`);
+  writeFileSync(inUseFile, `${inUse}\n`);
+
+  const run = fixture.run(upgrade, [], { FAKE_TARGET_IMAGES: images, FAKE_TARGET_IN_USE: inUseFile });
+  assert.equal(run.status, 0, run.output);
+  const rmis = run.target.filter((call) => call.args.startsWith('rmi ')).map((call) => call.args.slice(4));
+  assert.deepEqual(rmis.sort(), [...removable].sort(), 'only images outside the last 3 releases are asked to go');
+  assert.deepEqual(readFileSync(images, 'utf8').trim().split('\n').sort(), [...kept, inUse, ...others].sort(),
+    'the last 3 releases\' images, one a container uses, and images that are not releases stay');
+  assert.match(run.stdout, /Earlier release images: 4 removed; the last 3 releases' kept/);
+  assert.equal(readFileSync(path.join(fixture.target, '.upgrade/history'), 'utf8').trim().split('\n').at(-1).split(' ')[1], commit);
 });
 
 test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the release and left as they are', { skip: !compose && 'needs docker compose' }, (t) => {

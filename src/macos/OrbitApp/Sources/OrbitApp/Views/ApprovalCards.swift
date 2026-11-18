@@ -4595,6 +4595,17 @@ private struct OwnerItemCardView: View {
 
     private var standing: OwnerItemStanding { console.ownerItemStanding(itemID) }
 
+    /// The receipt this card draws. On a phone a settled card is drawn again when its fold opens
+    /// (board owner-card-ios-text, D1 = A), as a new view: the console's copy of the press keeps
+    /// it saying how it ended.
+    private var shownReceipt: String? {
+        #if os(iOS)
+        return receipt ?? console.ownerItemReceipts[itemID]
+        #else
+        return receipt
+        #endif
+    }
+
     /// The kind the header is drawn for: the item as the read publishes it, or as it was last read.
     private var shownKind: ProjectOpenItemKind? {
         if case .open(let row) = standing { return row.kind }
@@ -4605,7 +4616,7 @@ private struct OwnerItemCardView: View {
     /// an exception that became the owner's by escalation, a hand-over, or an ended or missing
     /// coordinator (`ExceptionCards.whoFixesIt`). Every other card keeps the layout below.
     private func whoFixesRow(_ standing: OwnerItemStanding) -> ProjectOpenItemRow? {
-        guard !isPause, receipt == nil, case .open(let row) = standing,
+        guard !isPause, shownReceipt == nil, case .open(let row) = standing,
               ExceptionCards.whoFixesIt(row) else { return nil }
         return row
     }
@@ -4614,22 +4625,28 @@ private struct OwnerItemCardView: View {
         let standing = self.standing
         let whoFixes = whoFixesRow(standing)
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            HStack(alignment: .center, spacing: 8) {
-                // Work that reached main without the owner's confirmation is no escalation: it wears
-                // its own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
-                ApprovalHeader(symbol: isPause ? "pause.circle.fill"
-                                   : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
-                                   : "exclamationmark.triangle.fill",
-                               title: ExceptionCards.title(shownKind, isPause: isPause),
-                               tone: .orange)
-                // D3 = A: the "Who fixes it?" card's one clock — the total wait, top right — in
-                // place of the footer.
-                if let whoFixes {
+            #if os(iOS)
+            if let whoFixes {
+                // The iPhone's one heading line (board owner-card-ios-text, rule 1): the kind is a
+                // small label, not the card's title — that is the cause under it — with the clock
+                // on its right.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    (Text(Image(systemName: "exclamationmark.triangle.fill"))
+                        + Text(" " + ExceptionCards.title(shownKind, isPause: false)))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
                     Text(ExceptionCards.whoFixesClock(whoFixes))
-                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+            } else {
+                header(whoFixes)
             }
+            #else
+            header(whoFixes)
+            #endif
             if whoFixes == nil {
                 Text(ExceptionCards.provenance)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -4637,7 +4654,7 @@ private struct OwnerItemCardView: View {
                     .help(ExceptionCards.provenanceTitle)
             }
 
-            if let receipt {
+            if let receipt = shownReceipt {
                 Text("✓ \(receipt)")
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -4683,9 +4700,29 @@ private struct OwnerItemCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .approvalChrome(.orange, dimmed: receipt != nil || !ExceptionCards.isOpen(standing))
+        .approvalChrome(.orange, dimmed: shownReceipt != nil || !ExceptionCards.isOpen(standing))
         .onChange(of: standing, initial: true) { _, now in
             if case .open(let row) = now { lastKind = row.kind }
+        }
+    }
+
+    /// The card's header row: its kind, and the "Who fixes it?" card's one clock.
+    @ViewBuilder private func header(_ whoFixes: ProjectOpenItemRow?) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            // Work that reached main without the owner's confirmation is no escalation: it wears
+            // its own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
+            ApprovalHeader(symbol: isPause ? "pause.circle.fill"
+                               : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
+                               : "exclamationmark.triangle.fill",
+                           title: ExceptionCards.title(shownKind, isPause: isPause),
+                           tone: .orange)
+            // D3 = A: the "Who fixes it?" card's one clock — the total wait, top right — in
+            // place of the footer.
+            if let whoFixes {
+                Text(ExceptionCards.whoFixesClock(whoFixes))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 
@@ -4697,7 +4734,13 @@ private struct OwnerItemCardView: View {
     @ViewBuilder private func nextBlock(_ row: ProjectOpenItemRow) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(ExceptionCards.requiredAction(row))
+                #if os(iOS)
+                // Never a large bold block on a phone (board owner-card-ios-text, rule 2): the doors
+                // under it say the same thing.
+                .font(.subheadline)
+                #else
                 .font(.orbitProse.weight(.semibold))
+                #endif
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let fixing = ExceptionCards.handledByLine(row) {
@@ -4767,8 +4810,9 @@ private struct OwnerItemCardView: View {
         #if os(iOS)
         VStack(alignment: .leading, spacing: 3) {
             button()
+            // Captions are 12pt on a phone (board owner-card-ios-text, rule 3).
             Text(consequence)
-                .font(.orbitLabel).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -4917,7 +4961,17 @@ private struct OwnerItemCardView: View {
             doorRow(cardPress.consequence) {
                 weighted(cardPress.tier, tint: cardPress.action == .abandon ? .red : nil) {
                     Button(action: make) {
+                        #if os(iOS)
+                        // A link is a link-blue word at the start of its line, never centred grey
+                        // words across the card (board owner-card-ios-text, rule 3).
+                        if cardPress.tier == .link {
+                            Text(cardPress.label)
+                        } else {
+                            Text(cardPress.label).approvalActionLabel()
+                        }
+                        #else
                         Text(cardPress.label).approvalActionLabel()
+                        #endif
                     }
                 }
                 .disabled(sending)
@@ -5012,7 +5066,11 @@ private struct OwnerItemCardView: View {
             // accent. The tint is the style's, not a second button.
             button().buttonStyle(.borderedProminent).tint(tint ?? .accentColor)
         } else if tier == .link {
+            #if os(iOS)
+            button().buttonStyle(.plain).font(.orbitLabel).foregroundStyle(tint ?? .accentColor)
+            #else
             button().buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
+            #endif
         } else {
             button().buttonStyle(.bordered)
         }
@@ -5028,11 +5086,19 @@ private struct OwnerItemCardView: View {
             PlatformHaptics.tap()
             askingToHandle = true
         } label: {
+            #if os(iOS)
+            Text(ExceptionCards.markHandled)
+            #else
             Text(ExceptionCards.markHandled).approvalActionLabel()
+            #endif
         }
         .buttonStyle(.plain)
         .font(.orbitLabel)
+        #if os(iOS)
+        .foregroundStyle(.tint)
+        #else
         .foregroundStyle(.secondary)
+        #endif
         .disabled(sending)
     }
 
