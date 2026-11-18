@@ -6607,9 +6607,6 @@ model TaskOwnerDecision {
   decision TaskOwnerDecisionValue
   /// The owner's reason. Required on SEND_BACK, optional on CONFIRM, never blank.
   note     String?
-  /// The translated SEND_BACK note stays on the decision until its run can receive it.
-  translatedNote  String? @map("translated_note")
-  translationLang String? @map("translation_lang")
 
   decidedAt     DateTime    @default(now()) @map("decided_at")
   decidedByType CreatorType @map("decided_by_type")
