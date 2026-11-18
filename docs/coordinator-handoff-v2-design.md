@@ -99,7 +99,9 @@ coordinator was told.
   workspace switch or a recovery opens with the digest too, with no note. The digest gains "Owner
   answers in force": answers to coordinators' questions given in the last 14 days or still blocking
   an unfinished task. An answer an earlier coordinator read is no longer replayed as a turn (§5.2
-  R11 of the contract); this section is where the successor reads it.
+  R11 of the contract); this section is where the successor reads it. An answer its automatic ruling
+  records is listed once, under the rulings (with the owner's typed words where the ruling's own text
+  lacks them), and one whose ruling was superseded is not listed (revision 41).
 - **Handoff note card** (already drawn) gains a line: "12 decisions, 3 merges before this
   conversation · Open previous coordinator".
 

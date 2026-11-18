@@ -48,8 +48,10 @@ const SETTLED: ReadonlySet<string> = new Set(['DONE', 'CANCELLED']);
 export interface StateDigestInput {
   asOf: Date;
   criteria: ReadonlyArray<{ key: string; text: string; satisfied: boolean | null }>;
-  rulings: ReadonlyArray<{ id: string; ruling: string; createdAt: string }>;
-  /** The owner's answers still in force, newest first: the question, the answer in words, when. */
+  /** `answer`: what the owner said, where the ruling's own words do not carry it (see `rulingAnswer`). */
+  rulings: ReadonlyArray<{ id: string; ruling: string; createdAt: string; answer?: string | null }>;
+  /** The owner's answers still in force, newest first: the question, the answer in words, when. Only
+   *  those no ruling records: an answer since rulings existed is one (`writeAutoRuling`), listed there. */
   answers: ReadonlyArray<{ id: string; question: string; answer: string; answeredAt: string }>;
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; title: string; taskId: string | null }>;
   /** Oldest first; the renderer puts unsettled ones first. */
@@ -117,7 +119,7 @@ export function renderStateDigest(input: StateDigestInput): string {
     ...(input.rulings.length === 0
       ? ['(none recorded)']
       : fit(
-        input.rulings.map((r) => `- ${r.createdAt.slice(0, 10)} · ${clip(r.ruling, LINE_MAX.ruling)} · ${r.id}`),
+        input.rulings.map((r) => `- ${r.createdAt.slice(0, 10)} · ${clip(r.ruling, LINE_MAX.ruling)}${r.answer ? ` → ${clip(r.answer, LINE_MAX.answer)}` : ''} · ${r.id}`),
         SECTION_MAX.rulings,
         (n) => `… ${n} more rulings not shown; project_get has them.`,
       )),
@@ -183,7 +185,7 @@ function base62(id: string): string {
   }
 }
 
-/** The digest of one project, read as of now. Eight statements; none is per task. */
+/** The digest of one project, read as of now. Nine statements; none is per task. */
 export async function readStateDigest(
   prisma: PrismaService,
   ownerId: string,
@@ -221,11 +223,11 @@ export async function readStateDigest(
     }),
   ]);
   const satisfied = new Map(satisfaction.map((row) => [row.definitionId, row.satisfied]));
-  const answers = await answersInForce(prisma, ownerId, answered, asOf);
+  const answers = await answersInForce(prisma, ownerId, projectId, answered, asOf);
   return renderStateDigest({
     asOf,
     criteria: definitions.map((d) => ({ key: criterionKeyOf(d.id), text: d.text, satisfied: satisfied.get(d.id) ?? null })),
-    rulings: rulings.map((r) => ({ id: base62(r.id), ruling: r.ruling, createdAt: r.createdAt })),
+    rulings: rulings.map((r) => ({ id: base62(r.id), ruling: r.ruling, createdAt: r.createdAt, answer: rulingAnswer(r) })),
     answers,
     openItems: openItems.map((o) => ({
       id: base62(o.id), kind: o.kind, assignee: o.assignee, title: o.title, taskId: o.taskId ? base62(o.taskId) : null,
@@ -242,16 +244,39 @@ export async function readStateDigest(
 }
 
 /**
+ * What the owner answered, beside an answered question's automatic ruling, when the ruling's text does not
+ * already say it. That ruling is the question with the chosen option (`autoRulingFromAnswer`), so an answer
+ * typed in words — alone or beside an option — is only in its quote, which the digest would otherwise drop.
+ * Null for every other ruling: a ruling recorded from a turn says what it rules in its own words.
+ */
+function rulingAnswer(r: { ruling: string; quote: string; sourceKind: string }): string | null {
+  if (r.sourceKind !== 'ASK_OWNER') return null;
+  const quote = r.quote.trim();
+  return quote && !r.ruling.includes(quote) ? quote : null;
+}
+
+/**
  * The answered questions still in force: answered in the last `ANSWER_IN_FORCE_DAYS`, or blocking a
  * task that is neither DONE nor CANCELLED. One statement for every blocked task's status.
+ *
+ * Not one a ruling records (`sourceKind` ASK_OWNER, `sourceId` the question), live or superseded: a live
+ * one is listed with the rulings already, and a superseded one is a decision the owner has since replaced,
+ * so the answer behind it is no longer in force. One more statement, for those rulings.
  */
 async function answersInForce(
   prisma: PrismaService,
   ownerId: string,
+  projectId: string,
   answered: ReadonlyArray<{ id: string; payload: unknown; answer: unknown; resolvedAt: Date | null }>,
   asOf: Date,
 ): Promise<StateDigestInput['answers']> {
-  const rows = answered.flatMap((row) => {
+  const ruled = answered.length === 0
+    ? new Set<string>()
+    : new Set((await prisma.projectRuling.findMany({
+      where: { ownerId, projectId, sourceKind: 'ASK_OWNER', sourceId: { in: answered.map((row) => row.id) } },
+      select: { sourceId: true },
+    })).map((ruling) => ruling.sourceId));
+  const rows = answered.filter((row) => !ruled.has(row.id)).flatMap((row) => {
     const question = row.payload as Partial<CoordinatorQuestion> | null;
     if (!row.answer || !row.resolvedAt || typeof question?.question !== 'string') return [];
     return [{ ...row, resolvedAt: row.resolvedAt, question: question as CoordinatorQuestion }];

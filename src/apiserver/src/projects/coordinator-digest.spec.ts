@@ -189,6 +189,59 @@ test('the reader keeps the answers still in force: recent ones, and old ones blo
   assert.ok(digest.indexOf('ans-translated') < digest.indexOf('ans-recent'), 'in the order read: newest first');
 });
 
+test('an answer a ruling records is listed once, with the rulings, and one whose ruling was replaced not at all', async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const question = (text: string) => ({
+    question: text, options: [{ label: 'Blue' }, { label: 'Green' }], recommendedOption: 0, blocksTaskIds: [], ifUnanswered: null,
+  });
+  const answeredAt = new Date(AS_OF.getTime() - day);
+  // Newest first, as the read orders them.
+  const answered = [
+    { id: 'ans-typed', payload: question('Typed answer?'), answer: { text: 'neither, use grey', answeredByUserId: 'u' }, resolvedAt: answeredAt },
+    { id: 'ans-picked', payload: question('Picked answer?'), answer: { option: 0, answeredByUserId: 'u' }, resolvedAt: answeredAt },
+    { id: 'ans-replaced', payload: question('Replaced answer?'), answer: { option: 1, answeredByUserId: 'u' }, resolvedAt: answeredAt },
+    { id: 'ans-before-rulings', payload: question('Answered before rulings existed?'), answer: { option: 1, answeredByUserId: 'u' }, resolvedAt: answeredAt },
+  ];
+  const live = [
+    { id: 'rul-picked', projectId: PROJECT_ID, ruling: 'Picked answer? — Blue', quote: 'Blue', sourceKind: 'ASK_OWNER', sourceId: 'ans-picked', recordedBySessionId: null, supersededById: null, createdAt: answeredAt },
+    { id: 'rul-typed', projectId: PROJECT_ID, ruling: 'Typed answer?', quote: 'neither, use grey', sourceKind: 'ASK_OWNER', sourceId: 'ans-typed', recordedBySessionId: null, supersededById: null, createdAt: answeredAt },
+    { id: 'rul-turn', projectId: PROJECT_ID, ruling: 'Ship on Friday', quote: 'ship it friday', sourceKind: 'TURN', sourceId: 'turn-1', recordedBySessionId: 's', supersededById: null, createdAt: answeredAt },
+  ];
+  let ruledAsked: unknown;
+  const prisma = {
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    projectRuling: {
+      findMany: async (args: { where: Record<string, unknown> }) => {
+        if (!('sourceKind' in args.where)) return live;
+        ruledAsked = args.where;
+        // Every ruling of these questions, superseded ones included: the replaced answer's was.
+        return [{ sourceId: 'ans-picked' }, { sourceId: 'ans-typed' }, { sourceId: 'ans-replaced' }];
+      },
+    },
+    projectOpenItem: {
+      findMany: async (args: { where: Record<string, unknown> }) => (args.where.state === 'OPEN' ? [] : answered),
+    },
+    task: { findMany: async () => [] },
+    projectTaskStatusCount: { findMany: async () => [] },
+  } as unknown as PrismaService;
+
+  const digest = await readStateDigest(prisma, 'owner-1', PROJECT_ID, AS_OF);
+
+  assert.deepEqual(ruledAsked, {
+    ownerId: 'owner-1', projectId: PROJECT_ID, sourceKind: 'ASK_OWNER',
+    sourceId: { in: ['ans-typed', 'ans-picked', 'ans-replaced', 'ans-before-rulings'] },
+  }, 'one read for the rulings of every answered question, superseded or not');
+  const section = (head: string) => digest.slice(digest.indexOf(`\n${head}`), digest.indexOf('\n\n', digest.indexOf(`\n${head}`) + 1));
+  const answers = section('Owner answers in force');
+  assert.ok(answers.includes('Answered before rulings existed? → Green · ans-before-rulings'), 'an answer no ruling records stays');
+  for (const ruled of ['ans-picked', 'ans-typed', 'ans-replaced']) assert.ok(!answers.includes(ruled), `${ruled} is not listed as an answer`);
+  const rulings = section('Owner rulings in force');
+  assert.match(rulings, /\n- \d{4}-\d{2}-\d{2} · Picked answer\? — Blue · rul-picked(\n|$)/, 'a picked option is in the ruling\'s words already');
+  assert.match(rulings, /\n- \d{4}-\d{2}-\d{2} · Typed answer\? → neither, use grey · rul-typed(\n|$)/,
+    'a typed answer is only in the ruling\'s quote, so the line carries it');
+  assert.match(rulings, /\n- \d{4}-\d{2}-\d{2} · Ship on Friday · rul-turn(\n|$)/, 'a ruling from a turn reads as before');
+});
+
 test('a successor\'s opening reports from the digest: no required project_get/task_list, and a later read wins', () => {
   const digest = renderStateDigest(fortyTaskProject());
   for (const note of ['Where things stand: two tasks are waiting on the owner.', null]) {
