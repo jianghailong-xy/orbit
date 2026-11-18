@@ -65,8 +65,8 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: scheduleRunAgentName\(scheduleRun, ENGINE_CLI_NAMES\[selectedEngine\] \?\? null\),/);
   });
 
-  it('folds the session column away, unless it was opened from the Scheduled runs folder', () => {
-    expect(SOURCE).toContain("${isScheduleRun && !composing && !onScheduledRuns ? ' is-schedule-run' : ''}");
-    expect(CSS).toContain('.workspace-split.is-schedule-run > .session-col { display: none; }');
+  it('keeps the session column: a run’s session is an ordinary session page (owner 2026-11-19)', () => {
+    expect(SOURCE).not.toContain('is-schedule-run');
+    expect(CSS).not.toContain('is-schedule-run');
   });
 });

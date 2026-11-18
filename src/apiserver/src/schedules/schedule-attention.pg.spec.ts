@@ -479,8 +479,8 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   const w = await world('s2e-check-only');
   const { schedule } = await created(w);
   const { run, sessionId } = await nextRun(schedule.id);
-  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).permissionMode, PermissionMode.DEFAULT,
-    'CHECK_ONLY on Claude Code is stored as Default; its claim hands the runner Auto (schedule-access.ts)');
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).permissionMode, PermissionMode.AUTO,
+    'CHECK_ONLY on Claude Code is opened in Auto, the mode its claim hands the runner (schedule-access.ts)');
   await heldByRunner(w, sessionId);
   const door = approvalDoor();
   const ask = (toolName: string, input: Record<string, unknown>, extra: Record<string, string> = {}) =>
