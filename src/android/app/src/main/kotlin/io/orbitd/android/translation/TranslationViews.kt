@@ -321,7 +321,9 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
         Translation.TurnState.FAILED -> {
             val error = MaterialTheme.colorScheme.error
             Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(TranslationFailureCopy.message(turn.failureReason, turn.httpStatus) ?: TranslationCopy.SEND_FAILED, color = error, style = MaterialTheme.typography.labelSmall)
+                // The reason's sentence wraps on a narrow phone; Retry and Send as written keep their width beside it.
+                Text(TranslationFailureCopy.message(turn.failureReason, turn.httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false),
+                    color = error, style = MaterialTheme.typography.labelSmall)
                 Sep(error); FootAction(TranslationCopy.RETRY, error, retry)
                 Sep(error); FootAction(TranslationCopy.SEND_AS_WRITTEN, error, sendAsWritten)
             }

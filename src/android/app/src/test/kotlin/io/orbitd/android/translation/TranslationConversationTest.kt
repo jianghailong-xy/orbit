@@ -3,6 +3,7 @@ package io.orbitd.android.translation
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import io.orbitd.android.composer.ComposerShell
 import io.orbitd.android.composer.ComposerShellTest
 import io.orbitd.android.core.net.ApiResponse
@@ -222,6 +223,35 @@ class TranslationConversationTest : ComposerShellTest() {
         ComposerShell.answers["GET users/me"] = { me(null) }
         ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
         await { has(tag and hasText("Chinese → English", substring = false), unmerged = true) }
+    }
+
+    /** On a narrow phone the reason's sentence (4B) wraps, under what the owner wrote, and Retry and Send as written keep their width. */
+    @Test @org.robolectric.annotation.Config(qualifiers = "w320dp-h700dp")
+    fun aWrappedReasonLaysOutUnderTheMessageOnANarrowPhone() {
+        translatedConversation()
+        val wrote = "再跑一遍全部测试"
+        ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, """[
+            {"turnId":"t-j","kind":"message","placement":"queued","content":"$wrote","attachments":[],"createdAt":"2026-11-12T01:06:00Z",
+             "translation":{"state":"FAILED","from":"zh-Hans","original":"$wrote","failureReason":"TIMEOUT"}}]""".encodeToByteArray()) }
+        signIn(); openSession()
+        val held = hasAnyAncestor(hasTestTag("queued:t-j"))
+        val sentence = "The translator didn't answer in time, so it wasn't sent"
+        await { has(text(sentence, substring = false) and held, unmerged = true) }
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("queued:t-j"))
+        compose.waitForIdle()
+        fun bounds(m: SemanticsMatcher) = compose.onNode(m and held, useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val message = bounds(text(wrote))
+        val line = bounds(text(sentence, substring = false))
+        val retry = bounds(hasTestTag("translation-action:${TranslationCopy.RETRY}"))
+        val asWritten = bounds(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}"))
+        val foot = bounds(hasTestTag("translation-foot"))
+        assertTrue("the foot is under the message: $message / $foot", foot.top >= message.bottom)
+        assertTrue("the sentence wraps at 320dp: ${line.bottom - line.top}", (line.bottom - line.top) > (retry.bottom - retry.top))
+        assertTrue("the sentence stays in the foot: $line / $foot", line.bottom <= foot.bottom && line.top >= foot.top)
+        assertTrue("Retry keeps its width: $retry", retry.right - retry.left > 20.dp)
+        assertTrue("Send as written keeps its width: $asWritten", asWritten.right - asWritten.left > 60.dp)
+        assertTrue("Send as written is on screen: $asWritten", asWritten.right <= 320.dp)
+        shot("11-held-timeout-wrapped-320dp")
     }
 
     @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
