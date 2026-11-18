@@ -201,7 +201,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let follow = try slice(console, from: "private func followPendingWaitingCard() {", to: "\n    }")
         XCTAssertTrue(follow.contains("let rows = TranscriptRows.build(state: state, statusCards: localStatusCards,"),
                       "the rows the transcript draws, so the request waits until the card is one of them")
-        XCTAssertTrue(follow.contains("decisionCards: decisionCards)"))
+        XCTAssertTrue(follow.contains("decisionCards: decisionCards,"))
+        XCTAssertTrue(follow.contains("conversationCreatedAt: conversationCreatedAt)"),
+                      "the same conversation boundary as the transcript, so earlier records stay hidden")
         XCTAssertTrue(follow.contains("SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)"))
         XCTAssertTrue(follow.contains("cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)"))
         let publish = try slice(console, from: "private func publishStateNow() {", to: "\n    }")
@@ -216,6 +218,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
                       "an owner request — the board's card — arrives from the account's list, not from a publish")
 
         let view = code(try appSource("Views/Console/ConsoleView.swift"))
+        // The transcript's rows are built in `builtRows`; `rows` folds settled cards on top of them.
+        let rows = try slice(view, from: "private var builtRows: [TranscriptRow] {", to: "\n    }")
+        XCTAssertTrue(rows.contains("decisionCards: console.decisionCards,"))
+        XCTAssertTrue(rows.contains("conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,"))
         let card = try slice(view, from: ".onChange(of: console.cardRequest, initial: true) { _, request in",
                              to: "\n        }")
         XCTAssertTrue(card.contains("console.cardRequestFollowed()"))

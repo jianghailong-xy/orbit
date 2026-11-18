@@ -109,10 +109,30 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ConditionsService, type ConditionFiring } from '../conditions/conditions.service';
+import {
+  START_WHEN_VIEW_SELECT,
+  TASK_START_WHEN_AND_RUN_AT,
+  assertStartWhenShape,
+  conditionStartedBlock,
+  endStartWhen,
+  startWhenCardLines,
+  startWhenFiredSql,
+  startWhenPermits,
+  startWhenPermitsSql,
+  startWhenView,
+  writeStartWhen,
+} from './task-start-when';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import {
+  ENGINE_LABELS,
+  isClaudeRegionRefused,
+  isEngineSignedOut,
+  signedOutEngineRefusal,
+} from '../sessions/engine-signin-preflight';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -693,6 +713,44 @@ function boundRunTask(
   };
 }
 
+/**
+ * Why a bound single-run plan no longer describes the task it was bound for, or null while it still
+ * does: one of the dispatch-relevant pins — the engine, the provider, the model, the assignee
+ * workspace or its runner — has changed since the plan was bound.
+ *
+ * Only a CREATE plan is ever judged: a RESUME or ADOPT names a run that already exists. And this is
+ * only half of the rule `abandonStaleCreatePlan` applies — the other half is that the plan's Session
+ * provably does not exist — because a plan whose effect may have landed is taken over, never replaced.
+ *
+ * The plan's pins are read the way `boundRunTask` reads them back (a routed plan pins only what the
+ * task pinned), and a plan bound before targets carried an engine reads its engine beside the task's
+ * current pins (`taskRunEngine`), exactly as carrying it out would.
+ */
+function staleCreatePlan(
+  target: TaskRunExecuteTarget,
+  current: {
+    engine: string | null;
+    provider: string | null;
+    model: string | null;
+    workspaceId: string | null;
+    runnerId: string | null;
+  },
+): string | null {
+  if (target.plan.kind !== 'CREATE') return null;
+  const bound = boundRunTask(target);
+  const engine = target.fromVersion ? taskRunEngine(target, current) : bound.engine ?? null;
+  const changed: string[] = [];
+  const compare = (field: string, was: string | null | undefined, now: string | null) => {
+    if ((was ?? null) !== now) changed.push(`${field} ${was ?? 'none'} -> ${now ?? 'none'}`);
+  };
+  compare('engine', engine, current.engine);
+  compare('provider', bound.provider, current.provider);
+  compare('model', bound.model, current.model);
+  compare('workspace', target.workspaceId, current.workspaceId);
+  compare('runner', target.runnerId, current.runnerId);
+  return changed.length > 0 ? changed.join(', ') : null;
+}
+
 export { buildTaskExecutionPrompt };
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
@@ -1189,6 +1247,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
   -- task that predates the column is.
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- ...and so is a startWhen that has not fired (docs/condition-triggers-design.md §5.2): a peer of run_at, the
+  -- same veto. No startWhen permits, which is every task without one.
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   -- The auto-run sweep is for tasks that have prerequisites AT ALL: it is the "a dependency just
   -- completed, start what it released" pass, not a general starter. So it anchors on the task
   -- HAVING an edge, and the satisfaction of those edges is the clause below.
@@ -1284,6 +1345,8 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- A startWhen that has not fired is the same veto as a run_at still to come (task-start-when.ts).
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   AND NOT EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
   AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
@@ -1420,8 +1483,13 @@ type AutoRunRetryDecision =
  * reach execute() would log one rejection per task per minute for as long as the condition lasts.
  */
 const SCHEDULED_DUE_SQL = Prisma.sql`
-  t.run_at IS NOT NULL
-  AND t.run_at <= now()
+  -- Due: its time has come, or its startWhen condition has fired (docs/condition-triggers-design.md §5.2). A task
+  -- has at most one of the two (task_run_at_or_start_when_chk). Both are retained, not consumed, by everything
+  -- below: the start that keeps one clears it.
+  (
+    (t.run_at IS NOT NULL AND t.run_at <= now())
+    OR (t.start_when_condition_id IS NOT NULL AND ${Prisma.raw(startWhenFiredSql('t'))})
+  )
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
   -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
@@ -2197,7 +2265,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * `@Optional()` and last for the places that build this service directly: they run no sweep.
      */
     @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
+    /**
+     * Conditions (docs/condition-triggers-design.md): a task's startWhen is written through it, and its fire hook makes
+     * the task due (`onModuleInit`). `@Optional()` and last for the places that build this service directly: they get
+     * one over THIS prisma, so a startWhen is written exactly as the injected one writes it.
+     */
+    @Optional() conditions?: ConditionsService,
   ) {
+    this.conditions = conditions ?? new ConditionsService(prisma);
+    // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
+    // gets a new dispatch moment, so the scheduled sweep that starts it names a request no earlier pass could have
+    // (TASK_RUN_TRIGGER.scheduled). Being due is SCHEDULED_DUE_SQL's to read off the condition; nothing else is written.
+    this.conditions.registerFireHook({ onFired: (tx, firing) => this.onStartWhenFired(tx, firing) });
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
@@ -2222,6 +2301,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   private readonly handoffs: ProjectHandoffService;
+  private readonly conditions: ConditionsService;
   private readonly completionInputs?: CompletionInputRouter;
   private readonly pauseProjector?: TaskListPauseProjectorService;
   private readonly openItems?: ProjectOpenItemService;
@@ -3929,6 +4009,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    // One of runAt and startWhen, a line, a baseline and an assignee to probe on (task-start-when.ts): before anything.
+    assertStartWhenShape(dto);
     await this.assertVerifierCreateHasCard(ownerId, TASK_CREATE_CARD_TOOL, [dto], creatorSessionId);
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
@@ -4266,6 +4348,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
+          // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
+          if (dto.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: created.id, workspaceId: created.assigneeId!, startWhen: dto.startWhen,
+              createdFromSessionId: sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, created.projectId, dto.fixesOpenItemId, creatorSessionId, true,
           );
@@ -4375,6 +4465,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.openItems?.resolveByFact([dto.supersedesTaskId]);
       await this.fuse?.afterSupersession(task.projectId, dto.supersedesTaskId);
     }
+    // A startWhen is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md §4.2): one asleep
+    // is woken now, so its probe runs. Nothing for a self-managed runner or with the switch off.
+    if (dto.startWhen) await this.conditions.wakeWorkspaceRunner(task.assigneeId);
     return task;
   }
 
@@ -4656,6 +4749,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
+    items.forEach((item, index) => assertStartWhenShape(item, `tasks[${index}]: `));
     items.forEach((item, index) => {
       const completionCriterion = this.assertCompletionDeclaration({
         ...item,
@@ -4898,6 +4992,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pausedLists = new Set(lists.filter((l) => l.paused).map((l) => l.id));
     const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
     const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
+    // The workspaces on Orbit Cloud a startWhen keeps awake while it waits (docs/condition-triggers-design.md §6.2).
+    const awake = items.some((i) => i.startWhen)
+      ? await this.conditions.keepsAwake(items.filter((i) => i.startWhen && i.assigneeId).map((i) => i.assigneeId!))
+      : new Set<string>();
     const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
 
     let startingNow = 0;
@@ -4905,6 +5003,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let needsManualStart = 0;
     let notDispatchable = 0;
     let scheduled = 0;
+    let waitingForCondition = 0;
     let awaitingProjectStart = 0;
     let internalEdges = 0;
     let externalEdges = 0;
@@ -4936,6 +5035,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       //
       // `autoRunWhenReady` is deliberately not consulted here, and a prerequisite is not required
       // to exist: both are answers to the dependency question, and this trigger is the clock.
+      // A startWhen is the same kind of trigger as a runAt (task-start-when.ts), counted by what stands between it
+      // and a run in the same order, its condition last.
+      if (item.startWhen) {
+        if (waitsOnBatch || waitsOnExisting) blocked += 1;
+        else if (!runnable) notDispatchable += 1;
+        else if (awaitsStart) awaitingProjectStart += 1;
+        else waitingForCondition += 1;
+        continue;
+      }
       if (runAt) {
         if (waitsOnBatch || waitsOnExisting) blocked += 1;
         else if (!runnable) notDispatchable += 1;
@@ -5001,6 +5109,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // of which would misdescribe it; a client that predates the field ignores it and simply
       // does not count these as starting now, which is the true statement.
       scheduled,
+      // Ready in every respect except their startWhen condition: they start once it holds (each item's lines below).
+      waitingForCondition,
       // Would start by themselves, now or at their runAt, but in a project its owner has not
       // started: they start with the project. Named for the reason `scheduled` is — "needs a manual
       // start" would say the start releases nothing — and ignored the same way by older clients.
@@ -5017,6 +5127,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependsOnRefs: item.dependsOnRefs ?? [],
         dependsOnTaskIds: item.dependsOnTaskIds ?? [],
         ref: item.ref ?? null,
+        // The card's Starts when, Today and If never (docs/mocks/condition-triggers frame 2), on an item with one.
+        ...(item.startWhen
+          ? {
+              startWhen: startWhenCardLines(
+                item.startWhen,
+                item.assigneeId ? nameOf.get(item.assigneeId) ?? null : null,
+                !!item.assigneeId && awake.has(item.assigneeId),
+              ),
+            }
+          : {}),
       })),
       // The card shows a window, not the whole batch: fifty rows is not something a person reads
       // before clicking, and the counts above are the decision.
@@ -5438,6 +5558,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           }));
         if (!existing) {
           insertedIds.push(task.id);
+          // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
+          if (item.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: task.id, workspaceId: task.assigneeId!, startWhen: item.startWhen,
+              createdFromSessionId: origin?.sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
           );
@@ -5609,6 +5736,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // remaining set is closed is the producer's question to answer from the rows, not this
     // caller's to guess from the shape of its own write.
     await this.deliverSettledProjects(created.map((task) => task.projectId));
+    // Each startWhen's Orbit Cloud runner, woken now, as the single create does.
+    const waking = new Set(items.flatMap((item) => (item.startWhen && item.assigneeId ? [item.assigneeId] : [])));
+    for (const workspaceId of waking) await this.conditions.wakeWorkspaceRunner(workspaceId);
     return created;
   }
 
@@ -9279,6 +9409,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id, ownerId },
       include: {
         assignee: { select: { id: true, name: true, model: true } },
+        // Its startWhen (docs/condition-triggers-design.md §6.2): what it waits for and the newest reading.
+        startWhenCondition: { select: START_WHEN_VIEW_SELECT },
         // The project it is filed under, named: a project's task is not listed on the Tasks page,
         // so a task opened from a link says which project it belongs to and whether that project
         // is still going.
@@ -9411,6 +9543,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       autoRunSkipped,
+      // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
+      // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
+      startWhen: startWhenView(task.startWhenCondition),
+      // Read once, as `startWhen` above.
+      startWhenCondition: undefined,
       // The last change to this task's completion criterion, read back out of the audit column the
       // change door writes: which criterion it moved away from, which it landed on, and why.
       // Derived rather than stored a second time — the reason column already carries all three, and
@@ -9665,6 +9802,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (runsTask !== null && runsTask !== id) {
         throw new ForbiddenException(verifierWriteFromRunRefusalBody());
       }
+    }
+    // A task has at most one of runAt and startWhen (task_run_at_or_start_when_chk): refused here as a sentence
+    // rather than at the CHECK as a 500.
+    if (dto.runAt != null && before.startWhenConditionId) {
+      throw new BadRequestException({
+        code: TASK_START_WHEN_AND_RUN_AT,
+        message: 'this task starts when its condition holds; a task has at most one of runAt and startWhen',
+      });
     }
     // A schedule, or auto-run switched on, starts the task in the account's default mode with no
     // session in the way, so a session that may not start that with `task_start` may not arrange it.
@@ -11171,6 +11316,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: true,
         autoRunWhenReady: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): one that has not fired is the same veto as a run_at to come.
+        startWhenCondition: { select: { firedAt: true, state: true } },
         // The list this candidate belongs to, because that is the batch whose budget the dispatch
         // below spends — read in the same statement as the rest of what decides the candidate.
         listId: true,
@@ -11241,6 +11388,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // this same READY state is one of the things it re-checks. Two independent triggers, and
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
+      // Waiting for its condition: the same, and the scheduled sweep starts it once the condition fires.
+      if (!startWhenPermits(dep.startWhenCondition)) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
       // Its list holds ready work that outranks it: the slot this edge would fill is that work's,
       // and the sweep is what deals the list's slots by priority. Left OPEN and READY, like a
@@ -11702,7 +11851,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The engine each run would be created on, as dispatch plans it (dispatchEngines): the quota
     // gate below judges that engine's quota and no other. Only the READY tasks reach here, so this
     // stays proportional to the work, like the filter above.
-    const engines = await this.dispatchEngines(rows);
+    //
+    // Except where this moment's request already has a bound plan that dispatch will carry out as
+    // bound (boundPlansInForce): then it is that plan's engine and credential, so the holds below
+    // judge the run that will be attempted and not one that will not.
+    const engines = await this.dispatchEngines(rows, await this.boundPlansInForce(rows));
     // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
     // can only match (the predicate requires an assignee with a runner), so assignee is never
     // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
@@ -11734,6 +11887,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
+    // A third, beside the disk floor: the engine the run would start on is signed out on its runner,
+    // so sessions.create would refuse it (signedOutEngineRefusal) on every pass until somebody signs in.
+    const signedOut = await this.signedOutGate(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
     // whose run would spend a quota nothing reports are named so the backoff can damp a usage
     // limit the gate above had no reset time to hold on.
@@ -11763,6 +11919,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let cloneHeld = 0;
+    // Per runner and engine, for the one line below: "on which machine, and which sign-in".
+    const signedOutHeld = new Map<string, number>();
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11807,6 +11965,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
       if (t.cloneHeld) {
         cloneHeld += 1;
+        continue;
+      }
+      // The sign-in gate, for the same reason again: the run would be refused before it was created,
+      // with the warning the sweep used to log for every such task every minute. It lifts on the sweep
+      // after the runner's next heartbeat reports the engine signed in; nothing here can sign it in.
+      const where = signedOut.get(t.id);
+      if (where) {
+        signedOutHeld.set(where, (signedOutHeld.get(where) ?? 0) + 1);
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11860,6 +12026,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (diskHeld > 0) {
       this.logger.log(
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
+      );
+    }
+    if (signedOutHeld.size > 0) {
+      const total = [...signedOutHeld.values()].reduce((sum, n) => sum + n, 0);
+      this.logger.log(
+        `auto-run: ${total} ready task(s) held — engine signed out on their runner: ` +
+          [...signedOutHeld].map(([where, n]) => `${where} (${n})`).join(', '),
       );
     }
     if (atCapacity > 0) {
@@ -12314,6 +12487,70 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Of these sweep candidates, the ones whose current moment's request (`dep:<task>:<epoch>`) is BOUND
+   * to a single-run CREATE plan that dispatch will carry out AS BOUND — mapped, by task id, to the
+   * engine and credential that plan creates its run on (null each: resolved at create, as the task's
+   * own unpinned fields are).
+   *
+   * The same rule abandonStaleCreatePlan applies, read without a lease: a plan whose pins still match
+   * the task is kept, and so is one whose Session exists. A stale plan with no Session is absent here,
+   * because dispatch will plan afresh from the task's current pins — which is what the gates judge
+   * for every task not in this map. Without a lease the read can be overtaken by a concurrent
+   * delivery; the next sweep reads it again, and dispatch itself decides under the lease.
+   */
+  private async boundPlansInForce(
+    rows: Array<{ id: string; ownerId: string; dispatchEpoch: bigint | null }>,
+  ): Promise<Map<string, { engine: string | null; provider: string | null }>> {
+    const inForce = new Map<string, { engine: string | null; provider: string | null }>();
+    if (rows.length === 0) return inForce;
+    const receipts = await this.prisma.$queryRaw<Array<{ ownerId: string; target: unknown }>>(Prisma.sql`
+      SELECT r."owner_id"::text AS "ownerId", r."target"
+        FROM "task_run_request" r
+        JOIN unnest(${rows.map((t) => t.ownerId)}::uuid[], ${rows.map((t) =>
+          TASK_RUN_TRIGGER.dependency(t.id, t.dispatchEpoch ?? 0n))}::text[]) AS c(owner_id, token)
+          ON r."owner_id" = c.owner_id AND r."request_token" = c.token
+       WHERE r."action_kind" = ${TASK_RUN_ACTION.execute}
+         AND r."status" = 'BOUND'`);
+    const plans = new Map<string, TaskRunExecuteTarget>();
+    for (const receipt of receipts) {
+      const run = readExecuteTarget(receipt.target);
+      if (run && run.plan.kind === 'CREATE') plans.set(run.taskId, run);
+    }
+    if (plans.size === 0) return inForce;
+    const tasks = await this.prisma.task.findMany({
+      where: { id: { in: [...plans.keys()] } },
+      select: {
+        id: true, ownerId: true, engine: true, provider: true, model: true,
+        assignee: { select: { id: true, runnerId: true } },
+      },
+    });
+    const sessionOf = new Map(
+      (
+        await this.prisma.session.findMany({
+          where: { id: { in: [...plans.values()].map((p) => p.plan.sessionId) } },
+          select: { id: true, ownerId: true, taskId: true },
+        })
+      ).map((s) => [s.id, s]),
+    );
+    for (const task of tasks) {
+      const run = plans.get(task.id)!;
+      const current = {
+        engine: task.engine, provider: task.provider, model: task.model,
+        workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+      };
+      // readOwnRun's test, on the batch read.
+      const own = sessionOf.get(run.plan.sessionId);
+      const created = own != null && own.ownerId === task.ownerId && (own.taskId == null || own.taskId === task.id);
+      if (staleCreatePlan(run, current) && !created) continue;
+      inForce.set(task.id, {
+        engine: run.fromVersion ? taskRunEngine(run, current) : run.engine,
+        provider: run.provider,
+      });
+    }
+    return inForce;
+  }
+
+  /**
    * The engine and the credential each task's next fresh run would be created on, as dispatch plans it
    * — what the sweep's quota gate judges, so that it holds back the quota a run will spend and not
    * another (docs/model-routing-design.md §6, docs/provider-engine-contract.md §4.5). The routed pair
@@ -12336,6 +12573,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       taskProvider?: string | null;
       modelRouting?: boolean | null;
     }>,
+    /** Bound plans dispatch will carry out as bound, by task id (boundPlansInForce): their pair is judged instead. */
+    inForce: ReadonlyMap<string, { engine: string | null; provider: string | null }> = new Map(),
   ): Promise<Map<string, DispatchCredential>> {
     const engines = new Map<string, DispatchCredential>();
     if (candidates.length === 0) return engines;
@@ -12361,11 +12600,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const reads = new Map<string, TaskRouteReads>();
     for (const c of candidates) {
       const task = tasks.get(c.id);
+      const bound = inForce.get(c.id);
       let credential = dispatchCredentialOf(
-        { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
+        bound ?? { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
         anchors.get(c.id) ?? seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
       );
-      if (task && c.runnerId) {
+      // A bound plan was routed (or not) when it was bound, and is carried out with what it names.
+      if (task && c.runnerId && !bound) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
         const route = await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
@@ -12513,6 +12754,71 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
+  }
+
+  /**
+   * Of these tasks, the ones whose run would start on an engine's own sign-in that their runner reports
+   * signed out — mapped, by task id, to how the hold names it (`Claude Code on runner "mac"`). The run
+   * would never be created: sessions.create refuses it with EngineSignedOutConflict, which the sweep
+   * logged as a warning per task per pass for as long as nobody signed in (2026-11-17: 308 in 2.5 hours
+   * for two tasks).
+   *
+   * Judged by the preflight itself (signedOutEngineRefusal), on the facts it reads — the runner's
+   * heartbeat `engines`, its accounts, its liveness — and for the account the run would use, picked the
+   * way quotaGate and sessions.create pick it (automaticAccount). Everything the preflight lets through
+   * is let through here: an offline runner, an `unknown` probe, an engine not installed, a credential the
+   * workspace's env brings. A run on a key or a pool (`login` false) brings its own credential and is
+   * never held.
+   */
+  private async signedOutGate(
+    tasks: Array<{
+      id: string;
+      assignee: { provider: string; login?: boolean; runnerId: string | null; workspaceId: string } | null;
+    }>,
+  ): Promise<Map<string, string>> {
+    const held = new Map<string, string>();
+    const judged = tasks.filter((t) => t.assignee?.login === true && t.assignee.runnerId);
+    if (judged.length === 0) return held;
+    const runners = await this.prisma.runner.findMany({
+      where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
+      select: {
+        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+      },
+    });
+    const runnerById = new Map(runners.map((r) => [r.id, r]));
+    const workspaceById = new Map(
+      (
+        await this.prisma.workspace.findMany({
+          where: { id: { in: [...new Set(judged.map((t) => t.assignee!.workspaceId))] } },
+          select: {
+            id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        })
+      ).map((w) => [w.id, w]),
+    );
+    const now = this.now();
+    for (const t of judged) {
+      const { provider, runnerId, workspaceId } = t.assignee!;
+      const runner = runnerById.get(runnerId!);
+      const workspace = workspaceById.get(workspaceId);
+      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      const automatic = automaticAccount(provider, workspace, runner, now);
+      const refusal = signedOutEngineRefusal({
+        runtime: provider,
+        bringsOwnCredentials: false,
+        workspaceEnv: workspace.env,
+        accounts: automatic ? { ...workspace, [ACCOUNT_CHOICE[provider]]: automatic } : workspace,
+        runner,
+        nowMs: now.getTime(),
+      });
+      if (refusal) {
+        const label = ENGINE_LABELS[provider];
+        held.set(t.id, `${label} on runner "${runner.displayName || runner.name}"`);
+      }
+    }
+    return held;
   }
 
   /**
@@ -13769,6 +14075,75 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND "request_token" = ${claim.requestToken}
          AND "status" <> 'OPEN'`;
     return row?.target ?? null;
+  }
+
+  /**
+   * Give back a bound CREATE plan that is stale, so this delivery plans afresh. True when it did.
+   *
+   * THE RULE. A bound plan is normally carried out exactly as bound, never re-planned: that is what
+   * makes a takeover of a half-done create finish the same create. But a plan whose create was
+   * refused before it wrote anything — Claude Code signed out on the runner, an engine the provider
+   * cannot run — stays BOUND (releaseRunRequest keeps the target), and a pin change does not move the
+   * task's dispatch epoch, so the same refused plan used to be replayed on every pass for as long as
+   * the token named the moment, whatever the task now said (2026-11-18: one `dep:` request at attempt
+   * 908, replaying a Claude plan for a task re-pinned to Cursor). So a bound plan is abandoned when
+   * BOTH hold:
+   *
+   *  1. it no longer describes the task: a dispatch-relevant pin changed since it was bound
+   *     (staleCreatePlan). Nothing else counts. The other facts a plan was decided with — the
+   *     prerequisites, the hold, the schedule — are the ones a takeover must not re-read, and a plan
+   *     on unchanged pins replays to the same create whatever refused it last time.
+   *  2. its effect provably never happened, and never can: the Session the plan names does not
+   *     exist. That read is sound only because this delivery holds the lease. The Session insert
+   *     proves its own lease inside its transaction with `SELECT … FOR UPDATE` on this request's row
+   *     (SessionsService.assertFenceHeld), so an older holder's create either committed before this
+   *     lease was taken — the lease UPDATE waited for its lock, and the read below sees the row — or
+   *     it will find its holder replaced and write nothing. A plan whose Session exists, or whose
+   *     create is in flight, is therefore still taken over, never replaced.
+   *
+   * Given back by a compare-and-set fenced on this lease, BOUND -> OPEN with the target cleared, so
+   * the fresh plan is bound by the ordinary `bindRunRequest` and every gate in `executeLeased` is
+   * asked again — the moment fence included. The token, and so the Session id a fresh CREATE names,
+   * stays the same. Only single-run CREATE plans: a RESUME or ADOPT names a run that exists, and a
+   * stand-down or a bulk Run's plan is not judged here.
+   *
+   * signedOutGate and quotaGate judge the same rule (boundPlansInForce), so the sweep's holds and
+   * this dispatch agree about which plan will run.
+   */
+  private async abandonStaleCreatePlan(
+    ownerId: string,
+    lease: Extract<TaskRunLease, { held: true }>,
+  ): Promise<boolean> {
+    const run = readExecuteTarget(lease.target);
+    if (!run || run.plan.kind !== 'CREATE') return false;
+    const task = await this.prisma.task.findFirst({
+      where: { id: run.taskId, ownerId },
+      select: { engine: true, provider: true, model: true, assignee: { select: { id: true, runnerId: true } } },
+    });
+    if (!task) return false;
+    const stale = staleCreatePlan(run, {
+      engine: task.engine, provider: task.provider, model: task.model,
+      workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+    });
+    if (!stale) return false;
+    if (await this.readOwnRun(ownerId, { id: run.taskId, title: run.title }, run.plan.sessionId)) return false;
+    const reopened = await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "status" = 'OPEN', "target" = NULL, "bound_at" = NULL,
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${lease.claim.ownerId}::uuid
+         AND "action_kind" = ${lease.claim.actionKind}
+         AND "request_token" = ${lease.claim.requestToken}
+         AND "status" = 'BOUND'
+         AND "lease_holder" = ${lease.claim.leaseHolder}
+         AND "attempt" = ${lease.claim.attempt}`;
+    // Lost the lease in between: the request is somebody else's to carry out, as bound.
+    if (reopened === 0) throw taskRunInProgress(lease.claim.actionKind, lease.claim.requestToken);
+    this.logger.log(
+      `task ${uuidToBase62(run.taskId)}: run request ${lease.claim.requestToken} had a bound plan that never ` +
+        `created its session and no longer matches the task (${stale}); planning it again`,
+    );
+    return true;
   }
 
   /**
@@ -15158,7 +15533,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // them wrote down what it decided with, and re-reading a world that has moved is how a repeat
     // of one press answers something the press never asked — a 400 where it got a Session, a second
     // Session where it got one, a trigger on a Project it never named.
-    if (lease.status === 'BOUND') {
+    //
+    // Except a CREATE plan that never produced its Session and no longer describes the task
+    // (abandonStaleCreatePlan): that one is given back, and this delivery plans afresh below.
+    if (lease.status === 'BOUND' && !(await this.abandonStaleCreatePlan(ownerId, lease))) {
       const bound = lease.target as TaskRunTargetRecord;
       // Dispatched on what the row SAYS it is, never on which door read it: a bulk Run's plan and a
       // single run's are both `BOUND` receipts, and reading one as the other sends this takeover
@@ -15199,6 +15577,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifiesTaskId: true,
         dispatchHold: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): the run that starts ends it, and a run its firing started is told so.
+        startWhenConditionId: true,
+        startWhenCondition: {
+          select: {
+            text: true, unit: true, probeCommand: true, compareOp: true, firedAt: true, lastValue: true, state: true,
+            events: { where: { kind: 'FIRED' }, orderBy: { at: 'desc' }, take: 1, select: { value: true } },
+          },
+        },
         supersededByTaskId: true,
         terminalReason: true,
         // WHICH MOMENT this row is at (0137). An automatic delivery names one, and this is what it
@@ -15407,7 +15793,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Moved below the dispatch, the two failure directions are both honest: a refused dispatch
     // records nothing, and an event that fails to write leaves a session that is already running
     // and already announces itself through its own creation.
-    const prompt = this.buildExecutePrompt(task);
+    // A run its condition started begins by saying so (docs/condition-triggers-design.md §6.2): the firing, and that
+    // it checks the condition again itself before acting. Only an automatic start of a fired condition: a person's
+    // task_start ignores the condition, and so does this brief.
+    const fired = auto && startWhenPermits(task.startWhenCondition) && task.startWhenCondition
+      ? task.startWhenCondition
+      : null;
+    const prompt = fired
+      ? `${conditionStartedBlock({ ...fired, firedValue: fired.events[0]?.value ?? null })}\n\n${this.buildExecutePrompt(task)}`
+      : this.buildExecutePrompt(task);
     // The commit-point half of the pre-check above. A supersession — or a lock this transaction
     // cannot have — landing between them is refused by the database, and arrives here as a typed
     // marker rather than as a session. Translated so the caller sees the same 409 either way,
@@ -15472,6 +15866,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dispatchOrigin: auto ? SessionDispatchOrigin.LEGACY_SWEEP : SessionDispatchOrigin.USER,
       runSource: auto ? SessionRunSource.TASK_LIST_AUTO : SessionRunSource.MANUAL,
       runAt: task.runAt ? task.runAt.toISOString() : null,
+      startWhenConditionId: task.startWhenConditionId ?? null,
       clearFailed: task.status === TaskStatus.FAILED,
       auto: auto != null,
     };
@@ -15583,6 +15978,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId, target.taskId, target.runAt ? new Date(target.runAt) : null,
     ).catch((e) =>
       this.logger.warn(`consumeRunAt for task ${target.taskId} failed: ${e?.message ?? e}`));
+    // And a startWhen ends with the start that keeps it, whichever door this is: task_start ignores the condition
+    // and ends it too (docs/condition-triggers-design.md §5.2).
+    await this.consumeStartWhen(ownerId, target.taskId, target.startWhenConditionId).catch((e) =>
+      this.logger.warn(`consumeStartWhen for task ${target.taskId} failed: ${e?.message ?? e}`));
     // Frozen last, and after the post-commit steps rather than before them: those are idempotent
     // recomputations of facts that follow from the Session, so a repeat that lands before this
     // write re-derives them harmlessly, while a repeat that lands after gets the same bytes without
@@ -15629,6 +16028,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await recordTaskRouteDecision(this.prisma, {
       ownerId, taskId, requestToken, sessionId: plan.sessionId, route,
     }).catch((e) => this.logger.warn(`task ${taskId}: route decision not recorded: ${e?.message ?? e}`));
+  }
+
+  /** The fire hook: a task's condition fired, so the task gets a new dispatch moment, inside the firing's transaction. */
+  private async onStartWhenFired(tx: Prisma.TransactionClient, firing: ConditionFiring): Promise<void> {
+    if (!firing.condition.taskId) return;
+    await tx.$executeRaw`SELECT "task_dispatch_epoch_advance"(ARRAY[${firing.condition.taskId}::uuid])`;
+  }
+
+  /** Spend a startWhen: its condition ends and the task's pointer clears, as consumeRunAt spends a runAt. */
+  private async consumeStartWhen(ownerId: string, taskId: string, conditionId: string | null | undefined): Promise<void> {
+    if (!conditionId) return;
+    const cleared = await withTransactionRetry(
+      this.prisma,
+      (tx) => endStartWhen(tx, ownerId, taskId, conditionId, new Date()),
+      this.transientWriteRetry('tasks.consumeStartWhen'),
+    );
+    if (cleared) this.publishKnownTaskRows(ownerId, [taskId]);
   }
 
   /**
@@ -15836,6 +16252,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         modelHintReason: true,
         status: true,
         runAt: true,
+        startWhenConditionId: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
@@ -16027,6 +16444,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...taskRunDispatch(t, route),
         route,
         runAt: t.runAt ? t.runAt.toISOString() : null,
+        startWhenConditionId: t.startWhenConditionId ?? null,
         clearFailed: t.status === TaskStatus.FAILED,
         projectId: t.projectId ?? null,
         ...itemPlan,
@@ -16094,6 +16512,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId, item.taskId, item.runAt ? new Date(item.runAt) : null,
         ).catch((e) =>
           this.logger.warn(`batchExecute: consumeRunAt for ${item.taskId} failed: ${e}`));
+        // And a startWhen, as the single Run ends one.
+        await this.consumeStartWhen(ownerId, item.taskId, item.startWhenConditionId).catch((e) =>
+          this.logger.warn(`batchExecute: consumeStartWhen for ${item.taskId} failed: ${e}`));
         return { id: item.taskId, ok: true as const, sessionId };
       } catch (e) {
         // Losing the fence is not an item outcome at all — it says this DELIVERY is no longer the

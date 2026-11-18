@@ -185,7 +185,7 @@ export async function readProjectReadyToRun(
       ),
       ready AS (
         SELECT t.id, t.title, t.status::text AS status,
-               t.auto_run_when_ready, t.run_at
+               t.auto_run_when_ready, t.run_at, t.start_when_condition_id
           FROM task t
           JOIN dependency_candidate candidate ON candidate.id = t.id
          WHERE t.project_id = ${projectId}::uuid
@@ -244,6 +244,8 @@ export async function readProjectReadyToRun(
         SELECT id, title, count(*) OVER ()::int AS count
           FROM ready
          WHERE status = 'OPEN' AND auto_run_when_ready = false AND run_at IS NULL
+           -- A task waiting for its startWhen condition starts by itself, as one with a run_at does.
+           AND start_when_condition_id IS NULL
          ORDER BY title, id
          LIMIT 1
       ),

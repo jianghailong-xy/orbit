@@ -41,6 +41,7 @@ final class ScheduleDisplayTests: XCTestCase {
                 case .schedule(let s, _): return s.title
                 case .run(let s, _, _): return s.title
                 case .draft(let c, _): return c.title ?? ""
+                case .task(let t): return t.title
                 }
             }
             return "\(g.title)|\(g.subtitle ?? "nil")|\(items.joined(separator: ","))"
@@ -215,6 +216,11 @@ final class ScheduleDisplayTests: XCTestCase {
                        "Every day at 08:00 · web · paused Nov 7")
         XCTAssertEqual(line(schedule(rule: .weekly(time: "09:00", weekdays: ["MON", "TUE", "WED", "THU", "FRI"])), draft: true),
                        "Weekdays at 09:00 · apiserver · Check only · draft, waiting for you")
+    }
+
+    func testLandMayCopy() {
+        XCTAssertEqual(ScheduleDisplay.mayText("LAND"), "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.")
+        XCTAssertEqual(ScheduleDisplay.accessOrder["LAND"], 2)
     }
 
     func testPastRunLines() {

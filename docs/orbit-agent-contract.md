@@ -1,6 +1,6 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.10.0, 2026-11-16 (v1.0.0 review record in §11; the 1.1.0 to 1.10.0 changes
+> **Status:** frozen at v1.11.0, 2026-11-17 (v1.0.0 review record in §11; the 1.1.0 to 1.11.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
@@ -15,8 +15,10 @@
 > real engines with real models and a deterministic layer in CI, every turn that touches Orbit files counts-only
 > telemetry, and a release that changes what agents read passes a documented gate with rollback conditions;
 > v1.10.0 merges main's own catalogue and contract edits (capability availability, the schedule tools, `delegate`,
-> `provider_list --workspace`, the receipt's recovery report) with the project line's, and changes no rule. This
-> file is the authority for how an
+> `provider_list --workspace`, the receipt's recovery report) with the project line's, and changes no rule;
+> v1.11.0 adds the fifth timer, a **condition**, for "when something outside Orbit becomes true" (§3.3):
+> `task_create`'s `startWhen`, `schedule_create`'s `WHEN` rule, each refused without the baseline the agent read,
+> and the read `condition_get`. This file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -476,6 +478,7 @@ receipts. The one trap is `autoRunWhenReady`, which is **true by default**.
 | `task_create` `startNow: true` | one task, scheduled to start now | yes — the runner starts it at once after the create (the server's once-a-minute scan is the fallback) | the record **and** the start (created task + the started run/session) |
 | card answer "Create and start" | one task | yes, even if the agent asked for no start | as above; this is the person's override |
 | `task_create` `runAt: <time>` | one task, scheduled | at that time, once | the record and the schedule |
+| `task_create` `startWhen: <condition>` | one task, `OPEN`, and its condition | once, when the condition holds (§3.3) | the record; `task_get` answers the condition under `startWhen` |
 | `task_create` `autoRunWhenReady: true` (the default) | one task | when an assignee is bound and **all prerequisites are DONE**, and for a project task once the project has started; a task in no project with no prerequisites is never started by it | the record and the trigger, not a run |
 | `task_start` | no task | yes — creates or resumes the task's session and queues it | the run (session id) |
 | `task_create_batch` | up to 50 tasks, atomically | per item, by that item's `startNow` / `runAt` / `autoRunWhenReady` (default true) | every item's id/status; per-item start outcomes |
@@ -501,6 +504,38 @@ receipts. The one trap is `autoRunWhenReady`, which is **true by default**.
    later item may depend on an earlier one by `ref`, and the whole batch is one card. `autoRunWhenReady`
    is true per item unless the item sets false. Use `dryRun` before filing a plan whose attribution
    or landing you are not sure of.
+6. **`startWhen` is a peer of `runAt`.** A task has at most one of `runAt`, `startNow` and `startWhen`,
+   and its card offers no "Create and start".
+
+### 3.3 Which timer (since 1.11.0)
+
+The tool descriptions of `schedule_create`, `schedule_wakeup`, `task_create` and `watch_create` carry the same
+choice, by what the person wants:
+
+| The person wants | The timer |
+| --- | --- |
+| "Keep checking while we work on this" | `schedule_wakeup` with `recurring: true`; it ends with this conversation |
+| "Tell me when that task or session gets there" | `task_await`, `session_await` or `watch_create`: a state, not a time |
+| "Start this task on Friday" | the task's `runAt` |
+| "Do this every morning" | a scheduled task, `schedule_create` with a timed rule |
+| **"When something outside Orbit becomes true"** | **a condition**: `task_create` with `startWhen` for deferred work that runs once, `schedule_create` with `rule: { kind: "WHEN", condition }` for a guard that runs at every crossing. Not a `bg_run` poll, which ends with its session, and not a daily check |
+
+The rules an agent follows with a condition ([`condition-triggers-design.md`](./condition-triggers-design.md) §8):
+
+1. **The command is shown verbatim and runs unattended.** It is a probe the workspace's runner runs every
+   `intervalSeconds`, with no model and the workspace's own rights; the owner's Create approves that exact text. It
+   must be read-only, and a secret is never written into it: a probe that needs one reads it from the workspace's
+   environment.
+2. **A baseline is required.** The agent runs the command once before the call and passes what it read: a
+   `startWhen` carries `baseline: { value }` (or `{ exitCode }` under `EXIT_ZERO`), a `WHEN` schedule carries the
+   schedule's `baseline: { key, summary }`. A call without one is refused before any card: `INVALID_ARGUMENTS` for
+   `startWhen`, a refusal naming the missing baseline for `schedule_create`.
+3. **"Wait until X" is a card, not a note.** When a person answers a question with "wait until X", the agent
+   proposes the condition on its card instead of writing a note to itself, which nothing evaluates.
+4. **There is no `condition_create`.** A condition exists only on a task or a schedule. `condition_get` reads one
+   back: its state (`WAITING`, `HOLDING`, `FIRED`, `UNKNOWN`, `ENDED`), its newest samples and its events.
+5. **`repeatSeconds` is a `WHEN` rule's alone**: "and again every N while it stays that way", for a guard whose run
+   may fail to fix what it found. On an Orbit Cloud workspace a condition keeps the workspace awake while it waits.
 
 ---
 
@@ -1178,6 +1213,7 @@ Code, 6.5 KB on Codex) and a `tools/list` of 253 KB for 80 or 81 tools; Codex re
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.11.0 | 2026-11-17 | Condition triggers C5 ([`condition-triggers-design.md`](./condition-triggers-design.md) §8). The fifth timer, "when something outside Orbit becomes true", is a condition (new §3.3): `task_create` and each `task_create_batch` item take `startWhen` (exclusive with `runAt` and `startNow`, its card offering no "Create and start"), `schedule_create` takes `rule: { kind: "WHEN", condition }` with `repeatSeconds` on a `WHEN` rule only, and each is refused before any card without the baseline the agent read. A new catalogued read, `condition_get`, answers a condition's state, newest samples and events (`GET /runner/conditions/:id`); there is no `condition_create`. `orbit task create` gains `--start-when JSON`, and `condition_get` has no CLI command, as `schedule_get` has none. The descriptions of `schedule_create`, `schedule_wakeup`, `task_create` and `watch_create` carry the fifth timer and the probe's rules (shown verbatim, unattended, read-only, no secret), and `watch_create` names a condition as the durable alternative to a `bg_run` poll. The catalogue moves to 1.9.0; the primer to 1.4.1, its first line naming this version; no other rule changed. |
 | 1.10.0 | 2026-11-16 | Main merged into the project line (P2-01's landing round). Main's own edits to the catalogue and to this contract are kept beside the project line's 1.7.0–1.9.0: stable unavailable codes, retry, idempotency and interaction per command and allowlist parity (fe1e92886), the `schedule_*` tools (61f4da7b3), `delegate` (60187457e, a30e157f1), `provider_list --workspace` (95884b154), the receipt's recovery report (660180f3b), cross-surface recovery (3bcb2598c) and a merge beside a session's turn (d7352a3d4). Every operation and field of both sides is in the catalogue, now 1.8.0, because main's 1.6.0 and the project line's 1.7.0 each named content the other did not have. The primer moves to 1.4.0: its first line names this version, and the engine instructions carry main's `delegate` paragraph and 1.9.0's paragraph on an engine's own sub-agents within a budget of 7,424 bytes, raised from main's 7,000 to hold both (7,178 bytes in the longest shape, §2.6). P1-03's migration is `0940_session_agent_tools`. No rule changed. |
 | 1.9.0 | 2026-11-14 | P2-01: the agent is measured, not the text (new §12, [`agent-contract-eval.md`](./agent-contract-eval.md)). The eight scenarios, their variants and five added cases (MCP missing with the CLI taking over, a declined card, the owner's chat, a lost answer, a write in Plan) are clauses checked over a run's transcript and a control-plane ledger: a deterministic layer in CI (a scripted golden agent through the real `orbit mcp` and CLI, and an agent per forbidden move that fails its clause) and a black-box layer on the real Claude Code and Codex with real models, which writes a comparable report and a release-gate verdict. Every turn that touches Orbit files counts-only `agent_contract_telemetry` (`ORBIT_AGENT_CONTRACT_TELEMETRY=off` turns it off). What the first measurements changed: §0 rule 1 now says an engine's own sub-agents are as private as its plan, and the engine instructions say where work for another agent goes, looked up with `task_list` first (their budget is 6,656 bytes, from 6,400); without orchestration the primer sends recorded work to `task_start` before recording anything; the receipt of a create the owner answered with "Create and start" says the start is the owner's decision, not to be undone, and a start the server answered without making is not called started; the next message after a compaction or a resume carries a note to call `task_get` with no arguments, which reads the session's own task, on both engines (§2.6); S6/S7's words say whose the work is to be, and S7 is read with the routing (a task-family start passes); a progress report on the session's own task is not an S5 write. A release that changes what agents read passes the documented gate, with rollback conditions. The first accepted report ([`agent-eval/baseline.json`](./agent-eval/baseline.json), §8.3) passes it on Claude Code 2.1.325 (`claude-sonnet-5-5`, `claude-opus-5-5`) and Codex 0.169.0 and 0.167.2 (`gpt-6.1-sol`). G10 closed; G12–G14 opened for what it found. The primer moves to 1.3.0: its first line names this version, the orchestration paragraph says the above, and the start paragraph no longer repeats the first's `autoRunWhenReady` default; no rule changed. |
 | 1.8.0 | 2026-11-14 | P1-03: the person's side of the contract (new §2.7). The Agent Tools guide (`agent_tools_guide.go`, guide 1.0.0) is generated into `docs/agent-tools-guide.md`, the web console's and OrbitKit's copies and the playbooks skill, each held to it byte for byte; it says MCP first, the record versus the private plan, which object, create versus start, the CLI's place and the troubleshooting table, with four examples whose MCP calls pass their schemas and whose `orbit` lines pass their parsers. The playbooks skill is managed per session — Claude Code's `orbit:playbooks` through `--plugin-dir` (2.1.325 and later), Codex's `orbit-playbooks` through `skills/extraRoots/set` — and is never named by the primer or the engine instructions. Each session's engine reports its Orbit MCP connection in its own words (Claude `system/init`, Codex `mcpServer/startupStatus/updated`) as an `agent_tools` system event, kept as `session.agentTools` (migration 0940, first numbered 0770) and shown read-only in Agent tools on web and macOS. The order and role of what each engine reads were measured from its own request and are stated in §2.7; the clients, the CLI help, the catalogue's agent fields and the workspace-write cards say runtime instructions and base instructions instead of system prompt. The route guide moves to 1.1.0 (each topic carries `asks`), the catalogue to 1.7.0 (agent_create/agent_update describe `systemPrompt` and `appendSystemPrompt` as base and runtime instructions), the primer to 1.2.0 (its first line names this version; no rule changed). No routing rule changes. |

@@ -121,18 +121,20 @@ struct RunnerUpdatingQueuedView: View {
 /// updating`, the reason underlined because a press opens why. A session a full runner, run or batch
 /// holds is drawn the same way with `QueuedCapacity`'s words (`Queued · runner full`, web
 /// `CapacityHeldTag`, docs/mocks/queued-card-runner-full), and its popover offers nothing to press.
+/// A new session Keep Free holds reads `Queued · low disk space` (`QueuedDiskLow`), likewise.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
     @State private var open = false
 
     private var full: Bool { QueuedCapacity.holds(foot.session) }
+    private var disk: Bool { QueuedDiskLow.holds(foot.session) }
 
     var body: some View {
         HStack(spacing: 4) {
             Text(RunnerUpdating.queuedWord)
             Text("·")
             Button { open = true } label: {
-                Text(full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
+                Text(disk ? QueuedDiskLow.tag : full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
                     .underline(pattern: .dot)
             }
             .buttonStyle(.plain)
@@ -146,15 +148,17 @@ struct RunnerUpdatingTagView: View {
     private var pop: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                Text(full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session)).font(.headline)
-                Text(full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
+                Text(disk ? QueuedDiskLow.title : full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session))
+                    .font(.headline)
+                Text(disk ? QueuedDiskLow.wait : full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
                      : RunnerUpdating.messageText(foot.session, machine: foot.machine))
                     .font(.callout)
-                if let waited = full ? QueuedCapacity.waited(foot.session, now: context.date)
+                // Keep Free's wait counts from when the session went PENDING, as a full runner's does.
+                if let waited = full || disk ? QueuedCapacity.waited(foot.session, now: context.date)
                     : RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
                 }
-                if let runnerID = foot.runnerID, !full, !RunnerUpdating.stopping(foot.session) {
+                if let runnerID = foot.runnerID, !full, !disk, !RunnerUpdating.stopping(foot.session) {
                     RunnerUpdateLaterControl(runnerID: runnerID,
                                              version: foot.session.queuedRunnerUpdate?.targetVersion,
                                              machine: foot.machine)

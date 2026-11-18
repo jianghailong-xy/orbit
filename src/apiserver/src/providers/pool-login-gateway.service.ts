@@ -49,6 +49,7 @@ import { PoolLoginLedger } from './pool-login-ledger';
 import { PoolNotices } from './pool-notice';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { readResponsesEvent, type ResponsesOutcome } from './responses-stream-tap';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /** How long a refresh may take before the request that needed it is answered 502. */
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -425,10 +426,9 @@ export class PoolLoginGatewayService {
     // A SubAgent's token (mintSubagentPoolLoginToken) names its own credential, and its child runs codex on this
     // pool whatever the parent session runs: only the codex gateway serves it, on a pool its owner did not share.
     const subagent = Boolean(row.accountId || row.keyId);
+    const open = OPEN_SESSION_STATUSES.includes(session.status) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
-      OPEN_SESSION_STATUSES.includes(session.status) &&
-      !session.completedAt &&
       !session.deletedAt &&
       // Nobody's session but the pool's owner's: the token's person is the owner (its foreign key), and
       // the session has to be theirs too.
@@ -447,6 +447,8 @@ export class PoolLoginGatewayService {
           !session.endReason
         : session.engine !== AgentProvider.CLAUDE));
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // Asked last, as the runner credential asks it: the token itself is good, and works again once the
     // account is enabled.
     if (session.owner.disabledAt) return ACCOUNT_DISABLED;

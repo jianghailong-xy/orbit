@@ -1,0 +1,350 @@
+/* The help drawer (board docs/mocks/help-center/01-web.png ①): a 380px column at the window's right, a flex sibling
+   of the page's main area in .app-shell and .settings-shell, so the page narrows rather than being covered. */
+.help-drawer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  height: var(--app-vh, 100vh);
+  box-sizing: border-box;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-raised, var(--bg-base));
+  color: var(--text-1);
+}
+.help-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.help-drawer-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.help-drawer-head .orbit-segmented {
+  margin-right: 4px;
+}
+.help-drawer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+.help-drawer-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.help-drawer-icon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.help-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.help-drawer-placeholder {
+  padding: 24px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* The Articles tab (board 01 ①–②). */
+.help-pane {
+  padding: 14px 16px;
+  font-size: 13px;
+}
+.help-pane-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+.help-pane-empty {
+  margin: 8px 0;
+  color: var(--text-3);
+}
+.help-drawer-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  background: var(--bg-base);
+}
+.help-drawer-search:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-tint);
+}
+.help-drawer-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+}
+.help-drawer-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.help-drawer-search-clear {
+  border: 0;
+  padding: 2px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 11px;
+}
+.help-group {
+  margin: 16px 0 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.help-group-ctx {
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--fill-muted, var(--bg-hover));
+  color: var(--text-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.help-drawer-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.help-art,
+.help-res {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.help-art:hover,
+.help-res:hover,
+.help-art:focus-visible,
+.help-res:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.help-art-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--fill-muted, var(--bg-hover));
+  color: var(--text-2);
+  font-size: 12px;
+}
+.help-art-icon.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.help-art-icon.brand {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.help-art-text,
+.help-res {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.help-res {
+  gap: 1px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  padding: 10px 2px;
+}
+.help-art-title,
+.help-res-title {
+  font-weight: 500;
+}
+.help-art-summary,
+.help-res-snippet {
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.help-res-category {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.help-res mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--warning-bg);
+  color: inherit;
+}
+.help-ask-row {
+  margin-top: 12px;
+  border: 1px dashed var(--brand);
+}
+.help-crumb {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.help-reading-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.help-reading-meta {
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.help-reading .help-md {
+  font-size: 13px;
+}
+.help-helpful {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.help-helpful-button {
+  padding: 1px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+}
+.help-helpful-button:hover {
+  background: var(--bg-hover);
+}
+.help-ask-instead {
+  margin-left: auto;
+}
+.help-drawer-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+.help-drawer-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.help-drawer-link.quiet {
+  color: var(--text-2);
+}
+.help-drawer-link:hover {
+  text-decoration: underline;
+}
+/* An error card's Learn more → (components/help/HelpLearnMore.tsx). */
+.rd-attention-learn {
+  margin-top: 6px;
+}
+.help-learn-more {
+  font-size: 12.5px;
+}
+
+/* A phone has no room for a column: the drawer lies over the page, the full width. */
+@media (max-width: 767.98px) {
+  .help-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    width: auto;
+    border-left: 0;
+  }
+}
+
+/* The ? button at the sidebar's foot, beside the avatar; above it on the collapsed rail. */
+.tp-user {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tp-user > .tp-user-trigger {
+  flex: 1;
+  min-width: 0;
+}
+.tp-help {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 15px;
+  cursor: pointer;
+}
+.tp-help:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.tp-help.is-open {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.tp-help:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.tp-help-key {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.7;
+}
+@media (min-width: 961px) {
+  .app-nav.collapsed .tp-user {
+    flex-direction: column-reverse;
+  }
+}

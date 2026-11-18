@@ -320,6 +320,35 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertEqual(PendingTray.text(of: bubble), "1 image")
     }
 
+    /// Settings › Translation: a row says what the reader wrote, as their bubble does, not the
+    /// English the engine is given (web parity: `queuedRow`'s `translation?.original`).
+    func testATranslatedRowSaysWhatTheReaderWrote() {
+        let translation: JSONValue = .object(["state": .string("DONE"), "from": .string("zh-Hans"),
+                                              "original": .string("lfs 属于另一个仓库")])
+        var r = running()
+        r.apply(steer(2, turn: "t1", text: "lfs belongs to another repository", extra: ["translation": translation]))
+        var queued = queuedBubble("q", text: "lfs belongs to another repository")
+        queued.translation = TurnTranslation.parse(translation)
+        var state = r.state
+        state.queued = [queued]
+
+        let rows = PendingTray.rows(state: state, withdrawing: [], steering: [], steerOffered: true)
+        XCTAssertEqual(rows.map(\.text), ["lfs 属于另一个仓库", "lfs 属于另一个仓库"])
+    }
+
+    /// Withdraw hands back the words the reader wrote, as the row shows them, not the English the
+    /// engine was given; and still nothing for a turn nobody typed (`restorableText`).
+    func testWithdrawHandsBackWhatTheReaderWrote() {
+        var translated = queuedBubble("q", text: "lfs belongs to another repository")
+        translated.translation = TurnTranslation(state: .done, from: .zhHans, original: "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: translated), "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: queuedBubble("p", text: " and update the changelog ")),
+                       "and update the changelog")
+        var orbit = translated
+        orbit.authoredByOrbit = true
+        XCTAssertNil(ComposerLogic.withdrawnText(of: orbit))
+    }
+
     // MARK: - sent the other way
 
     func testQueueingForTheNextTurnSaysSoAndASendOtherwiseLeavesItToTheServer() throws {

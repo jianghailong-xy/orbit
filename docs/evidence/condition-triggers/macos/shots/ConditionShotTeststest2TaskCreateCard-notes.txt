@@ -1,0 +1,11 @@
+task-card: no window after launch; File > New Window
+task-card: never in the band 140.0–640.0; last frame (missing)
+task-card: Set kubernetes pool to 3 copies shown
+task-card: Starts when shown
+task-card: 3 or more OSDs are in shown
+task-card: Once. Checked every 5 min on workstation-gpu, no model. shown
+task-card: ceph osd stat -f json | jq .num_in_osds shown
+task-card: Today shown
+task-card: 2 in. Not yet. shown
+task-card: If never shown
+task-card: Asks you after 30 days of waiting shown

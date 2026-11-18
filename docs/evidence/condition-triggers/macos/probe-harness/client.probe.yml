@@ -1,0 +1,142 @@
+# TEMPORARY (probe branch probe/condition-triggers-macos, never merged). Task 34yx4AGdDd60onPF0VUty. The commit under
+# test is the task branch (this commit's parent), plus .ct-probe/ and this file, which replaces
+# .github/workflows/client.yml on this branch only. Adapted from ../../ios/probe-harness/client.probe.yml.
+#   - shots: .ct-probe/run.sh on macos-26: the Mac probe app built from the commit's own MainView and shared
+#     sources, driven by XCUITest against .ct-probe/stub.py.
+#   - macos: client.yml's own macOS gate (OrbitKit `swift test`, OrbitApp `swift build`), each step's log kept.
+#   - report: pushes the results, summaries, logs and pictures to probe/condition-triggers-macos-results.
+name: Condition triggers probe (Mac)
+
+on:
+  push:
+    branches: ["probe/condition-triggers-macos"]
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    name: Condition triggers probe (Mac)
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .ct-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .ct-probe/shots
+          cp run-output.log .ct-probe/shots/run-output.log 2>/dev/null || true
+          { swift --version 2>&1 | head -2; xcodebuild -version; xcodegen --version; sw_vers; } > .ct-probe/shots/toolchain.txt
+          for log in .ct-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".ct-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".ct-probe/shots/tail-$base.txt" || true
+          done
+          find .ct-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          python3 - .ct-probe/shots <<'PY'
+          import os, re, sys
+          for root, dirs, files in os.walk(sys.argv[1], topdown=False):
+              for name in files + dirs:
+                  safe = re.sub(r'[\"\\:<>|*?\r\n]', '_', name)
+                  if safe != name:
+                      os.rename(os.path.join(root, name), os.path.join(root, safe))
+          PY
+          echo "capture=${{ steps.capture.outcome }}" > .ct-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ct-shots
+          path: .ct-probe/shots
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  macos:
+    name: macOS (OrbitKit test + OrbitApp build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Test OrbitKit (macOS)
+        id: test
+        continue-on-error: true
+        working-directory: src/macos/OrbitKit
+        run: |
+          set -o pipefail
+          mkdir -p "$GITHUB_WORKSPACE/gate"
+          swift test 2>&1 | tee "$GITHUB_WORKSPACE/gate/orbitkit-test.log"
+      - name: Build OrbitApp
+        id: build
+        if: always()
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee "$GITHUB_WORKSPACE/gate/orbitapp-build.log"
+      - name: Summaries
+        if: always()
+        run: |
+          cd gate
+          { swift --version 2>&1 | head -2; xcodebuild -version; } > toolchain.txt
+          grep -E "Executed|error:|failed|with [0-9]+ tests? in|Test Suite 'All tests'" orbitkit-test.log | tail -60 > summary-orbitkit-test.txt || true
+          grep -E "ConditionDisplayTests|ScheduleDisplayTests" orbitkit-test.log | grep -E "passed|failed" > orbitkit-condition-cases.txt || true
+          tail -40 orbitapp-build.log > tail-orbitapp-build.txt || true
+          gzip -9 orbitkit-test.log
+          echo "test=${{ steps.test.outcome }}" > outcomes.txt
+          echo "build=${{ steps.build.outcome }}" >> outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-gate
+          path: gate
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [shots, macos]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/condition-triggers-macos-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/condition-triggers-macos-results

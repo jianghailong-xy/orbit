@@ -29,7 +29,8 @@ data class ApprovalDecision(val behavior: String, val message: String? = null,
     val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
     val startAfterCreate: Boolean? = null, val sendAsWritten: Boolean? = null)
 @Serializable
-data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
+data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null,
+    val sendAsWritten: Boolean? = null)
 @Serializable
 data class CriteriaDecision(val commitToken: String, val decision: String, val baseSeal: String)
 @Serializable
@@ -151,7 +152,11 @@ object CardCatalog {
             val title = when (family) {
                 CardFamily.QUESTION -> "Your input is needed"
                 CardFamily.PLAN -> "Plan ready for review"
-                CardFamily.CREATE -> if (approval.toolName == "orbit_task_create") "Create this task?" else "Create this project?"
+                // A task that starts on a condition says so in its title (condition-triggers board frame 2).
+                CardFamily.CREATE -> if (approval.toolName != "orbit_task_create") "Create this project?"
+                    else if (io.orbitd.android.core.schedule.StartWhenCardLines.ofCreateInput(approval.input) != null)
+                        io.orbitd.android.core.schedule.ConditionCopy.createTaskTitle
+                    else "Create this task?"
                 CardFamily.BATCH -> "Create these tasks?"
                 CardFamily.DAG -> "Change dependencies?"
                 CardFamily.BLOCKER -> "Resolve this blocker?"
@@ -162,8 +167,11 @@ object CardCatalog {
             }
             // Settings › Translation (3A): the card shows its questions, description and plan in the owner's language once the server
             // translated them; the binding stays the input the engine asked with, so a translation arriving changes no press.
-            add(InteractionCard("approval:${approval.id}", family, title, Translation.shownApproval(raw), id, projectId, approval.id,
-                approval.input.toString(), actions, if (unexpired) approval.status else "Expired"))
+            // Orbit's own cards keep the card as it came, so "Show original" can flip back to it (OrbitCardTranslation).
+            val shown = Translation.shownApproval(raw)
+            add(InteractionCard("approval:${approval.id}", family, title, shown, id, projectId, approval.id,
+                approval.input.toString(), actions, if (unexpired) approval.status else "Expired",
+                OrbitCardTranslation.context(approval.toolName, raw, shown)))
         }
         val standing = snapshot.standing
         (standing["evidenceDecisions"] as? JsonObject)?.let { queue ->

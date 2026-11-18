@@ -1,5 +1,5 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
-import type { SubagentRunView } from '@orbit/shared';
+import type { HelpAskMarker, SubagentRunView } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
@@ -37,7 +37,7 @@ import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
-import { CLEARED_RUNNING_WORK } from './running-work';
+import { CLEARED_RUNNING_WORK, KEEP_BACKGROUND_WORK_END_CONTENT } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
 import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnId, openingTurnKey } from './orbit-authored-turn';
@@ -157,6 +157,7 @@ import {
 import { GithubConnectionService } from '../github/github-connection.service';
 import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RUNNER_DISK_BELOW_FLOOR, sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
@@ -1203,6 +1204,12 @@ export class SessionsService {
        */
       externalSender?: ExternalTurnSender;
       /**
+       * The help center's Ask (help/help-ask.ts, migration 0850): this session answers a question read-only. Internal,
+       * set only by the Ask door, which checked the machine. It belongs to no workspace, executes no task and opens with
+       * words; `session.help_ask` is written in the row's own INSERT, and 0850's guard refuses every later write of it.
+       */
+      helpAsk?: HelpAskMarker;
+      /**
        * The owner's own door (POST /sessions): with Settings › Translation on, the opening message is
        * laid down HELD in the session's own INSERT transaction and translated before the claim may hand
        * the session out (turn-translation.ts). Words typed by a person only: a task run, a shell-first
@@ -1245,6 +1252,10 @@ export class SessionsService {
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
     if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
+    }
+    // An Ask is a question on a machine and nothing else: no workspace, no task, no shell (help/help-ask.ts).
+    if (opts?.helpAsk && (dto.taskId || dto.workspaceId || dto.newWorkspace != null || dto.shell || !dto.assignedRunnerId)) {
+      throw new Error('an Ask is a session of a machine, in no workspace, that executes no task and opens with words');
     }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
     // runtime is handed the files either way. A shell command is nothing without its words.
@@ -1769,11 +1780,13 @@ export class SessionsService {
         // A chat for its whole life, from this statement (wiki contract `chat.binding`); 0476's guard
         // refuses every later write of it.
         ...(wikiChat ? { wikiChatSpaceId: wikiChat.spaceId } : {}),
+        // An Ask for its whole life, from this statement (migration 0850); the guard refuses every later write of it.
+        ...(opts?.helpAsk ? { helpAsk: opts.helpAsk as unknown as Prisma.InputJsonValue } : {}),
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
     const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
-    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim() && !isSlashCommand(dto.prompt)
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -4119,8 +4132,9 @@ export class SessionsService {
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
+    // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
+      scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       // A scheduled task's run is reached from its schedule's history and its notification, never from a list
       // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
       // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
@@ -4567,6 +4581,10 @@ export class SessionsService {
               -- named before capacity, because a slot coming free would not start this session.
               WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
                 THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
+              -- Keep Free (runner-disk-gate.ts): the claim's own gate on a session that has never run. Before capacity,
+              -- because a slot coming free would not start it; it lifts when the runner reports space above its floor.
+              WHEN ${sessionDiskHoldSql('s')}
+                THEN ${RUNNER_DISK_BELOW_FLOOR}::text
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
@@ -5396,7 +5414,7 @@ export class SessionsService {
 
   /** A shared session's header — what its public page says of it above the transcript — and nothing
    *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
-  private async sharedHead(sessionId: string) {
+  async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {
@@ -6958,9 +6976,19 @@ export class SessionsService {
        * `dto`; every platform delivery and every session-to-session door leaves it unset.
        */
       translate?: boolean;
+      /**
+       * The owner's words this turn carries were translated already, by a door that refuses them whole when
+       * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
+       * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
+       * message in the agent language, which is what the engine receives. Written as a translated turn that was
+       * never held (display_prompt, translation_state DONE, translation_lang `from`). An option of this call and
+       * never a field of `dto`.
+       */
+      translated?: { content: string; from: TranslationLanguage };
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    if (opts?.translated) assertPromptSize(opts.translated.content, 'message');
     if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
       throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
     }
@@ -7264,7 +7292,10 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
-        content: dto.content,
+        content: opts?.translated && dto.content ? opts.translated.content : dto.content,
+        ...(opts?.translated && dto.content
+          ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
+          : {}),
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
@@ -9496,12 +9527,13 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    endTurnContent?: string,
   ) {
     // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
     // re-run sees whichever end actually committed rather than re-applying one that did not.
     const ended = await withTransactionRetry(
       this.prisma,
-      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding),
+      (tx) => this.transitionEndLocked(tx, ownerId, sessionId, reason, lifecycle, requireNoProjectBinding, endTurnContent),
       loggedRetry(this.logger, 'sessions.transitionEnd'),
     );
     await reprojectAfterSettledChecks(this.prisma, ended.checksSettled, this.logger);
@@ -9519,6 +9551,8 @@ export class SessionsService {
     reason: SessionEndReason,
     lifecycle?: 'completedAt' | 'deletedAt',
     requireNoProjectBinding = false,
+    /** What the `end` turn says, when it says anything: KEEP_BACKGROUND_WORK_END_CONTENT for a handover (complete). */
+    endTurnContent?: string,
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
@@ -9691,6 +9725,7 @@ export class SessionsService {
       await this.insertTurnLocked(tx, sessionId, {
         kind: 'end',
         clientTurnId: randomUUID(),
+        ...(endTurnContent !== undefined ? { content: endTurnContent } : {}),
       });
     }
     return {
@@ -9907,6 +9942,13 @@ export class SessionsService {
             'create the task with the plain yes, then start it',
         );
       }
+      // A startWhen task starts when its condition fires (docs/condition-triggers-design.md §6.2); "and start" would
+      // write a runAt beside it, which a task may not have.
+      if ((asked.input as { startWhen?: unknown } | null)?.startWhen != null) {
+        throw new BadRequestException(
+          'startAfterCreate does not apply to a task that starts when its condition holds: create it with the plain yes',
+        );
+      }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
     // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
@@ -10044,18 +10086,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
-    // only at the scheduled approval door, never exported as an engine pattern.
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {
@@ -11039,12 +11069,17 @@ export class SessionsService {
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async complete(ownerId: string, id: string) {
+  async complete(ownerId: string, id: string, opts: { handingOver?: boolean } = {}) {
+    // A coordinator handing over (ProjectsService.coordinator's replace with a handoff) ends the same way, but its
+    // `end` turn says to leave the session's SubAgent runs and bg_run jobs running: their wake goes to the successor
+    // (docs/coordinator-handoff-v2-design.md §1). Every other Complete stops them.
     const ended = await this.transitionEnd(
       ownerId,
       id,
       SessionEndReason.COMPLETED,
       'completedAt',
+      false,
+      opts.handingOver ? KEEP_BACKGROUND_WORK_END_CONTENT : undefined,
     );
     // Everything below is deliberately post-commit. A failed end-turn insert rolls back
     // both the intent and completedAt, and therefore produces no runner/realtime signal.
@@ -12035,6 +12070,8 @@ export class SessionsService {
    */
   async remove(ownerId: string, id: string) {
     const ended = await this.transitionEnd(ownerId, id, SessionEndReason.DELETED, 'deletedAt');
+    // Nobody watches a session in the Trash: its guests' and links' viewer streams end (viewer-stream.service.ts).
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
     this.realtime.publishSessionLifecycleChanged(
@@ -12058,6 +12095,7 @@ export class SessionsService {
       true,
     );
     if (ended.projectBound) return false;
+    this.realtime.publishViewerRevoked({ sessionId: id });
     this.publishEndIntent(id, ended);
     this.realtime.publishSessionLifecycleChanged(
       id,
@@ -12540,6 +12578,7 @@ export class SessionsService {
       }
       await tx.session.delete({ where: { id: session.id } });
     }, loggedRetry(this.logger, 'sessions.purge'));
+    this.realtime.publishViewerRevoked({ sessionId: id });
     return { ok: true };
   }
 }

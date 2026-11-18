@@ -1,5 +1,6 @@
 import type { OwnerConfirmationNotReviewedReason } from './owner-confirmation-review';
 import type { MainCheckoutRunnerRequest } from './mainCheckoutGit';
+import type { ConditionProbe, ConditionSampleReport } from './condition';
 // The wire contract shared by the control plane, the Go runner, the web app and the native
 // clients.
 //
@@ -854,6 +855,10 @@ export interface RunnerHeartbeatRequest {
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
   agentDirProbes?: AgentDirProbe[];
+  /** What the runner read for the conditions it was handed (RunnerHeartbeatResponse.conditionProbes,
+   *  docs/condition-triggers-design.md §4.2). Only from a runner that declares condition-probe/v1; a
+   *  sample for a condition whose workspace this runner does not serve is refused and stored nowhere. */
+  conditionSamples?: ConditionSampleReport[];
   /** State of the shared checkouts this machine's agents work in. Absent on older runners,
    *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
   repos?: RunnerRepoHealth[];
@@ -1430,6 +1435,10 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Those of cancelSessionIds whose end is a coordinator handing over (docs/coordinator-handoff-v2-design.md §1):
+   *  the runner ends the session but leaves its running SubAgent runs and bg_run jobs to end by themselves, their
+   *  wake forwarded to the successor. The same fact the session's `end` turn carries; absent when there are none. */
+  keepWorkSessionIds?: string[];
   /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
    *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
   remoteSubagentRuns?: string[];
@@ -1479,6 +1488,11 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** The conditions of the workspaces this runner serves, to probe on their intervals and answer with
+   *  RunnerHeartbeatRequest.conditionSamples (docs/condition-triggers-design.md §4.2). On every full answer to a
+   *  runner that declares condition-probe/v1, the whole list ([] for none); absent otherwise, which the runner reads
+   *  as "keep probing what you have". */
+  conditionProbes?: ConditionProbe[];
   /** Every PENDING and CLONING GitHub workspace of this runner (docs/github-workspace-design.md §5.4), on every full
    *  answer to a runner that declared clone-workdir/v1: a full reconcile, answered by cloneReports. Absent otherwise. */
   cloneRequests?: CloneRequest[];
@@ -2685,7 +2699,7 @@ export interface SubagentDecision {
   readonly?: boolean;
 }
 
-/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the owner's account. */
 export interface SubagentWorkspaceChoice {
   /** The workspace's id, as the runner has it (a UUID). */
   id: string;
@@ -2809,7 +2823,7 @@ export interface SubagentRunCreateRequest {
   permissionMode?: string;
   /** The delegate call's description, which the wake for the run's end names. */
   description?: string;
-  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  /** A workspace to run on, by name (§10.1 row 1): any workspace of the owner's account, in its own repository. */
   workspace?: string;
   /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
   needs?: string[];
@@ -2960,6 +2974,9 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** An Ask (migration 0850, help.ts): start this session read-only, in a scratch folder holding the help article
+   *  library, never in workDir. Only to a runner that declares HELP_ASK_V1. Absent for every other session. */
+  helpAsk?: import('./help').HelpAskMarker;
   /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
    *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
    *  this branch instead of the shared workDir. Generated server-side at session creation. */

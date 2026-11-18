@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { judgeEnvelopeChange, widenedParts, type Envelope } from './schedule-envelope';
-import { instantOfLocal, nextDueAt, parseRule, runsPerWeek } from './schedule-time';
+import { instantOfLocal, mergeRule, nextDueAt, parseRule, ruleCommandHash, runsPerWeek, type ScheduleRule } from './schedule-time';
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
@@ -61,7 +61,7 @@ test('instantOfLocal and parseRule refuse what is not a rule or a zone', () => {
   assert.throws(() => parseRule({ kind: 'DAILY', time: '24:00' }), /HH:mm/);
   assert.throws(() => parseRule({ kind: 'WEEKLY', time: '10:00', weekdays: [] }), /WEEKLY/);
   assert.throws(() => parseRule({ kind: 'ONCE', at: '2026-02-30T10:00' }), /calendar/);
-  assert.throws(() => parseRule({ kind: 'CRON', expr: '* * * * *' }), /ONCE, DAILY or WEEKLY/);
+  assert.throws(() => parseRule({ kind: 'CRON', expr: '* * * * *' }), /ONCE, DAILY, WEEKLY or WHEN/);
   assert.throws(() => nextDueAt(parseRule({ kind: 'DAILY', time: '10:00' }), 'Mars/Olympus', new Date()), /IANA/);
 });
 
@@ -71,8 +71,39 @@ test('runsPerWeek: ONCE 1, DAILY 7, WEEKLY the number of its weekdays', () => {
   assert.equal(runsPerWeek(parseRule({ kind: 'WEEKLY', time: '10:00', weekdays: ['MON', 'WED', 'WED'] })), 2);
 });
 
+test('a WHEN rule: defaults written out, no slot, its runs a week, a change merged onto it, and no change of kind', () => {
+  const rule = parseRule({ kind: 'WHEN', condition: { text: 'Raw used above 90%', command: 'ceph df', compare: { op: 'GT', value: 90 } } });
+  assert.deepEqual(rule, {
+    kind: 'WHEN', conditionId: null, runsPerWeek: 3,
+    condition: {
+      text: 'Raw used above 90%', command: 'ceph df', compare: { op: 'GT', value: 90 }, holdSeconds: 0, rearm: null,
+      intervalSeconds: 300, unit: null, timeoutSeconds: 20, repeatSeconds: null,
+    },
+  });
+  assert.equal(nextDueAt(rule, 'UTC', new Date()), null, 'the time worker has nothing to fire');
+  assert.equal(runsPerWeek(rule), 3);
+  assert.throws(() => parseRule({ ...rule, condition: { ...(rule as { condition: object }).condition, intervalSeconds: 59 } }), /intervalSeconds/);
+  assert.throws(() => parseRule({ kind: 'WHEN', condition: { text: 'x', command: 'y', compare: { op: 'GT' } } }), /needs a number/);
+  const merged = parseRule(mergeRule({ ...(rule as Extract<ScheduleRule, { kind: 'WHEN' }>), conditionId: 'c1' }, { kind: 'WHEN', condition: { command: 'ceph df -f json' } }));
+  assert.equal(merged.kind === 'WHEN' && merged.condition.command, 'ceph df -f json');
+  assert.equal(merged.kind === 'WHEN' && merged.condition.text, 'Raw used above 90%', 'what the change does not name stays');
+  assert.equal(merged.kind === 'WHEN' && merged.conditionId, 'c1');
+  assert.throws(() => mergeRule(rule, { kind: 'DAILY', time: '10:00' }), /cannot take a time/);
+  assert.notEqual(ruleCommandHash(rule), ruleCommandHash(merged));
+  assert.equal(ruleCommandHash(parseRule({ kind: 'DAILY', time: '10:00' })), null);
+});
+
 const env = (over: Partial<Envelope> = {}): Envelope => ({
   workspaceId: 'w1', accessLevel: 'CHECK_ONLY', runsPerWeek: 7, runLimitMinutes: 30, ...over,
+});
+
+test('envelope: a WHEN rule\'s command other than the approved one widens it; the same one is inside', () => {
+  assert.deepEqual(widenedParts(env({ commandHash: 'a' }), env({ commandHash: 'b' })), ['PROBE_COMMAND']);
+  assert.deepEqual(widenedParts(env({ commandHash: 'a' }), env({ commandHash: 'a' })), []);
+  assert.deepEqual(widenedParts(env(), env({ commandHash: null })), [], 'a timed schedule has no command');
+  const judged = judgeEnvelopeChange(env({ commandHash: 'a' }), env({ commandHash: 'a' }), env({ commandHash: 'b' }), 'SESSION');
+  assert.equal(judged.inside, false);
+  assert.equal(judged.next.commandHash, 'b', 'Allow approves the new command');
 });
 
 test('envelope: each of the four parts widens, and narrower values are inside', () => {
@@ -98,4 +129,13 @@ test('envelope: a person narrows it, a run does not, and only the parts the chan
   assert.equal(mixed.inside, false);
   assert.deepEqual(mixed.widens, ['RUN_LIMIT']);
   assert.deepEqual(mixed.next, env({ runLimitMinutes: 60, runsPerWeek: 2 }));
+});
+
+
+test('envelope order: CHECK_ONLY < OPEN_PR < LAND; widening needs Allow, narrowing is immediate', () => {
+  for (const accessLevel of ['CHECK_ONLY', 'OPEN_PR'] as const) {
+    assert.deepEqual(widenedParts(env({ accessLevel }), env({ accessLevel: 'LAND' })), ['ACCESS_LEVEL']);
+    assert.equal(judgeEnvelopeChange(env({ accessLevel }), env({ accessLevel }), env({ accessLevel: 'LAND' }), 'SESSION').inside, false);
+    assert.equal(judgeEnvelopeChange(env({ accessLevel: 'LAND' }), env({ accessLevel: 'LAND' }), env({ accessLevel }), 'SESSION').inside, true);
+  }
 });

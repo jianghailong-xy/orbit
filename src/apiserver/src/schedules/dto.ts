@@ -12,7 +12,7 @@ export class ScheduleCreateDto {
   @IsString() @MaxLength(20000) prompt!: string;
   @IsObject() rule!: Record<string, unknown>;
   @IsOptional() @IsString() @MaxLength(100) timezone?: string;
-  @IsIn(['CHECK_ONLY', 'OPEN_PR']) accessLevel!: 'CHECK_ONLY' | 'OPEN_PR';
+  @IsIn(['CHECK_ONLY', 'OPEN_PR', 'LAND']) accessLevel!: 'CHECK_ONLY' | 'OPEN_PR' | 'LAND';
   @IsOptional() @IsInt() @Min(1) runLimitMinutes?: number;
   @IsOptional() @IsDateString() endAt?: string;
   @IsOptional() @IsString() @MaxLength(500) readBack?: string;
@@ -28,7 +28,7 @@ export class ScheduleUpdateDto {
   @IsOptional() @IsString() @MaxLength(100) timezone?: string;
   /** null clears it. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsDateString() endAt?: string | null;
-  @IsOptional() @IsIn(['CHECK_ONLY', 'OPEN_PR']) accessLevel?: 'CHECK_ONLY' | 'OPEN_PR';
+  @IsOptional() @IsIn(['CHECK_ONLY', 'OPEN_PR', 'LAND']) accessLevel?: 'CHECK_ONLY' | 'OPEN_PR' | 'LAND';
   @IsOptional() @IsInt() @Min(1) runLimitMinutes?: number;
   /** The schedule read back as it is after this change; a rule change without one leaves the read to derive it. */
   @IsOptional() @IsString() @MaxLength(500) readBack?: string;

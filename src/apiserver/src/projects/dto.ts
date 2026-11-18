@@ -529,6 +529,8 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -776,6 +778,8 @@ export class ConfirmPromotionDto {
 export class AnswerOpenItemDto {
   @IsOptional() @IsInt() @Min(0) @Max(3) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**

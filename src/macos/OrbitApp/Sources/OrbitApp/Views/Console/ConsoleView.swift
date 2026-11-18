@@ -248,7 +248,7 @@ struct ConsoleView: View {
     /// tray's waiting rows say which (`PendingTrayView.held`).
     private func trayHeld(_ console: ConsoleModel) -> Session? {
         guard let session = appModel.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -952,6 +952,8 @@ struct TranscriptView: View {
     /// The bar was tapped open; the reader's next drag folds the band again.
     var bandOpened: Binding<Bool> = .constant(false)
     @State private var reviewSessionID: String?
+    /// The settled-items folds the reader opened, by their first card's row id (D1 = A).
+    @State private var settledFoldsOpen: Set<String> = []
     /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
     /// starts a new turn, because the reader is in it now and a card arriving under each answer
     /// would push the answer up. It is cleared when this view opens another session: the Mac and
@@ -1090,7 +1092,7 @@ struct TranscriptView: View {
     /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
         guard let session = app.session(id: console.sessionID),
-              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) || QueuedDiskLow.holds(session) else { return nil }
         return session
     }
 
@@ -1127,9 +1129,12 @@ struct TranscriptView: View {
     /// The transcript itself: one flat `ForEach` over the pre-assembled rows, with the row-level
     /// preferences that must sit on the outermost row view.
     private var rowsList: some View {
-        List {
+        // One build of the rows, and the settled-items folds among them (D1 = A).
+        let folded = foldedRows
+        let rows = folded.rows
+        return List {
             ForEach(rows) { row in
-                transcriptRow(row)
+                transcriptRow(row, folds: folded.folds)
                     // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
                     // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
                     // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
@@ -1494,7 +1499,24 @@ struct TranscriptView: View {
     /// The List's rows, assembled from ONE read of each source so the snapshot the List diffs is
     /// always internally consistent (`console.state` publishes on a 200ms coalescing timer while
     /// `localStatusCards` / `showWorkingIndicator` publish immediately).
-    private var rows: [TranscriptRow] {
+    private var rows: [TranscriptRow] { foldedRows.rows }
+
+    /// The rows drawn, and the settled-items folds among them by their first card's row id.
+    /// Settled exception cards directly above an open one fold into one row on a phone (board
+    /// owner-card-ios-text, D1 = A): `settledFoldRow` draws it in the first one's place.
+    private var foldedRows: (rows: [TranscriptRow], folds: [String: SettledExceptionFold.Run]) {
+        let built = builtRows
+        #if os(iOS)
+        let runs = SettledExceptionFold.runs(built) { console.settledFoldStanding($0) }
+        guard !runs.isEmpty else { return (built, [:]) }
+        return (SettledExceptionFold.fold(built, runs: runs, expanded: settledFoldsOpen),
+                Dictionary(uniqueKeysWithValues: runs.map { ($0.headID, $0) }))
+        #else
+        return (built, [:])
+        #endif
+    }
+
+    private var builtRows: [TranscriptRow] {
         TranscriptRows.build(state: console.state,
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
@@ -1583,7 +1605,8 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRow(_ row: TranscriptRow) -> some View {
+    private func transcriptRow(_ row: TranscriptRow,
+                               folds: [String: SettledExceptionFold.Run] = [:]) -> some View {
         switch row {
         case .createdWorkspace(let line):
             // No `AnchorRow`: what the conversation made is no "Your question".
@@ -1614,7 +1637,14 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+            // Live while the turn is at work (docs/mocks/session-compact-steps: a call in flight sits
+            // under the line until it answers; once the turn is over it joins the line). Read off the
+            // session row, as Stop and "Working for…" are: the stream status never returns to
+            // `.running` — no event says a turn started, and an earlier turn's `turn_end` leaves it
+            // `.awaitingInput` — so it folded a second turn's running call into "Ran 2 shell commands".
+            StepsRowView(items: items,
+                         live: app.session(id: console.sessionID)?.isGenerating ?? (console.state.status == .running),
+                         fullPayload: console.fullPayload)
         case .agents(let cards):
             // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
             AgentGroupView(cards: cards, fullPayload: console.fullPayload)
@@ -1631,7 +1661,15 @@ struct TranscriptView: View {
             // No `AnchorRow`: a question about the project's ruler isn't a "Your question" the
             // sticky header names. Unlike an approval it stops no turn, so later messages render
             // BELOW it — which is why the bar at the top of this console points down at it.
+            #if os(iOS)
+            if let run = folds[card.id] {
+                settledFoldRow(run, card: card)
+            } else {
+                DeliveredDecisionCardView(console: console, card: card)
+            }
+            #else
             DeliveredDecisionCardView(console: console, card: card)
+            #endif
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval)
@@ -1675,6 +1713,42 @@ struct TranscriptView: View {
             }
         }
     }
+
+    #if os(iOS)
+    /// "✓ 2 sent back to the coordinator · Show": the settled exception cards above an open one, in
+    /// one row that opens in place (board owner-card-ios-text, D1 = A). Opened, the first card is
+    /// drawn under it here and the others in their own rows.
+    @ViewBuilder private func settledFoldRow(_ run: SettledExceptionFold.Run,
+                                             card: DeliveredDecisionCard) -> some View {
+        let open = settledFoldsOpen.contains(run.headID)
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                PlatformHaptics.tap()
+                withAnimation(.smooth(duration: 0.25)) {
+                    if open { settledFoldsOpen.remove(run.headID) } else { settledFoldsOpen.insert(run.headID) }
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("✓ \(run.line)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(open ? SettledExceptionFold.hide : SettledExceptionFold.show)
+                        .font(.subheadline).foregroundStyle(.tint)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.22)) }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settled-fold")
+            if open {
+                DeliveredDecisionCardView(console: console, card: card)
+            }
+        }
+    }
+    #endif
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.

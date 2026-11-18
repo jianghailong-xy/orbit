@@ -41,6 +41,7 @@ final class QueuedCapacityCopyParityTests: XCTestCase {
         try assertSays(Self.webCopy, "export const RUN_FULL_TAG = '\(QueuedCapacity.RUN_FULL_TAG)';")
         try assertSays(Self.webCopy, "export const BATCH_FULL_TITLE = '\(QueuedCapacity.BATCH_FULL_TITLE)';")
         try assertSays(Self.webCopy, "export const BATCH_FULL_TAG = '\(QueuedCapacity.BATCH_FULL_TAG)';")
+        try assertSays(Self.webCopy, "export const CAPACITY_HELD_LINE = '\(QueuedCapacity.CAPACITY_HELD_LINE)';")
         for reason in QueuedCapacity.reasons {
             try assertSays(Self.webCopy, "reason === '\(reason)'")
         }

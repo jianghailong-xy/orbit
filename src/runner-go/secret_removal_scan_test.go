@@ -102,60 +102,44 @@ func TestMergeDuringARemovalScanIsDecidedAndAValueStaysRefusedAfterIt(t *testing
 	}
 }
 
-// A turn ending while a removal scan runs waits a bounded time for it: a scan that ends in time leaves the turn's
-// patches in. One that does not is withheld with the pending reason — in the log and in the session's notice, neither
-// saying the file holds a value — and the next report, once the scan has ended, carries the patch again.
 func TestTurnPatchesDuringARemovalScan(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	secretWarned.Range(func(key, _ interface{}) bool { secretWarned.Delete(key); return true })
-	oldWait := secretPatchScanWait
-	t.Cleanup(func() { secretPatchScanWait = oldWait })
-	clean := []FilePatch{{Path: "clean.txt", Patch: "+clean\n"}}
-
-	t.Run("the scan ends within the wait", func(t *testing.T) {
-		store, release := blockedRemovalScan(t, testSecretValue, func(*integrationOutputRedactor) error { return nil })
-		secretPatchScanWait = 20 * time.Second
-		go func() { time.Sleep(200 * time.Millisecond); release() }()
-		if got := withoutSecretPatches(clean, "sScanEnds"); len(got) != 1 {
-			t.Fatalf("a turn ending during a scan that then ended lost its patch: %+v", got)
+	if err := recordTaintObjects(initRepo(t), []secretTaintObject{{ID: "abcdef1234567890", Path: "recorded.env"}}); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := blockedRemovalScan(t, testSecretValue, func(*integrationOutputRedactor) error { return nil })
+	runnerSecretStore.Store(store)
+	t.Cleanup(func() { runnerSecretStore.Store(nil) })
+	if r := store.scrubber(); r != nil && r.holds([]byte(testSecretValue)) {
+		t.Fatal("store still holds removed value")
+	}
+	var notices []map[string]interface{}
+	defer registerSecretWarnings("sScan", func(_ string, p map[string]interface{}) { notices = append(notices, p) })()
+	start := time.Now()
+	if got := withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean"}}, "sScan"); len(got) != 1 || len(notices) != 0 {
+		t.Fatalf("clean patch: %+v, notices: %+v", got, notices)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("clean patch waited for scan")
+	}
+	for _, patch := range []FilePatch{
+		{Path: "leak.env", Patch: "+" + testSecretValue},
+		{Path: "preview.env", Preview: testSecretValue},
+		{Path: "recorded.env", Patch: "index abcdef1..0000000"},
+	} {
+		if got := withoutSecretPatches([]FilePatch{patch}, "sScan"); len(got) != 0 {
+			t.Fatalf("sent: %+v", got)
 		}
-		store.waitScans()
-	})
-
-	t.Run("the scan outlasts the wait", func(t *testing.T) {
-		store, release := blockedRemovalScan(t, testSecretValue, func(*integrationOutputRedactor) error { return nil })
-		secretPatchScanWait = 50 * time.Millisecond
-		var mu sync.Mutex
-		var notices []map[string]interface{}
-		defer registerSecretWarnings("sScanOutlasts", func(_ string, payload map[string]interface{}) {
-			mu.Lock()
-			notices = append(notices, payload)
-			mu.Unlock()
-		})()
-		var got []FilePatch
-		logs := captureLogs(t, func() { got = withoutSecretPatches(clean, "sScanOutlasts") })
-		if len(got) != 0 {
-			t.Fatalf("a patch was sent while the removal scan ran: %+v", got)
+	}
+	if len(notices) != 3 {
+		t.Fatalf("notices: %+v", notices)
+	}
+	for _, n := range notices {
+		if !strings.Contains(n["notice"].(string), "holds the value of a secret") {
+			t.Fatalf("notice: %+v", n)
 		}
-		if strings.Contains(logs, "holds a secret's value") || !strings.Contains(logs, "had its diff withheld: the secret record is pending (a removal scan is running)") {
-			t.Fatalf("log for a withhold during the scan: %q", logs)
-		}
-		mu.Lock()
-		if len(notices) != 1 {
-			t.Fatalf("notices = %#v", notices)
-		}
-		notice, _ := notices[0]["notice"].(string)
-		mu.Unlock()
-		if strings.Contains(notice, "holds the value") || !strings.Contains(notice, "still checking") {
-			t.Fatalf("notice for a withhold during the scan: %q", notice)
-		}
-
-		release()
-		store.waitScans()
-		if got := withoutSecretPatches(clean, "sScanOutlasts"); len(got) != 1 {
-			t.Fatalf("the next report after the scan lost the patch: %+v", got)
-		}
-	})
+	}
 }
 
 // The log line and the notice name the reason a diff was withheld: "holds a secret's value" only when it does, the
@@ -194,10 +178,10 @@ func TestSecretFileWarningSaysWhyADiffWasWithheld(t *testing.T) {
 	logs = captureLogs(t, func() {
 		withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean\n"}}, "sUnreadable")
 	})
-	if strings.Contains(logs, "holds a secret's value") || !strings.Contains(logs, "had its diff withheld: the runner's secret record is unreadable") {
+	if strings.Contains(logs, "holds a secret's value") || !strings.Contains(logs, "record_unreadable") {
 		t.Fatalf("log for an unreadable record: %q", logs)
 	}
-	if n := notices["sUnreadable"]; strings.Contains(n, "holds the value") || !strings.Contains(n, "could not read its record") {
+	if n := notices["sUnreadable"]; strings.Contains(n, "holds the value") || !strings.Contains(n, "could not read this runner's record") {
 		t.Fatalf("notice for an unreadable record: %q", n)
 	}
 }

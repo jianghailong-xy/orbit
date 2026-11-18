@@ -51,7 +51,7 @@ const scheduleTimerChoice = "Pick the timer by what the person wants. \"Keep che
 	"task or session gets there\": task_await, session_await or watch_create, which wait for a state, not a time. " +
 	"\"Start this task on Friday\": the task's runAt, because the work is a deliverable with evidence and a landing. " +
 	"\"Do this every morning\", \"check at 18:00 and tell me\": a scheduled task (schedule_create), which runs in a new " +
-	"session at each slot and outlives this conversation."
+	"session at each slot and outlives this conversation. " + conditionTimerCase
 
 // withoutScheduleRunReport is tools without schedule_run_report: what a session that serves no run lists.
 func withoutScheduleRunReport(tools []map[string]interface{}) []map[string]interface{} {
@@ -71,24 +71,42 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 		return map[string]interface{}{"type": "string", "description": description}
 	}
 	id := str("The schedule's id, as schedule_list or schedule_get returns it.")
-	rule := map[string]interface{}{
-		"type": "object",
-		"description": "When it runs, in the schedule's time zone: {kind: \"DAILY\", time: \"10:00\"}, " +
-			"{kind: \"WEEKLY\", time: \"09:00\", weekdays: [\"MON\", \"THU\"]} (MON to SUN), or {kind: \"ONCE\", at: " +
-			"\"2026-11-16T18:00\"} for one run.",
-		"properties": map[string]interface{}{
-			"kind":     map[string]interface{}{"type": "string", "enum": []string{"ONCE", "DAILY", "WEEKLY"}},
+	// The rule's schema, for a create (a WHEN condition names its text, command and comparison) or a change (a WHEN
+	// condition names only what it changes; schedule-time.ts mergeRule keeps the rest).
+	ruleSchema := func(create bool) map[string]interface{} {
+		props := map[string]interface{}{
+			"kind":     map[string]interface{}{"type": "string", "enum": []string{"ONCE", "DAILY", "WEEKLY", "WHEN"}},
 			"time":     str("DAILY and WEEKLY: local HH:mm."),
 			"at":       str("ONCE: local YYYY-MM-DDTHH:mm."),
 			"weekdays": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string", "enum": []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}}},
-		},
-		"required": []string{"kind"},
+		}
+		for key, value := range whenRuleProps(obj) {
+			props[key] = value
+		}
+		if !create {
+			condition := props["condition"].(map[string]interface{})
+			delete(condition, "required")
+			condition["description"] = "WHEN only: the fields of the condition to change; the rest are kept. A changed " +
+				"command waits for the owner's Allow, since they approved the old one."
+		}
+		return map[string]interface{}{
+			"type": "object",
+			"description": "When it runs, in the schedule's time zone: {kind: \"DAILY\", time: \"10:00\"}, " +
+				"{kind: \"WEEKLY\", time: \"09:00\", weekdays: [\"MON\", \"THU\"]} (MON to SUN), {kind: \"ONCE\", at: " +
+				"\"2026-11-16T18:00\"} for one run, or {kind: \"WHEN\", condition: {text, command, compare, ...}} for a run " +
+				"each time something outside Orbit becomes true. A WHEN rule has no time; a schedule cannot change between " +
+				"WHEN and a time.",
+			"properties": props,
+			"required":   []string{"kind"},
+		}
 	}
 	access := map[string]interface{}{
-		"type": "string", "enum": []string{"CHECK_ONLY", "OPEN_PR"},
+		"type": "string", "enum": []string{"CHECK_ONLY", "OPEN_PR", "LAND"},
 		"description": "What each run may do. CHECK_ONLY reads and reports and edits nothing: a check, a report, a " +
 			"summary. OPEN_PR edits in its own worktree and opens a PR, and can't merge or deploy: only when the person " +
-			"asked for changes.",
+			"asked for changes. LAND edits in its own worktree and commits on its branch; after the turn and report Orbit " +
+			"lands it on main through the normal merge check. LAND never opens a PR and cannot release or deploy. " +
+			"Creating or widening to LAND needs the owner to allow it.",
 	}
 	runLimit := map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 120, "description": "Minutes one run may work, 30 when omitted, at most 120."}
 	timezone := str("IANA time zone the person named (\"Beijing time\" is Asia/Shanghai). Leave it out when they named none.")
@@ -107,7 +125,9 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"press Create, so tell them the card is waiting, never that it is scheduled. First, when you can, do the " +
 				"check once yourself and pass what you found as baseline: the card shows it as Today, and the first run " +
 				"won't report it as news. Ask the person only for what is theirs to decide (how often, what it may do), and " +
-				"fill in the rest yourself.",
+				"fill in the rest yourself. A WHEN rule needs that baseline and is refused without one: run the condition's " +
+				"command once and pass what it read, such as {key: \"raw-used@87%\", summary: \"Raw used is 87% now\"}. " +
+				conditionProbeRules,
 			"inputSchema": obj(map[string]interface{}{
 				"intent":   str("The person's own words, verbatim. Kept as what was asked."),
 				"title":    str("A short name for the list, such as \"Codex stable check\"."),
@@ -115,14 +135,14 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"findings": str("What a new finding of this task is, as a plural noun, such as \"versions\" or \"issues\": the card ends \"You'll hear about new versions and failures only.\""),
 				"prompt": str("What every run does, written for an agent that starts with no context: what to check, how to tell new " +
 					"from already seen, the key to report a finding under (such as codex@0.48.1), and when to report CHANGED."),
-				"rule":            rule,
+				"rule":            ruleSchema(true),
 				"timezone":        timezone,
 				"accessLevel":     access,
 				"runLimitMinutes": runLimit,
 				"endAt":           endAt,
 				"baseline": map[string]interface{}{
 					"type":        "object",
-					"description": "What your own check found today: recorded as already told, so the first run doesn't announce it.",
+					"description": "What your own check found today: recorded as already told, so the first run doesn't announce it. Required with a WHEN rule: what the condition's command read when you ran it.",
 					"properties": map[string]interface{}{
 						"key":     str("The finding's key, as a run would report it."),
 						"summary": str("One line: what you found."),
@@ -137,23 +157,23 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 			"description": "Change a schedule from what the person says (\"make it 9:00\", \"only on weekdays\", \"stop opening " +
 				"PRs\"). A change inside what the person allowed (the envelope: workspace, access level, runs per week, run " +
 				"limit) applies at once: the answer is outcome APPLIED with the record of the change, which the person can " +
-				"undo. A change that grows the envelope (another workspace, OPEN_PR, more runs a week, a longer run limit) " +
+				"undo. A change that grows the envelope (another workspace, a wider access level (OPEN_PR or LAND), more runs a week, a longer run limit) " +
 				"applies nothing. It puts a card showing Now and Asked in front of the person and returns outcome PENDING, " +
 				"and the schedule runs as before until they allow it. Leave intent out unless the person restates the goal " +
 				"(what to watch, what counts as news): a change of time, frequency, limits or prompt leaves intent alone, " +
 				"and a correction such as \"weekly is too rare, make it daily again\" is never the new intent. An intent " +
 				"sent with only a change of when or how much it runs is not written. Whenever you change when or how often the schedule runs (rule or timezone), " +
-				"pass a fresh readBack: one sentence saying when it runs and what it checks after the change. " +
+				"pass a fresh readBack: one sentence saying when it runs and what it checks after the change. Pass one too when the prompt or access level changes. " +
 				"A scheduled run may change only the schedule it serves: rewrite its prompt, run less often, or go back up to " +
 				"what was allowed. A run's request to widen goes to the person's Waiting on you, and the run goes on with the " +
 				"access it has.",
 			"inputSchema": obj(map[string]interface{}{
 				"scheduleId":      id,
 				"intent":          str("Only when the person restates the goal: their new goal, verbatim. Never a correction of the time, frequency or limits."),
-				"readBack":        str("The schedule read back as it is after this change, one first-person sentence of at most 500 characters, like schedule_create's: \"Every Monday at 09:00 Beijing time I check ...\". Pass it whenever the rule or timezone changes; say both when it runs and what it checks."),
+				"readBack":        str("The schedule read back as it is after this change, one first-person sentence of at most 500 characters, like schedule_create's: \"Every Monday at 09:00 Beijing time I check ...\". Pass it whenever the prompt, access, time or frequency changes; say both when it runs and what it checks. A readBack-only change applies at once and is undoable."),
 				"title":           str("A new title."),
 				"prompt":          str("New instructions for every run."),
-				"rule":            rule,
+				"rule":            ruleSchema(false),
 				"timezone":        str("A new IANA time zone."),
 				"accessLevel":     access,
 				"runLimitMinutes": runLimit,
@@ -238,6 +258,11 @@ func (s *mcpServer) callScheduleTool(name string, args map[string]interface{}) (
 	}
 	if name == scheduleRunReportTool && !s.scheduleRun {
 		return toolResult("schedule_run_report reports a scheduled run, and this session serves none: nothing was reported", true), true
+	}
+	if name == "schedule_create" {
+		if err := requireWhenBaseline(args); err != nil {
+			return toolResult(name+" refused: "+err.Error(), true), true
+		}
 	}
 	raw, err := runScheduleTool(s.t, session, name, args)
 	if err != nil {

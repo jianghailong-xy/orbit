@@ -967,9 +967,9 @@ public final class APIClient: @unchecked Sendable {
     /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
     /// the owner's note goes to the coordinator conversation with the card's facts.
     public func declineDoneRequest(projectID: String, itemID: String,
-                                   note: String) async throws -> ProjectDoneRequestDeclined {
+                                   note: String, sendAsWritten: Bool = false) async throws -> ProjectDoneRequestDeclined {
         try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
-                       body: ProjectDoneDeclineBody(note: note))
+                       body: ProjectDoneDeclineBody(note: note, sendAsWritten: sendAsWritten))
     }
 
     // MARK: the done card's follow-ups (`ProjectDoneFollowUps.swift`)
@@ -1027,8 +1027,16 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/done", body: body)
     }
 
-    public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
-        try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    /// A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). The answer is a kind
+    /// `OwnerRequest` does not read, so it is taken as it comes and the list is read again.
+    @discardableResult
+    public func answerConditionItem(_ id: String, option: Int) async throws -> JSONValue {
+        try await post("owner-requests/\(id)/done", body: OwnerRequestDoneBody(option: option))
+    }
+
+    public func declineOwnerRequest(_ id: String, reason: String, sendAsWritten: Bool = false) async throws -> OwnerRequest {
+        try await post("owner-requests/\(id)/decline",
+                       body: OwnerRequestDeclineBody(reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
@@ -2393,6 +2401,11 @@ public final class APIClient: @unchecked Sendable {
     /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.
     public func schedule(_ id: String) async throws -> ScheduleDetailResponse {
         try await get("schedules/\(id)")
+    }
+
+    /// `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8).
+    public func condition(_ id: String) async throws -> ConditionView {
+        try await get("conditions/\(id)")
     }
 
     public func scheduleRuns(_ id: String, limit: Int = 20) async throws -> [ScheduleRunView] {

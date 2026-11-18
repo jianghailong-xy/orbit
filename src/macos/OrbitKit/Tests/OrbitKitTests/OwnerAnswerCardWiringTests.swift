@@ -93,7 +93,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("CoordinatorQuestions.held(drawn: decisionCards, read: openItems)"))
         XCTAssertTrue(model.contains(
             "guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }"))
-        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)"))
+        XCTAssertTrue(model.contains("return OwnerAnswerTold(card: card, text: turn.text)"))
     }
 
     /// The answered card leaves the blue for the neutral frame, with a grey chip and the answer ticked
@@ -107,8 +107,7 @@ final class OwnerAnswerCardWiringTests: XCTestCase {
         for line in [".approvalChrome(.gray, dashed: queued)", ".foregroundStyle(Color.gray)",
                      ".font(.orbitMeta).foregroundStyle(Color.green)",
                      "Text(CoordinatorQuestions.queuedForCoordinator)", "if let notice {",
-                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)",
-                     "if let attached = told.attached { AttachedNoteEntry(attached: attached) }"] {
+                     "if let told { toldFold(told) }", "Text(OwnerAnswerCard.told)", "Text(told.text)"] {
             XCTAssertTrue(code.contains(line), "the record view no longer draws \(line)")
         }
         XCTAssertFalse(code.joined(separator: "\n").contains(".approvalChrome(.blue"),

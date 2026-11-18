@@ -12,9 +12,10 @@ import { ControlPlaneProvider } from './useControlPlane';
  * recorded, or the owner's own decision in Review (contract `realtime`). It says only that — no
  * entry, title, status, op or count — so what it re-reads is the whole wiki group and nothing else.
  *
- * The group is named explicitly because `groupsFor`'s default branch is `['sessions']`: unmapped, a
- * wiki write would re-read a session list the event says nothing about, which is the one thing this
- * event must not do. Mounted over a fake EventSource, read off the cache's own `isInvalidated` flag.
+ * The group is named explicitly because every wiki read declares `meta.entities: ['wiki']`: the
+ * stream selects on that declaration, so one `wiki.changed` re-reads the whole group and no
+ * session list the event says nothing about. Mounted over a fake EventSource, read off the cache's
+ * own `isInvalidated` flag.
  */
 
 vi.mock('../api', () => ({ getToken: () => 'token' }));
@@ -52,11 +53,21 @@ const frame = (type: string, data: Record<string, unknown>, sessionId = '') => (
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
+/** Seeds a cached read with the declaration its real counterpart makes: the stream selects on
+ *  `meta.entities`, and a bare `setQueryData` creates an entry that declares nothing. */
+function seed(client: QueryClient, key: QueryKey): void {
+  const entities = key[0] === 'wiki' ? ['wiki']
+    : key[0] === 'sessions' ? ['session', 'workspace', 'tag', 'folder', 'project']
+    : ['task'];
+  client.getQueryCache().build(client, { queryKey: key, meta: { entities } });
+  client.setQueryData(key, []);
+}
+
 async function mount(keys: QueryKey[]): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Seeded rather than fetched: a read with no observer is only marked by an invalidation, never
   // refetched, so the flag is the provider's doing and nothing else's.
-  for (const key of keys) client.setQueryData(key, []);
+  for (const key of keys) seed(client, key);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -129,14 +140,14 @@ describe('the wiki reads ride the control-plane stream', () => {
     await untilInvalidated(client, ONE_WIKI_READ);
   });
 
-  it('a wiki.changed re-reads the wiki group, and NOT the sessions the default branch names', async () => {
+  it('a wiki.changed re-reads the wiki group, and no list it says nothing about', async () => {
     const client = await mount([WIKI, SESSIONS, TASKS]);
 
     await publish(frame('wiki.changed', { id: 'SP1' }));
     await untilInvalidated(client, WIKI);
 
-    // The whole point of naming the group: an unmapped `wiki.` event falls through to `['sessions']`,
-    // and a wiki write would re-read a session list it says nothing about.
+    // The whole point of the declaration: a `wiki.` event names the wiki entity, and nothing a
+    // wiki write moves is a session or a task.
     expect(invalidated(client, SESSIONS)).toBe(false);
     expect(invalidated(client, TASKS)).toBe(false);
   });

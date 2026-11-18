@@ -50,6 +50,7 @@ test('complete atomically persists live end intent and completedAt before side e
     },
   } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => {
       assert.equal(committed, true);
       effects.push('updated');
@@ -134,6 +135,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => summaryUpdates++,
     publishQueuedTurnsChanged: () => queuedTurnUpdates++,
     requestCancel: () => undefined,
@@ -188,6 +190,7 @@ test('completing a dormant terminal session publishes its actual end reason', as
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: (
       _id: string,
@@ -231,6 +234,7 @@ test('complete rejects Trash under the Session row lock without side effects', a
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => effects++,
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
@@ -287,6 +291,7 @@ test('when remove wins the lifecycle lock, a racing complete cannot overwrite Tr
     },
   } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: (
       _id: string,
@@ -341,6 +346,7 @@ test('complete emits no side effects when the atomic end transaction fails', asy
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => effects++,
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
@@ -374,6 +380,7 @@ test('repeated remove keeps the original Trash retention timestamp', async () =>
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionUpdated: () => undefined,
     publishSessionLifecycleChanged: () => undefined,
   } as never;

@@ -5449,6 +5449,28 @@ button.toast--pill:focus-visible {
   flex-basis: 100%;
   color: var(--error);
 }
+/* "Land without the check", asked once before it stops anything: the sentence takes the whole line,
+   and the two answers sit under it. */
+.session-project-landing .spl-confirm {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.session-project-landing .spl-confirm-text {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+/* What a skip of this landing's check has started: in the note's place, in the note's ink, because
+   it is a fact about the landing rather than something wanted of the reader. */
+.session-project-landing .spl-skip {
+  color: var(--text-2);
+}
+/* A refusal under the foot says something is wrong; "Nothing to do" above it would say the opposite. */
+.session-project-landing:has(.spl-error) .spl-note {
+  display: none;
+}
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
    page waiting on the reader. */
@@ -8265,6 +8287,15 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+.chat-translate-foot.is-card {
+  display: flex;
+  margin: 6px 0 0;
+}
+/* A send-back the composer finished and the server could not translate: above the composer. */
+.composer-translate-refused {
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
 .chat-translate-foot.is-reply {
   display: flex;
   margin: 2px 0 6px;
@@ -8916,223 +8947,6 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a message (useControlPlaneNote): one quiet line in the meta voice — the
-   size and grey of the time under a message, no colour, no frame — so what the person typed stays
-   what the eye lands on. ⊕ while shut, ⊖ once open. Under a person's bubble the line ends the meta
-   row and the opened rows go under that row; at the foot of a card that is Orbit's own, the line
-   opens in place (ControlPlaneNote). */
-.chat-injected {
-  margin-top: 6px;
-}
-.chat-injected-head {
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  text-align: left;
-  cursor: pointer;
-}
-.chat-injected-head:hover {
-  color: var(--text-2);
-}
-.chat-injected-mark {
-  font-size: 10px;
-  vertical-align: 1px;
-}
-/* Drop the focus ring on mouse click; keep it for keyboard navigation. */
-.chat-injected-head:focus {
-  outline: none;
-}
-.chat-injected-head:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.chat-injected-panel {
-  margin-top: 2px;
-}
-.chat-injected-panel > :first-child {
-  margin-top: 0;
-}
-/* Under a person's bubble the opened rows take the column's width, on a quiet panel of their own. */
-.chat-user-wrap > .chat-injected-panel {
-  align-self: stretch;
-  margin-top: 4px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--bg-sunken);
-}
-.chat-injected-body {
-  max-height: 320px;
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  overflow: auto;
-  border-radius: 8px;
-  /* Translucent, as the rows above it are: it may sit on a tinted card. */
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-/* The background-jobs block opened as rows (BackgroundJobsNote): the wake card's own row language
-   (.bgwake-job*), one step quieter, because this sits inside someone's bubble rather than standing
-   as a card of its own. */
-.bgjobs {
-  margin-top: 6px;
-}
-.bgjobs-group {
-  margin-bottom: 4px;
-  color: var(--text-2);
-  font-weight: 600;
-}
-.bgjobs-list {
-  margin: 0 0 8px;
-  padding: 0;
-  list-style: none;
-}
-.bgjobs-job {
-  padding: 6px 8px;
-  border-radius: 8px;
-  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
-  background: var(--fill-inset);
-}
-.bgjobs-job + .bgjobs-job {
-  margin-top: 4px;
-}
-.bgjobs-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.bgjobs-mark {
-  flex: none;
-}
-.bgjobs-mark.is-ok {
-  color: var(--success-solid);
-}
-.bgjobs-mark.is-failed {
-  color: var(--error-solid);
-}
-.bgjobs-mark.is-running {
-  color: var(--text-3);
-}
-/* The command is the row. Two lines of it, because a job's command can be a whole heredoc and the
-   fold below holds the rest. */
-.bgjobs-name {
-  display: -webkit-box;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-.bgjobs-outcome {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-/* The ids line up under the command, not under its icon. */
-.bgjobs-meta {
-  margin-top: 2px;
-  padding-left: 20px;
-  color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-.bgjobs-raw summary {
-  color: var(--text-3);
-  cursor: pointer;
-}
-.bgjobs-raw pre {
-  max-height: 320px;
-  margin: 4px 0 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* The `#`-referenced tasks opened as cards (ReferencedTaskNote): the background-jobs row language
-   (.bgjobs-*), since the two sit one above the other in the same fold whenever a note carries both.
-   The title is the link, so the task is one click from the message that referenced it. */
-.reftask {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.reftask-task {
-  padding: 6px 8px;
-  border-radius: 8px;
-  /* Translucent: the bubble this sits in is already tinted, and an opaque panel lands as a hole. */
-  background: var(--fill-inset);
-}
-.reftask-task + .reftask-task {
-  margin-top: 4px;
-}
-.reftask-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.reftask-head .status-pill {
-  flex: none;
-}
-/* What the status line said after the status: the kind of task it is, not its lifecycle. */
-.reftask-suffix {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-}
-/* The title is the row, and the row is the link. Two lines of it — a task title runs long and the
-   id is under it. Named twice so it wins over `.chat-user a`, which underlines links in a person's
-   own message: this one is a whole row rather than a link mid-sentence, and the `#`-pill in the
-   same bubble (.md-reference) drops the underline for the same reason. */
-.reftask .reftask-title {
-  display: -webkit-box;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--brand);
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-.reftask .reftask-title:hover {
-  text-decoration: underline;
-}
-.reftask-outcome {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--fill-inset);
-  color: var(--text-2);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-}
-.reftask-meta {
-  margin-top: 2px;
-  color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  overflow-wrap: anywhere;
-}
-
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
    sits mid-sentence and must not disturb the line box. */
@@ -23982,10 +23796,6 @@ div.landing-jobs-open {
   white-space: pre-wrap;
   word-break: break-word;
 }
-/* Whatever else the same note carried, folded in with the rest of what the line carried. */
-.bgwake-body > .chat-injected {
-  margin-top: 8px;
-}
 .bgwake-tail {
   margin: 6px 0 6px 22px;
   padding: 10px 12px;
@@ -24680,7 +24490,7 @@ a.smc-from:hover {
   font-size: 13px;
   cursor: pointer;
 }
-/* One grey foot row: time · its task · the request and where it stands · what Orbit attached. Items
+/* One grey foot row: time · its task · the request and where it stands. Items
    keep whole and the row wraps between them. */
 .smc-meta {
   margin-top: 3px;
@@ -24701,13 +24511,6 @@ a.smc-from:hover {
 }
 .smc-meta a:hover {
   color: var(--brand);
-}
-.smc-meta > .chat-injected {
-  display: inline;
-  margin: 0;
-}
-.smc-meta > .chat-injected > .chat-injected-panel {
-  white-space: normal;
 }
 /* A sender that runs narrower than this session: in the foot row's voice, under it. */
 .smc-narrower {
@@ -25747,6 +25550,23 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-who-status b {
   color: var(--text-1);
+}
+/* The coordinator's hand-over note, under its caption, in the coordinator row. */
+.project-open-item-handover {
+  margin: 6px 0 0;
+}
+.project-open-item-handover-caption {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.project-open-item-handover-note {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
 }
 .project-open-item-actions.project-open-item-who-presses {
   display: flex;
@@ -27387,34 +27207,6 @@ button.project-open-item-action:disabled {
   .wk-browse-doc .h .n { margin-left: auto; }
 }
 
-/* ── The wiki in a conversation: the context a session was handed ──────────────────────────────
-   Mock 05 (docs/mocks/wiki/05-session-touchpoints). One of its panels needs rules of its own: the
-   entries under the task start card's folded Wiki context line. The link card borrows the Wiki's
-   own marks and the search palette borrows `.ssearch-*`, so neither has a block here beyond the
-   group heading. */
-
-.wkctx { margin-top: 6px; }
-.wkctx-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: var(--fill-inset);
-}
-.wkctx-row { display: flex; align-items: center; gap: 7px; height: 23px; font-size: 12.5px; }
-/* One word wide, the kind column, so the titles line up whatever they are filed as. */
-.wkctx-kind { flex: none; width: 70px; color: var(--text-3); font-size: 12px; }
-.wkctx-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--brand);
-  text-decoration: none;
-}
-a.wkctx-title:hover { text-decoration: underline; }
-.wkctx-foot { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--text-3); }
-
 /* The ⌘K palette's Wiki group: one heading, then rows that are `.ssearch-row`s like any other, so
    the cursor, the title line and the meta line stay the palette's rather than a second palette's. */
 .wk-pal-group {
@@ -27434,10 +27226,6 @@ a.wkctx-title:hover { text-decoration: underline; }
    status glyph, and the anchor's tick where a hit says what it matched on. */
 .ssearch-row > .wk-kind { flex: none; }
 .ssearch-meta .ok { color: var(--success); }
-
-@media (max-width: 600px) {
-  .wkctx-kind { width: 58px; }
-}
 
 /* Background agent / workflow progress (TaskProgressBlock): the agents by phase, then the totals.
    Opens under a Workflow card in the conversation and under its row in the tray. */
@@ -28570,13 +28358,6 @@ button.agent-progress-agent:hover {
 .wk-chat-choice:hover { border-color: var(--brand); background: var(--brand-tint); }
 .wk-chat-choice .m { font-size: 12px; color: var(--text-3); }
 .wk-chat-body { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
-/* A person's meta row runs out to the left of the bubble's column on one line (.chat-user-meta), but the panel is 320 wide
-   and up and its body is a scroll box, which cuts off whatever runs past its left edge (C15). Here the attachment line
-   takes a line of its own under the bubble and wraps there, whole, as board 42 ① shows it; the copy and the time keep
-   their line under it, where the dot that led into the attachment line has nothing left to lead into. */
-.wk-chat-body .chat-user-meta { flex-wrap: wrap; height: auto; min-height: 18px; }
-.wk-chat-body .chat-user-meta > .chat-injected-head { order: -1; flex: 1 1 100%; white-space: normal; text-align: right; }
-.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head) { display: none; }
 .wk-chat-empty { margin: 34px 16px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
 /* The panel's composer is the session page's (board 43): its box 12px in from the panel's edges, as the short one it
    replaced was — 374 wide in the default panel, where its toolbar keeps one line as it is. Dragged narrower (to 320),

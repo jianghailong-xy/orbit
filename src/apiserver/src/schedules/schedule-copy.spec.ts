@@ -85,7 +85,7 @@ test('(a) rules: the cards\' short form, as the boards write it', () => {
 test('(b) access: the May line and the Asked side say "Open a PR" and "It can\'t merge or deploy."', () => {
   assert.equal(scheduleMayText('CHECK_ONLY'), 'Check only · reads and reports, edits nothing');
   assert.equal(scheduleMayText('OPEN_PR'), "Open a PR · edits in its own worktree and opens a PR. It can't merge or deploy.");
-  for (const level of ['CHECK_ONLY', 'OPEN_PR'] as const) assert.equal(scheduleMayText(level), sharedMayText(level));
+  for (const level of ['CHECK_ONLY', 'OPEN_PR', 'LAND'] as const) assert.equal(scheduleMayText(level), sharedMayText(level));
 });
 
 test('(c, d) a failure: "failed 3 runs in a row", "ended without a report", in the card and in the push', () => {

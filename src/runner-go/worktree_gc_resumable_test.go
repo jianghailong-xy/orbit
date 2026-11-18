@@ -3123,7 +3123,8 @@ func TestTheRunLoopCallsEverySideOfTheResumableSweep(t *testing.T) {
 	if restore < 0 || activate < 0 || restore > activate {
 		t.Error("a checkout must come back before the claim wakes the supervisor that stands on it")
 	}
-	if !strings.Contains(body, "execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)") {
+	// An Ask takes its own folder instead (help_ask.go), so the assignment sits in an else; the call is what is pinned.
+	if !strings.Contains(body, "execDir = pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)") && !strings.Contains(body, "execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)") {
 		t.Error("a supervisor about to be registered must say whether its session is at rest")
 	}
 	if strings.Contains(body, "setupWorktree(job,") {

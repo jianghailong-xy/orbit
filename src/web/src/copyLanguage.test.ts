@@ -45,10 +45,7 @@ const OWNER_WORDS = 'recognizes what the owner writes, in Chinese as well as Eng
 /** The files that may hold Chinese, with how many literals and why. */
 const ALLOWED: Record<string, [count: number, why: string]> = {
   'src/web/src/lib/backgroundWake.ts': [1, OLD_NOTES],
-  'src/web/src/lib/referencedTask.ts': [4, OLD_NOTES],
   'src/macos/OrbitKit/Sources/OrbitKit/App/BackgroundWake.swift': [9, OLD_NOTES],
-  'src/macos/OrbitKit/Sources/OrbitKit/Transcript/BackgroundJobs.swift': [7, OLD_NOTES],
-  'src/macos/OrbitKit/Sources/OrbitKit/Transcript/ReferencedTask.swift': [7, OLD_NOTES],
   'src/android/core/src/main/kotlin/io/orbitd/android/core/cards/WakeCards.kt': [9, OLD_NOTES],
   'src/apiserver/src/tasks/task-criterion-shape-advice.ts': [10, OWNER_WORDS],
   'src/web/src/lib/wikiArticles.ts': [1, 'sorts Chinese titles by their pinyin initials'],

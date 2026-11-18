@@ -56,14 +56,22 @@ struct QuestionReply: Equatable, Sendable {
         /// (`OwnerRequestCard`), talked about rather than answered, goes the same way to this session.
         case ownerItem(context: String)
 
-        /// Whether the typed sentence IS the message: the two that reach no door carry nothing but
-        /// text (an attachment cannot say what should change), so an empty composer leaves the bar
-        /// armed rather than sending the context back with no question attached.
+        /// Whether the typed sentence IS the message: a plan change carries nothing but text (an
+        /// attachment cannot say what should change), so an empty composer leaves the bar armed
+        /// rather than sending the context back with no question attached.
         var needsText: Bool {
             switch self {
-            case .planChange, .ownerItem: return true
-            case .approval, .ownerConfirmation, .evidenceDecision: return false
+            case .planChange: return true
+            case .ownerItem, .approval, .ownerConfirmation, .evidenceDecision: return false
             }
+        }
+
+        /// Whether staged attachments may go with no typed text: an owner item or request talked
+        /// about reaches no door that waits on a note, and a request may ask for a screenshot
+        /// (web: `if (!c && readyImages.length === 0) return`).
+        var sendsAttachmentsAlone: Bool {
+            if case .ownerItem = self { return true }
+            return false
         }
     }
 
@@ -2197,11 +2205,13 @@ final class ConsoleModel {
     /// readyImages.length > 0`): a screenshot on its own is a perfectly good message, and the
     /// runner builds an image-only user turn for it (no text block). That holds for a draft too:
     /// POST /sessions takes attachments alone as the opening message. A question reply keeps the
-    /// text-is-required rule, since its deny+message channel carries text only. `send` also
+    /// text-is-required rule, since its deny+message channel carries text only; an owner item or
+    /// request talked about does not (`Target.sendsAttachmentsAlone`). `send` also
     /// excludes a bare `!`, which is a shell no-op rather than a message. A new wiki chat opens with
     /// the owner's words, so its files never go alone (contract `chat.create`).
     private var canSendAttachmentsAlone: Bool {
-        replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil
+        (replyContext == nil || replyContext?.target.sendsAttachmentsAlone == true)
+            && !pendingAttachments.isEmpty && wikiChat?.create == nil
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -3077,7 +3087,8 @@ final class ConsoleModel {
             // The chips staged with the sentence go with it, as on the web: they were picked for
             // this message, and left behind they would sit in the composer looking unsent.
             case .ownerItem(let context):
-                await send(authoritative: authoritative, overrideText: "\(context)\n\n\(text)",
+                await send(authoritative: authoritative,
+                           overrideText: text.isEmpty ? context : "\(context)\n\n\(text)",
                            takesStagedAttachments: true)
             case .planChange(let context):
                 // Says outright that it carries no attachments, rather than leaving that to how
@@ -4016,7 +4027,7 @@ final class ConsoleModel {
             // bytes), matching interrupt. Except a turn nobody typed — a wake, a delivery — which
             // would land in the composer as though the user had written it
             // (`ComposerLogic.restorableText`).
-            if let words = ComposerLogic.restorableText(of: bubble) {
+            if let words = ComposerLogic.withdrawnText(of: bubble) {
                 let body = bubble.shell ? "!" + words : words
                 composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? body : composerText + "\n\n" + body
@@ -4085,7 +4096,7 @@ final class ConsoleModel {
             try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
             reducer.removeWithdrawnSteer(turnId: turnId)
             publishStateNow()
-            if let body = ComposerLogic.restorableText(of: bubble) {
+            if let body = ComposerLogic.withdrawnText(of: bubble) {
                 composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? body : composerText + "\n\n" + body
             }
@@ -4555,6 +4566,11 @@ final class ConsoleModel {
     /// whoever answered it, and the review sheet has to tell them apart: its own press leaves it a
     /// moment later, and an answer from another end does not.
     private(set) var questionsAnsweredHere: Set<String> = []
+    /// The exception cards a press HERE ended, by item id, with the receipt each one drew ("Sent
+    /// back to the coordinator"): what the iPhone's settled-items fold counts and names (board
+    /// owner-card-ios-text, D1 = A). Written by the door's own call, before the read that drops the
+    /// item, because by then the card that pressed may no longer be drawn.
+    private(set) var ownerItemReceipts: [String: String] = [:]
     /// The version of the standard set a press HERE confirmed — the one version the confirmation
     /// card's entry in `closedCards` is about (`reopenConfirmationForANewVersion`).
     private var confirmedHereDigest: String?
@@ -5040,17 +5056,26 @@ final class ConsoleModel {
     /// "Not yet…": the coordinator's request is ended with the owner's note, which reaches this
     /// conversation's agent with the card's facts; the card gives way to why the project is not done.
     /// Says whether the note went.
-    func declineDoneRequest(note: String) async -> Bool {
+    func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {
         guard let projectID, let row = doneRequestRow else { return false }
         do {
-            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)
+            _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
+                                                 sendAsWritten: sendAsWritten)
+            doneDeclineRefusedUntranslated = false
         } catch {
-            statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
+            if !doneDeclineRefusedUntranslated {
+                statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
+            }
             return false
         }
         await refreshRulerQuestions(force: true)
         return true
     }
+
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
+    var doneDeclineRefusedUntranslated = false
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.
@@ -5564,7 +5589,7 @@ final class ConsoleModel {
     /// turn here did.
     func questionTold(_ itemID: String) -> OwnerAnswerTold? {
         guard let turn = OwnerAnswer.handover(of: itemID, in: state), let card = turn.ownerAnswer else { return nil }
-        return OwnerAnswerTold(card: card, text: turn.text, attached: turn.attached)
+        return OwnerAnswerTold(card: card, text: turn.text)
     }
 
     /// Where one delivered proposal stands right now — the whole of what decides whether its
@@ -5670,10 +5695,15 @@ final class ConsoleModel {
     /// the outcomes worth explaining, and the re-read below is what explains them. The receipt the
     /// answer leaves comes back with that read, so what is drawn is the record rather than a guess.
     func decideOwnerConfirmation(_ waiting: OwnerConfirmationWaiting, _ decision: OwnerDecision,
-                                 note: String? = nil, review: OwnerDecisionReview? = nil) async {
+                                 note: String? = nil, review: OwnerDecisionReview? = nil,
+                                 sendAsWritten: Bool = false) async {
         guard let taskID,
-              let request = OwnerConfirmations.request(waiting: waiting, decision: decision,
+              let drafted = OwnerConfirmations.request(waiting: waiting, decision: decision,
                                                        note: note, review: review) else { return }
+        let request = OwnerDecisionRequest(decision: drafted.decision, requestId: drafted.requestId,
+                                           note: drafted.note, reviewRecordId: drafted.reviewRecordId,
+                                           answers: drafted.answers, sendAsWritten: sendAsWritten)
+        ownerDecisionsRefusedUntranslated[waiting.requestId] = nil
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
             if decision == .confirm {
@@ -5688,13 +5718,30 @@ final class ConsoleModel {
                                ? OwnerConfirmations.confirmedHeading
                                : OwnerConfirmations.sentBackHeading)
         } catch {
-            // A refusal for staleness is said as such: the card stays and re-derives, and the
-            // sentence tells the reader which refusal the press met rather than "it failed".
-            let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
-            statusMessage = "\(title) — \(APIClient.failureReason(error))."
+            if OwnerCardTranslations.refused(error) {
+                // The owner's words could not be translated, so nothing was recorded: the card offers
+                // Retry and Send as written with the same answer.
+                ownerDecisionsRefusedUntranslated[waiting.requestId] =
+                    RefusedOwnerDecision(waiting: waiting, decision: decision, note: note, review: review)
+            } else {
+                // A refusal for staleness is said as such: the card stays and re-derives, and the
+                // sentence tells the reader which refusal the press met rather than "it failed".
+                let title = OwnerConfirmations.refusalTitle(code: APIClient.refusalCode(error))
+                statusMessage = "\(title) — \(APIClient.failureReason(error))."
+            }
         }
         await refreshOwnerConfirmation(force: true)
     }
+
+    /// An owner-confirmation answer refused with 422 TRANSLATION_FAILED, by the report it answers:
+    /// what to send again on Retry or Send as written.
+    struct RefusedOwnerDecision {
+        let waiting: OwnerConfirmationWaiting
+        let decision: OwnerDecision
+        let note: String?
+        let review: OwnerDecisionReview?
+    }
+    var ownerDecisionsRefusedUntranslated: [String: RefusedOwnerDecision] = [:]
 
     /// Reopen task, from a receipt whose late review found problems (contract §9 L4): the task
     /// panel's own write (`TaskReopen.request`), not a door of its own. The read that follows is
@@ -5785,9 +5832,14 @@ final class ConsoleModel {
     /// Not dropped optimistically, for the reason `decideCriteria` gives: the door's refusals are
     /// the outcomes worth explaining, and the re-read below is what explains them.
     func decideEvidence(_ row: EvidenceDecisionRow, _ decision: EvidenceDecisionAnswer,
-                        note: String? = nil) async {
-        guard let request = EvidenceDecisions.request(row: row, decision: decision, note: note,
+                        note: String? = nil, sendAsWritten: Bool = false) async {
+        guard let drafted = EvidenceDecisions.request(row: row, decision: decision, note: note,
                                                       decidingSessionID: sessionID) else { return }
+        let request = EvidenceDecisionRequest(decidingSessionId: drafted.decidingSessionId,
+                                              evidenceRevision: drafted.evidenceRevision,
+                                              decision: drafted.decision, note: drafted.note,
+                                              sendAsWritten: sendAsWritten)
+        evidenceNotesRefusedUntranslated[row.id] = nil
         do {
             _ = try await api.decideEvidence(taskID: row.taskId, request)
             if decision == .confirm {
@@ -5799,10 +5851,20 @@ final class ConsoleModel {
             // happened (`adoptEvidenceReceipts`) — and which survives the console being opened
             // again, unlike the in-memory line it replaces.
         } catch {
-            statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
+            if OwnerCardTranslations.refused(error), let note {
+                // The reason could not be translated, so it was not sent: the card offers Retry and
+                // Send as written with it.
+                evidenceNotesRefusedUntranslated[row.id] = note
+            } else {
+                statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
+            }
         }
         await refreshRulerQuestions(force: true)
     }
+
+    /// A send-back's reason refused with 422 TRANSLATION_FAILED, by evidence row: the evidence card
+    /// shows "Couldn't translate, so it wasn't sent · Retry · Send as written" with it.
+    var evidenceNotesRefusedUntranslated: [String: String] = [:]
 
     /// Restart the task from a card offering it (`EvidenceRestart`): one Run press, named at the
     /// gesture. Nil is a start; otherwise the refusal, for the card to show. The read is asked again
@@ -6110,6 +6172,17 @@ final class ConsoleModel {
         ExceptionCards.standing(items: openItems, itemId: itemID)
     }
 
+    /// Where one exception card stands for the iPhone's settled-items fold: open, ended (with the
+    /// receipt a press here drew), or not read yet.
+    func settledFoldStanding(_ itemID: String) -> SettledExceptionFold.Standing {
+        if let receipt = ownerItemReceipts[itemID] { return .settled(receipt: receipt) }
+        switch ownerItemStanding(itemID) {
+        case .open: return .open
+        case .gone: return .settled(receipt: nil)
+        case .unread: return .other
+        }
+    }
+
     /// The candidate one delivered merge card is about, or nil when the read no longer publishes
     /// it: a newer candidate superseded this one, and a card that drew the new candidate's numbers
     /// under the old one's question would be describing a merge nobody was asked about.
@@ -6132,23 +6205,36 @@ final class ConsoleModel {
     /// with the server's copy of the same record, so nothing stands empty between the press and
     /// the read. A refusal leaves the card standing and says which refusal it met.
     func answerQuestion(_ row: ProjectOpenItemRow, chosen: CoordinatorQuestionChoice?,
-                        text: String) async -> OwnerAnswerReceipt? {
+                        text: String, sendAsWritten: Bool = false) async -> OwnerAnswerReceipt? {
         guard let projectID, let question = row.question,
-              let request = CoordinatorQuestions.request(question: question, chosen: chosen, text: text)
+              let drafted = CoordinatorQuestions.request(question: question, chosen: chosen, text: text)
         else { return nil }
+        let request = OwnerAnswerRequest(option: drafted.option, text: drafted.text, sendAsWritten: sendAsWritten)
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
+            answersRefusedUntranslated.remove(row.itemId)
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
+            // Words that could not be translated were not sent (decision 2A): the card offers Retry and
+            // Send as written in place of a failure line.
+            if OwnerCardTranslations.refused(error) {
+                answersRefusedUntranslated.insert(row.itemId)
+                return nil
+            }
+            answersRefusedUntranslated.remove(row.itemId)
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
+
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
+    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
+    var answersRefusedUntranslated: Set<String> = []
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and
@@ -6162,6 +6248,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.returnOpenItemToCoordinator(projectID: projectID,
                                                                     itemID: row.itemId)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.returned
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
@@ -6215,6 +6303,8 @@ final class ConsoleModel {
         do {
             let receipt = try await api.resolveOpenItem(projectID: projectID, itemID: row.itemId,
                                                         request)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.handled
             await refreshRulerQuestions(force: true)
             return receipt
         } catch {
@@ -6295,6 +6385,8 @@ final class ConsoleModel {
         guard let projectID, ExceptionCards.addressed(row, .accept) else { return false }
         do {
             try await api.acceptOpenItem(projectID: projectID, itemID: row.itemId)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.accepted
             await refreshRulerQuestions(force: true)
             return true
         } catch {
@@ -6350,6 +6442,8 @@ final class ConsoleModel {
         guard let projectID, let episodeID = row.fuseEpisodeId else { return nil }
         do {
             let resumed = try await api.resumeProjectFuse(projectID: projectID, episodeID: episodeID)
+            // Before the read that drops the item: the settled-items fold names how it ended.
+            ownerItemReceipts[row.itemId] = ExceptionCards.resumed
             await refreshRulerQuestions(force: true)
             return resumed
         } catch {

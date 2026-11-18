@@ -18,6 +18,7 @@ import { CommentOutlined } from '@ant-design/icons';
 import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
 import { WikiChatFab } from './WikiChatFab';
 import { WikiChatPanel } from './WikiChatPanel';
+import { useHelpDrawer } from '../lib/helpDrawer';
 import { routeId } from '../lib/idCodec';
 import { setSidebarFolded } from '../lib/sidebarFold';
 import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
@@ -126,8 +127,13 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
   // own would render once more with the old address first, which the effect below would then put back.
   const closed = readWikiChatClosed(space.slug);
   const setClosed = useCallback((next: boolean) => writeWikiChatClosed(space.slug, next), [space.slug]);
+  // The help drawer docks in the panel's slot (board help-center 01 ①): one at a time. While help is open the panel is
+  // not shown by default, opening help closes a panel that is open, and opening the panel closes help.
+  const help = useHelpDrawer();
+  const { closeHelp } = help;
   // Shown by default (board 45): only where it docks, on a page that has the panel, and not once hidden with ✕.
-  const byDefault = asked === null && kept === null && wikiChatFabShown(route, true) && wikiChatDocks(layout) && !closed;
+  const byDefault =
+    asked === null && kept === null && wikiChatFabShown(route, true) && wikiChatDocks(layout) && !closed && !help.open;
   const defaultChat = byDefault && list.data ? wikiChatToOpen(list.data.chats) : null;
   const chat = asked ?? kept ?? defaultChat;
   const open = chat !== null;
@@ -156,6 +162,14 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
       );
     }
   }, [asked, kept, space.slug, navigate, location.pathname, location.search, location.hash, location.state]);
+
+  // Help opened (by its button, ? or a link) while a chat is open: the chat gives up the slot.
+  const helpWasOpen = useRef(help.open);
+  useLayoutEffect(() => {
+    const opened = help.open && !helpWasOpen.current;
+    helpWasOpen.current = help.open;
+    if (opened && (asked || kept)) go(null);
+  }, [help.open, asked, kept, go]);
 
   const [dragged, setDragged] = useState<number | null>(() => readWikiChatWidth());
   const width = wikiChatPanelWidth(layout, dragged, windowWidth);
@@ -196,16 +210,18 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
     () => ({
       ask: (quote) => {
         dispatch({ type: 'quote', quote });
+        closeHelp();
         if (!open) go(wikiChatToOpen(chats));
       },
       quoted: new Set(attachments.quote?.sentenceIds ?? []),
       wouldRewrite,
       open: (next, card = null) => {
         setFocused(card ? { chat: next, card } : null);
+        closeHelp();
         go(next);
       },
     }),
-    [attachments.quote, open, go, chats, wouldRewrite],
+    [attachments.quote, open, go, chats, wouldRewrite, closeHelp],
   );
 
   const fab = wikiChatFab(list.data?.fab);
@@ -271,6 +287,7 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
             setFocused(fab.state === 'needs_you' ? { chat: next, card: WIKI_CHAT_FOCUS_NEEDS_YOU } : null);
             // The button undoes ✕: pages open with the panel shown again (board 45, Q1 A).
             setClosed(false);
+            closeHelp();
             go(next);
           }}
         />

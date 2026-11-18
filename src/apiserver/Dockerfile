@@ -39,7 +39,7 @@ RUN npm run build -w @orbit/shared \
 # install unpacks), and `codex` on PATH is its native binary. No match here fails the build: npm
 # only warns when an optional dependency — which is how the platform package arrives — is missing.
 FROM node:26-slim AS codex
-RUN npm install -g @openai/codex@0.169.0 \
+RUN npm install -g @openai/codex@0.169.1 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
 
 # ──────────────────────────────── runtime ────────────────────────────────
@@ -82,6 +82,8 @@ COPY contracts ./contracts
 COPY scripts/executable-acceptance-dead-man.mjs ./scripts/executable-acceptance-dead-man.mjs
 # The runner release pointer: which runners get the latest /dl release (src/runner-api/runner-release.ts).
 COPY runner-release.json ./runner-release.json
+# The help article library (src/help/help-library.ts reads it once at boot): this server's own help, images included.
+COPY docs/help ./docs/help
 
 EXPOSE 3000
 # Apply migrations, then start the API. Prisma 7 takes the connection URL from prisma.config.ts

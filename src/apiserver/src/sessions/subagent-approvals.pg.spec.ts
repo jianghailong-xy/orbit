@@ -4,7 +4,8 @@
  *
  *   1. Modes. A SubAgent whose definition names a mode wider than its parent's is refused (403
  *      PERMISSION_MODE_WIDER_THAN_SESSION) and no run is written; one that names none runs in the parent's own
- *      mode; one that names a narrower mode runs in it; a read-only definition runs in plan.
+ *      mode; one that names a narrower mode runs in it; a read-only Claude definition keeps the parent's mode and
+ *      its read-only flag (the runner withholds its edit tools: 9f64a96f5).
  *   1b. No exemption: an Auto parent's SubAgent asking for bypassPermissions is refused too (isWiderThanParent),
  *      while a Bypass parent's may run anything.
  *   2. Approvals. A SubAgent's card is filed under the parent's session, names its run, and carries the child's
@@ -126,7 +127,7 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     return { sessionId, turnId: turn.id };
   }
 
-  await t.test('(1) a wider mode is refused; no mode runs in the parent\'s; a narrower one and read-only narrow it', async () => {
+  await t.test('(1) a wider mode is refused; no mode runs in the parent\'s; a narrower one narrows it; read-only Claude keeps it', async () => {
     const { sessionId } = await parent('default');
     for (const wider of ['bypassPermissions', 'auto']) {
       await assert.rejects(
@@ -152,7 +153,9 @@ test('SubAgent permissions and approvals', { skip, concurrency: 1, timeout: 300_
     const readonly = await subagents.createSubagentRun(runner, sessionId, create({
       toolUseId: 'toolu_readonly', type: 'explore', readonly: true,
     }));
-    assert.equal(readonly.exec.permissionMode, 'plan', 'a read-only definition runs in plan');
+    assert.equal(readonly.exec.permissionMode, 'default',
+      "a read-only Claude definition runs in the parent's mode, not plan: the runner withholds its edit tools");
+    assert.equal(readonly.decision.readonly, true, 'and the decision carries the flag the runner withholds them by');
 
     const edits = await parent('acceptEdits');
     const fromEdits = await subagents.createSubagentRun(runner, edits.sessionId, create({ toolUseId: 'toolu_inherit' }));
