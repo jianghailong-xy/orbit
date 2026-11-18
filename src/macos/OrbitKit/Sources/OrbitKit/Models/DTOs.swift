@@ -1613,6 +1613,8 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// The engine's call this card asks about: an answered question's record finds its card by it.
+    public let toolUseId: String?
     /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
     /// `ApprovalTranslation.parse`.
     public let translation: JSONValue?

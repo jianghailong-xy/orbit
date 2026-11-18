@@ -9800,7 +9800,7 @@ export class SessionsService {
    * asks for any other status is untouched, and the question an unanswered evidence card was about
    * is still on the decision rail's derived read (`pending-evidence-judgments.ts`).
    */
-  async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
+  async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
@@ -9808,7 +9808,7 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
-      where: { sessionId: id, ...(status ? { status } : {}) },
+      where: { sessionId: id, ...(status ? { status } : {}), ...(toolName ? { toolName } : {}) },
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;
