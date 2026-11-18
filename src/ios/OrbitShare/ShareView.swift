@@ -3,14 +3,54 @@ import OrbitKit
 
 /// "Add to Orbit" (board docs/mocks/share-to-orbit/board-1.png, panels 2 and 3): Cancel / Add, the
 /// shared items as chips, search, New session in the default workspace, Recent sessions from the
-/// app's snapshot, an optional note; then the done state. SwiftUI only, so the macOS Share-menu
-/// extension can host it as it is.
+/// app's snapshot, an optional note; then the done state. SwiftUI only: the macOS Share-menu
+/// extension hosts it too, laid out as board-3 panel 9 (title on top, Cancel / Add at the bottom).
 struct ShareView: View {
     @Bindable var model: ShareModel
     var onCancel: () -> Void
     var onDone: () -> Void
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        phoneBody
+        #endif
+    }
+
+    #if os(macOS)
+    /// A Share-menu popover has no navigation bar. Add opens Orbit on the entry, so a hand-off that
+    /// reached the app closes the popover at once; only one that did not shows the done state.
+    private var macBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !isDone {
+                Text(ShareCopy.title).font(.headline).padding([.horizontal, .top], 16).padding(.bottom, 4)
+            }
+            content
+            if !isDone {
+                Divider()
+                HStack {
+                    Spacer()
+                    Button(ShareCopy.cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                    if model.phase == .adding {
+                        ProgressView().controlSize(.small).frame(width: 52)
+                    } else {
+                        Button(ShareCopy.add) { Task { await model.add() } }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(!model.canAdd)
+                    }
+                }
+                .padding(12)
+            }
+        }
+        .frame(width: 420, height: 480)
+        .onChange(of: model.phase) { _, phase in
+            if case .done(_, true) = phase { onDone() }
+        }
+    }
+    #endif
+
+    private var phoneBody: some View {
         NavigationStack {
             content
                 .navigationTitle(ShareCopy.title)

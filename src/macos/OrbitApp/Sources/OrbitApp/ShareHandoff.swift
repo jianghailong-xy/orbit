@@ -13,8 +13,9 @@ enum PendingShareClaim: Equatable {
 /// (or a new-session draft), stages each item through the composer's own `attachFile`, puts the
 /// short text in the composer, and deletes the entry. Nothing is sent: the person sends.
 ///
-/// Without the App Group entitlement (`ShareAppGroup.container()` nil — the macOS app until its
-/// extension ships, an unsigned build) every call here is a no-op.
+/// Without the App Group entitlement (`ShareAppGroup.container()` nil — a `swift run` macOS app, an
+/// unsigned build) every call here is a no-op. On macOS the extension opens the app with the
+/// `orbit-session://<id>?share=<entry>` link itself (§3.3), so no notification is involved.
 extension AppModel {
     private var shareContainer: URL? { ShareAppGroup.container() }
 

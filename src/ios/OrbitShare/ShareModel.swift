@@ -1,13 +1,18 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#else
 import UserNotifications
+#endif
 import OrbitKit
 
 /// The Share Extension's state: what was shared, where it goes, and the hand-off to the app
 /// (docs/share-to-orbit-design.md §3.1). Nothing here holds a credential or touches the network:
-/// the picker reads the app's snapshot and Add writes one inbox entry plus a local notification.
-/// Free of UIKit/AppKit so the macOS Share-menu extension can host the same model and view.
+/// the picker reads the app's snapshot and Add writes one inbox entry, then hands off: a local
+/// notification on iOS, opening the app with the link on macOS (§3.3). The macOS Share-menu
+/// extension hosts this same model and view.
 @MainActor
 @Observable
 final class ShareModel {
@@ -34,7 +39,8 @@ final class ShareModel {
         case loading
         case picking
         case adding
-        /// Added. `notified` says whether the "tap to finish" notification could be posted.
+        /// Added. `notified` says whether the hand-off reached the person: the "tap to finish"
+        /// notification was posted (iOS), or the app was opened on the entry (macOS).
         case done(title: String, notified: Bool)
         case failed(String)
     }
@@ -160,8 +166,9 @@ final class ShareModel {
 
     // MARK: Add
 
-    /// Writes the inbox entry, then posts "N files ready … tap to finish". Nothing is uploaded or
-    /// sent: the app stages the items in the composer and the person sends from there.
+    /// Writes the inbox entry, then posts "N files ready … tap to finish" (iOS) or opens Orbit on
+    /// it (macOS). Nothing is uploaded or sent: the app stages the items in the composer and the
+    /// person sends from there.
     func add() async {
         guard canAdd, let destination, let container else { return }
         phase = .adding
@@ -184,7 +191,11 @@ final class ShareModel {
             return
         }
         cleanUp()
+        #if os(macOS)
+        let notified = NSWorkspace.shared.open(ShareHandoffLink.url(target: entry.target, entryID: entry.id))
+        #else
         let notified = await Self.notify(entry: entry, title: destination.title)
+        #endif
         phase = .done(title: destination.title, notified: notified)
     }
 
@@ -192,6 +203,7 @@ final class ShareModel {
         try? FileManager.default.removeItem(at: scratch)
     }
 
+    #if !os(macOS)
     private static func notify(entry: ShareEntry, title: String) async -> Bool {
         let center = UNUserNotificationCenter.current()
         let status = await center.notificationSettings().authorizationStatus
@@ -205,4 +217,5 @@ final class ShareModel {
         let request = UNNotificationRequest(identifier: "share-\(entry.id)", content: content, trigger: nil)
         return (try? await center.add(request)) != nil
     }
+    #endif
 }

@@ -161,15 +161,33 @@ public enum ShareHandoffLink {
     }
 }
 
-/// The App Group both Apple targets share; the inbox and the snapshot live in its container.
+/// The App Group the app and its share extension share; the inbox and the snapshot live in its container.
 public enum ShareAppGroup {
+    /// iOS: the provisioned `group.` group.
     public static let identifier = "group.io.orbitd.app"
+    /// macOS: a Developer ID app has no provisioning profile, so its group is `<TEAMID>.io.orbitd.app`,
+    /// which only build-dmg.sh knows. It writes the id under this Info.plist key in the app and in
+    /// OrbitShare.appex, beside the matching entitlement.
+    public static let infoPlistKey = "OrbitAppGroup"
 
-    /// The container, or nil where the entitlement is missing (an unsigned build, the macOS app
-    /// until its extension ships): every share path is then a no-op.
+    /// The group this build was signed with, or nil where it has none.
+    public static func currentIdentifier(bundle: Bundle = .main) -> String? {
+        #if os(macOS)
+        // A bare `swift run` has no Info.plist and no entitlement. Asking macOS for a group container
+        // the signature does not own would raise the "access data from other apps" prompt.
+        guard let id = bundle.object(forInfoDictionaryKey: infoPlistKey) as? String, !id.isEmpty else { return nil }
+        return id
+        #else
+        return identifier
+        #endif
+    }
+
+    /// The container, or nil where the entitlement is missing (an unsigned build, a `swift run`
+    /// macOS app): every share path is then a no-op.
     public static func container() -> URL? {
         #if os(iOS) || os(macOS)
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+        guard let id = currentIdentifier() else { return nil }
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
         #else
         return nil
         #endif
