@@ -69,6 +69,7 @@ const agent = (text: string) => `AGENT[${text}]`;
 const WORDS = '周一再发布，先修好登录页';
 
 interface Turn {
+  id: string;
   content: string | null;
   displayPrompt: string | null;
   translationState: string | null;
@@ -113,7 +114,8 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
   const delivery = new WatchDeliveryService(prisma, sessions, push, { retryBaseMs: 0, retryMaxMs: 0, pollIntervalMs: 3_600_000 });
   const reviews = new OwnerConfirmationReviewService(prisma, sessions, realtime);
   const confirmations = new TaskOwnerConfirmationService(prisma, sessions, undefined, realtime, reviews);
-  const evidence = new TaskCompletionEvidenceService(prisma, undefined, undefined, realtime, new EvidenceReviewService(prisma, sessions));
+  const evidenceReviews = new EvidenceReviewService(prisma, sessions);
+  const evidence = new TaskCompletionEvidenceService(prisma, undefined, undefined, realtime, evidenceReviews);
   const feishuReplies: string[] = [];
   const feishu = new FeishuDirectService(
     prisma,
@@ -160,7 +162,7 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
     return id;
   };
   const turnsOn = async (sessionId: string): Promise<Turn[]> => (await sql.query<Turn>(
-    `SELECT "content", "display_prompt" AS "displayPrompt", "translation_state" AS "translationState",
+    `SELECT "id", "content", "display_prompt" AS "displayPrompt", "translation_state" AS "translationState",
             "translation_lang" AS "translationLang"
        FROM "conversation_turn" WHERE "session_id" = $1 ORDER BY "seq"`,
     [sessionId],
@@ -391,12 +393,34 @@ test('the owner\'s typed answers reach the agent in the agent language', { skip,
         assert.equal((await turnsOn(runSessionId)).length, before, 'the run is told nothing');
         return;
       }
+      if (which === 'translated') {
+        await db.session.update({
+          where: { id: runSessionId }, data: { retryAt: new Date(Date.now() + 3_600_000) },
+        });
+      }
       await sendBack();
       assert.deepEqual(await decided(), [{ note: WORDS }], 'the decision keeps the owner\'s words');
+      if (which === 'translated') {
+        assert.equal((await turnsOn(runSessionId)).length, before, 'the translation waits for recovery');
+        await db.session.update({ where: { id: runSessionId }, data: { retryAt: null } });
+        await evidenceReviews.deliverSendBacksOwedTo(runSessionId);
+      }
       const turns = await turnsOn(runSessionId);
       assert.equal(turns.length, before + 1);
-      deliveredFor(which, turns.at(-1)!.content);
-      if (which === 'translated') assert.ok(turns.at(-1)!.displayPrompt?.includes(WORDS), 'the transcript shows the owner\'s words');
+      const sent = turns.at(-1)!;
+      deliveredFor(which, sent.content);
+      if (which === 'translated') {
+        assert.ok(sent.displayPrompt?.includes(WORDS), 'the transcript shows the owner\'s words');
+        await db.conversationTurn.update({
+          where: { id: sent.id }, data: { status: 'ANSWERED', answeredAt: new Date(), deliveredAt: null },
+        });
+        await evidenceReviews.deliverSendBacksOwedTo(runSessionId);
+        const retried = await turnsOn(runSessionId);
+        assert.equal(retried.length, before + 2);
+        assert.equal(retried.at(-1)!.content, sent.content);
+        assert.equal(retried.at(-1)!.displayPrompt, sent.displayPrompt);
+        assert.equal(retried.at(-1)!.translationLang, sent.translationLang);
+      }
     });
   }
 

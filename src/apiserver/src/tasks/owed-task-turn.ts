@@ -27,13 +27,14 @@ export async function deliverOwedTaskTurn(
   });
   if (previous && (previous.deliveredAt || previous.status !== 'ANSWERED')) return;
   const clientTurnId = previous ? `${baseKey}:retry:${previous.id}` : baseKey;
-  const previousTranslation = previous?.displayPrompt != null && isTranslationLanguage(previous.translationLang)
+  const previousTranslation = previous?.translationState === 'DONE' && previous.displayPrompt != null && previous.content != null
+    && isTranslationLanguage(previous.translationLang)
     ? { content: previous.content, from: previous.translationLang }
     : undefined;
   try {
     await sessions.createTurn(ownerId, sessionId, {
       clientTurnId,
-      content: previous?.displayPrompt ?? previous?.content ?? content,
+      content: (previousTranslation ? previous?.displayPrompt : previous?.content) ?? content,
       intent: 'NEXT_TURN',
     }, {
       translated: previous ? previousTranslation : translated,
