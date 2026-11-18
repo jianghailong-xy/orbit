@@ -46,6 +46,9 @@
  *  (16) The sweep does not re-send a session on a spent account on the strength of an account past its share.
  *  (17) A session held for a far reset goes when another account has room again, one at a time; one whose
  *       reset is near, or that is pinned, is left where it is.
+ *  (18) Removing an account its runner says sessions are in moves each to another account, unpinned —
+ *       a live one with the reload that carries its conversation — rather than refusing the removal;
+ *       only a session with nowhere to go, or on a runner that cannot carry it, is left as one that cannot leave.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -990,5 +993,47 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const after = await Promise.all([first, second, near, pinned].map(armedAt));
     assert.equal(after[0], now.getTime(), 'the furthest reset is made due');
     assert.deepEqual(after.slice(1), before.slice(1), 'one a pass; near a reset or pinned, nothing moves it');
+  });
+
+  await t.test('(18) sessions in an account being removed move to another one instead of keeping it', async () => {
+    const m = await machine('remove');
+    const idle = await sessionOn(m, 'codex', RunStatus.AWAITING_INPUT, { codexAccount: WORK, codexAccountPinned: true });
+    const running = await sessionOn(m, 'codex', RunStatus.RUNNING, { codexAccount: WORK, engineTurnActive: true });
+    const ended = await sessionOn(m, 'codex', RunStatus.SUCCEEDED, { codexAccount: WORK });
+    const elsewhere = await sessionOn(m, 'codex', RunStatus.AWAITING_INPUT);
+
+    assert.deepEqual(await sessions.moveOffRemovedAccount(m.runnerId, 'codex', WORK, [idle, running, ended, elsewhere]), []);
+    for (const id of [idle, running, ended]) {
+      const after = await row(id);
+      assert.deepEqual(
+        { account: after.codex_account, pinned: after.codex_account_pinned, notice: after.pool_switch_notice },
+        { account: 'default', pinned: false, notice: 'Switched to Default — Work is being removed' },
+      );
+    }
+    assert.deepEqual(await reloads(idle), [{ content: JSON.stringify({ provider: 'codex' }), status: 'PENDING' }]);
+    assert.equal((await reloads(running)).length, 1, 'a running one re-spawns there once its turn is over');
+    assert.deepEqual(await reloads(ended), [], 'nothing is running to reload');
+    assert.deepEqual(await reloads(elsewhere), [], 'a session on another account is not touched');
+
+    // Reported again on the next heartbeat while its turn runs: already off the account, nothing more is queued.
+    assert.deepEqual(await sessions.moveOffRemovedAccount(m.runnerId, 'codex', WORK, [running]), []);
+    assert.equal((await reloads(running)).length, 1);
+
+    // Nowhere to go: Default signed out. And a runner that cannot carry the conversation.
+    const alone = ENGINES.map((engine) =>
+      engine.engine === 'codex'
+        ? { ...engine, accounts: engine.accounts!.map((account) => (account.id === 'default' ? { ...account, auth: 'no' as const } : account)) }
+        : engine,
+    );
+    const lone = await machine('remove-alone', [CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1], alone);
+    const stuck = await sessionOn(lone, 'codex', RunStatus.AWAITING_INPUT, { codexAccount: WORK });
+    assert.deepEqual(await sessions.moveOffRemovedAccount(lone.runnerId, 'codex', WORK, [stuck]), [stuck]);
+    assert.equal((await row(stuck)).codex_account, WORK);
+    const old = await machine('remove-old', []);
+    const onOld = await sessionOn(old, 'codex', RunStatus.AWAITING_INPUT, { codexAccount: WORK });
+    assert.deepEqual(await sessions.moveOffRemovedAccount(old.runnerId, 'codex', WORK, [onOld]), [onOld]);
+    assert.deepEqual(await reloads(onOld), []);
+    // Another runner's session is not this runner's to move.
+    assert.deepEqual(await sessions.moveOffRemovedAccount(lone.runnerId, 'codex', WORK, [idle]), []);
   });
 });

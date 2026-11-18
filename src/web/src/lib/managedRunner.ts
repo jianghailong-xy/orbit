@@ -20,6 +20,7 @@ import {
 import { api, ApiError } from '../api';
 import { routeId } from './idCodec';
 import { machineName } from './machineSetup';
+import { runnersQuery } from './queries';
 import { useToast } from './toast';
 import { compatibleUuid } from './uuid';
 
@@ -92,16 +93,30 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
 }
 
 /**
- * The account's managed runner's id, as a page that shows the managed runner has already read it. Reads
- * nothing itself (the console and Settings read the status), so any place that names a machine can ask.
+ * The account's managed runner's id, as a page that shows a machine has already read it: the runner list's
+ * row that says `managed`, else the managed status's runnerId (a server that predates the row's flag).
+ * Reads nothing itself, so any place that names a machine can ask.
  */
 export function useManagedRunnerId(): string | null {
   const { data } = useQuery({ ...managedRunnerStatusQuery(), enabled: false });
-  return managedRunnerDisplay(data) ? (data?.runnerId ?? null) : null;
+  const { data: runners } = useQuery({ ...runnersQuery(), enabled: false });
+  const flagged = (runners as Array<{ id?: string; managed?: boolean }> | undefined)?.find((runner) => runner.managed === true)?.id;
+  return flagged ?? (managedRunnerDisplay(data) ? (data?.runnerId ?? null) : null);
+}
+
+/**
+ * A list of machines with Orbit Cloud (the account's managed runner) first and the rest in their own
+ * order, as every machine list draws them (docs/mocks/orbit-cloud-pinned). The list as given without one.
+ */
+export function managedFirst<T extends { id: string }>(runners: T[], managedId: string | null): T[] {
+  if (!managedId) return runners;
+  const at = runners.findIndex((runner) => routeId(runner.id) === routeId(managedId));
+  if (at <= 0) return runners;
+  return [runners[at], ...runners.slice(0, at), ...runners.slice(at + 1)];
 }
 
 /** machineName with the account's managed runner said as Orbit Cloud. */
-export function useMachineName(): (runner: { id?: string; name?: string; displayName?: string | null }) => string {
+export function useMachineName(): (runner: { id?: string; name?: string; displayName?: string | null; managed?: boolean }) => string {
   const managedId = useManagedRunnerId();
   return useCallback((runner) => machineName(runner, managedId), [managedId]);
 }

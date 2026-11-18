@@ -36,6 +36,10 @@ export class SessionsScheduleRunPort implements ScheduleRunSessionPort {
     );
   }
 
+  async land(ownerId: string, sessionId: string): Promise<void> {
+    await this.sessions.mergeToMain(ownerId, sessionId, 'main');
+  }
+
   async interrupt(ownerId: string, sessionId: string): Promise<void> {
     await this.sessions.interrupt(ownerId, sessionId);
   }

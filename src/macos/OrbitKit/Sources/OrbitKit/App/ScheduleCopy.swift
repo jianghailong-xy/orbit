@@ -85,8 +85,13 @@ public enum ScheduleCopy {
         public static let daysSeparator = ", "
     }
     public static let separator = " · "
+    public enum Landing {
+        public static let landed = "Landed on main: {sha}."
+        public static let failed = "Could not land on main: {reason}"
+    }
     public static let access: [String: ScheduleAccessCopy] = [
         "CHECK_ONLY": ScheduleAccessCopy(label: "Check only", detail: "reads and reports, edits nothing", brief: "reads and reports"),
+        "LAND": ScheduleAccessCopy(label: "Edit and land on main", detail: "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.", brief: "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."),
         "OPEN_PR": ScheduleAccessCopy(label: "Open a PR", detail: "edits in its own worktree and opens a PR. It can't merge or deploy.", brief: "edits in its own worktree and opens a PR. It can't merge or deploy."),
     ]
     public enum Costs {
@@ -129,6 +134,7 @@ public enum ScheduleCopy {
         "RUNNER_UNAVAILABLE": "found no runner online",
         "QUOTA": "hit the engine's usage limit",
         "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
+        "LANDING_FAILED": "could not land on main",
         "REPORTED_FAILED": "reported a failure",
         "NO_REPORT": "ended without a report",
         "ENGINE_CRASHED": "ended when its engine stopped",
@@ -141,6 +147,7 @@ public enum ScheduleCopy {
         "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed.",
     ]
     public static let failureReasonsWithSummary: [String: String] = [
+        "LANDING_FAILED": "could not land on main: {summary}",
         "REPORTED_FAILED": "reported a failure: {summary}",
     ]
     public static let heldReasons: [String: ScheduleHeldCopy] = [
@@ -152,6 +159,7 @@ public enum ScheduleCopy {
         "OUTSIDE_ENVELOPE": ScheduleHeldCopy(clause: "it no longer fits what you allowed", until: "you allow it"),
         "ACCESS_NOT_ENFORCEABLE": ScheduleHeldCopy(clause: "the engine it would run on cannot enforce its access level", until: "it runs on an engine that can"),
         "MODE_WIDER_THAN_ACCOUNT_DEFAULT": ScheduleHeldCopy(clause: "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)", until: "your default mode allows it"),
+        "WORKTREE_DISABLED": ScheduleHeldCopy(clause: "the workspace {workspace} has worktrees disabled", until: "worktrees are enabled"),
         "NO_REPOSITORY": ScheduleHeldCopy(clause: "the workspace {workspace} has no repository", until: "it has one"),
         "SESSION_REFUSED": ScheduleHeldCopy(clause: "its run's session could not be opened", until: "that is fixed"),
     ]
@@ -165,6 +173,7 @@ public enum ScheduleCopy {
         "OUTSIDE_ENVELOPE": "outside what you allowed",
         "ACCESS_NOT_ENFORCEABLE": "access not enforceable",
         "MODE_WIDER_THAN_ACCOUNT_DEFAULT": "wider than your default mode",
+        "WORKTREE_DISABLED": "worktrees disabled",
         "NO_REPOSITORY": "no repository",
         "SESSION_REFUSED": "session refused",
     ]
@@ -242,6 +251,7 @@ public enum ScheduleCopy {
         public static let fields: [String: String] = [
             "title": "Name",
             "prompt": "Prompt",
+            "readBack": "Read-back",
             "intent": "What was asked",
             "rule": "Time",
             "timezone": "Time zone",
@@ -273,6 +283,7 @@ public enum ScheduleCopy {
         public static let noticeAbout = "You'll hear about new {findings} and failures only."
     }
     public enum EnvelopeCard {
+        public static let landTitle = "Let {title} land on main?"
         public static let now = "Now"
         public static let asked = "Asked"
         public static let accessJoin = " — "
@@ -283,6 +294,7 @@ public enum ScheduleCopy {
             "RUNS_PER_WEEK": "Let {title} run more often?",
             "RUN_LIMIT": "Let {title} run longer?",
             "WORKSPACE": "Let {title} run in {workspace}?",
+            "PROBE_COMMAND": "Let {title} check with a new command?",
         ]
     }
     public enum SessionPreview {
@@ -318,7 +330,7 @@ public enum ScheduleCopy {
     public enum RunSession {
         public static let crumb = "Scheduled"
         public static let runOf = "run of {date}"
-        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        public static let strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         public static let reported = "Reported: {state}"
         public static let agent = "{engine} agent"
         public static let duration = "{minutes} min"
@@ -390,6 +402,17 @@ public enum ScheduleCopy {
         "access.CHECK_ONLY.label": ScheduleCopy.access["CHECK_ONLY"]!.label,
         "access.CHECK_ONLY.detail": ScheduleCopy.access["CHECK_ONLY"]!.detail,
         "access.CHECK_ONLY.brief": ScheduleCopy.access["CHECK_ONLY"]!.brief,
+        "landing.landed": ScheduleCopy.Landing.landed,
+        "landing.failed": ScheduleCopy.Landing.failed,
+        "access.LAND.label": ScheduleCopy.access["LAND"]!.label,
+        "access.LAND.detail": ScheduleCopy.access["LAND"]!.detail,
+        "access.LAND.brief": ScheduleCopy.access["LAND"]!.brief,
+        "failureReasons.LANDING_FAILED": ScheduleCopy.failureReasons["LANDING_FAILED"]!,
+        "failureReasonsWithSummary.LANDING_FAILED": ScheduleCopy.failureReasonsWithSummary["LANDING_FAILED"]!,
+        "heldReasons.WORKTREE_DISABLED.clause": ScheduleCopy.heldReasons["WORKTREE_DISABLED"]!.clause,
+        "heldReasons.WORKTREE_DISABLED.until": ScheduleCopy.heldReasons["WORKTREE_DISABLED"]!.until,
+        "heldShort.WORKTREE_DISABLED": ScheduleCopy.heldShort["WORKTREE_DISABLED"]!,
+        "history.fields.readBack": ScheduleCopy.History.fields["readBack"]!,
         "access.OPEN_PR.label": ScheduleCopy.access["OPEN_PR"]!.label,
         "access.OPEN_PR.detail": ScheduleCopy.access["OPEN_PR"]!.detail,
         "access.OPEN_PR.brief": ScheduleCopy.access["OPEN_PR"]!.brief,
@@ -548,6 +571,7 @@ public enum ScheduleCopy {
         "createCard.zoneFromDevice": ScheduleCopy.CreateCard.zoneFromDevice,
         "createCard.notice": ScheduleCopy.CreateCard.notice,
         "createCard.noticeAbout": ScheduleCopy.CreateCard.noticeAbout,
+        "envelopeCard.landTitle": ScheduleCopy.EnvelopeCard.landTitle,
         "envelopeCard.now": ScheduleCopy.EnvelopeCard.now,
         "envelopeCard.asked": ScheduleCopy.EnvelopeCard.asked,
         "envelopeCard.accessJoin": ScheduleCopy.EnvelopeCard.accessJoin,
@@ -557,6 +581,7 @@ public enum ScheduleCopy {
         "envelopeCard.titles.RUNS_PER_WEEK": ScheduleCopy.EnvelopeCard.titles["RUNS_PER_WEEK"]!,
         "envelopeCard.titles.RUN_LIMIT": ScheduleCopy.EnvelopeCard.titles["RUN_LIMIT"]!,
         "envelopeCard.titles.WORKSPACE": ScheduleCopy.EnvelopeCard.titles["WORKSPACE"]!,
+        "envelopeCard.titles.PROBE_COMMAND": ScheduleCopy.EnvelopeCard.titles["PROBE_COMMAND"]!,
         "sessionPreview.create": ScheduleCopy.SessionPreview.create,
         "sessionPreview.envelope": ScheduleCopy.SessionPreview.envelope,
         "waiting.title": ScheduleCopy.Waiting.title,

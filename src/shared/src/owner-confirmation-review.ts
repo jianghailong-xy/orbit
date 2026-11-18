@@ -5,6 +5,8 @@
  * the readings the session rows and turn cards carry.
  */
 
+import type { OwnerCardTranslation, OwnerWordsTranslation } from './translation';
+
 /**
  * One line of a review. criterionKey / whyNotProven / coordinatorChecked / evidenceRefs are
  * AcceptedGap's fields (project-done.ts), with the same names and meanings: a notChecked line that
@@ -109,6 +111,9 @@ export interface OwnerConfirmationReviewView<Instant = string> {
     recordedAt: Instant;
     reviewedSha: string | null;
     judgment: string;
+    /** `judgment` and `needsYou` in the owner's language (Settings › Translation); absent until
+     *  translated, on every review translation is off for, and from older servers. */
+    translation?: OwnerCardTranslation;
   } & ConfirmationReviewLists) | null;
   returned: ConfirmationReturnRecordView<Instant> | null;  // the RETURN record (§8)
   problems: ConfirmationReturnRecordView<Instant> | null;  // the PROBLEMS record (§9)
@@ -120,6 +125,9 @@ export interface ConfirmationReturnRecordView<Instant = string> {
   reviewedSha: string | null;
   reason: string;
   problems: ConfirmationReviewItem[];
+  /** A PROBLEMS record's `reason` and `problems` in the owner's language (Settings › Translation);
+   *  absent until translated, on a RETURN record, and from older servers. */
+  translation?: OwnerCardTranslation;
 }
 
 export type ConfirmationReviewHeadline =
@@ -135,6 +143,8 @@ export interface OwnerConfirmationAnswer {
   /** OWNER: the owner chose it on the card. NOT_SHOWN: the client did not know about reviews, so
    *  the recommended option was recorded for them (Q3). */
   source: 'OWNER' | 'NOT_SHOWN';
+  /** `text` as the reviewer was told it, in the agent language, when Settings › Translation translated it. */
+  translation?: OwnerWordsTranslation;
 }
 
 /**

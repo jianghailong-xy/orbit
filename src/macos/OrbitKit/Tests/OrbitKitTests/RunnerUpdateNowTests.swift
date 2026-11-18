@@ -59,6 +59,16 @@ final class RunnerUpdateNowTests: XCTestCase {
         XCTAssertEqual(c.version, "0.1.254")
     }
 
+    /// The press is answered by the runner's next heartbeat: the page reads again until the release
+    /// it waited for is no longer waiting (restarting), or the runner is gone.
+    func testAnsweredOnceTheRunnerReportsTheRestart() throws {
+        for phase in ["available", "draining", "postponed"] {
+            XCTAssertFalse(RunnerUpdateNow.answered(try runner(["state": "enabled", "phase": phase, "targetVersion": "0.1.254"])))
+        }
+        XCTAssertTrue(RunnerUpdateNow.answered(try runner(["state": "enabled", "phase": "restarting", "targetVersion": "0.1.254"])))
+        XCTAssertTrue(RunnerUpdateNow.answered(nil))
+    }
+
     func testOneTurn() throws {
         let r = try runner(["state": "enabled", "phase": "postponed", "targetVersion": "0.1.254"],
                            updateTurns: [twoTurns[0]])
@@ -249,7 +259,11 @@ final class RunnerUpdateNowTests: XCTestCase {
         XCTAssertTrue(control.contains("RunnerUpdateNow.offered(runner)"))
         XCTAssertTrue(control.contains("app.runners?.updateNow(runnerID)"))
         XCTAssertFalse(control.contains(".confirmationDialog("))
-        XCTAssertTrue(try read("RunnersModel.swift").contains("await press { _ = try await self.api.updateRunnerNow(id) }"))
+        let model = try read("RunnersModel.swift")
+        XCTAssertTrue(model.contains("await press({ _ = try await self.api.updateRunnerNow(id) })"))
+        // Read again until the runner answers, so the card turns to Restarting without a pull.
+        XCTAssertTrue(model.contains("Task { await self.awaitUpdateNowAnswer(id) }"))
+        XCTAssertTrue(model.contains("!RunnerUpdateNow.answered(runner(id))"))
 
         let updating = try read("Views/Console/RunnerUpdatingViews.swift")
         XCTAssertEqual(updating.components(separatedBy: "RunnerUpdateNowControl(runnerID:").count - 1, 2,

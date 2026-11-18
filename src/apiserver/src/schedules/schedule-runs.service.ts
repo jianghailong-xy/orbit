@@ -45,7 +45,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { isUsageLimitErrorText } from '@orbit/shared';
+import { SCHEDULE_COPY, scheduleFill, isUsageLimitErrorText } from '@orbit/shared';
 import { Prisma, RunStatus, type Schedule, type ScheduleRun } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
@@ -71,8 +71,16 @@ import {
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
-import { scheduledRunTurn } from './schedule-run-block';
-import { scheduleOverBudget, scheduleStartCheck, type StartPlan } from './schedule-start-check';
+import type { ConditionFiring } from '../conditions/conditions.service';
+import { sampleHolds } from '../conditions/condition-evaluation';
+import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
+import {
+  scheduleBudgetStarts,
+  scheduleOverBudget,
+  scheduleOverBudgetMessage,
+  scheduleStartCheck,
+  type StartPlan,
+} from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
 import {
   SCHEDULE_CLOCK,
@@ -117,7 +125,8 @@ export type ScheduleFailureReason =
   | 'ENGINE_CRASHED'
   | 'APPROVAL_TIMEOUT'
   | 'RUN_LIMIT'
-  | 'CANCELLED_BY_OWNER';
+  | 'CANCELLED_BY_OWNER'
+  | 'LANDING_FAILED';
 
 /** The reasons of a run that never reached its engine: the only ones retried. */
 export const RETRIED_FAILURES: ReadonlySet<ScheduleFailureReason> = new Set([
@@ -155,6 +164,8 @@ export interface OpenRunSession {
 /** The session doors a run needs, so the passes can be driven in a spec without a runner. */
 export interface ScheduleRunSessionPort {
   open(input: OpenRunSession): Promise<void>;
+  /** Queue the ordinary Merge-to-main path, including its merge check. */
+  land(ownerId: string, sessionId: string): Promise<void>;
   interrupt(ownerId: string, sessionId: string): Promise<void>;
   complete(ownerId: string, sessionId: string): Promise<void>;
   /** Retire the session: no auto-retry, ended; one already ended or never written counts as retired. */
@@ -228,7 +239,8 @@ export function waitedOnCards(cards: Array<{ createdAt: Date; decidedAt: Date | 
 
 /** How far back a slot may still be caught up, or retried: one period of its rule. */
 export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date): number {
-  if (rule.kind === 'ONCE') return SCHEDULE_ONCE_CATCH_UP_MS;
+  // A WHEN run's slot is its firing: like a ONCE slot, it may start for a day, and is MISSED after.
+  if (rule.kind === 'ONCE' || rule.kind === 'WHEN') return SCHEDULE_ONCE_CATCH_UP_MS;
   const next = nextDueAt(rule, timezone, slot);
   return next ? next.getTime() - slot.getTime() : 7 * 24 * HOUR;
 }
@@ -334,6 +346,32 @@ export class ScheduleRunsService {
     );
     await this.alert(alerts);
     return fired;
+  }
+
+  /**
+   * A WHEN schedule's condition fired (docs/condition-triggers-design.md §5.2), inside the transaction that fired it,
+   * which holds the condition's row lock: one firing, one run. The run is CONDITION, planned at the firing sample's
+   * time, QUEUED under the overlap rule; from there it is any run's — the start checks, the weekly budget (a firing
+   * over it is MISSED OVER_BUDGET at its start), the report, findings and who hears. A schedule that is not ACTIVE
+   * (HELD) starts nothing, as a held schedule fires no slot; the condition waits for its re-arm either way. Returns the
+   * run's id, written on the FIRED event, or null.
+   */
+  async fireCondition(tx: Tx, firing: ConditionFiring): Promise<string | null> {
+    const scheduleId = firing.condition.scheduleId;
+    if (!scheduleId) return null;
+    const schedule = await this.lock(tx, scheduleId);
+    if (!schedule || schedule.state !== 'ACTIVE') return null;
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || rule.conditionId !== firing.condition.id) return null;
+    await this.skipQueued(tx, scheduleId, this.clock());
+    const id = randomUUID();
+    await tx.scheduleRun.create({
+      data: {
+        id, scheduleId, scheduleRevision: schedule.revision, plannedAt: firing.at, trigger: 'CONDITION', state: 'QUEUED',
+      },
+    });
+    await tx.conditionEvent.update({ where: { id: firing.eventId }, data: { runId: id } });
+    return id;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -627,6 +665,112 @@ export class ScheduleRunsService {
     return 'UNCHANGED';
   }
 
+  /** LAND reports wait for the turn, then use the owner's merge path and its durable receipt. */
+  async landReportedRuns(batch = 25): Promise<void> {
+    const pending = await this.prisma.scheduleRun.findMany({
+      where: { accessLevel: 'LAND', state: { in: ['CHANGED', 'NO_CHANGE'] }, landingStatus: { in: ['WAITING', 'MERGING'] } },
+      orderBy: { endedAt: 'asc' }, take: batch,
+    });
+    for (const run of pending) {
+      try {
+        await this.landRun(run);
+      } catch (error) {
+        this.logger.error(`schedule run ${run.id} landing pass failed: ${messageOf(error)}`);
+      }
+    }
+  }
+
+  private async landRun(run: ScheduleRun): Promise<void> {
+    const session = run.sessionId ? await this.prisma.session.findUnique({ where: { id: run.sessionId } }) : null;
+    if (!session || session.deletedAt || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED
+        || session.status === RunStatus.INTERRUPTED || session.cancelRequestedAt) {
+      await this.settleLanding(run.id, 'FAILED', null, 'The run session ended unsuccessfully; nothing was landed.');
+      return;
+    }
+    // The tool reports during the turn. A commit and its final worktree report may still be on the way.
+    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.SUCCEEDED) {
+      // Reporting does not exempt the rest of a LAND turn from its run limit.
+      const opening = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId: session.id, clientTurnId: openingTurnKey(session.id) }, select: { deliveredAt: true },
+      });
+      if (opening?.deliveredAt) {
+        const schedule = await this.prisma.schedule.findUniqueOrThrow({ where: { id: run.scheduleId } });
+        const cards = await this.prisma.approval.findMany({ where: { sessionId: session.id, createdAt: { gte: opening.deliveredAt } } });
+        const now = this.clock();
+        const working = now.getTime() - opening.deliveredAt.getTime() - waitedOnCards(cards, now);
+        if (working >= schedule.runLimitMinutes * MINUTE) {
+          await this.sessions.interrupt(session.ownerId, session.id);
+          await this.settleLanding(run.id, 'FAILED', null, 'The run exceeded its working-time limit after reporting.', 'RUN_LIMIT');
+        }
+      }
+      return;
+    }
+    if (!session.branchSha || !session.baseSha) {
+      await this.settleLanding(run.id, 'FAILED', null, 'The runner did not report the branch and base commits.');
+      return;
+    }
+    const receipt = await this.prisma.sessionMergeReceipt.findFirst({
+      where: { ownerId: session.ownerId, sessionId: session.id, sourceSha: session.branchSha,
+        targetBranch: 'main', result: { in: ['MERGED', 'ALREADY_MERGED'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (receipt?.targetShaAfter) {
+      await this.settleLanding(run.id, 'LANDED', receipt.targetShaAfter);
+      return;
+    }
+    if (session.branchSha === session.baseSha) {
+      await this.settleLanding(run.id, 'NO_COMMITS');
+      return;
+    }
+    if (session.mergeStatus === 'pending') {
+      await this.settleLanding(run.id, 'MERGING');
+      return;
+    }
+    if (session.mergeStatus === 'error' || session.mergeStatus === 'conflict') {
+      await this.settleLanding(run.id, 'FAILED', null, session.mergeError ?? 'The merge check refused the landing.');
+      return;
+    }
+    try {
+      await this.sessions.land(session.ownerId, session.id);
+    } catch (error) {
+      await this.settleLanding(run.id, 'FAILED', null, messageOf(error));
+      return;
+    }
+    // Replaying after a crash queues the same session operation; mergeToMain is idempotent while pending.
+    await this.settleLanding(run.id, 'MERGING');
+  }
+
+  private async settleLanding(
+    runId: string, status: 'MERGING' | 'LANDED' | 'NO_COMMITS' | 'FAILED', sha: string | null = null, reason?: string,
+    failureReason: ScheduleFailureReason = 'LANDING_FAILED',
+  ): Promise<void> {
+    const alerts: ScheduleAlert[] = [];
+    await withTransactionRetry(this.prisma, async (tx) => {
+      alerts.length = 0;
+      const ref = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
+      if (!ref) return;
+      const schedule = await this.lock(tx, ref.scheduleId);
+      const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
+      if (!schedule || !run || (run.state !== 'CHANGED' && run.state !== 'NO_CHANGE')
+          || (run.landingStatus !== 'WAITING' && run.landingStatus !== 'MERGING')) return;
+      const failed = status === 'FAILED';
+      const suffix = status === 'LANDED' ? scheduleFill(SCHEDULE_COPY.landing.landed, { sha: sha! })
+        : failed ? scheduleFill(SCHEDULE_COPY.landing.failed, { reason: reason! }) : null;
+      const summary = suffix ? `${run.summary ?? ''}\n${suffix}`.trim() : run.summary;
+      await tx.scheduleRun.update({ where: { id: runId }, data: {
+        landingStatus: status, landedSha: sha, summary,
+        ...(failed ? { state: 'FAILED', failureReason } : {}),
+      } });
+      if (status !== 'MERGING') {
+        await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: failed ? { increment: 1 } : 0 } });
+        await this.settleItems(tx, schedule, run, failed ? 'FAILED' : 'SUCCEEDED', this.clock(), alerts, {
+          reason: failureReason, summary: reason ?? null, consecutiveFailures: failed ? schedule.consecutiveFailures + 1 : 0,
+        });
+      }
+    }, loggedRetry(this.logger, 'scheduleRuns.settleLanding'));
+    await this.alert(alerts);
+  }
+
   /** §7.4: a NO_CHANGE run's session is completed once its turn has settled. */
   async completeNoChangeSessions(batch = 25): Promise<string[]> {
     const sessions = await this.prisma.session.findMany({
@@ -635,7 +779,7 @@ export class ScheduleRunsService {
         completedAt: null,
         deletedAt: null,
         status: { notIn: [RunStatus.PENDING, RunStatus.RUNNING] },
-        scheduleRun: { state: 'NO_CHANGE' },
+        scheduleRun: { state: 'NO_CHANGE', OR: [{ landingStatus: null }, { landingStatus: { in: ['LANDED', 'NO_COMMITS'] } }] },
       },
       take: batch,
       select: { id: true, ownerId: true, scheduleRun: { select: { sessionId: true } } },
@@ -690,10 +834,12 @@ export class ScheduleRunsService {
         }
         const now = this.clock();
         const alerts: ScheduleAlert[] = [];
+        const waitsForLanding = run.accessLevel === 'LAND' && report.outcome !== 'FAILED';
         const ended = await tx.scheduleRun.update({
           where: { id: run.id },
           data: {
             state: report.outcome,
+            landingStatus: waitsForLanding ? 'WAITING' : null,
             key: report.key,
             summary: report.summary,
             links: report.links as Prisma.InputJsonValue,
@@ -705,7 +851,7 @@ export class ScheduleRunsService {
           where: { id: schedule.id },
           data: {
             ...(report.note !== undefined ? { note: report.note } : {}),
-            consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0,
+            ...(waitsForLanding ? {} : { consecutiveFailures: report.outcome === 'FAILED' ? { increment: 1 } : 0 }),
           },
         });
         let newFinding = false;
@@ -746,7 +892,7 @@ export class ScheduleRunsService {
             });
           }
         }
-        await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
+        if (!waitsForLanding) await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
           reason: 'REPORTED_FAILED',
           summary: report.summary,
           consecutiveFailures: report.outcome === 'FAILED' ? schedule.consecutiveFailures + 1 : 0,
@@ -756,7 +902,7 @@ export class ScheduleRunsService {
       loggedRetry(this.logger, 'scheduleRuns.report'),
     );
     await this.alert(result.alerts);
-    if (result.run.state === 'NO_CHANGE') await this.completeIfSettled(ownerId, sessionId);
+    if (result.run.state === 'NO_CHANGE' && result.run.accessLevel !== 'LAND') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
   }
@@ -781,12 +927,15 @@ export class ScheduleRunsService {
         // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
         // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
         // The run it would write is planned at now.
-        if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
-          throw refusal(
-            'CONFLICT',
-            'SCHEDULE_OVER_BUDGET',
-            `This schedule has already started ${schedule.envelopeRunsPerWeek} runs in the past 7 days, as many as its owner allowed; only the owner can run it now.`,
-          );
+        if (actor.kind !== 'OWNER') {
+          const started = await scheduleBudgetStarts(tx, schedule, now);
+          if (started >= schedule.envelopeRunsPerWeek) {
+            throw refusal(
+              'CONFLICT',
+              'SCHEDULE_OVER_BUDGET',
+              scheduleOverBudgetMessage(started, schedule.envelopeRunsPerWeek),
+            );
+          }
         }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
@@ -1192,7 +1341,7 @@ export class ScheduleRunsService {
             title: schedule.title,
             deadline: new Date(card.createdAt.getTime() + SCHEDULE_APPROVAL_TIMEOUT_MS),
             nextAt: schedule.nextDueAt,
-            pattern: approvalPattern(card.toolName, card.input),
+            pattern: approvalPattern(card.toolName, card.input, (run.accessLevel ?? schedule.accessLevel) === 'CHECK_ONLY'),
             workspaceName: workspace?.name ?? '',
             now,
             timezone: schedule.timezone,
@@ -1352,7 +1501,68 @@ export class ScheduleRunsService {
       note: schedule.note,
       accessLevel: schedule.accessLevel,
       runLimitMinutes: schedule.runLimitMinutes,
+      firing: run.trigger === 'CONDITION' ? await this.firingOf(tx, schedule, run) : null,
     });
+  }
+
+  /**
+   * What a CONDITION run's block says about its firing (docs/condition-triggers-design.md §6.1): the condition, the
+   * reading that fired it, since when the comparison held (the oldest of the unbroken true readings up to the firing;
+   * a failed check neither breaks nor starts it), and the recent samples up to the firing, newest first.
+   */
+  private async firingOf(tx: Tx, schedule: Schedule, run: ScheduleRun): Promise<RunBlockFiring | null> {
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || !rule.conditionId) return null;
+    const condition = await tx.condition.findUnique({ where: { id: rule.conditionId } });
+    if (!condition) return null;
+    const samples = await tx.conditionSample.findMany({
+      where: { conditionId: condition.id, at: { lte: run.plannedAt } },
+      orderBy: { at: 'desc' },
+      take: 200,
+    });
+    const fired = samples[0] && samples[0].at.getTime() === run.plannedAt.getTime() ? samples[0] : null;
+    let since: Date | null = null;
+    for (const sample of samples) {
+      const held = sampleHolds(condition.compareOp, condition.compareValue, sample);
+      if (held === false) break;
+      if (held) since = sample.at;
+    }
+    return {
+      text: condition.text,
+      unit: condition.unit,
+      at: run.plannedAt,
+      value: fired ? (condition.compareOp === 'EXIT_ZERO' ? fired.exitCode : fired.value) : null,
+      since,
+      samples: samples.slice(0, RUN_BLOCK_MAX_SAMPLES).map((s) => ({
+        at: s.at,
+        value: condition.compareOp === 'EXIT_ZERO' ? (s.outcome === 'EXIT' ? s.exitCode : null) : s.outcome === 'VALUE' ? s.value : null,
+        outcome: s.outcome,
+      })),
+      repeat: await this.repeatOf(tx, condition.id, run),
+    };
+  }
+
+  /**
+   * A repeat firing's line (docs/condition-triggers-design.md §5.1): the crossing it follows, the newest FIRED that is
+   * not a repeat up to it, and the runs of this schedule's condition that started from then until this one. Null when
+   * the run's firing is a crossing.
+   */
+  private async repeatOf(tx: Tx, conditionId: string, run: ScheduleRun): Promise<{ firstFiredAt: Date; runsSince: number } | null> {
+    const event = await tx.conditionEvent.findFirst({ where: { conditionId, runId: run.id, kind: 'FIRED' }, select: { at: true, repeat: true } });
+    if (!event?.repeat) return null;
+    const first = await tx.conditionEvent.findFirst({
+      where: { conditionId, kind: 'FIRED', repeat: false, at: { lte: event.at } },
+      orderBy: [{ at: 'desc' }, { id: 'desc' }],
+      select: { at: true },
+    });
+    if (!first) return null;
+    const runsSince = await tx.scheduleRun.count({
+      where: {
+        scheduleId: run.scheduleId, trigger: 'CONDITION', id: { not: run.id }, startedAt: { not: null },
+        plannedAt: { gte: first.at, lt: run.plannedAt },
+      },
+    });
+    return { firstFiredAt: first.at, runsSince };
   }
 
   private openInput(schedule: Schedule, run: ScheduleRun, sessionId: string, prompt: string, plan: StartPlan): OpenRunSession {

@@ -18,7 +18,8 @@
 #                            profile's runner.image is set to it before the apiserver is replaced, and the apiserver's
 #                            manager moves each runner onto it once that runner is idle (rollPreviousImage)
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
-#   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
+#   ORBIT_DEPLOY_PRUNE       1 also prunes dangling images once the release runs (upgrade.sh --prune); earlier releases'
+#                            images beyond the last 3 are removed on every deploy
 #   ORBIT_DEPLOY_PLAN        1 prints the plan and stops there, having changed nothing (upgrade.sh --plan)
 #   ORBIT_DEPLOY_STOP_THEN_START
 #                            1 stops the running apiserver and web before their replacements start, as every release did
@@ -190,9 +191,14 @@ healthy() {
 # (src/apiserver/src/common/graceful-stop.ts); 137 would be Docker killing it at the end of its grace period.
 stop_and_say() {
   local began
-  began="$(date +%s%3N)"
+  began="$(monotonic_ms)"
   docker stop "$1" >/dev/null || return 1
-  echo "    $1 stopped in $(($(date +%s%3N) - began)) ms, exit code $(docker inspect -f '{{.State.ExitCode}}' "$1")"
+  echo "    $1 stopped in $(($(monotonic_ms) - began)) ms, exit code $(docker inspect -f '{{.State.ExitCode}}' "$1")"
+}
+# Milliseconds since boot, which no clock adjustment moves: a step of the wall clock during a stop once
+# printed "stopped in -24 ms". The wall clock where there is no /proc/uptime.
+monotonic_ms() {
+  if [ -r /proc/uptime ]; then awk '{ printf "%d\n", $1 * 1000 }' /proc/uptime; else date +%s%3N; fi
 }
 # The pids of the gateway's workers that take new connections.
 workers() {
@@ -593,5 +599,22 @@ if [ "$PRUNE" = 1 ]; then
   docker image prune -f
 fi
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $COMMIT link-gateway=$LINK_TAG" >>.upgrade/history
+
+# Earlier releases' images. Every release pulls its own apiserver and web image (about 2.5 GB together) and nothing
+# else removes them, so they filled production's disk (2026-11-18: 77 releases, 137 GB, 6.6 GB left). The images of
+# the last KEEP_RELEASES releases in .upgrade/history stay for a quick rollback; an older one is in the registry and a
+# rollback to it pulls it again. Docker refuses an image a container uses, and that refusal is kept.
+KEEP_RELEASES=3
+remove_earlier_release_images() {
+  local keep_tags removed=0 ref
+  keep_tags=" $(tail -n "$KEEP_RELEASES" .upgrade/history | awk '{ print $2; sub(/^link-gateway=/, "", $3); print $3 }' | tr '\n' ' ') "
+  while IFS= read -r ref; do
+    case "$ref" in "$REGISTRY"/orbit-apiserver:* | "$REGISTRY"/orbit-web:* | "$REGISTRY"/orbit-link-gateway:*) ;; *) continue ;; esac
+    case "$keep_tags" in *" ${ref##*:} "*) continue ;; esac
+    if docker rmi "$ref" >/dev/null 2>&1; then removed=$((removed + 1)); fi
+  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}')
+  echo "==> Earlier release images: $removed removed; the last $KEEP_RELEASES releases' kept"
+}
+remove_earlier_release_images
 for notice in ${NOTICES[@]+"${NOTICES[@]}"}; do printf '%s\n' "$notice" >&2; done
 echo "✓ Deployed $COMMIT on $(hostname). Its releases so far, newest last, are in $DIR/.upgrade/history."

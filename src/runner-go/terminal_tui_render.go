@@ -414,6 +414,13 @@ func (a tuiApproval) rememberRules() []map[string]string {
 	case a.ToolName == "AskUserQuestion", a.ToolName == "ExitPlanMode", strings.HasPrefix(a.ToolName, "mcp__orbit__"), strings.HasPrefix(a.ToolName, "orbit_"):
 		return nil
 	case a.ToolName == "Bash":
+		if exact, _ := a.Input["orbitScheduleCheckOnly"].(bool); exact {
+			command := tuiStr(a.Input["command"])
+			if strings.TrimSpace(command) == "" {
+				return nil
+			}
+			return []map[string]string{{"toolName": "Bash", "ruleContent": command}}
+		}
 		var rules []map[string]string
 		for _, prefix := range bashRulePrefixes(tuiStr(a.Input["command"])) {
 			rules = append(rules, map[string]string{"toolName": "Bash", "ruleContent": prefix + ":*"})

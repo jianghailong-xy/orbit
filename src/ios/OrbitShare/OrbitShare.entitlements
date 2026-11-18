@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The App Group the app shares with this extension: the share inbox and the recent-sessions
+	     snapshot live in its container (docs/share-to-orbit-design.md §3.1). The extension holds no
+	     credential and makes no network call. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.io.orbitd.app</string>
+	</array>
+</dict>
+</plist>

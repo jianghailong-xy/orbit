@@ -197,6 +197,7 @@ func TestEveryOperationHasCatalogMetadata(t *testing.T) {
 		objectAgent: true, objectRunner: true, objectProvider: true, objectWatch: true,
 		objectWiki: true, objectFile: true, objectOwner: true, objectAccount: true,
 		objectBackgroundJob: true, objectPermission: true, objectMergeReceipt: true, objectSchedule: true,
+		objectCatalog: true,
 	}
 	validRisks := map[operationRisk]bool{riskLow: true, riskMedium: true, riskHigh: true}
 	validApprovals := map[operationApproval]bool{approvalKindNone: true, approvalKindCard: true, approvalKindOwner: true}
@@ -565,10 +566,10 @@ func TestCatalogCoversTheContractBaselineGap(t *testing.T) {
 		}
 	}
 	wantMCPOnly := []string{
-		"ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "criterion_check_report",
+		"ask_owner", "bg_kill", "bg_list", "bg_output", "bg_run", "condition_get", "criterion_check_report",
 		"criterion_check_start", "criterion_confirm", "criterion_confirmation_withdraw",
 		"integration_abandon", "integration_observe", "integration_retry", "open_item_hand_over",
-		"open_item_resolve", "permission_prompt", "request_owner_action", "schedule_create",
+		"open_item_resolve", "permission_prompt", "project_ruling_record", "request_owner_action", "schedule_create",
 		"schedule_delete", "schedule_end", "schedule_get", "schedule_list", "schedule_pause",
 		"schedule_resume", "schedule_run_now", "schedule_run_report", "schedule_run_stop",
 		"schedule_update", "schedule_wakeup", "withdraw_owner_request",

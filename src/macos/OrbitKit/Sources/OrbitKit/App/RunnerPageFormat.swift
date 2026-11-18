@@ -33,8 +33,8 @@ public enum RunnerPageFormat {
     }
 
     /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
-    /// managed runner (`ManagedRunnerIdentity`, the managed status's runnerId — never its stored name
-    /// `orbit-managed`), else the machine's own name.
+    /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
+    /// never its stored name `orbit-managed`), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
         displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
     }
@@ -43,7 +43,7 @@ public enum RunnerPageFormat {
     public static func displayName(_ runner: Runner, managedRunnerID: String?) -> String {
         let alias = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !alias.isEmpty { return alias }
-        return isManaged(runner.id, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+        return isManaged(runner, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
     /// The name a machine falls back to with no alias: Orbit Cloud for the managed runner, else its own.
@@ -51,14 +51,30 @@ public enum RunnerPageFormat {
         isManaged(runner) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
     }
 
-    /// Whether `runner` is the account's managed runner, by id.
+    /// Whether `runner` is the account's managed runner: its row says so (`managed`), or its id is the
+    /// managed status's runnerId (an older server, which sends no flag).
     public static func isManaged(_ runner: Runner) -> Bool {
-        isManaged(runner.id, managedRunnerID: ManagedRunnerIdentity.runnerID)
+        isManaged(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `isManaged` against a given managed runner id, kept pure for tests.
+    public static func isManaged(_ runner: Runner, managedRunnerID: String?) -> Bool {
+        runner.managed == true || isManaged(runner.id, managedRunnerID: managedRunnerID)
     }
 
     public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {
         guard let runnerID, let managedRunnerID, !runnerID.isEmpty, !managedRunnerID.isEmpty else { return false }
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
+    }
+
+    /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
+    public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
+        guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),
+              index != runners.startIndex else { return runners }
+        var order = runners
+        let managed = order.remove(at: index)
+        order.insert(managed, at: 0)
+        return order
     }
 
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
@@ -206,6 +222,7 @@ public enum RunnerPageFormat {
     /// (board iOS 2 ②) — its version is the one Orbit pins, not the latest every 30 minutes.
     public static func enginesFooter(_ runner: Runner, fleet: [Runner]? = nil, offline: Bool) -> String {
         if offline { return RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER }
+        if isManaged(runner) { return RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER }
         return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
@@ -375,6 +392,13 @@ public enum RunnerPageFormat {
     public static func engineSite(_ health: RunnerEngineHealth) -> String? {
         guard (health.accounts ?? []).count < 2 else { return nil }
         return KimiSite.current(of: health)?.domain
+    }
+
+    /// OpenCode's note after its version when its CLI listed no provider key (web's
+    /// `1.19.5 · no provider key found`): its Unknown is about a key, never the version. Nil otherwise.
+    public static func engineKeyNote(_ health: RunnerEngineHealth) -> String? {
+        health.engine == "opencode" && health.openCodeNoKey == true && health.auth != "yes"
+            ? RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY : nil
     }
 
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login
@@ -713,11 +737,15 @@ public enum RunnerPageFormat {
         public let pending: Bool
         public let refused: String?
         public let blocking: [BlockingSession]
+        /// Under way and waiting on the sessions it moved to another account to leave this one (web
+        /// `runnerAccountMovingOne`/`Many`); nil otherwise.
+        public let moving: String?
 
-        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = []) {
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = [], moving: String? = nil) {
             self.pending = pending
             self.refused = refused
             self.blocking = blocking
+            self.moving = moving
         }
     }
 
@@ -758,7 +786,15 @@ public enum RunnerPageFormat {
         case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
         default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
         }
-        return AccountRemoval(pending: state.status == "pending", refused: refused, blocking: blocking)
+        let pending = state.status == "pending"
+        let count = pending ? (state.moving ?? 0) : 0
+        let moving: String?
+        switch count {
+        case ..<1: moving = nil
+        case 1: moving = RunnerAccountCopy.runnerAccountMovingOne(engine: engineName(engine))
+        default: moving = RunnerAccountCopy.runnerAccountMovingMany(engine: engineName(engine), count: count)
+        }
+        return AccountRemoval(pending: pending, refused: refused, blocking: blocking, moving: moving)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,

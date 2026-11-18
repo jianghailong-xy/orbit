@@ -4,8 +4,8 @@
  *   1. By name: `delegate(workspace="orbit-macos")` opens a run on that workspace, with workspace_id,
  *      target_runner_id and the reason in its decision; the read endpoint's view says `on orbit-macos`.
  *   2. By `needs` with two candidates: the one with more quota headroom is chosen, and its reason says so.
- *   3. By `needs` with none: refused, listing what each candidate lacked.
- *   4. SUBAGENT_WORKSPACE_REPO_MISMATCH: another repository, and an empty repoUrl on either side.
+ *   3. By `needs` with none: refused, listing what each candidate lacked, including other repositories.
+ *   4. By name: another repository and an empty repoUrl on either side are allowed.
  *   5. SUBAGENT_WORKSPACE_NOT_GIT: a workspace whose work dir is not a git repository.
  *   6. A target whose agent has SubAgents off is refused.
  *   7. An event for the run from a runner other than target_runner_id is refused, and writes nothing.
@@ -218,7 +218,9 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     const roomy = await machine(ownerId, 'mac-studio', { capabilities: ['os:darwin', 'xcode'], claudeUsed: 25 });
     const develop = await workspace(ownerId, hpc, 'orbit-develop', { position: 0 });
     await workspace(ownerId, busy, 'orbit-macos', { position: 1 });
-    const studio = await workspace(ownerId, roomy, 'orbit-studio', { position: 2 });
+    const studio = await workspace(ownerId, roomy, 'orbit-studio', {
+      position: 2, repoUrl: 'git@github.com:orbit-test/orbit.git',
+    });
     const sessionId = await parentIn(ownerId, develop, hpc);
 
     const opened = await subagents.openSubagentRun(hpc, sessionId, create({
@@ -263,37 +265,48 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'and wrote no row');
   });
 
-  await t.test('SUBAGENT_WORKSPACE_REPO_MISMATCH: another repository, or an empty repoUrl on either side', async () => {
+  await t.test('by name: another repository, or an empty repoUrl on either side, is picked as remote', async () => {
     const ownerId = await account();
     const hpc = await machine(ownerId, 'workstation-gpu');
     const mac = await machine(ownerId, 'mac-mini', { capabilities: ['os:darwin'] });
     const develop = await workspace(ownerId, hpc, 'orbit-develop');
-    await workspace(ownerId, mac, 'site', { repoUrl: 'git@github.com:orbit-test/site.git' });
-    await workspace(ownerId, mac, 'scratch', { repoUrl: null });
-    // The same repository spelled another way is the same repository.
-    await workspace(ownerId, mac, 'orbit-ssh', { repoUrl: 'git@github.com:orbit-test/orbit.git' });
+    const lfs = await workspace(ownerId, mac, 'lfs', { repoUrl: 'git@github.com:orbit-test/lfs-builder.git' });
     const sessionId = await parentIn(ownerId, develop, hpc);
 
-    let message = '';
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Site', workspace: 'site' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH', (said) => { message = said; }),
-    );
-    assert.equal(message, "site works on github.com/orbit-test/site, and this session's workspace on github.com/orbit-test/orbit. "
-      + 'A SubAgent runs only on a workspace of the same repository; use session_create for work in another one.');
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Scratch', workspace: 'scratch' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH'), 'an empty repoUrl on the target');
+    const other = await subagents.openSubagentRun(hpc, sessionId, create({
+      toolUseId: 'toolu_01Lfs', workspace: 'lfs', needs: ['os:darwin'],
+    })) as SubagentRemoteRunCreateResponse;
+    assert.deepEqual(other.remote, { workspaceId: lfs, workspaceName: 'lfs' });
+    assert.equal(other.decision.workspace?.reason, 'Named by the delegate call: lfs, whose runner reports os:darwin');
+    await subagents.endRemoteSubagentRun(mac, other.runId, update({ status: 'DONE' }));
 
-    const bare = await workspace(ownerId, hpc, 'no-remote', { repoUrl: '' });
-    const bareParent = await parentIn(ownerId, bare, hpc);
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, bareParent, create({ toolUseId: 'toolu_01Bare', workspace: 'orbit-ssh' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH'), "an empty repoUrl on the parent's side");
-
-    const same = await subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Ssh', workspace: 'orbit-ssh' }));
-    assert.equal((same as SubagentRemoteRunCreateResponse).remote.workspaceName, 'orbit-ssh', 'git@ and https:// name one repository');
-    assert.equal(await prisma.subagentRun.count({ where: { sessionId, toolUseId: { in: ['toolu_01Site', 'toolu_01Scratch'] } } }), 0);
+    for (const repoUrl of [null, '']) {
+      await prisma.workspace.update({ where: { id: lfs }, data: { repoUrl } });
+      const emptyTarget = await subagents.openSubagentRun(hpc, sessionId, create({
+        toolUseId: `toolu_01Target-${repoUrl === null ? 'null' : 'blank'}`, workspace: 'lfs',
+      })) as SubagentRemoteRunCreateResponse;
+      assert.deepEqual(emptyTarget.remote, { workspaceId: lfs, workspaceName: 'lfs' }, 'an empty repoUrl on the target');
+      await subagents.endRemoteSubagentRun(mac, emptyTarget.runId, update({ status: 'DONE' }));
+      await assert.rejects(
+        subagents.openSubagentRun(hpc, sessionId, create({
+          toolUseId: `toolu_01NeedsTarget-${repoUrl === null ? 'null' : 'blank'}`, needs: ['os:darwin'],
+        })),
+        refusedWith('SUBAGENT_NO_WORKSPACE_MATCHES'), 'needs still rejects a target without a repository URL');
+    }
+    await prisma.workspace.update({ where: { id: lfs }, data: { repoUrl: 'git@github.com:orbit-test/lfs-builder.git' } });
+    for (const repoUrl of [null, '']) {
+      await prisma.workspace.update({ where: { id: develop }, data: { repoUrl } });
+      const emptyParent = await subagents.openSubagentRun(hpc, sessionId, create({
+        toolUseId: `toolu_01Parent-${repoUrl === null ? 'null' : 'blank'}`, workspace: 'lfs',
+      })) as SubagentRemoteRunCreateResponse;
+      assert.deepEqual(emptyParent.remote, { workspaceId: lfs, workspaceName: 'lfs' }, "an empty repoUrl on the parent's side");
+      await subagents.endRemoteSubagentRun(mac, emptyParent.runId, update({ status: 'DONE' }));
+      await assert.rejects(
+        subagents.openSubagentRun(hpc, sessionId, create({
+          toolUseId: `toolu_01NeedsParent-${repoUrl === null ? 'null' : 'blank'}`, needs: ['os:darwin'],
+        })),
+        refusedWith('SUBAGENT_NO_WORKSPACE_MATCHES'), 'needs still requires the parent repository URL');
+    }
   });
 
   await t.test('SUBAGENT_WORKSPACE_NOT_GIT: a work dir that is not a git repository is refused', async () => {

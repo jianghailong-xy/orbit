@@ -80,6 +80,8 @@ class ManagedRunnerEntryTest {
         settled()
         none(ManagedRunner.Entry.TITLE)
         none(ManagedRunner.Entry.SUBTITLE)
+        compose.onNodeWithTag("managed-runner-icon", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("managed-runner-divider").assertDoesNotExist()
         assertTrue(fixture.calls.toString(), "GET auth/capabilities" in fixture.calls)
         assertEquals(fixture.calls.toString(), 0, managedReads())
     }
@@ -192,6 +194,8 @@ class ManagedRunnerEntryTest {
         await(ManagedRunner.SHORT.getValue("sleeping"))
         compose.onNode(hasText("Asleep") and hasTestTag("managed-runner-label"), useUnmergedTree = true).assertExists()
         compose.onNodeWithText(ManagedRunner.Asleep.ROW, useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("managed-runner-icon", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("managed-runner-divider").assertDoesNotExist()
         none(RunnerCopy.OFFLINE)
         none("is offline")
         none(ManagedRunner.Entry.TITLE)

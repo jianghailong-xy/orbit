@@ -1,0 +1,127 @@
+# The agent-contract eval's black-box layer (docs/agent-contract-eval.md), weekly and on demand.
+#
+# The real Claude Code and Codex, installed from npm, play the Orbit Agent Contract's scenarios with real models
+# against the eval's own control plane: nothing reaches an Orbit account. Each engine runs at the newest version the
+# supported matrix lists (contracts/orbit-agent.contract.json eval.supportedMatrix) and at the newest version
+# published, so an engine update is measured within a week of its release, before the runners' own engine updates
+# reach it. Every run writes a report in the one shape reports compare in, compared cell by cell with the accepted
+# baseline (docs/agent-eval/baseline.json); the report is the job's summary and its artifact, and the job fails
+# unless the release gate passes.
+#
+# Model credentials are repository secrets: ANTHROPIC_API_KEY for Claude Code, OPENAI_API_KEY for Codex. An engine
+# without one is not run, and its job says so as a warning in the summary rather than passing as if it had been
+# measured. The models are the repository variables AGENT_EVAL_CLAUDE_MODEL and AGENT_EVAL_CODEX_MODEL, or the
+# inputs of a dispatch.
+name: Agent contract eval (black-box)
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Scenario ids, comma-separated ("E1*" names a prefix), or all
+        default: all
+      repeats:
+        description: Runs per scenario
+        default: '1'
+      claude_model:
+        description: Claude model (default the AGENT_EVAL_CLAUDE_MODEL variable, else claude-sonnet-5-5)
+        default: ''
+      codex_model:
+        description: Codex model (default the AGENT_EVAL_CODEX_MODEL variable, else the engine's own default)
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-eval-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  black-box:
+    name: Black-box eval (${{ matrix.engine }}, ${{ matrix.version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [claude, codex]
+        version: [supported, latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Choose the engine version
+        id: pick
+        env:
+          ENGINE: ${{ matrix.engine }}
+          WHICH: ${{ matrix.version }}
+        run: |
+          package=@anthropic-ai/claude-code
+          [ "$ENGINE" = codex ] && package=@openai/codex
+          if [ "$WHICH" = supported ]; then
+            version="$(node -e '
+              const m = require("./contracts/orbit-agent.contract.json").eval.supportedMatrix;
+              const e = m.find((x) => x.engine === process.argv[1]);
+              process.stdout.write(e ? e.versions[e.versions.length - 1] : "");' "$ENGINE")"
+          else
+            version="$(npm view "$package" version)"
+          fi
+          [ -n "$version" ] || { echo "no $WHICH version for $ENGINE"; exit 1; }
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check for the model credential
+        id: credential
+        env:
+          ENGINE: ${{ matrix.engine }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          key="$ANTHROPIC_API_KEY"
+          name=ANTHROPIC_API_KEY
+          if [ "$ENGINE" = codex ]; then key="$OPENAI_API_KEY"; name=OPENAI_API_KEY; fi
+          if [ -z "$key" ]; then
+            echo "::warning::No $name secret: the $ENGINE black-box eval did not run, so nothing was measured."
+            echo "No \`$name\` secret: the **$ENGINE** black-box eval did not run, so nothing was measured." >> "$GITHUB_STEP_SUMMARY"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install ${{ matrix.engine }} ${{ steps.pick.outputs.version }}
+        if: steps.credential.outputs.present == 'true'
+        run: npm install -g "${{ steps.pick.outputs.package }}@${{ steps.pick.outputs.version }}"
+      - name: Sign Codex in with the API key
+        if: steps.credential.outputs.present == 'true' && matrix.engine == 'codex'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: printenv OPENAI_API_KEY | codex login --with-api-key
+      - name: Run the black-box eval
+        if: steps.credential.outputs.present == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ matrix.engine == 'claude' && secrets.ANTHROPIC_API_KEY || '' }}
+          SCENARIOS: ${{ inputs.scenarios || 'all' }}
+          REPEATS: ${{ inputs.repeats || '1' }}
+          CLAUDE_MODEL: ${{ inputs.claude_model || vars.AGENT_EVAL_CLAUDE_MODEL || 'claude-sonnet-5-5' }}
+          CODEX_MODEL: ${{ inputs.codex_model || vars.AGENT_EVAL_CODEX_MODEL || '' }}
+        run: |
+          scripts/agent-eval.sh live --engines "${{ matrix.engine }}" --scenarios "$SCENARIOS" --repeats "$REPEATS" \
+            --claude-model "$CLAUDE_MODEL" --codex-model "$CODEX_MODEL" \
+            --baseline docs/agent-eval/baseline.json --out agent-eval-reports
+      - name: Put the report in the summary
+        if: always() && steps.credential.outputs.present == 'true'
+        run: cat agent-eval-reports/*.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      - name: Keep the report
+        if: always() && steps.credential.outputs.present == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agent-eval-${{ matrix.engine }}-${{ steps.pick.outputs.version }}
+          path: agent-eval-reports/
+          if-no-files-found: warn
+          retention-days: 90

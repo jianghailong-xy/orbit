@@ -27,11 +27,11 @@ struct UserBubbleView: View {
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
-    /// Whether what Orbit attached is open: its line ends the meta row, its rows go under that row.
-    @State private var noteOpen = false
     /// Settings › Translation: this message flipped to the English the agent got. Per message and
     /// never persisted (board frame 5).
     @State private var flipped = false
+    /// "Show both languages": this message's English hidden ("Hide original"). Per message, not kept.
+    @State private var originalHidden = false
     @Environment(\.translationActions) private var translationActions
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
@@ -81,7 +81,9 @@ struct UserBubbleView: View {
     /// "Agents work in": the language the agent got the message in.
     private var agentLanguage: TranslationLanguage { translationActions?.agentLanguage ?? .agentDefault }
     /// The English under the owner's words, when both languages are shown (mark C).
-    private var english: String? { SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual) }
+    private var english: String? {
+        SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual && !originalHidden)
+    }
 
     var body: some View {
         let words = self.words
@@ -108,13 +110,15 @@ struct UserBubbleView: View {
                 if !files.isEmpty {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
                 }
-                // The bubble is the person's words and nothing else: what delivery appended is named
-                // on a line in the meta row under it (`AttachedNoteLine`), never in it.
+                // The bubble is the person's words; the note delivery appended stays out of it.
                 if !bubble.text.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         typedText(shown, showsCard: showsCard)
                         if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }
                     }
+                        // The English under the words fills what it is offered, divider and all; the
+                        // bubble still hugs the wider of its two lines rather than taking the row.
+                        .hugWidth(!showsCard)
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
@@ -130,14 +134,6 @@ struct UserBubbleView: View {
                 meta
                 why
                 if !delivered { translationFoot }
-                if noteOpen, let attached = bubble.attached {
-                    // What the line in the meta row opened, in the bubble's column on a quiet panel of
-                    // its own (web's `.chat-user-wrap > .chat-injected-panel`).
-                    AttachedNoteBody(attached: attached)
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-                }
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
             // contentShape makes the WHOLE column rect (incl. the 3pt spacing gaps and the meta's
@@ -265,12 +261,11 @@ struct UserBubbleView: View {
     // "Queued" (a turn was already in flight) or "Sending…" in place of the time, and "Not
     // delivered" once the run has ended without ever taking it. A message written into the running
     // turn instead of queued behind it (a steer) shows how far it got there instead — see
-    // SteerDelivery. The line naming what Orbit attached ends the row and is always shown. Always
-    // laid out so revealing it doesn't move the bubble. An image-only turn (empty text) has nothing
-    // to copy, so the row is suppressed unless it has a state or a note to show — web parity.
+    // SteerDelivery. Always laid out so revealing it doesn't move the bubble. An image-only turn
+    // (empty text) has nothing to copy, so the row is suppressed unless it has a state to show.
     @ViewBuilder
     private var meta: some View {
-        if !bubble.text.isEmpty || unconfirmed || bubble.attached != nil || heldFoot != nil {
+        if !bubble.text.isEmpty || unconfirmed || heldFoot != nil {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
@@ -346,22 +341,21 @@ struct UserBubbleView: View {
                 }
                 // A delivered translation's Show original / Show translation ends the copy/time line
                 // rather than taking one of its own (docs/mocks/translation-foot-one-line, B). The dot
-                // goes with the time, so on macOS at rest the press keeps its place at the edge.
+                // goes with the time, so on macOS at rest the press keeps its place at the edge. With
+                // nothing in that slot (no time, or a hold drawing its tag instead) there is no dot to
+                // hang off the copy button (web parity: its separator needs `node.ts`).
                 if delivered {
-                    Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                    if stateOrTimeDrawn {
+                        Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                    }
                     translationFoot
                 }
                 // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
                 if let heldFoot {
                     RunnerUpdatingTagView(foot: heldFoot)
                 }
-                if let attached = bubble.attached {
-                    // Named, not hidden: without it the agent answers about a quota outage nobody
-                    // appears to have raised. Opened, its rows go under this row (`noteOpen`).
-                    AttachedNoteLine(attached: attached, open: $noteOpen)
-                }
             }
-            // At least one line: a long note line wraps on a phone rather than being cut.
+            // Reserve at least one line for the meta row.
             .frame(minHeight: metaHeight)
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
@@ -396,16 +390,27 @@ struct UserBubbleView: View {
     /// A delivered translation, whose press rides in the meta row.
     private var delivered: Bool { bubble.translation?.state == .done }
 
+    /// Whether `meta`'s state-or-time slot draws anything — the same branches, in the same order.
+    private var stateOrTimeDrawn: Bool {
+        if bubble.undelivered || bubble.steer { return true }
+        if bubble.pending, bubble.translation?.held == true || heldFoot != nil { return false }
+        if awaitingServer { return true }
+        guard let ts = bubble.ts else { return false }
+        return RelativeTime.format(ts) != nil
+    }
+
     /// Settings › Translation: "Show original" and its flip (in the meta row, `delivered`), or on a line
     /// of its own the "Translating…" chip or "Couldn't translate, so it wasn't sent · Retry · Send as
     /// written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
-        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)
+        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,
+                                                originalHidden: originalHidden)
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
                 case .flip: flipped.toggle()
+                case .hideOriginal: originalHidden.toggle()
                 case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }
                 case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }
                 case .retryReply: break
@@ -428,6 +433,8 @@ struct AssistantBubbleView: View {
     let bubble: AssistantBubble
     /// Settings › Translation: this reply flipped to the English the agent wrote (board frame 5).
     @State private var flipped = false
+    /// "Show both languages": this reply's original hidden ("Hide original"). Per message, not kept.
+    @State private var originalHidden = false
     @State private var hovering = false
     @Environment(\.translationActions) private var translationActions
     /// "Show both languages" is on: a translated reply also shows the words the agent wrote.
@@ -455,7 +462,7 @@ struct AssistantBubbleView: View {
     /// "Show both languages" with a reply whose blocks pair: drawn block by block, each original under
     /// its translation (03-interleaved.png). Nil draws it as before, whole (frame 4).
     private var pairs: [BilingualPairs.Pair]? {
-        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)
+        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual && !originalHidden)
     }
 
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
@@ -492,14 +499,16 @@ struct AssistantBubbleView: View {
             .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
             if bubble.isFinalized,
-               let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual) {
+               let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation,
+                                                             bilingual: bilingual && !originalHidden) {
                 BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)
             }
             if tail == nil {
                 TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,
-                                                                        bilingual: bilingual)) { action in
+                                                                        bilingual: bilingual, originalHidden: originalHidden)) { action in
                     switch action {
                     case .flip: flipped.toggle()
+                    case .hideOriginal: originalHidden.toggle()
                     case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
                     case .retryTurn, .sendAsWritten: break
                     }

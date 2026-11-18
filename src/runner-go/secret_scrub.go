@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // The exact-value scrubber for owner-request secrets (docs/design/owner-request-secrets.md §5.4). One routine, built on
@@ -35,11 +36,33 @@ func secretValueForms(value string) []string {
 		forms = append(forms, trimmed)
 	}
 	if strings.Contains(value, "\n") {
+		// Each line on its own, trimmed, and only one that could not be ordinary text: a pretty-printed JSON secret's
+		// `        },` or `  "type": "x",` is in every codebase.
 		for _, line := range strings.Split(value, "\n") {
-			forms = append(forms, strings.TrimRight(line, "\r"), strings.TrimSpace(line))
+			if line = strings.TrimSpace(line); secretLineDistinctive(line) {
+				forms = append(forms, line)
+			}
 		}
 	}
 	return forms
+}
+
+// secretLineMinAlnum is how many letters and digits one line of a multi-line value needs to be matched on its own.
+const secretLineMinAlnum = 12
+
+// secretLineDistinctive reports whether one trimmed line of a multi-line value is distinctive enough to match on its
+// own: at least secretLineMinAlnum letters and digits, of at least 6 different ones. A PEM body line or a key's value
+// passes; indentation, brackets and short JSON keys do not.
+func secretLineDistinctive(line string) bool {
+	alnum := 0
+	distinct := map[rune]bool{}
+	for _, c := range line {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) {
+			alnum++
+			distinct[c] = true
+		}
+	}
+	return alnum >= secretLineMinAlnum && len(distinct) >= 6
 }
 
 // newSecretRedactor is an integrationOutputRedactor over values and their forms, and nothing else: no environment

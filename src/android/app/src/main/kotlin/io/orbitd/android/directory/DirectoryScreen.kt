@@ -32,10 +32,12 @@ import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.text
 import io.orbitd.android.navigation.*
 import io.orbitd.android.perf.OrbitPerf
+import io.orbitd.android.realtime.PagePoll
 import io.orbitd.android.watch.WatchSessionSummary
 import io.orbitd.android.watch.watchKey
 import io.orbitd.android.wiki.PageBar
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -78,18 +80,54 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     val folder = data.folders.firstOrNull { ObjectId.same(it.id, route.id) }
     val workspace = route.workspaceId ?: route.id.orEmpty()
     val isFolder = route.destination == Destination.FOLDER
-    val folderId = if (isFolder) route.id else null
+    val onScheduledRuns = isFolder && route.id == ScheduledRunsFolder.ID
+    val folderId = if (isFolder && !onScheduledRuns) route.id else null
+    val folderTitle = if (onScheduledRuns) ScheduledRunsFolderCopy.TITLE else folder?.name.takeIf { isFolder }
     val workspaceName = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.name ?: "Workspace"
     val runnerOffline = data.runners.firstOrNull { ObjectId.same(it.id, data.workspaces.firstOrNull { w -> ObjectId.same(w.id, workspace) }?.runnerId) }?.online == false
+    val showFolders = listShowsFolders(isFolder, view, tag, grouping)
+    val readScheduled = onScheduledRuns || (showFolders && query.isBlank() && workspace.isNotEmpty())
+    val scheduledList = remember(api, workspace, view) { SessionScopeList(api, scheduledWorkspace = workspace) }
 
-    LaunchedEffect(view, asks) { if (view == SessionView.OPEN) scopeList.clear() else scopeList.show(view, asks) }
-
-    val openRows = data.sessions[SessionView.OPEN.query].orEmpty()
-    val scopeRows = if (view == SessionView.OPEN) null else scopeList.rows(view)
-    val sessions = remember(view, openRows, scopeRows, trashing) {
-        if (view == SessionView.OPEN) openRows else TrashingSessions.without(scopeRows.orEmpty(), trashing) { it.id }
+    LaunchedEffect(view, asks, onScheduledRuns) {
+        if (!onScheduledRuns) {
+            if (view == SessionView.OPEN) scopeList.clear() else scopeList.show(view, asks)
+        }
     }
-    val content = remember(sessions, openRows, data.folders, sidebar, view, workspace, folderId, tag, grouping, runnerOffline, watching, recaps) {
+    if (readScheduled) {
+        // New runs are omitted from directory events, so keep a fixed cadence while the page is visible.
+        PagePoll(app, handle, emptySet(), scheduledList, asks, inFlightMs = { ScheduledRunsFolder.POLL_INTERVAL_MS }) {
+            scheduledList.read(view, asks)
+        }
+    }
+
+    val openSnapshot = data.sessions[SessionView.OPEN.query].orEmpty()
+    val openRows = remember(openSnapshot) { openSnapshot.withoutScheduledRuns() }
+    val scopeRows = if (view == SessionView.OPEN) null else scopeList.rows(view)
+    val scheduledSnapshot = scheduledList.rows(view)
+    val scheduledSessions = remember(scheduledSnapshot, workspace, trashing) {
+        TrashingSessions.without(ScheduledRunsFolder.sessions(scheduledSnapshot.orEmpty(), workspace), trashing) { it.id }
+    }
+    val scheduledRow = remember(scheduledSessions, showFolders) { ScheduledRunsFolder.row(scheduledSessions, showFolders) }
+    var scheduledRowWasShown by remember { mutableStateOf(false) }
+    SideEffect {
+        // Keep the top visible when the scheduled read finishes after the ordinary list.
+        if (scheduledRow != null && !scheduledRowWasShown && list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0) {
+            list.requestScrollToItem(0)
+        }
+        scheduledRowWasShown = scheduledRow != null
+    }
+    val sessions = when {
+        onScheduledRuns -> scheduledSessions
+        view == SessionView.OPEN -> openRows
+        else -> remember(scopeRows, trashing) {
+            TrashingSessions.without(scopeRows.orEmpty().withoutScheduledRuns(), trashing) { it.id }
+        }
+    }
+    val content = remember(sessions, openRows, data.folders, sidebar, view, workspace, folderId, onScheduledRuns,
+        showFolders, tag, grouping, runnerOffline, watching, recaps) {
+        if (onScheduledRuns) return@remember ListContent(
+            directoryGroups(sessions, view, Grouping.RECENCY), emptyMap(), emptyMap(), emptyList())
         // This workspace's rows, by the few spellings of a workspace there are: `ObjectId.same` parses both ids, and an owner's Completed
         // has thousands of rows, mostly in other workspaces.
         val spellings = sessions.mapTo(HashSet()) { it.workspace }.filterTo(HashSet()) { ObjectId.same(it, workspace) }
@@ -108,24 +146,36 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
             folderId, view, tag, grouping == Grouping.TAG), view, grouping)
         // A folder counts a project's members where their coordinator is filed.
         val counted = listing?.assigned ?: local
-        val folders = if (isFolder || view == SessionView.TRASH || tag != null || grouping == Grouping.TAG) emptyList() else data.folders.filter { f ->
+        val folders = if (!showFolders) emptyList() else data.folders.filter { f ->
             ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN || counted.any { ObjectId.same(it.folderId, f.id) })
         }.sortedBy { it.name.lowercase() }.map { f -> f to counted.filter { ObjectId.same(it.folderId, f.id) } }
         ListContent(groups, listing?.projects.orEmpty().associateBy { it.projectId }, listing?.marks.orEmpty(), folders)
     }
-    val waiting = if (view == SessionView.OPEN) !data.ready && data.error == null else scopeRows == null && scopeList.error(view) == null
-    val failure = if (view == SessionView.OPEN) data.error.takeIf { !data.ready } else scopeList.error(view).takeIf { scopeRows == null }
+    val failure = when {
+        onScheduledRuns -> scheduledList.error(view).takeIf { scheduledSnapshot == null }
+        view == SessionView.OPEN -> data.error.takeIf { !data.ready }
+        else -> scopeList.error(view).takeIf { scopeRows == null }
+    }
+    val waiting = failure == null && when {
+        onScheduledRuns -> scheduledSnapshot == null
+        view == SessionView.OPEN -> !data.ready
+        else -> scopeRows == null
+    }
     val machine = data.machineName(workspace)
 
-    PageBar.Bind(route, title = folder?.name.takeIf { isFolder }, subtitle = workspaceName.takeIf { isFolder && folder != null }, actions = {
+    PageBar.Bind(route, title = folderTitle, subtitle = workspaceName.takeIf { folderTitle != null }, actions = {
         if (isFolder) {
-            if (folder != null) IconButton(onClick = { action = DirectoryDialog.EditFolder(folder) }) { Icon(painterResource(R.drawable.ic_more), SessionListCopy.FOLDER_ACTIONS) }
+            if (!onScheduledRuns && folder != null) IconButton(onClick = { action = DirectoryDialog.EditFolder(folder) }) {
+                Icon(painterResource(R.drawable.ic_more), SessionListCopy.FOLDER_ACTIONS)
+            }
         } else SessionOptionsMenu(view, data.tags, tag, grouping == Grouping.TAG, onView = { next -> view = next; coroutines.launch { list.scrollToItem(0) } },
             onTag = { tag = it }, onByTag = { grouping = if (it) Grouping.TAG else Grouping.RECENCY },
             onNewFolder = { action = DirectoryDialog.NewFolder(workspace) },
             onSettings = { open(OrbitRoute(Destination.SETTINGS, id = "workspace", workspaceId = workspace)) })
-        IconButton(onClick = { open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, folderId = folderId)) }) {
-            Icon(painterResource(R.drawable.ic_compose), if (isFolder) SessionListCopy.startSessionIn(folder?.name ?: "Folder") else SessionListCopy.startSession(workspaceName))
+        if (!onScheduledRuns) IconButton(onClick = { open(OrbitRoute(Destination.DRAFT, workspaceId = workspace, folderId = folderId)) }) {
+            val composeLabel = if (isFolder) SessionListCopy.startSessionIn(folderTitle ?: "Folder")
+                else SessionListCopy.startSession(workspaceName)
+            Icon(painterResource(R.drawable.ic_compose), composeLabel)
         }
     })
 
@@ -140,17 +190,30 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                     pulling = true
                     coroutines.launch {
                         try {
-                            if (view != SessionView.OPEN) scopeList.read(view, asks)
-                            // Offline there is no read to wait for: the rows stay, and the drawer says why.
-                            else if (!data.offline) withTimeoutOrNull(PULL_WAIT_MS) { app.realtime.rereadDirectory() }
+                            when {
+                                onScheduledRuns -> scheduledList.read(view, asks)
+                                view != SessionView.OPEN -> coroutineScope {
+                                    if (readScheduled) launch { scheduledList.read(view, asks) }
+                                    scopeList.read(view, asks)
+                                }
+                                // This also advances asks and refreshes the scheduled row.
+                                !data.offline -> withTimeoutOrNull(PULL_WAIT_MS) { app.realtime.rereadDirectory() }
+                                else -> Unit
+                            }
                         } finally { pulling = false }
                     }
                 }, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = list,
                         contentPadding = PaddingValues(bottom = if (isFolder) 24.dp else SEARCH_FIELD_ROOM)) {
-                        if (data.ready && isFolder && folder == null) {
+                        if (data.ready && isFolder && folderTitle == null) {
                             item { StatusMessage("Folder unavailable", "It may have been deleted or moved.", refresh) }
                         } else {
+                            if (scheduledRow != null) item(key = "folder:${ScheduledRunsFolder.ID}") {
+                                FolderRow(ScheduledRunsFolder.ID, ScheduledRunsFolderCopy.TITLE, scheduledRow, onOpen = {
+                                    open(OrbitRoute(Destination.FOLDER, ScheduledRunsFolder.ID, workspace, sessionView = view.query))
+                                })
+                                RowDivider()
+                            }
                             items(content.folders, key = { "folder:${it.first.id}" }) { (f, children) ->
                                 FolderRow(f, children, runnerOffline, watching,
                                     onOpen = { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) },
@@ -189,15 +252,20 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 }
                             }
                             // iOS's overlay on an empty list: Loading…, or that there is nothing. A read that failed says so.
-                            if (content.groups.isEmpty() && content.folders.isEmpty()) item(key = "empty") {
+                            if (content.groups.isEmpty() && content.folders.isEmpty() && scheduledRow == null) item(key = "empty") {
                                 Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                     // Open not read yet is a page brought back with no rows yet: a bare spinner, as at a launch.
                                     if (failure != null) StatusMessage("Couldn't load sessions", failure) {
-                                        if (view == SessionView.OPEN) refresh() else coroutines.launch { scopeList.read(view, asks) }
+                                        when {
+                                            onScheduledRuns -> coroutines.launch { scheduledList.read(view, asks) }
+                                            view == SessionView.OPEN -> refresh()
+                                            else -> coroutines.launch { scopeList.read(view, asks) }
+                                        }
                                     } else if (waiting && view == SessionView.OPEN) CircularProgressIndicator()
                                     else Text(when {
                                         waiting -> SessionListCopy.LOADING
                                         tag != null -> "No matches"
+                                        onScheduledRuns -> ScheduledRunsFolderCopy.EMPTY
                                         isFolder -> SessionListCopy.FOLDER_EMPTY
                                         else -> SessionListCopy.noSessions(view)
                                     }, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

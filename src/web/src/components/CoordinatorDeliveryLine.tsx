@@ -46,7 +46,6 @@ export function CoordinatorDeliveryLine({
   text,
   seq,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: CoordinatorDeliveryCard;
@@ -54,8 +53,6 @@ export function CoordinatorDeliveryLine({
   text: string;
   seq?: number;
   undelivered?: boolean;
-  /** What delivery appended to the same turn, as its own folded entry under the words. */
-  attached?: ReactNode;
   /** The queue's own line, while the turn still waits behind a running one. */
   queued?: ReactNode;
 }) {
@@ -83,7 +80,6 @@ export function CoordinatorDeliveryLine({
             {card.toCoordinator ? OWNER_ANSWER_TOLD : COORDINATOR_DELIVERY_SESSION_TOLD}
           </div>
           <pre>{text}</pre>
-          {attached}
           {taskPublic && (
             <AppLink className="coordinator-delivery-task" to={`/tasks/${encodeURIComponent(taskPublic)}`}>
               {COORDINATOR_DELIVERY_ITS_TASK}

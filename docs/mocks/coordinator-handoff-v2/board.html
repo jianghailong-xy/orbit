@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Coordinator handoff v2</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#e3e3e8; --blue:#2f6fde; --blue-bg:#eef3fd; --green:#2e9e5b; --red:#d14343; --amber:#c98a12; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f5f5f7; font-family: Inter, "Noto Sans SC", sans-serif; color:var(--ink); font-size:14px; line-height:1.5; }
+  .b-part { width:1280px; padding:32px 40px 36px; background:#fff; margin:0 0 16px; }
+  .b-part h2 { margin:0 0 4px; font-size:22px; }
+  .b-sub { color:var(--mute); margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-col h3 { margin:0 0 10px; font-size:15px; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:10px; margin-left:6px; vertical-align:2px; }
+  .b-tag.now { background:#fdecec; color:var(--red); }
+  .b-tag.new { background:#e8f6ee; color:var(--green); }
+  table.b-t { border-collapse:collapse; width:100%; font-size:13px; }
+  .b-t th, .b-t td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  .b-t th { color:var(--mute); font-weight:500; }
+  .ok { color:var(--green); font-weight:600; }
+  .bad { color:var(--red); font-weight:600; }
+  .b-mark { display:inline-flex; width:20px; height:20px; border-radius:50%; background:var(--blue); color:#fff; font-size:12px; align-items:center; justify-content:center; margin-right:6px; flex:none; }
+  .b-notes { margin-top:18px; display:grid; gap:8px; }
+  .b-note { display:flex; gap:4px; }
+  code { font-family:"JetBrains Mono", monospace; font-size:12px; background:#f2f2f5; padding:0 4px; border-radius:4px; }
+  /* conversation frames */
+  .b-frame { border:1px solid var(--line); border-radius:12px; background:#fbfbfd; height:560px; overflow:hidden; position:relative; padding:14px; }
+  .b-frame .hdr { font-weight:600; font-size:15px; margin-bottom:10px; }
+  .b-card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:12.5px; }
+  .b-card .t { font-weight:600; display:flex; justify-content:space-between; }
+  .b-card .t span { color:var(--mute); font-weight:400; }
+  .b-card .a { color:var(--green); margin-top:4px; }
+  .b-card.note { background:var(--blue-bg); border-color:#bcd0f5; }
+  .b-card.note .sec { margin-top:6px; color:#333; }
+  .b-card.note .more { margin-top:8px; color:var(--blue); }
+  .b-msg { background:#fff; border-radius:10px; padding:10px 12px; font-size:12.5px; margin-bottom:8px; border:1px solid var(--line); }
+  .b-msg.me { background:#e9eefc; margin-left:80px; }
+  .b-fade { position:absolute; left:0; right:0; bottom:0; height:60px; background:linear-gradient(transparent,#fbfbfd); }
+  .b-ring { outline:2px dashed var(--red); outline-offset:3px; border-radius:10px; }
+  .b-ring.g { outline-color:var(--green); }
+  /* flow */
+  .b-flow { display:flex; align-items:stretch; gap:10px; margin:6px 0 4px; }
+  .b-box { flex:1; border:1px solid var(--line); border-radius:10px; padding:12px; background:#fbfbfd; font-size:13px; }
+  .b-box b { display:block; margin-bottom:4px; }
+  .b-arrow { align-self:center; color:var(--mute); font-size:20px; }
+  /* bars */
+  .b-bars { display:grid; gap:14px; margin-top:8px; }
+  .b-bar-row { display:grid; grid-template-columns:150px 1fr 70px; align-items:center; gap:10px; font-size:13px; }
+  .b-bar { display:flex; height:26px; border-radius:6px; overflow:hidden; background:#f2f2f5; }
+  .b-bar span { display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; white-space:nowrap; overflow:hidden; }
+  .s-fixed { background:#8e8e93; } .s-read { background:var(--blue); } .s-skill { background:var(--amber); } .s-dig { background:var(--green); }
+  .b-dec { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  .b-dec h4 { margin:0 0 8px; font-size:14px; }
+  .b-opt { display:grid; grid-template-columns:28px 1fr; gap:6px; margin:4px 0; font-size:13px; }
+  .b-opt .k { font-weight:700; }
+  .b-rec { color:var(--green); font-weight:600; }
+  ol.b-steps { margin:0; padding-left:20px; } ol.b-steps li { margin:6px 0; }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="b-part" id="part-1">
+  <h2>① 交接时，哪些“挂着的事”跟着走</h2>
+  <p class="b-sub">今天的换人事务只搬 watch。其余四种挂着的事留在已结束的旧协调者身上，结果回来时被丢弃（<code>DROPPED</code>）。</p>
+  <table class="b-t">
+    <tr><th style="width:26%">挂着的事</th><th style="width:30%">今天 <span class="b-tag now">v1</span></th><th>建议 <span class="b-tag new">v2</span></th></tr>
+    <tr><td><code>task_await</code> / watch</td><td class="ok">✓ 在换人事务里搬走</td><td>不变</td></tr>
+    <tr><td><code>delegate</code> SubAgent 运行</td><td class="bad">✗ 结束时唤醒被丢弃</td><td>继续在原处跑；<b>唤醒转给接手者</b>（交接链可多跳）</td></tr>
+    <tr><td><code>bg_run</code> 后台任务</td><td class="bad">✗ 退出唤醒被丢弃</td><td>同上：进程不动，唤醒转给接手者</td></tr>
+    <tr><td><code>schedule_wakeup</code> 一次性唤醒</td><td class="bad">✗ 留在旧会话</td><td>在换人事务里改 <code>session_id</code></td></tr>
+    <tr><td>唤醒循环（loop）</td><td class="bad">✗ 留在旧会话</td><td>同上，节奏不变</td></tr>
+    <tr><td>未答的 owner 问题、open item</td><td class="ok">✓ 项目级，本来就在</td><td>不变</td></tr>
+  </table>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mark">1</span><span>转发规则只有一条：旧协调者若是“交接完成”而结束，它欠的唤醒发给 <code>handedOverToSessionId</code>，而不是丢弃。不搬行、不加列。</span></div>
+    <div class="b-note"><span class="b-mark">2</span><span>确认弹窗把这些都列出来，并标种类：“Deploy 55a189aa3 to production · SubAgent, running 12m”。接手者收到的唤醒写明 “Started by the previous coordinator”。</span></div>
+    <div class="b-note"><span class="b-mark">3</span><span>今天真实发生过的风险：协调者 11:22 交给 orbit-op 一个部署。若这时交接，部署结果不会送到任何人手里。</span></div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="b-part" id="part-2">
+  <h2>② owner 的裁定：从交接便条里搬出来，成为项目记录</h2>
+  <p class="b-sub">今天“和 owner 约定的”只是便条里的一段文字；每交接一次就是“摘要的摘要”，丢一条就永远丢了。</p>
+  <div class="b-flow">
+    <div class="b-box"><b>来源 A：ask_owner 被回答</b>问题 + 选中的选项自动成为一条裁定，原话即引文。</div>
+    <div class="b-arrow">→</div>
+    <div class="b-box" style="border-color:#bcd0f5;background:var(--blue-bg)"><b>project_ruling</b>一句话裁定 · owner 原话 · 来源（问题或对话轮次）· 谁记的 · 何时 · 可被新裁定取代（旧的标“已取代”，不删）</div>
+    <div class="b-arrow">→</div>
+    <div class="b-box"><b>去处</b>接手者的开场摘要逐条列出；项目页在验收标准下方显示。</div>
+  </div>
+  <div class="b-flow">
+    <div class="b-box"><b>来源 B：对话里的裁定</b>协调者调用 <code>project_ruling_record</code>，引文必须是那一轮 owner 原话的子串（和 <code>wiki_note</code> 的引证检查一样）。</div>
+    <div class="b-arrow">→</div>
+    <div class="b-box"><b>交接时</b>便条那一轮先要求“把还没记录的裁定记下来”，再写便条。便条的 “Agreed with the owner” 改为 “Rulings not yet recorded”，正常为空。</div>
+    <div class="b-arrow"></div>
+    <div class="b-box" style="visibility:hidden"></div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mark">4</span><span>裁定不是验收标准，平台不据此强制任何事；它记录的是“协调者被告知了什么”。</span></div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="b-part" id="part-3">
+  <h2>③ 接手者的对话：干净地开始</h2>
+  <p class="b-sub">今天：项目级的已答问题、开项目回执、合并行，时间早于对话第一条事件，全部被放在顶部（<code>'head'</code>），且永远不会下移。</p>
+  <div class="b-cols">
+    <div class="b-col">
+      <h3>今天 <span class="b-tag now">v1</span></h3>
+      <div class="b-frame">
+        <div class="hdr">Sample project · Coordinator</div>
+        <div class="b-ring">
+          <div class="b-card"><div class="t">Decision recorded <span>by you · 03:42 PM</span></div>You started the project on 8 criteria</div>
+          <div class="b-card"><div class="t">Answered <span>11/14 6:41 PM</span></div>The runner host is out of memory…<div class="a">✓ Wait for the host</div></div>
+          <div class="b-card"><div class="t">Answered <span>11/15 12:48 AM</span></div>Waiting has not helped for 7 hours…<div class="a">✓ Keep waiting</div></div>
+          <div class="b-card"><div class="t">Answered <span>11/15 4:00 AM</span></div>Main's unit suite is red…<div class="a">✓ Fix it here</div></div>
+          <div class="b-card"><div class="t">Answered <span>11/15 4:51 AM</span></div>Main is red for the third time…<div class="a">✓ Fix this one too</div></div>
+          <div class="b-card"><div class="t">Answered <span>11/15 7:33 AM</span></div>A fix for "Check only" on…<div class="a">✓ Scheduled runs only</div></div>
+        </div>
+        <div class="b-fade"></div>
+      </div>
+      <div class="b-notes"><div class="b-note"><span class="b-mark">5</span><span>交接便条被压到十几张旧卡片下面，读者要滚很久才看到“这一段对话从哪开始”。</span></div></div>
+    </div>
+    <div class="b-col">
+      <h3>建议 <span class="b-tag new">v2</span></h3>
+      <div class="b-frame">
+        <div class="hdr">Sample project · Coordinator</div>
+        <div class="b-card note b-ring g">
+          <div class="t">Handoff from the previous coordinator <span>3:42 PM</span></div>
+          <div class="sec"><b>Where things stand</b> · All code is on main; only the walkthrough task is open.</div>
+          <div class="sec"><b>Waiting on</b> · The owner's go for the walkthrough.</div>
+          <div class="sec"><b>Next</b> · Start it on the owner's word; judge its evidence.</div>
+          <div class="sec">2 waits and 1 SubAgent run moved here.</div>
+          <div class="more">12 decisions and 3 merges before this conversation · Open previous coordinator ›</div>
+        </div>
+        <div class="b-msg">Here is where things stand: all code is on main…</div>
+        <div class="b-msg me">Deploy main first.</div>
+        <div class="b-msg">I've started the production deploy…</div>
+      </div>
+      <div class="b-notes"><div class="b-note"><span class="b-mark">6</span><span>规则（web、iOS/macOS、Android 同一条）：<b>早于本对话创建时间的记录不画进本对话</b>；<code>'head'</code> 只留给“晚于创建、但早于已加载最早一页”的记录。未结的问题不是记录，照常画。</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="b-part" id="part-4">
+  <h2>④ 接手者的上下文：开场从 58k 到约 43k</h2>
+  <p class="b-sub">实测（11-16 那次交接，按每次调用的 input 计）。固定部分（系统提示、工具定义、CLAUDE.md、记忆索引）约 38.6k，这次不动。</p>
+  <div class="b-bars">
+    <div class="b-bar-row"><span>今天 · 第一轮结束</span>
+      <div class="b-bar"><span class="s-fixed" style="width:38.6%">固定 38.6k</span><span class="s-read" style="width:10.7%">project_get 10.7k</span><span class="s-read" style="width:6.9%;opacity:.75">task_get 6.9k</span></div><span>58k</span></div>
+    <div class="b-bar-row"><span>今天 · /upgrade 之后</span>
+      <div class="b-bar"><span class="s-fixed" style="width:38.6%">固定 38.6k</span><span class="s-read" style="width:17.6%">读取 17.6k</span><span class="s-skill" style="width:30%">/upgrade 技能 + 重发上下文块 30k</span></div><span>89k</span></div>
+    <div class="b-bar-row"><span>建议 · 第一轮结束</span>
+      <div class="b-bar"><span class="s-fixed" style="width:38.6%">固定 38.6k</span><span class="s-dig" style="width:4%"></span><span style="color:var(--green);padding-left:8px;justify-content:flex-start">摘要 ≤4k</span></div><span>≈43k</span></div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mark">7</span><span>服务端在开场里渲染一份带日期的状态摘要（每个任务、标准一行，加 open item 和裁定），不再要求先调 <code>project_get</code> + <code>task_list</code>；需要细节时再读，读到的为准。</span></div>
+    <div class="b-note"><span class="b-mark">8</span><span>“/upgrade 时重发 <code>&lt;orbit_project_coordinator_context&gt;</code>”是单独的缺陷（开场已带过一份），另开任务查，不在本设计里。</span></div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="b-part" id="part-5">
+  <h2>⑤ 待定 · 要你拍板</h2>
+  <div class="b-dec"><h4>D1 裁定存在哪</h4>
+    <div class="b-opt"><span class="k">A</span><span>独立记录 <code>project_ruling</code>：有来源、引文、取代关系，交接多少次都不丢。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>追加到项目 instructions 的 “Owner rulings” 段：不改表，但又成了自由文本，且 <code>project_update</code> 可改。</span></div></div>
+  <div class="b-dec"><h4>D2 交接前的历史在接手者里怎么呈现</h4>
+    <div class="b-opt"><span class="k">A</span><span>不画；便条卡片上一行链接到上一任协调者。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>在顶部折叠成一行，可展开。</span></div></div>
+  <div class="b-dec"><h4>D3 接手者的开场读取</h4>
+    <div class="b-opt"><span class="k">A</span><span>服务端摘要写进开场：确定、约 4k、无工具调用。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>保留两次读取，给 <code>project_get</code> 加 brief 模式。</span></div></div>
+  <h3 style="margin:18px 0 6px">落地（按代价排）</h3>
+  <ol class="b-steps">
+    <li>挂着的事全部跟着走：唤醒转发 + wakeup/loop 搬家 + 确认弹窗列出（服务端 + 三端弹窗）。</li>
+    <li>清爽开场规则：web、iOS/macOS、Android 各改 <code>decisionReceiptAnchor</code> / <code>ReceiptAnchor.place</code>。</li>
+    <li>开场状态摘要（服务端）。</li>
+    <li>裁定记录：表、<code>project_ruling_record</code>、ask_owner 自动成裁定、便条提示词、项目页显示。</li>
+  </ol>
+  <p class="b-sub" style="margin-top:12px">以后再说：上下文到约 55% 时提示交接；便条“Waiting on”与实际搬走的事比对；协调者里的重技能改为子代理执行。</p>
+</section>
+
+</body>
+</html>

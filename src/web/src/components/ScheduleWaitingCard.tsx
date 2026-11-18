@@ -70,6 +70,7 @@ export function ScheduleWaitingCard({ request, now = Date.now() }: { request: Ow
   const detail = useQuery({ ...scheduleDetailQuery(scheduleId), enabled: Boolean(scheduleId) });
   const approvals = useQuery({
     queryKey: ['session-approvals', request.askedBySessionId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<ApprovalInfo[]>(`/sessions/${encodeURIComponent(request.askedBySessionId)}/approvals?status=PENDING`),
     enabled: request.kind === 'SCHEDULE_APPROVAL',
   });
@@ -201,7 +202,7 @@ export function ScheduleWaitingCard({ request, now = Date.now() }: { request: Ow
     const asked = envelopeOf(env.asked);
     const decided = card.data.state !== 'PENDING';
     drawn = {
-      title: scheduleEnvelopeTitle(card.data.title ?? title, env.widens, names[asked.workspaceId]),
+      title: scheduleEnvelopeTitle(card.data.title ?? title, env.widens, names[asked.workspaceId], asked.accessLevel),
       kind: C.waiting.kinds.schedule,
       body: scheduleWidenWaitingText({
         reason: run?.summary ?? '',

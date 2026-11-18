@@ -32,6 +32,7 @@ import {
   toUuid,
   type MoveCriterionRefusal,
   type MoveCriterionResult,
+  type TaskSignInHold,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -66,6 +67,7 @@ import {
   MAX_TASK_PAGE_SIZE,
   decodeTaskPageCursor,
   encodeTaskPageCursor,
+  mayBeSweepCandidate,
 } from '../tasks/tasks.service';
 import {
   // §13.3 DEP's epoch, the same fragments the run gate and the sweeps read: the graph counts them
@@ -91,6 +93,7 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
@@ -99,8 +102,11 @@ import {
   criteriaDecisionRecorded,
   criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
+  stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -122,6 +128,7 @@ import {
   standardSetVersion,
 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
+import { readStateDigest } from './coordinator-digest';
 import {
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
@@ -1853,11 +1860,61 @@ export class ProjectsService {
     // an empty queue, so this route cannot be used to learn which project ids exist by the
     // difference between two successful answers.
     await this.assertOwned(ownerId, projectId);
-    return readPendingCriteriaDecisionsForOwner(
+    const queue = await readPendingCriteriaDecisionsForOwner(
       this.prisma as unknown as Prisma.TransactionClient,
       ownerId,
       projectId,
     );
+    // Decision 1A: a pending proposal with no translation in the owner's current language gets one queued as it
+    // is read; one already tried in this language, failed or not, is left.
+    if (queue.pending.length > 0) {
+      await translationLanguages(this.prisma, ownerId)
+        .then((langs) => {
+          if (!langs) return;
+          for (const row of queue.pending) {
+            if (!translatedInto(row.translation, langs)) this.queueProposalTranslation(ownerId, projectId, row.intentId, langs);
+          }
+        })
+        .catch((error: Error) => this.logger.warn(`queueing proposal translations failed: ${error.message}`));
+    }
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one criteria proposal's words into the owner's language
+   * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
+   * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
+   */
+  queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `criteria-change:${intentId}`,
+      read: async () => {
+        const db = this.prisma as unknown as Prisma.TransactionClient;
+        const rows = await db.projectRatifiedActionIntent.findMany({
+          where: { ownerId, projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+          select: { id: true, action: true },
+        });
+        const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
+        if (!open) return null;
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
+          where: { intentId },
+          select: { translation: true },
+        });
+        const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
+      },
+      write: async (translation) => {
+        const value = translation as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
+          where: { intentId },
+          create: { intentId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -2820,6 +2877,7 @@ export class ProjectsService {
       standardSetConfirmation,
       mainBranchMemory,
       moveRecord,
+      rulings,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2882,6 +2940,8 @@ export class ProjectsService {
       // follow-up, and where each of its own came from. One statement over the move activity rows,
       // found by 0555's partial indexes and bounded by the moves, not by anything else the project holds.
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
+      // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
+      readLiveRulings(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2934,6 +2994,8 @@ export class ProjectsService {
       })),
       // The criteria this project moved out to a follow-up, in the order they stood here.
       criteriaMovedOut: moveRecord.movedOut,
+      // The owner rulings still live, oldest first; a superseded one is kept but not listed.
+      rulings,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -3290,7 +3352,8 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, integrations] = await Promise.all([
+    const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
+    const [dependencies, workStates, integrations, holds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3311,6 +3374,10 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
+      // Why the sweep holds a row that reads Ready (the task read's `hold`, by the same read).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
+        : new Map<string, TaskSignInHold>(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3341,6 +3408,7 @@ export class ProjectsService {
         // report dependencies" rather than as "this task has none".
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
+        hold: holds.get(task.id) ?? null,
       };
     });
     return {
@@ -4077,6 +4145,11 @@ export class ProjectsService {
       // owner's own read.
       if (held) {
         this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+        // And translated for the owner in the background, when their translation is on (decision 1A).
+        const { intentId } = held;
+        void translationLanguages(this.prisma, ownerId)
+          .then((langs) => { if (langs) this.queueProposalTranslation(ownerId, id, intentId, langs); })
+          .catch((error: Error) => this.logger.warn(`translating proposal ${intentId} failed to queue: ${error.message}`));
       }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
@@ -4843,7 +4916,9 @@ export class ProjectsService {
     // coordinate, so a swap that left this one open would demote a conversation still being written
     // to — it would go on being talked to and quietly stop being able to act. Already-completed is
     // the no-op case, and the one this call reached through the ordinary route.
-    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
+    // A handoff's outgoing coordinator leaves its SubAgent runs and bg_run jobs running; their end wakes the
+    // successor (docs/coordinator-handoff-v2-design.md §1).
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id, { handingOver: handoff != null });
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of
@@ -4856,6 +4931,14 @@ export class ProjectsService {
     // the coordinator is unavailable until its owner rebinds it, which is a different sentence
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
+    // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap. Every
+    // successor, not only a handoff's: one opened by the owner's replace, a workspace switch or a
+    // recovery has no note, and the digest is all it inherits of the decisions made before it —
+    // including the owner's answers, which are no longer replayed to it one turn each (§5.2 R11).
+    const openingHandoff = handoff || project.coordinatorSessionId
+      ? { note: handoff?.note ?? null, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+      : null;
     let session: { id: string };
     try {
       session = await this.sessions.create(
@@ -4868,7 +4951,7 @@ export class ProjectsService {
             project.id,
             project.coordinatorEnabled,
             modelRoutingEnabled(project.owner),
-            handoff?.note,
+            openingHandoff,
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
@@ -5002,23 +5085,66 @@ export class ProjectsService {
                 FOR UPDATE)
             RETURNING "id", "state"`;
           movedWatches = moved.map((row) => row.id);
+          // Then the outgoing coordinator's scheduled wakeups and its wakeup loop (design v2 §1), still in
+          // this transaction: a wakeup filed onto a completed session is dropped, and a loop's ticks would
+          // stop. The loop first and its PENDING tick after it — the order the wakeup worker takes them in
+          // (settleLoopTick: session, loop, tick) — each FOR UPDATE in id order in one statement. Only
+          // `session_id` changes, so a loop keeps its schedule, and its tick its due time. A wakeup already
+          // DELIVERED stays with the turn it was filed onto. Their new session FK check takes the candidate
+          // Session FOR KEY SHARE, already held.
+          const movedLoops = await tx.$queryRaw<Array<{ id: string }>>`
+            UPDATE "session_wakeup_loop" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_wakeup_loop"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'ACTIVE'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id"`;
+          const movedWakeups = await tx.$queryRaw<Array<{ id: string; loop_id: string | null }>>`
+            UPDATE "session_scheduled_wakeup" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_scheduled_wakeup"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'PENDING'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id", "loop_id"`;
           // The handoff this replacement completes, in the same transaction as the swap (rank 46,
           // after the watches): COMPLETED with its successor and the waits that moved, labelled as the
           // preview read them before the swap. A compare-and-set on HANDING_OVER — the one state a
           // replacement is run from — so a handoff that is not that any more rolls the swap back.
           if (handoff) {
-            const labels = new Map(handoff.waits.map((wait) => [wait.id, wait.label]));
+            const preview = new Map(handoff.waits.map((wait) => [`${wait.kind}:${wait.id}`, wait]));
             // Oldest first, as the preview lists them (RETURNING has no order); one created since
             // the preview, last.
-            const rank = new Map(handoff.waits.map((wait, index) => [wait.id, index]));
-            const ordered = [...moved].sort((a, b) =>
-              (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER)
-              || a.id.localeCompare(b.id));
-            const movedWaits: CoordinatorPendingWait[] = ordered.map((row) => ({
-              id: row.id,
-              label: labels.get(row.id) ?? pendingWaitLabel(null, []),
-              paused: row.state === 'PAUSED',
-            }));
+            const rank = new Map(handoff.waits.map((wait, index) => [`${wait.kind}:${wait.id}`, index]));
+            const rows: CoordinatorPendingWait[] = [
+              ...moved.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WATCH',
+                label: preview.get(`WATCH:${row.id}`)?.label ?? pendingWaitLabel(null, []),
+                paused: row.state === 'PAUSED',
+              })),
+              ...movedLoops.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'LOOP',
+                label: preview.get(`LOOP:${row.id}`)?.label ?? 'Wakeup loop',
+                paused: false,
+              })),
+              // A loop's tick moves with its loop and is listed as the loop.
+              ...movedWakeups.filter((row) => row.loop_id === null).map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WAKEUP',
+                label: preview.get(`WAKEUP:${row.id}`)?.label ?? 'Scheduled wakeup',
+                paused: false,
+              })),
+              // SubAgent runs and bg_run jobs move no row: their wakes are forwarded when they end
+              // (runner-api/handoff-wake-forward.ts), so the preview's list of them is what moved.
+              ...handoff.waits.filter((wait) => wait.kind === 'SUBAGENT' || wait.kind === 'JOB'),
+            ];
+            const key = (wait: CoordinatorPendingWait) => `${wait.kind}:${wait.id}`;
+            const movedWaits = rows.sort((a, b) =>
+              (rank.get(key(a)) ?? Number.MAX_SAFE_INTEGER) - (rank.get(key(b)) ?? Number.MAX_SAFE_INTEGER)
+              || key(a).localeCompare(key(b)));
             const completed = await tx.coordinatorHandoff.updateMany({
               where: { id: handoff.id, fromSessionId: project.coordinatorSessionId, state: 'HANDING_OVER' },
               data: {
@@ -5094,10 +5220,10 @@ export class ProjectsService {
     for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
-    // everything still waiting is handed over rather than left addressed to the conversation before.
-    // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
-    // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
-    await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // everything still waiting is handed over rather than left addressed to the conversation before,
+    // with every owner answer no coordinator has read yet (§5.2 R11); the ones already read are in
+    // this conversation's opening digest instead.
+    await this.openItems?.deliverOwed(id);
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);
@@ -5105,10 +5231,17 @@ export class ProjectsService {
   }
 
   /**
-   * The waits a replacement would move (see the swap in `coordinator`): every live watch — ACTIVE or
-   * PAUSED — whose observer is this project's current coordinator, oldest first, as
-   * `{ id, label, paused }` for the confirm dialog. Empty when the project has no coordinator or it is
-   * waiting on nothing.
+   * The pending work a replacement hands over (see the swap in `coordinator`), oldest first, each with its
+   * kind, for the confirm dialog (docs/coordinator-handoff-v2-design.md §1):
+   *
+   *   WATCH    — every live watch, ACTIVE or PAUSED, whose observer is this project's current coordinator;
+   *   SUBAGENT — its running `delegate` runs that owe it a wake, labelled by their description;
+   *   JOB      — the `bg_run` jobs it has running (`Session.runningBgJobs`), labelled by the description the
+   *              job was started with, else its command;
+   *   WAKEUP   — its pending one-shot `schedule_wakeup`, labelled by its reason;
+   *   LOOP     — its running wakeup loop, labelled by its reason, else its prompt.
+   *
+   * Empty when the project has no coordinator or it is waiting on nothing.
    */
   async coordinatorPendingWaits(ownerId: string, id: string): Promise<CoordinatorPendingWait[]> {
     const project = await this.prisma.project.findFirst({
@@ -5116,33 +5249,92 @@ export class ProjectsService {
       select: { coordinatorSessionId: true },
     });
     if (!project) throw new NotFoundException('project not found');
-    if (!project.coordinatorSessionId) return [];
-    const watches = await this.prisma.watch.findMany({
-      where: { ownerId, observerSessionId: project.coordinatorSessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        state: true,
-        predicate: true,
-        targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
-      },
-    });
-    if (watches.length === 0) return [];
+    const sessionId = project.coordinatorSessionId;
+    if (!sessionId) return [];
+    const [watches, runs, coordinator, wakeups, loops] = await Promise.all([
+      this.prisma.watch.findMany({
+        where: { ownerId, observerSessionId: sessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          state: true,
+          predicate: true,
+          createdAt: true,
+          targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
+        },
+      }),
+      this.prisma.subagentRun.findMany({
+        where: { ownerId, sessionId, status: 'RUNNING', wakeOwed: true, wakeFiledAt: null },
+        select: { id: true, description: true, createdAt: true },
+      }),
+      this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { runningBgJobs: true } }),
+      this.prisma.sessionScheduledWakeup.findMany({
+        where: { sessionId, loopId: null, state: 'PENDING' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+      this.prisma.sessionWakeupLoop.findMany({
+        where: { sessionId, state: 'ACTIVE' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+    ]);
+    const jobIds = coordinator?.runningBgJobs ?? [];
     const ids = (kind: string) => [...new Set(watches.flatMap((w) =>
       w.targets.filter((t) => t.targetKind === kind).map((t) => t.targetResourceId)))];
-    const [tasks, sessions] = await Promise.all([
+    const [tasks, sessions, jobCalls] = await Promise.all([
       this.prisma.task.findMany({ where: { id: { in: ids('TASK') }, ownerId }, select: { id: true, title: true } }),
       this.prisma.session.findMany({
         where: { id: { in: ids('SESSION') }, ownerId },
         select: { id: true, title: true },
       }),
+      // The launch the runner recorded for each job (runner-go background_job.go: a Bash tool_use whose id is
+      // the job's), which carries the description bg_run was given.
+      jobIds.length === 0 ? [] : this.prisma.toolCall.findMany({
+        where: { sessionId, toolUseId: { in: jobIds } },
+        select: { toolUseId: true, input: true, startedAt: true },
+      }),
     ]);
     const titles = new Map<string, string>([...tasks, ...sessions].map((row) => [row.id, row.title ?? 'Untitled']));
-    return watches.map((w) => ({
-      id: w.id,
-      label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
-      paused: w.state === 'PAUSED',
-    }));
+    const launches = new Map(jobCalls.map((call) => [call.toolUseId, call]));
+    const text = (...values: Array<unknown>) =>
+      values.map((value) => (typeof value === 'string' ? value.trim() : '')).find((value) => value !== '') ?? null;
+    const dated: Array<{ at: number; wait: CoordinatorPendingWait }> = [
+      ...watches.map((w) => ({
+        at: w.createdAt.getTime(),
+        wait: {
+          id: w.id,
+          kind: 'WATCH' as const,
+          label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
+          paused: w.state === 'PAUSED',
+        },
+      })),
+      ...runs.map((run) => ({
+        at: run.createdAt.getTime(),
+        wait: { id: run.id, kind: 'SUBAGENT' as const, label: text(run.description) ?? 'SubAgent run', paused: false },
+      })),
+      ...jobIds.map((jobId) => {
+        const launch = launches.get(jobId);
+        const input = (launch?.input ?? {}) as { description?: unknown; command?: unknown };
+        return {
+          at: launch?.startedAt?.getTime() ?? Number.MAX_SAFE_INTEGER,
+          wait: { id: jobId, kind: 'JOB' as const, label: text(input.description, input.command) ?? jobId, paused: false },
+        };
+      }),
+      ...wakeups.map((wakeup) => ({
+        at: wakeup.createdAt.getTime(),
+        wait: {
+          id: wakeup.id,
+          kind: 'WAKEUP' as const,
+          label: text(wakeup.reason, wakeup.prompt) ?? 'Scheduled wakeup',
+          paused: false,
+        },
+      })),
+      ...loops.map((loop) => ({
+        at: loop.createdAt.getTime(),
+        wait: { id: loop.id, kind: 'LOOP' as const, label: text(loop.reason, loop.prompt) ?? 'Wakeup loop', paused: false },
+      })),
+    ];
+    // Stable: watches keep the (created_at, id) order they were read in.
+    return dated.sort((a, b) => a.at - b.at).map((entry) => entry.wait);
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   BgColorsOutlined,
   CaretDownOutlined,
   CheckOutlined,
+  CloudOutlined,
   CodeOutlined,
   DeleteOutlined,
   DesktopOutlined,
@@ -15,6 +16,7 @@ import {
   MenuUnfoldOutlined,
   MoreOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -58,7 +60,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
+import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -104,6 +106,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
+import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -291,6 +294,9 @@ export interface Runner {
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
   // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
   registerDir?: string | null;
+  // The account's managed runner, labelled Orbit Cloud (RunnerRowIdentity). Absent from an older server,
+  // where the managed status's runnerId says which runner it is.
+  managed?: boolean;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
@@ -375,6 +381,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -420,12 +427,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
-  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
-  // its session lights Scheduled, and no workspace row.
-  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
+  // A scheduled task's run is a session of its workspace like any other (owner 2026-11-19): it lights that workspace's
+  // row, whose list holds it in the Scheduled runs folder.
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId && !onScheduleRun
+    (sessionId
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -485,8 +491,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
-    : onScheduleRun
-    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -598,6 +602,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
   // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
   const { managed: accountManaged } = useManagedRunner();
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -606,16 +612,20 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, machineName(r, accountManaged?.status.runnerId));
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, managedRunnerId));
     return m;
-  }, [runners.data, accountManaged?.status.runnerId]);
+  }, [runners.data, managedRunnerId]);
 
-  // The account menu's Machines row: every machine, and how many of them are online.
-  const machineList = runners.data ?? [];
+  // The account menu's Machines row: every machine, Orbit Cloud first, and how many of them are online.
+  const machineList = managedFirst(runners.data ?? [], managedRunnerId);
   const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<Workspace[]>('/workspaces'),
+  });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
@@ -976,7 +986,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
+            (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -1089,7 +1099,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      (a.runner ? machineName(a.runner, accountManaged?.status.runnerId) || null : null) ??
+                      (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1139,7 +1149,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner, accountManaged?.status.runnerId))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, managedRunnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1289,13 +1299,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     </span>
                   ),
                   children: [
-                    ...machineList.map((runner) => {
+                    ...machineList.flatMap((runner, index) => {
                       // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
                       const managedRow = managedRowOf(accountManaged, runner.id);
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
-                      return {
+                      // Orbit Cloud, pinned first: its cloud and a semibold name, then a line before your own machines
+                      // (docs/mocks/orbit-cloud-pinned, A).
+                      const cloud = index === 0 && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+                      const row = {
                         key: `machine-${runner.id}`,
-                        textValue: machineName(runner, accountManaged?.status.runnerId),
+                        textValue: machineName(runner, managedRunnerId),
                         icon: (
                           <span
                             className="tp-account-machine-dot"
@@ -1304,7 +1317,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{machineName(runner, accountManaged?.status.runnerId)}</span>
+                            {cloud ? (
+                              <span className="tp-account-machine-cloud">
+                                <CloudOutlined aria-hidden />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
+                            ) : (
+                              <span>{machineName(runner, managedRunnerId)}</span>
+                            )}
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
@@ -1312,6 +1332,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
                       };
+                      return cloud && machineList.length > 1
+                        ? [row, { type: 'separator' as const, key: 'machines-cloud-separator' }]
+                        : [row];
                     }),
                     { type: 'separator' as const, key: 'machines-add-separator' },
                     {
@@ -1339,6 +1362,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               icon: <SettingOutlined />,
               label: 'Settings',
               onSelect: () => navigate('/settings'),
+            },
+            // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
+            {
+              key: 'help',
+              icon: <QuestionCircleOutlined />,
+              label: 'Help center',
+              onSelect: () => navigate(HELP_PATH),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1380,6 +1410,25 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
+        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
+        <Tooltip
+          side="top"
+          content={
+            <>
+              Help<kbd className="tp-help-key">?</kbd>
+            </>
+          }
+        >
+          <button
+            type="button"
+            className={`tp-help${help.open ? ' is-open' : ''}`}
+            aria-label="Help"
+            aria-pressed={help.open}
+            onClick={help.toggleHelp}
+          >
+            <QuestionCircleOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       <div

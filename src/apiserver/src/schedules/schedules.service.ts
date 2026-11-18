@@ -59,7 +59,20 @@ import {
   type AccessLevel,
   type Envelope,
 } from './schedule-envelope';
-import { ScheduleRuleError, assertTimezone, nextDueAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
+import {
+  ScheduleRuleError,
+  assertTimezone,
+  mergeRule,
+  nextDueAt,
+  parseRule,
+  ruleCommandHash,
+  runsPerWeek,
+  type ScheduleRule,
+} from './schedule-time';
+import { closeUnknownItems } from '../conditions/condition-attention';
+import { assertConditionRoom, createConditionRow } from '../conditions/conditions.service';
+import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
 import { scheduleStartCheck } from './schedule-start-check';
 import { workspaceNames } from './schedule-views';
@@ -146,10 +159,10 @@ export interface SchedulePatch {
   /** Dropped when the patch only reschedules (`isOnlyReschedule`): a correction of the time is not a new goal. */
   intent?: string;
   /**
-   * A new read-back for the schedule as it is after the change, at most 500 characters. Not a setting: no revision
-   * records it. A rule or time-zone change without one clears the stored one, and the read derives it.
+   * A new read-back for the schedule as it is after the change, at most 500 characters. Recorded and undoable.
+   * A rule or time-zone change without one clears the stored one, and the read derives it. Null restores a cleared value on undo.
    */
-  readBack?: string;
+  readBack?: string | null;
   title?: string;
   prompt?: string;
   rule?: unknown;
@@ -273,6 +286,16 @@ function ruleOf(raw: unknown): ScheduleRule {
   }
 }
 
+/** A change's rule, merged onto the WHEN rule it changes (schedule-time.ts mergeRule), then validated. */
+function ruleAfter(current: ScheduleRule, raw: unknown): ScheduleRule {
+  try {
+    return parseRule(mergeRule(current, raw));
+  } catch (err) {
+    if (err instanceof ScheduleRuleError) throw refusal('BAD_REQUEST', err.code, err.message);
+    throw err;
+  }
+}
+
 function checkTimezone(timezone: string): void {
   try {
     assertTimezone(timezone);
@@ -293,8 +316,8 @@ function checkRunLimit(minutes: number): void {
 }
 
 function checkAccessLevel(level: unknown): asserts level is AccessLevel {
-  if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR') {
-    throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY or OPEN_PR.');
+  if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR' && level !== 'LAND') {
+    throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY, OPEN_PR or LAND.');
   }
 }
 
@@ -312,11 +335,13 @@ function checkText(name: string, value: unknown): void {
 
 /** What a schedule's settings need of the envelope. */
 function needOf(s: { workspaceId: string; accessLevel: AccessLevel; rule: unknown; runLimitMinutes: number }): Envelope {
+  const rule = ruleOf(s.rule);
   return {
     workspaceId: s.workspaceId,
     accessLevel: s.accessLevel,
-    runsPerWeek: runsPerWeek(ruleOf(s.rule)),
+    runsPerWeek: runsPerWeek(rule),
     runLimitMinutes: s.runLimitMinutes,
+    commandHash: ruleCommandHash(rule),
   };
 }
 
@@ -326,6 +351,7 @@ function envelopeOf(s: Schedule): Envelope {
     accessLevel: s.envelopeAccessLevel,
     runsPerWeek: s.envelopeRunsPerWeek,
     runLimitMinutes: s.envelopeRunLimitMinutes,
+    commandHash: s.envelopeCommandHash,
   };
 }
 
@@ -335,7 +361,13 @@ function envelopeColumns(e: Envelope) {
     envelopeAccessLevel: e.accessLevel,
     envelopeRunsPerWeek: e.runsPerWeek,
     envelopeRunLimitMinutes: e.runLimitMinutes,
+    envelopeCommandHash: e.commandHash ?? null,
   };
+}
+
+/** A WHEN schedule's condition probes while the schedule is ACTIVE or HELD; paused or ended, it is ENDED. */
+function conditionLive(state: ScheduleState): boolean {
+  return state === 'ACTIVE' || state === 'HELD';
 }
 
 /** A field as a revision stores it. */
@@ -370,12 +402,44 @@ export class SchedulesService {
     @Optional() @Inject(SCHEDULE_CLOCK) clock?: () => Date,
     /** Who hears (§7.3): a run's widen card and a run ending its own schedule. Absent, nothing is pushed. */
     @Optional() @Inject(SCHEDULE_NOTIFIER) private readonly notifier?: ScheduleNotifier,
+    /**
+     * A WHEN schedule's condition is handed to its runner on the heartbeat's full reconcile; marking the runner changed
+     * after a commit that creates, changes, pauses or ends one brings that reconcile at once (link-heartbeat.ts).
+     */
+    @Optional() @Inject(RealtimeService) private readonly realtime?: Pick<RealtimeService, 'markRunnerChanged'>,
+    /**
+     * An ACTIVE WHEN schedule's condition is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md
+     * §4.2): a create, a resume or a change that leaves it ACTIVE asks a sleeping one to wake. The hook does nothing with
+     * the switch off or for a runner with no mapping; absent, the manager's sweep finds it.
+     */
+    @Optional() @Inject(MANAGED_RUNNER_DEMAND) private readonly managedDemand?: ManagedRunnerDemand,
   ) {
     this.clock = clock ?? (() => new Date());
   }
 
   private async alert(alerts: readonly ScheduleAlert[]): Promise<void> {
     await sendAlerts(this.notifier, alerts, (m) => this.logger.warn(m));
+  }
+
+  /**
+   * After a commit that touched a WHEN schedule: its condition's probe was handed out, changed or withdrawn, so its
+   * runner is marked changed; and an ACTIVE one's Orbit Cloud runner is asked to wake. Best effort: a mark that fails leaves it to the next full reconcile, at most five
+   * minutes away.
+   */
+  private async markConditionRunner(schedule: Schedule | null | undefined): Promise<void> {
+    if (!schedule || (schedule.rule as { kind?: string } | null)?.kind !== 'WHEN') return;
+    const wake = schedule.state === 'ACTIVE' && !!this.managedDemand;
+    if (!this.realtime && !wake) return;
+    try {
+      const workspace = await this.prisma.workspace.findUnique({ where: { id: schedule.workspaceId }, select: { runnerId: true } });
+      if (workspace?.runnerId) {
+        this.realtime?.markRunnerChanged(workspace.runnerId);
+        // Paused, held or ended, nothing is asked: the condition no longer holds the runner, which sleeps by the idle rule.
+        if (wake) await this.managedDemand!.requested(workspace.runnerId, 'condition');
+      }
+    } catch (error) {
+      this.logger.warn(`runner of schedule ${schedule.id} not marked: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -388,7 +452,7 @@ export class SchedulesService {
    */
   async create(actor: ScheduleActor, input: ScheduleCreateInput): Promise<ScheduleCreateResult> {
     if (actor.kind === 'PAT') throw patRefusal();
-    return withTransactionRetry(
+    const result = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         await this.lockAccount(tx, actor.ownerId);
@@ -432,6 +496,8 @@ export class SchedulesService {
       },
       loggedRetry(this.logger, 'schedules.create'),
     );
+    if (result.outcome === 'CREATED') await this.markConditionRunner(result.schedule);
+    return result;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -467,6 +533,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.update'),
     );
     await this.alert(alerts);
+    if (result.outcome === 'APPLIED') await this.markConditionRunner(result.schedule);
     return intentKept ? { ...result, intentKept } : result;
   }
 
@@ -495,7 +562,7 @@ export class SchedulesService {
           + 'signed in to Orbit with no acting session. Nothing was changed; the card is waiting for them.',
       });
     }
-    return withTransactionRetry(
+    const answer = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         await this.lockAccount(tx, actor.ownerId);
@@ -615,6 +682,8 @@ export class SchedulesService {
       },
       loggedRetry(this.logger, 'schedules.decide'),
     );
+    if (answer.outcome === 'ALLOWED') await this.markConditionRunner(answer.schedule);
+    return answer;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -623,7 +692,7 @@ export class SchedulesService {
 
   /** ACTIVE → PAUSED: no next slot, and a QUEUED run is cancelled. A RUNNING run continues. */
   async pause(actor: ScheduleActor, scheduleId: string): Promise<Schedule> {
-    return withTransactionRetry(
+    const paused = await withTransactionRetry(
       this.prisma,
       (tx) =>
         this.controlLocked(tx, actor, scheduleId, (s) => {
@@ -632,6 +701,8 @@ export class SchedulesService {
         }),
       loggedRetry(this.logger, 'schedules.pause'),
     );
+    await this.markConditionRunner(paused);
+    return paused;
   }
 
   /**
@@ -639,7 +710,7 @@ export class SchedulesService {
    * start checks (§6.1) run first, and a schedule that still fails one stays HELD (SCHEDULE_START_CHECK_FAILED).
    */
   async resume(actor: ScheduleActor, scheduleId: string): Promise<Schedule> {
-    return withTransactionRetry(
+    const resumedSchedule = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         const resumed = await this.controlLocked(tx, actor, scheduleId, (s) => {
@@ -668,6 +739,8 @@ export class SchedulesService {
       },
       loggedRetry(this.logger, 'schedules.resume'),
     );
+    await this.markConditionRunner(resumedSchedule);
+    return resumedSchedule;
   }
 
   /** ENDED (GOAL_REACHED): what a session, or the run itself, says when there is nothing left to watch. */
@@ -686,6 +759,7 @@ export class SchedulesService {
       },
       loggedRetry(this.logger, 'schedules.end'),
     );
+    await this.markConditionRunner(schedule);
     // §8.3: a run ending its own schedule is news, once (an ENDED schedule cannot be ended again); a person's own
     // end is not, they did it.
     if (byRun) {
@@ -705,11 +779,13 @@ export class SchedulesService {
 
   /** ENDED (DELETED). Runs and findings are kept. */
   async remove(actor: ScheduleActor, scheduleId: string): Promise<Schedule> {
-    return withTransactionRetry(
+    const removed = await withTransactionRetry(
       this.prisma,
       (tx) => this.controlLocked(tx, actor, scheduleId, () => ({ state: 'ENDED', endedReason: 'DELETED' }), true),
       loggedRetry(this.logger, 'schedules.remove'),
     );
+    await this.markConditionRunner(removed);
+    return removed;
   }
 
   /**
@@ -772,6 +848,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.undo'),
     );
     await this.alert(alerts);
+    if (result.outcome === 'APPLIED') await this.markConditionRunner(result.schedule);
     return result;
   }
 
@@ -913,7 +990,7 @@ export class SchedulesService {
     const state = patch.state ?? schedule.state;
     const endedReason = patch.state !== undefined ? (patch.endedReason ?? null) : schedule.endedReason;
     let due: Date | null = null;
-    if (state === 'ACTIVE') {
+    if (state === 'ACTIVE' && settings.rule.kind !== 'WHEN') {
       due = nextDueAt(ruleOf(settings.rule), settings.timezone, now, { startAt: schedule.startAt, endAt: settings.endAt });
       if (!due) {
         throw refusal('BAD_REQUEST', 'SCHEDULE_NO_NEXT_SLOT', 'The rule has no slot left before the schedule\'s end.');
@@ -947,13 +1024,13 @@ export class SchedulesService {
     // The read-back describes the schedule as it is now: a new one when the change brings one, none (so the read
     // derives it) when the rule or zone moved without one.
     const readBack = patch.readBack !== undefined
-      ? patch.readBack.trim() || null
+      ? patch.readBack?.trim() || null
       : 'rule' in after || 'timezone' in after ? null : schedule.readBack;
-    if (Object.keys(after).length === 0) {
-      if (readBack === schedule.readBack) return { outcome: 'UNCHANGED', schedule };
-      const reread = await tx.schedule.update({ where: { id: schedule.id }, data: { readBack } });
-      return { outcome: 'UNCHANGED', schedule: reread };
+    if (readBack !== schedule.readBack) {
+      before.readBack = schedule.readBack;
+      after.readBack = readBack;
     }
+    if (Object.keys(after).length === 0) return { outcome: 'UNCHANGED', schedule };
 
     const revision = schedule.revision + 1;
     const updated = await tx.schedule.update({
@@ -987,6 +1064,7 @@ export class SchedulesService {
         undoOfRevision: opts.undoOf,
       },
     });
+    await this.syncCondition(tx, updated, now);
     if (state !== 'ACTIVE' && schedule.state === 'ACTIVE') {
       // §8.4: pausing, ending or deleting cancels the run waiting in the queue; a running one continues.
       await tx.scheduleRun.updateMany({
@@ -1020,9 +1098,11 @@ export class SchedulesService {
     const now = this.clock();
     const startAt = input.startAt ?? now;
     const due = nextDueAt(input.rule, input.timezone, now, { startAt, endAt: input.endAt });
-    if (!due) throw refusal('BAD_REQUEST', 'SCHEDULE_NO_NEXT_SLOT', 'The rule has no slot left before the schedule\'s end.');
+    if (!due && input.rule.kind !== 'WHEN') {
+      throw refusal('BAD_REQUEST', 'SCHEDULE_NO_NEXT_SLOT', 'The rule has no slot left before the schedule\'s end.');
+    }
     const envelope = needOf(input);
-    const schedule = await tx.schedule.create({
+    let schedule = await tx.schedule.create({
       data: {
         ownerId,
         workspaceId: input.workspaceId,
@@ -1042,6 +1122,31 @@ export class SchedulesService {
         readBack: input.readBack,
       },
     });
+    if (input.rule.kind === 'WHEN') {
+      // The owner's Create approves this exact command (docs/condition-triggers-design.md §4.1): the condition, its
+      // approved hash and the schedule's rule naming it are written in this one transaction.
+      const c = input.rule.condition;
+      const condition = await createConditionRow(tx, {
+        ownerId,
+        workspaceId: input.workspaceId,
+        command: c.command,
+        timeoutSeconds: c.timeoutSeconds,
+        compare: c.compare,
+        holdSeconds: c.holdSeconds,
+        rearm: c.rearm,
+        intervalSeconds: c.intervalSeconds,
+        repeatSeconds: c.repeatSeconds ?? null,
+        text: c.text,
+        unit: c.unit,
+        scheduleId: schedule.id,
+        createdFromSessionId,
+        approvedAt: now,
+      });
+      schedule = await tx.schedule.update({
+        where: { id: schedule.id },
+        data: { rule: { ...input.rule, conditionId: condition.id } as unknown as Prisma.InputJsonValue },
+      });
+    }
     await tx.scheduleRevision.create({
       data: {
         scheduleId: schedule.id,
@@ -1067,6 +1172,54 @@ export class SchedulesService {
       });
     }
     return schedule;
+  }
+
+  /**
+   * Keep a WHEN schedule's condition equal to its rule after a change (docs/condition-triggers-design.md §6.1): the
+   * text, comparison, hold, re-arm, interval, repeat and unit as they are now (a repeat is inside the envelope: the
+   * weekly budget already bounds how many runs it can start, so a shorter one applies at once); the command once it is
+   * inside the envelope (on the owner's Create or Allow, or an Undo back to it), approved as of now; and its life: a
+   * schedule paused or ended ends its condition, so the runner stops being sent the probe, and one resumed brings it
+   * back, armed and waiting.
+   */
+  private async syncCondition(tx: Tx, schedule: Schedule, now: Date): Promise<void> {
+    const rule = schedule.rule as unknown as ScheduleRule;
+    if (rule.kind !== 'WHEN' || !rule.conditionId) return;
+    await tx.$queryRaw`SELECT "id" FROM "condition" WHERE "id" = ${rule.conditionId}::uuid FOR UPDATE`;
+    const condition = await tx.condition.findUnique({ where: { id: rule.conditionId } });
+    if (!condition) return;
+    const c = rule.condition;
+    const hash = ruleCommandHash(rule)!;
+    const data: Prisma.ConditionUpdateInput = {
+      workspaceId: schedule.workspaceId,
+      text: c.text,
+      unit: c.unit,
+      probeTimeoutSeconds: c.timeoutSeconds,
+      compareOp: c.compare.op,
+      compareValue: c.compare.value,
+      holdSeconds: c.holdSeconds,
+      rearmOp: c.rearm?.op ?? null,
+      rearmValue: c.rearm?.value ?? null,
+      intervalSeconds: c.intervalSeconds,
+      repeatSeconds: c.repeatSeconds ?? null,
+    };
+    if (hash !== condition.approvedCommandHash) {
+      data.probeCommand = c.command;
+      data.approvedCommandHash = hash;
+      data.approvedAt = now;
+    }
+    const live = conditionLive(schedule.state);
+    if (!live && condition.state !== 'ENDED') {
+      Object.assign(data, { state: 'ENDED', endedAt: now, trueSince: null, repeatFrom: null });
+      await closeUnknownItems(tx, condition.id, now);
+    } else if (live && condition.state === 'ENDED') {
+      await assertConditionRoom(tx, schedule.ownerId);
+      Object.assign(data, {
+        state: 'WAITING', armed: true, trueSince: null, unknownSince: null, unknownReason: null, failedChecks: 0,
+        endedAt: null, resumedAt: now, repeatFrom: null,
+      });
+    }
+    await tx.condition.update({ where: { id: condition.id }, data });
   }
 
   private async lockAccount(tx: Tx, ownerId: string): Promise<void> {
@@ -1179,12 +1332,24 @@ export class SchedulesService {
     const runLimitMinutes = input.runLimitMinutes ?? DEFAULT_RUN_LIMIT_MINUTES;
     checkRunLimit(runLimitMinutes);
     if (input.baseline) checkText('baseline key', input.baseline.key);
+    const rule = ruleOf(input.rule);
+    if (rule.kind === 'WHEN') {
+      // docs/condition-triggers-design.md §4.1, §8: the agent ran the probe once; that reading is the card's Today.
+      if (!input.baseline) {
+        throw refusal(
+          'BAD_REQUEST',
+          'SCHEDULE_BASELINE_REQUIRED',
+          'A WHEN rule needs a baseline: run the probe command once and pass what it read as { key, summary }.',
+        );
+      }
+      rule.conditionId = null;
+    }
     return {
       workspaceId,
       intent: input.intent,
       title: input.title,
       prompt: input.prompt,
-      rule: ruleOf(input.rule),
+      rule,
       timezone,
       accessLevel: input.accessLevel,
       runLimitMinutes,
@@ -1235,7 +1400,7 @@ export class SchedulesService {
     if (patch.intent !== undefined) (checkText('intent', patch.intent), (next.intent = patch.intent));
     if (patch.title !== undefined) (checkText('title', patch.title), (next.title = patch.title));
     if (patch.prompt !== undefined) (checkText('prompt', patch.prompt), (next.prompt = patch.prompt));
-    if (patch.rule !== undefined) next.rule = ruleOf(patch.rule);
+    if (patch.rule !== undefined) next.rule = ruleAfter(next.rule, patch.rule);
     if (patch.timezone !== undefined) (checkTimezone(patch.timezone), (next.timezone = patch.timezone));
     if (patch.endAt !== undefined) next.endAt = patch.endAt;
     if (patch.accessLevel !== undefined) (checkAccessLevel(patch.accessLevel), (next.accessLevel = patch.accessLevel));
@@ -1264,6 +1429,7 @@ export class SchedulesService {
   private fieldValues(s: Schedule): FieldValues {
     return {
       ...this.fieldValuesOfSettings(this.settingsOf(s)),
+      readBack: s.readBack,
       state: s.state,
       endedReason: s.endedReason,
       envelope: envelopeOf(s),

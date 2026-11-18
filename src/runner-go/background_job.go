@@ -273,6 +273,10 @@ type bgJob struct {
 	reaping     bool
 	exited      bool
 	adoptedExit *int
+	// keptPastEnd marks a job its session left running when it ended by a coordinator handing over
+	// (keepJobsPastEnd): handedOff too, so the tailer neither kills nor reaps it, and its waiter ends it
+	// when it exits by itself (endKeptJob).
+	keptPastEnd bool
 	// awaitingOwner marks a job the gate sent to a person, whose process has not started
 	// (background_gate.go). Its status stays bgStatusRunning, so that everything that ends or reports a job
 	// treats it as one. ownerWaitAnnounced records that a call has told the agent it is waiting, which
@@ -543,6 +547,8 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		awaitChildExit(job.pid)
 		if b.claimReap(job) {
 			b.finishJob(job, job.reap())
+		} else {
+			b.endKeptJob(job)
 		}
 	}()
 	return status, nil

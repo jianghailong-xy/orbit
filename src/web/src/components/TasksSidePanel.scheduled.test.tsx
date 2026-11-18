@@ -98,14 +98,14 @@ describe('the sidebar’s Scheduled entry', () => {
     expect(entry().classList).toContain('active');
   });
 
-  it('is lit on a scheduled run’s session, and the session’s workspace is not', async () => {
+  it('leaves a scheduled run’s session to its workspace’s row, as any session', async () => {
     serve();
     vi.mocked(getSession).mockResolvedValue({
       id: 'sess-run', title: 'Codex stable check', runSource: 'SCHEDULE', scheduleRunId: 'run-1', workspace: { id: WORKSPACE.id, name: WORKSPACE.name },
     } as never);
     await visit('/sessions/sess-run');
-    expect(entry().classList).toContain('active');
-    expect(container!.querySelector('.tp-group-workspaces .tp-item.active')).toBeNull();
+    expect(entry().classList).not.toContain('active');
+    expect(container!.querySelector('.tp-group-workspaces .tp-item.active')!.textContent).toContain('apiserver');
   });
 
   it('leaves an ordinary session to its workspace’s row', async () => {

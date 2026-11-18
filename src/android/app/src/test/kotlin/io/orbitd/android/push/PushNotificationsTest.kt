@@ -73,6 +73,27 @@ class PushNotificationsTest {
         assertNull(restored.bindAccount("account-A").bindAccount(null).pending)
     }
 
+    /** A condition's two pushes (the shared fixture's `condition-unknown` and `schedule-finding`, docs/condition-triggers-design.md
+     * §5.3, §6.1) are shown, not dropped: the can't-read one rings on the needs-you channel and opens the conversation that draws its
+     * card; a firing's run rings with its report and opens the run. */
+    @Test fun aConditionThatCannotBeReadAndAFiredConditionsRunAreShown() {
+        val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/shared/src/android-push.fixture.json").isFile }
+        val fixture = Wire.json.parseToJsonElement(java.io.File(root, "src/shared/src/android-push.fixture.json").readText()).jsonObject
+        fun data(name: String) = fixture["samples"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == name }["data"]!!
+            .jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val cantRead = data("condition-unknown")
+        assertTrue(notifications.show(PushMessage.parse(cantRead)!!, cantRead))
+        val first = manager.activeNotifications.single().notification
+        assertEquals(PushNotifications.NEEDS_YOU, first.channelId)
+        assertEquals("Can't read: Root disk below 5%", first.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(Destination.SESSION, OrbitLinks.parse(shadowOf(first.contentIntent).savedIntent.dataString!!)!!.destination)
+        val fired = data("schedule-finding")
+        assertTrue(notifications.show(PushMessage.parse(fired)!!, fired))
+        assertEquals(2, manager.activeNotifications.size)
+        assertTrue(manager.activeNotifications.any { it.notification.extras.getString(Notification.EXTRA_TITLE) == "Ceph capacity guard" })
+    }
+
     /** The server's terminal-login send (the shared fixture's sample): it rings on the needs-you channel, and its tap opens the Waiting
      * on you inbox whose Open tab heads with the approve card. */
     @Test fun aTerminalAskingToBeApprovedRingsAsNeedsYouAndOpensTheInbox() {

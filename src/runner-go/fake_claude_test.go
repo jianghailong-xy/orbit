@@ -110,8 +110,9 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	// This binary as the `orbit` CLI itself, when a shell turn runs `orbit task …`, `orbit token …` or
-	// `orbit whoami` (runner_child_identity_test.go). `go test` never starts it with a subcommand.
-	if len(os.Args) > 1 && (os.Args[1] == "task" || os.Args[1] == "token" || os.Args[1] == "whoami") {
+	// `orbit whoami` (runner_child_identity_test.go), or any command at all for an agent-contract eval's session
+	// (evalCLIEnv, agent_eval_session_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && (os.Args[1] == "task" || os.Args[1] == "token" || os.Args[1] == "whoami" || evalCLIDispatch(os.Args[1])) {
 		main()
 		os.Exit(0)
 	}

@@ -271,7 +271,8 @@ final class TaskDetailWiringTests: XCTestCase {
         let chip = try section(composer, from: "private var modelChipLabel: some View {", to: "private var chipEffortLabel")
         XCTAssertTrue(chip.contains("let smart = smartRoute != nil"))
         let phone = try section(chip, from: "#if os(iOS)", to: "#else")
-        XCTAssertTrue(phone.contains("Text(\"✦\")"))
+        let row = try section(chip, from: "private func chipRow(smart: Bool, effort: Bool)", to: "#endif")
+        XCTAssertTrue(row.contains("Text(\"✦\")"))
         XCTAssertTrue(phone.contains("Color.accentColor.opacity(0.12)"), "the light blue ground, on the label")
         XCTAssertTrue(chip.contains("Text(smart ? \"✦ \" : \"\")"), "the Mac's title carries the ✦")
         // A Mac borderless menu drops its label's ground: there it is painted on the control.

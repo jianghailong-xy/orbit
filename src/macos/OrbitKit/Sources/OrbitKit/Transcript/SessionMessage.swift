@@ -169,23 +169,17 @@ public enum SessionMessageCard {
         "Sender runs in \(modeLabel(from)), narrower than this session's \(modeLabel(to)): not taken as your approval"
     }
 
-    /// A session message's recorded note without its own block, which only tells the agent what the
-    /// card already shows (owner, 2026-11-12; web `splitSessionMessageNote`). `attached` is whatever
-    /// else delivery appended, still folded under the card — nil when nothing else rode along — and
-    /// `narrower` the card's line when the block says the sender runs narrower than this session.
-    public static func splitNote(_ note: String?) -> (attached: (kind: String, text: String)?, narrower: String?) {
-        guard let note else { return (nil, nil) }
+    /// The card's line when a session message's recorded block says the sender runs narrower than
+    /// this session; nil otherwise. Nothing else in the note is drawn (owner, 2026-11-18).
+    public static func narrowerLine(_ note: String?) -> String? {
+        guard let note else { return nil }
         let range = NSRange(note.startIndex..., in: note)
         let blocks = blockPattern.matches(in: note, range: range).compactMap { Range($0.range, in: note).map { String(note[$0]) } }
-        let narrower = blocks.lazy.compactMap { block -> String? in
+        return blocks.lazy.compactMap { block -> String? in
             guard let m = narrowerPattern.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),
                   let from = Range(m.range(at: 1), in: block), let to = Range(m.range(at: 2), in: block) else { return nil }
             return Self.narrower(from: String(block[from]), to: String(block[to]))
         }.first
-        let rest = blockPattern.stringByReplacingMatches(in: note, range: range, withTemplate: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let kind = rest.isEmpty ? "" : describeNote(rest)
-        return (kind.isEmpty ? nil : (kind, rest), narrower)
     }
 
     /// The block delivery appends after another session's message (apiserver `sessionMessageBlock`).

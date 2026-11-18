@@ -37,6 +37,10 @@ public struct SessionFolderListing: Equatable, Sendable {
 /// because the Open and Completed lists are already whole-list fetches narrowed to one workspace
 /// (`SessionFilter.forAgent`), so splitting them once more by `folderId` costs no request (§3.3).
 public enum SessionFolderGrouping {
+    public static func listShowsFolders(view: SessionView, byTag: Bool) -> Bool {
+        view != .trash && !byTag
+    }
+
     /// Split one workspace's list for one scope into folder rows and the sessions in no folder.
     ///
     /// - Parameters:
@@ -55,7 +59,7 @@ public enum SessionFolderGrouping {
     public static func listing(_ sessions: [Session], folders: [SessionFolder], view: SessionView,
                                byTag: Bool, runnerOffline: Bool = false,
                                watching: [String: WatchSessionSummary] = [:]) -> SessionFolderListing {
-        guard view != .trash, !byTag else {
+        guard listShowsFolders(view: view, byTag: byTag) else {
             return SessionFolderListing(folders: [], sessions: sessions)
         }
         let known = Set(folders.map(\.id))
@@ -111,5 +115,20 @@ public enum SessionFolderGrouping {
             case .orderedSame: return a.id < b.id
             }
         }
+    }
+}
+
+public enum ScheduledRunsFolder {
+    public struct Summary: Equatable, Sendable {
+        public let sessionCount: Int
+        public let needsYou: Int
+        public let running: Bool
+    }
+
+    /// The caller passes the run sessions for this workspace and view.
+    public static func summary(_ runs: [Session], view: SessionView, byTag: Bool) -> Summary? {
+        guard SessionFolderGrouping.listShowsFolders(view: view, byTag: byTag), !runs.isEmpty else { return nil }
+        return Summary(sessionCount: runs.count, needsYou: runs.filter(NeedsYouLogic.isCounted).count,
+                       running: runs.contains { $0.status == .running })
     }
 }

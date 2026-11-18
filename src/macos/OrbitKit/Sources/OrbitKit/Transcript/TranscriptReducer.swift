@@ -186,6 +186,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// later model request, so one incident logs its line again and again, and gets one row with a
     /// count rather than a row per attempt. Transient like `stderrSeen`.
     private var diagnosticSeen: [String: String] = [:]
+    private var legacyWithheld: (count: Int, turn: String?)?
     /// The most recent stderr row that may receive continuation lines. Tool failures from
     /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
     /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
@@ -316,6 +317,12 @@ public struct TranscriptReducer: Sendable, Codable {
                 state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
             }
         }
+        let legacy = ev.type == .system && str(ev, "subtype") == "secret_patch_withheld"
+            && str(ev, "path").map { path in
+                ["Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+                 "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."].contains { str(ev, "notice") == "\(path): \($0)" }
+            } == true
+        if !legacy || legacyWithheld?.turn != ev.turnId { legacyWithheld = nil }
         // The runner reports context-window occupancy on `turn_end`; a lightweight event can also
         // refresh the gauge without ending the active turn. Guard on > 0 so an event without usage
         // doesn't blank a known value. The window rides the same event and is taken only from one
@@ -381,12 +388,26 @@ public struct TranscriptReducer: Sendable, Codable {
                 diagnosticSeen.removeAll()
             }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
-            // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
+            // sent beside stderr; if it ever were, it wins, as on web. Legacy temporary secret notices fold.
             if let item = mainCheckoutNotice(ev) {
                 state.items.append(.mainCheckout(item))
             } else if let notice = nonEmpty(str(ev, "notice")) {
-                state.items.append(.notice(id: nextID(), message: notice,
-                                           accountSwitch: str(ev, "noticeKind") == "pool-member-switched"))
+                if legacy {
+                    let previous = legacyWithheld
+                    let count = (previous?.count ?? 0) + 1
+                    let message = count == 1
+                        ? "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it."
+                        : "Orbit held back the diffs of \(count) files while it checked this runner for a removed secret. No secret was found in them."
+                    if previous != nil, let last = state.items.last, case .notice(let id, _, _) = last {
+                        state.items[state.items.count - 1] = .notice(id: id, message: message, accountSwitch: false)
+                    } else {
+                        state.items.append(.notice(id: nextID(), message: message, accountSwitch: false))
+                    }
+                    legacyWithheld = (count, ev.turnId)
+                } else {
+                    state.items.append(.notice(id: nextID(), message: notice,
+                                               accountSwitch: str(ev, "noticeKind") == "pool-member-switched"))
+                }
             } else if let diagnostic = recoverableDiagnostic(ev) {
                 // Current runners attach impact metadata to known startup/auxiliary failures. Keep
                 // a recoverable diagnostic as a calm row of its own kind on native too; an
@@ -504,6 +525,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // Retire any running shell before discarding its card. Otherwise a delayed notification
         // from the spent stream could be cached as an apparent output-before-tool_use after reseed.
         clearLiveToolOutputsAtBoundary()
+        legacyWithheld = nil
         state.items = []
         state.maxSeq = 0
         state.oldestSeq = nil
@@ -1167,19 +1189,21 @@ public struct TranscriptReducer: Sendable, Codable {
             state.items.append(.error(id: nextID(), message: settled))
             return
         }
+        // Already in the owner's language: the translation is the reply, so draw the reply alone.
+        let shown = { (text: String) in translation?.unchanged(from: text) == true ? nil : translation }
         if let i = openAssistant, case .assistant(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
             b.seq = seq
             b.turnId = turnId ?? b.turnId
             if ts != nil { b.ts = ts }
-            b.translation = translation
+            b.translation = shown(b.text)
             b.awaitsTranslation = translation == nil && turnTranslated ? true : nil
             state.items[i] = .assistant(b)
         } else {
             state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "",
                                                           seq: seq, turnId: turnId, ts: ts,
-                                                          translation: translation,
+                                                          translation: shown(full),
                                                           awaitsTranslation: translation == nil && turnTranslated ? true : nil)))
         }
         openAssistant = nil
@@ -1204,7 +1228,7 @@ public struct TranscriptReducer: Sendable, Codable {
             if case .assistant(let b) = $0 { return b.seq == of }
             return false
         }), case .assistant(var b) = state.items[i] else { return }
-        b.translation = translation
+        b.translation = translation.unchanged(from: b.text) ? nil : translation
         b.awaitsTranslation = nil
         state.items[i] = .assistant(b)
     }
@@ -2030,7 +2054,8 @@ public struct TranscriptReducer: Sendable, Codable {
         let appr = PendingApproval(id: id, kind: approvalKind(ev),
                                    toolName: str(ev, "toolName") ?? str(ev, "name"),
                                    input: ev.payload["input"],
-                                   translation: ApprovalTranslation.parse(ev.payload["translation"]))
+                                   translation: ApprovalTranslation.parse(ev.payload["translation"]),
+                                   toolUseId: str(ev, "toolUseId"))
         // A translated card is published again under the same id (3A): it replaces the one drawn.
         if let i = state.pendingApprovals.firstIndex(where: { $0.id == id }) {
             state.pendingApprovals[i] = appr

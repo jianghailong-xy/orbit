@@ -101,7 +101,6 @@ final class OrbitEventTests: XCTestCase {
         XCTAssertFalse(OrbitEvent.draws(b))
         XCTAssertTrue(SteerDelivery.isReadersOwn(b))
         XCTAssertTrue(StickySummary.isAnchor(text: b.text, note: b.note))
-        XCTAssertEqual(b.attached?.kind, "context", "the attached line stays under the bubble")
     }
 
     func testAttachmentsAloneAreStillTheReadersMessage() {

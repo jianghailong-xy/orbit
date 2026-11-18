@@ -76,6 +76,15 @@ final class ApprovalRememberParityTests: XCTestCase {
         }
     }
 
+    func testScheduledCheckRemembersOnlyTheExactCommand() {
+        let command = #"python3 -c "print(open('watched.txt').read())""#
+        let rules = Approvals.rememberRules(toolName: "Bash", input: .object([
+            "command": .string(command), "orbitScheduleCheckOnly": .bool(true),
+        ]))
+        XCTAssertEqual(rules, [PermissionRule(toolName: "Bash", ruleContent: command)])
+        XCTAssertEqual(Approvals.rememberLabel(rules), command)
+    }
+
     func testEachRuleIsACommandPrefixUnderBash() {
         XCTAssertEqual(Approvals.bashCommandRules("cd /x && git add -A"), [
             PermissionRule(toolName: "Bash", ruleContent: "cd:*"),

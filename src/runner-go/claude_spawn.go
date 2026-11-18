@@ -25,6 +25,10 @@ import (
 // firstSpawn opens a new conversation (--session-id); a re-spawn continues the existing one
 // (--resume), whose local transcript file the caller must have ensured already.
 func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) []string {
+	// An Ask starts read-only, with its own tools and prompt and nothing of an ordinary session's (help_ask.go).
+	if job.HelpAsk != nil {
+		return helpAskClaudeArgs(job, scratchDir, firstSpawn)
+	}
 	a := job.Agent
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
@@ -130,6 +134,14 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 		// And only the built-in tools a check uses (schedule_check_only.go checkOnlyBuiltinTools).
 		args = append(args, "--tools", strings.Join(checkOnlyBuiltinTools, ","))
 	}
+	// Orbit's playbooks skill, as a plugin in the session's own directory (agent_tools_guide.go): never the
+	// user's ~/.claude, and only for a CLI known to take the flag. A plugin that could not be written leaves
+	// the spawn as it was; nothing depends on the skill.
+	if claudeManagedPluginOn() {
+		if dir := writeClaudeManagedPlugin(scratchDir); dir != "" {
+			args = append(args, "--plugin-dir", dir)
+		}
+	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
 	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
 	// them without a per-read permission prompt; created up front so the flag points at an
@@ -187,6 +199,8 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 				{"matcher": "Bash", "hooks": guard},
 				{"matcher": "BashOutput|KillShell|TaskOutput|TaskStop", "hooks": guard},
 				{"matcher": "ScheduleWakeup|CronCreate", "hooks": guard},
+				// Claude's own alert, which reaches the engine's sign-in rather than the person (bgGuardPushNotificationReason).
+				{"matcher": "PushNotification", "hooks": guard},
 				// The other two doors a poll of Orbit's own work comes through (bgGuardOrbitPollReason).
 				{"matcher": "Monitor|" + claudeToolName("bg_run"), "hooks": guard},
 				// A SubAgent's questions and plans (subagentAsksNobodyReason); no verdict in any other session.

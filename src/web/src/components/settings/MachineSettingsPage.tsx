@@ -1,4 +1,6 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
+import { HelpLearnMore } from '../help/HelpLearnMore';
+import { HELP_ERROR_ATTR } from '../../lib/help/drawerArticles';
 import { ENGINE_UPDATE_FIX_TARGET, agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
@@ -83,6 +85,7 @@ import {
   MANAGED_RUNNER_NOT_REPORTED,
   MANAGED_RUNNER_UPDATED_BY_ORBIT,
   RUNNER_ENGINES_FOOTER,
+  RUNNER_ENGINES_MANAGED_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
@@ -262,7 +265,11 @@ export function MachineSettingsPage() {
   // Asleep while it waits for a login: opening its page, where it is signed in, wakes it.
   useWakeForSignIn(managed);
 
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<MachineWorkspace[]>('/workspaces'),
+  });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
   // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
   const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];
@@ -405,12 +412,14 @@ export function MachineSettingsPage() {
     return <p className="settings-empty">This machine doesn't exist, or isn't yours.</p>;
   }
 
+  // Whether this is the account's managed runner: its row says so, or (an older server) the managed status.
+  const isManaged = !!managed || runner.managed === true;
   // The managed runner is Orbit Cloud, unless its owner named it (machineName).
   const shownName = machineName(runner, managed ? runnerId : null);
   const nowMs = Date.now();
   // The managed runner's state is its shared label and notice: its heartbeat's "offline" card is not repeated.
   const managedRow = managedRowOf(managed, runnerId);
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion, managed: !!managed }).filter(
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion, managed: isManaged }).filter(
     (item) => !(managedRow && item.kind === 'offline'),
   );
 
@@ -462,7 +471,7 @@ export function MachineSettingsPage() {
   const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
   const versionNote = (() => {
     // Orbit rolls the managed runner's image: nothing here is for its owner to do.
-    if (managed) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
+    if (isManaged) return isReleaseVersion(version) ? { text: MANAGED_RUNNER_UPDATED_BY_ORBIT, warn: false } : null;
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
     if (stuck) return { text: stuck.short, warn: true };
@@ -489,7 +498,7 @@ export function MachineSettingsPage() {
   const lastUpdate = (() => {
     const report = runner.selfUpdate;
     // A managed runner never installs a release into itself: Orbit replaces its image.
-    if (!report || managed) return null;
+    if (!report || isManaged) return null;
     const versions =
       report.lastUpdatedFrom && report.lastUpdatedTo
         ? runnerUpdatedFromTo(report.lastUpdatedFrom, report.lastUpdatedTo)
@@ -720,7 +729,7 @@ export function MachineSettingsPage() {
       : RUNNER_OFFLINE;
   const metaline = [
     runner.hostname || null,
-    runnerVersionLine(version, !!managed),
+    runnerVersionLine(version, isManaged),
     runner.online && runner.lastHeartbeatAt ? `${RUNNER_ABOUT_LAST_CHECK_IN} ${ago(runner.lastHeartbeatAt, nowMs)}` : null,
   ].filter(Boolean) as string[];
 
@@ -833,13 +842,24 @@ export function MachineSettingsPage() {
               ? <AgentFixButton view={fixView} target={fixTarget} runnerId={runner.id} />
               : null;
             const action = attentionAction(item, fixButton);
+            // The offline card names its error, so the help drawer puts the article about it first, and opens it.
+            const offline = item.kind === 'offline';
             return (
-              <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+              <div
+                key={`${item.kind}:${index}`}
+                className={`rd-attention-card ${item.tone}`}
+                {...(offline ? { [HELP_ERROR_ATTR]: 'runner.offline' } : {})}
+              >
                 <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
                 <div className="rd-attention-main">
                   <div className="rd-attention-title">{item.title}</div>
                   <div className="rd-attention-detail">{attentionDetail(item)}</div>
                   {action && <div className="rd-attention-action">{action}</div>}
+                  {offline && (
+                    <div className="rd-attention-learn">
+                      <HelpLearnMore slug="machine-offline" />
+                    </div>
+                  )}
                   <AgentFixLine view={fixView} />
                 </div>
               </div>
@@ -933,7 +953,7 @@ export function MachineSettingsPage() {
           />
         </div>
         {runner.engines && (
-          <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
+          <div className="rd-hint">{!runner.online ? RUNNER_ENGINES_OFFLINE_FOOTER : managed ? RUNNER_ENGINES_MANAGED_FOOTER : RUNNER_ENGINES_FOOTER}</div>
         )}
       </SettingsSection>
       </>
@@ -1069,7 +1089,7 @@ export function MachineSettingsPage() {
             title={RUNNER_ABOUT_VERSION}
             control={
               <span className="machine-about-value">
-                {managed && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
+                {isManaged && !isReleaseVersion(version) ? MANAGED_RUNNER_KEPT_UP_TO_DATE : (version ?? '—')}
                 {versionNote && <small className={versionNote.warn ? 'warn' : undefined}>{versionNote.text}</small>}
               </span>
             }

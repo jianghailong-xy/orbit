@@ -1,4 +1,5 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
+import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
@@ -70,10 +71,19 @@ import { APISERVER_PROCESS_QUIET_AFTER_MS, markRunnersChanged, RUNNER_BEATS } fr
 const EVENT_CHANNEL = 'orbit_event';
 /** For notifyWaiters. Named for what it first carried, turns for the inbox long polls that are gone. */
 const WAITERS_CHANNEL = 'orbit_inbox';
+/** For publishViewerRevoked: a viewer's access may have ended (docs/session-viewer-stream-design.md §5). */
+const VIEWER_CHANNEL = 'orbit_viewer';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 /** How often a runner change that could not be marked is reported (markRunnerChanged): once a minute, never per mark. */
 const UNMARKED_REPORT_MS = 60_000;
+
+/**
+ * Whose viewer streams a committed write may have ended (docs/session-viewer-stream-design.md §5): every stream of a
+ * session (it went to the Trash or was deleted), one guest's streams of a session (removed, or left), or every stream
+ * opened through a link (turned off, or changed). A stream it names rechecks its access and, if that is gone, ends.
+ */
+export type ViewerRevocation = { sessionId: string; guestId?: string } | { linkId: string };
 
 /**
  * Cap on the mid-turn text one session holds for a client that connects while it is streaming (see
@@ -376,6 +386,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
+  /** publishViewerRevoked's signals, this replica's own and those the NOTIFY bridge carried in. */
+  private readonly viewerRevocations$ = new Subject<ViewerRevocation>();
   /** sessionId → what reached this replica for the session behind its read-back in flight (readBackInOrder). */
   private readonly heldBehindReadBack = new Map<string, Array<{ event: NormalizedRunEvent } | ReadBack>>();
   /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
@@ -389,6 +401,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private listenerLostAt?: number;
   /** sessionId → how many of this replica's streams of the session are open (streamForRun), for listenerBack. */
   private readonly openStreams = new Map<string, number>();
+  /** sessionId → how many of those streams are the owner's own (GET /sessions/:id/events): whether the owner is
+   *  viewing the session, for the held-message push (`heldMessageUnseen`). This replica's only. */
+  private readonly ownerStreams = new Map<string, number>();
   /** sessionId → {ownerId, workspaceId}, for scoping the user-stream (GET /api/events) without a
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; workspaceId: string | null }>();
@@ -457,6 +472,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
       await client.query(`LISTEN ${WAITERS_CHANNEL}`);
       await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
+      await client.query(`LISTEN ${VIEWER_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
       const lostAt = this.listenerLostAt;
@@ -550,7 +566,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string; u?: 1; x?: number;
+      a?: string; ts?: string; u?: 1; x?: number; v?: ViewerRevocation;
     };
     try {
       m = JSON.parse(payload);
@@ -562,6 +578,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === WAITERS_CHANNEL) {
       this.waiters.emit(m.r);
+      return;
+    }
+    if (channel === VIEWER_CHANNEL) {
+      if (m.v) this.viewerRevocations$.next(m.v);
       return;
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
@@ -755,6 +775,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   notifyWaiters(key: string): void {
     this.waiters.emit(key); // same replica
     this.notifyRaw(WAITERS_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
+  }
+
+  /**
+   * A write that may end viewers' access has committed: tell every replica's viewer streams it names
+   * (ViewerStreamService), this one's at once and the others' over NOTIFY. Best effort: a signal that is lost is
+   * caught by the streams' own recheck at their next ping.
+   */
+  publishViewerRevoked(revocation: ViewerRevocation): void {
+    this.viewerRevocations$.next(revocation);
+    this.notifyRaw(VIEWER_CHANNEL, JSON.stringify({ i: this.instanceId, r: 'viewer', v: revocation }));
+  }
+
+  /** Every publishViewerRevoked, from this replica and the others. */
+  viewerRevocations(): Observable<ViewerRevocation> {
+    return this.viewerRevocations$.asObservable();
   }
 
   /** Park until notifyWaiters(key) on any replica, or the timeout elapses. */
@@ -982,7 +1017,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  streamForRun(runId: string): Observable<NormalizedRunEvent> {
+  streamForRun(runId: string, opts?: { owner?: boolean }): Observable<NormalizedRunEvent> {
     const hub$ = this.hub.asObservable().pipe(
       // Lifecycle signals (session_created/ended) are control-plane-internal: they ride the hub
       // for the NOTIFY bridge but must never leak into a per-session transcript stream.
@@ -992,16 +1027,51 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Without the runner link the stream is the hub alone, exactly as before.
     const stream$ = this.hints?.enabled ? merge(hub$, this.linkStream(this.hints, runId)) : hub$;
     // Counted while it is open: a listener that comes back tells the sessions streamed here to re-fetch (listenerBack).
+    // The owner's own streams are counted apart as well: that is the owner viewing the session (ownerIsViewing).
+    const counts = opts?.owner ? [this.openStreams, this.ownerStreams] : [this.openStreams];
     return defer(() => {
-      this.openStreams.set(runId, (this.openStreams.get(runId) ?? 0) + 1);
+      for (const count of counts) count.set(runId, (count.get(runId) ?? 0) + 1);
       return stream$.pipe(
         finalize(() => {
-          const left = (this.openStreams.get(runId) ?? 1) - 1;
-          if (left > 0) this.openStreams.set(runId, left);
-          else this.openStreams.delete(runId);
+          for (const count of counts) {
+            const left = (count.get(runId) ?? 1) - 1;
+            if (left > 0) count.set(runId, left);
+            else count.delete(runId);
+          }
         }),
       );
     });
+  }
+
+  /**
+   * Whether the owner is viewing the session: a stream of it opened through the owner's door (GET
+   * /sessions/:id/events) is open on THIS replica. No push decided "is the owner looking" before the held-message
+   * push, so this is the session's live-stream subscription presence; a stream held open on another replica is
+   * not seen here.
+   */
+  ownerIsViewing(sessionId: string): boolean {
+    return (this.ownerStreams.get(sessionId) ?? 0) > 0;
+  }
+
+  /**
+   * A held message's translation failed 60 s ago (SessionsService.scheduleHeldMessagePush): unless the owner is
+   * viewing the session, PushService tells them it wasn't sent, if it is still held and failed by then.
+   */
+  heldMessageUnseen(sessionId: string, turnId: string): Promise<void> {
+    if (this.ownerIsViewing(sessionId)) return Promise.resolve();
+    return this.push.notifyHeldMessage(sessionId, turnId);
+  }
+
+  /**
+   * A session's `session_updated` signals — a rename, a row change — which streamForRun keeps out of the transcript
+   * stream (isLifecycleType). The viewer streams re-read their head on them (sessions/viewer-stream.service.ts); the
+   * hub alone carries them, from this replica and over NOTIFY from the others.
+   */
+  sessionUpdatesForRun(runId: string): Observable<NormalizedRunEvent> {
+    return this.hub.asObservable().pipe(
+      filter((m) => m.runId === runId && m.event.type === RunEventType.SESSION_UPDATED),
+      map((m) => m.event),
+    );
   }
 
   /**
@@ -1803,6 +1873,22 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     return sessions.map((s) => s.id);
+  }
+
+  /**
+   * Those of `sessionIds` (drainCancellations' answer) whose end is a coordinator handing over: their `end` turn
+   * carries KEEP_BACKGROUND_WORK_END_CONTENT, written in the transaction that requested the end. The heartbeat names
+   * them in `keepWorkSessionIds`, so a runner told of the end here before its inbox hands it that turn still leaves
+   * the session's SubAgent runs and jobs running.
+   */
+  async keepingWork(sessionIds: string[]): Promise<string[]> {
+    if (sessionIds.length === 0) return [];
+    const turns = await this.prisma.conversationTurn.findMany({
+      where: { sessionId: { in: sessionIds }, kind: 'end', content: KEEP_BACKGROUND_WORK_END_CONTENT },
+      select: { sessionId: true },
+      distinct: ['sessionId'],
+    });
+    return turns.map((turn) => turn.sessionId);
   }
 
   /**

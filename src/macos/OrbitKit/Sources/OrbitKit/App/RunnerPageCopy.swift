@@ -6,6 +6,7 @@ public enum RunnerPageCopy {
     public static let RUNNER_ONLINE = "Online"
     public static let RUNNER_OFFLINE = "Offline"
     public static let RUNNER_LINE_SEPARATOR = " · "
+    public static let RUNNER_ENGINE_NO_PROVIDER_KEY = "no provider key found"
 
     public static func runnerOfflineLastSeen(when: String) -> String { "Offline · last seen \(when)" }
     public static func runnerVersionTag(version: String) -> String { "v\(version)" }
@@ -70,8 +71,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_KEEP_FREE_20_GB = "20 GB"
     public static let RUNNER_KEEP_FREE_50_GB = "50 GB"
     public static let RUNNER_CAPACITY_FOOTER =
-        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task "
-        + "runs stop being sent here and finished worktrees are cleaned up sooner."
+        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and "
+        + "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
 
     public static func runnerGb(amount: String) -> String { "\(amount) GB" }
     public static func runnerDiskUsed(used: String, total: String) -> String {
@@ -96,6 +97,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_REFRESH_MODEL_LISTS = "Refresh Model Lists"
     public static let RUNNER_ENGINES_FOOTER =
         "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends "
+        + "that subscription, nothing to paste."
+    /// A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min.
+    public static let RUNNER_ENGINES_MANAGED_FOOTER =
+        "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends "
         + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
 
@@ -408,7 +413,7 @@ public enum RunnerPageCopy {
     }
     public static func attentionDiskBelowReserve(free: String, total: String,
                                                   reserve: String) -> String {
-        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — task runs stop being sent here until space frees up."
+        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — new sessions and task runs wait until space frees up."
     }
 
     public static let ATTENTION_CANT_UPDATE_ITSELF = "Can’t update itself"

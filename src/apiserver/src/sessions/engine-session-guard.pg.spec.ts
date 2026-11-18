@@ -401,6 +401,8 @@ const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.runnerSessions.endSession({ id: w.runnerId, ownerId: w.ownerId } as never, undefined, randomUUID(), undefined, id),
   'POST /runner/sessions/:id/complete-session': (s, w, id) =>
     s.runnerSessions.completeSession({ id: w.runnerId, ownerId: w.ownerId } as never, undefined, randomUUID(), undefined, id),
+  'POST /runner/sessions/:id/move': (s, w, id) =>
+    s.runnerSessions.moveSession({ id: w.runnerId, ownerId: w.ownerId } as never, undefined, randomUUID(), undefined, id, {}),
   'DELETE /runner/sessions/:id': (s, w, id) =>
     s.runnerSessions.deleteSession({ id: w.runnerId, ownerId: w.ownerId } as never, undefined, randomUUID(), undefined, id),
   'POST /runner/sessions/:id/archive': (s, w, id) =>

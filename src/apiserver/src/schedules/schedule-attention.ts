@@ -200,11 +200,12 @@ export function heldCopy(input: {
 }
 
 /** What Always allow would write for a card, as the card's rule names it ("psql:*", "WebFetch"); '' for none. */
-export function approvalPattern(toolName: string, input: unknown): string {
+export function approvalPattern(toolName: string, input: unknown, checkOnly = false): string {
   if (toolName === 'AskUserQuestion') return '';
   if (toolName !== 'Bash') return toolName;
   const command = input && typeof input === 'object' ? (input as { command?: unknown }).command : undefined;
-  return typeof command === 'string' ? bashCommandRules(command).map((r) => r.ruleContent || r.toolName).join(', ') : '';
+  const exact = checkOnly || (input as { orbitScheduleCheckOnly?: boolean } | null)?.orbitScheduleCheckOnly === true;
+  return typeof command === 'string' ? exact ? command : bashCommandRules(command).map((r) => r.ruleContent || r.toolName).join(', ') : '';
 }
 
 /**
@@ -241,7 +242,7 @@ export function widenCopy(input: {
   workspaceNames: Record<string, string>;
 }): ScheduleCopy {
   const text = scheduleWidenWaitingText({ ...input, reason: input.reason ?? '' });
-  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId]);
+  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId], input.asked.accessLevel);
   return { title: line(title, 120), body: line(text), why: line(text, WHY_MAX) };
 }
 

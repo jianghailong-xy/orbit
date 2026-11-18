@@ -960,6 +960,7 @@ test('the reconcile sweep does not start a task overtaken in the same window', a
   const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
   (f.service as any).quotaGate = async () => ({ blocked: new Map(), blind: new Set() });
   (f.service as any).autoRunHoldOff = async () => new Set();
+  (f.service as any).signedOutGate = async () => new Map();
 
   await (f.service as any).reconcileReadyTasks();
 

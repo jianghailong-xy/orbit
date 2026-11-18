@@ -63,6 +63,7 @@ import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
+import type { AgentToolsReport } from './lib/agentTools';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -249,6 +250,17 @@ export function scheduleProactiveRefresh(): void {
 // a browser tab left open for a month is exactly the client nothing else can see.
 declare const __APP_VERSION__: string;
 
+/** The pages a signed-out visitor may stay on: a dead session found under one is not sent to /login. */
+export function readSignedOut(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/s/') ||
+    pathname === '/help' ||
+    pathname.startsWith('/help/')
+  );
+}
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -277,9 +289,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
-    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
+    // The privacy policy, a shared link (/s/…) and the help center (/help…) are read signed out as well: a
+    // stored session found dead under one (the theme's read of the account) is cleared, and the reader stays.
+    if (!readSignedOut(location.pathname)) location.href = '/login';
   }
   return res;
 }
@@ -973,6 +985,11 @@ export interface ApprovalInfo {
 /** Pending (default) tool-permission approvals awaiting a human allow/deny. */
 export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
+
+/** Every AskUserQuestion card of the session, decided or not: an answered question's record shows
+ *  the questions as its card did, in the owner's language (`translation`). */
+export const listQuestionApprovals = (sessionId: string) =>
+  api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?toolName=AskUserQuestion`);
 
 /** A claude permission rule so future "same kind" calls are auto-allowed
  *  (mirrors PermissionRule in @orbit/shared). */
@@ -1800,6 +1817,13 @@ export const getSharedEventsAfter = (
     `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
   );
 
+/** The shared conversation's stream (docs/session-viewer-stream-design.md §3): what it adds after
+ *  `sinceSeq`, clipped like the rest, then the reply as it is written and its header as it changes. */
+export const sharedStreamUrl = (token: string, opts: { sinceSeq: number; sessionId?: string }): string => {
+  const since = opts.sinceSeq > 0 ? `sinceSeq=${opts.sinceSeq}&` : '';
+  return `/api/shared/${encodeURIComponent(token)}${sharedConversation(opts.sessionId)}/stream?${since}maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
@@ -1840,6 +1864,13 @@ export const getGuestEventPage = (id: string, opts: { before: number; limit: num
 export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
   api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
 export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
+/** The guest page's stream (docs/session-viewer-stream-design.md §3): the sign-in rides `access_token`, as on the
+ *  owner's stream, since EventSource sends no header; `sinceSeq` replays only what came after it. */
+export const guestStreamUrl = (id: string, sinceSeq?: number): string => {
+  const tok = encodeURIComponent(getToken() ?? '');
+  const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
+  return `/api${guestPath(id)}/stream?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
 /** Object URL for an inline image in the guest page's transcript, read through the guest door (the owner's
  *  `/attachments/:id` is theirs alone). Caller revokes it. */
 export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: string): Promise<string> => {
@@ -2030,6 +2061,9 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
+   *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
+  agentTools?: AgentToolsReport | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
   // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a

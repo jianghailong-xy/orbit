@@ -5,6 +5,7 @@ import {
   type ProjectListIntegration,
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
+  type TaskSignInHold,
   type TaskStatus,
 } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,7 @@ import {
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
+import { TaskSignInHoldNote } from '../components/TaskSignInHold';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -427,6 +429,7 @@ export function ProjectsPage() {
   const runners = useQuery(runnersQuery());
   const projects = useQuery({
     queryKey: projectsQueryKey(filter),
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<Project[]>(projectsPath(filter)),
     // Task writes and blocker ownership are server facts. Advancing only the local clock would
     // eventually label a still-active project quiet, so refresh the evidence at the same cadence.
@@ -1063,6 +1066,7 @@ export function ProjectDetailPage() {
   const openTaskId = routeId(params.taskId);
   const project = useQuery({
     queryKey: ['project', id],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectDetail>(`/projects/${encodeURIComponent(id!)}`),
     enabled: Boolean(id),
   });
@@ -1816,6 +1820,8 @@ interface ProjectTaskPage {
 export interface ProjectTask {
   id: string;
   title: string;
+  /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
+  hold?: TaskSignInHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -2263,6 +2269,14 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   const { open } = useOpenProjectCoordinator(projectId, NEW_TASK_INTENT);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
+    // A row's work lane — Running above all — is read off the session carrying the task
+    // (`workState`), and a run starting or ending writes no task row: only `session.*` announces
+    // it. `task` alone would leave a row saying Running after its run had ended.
+    //
+    // Also the key ProjectBlockers reads (`RefusedTaskList`): the two are one cache entry, and
+    // react-query keeps one `meta` on it, taken from whichever observer set its options last, so
+    // every site on this key must declare the same entities or the declaration is a coin toss.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`),
   });
@@ -2461,7 +2475,11 @@ function ProjectTaskRow({
                   </ProjectTaskLink>{' '}
                   <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
                   <WaitingOnYouTaskBadge taskId={task.id} />
-                  {workLabel ? (
+                  {/* Held for a sign-in replaces "Ready · automatic dispatch": that would say it starts
+                      by itself, and it will not until somebody signs in (the server's `hold`). */}
+                  {task.hold ? (
+                    <TaskSignInHoldNote hold={task.hold} />
+                  ) : workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}
                     </Badge>
@@ -2565,6 +2583,7 @@ function ProjectTaskRow({
 function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
   const graph = useQuery({
     queryKey: ['task', task.id, 'prerequisites'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${encodeURIComponent(encodeId(task.id))}/dependency-graph?direction=upstream&maxDepth=1`,
@@ -2629,6 +2648,9 @@ export function ProjectTaskLevel({
 }) {
   const children = useQuery({
     queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
+    // The same project task page as the root level, row for row: a subtask's Running mark is its
+    // work session's, and a run starting or ending writes no task row.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`,

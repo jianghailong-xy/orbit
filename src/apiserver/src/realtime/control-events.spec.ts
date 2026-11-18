@@ -36,6 +36,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.WATCH_CHANGED), ControlEventType.WATCH_CHANGED);
   assert.equal(controlTypeFor(RunEventType.WIKI_CHANGED), ControlEventType.WIKI_CHANGED);
   assert.equal(controlTypeFor(RunEventType.TERMINALS_CHANGED), ControlEventType.TERMINALS_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.TRANSLATION_STATUS_CHANGED), ControlEventType.TRANSLATION_STATUS_CHANGED);
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -56,6 +57,8 @@ test('only the owner-library events are user-scoped', () => {
     ControlEventType.WIKI_CHANGED,
     // A terminal sign-in or credential belongs to the account; the request comes from a runner, not a session.
     ControlEventType.TERMINALS_CHANGED,
+    // The translator's breaker is the server's, the same for every account: it rides the every-user key.
+    ControlEventType.TRANSLATION_STATUS_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }

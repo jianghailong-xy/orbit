@@ -82,6 +82,7 @@ object ScheduleCopy {
     val access: Map<String, ScheduleAccessCopy> = mapOf(
         "CHECK_ONLY" to ScheduleAccessCopy("Check only", "reads and reports, edits nothing", "reads and reports"),
         "OPEN_PR" to ScheduleAccessCopy("Open a PR", "edits in its own worktree and opens a PR. It can't merge or deploy.", "edits in its own worktree and opens a PR. It can't merge or deploy."),
+        "LAND" to ScheduleAccessCopy("Edit and land on main", "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.", "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."),
     )
     object Costs {
         const val upTo = "Up to {runs}, {minutes} min each"
@@ -130,12 +131,14 @@ object ScheduleCopy {
         "RUN_LIMIT" to "ran past its run limit",
         "CANCELLED_BY_OWNER" to "was stopped by you",
         "OVER_BUDGET" to "was over what you allowed this week",
+        "LANDING_FAILED" to "could not land on main",
     )
     val runReasonTexts: Map<String, String> = mapOf(
         "OVER_BUDGET" to "Not started: it had already started as many runs in the past 7 days as you allowed.",
     )
     val failureReasonsWithSummary: Map<String, String> = mapOf(
         "REPORTED_FAILED" to "reported a failure: {summary}",
+        "LANDING_FAILED" to "could not land on main: {summary}",
     )
     val heldReasons: Map<String, ScheduleHeldCopy> = mapOf(
         "WORKSPACE_NOT_OWNED" to ScheduleHeldCopy("the workspace {workspace} is no longer yours", "it is yours again"),
@@ -148,6 +151,7 @@ object ScheduleCopy {
         "MODE_WIDER_THAN_ACCOUNT_DEFAULT" to ScheduleHeldCopy("your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)", "your default mode allows it"),
         "NO_REPOSITORY" to ScheduleHeldCopy("the workspace {workspace} has no repository", "it has one"),
         "SESSION_REFUSED" to ScheduleHeldCopy("its run's session could not be opened", "that is fixed"),
+        "WORKTREE_DISABLED" to ScheduleHeldCopy("the workspace {workspace} has worktrees disabled", "worktrees are enabled"),
     )
     const val heldWhere = " in workspace {workspace}"
     val heldShort: Map<String, String> = mapOf(
@@ -161,6 +165,7 @@ object ScheduleCopy {
         "MODE_WIDER_THAN_ACCOUNT_DEFAULT" to "wider than your default mode",
         "NO_REPOSITORY" to "no repository",
         "SESSION_REFUSED" to "session refused",
+        "WORKTREE_DISABLED" to "worktrees disabled",
     )
     val endedReasons: Map<String, String> = mapOf(
         "DELETED" to "deleted",
@@ -233,6 +238,7 @@ object ScheduleCopy {
             "accessLevel" to "Access",
             "runLimitMinutes" to "Run limit",
             "workspaceId" to "Workspace",
+            "readBack" to "Read-back",
         )
         const val change = "{field} {before} → {after}"
         const val changeTo = "{field} → {after}"
@@ -272,12 +278,14 @@ object ScheduleCopy {
             "RUNS_PER_WEEK" to "Let {title} run more often?",
             "RUN_LIMIT" to "Let {title} run longer?",
             "WORKSPACE" to "Let {title} run in {workspace}?",
+            "PROBE_COMMAND" to "Let {title} check with a new command?",
         )
         const val now = "Now"
         const val asked = "Asked"
         const val accessJoin = " — "
         const val appliesFromNextRun = "Applies from the next run."
         const val checkedEachRun = "Each run checks this again before it starts."
+        const val landTitle = "Let {title} land on main?"
     }
     object SessionPreview {
         const val create = "Waiting for you to confirm"
@@ -312,10 +320,14 @@ object ScheduleCopy {
     object RunSession {
         const val crumb = "Scheduled"
         const val runOf = "run of {date}"
-        const val strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        const val strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         const val reported = "Reported: {state}"
         const val agent = "{engine} agent"
         const val duration = "{minutes} min"
+    }
+    object Landing {
+        const val landed = "Landed on main: {sha}."
+        const val failed = "Could not land on main: {reason}"
     }
 
     /** Every sentence above under its contract path (`group.key`, arrays by index): what the parity test reads. */
@@ -388,6 +400,9 @@ object ScheduleCopy {
         "access.OPEN_PR.label" to access.getValue("OPEN_PR").label,
         "access.OPEN_PR.detail" to access.getValue("OPEN_PR").detail,
         "access.OPEN_PR.brief" to access.getValue("OPEN_PR").brief,
+        "access.LAND.label" to access.getValue("LAND").label,
+        "access.LAND.detail" to access.getValue("LAND").detail,
+        "access.LAND.brief" to access.getValue("LAND").brief,
         "costs.upTo" to Costs.upTo,
         "costs.upToLower" to Costs.upToLower,
         "costs.runsOnly" to Costs.runsOnly,
@@ -426,8 +441,10 @@ object ScheduleCopy {
         "failureReasons.RUN_LIMIT" to failureReasons.getValue("RUN_LIMIT"),
         "failureReasons.CANCELLED_BY_OWNER" to failureReasons.getValue("CANCELLED_BY_OWNER"),
         "failureReasons.OVER_BUDGET" to failureReasons.getValue("OVER_BUDGET"),
+        "failureReasons.LANDING_FAILED" to failureReasons.getValue("LANDING_FAILED"),
         "runReasonTexts.OVER_BUDGET" to runReasonTexts.getValue("OVER_BUDGET"),
         "failureReasonsWithSummary.REPORTED_FAILED" to failureReasonsWithSummary.getValue("REPORTED_FAILED"),
+        "failureReasonsWithSummary.LANDING_FAILED" to failureReasonsWithSummary.getValue("LANDING_FAILED"),
         "heldReasons.WORKSPACE_NOT_OWNED.clause" to heldReasons.getValue("WORKSPACE_NOT_OWNED").clause,
         "heldReasons.WORKSPACE_NOT_OWNED.until" to heldReasons.getValue("WORKSPACE_NOT_OWNED").until,
         "heldReasons.WORKSPACE_DELETED.clause" to heldReasons.getValue("WORKSPACE_DELETED").clause,
@@ -448,6 +465,8 @@ object ScheduleCopy {
         "heldReasons.NO_REPOSITORY.until" to heldReasons.getValue("NO_REPOSITORY").until,
         "heldReasons.SESSION_REFUSED.clause" to heldReasons.getValue("SESSION_REFUSED").clause,
         "heldReasons.SESSION_REFUSED.until" to heldReasons.getValue("SESSION_REFUSED").until,
+        "heldReasons.WORKTREE_DISABLED.clause" to heldReasons.getValue("WORKTREE_DISABLED").clause,
+        "heldReasons.WORKTREE_DISABLED.until" to heldReasons.getValue("WORKTREE_DISABLED").until,
         "heldWhere" to heldWhere,
         "heldShort.WORKSPACE_NOT_OWNED" to heldShort.getValue("WORKSPACE_NOT_OWNED"),
         "heldShort.WORKSPACE_DELETED" to heldShort.getValue("WORKSPACE_DELETED"),
@@ -459,6 +478,7 @@ object ScheduleCopy {
         "heldShort.MODE_WIDER_THAN_ACCOUNT_DEFAULT" to heldShort.getValue("MODE_WIDER_THAN_ACCOUNT_DEFAULT"),
         "heldShort.NO_REPOSITORY" to heldShort.getValue("NO_REPOSITORY"),
         "heldShort.SESSION_REFUSED" to heldShort.getValue("SESSION_REFUSED"),
+        "heldShort.WORKTREE_DISABLED" to heldShort.getValue("WORKTREE_DISABLED"),
         "endedReasons.DELETED" to endedReasons.getValue("DELETED"),
         "endedReasons.END_REACHED" to endedReasons.getValue("END_REACHED"),
         "endedReasons.GOAL_REACHED" to endedReasons.getValue("GOAL_REACHED"),
@@ -516,6 +536,7 @@ object ScheduleCopy {
         "history.fields.accessLevel" to History.fields.getValue("accessLevel"),
         "history.fields.runLimitMinutes" to History.fields.getValue("runLimitMinutes"),
         "history.fields.workspaceId" to History.fields.getValue("workspaceId"),
+        "history.fields.readBack" to History.fields.getValue("readBack"),
         "history.change" to History.change,
         "history.changeTo" to History.changeTo,
         "history.changeText" to History.changeText,
@@ -547,11 +568,13 @@ object ScheduleCopy {
         "envelopeCard.titles.RUNS_PER_WEEK" to EnvelopeCard.titles.getValue("RUNS_PER_WEEK"),
         "envelopeCard.titles.RUN_LIMIT" to EnvelopeCard.titles.getValue("RUN_LIMIT"),
         "envelopeCard.titles.WORKSPACE" to EnvelopeCard.titles.getValue("WORKSPACE"),
+        "envelopeCard.titles.PROBE_COMMAND" to EnvelopeCard.titles.getValue("PROBE_COMMAND"),
         "envelopeCard.now" to EnvelopeCard.now,
         "envelopeCard.asked" to EnvelopeCard.asked,
         "envelopeCard.accessJoin" to EnvelopeCard.accessJoin,
         "envelopeCard.appliesFromNextRun" to EnvelopeCard.appliesFromNextRun,
         "envelopeCard.checkedEachRun" to EnvelopeCard.checkedEachRun,
+        "envelopeCard.landTitle" to EnvelopeCard.landTitle,
         "sessionPreview.create" to SessionPreview.create,
         "sessionPreview.envelope" to SessionPreview.envelope,
         "waiting.title" to Waiting.title,
@@ -580,6 +603,8 @@ object ScheduleCopy {
         "runSession.reported" to RunSession.reported,
         "runSession.agent" to RunSession.agent,
         "runSession.duration" to RunSession.duration,
+        "landing.landed" to Landing.landed,
+        "landing.failed" to Landing.failed,
         )
     }
 }

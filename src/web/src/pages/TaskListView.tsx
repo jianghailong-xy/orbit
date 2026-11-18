@@ -26,6 +26,7 @@ import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
+import { TaskSignInHoldNote } from '../components/TaskSignInHold';
 import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
@@ -550,6 +551,10 @@ export function TaskListView() {
         creatorSessionId: createdIn,
       },
     ],
+    // A row's pill is `running` / `queued` from the session carrying the task, and page one's
+    // `counts` counts those same session-derived states — neither moves when only the task row is
+    // written, and both move on every run that starts or ends.
+    meta: { entities: ['task', 'session'] },
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({
@@ -596,7 +601,11 @@ export function TaskListView() {
   // just a query whose key says what it depends on.
   const taskCounts = useQuery(taskCountsQuery(scopeListId, labels, createdIn, scopeProjectId));
   const taskPageCounts = taskCounts.data;
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<any[]>('/workspaces'),
+  });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
   // request of its own and its entries can show what they would narrow to.
   // The work that is happening, fetched outside the paged list because it can never be in it:
@@ -631,6 +640,7 @@ export function TaskListView() {
   // tasks this view now pages through.
   const taskLists = useQuery({
     queryKey: ['task-lists'],
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskListRow[]>('/task-lists'),
   });
   // The title is also where every other scope is picked (`taskScopeMenuItems`). The tasks in no
@@ -639,6 +649,7 @@ export function TaskListView() {
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
   const unlistedCount = useQuery({
     queryKey: ['tasks', 'unlisted-count'],
+    meta: { entities: ['task'] },
     // Over the tasks outside projects, the scope the No list page lists.
     queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none', projectId: 'none' })),
     enabled: scopeMenuOpen,
@@ -1196,6 +1207,8 @@ export function TaskListView() {
             {r.title ?? ''}
           </span>
           <WaitingOnYouTaskBadge taskId={r.id} />
+          {/* The sweep holds it for a sign-in (the server's `hold`): Held, why, and Sign in. */}
+          {r.hold && !r.running && !r.queued ? <TaskSignInHoldNote hold={r.hold} /> : null}
           {r.blocked ? (
             <Tooltip
               content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}

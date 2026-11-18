@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>会话列表 · Runner full 这一行</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f2f2f4;color:#1c1c1e;width:1680px;padding:0}
+.b-part{font:15px/1.6 Inter,"Noto Sans SC",sans-serif;padding:32px 40px;background:#f2f2f4}
+h1{font-size:26px;margin-bottom:6px}
+h2{font-size:20px;margin:0 0 10px}
+.lead{font-size:15.5px;color:#444;max-width:1560px}
+.lead b{color:#000}
+.grid{display:grid;grid-template-columns:repeat(2,770px);gap:28px 60px}
+.stage .ttl{font-size:16px;font-weight:700;margin-bottom:8px}
+.stage .ttl .rec{background:#2e7d32;color:#fff;border-radius:6px;padding:1px 8px;font-size:13px;margin-left:8px}
+.cap{font-size:14.5px;color:#333;margin-top:10px;line-height:1.6}
+.good{color:#2e7d32}.bad{color:#c62828}.mid{color:#a15c00}
+/* desktop sidebar list, drawn after the owner's screenshot */
+.pane{width:560px;background:#fff;border-radius:12px;padding:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);position:relative}
+.r{display:flex;gap:12px;padding:11px 14px 12px;border-radius:9px;align-items:flex-start;position:relative}
+.r.sel{background:#e9effd}
+.r .ic{width:20px;height:20px;margin-top:3px;flex:none}
+.r .tx{flex:1;min-width:0}
+.r .t{font-size:16px;color:#1c1c1e;display:flex;justify-content:space-between;gap:10px}
+.r .t span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .t .when{font-size:14px;color:#a1a1a6;flex:none}
+.r .l{font-size:14.5px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.l .run{color:#0a6cff}
+.l .q{color:#8e8e93}
+.l .qs{color:#6e6e73;font-weight:500}
+.l .sep{color:#c7c7cc;margin:0 5px}
+.hl{outline:2.5px solid #ff9f0a;outline-offset:2px;border-radius:5px}
+.pin{position:absolute;background:#ff9f0a;color:#000;font:700 12px/20px Inter,sans-serif;border-radius:10px;width:20px;text-align:center}
+.tip{position:absolute;left:150px;top:118px;width:360px;background:#2c2c2e;color:#f2f2f7;border-radius:10px;padding:11px 13px;font-size:13.5px;line-height:1.5;box-shadow:0 10px 26px rgba(0,0,0,.28);z-index:3}
+.tip b{display:block;font-size:14.5px;margin-bottom:3px}
+.tip .w{color:#aeaeb2;margin-top:4px}
+table{border-collapse:collapse;font-size:14.5px;width:1600px;background:#fff;border-radius:12px;overflow:hidden}
+th,td{border-bottom:1px solid #ececf0;padding:9px 12px;text-align:left;vertical-align:top}
+th{background:#fafafa;font-weight:600}
+.box{background:#fff;border-radius:12px;padding:18px 24px;max-width:1600px;font-size:15px;line-height:1.75}
+.box li{margin-left:22px}
+code{font-family:"JetBrains Mono",monospace;font-size:13px;background:#f0f0f3;border-radius:4px;padding:0 4px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="#b8b8bd" stroke-width="1.6"/><path d="M10 5.5V10l3 2" fill="none" stroke="#b8b8bd" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#d6e4ff" stroke-width="2"/><path d="M10 2.5a7.5 7.5 0 0 1 7.5 7.5" fill="none" stroke="#0a6cff" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="idle" viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="#c7c7cc"/></symbol>
+</svg>
+
+<section class="b-part" id="part-1">
+  <h1>会话列表 · 「Runner full」这一行怎么写</h1>
+  <p class="lead">场景：你在会话「卡片高度不一致确认」里发了一条消息，可这台 runner 的 16 个位置全被占了，消息只能排队，等有空位再自动送进去（<code>queuedReason = runner_at_capacity</code>）。
+  会话列表里这一行的第二行现在只写 <b>Runner full</b>。Web、macOS/iOS、Android 共用一套文字（<code>queuedLabel</code> / <code>SessionLine</code>），所以不管改成哪种，三端会一起改。
+  下面的行是按你的截图画的；界面文字照原样用英文，会话标题和消息内容都是示例。</p>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>先看问题：现在这一行少了什么</h2>
+  <div class="grid">
+    <div class="stage">
+      <div class="ttl">① 现在</div>
+      <div class="pane">
+        <div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run">Running Edit SettingsView.swift…</span></div></div></div>
+        <div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">just now</span></div><div class="l"><span class="q hl" id="m1">Runner full</span></div></div>
+          <span class="pin" style="left:112px;top:52px">1</span></div>
+        <div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="ttl">诊断</div>
+      <div class="box" style="max-width:none">
+        <ol>
+          <li><b>你说的话被顶掉了。</b>本来第二行显示的是 <code>You: 请确认卡片高度…</code>，进了排队就整个换成 Runner full。在列表里只看这一行，分不清排着的是哪一条消息。</li>
+          <li><b>只有原因，没说结果。</b>“Runner full”是 runner 那边的状态，没告诉你“会自动发出去、不用管”。灰色时钟加灰字，看着更像卡死或者出错了。</li>
+          <li><b>看不出要等多久。</b>满了多少、等了多久都没写。这些数其实都在：会话里的那个弹框写着 <code>HPC is running 16 of 16 sessions…</code>，只是列表里不显示。</li>
+          <li>右上角的 <b>just now</b> 是这一行最后一次有动静的时间，不是开始排队的时间，所以帮不上忙。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>三个方案</h2>
+  <div class="grid">
+    <div class="stage">
+      <div class="ttl">A · 消息原样保留，状态缩成前缀<span class="rec">推荐</span></div>
+      <div class="pane">
+        <div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run">Running Edit SettingsView.swift…</span></div></div></div>
+        <div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">just now</span></div><div class="l"><span class="qs">Runner full</span><span class="sep">·</span>You: 请确认三张卡片在窄屏下的高度是否一致，截图…</div></div></div>
+        <div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div>
+      </div>
+      <p class="cap"><span class="good">＋</span> 你说的话还在（和“用户输入是视觉重心”那条裁定一致）；状态词变短，只当前缀用；“You:”这种写法和正在跑的那一行一样，少一种样式要认。<br>
+      <span class="bad">－</span> 窄侧栏里消息会截得更短。等待时长和占用数仍然要点进会话才看得到（用 ④ 的悬停提示补）。</p>
+    </div>
+    <div class="stage">
+      <div class="ttl">B · 加上占用数</div>
+      <div class="pane">
+        <div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run">Running Edit SettingsView.swift…</span></div></div></div>
+        <div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">just now</span></div><div class="l"><span class="q">Runner full · 16/16</span></div></div></div>
+        <div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div>
+      </div>
+      <p class="cap"><span class="good">＋</span> 改动最小，数字服务器已经发下来了。<br>
+      <span class="bad">－</span> 16/16 只是把 full 又说了一遍，你最关心的“什么时候轮到”还是看不出；数字跳得快，列表会一直闪；有 6 个位是后台任务占的，这种情况下 16/16 反而容易看错。消息照样被顶掉。</p>
+    </div>
+    <div class="stage">
+      <div class="ttl">C · 改成大白话，加上已等时长</div>
+      <div class="pane">
+        <div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run">Running Edit SettingsView.swift…</span></div></div></div>
+        <div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">just now</span></div><div class="l"><span class="q">Waiting for a free slot · 3 min</span></div></div></div>
+        <div class="r"><svg class="ic"><use href="#idle"/></svg><div class="tx"><div class="t"><span>导出 CSV 的列顺序</span><span class="when">1h</span></div><div class="l">Done. The columns now follow the table's own order, and the…</div></div></div>
+      </div>
+      <p class="cap"><span class="good">＋</span> 一眼看出是在等、会自己走，等多久也有了。<br>
+      <span class="bad">－</span> 列表得每分钟刷新一次；和会话里已经批准的“Runner full”说法对不上（Run full / Batch full 也得另想词）；消息照样被顶掉。</p>
+    </div>
+    <div class="stage">
+      <div class="ttl">④ 配合 A：悬停（iOS / Android 长按）看完整原因</div>
+      <div class="pane" style="height:236px">
+        <div class="r"><svg class="ic"><use href="#spin"/></svg><div class="tx"><div class="t"><span>设置页按钮对齐</span><span class="when">2m</span></div><div class="l"><span class="run">Running Edit SettingsView.swift…</span></div></div></div>
+        <div class="r sel"><svg class="ic"><use href="#clock"/></svg><div class="tx"><div class="t"><span>卡片高度不一致确认</span><span class="when">just now</span></div><div class="l"><span class="qs hl">Runner full</span><span class="sep">·</span>You: 请确认三张卡片在窄屏下的高度是否一致，截图…</div></div></div>
+        <div class="tip"><b>Runner full</b>HPC is running 16 of 16 sessions. This message is sent as soon as one finishes.<div class="w">Waiting 3 min</div></div>
+      </div>
+      <p class="cap">鼠标停在前缀上，出来的就是会话里那个弹框的原话和等待时长（<code>capacityHeldMessageText</code> / <code>capacityHeldWaited</code>），<b>不新写一个字</b>。iOS、Android 没有悬停，就放进行的长按菜单里，或者干脆不做（见待定 ②）。</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>对比</h2>
+  <table>
+    <tr><th style="width:250px"></th><th>① 现在</th><th>A 前缀 + 消息（推荐）</th><th>B 加占用数</th><th>C 大白话 + 时长</th></tr>
+    <tr><td>排着的是哪条消息</td><td class="bad">看不出</td><td class="good">看得出</td><td class="bad">看不出</td><td class="bad">看不出</td></tr>
+    <tr><td>能看出“会自动发出”</td><td class="bad">看不出</td><td class="mid">时钟图标 + 前缀，靠悬停补全</td><td class="bad">看不出</td><td class="good">看得出</td></tr>
+    <tr><td>看得到等多久 / 满多少</td><td class="bad">都看不到</td><td class="mid">悬停才看到</td><td class="mid">满多少看得到</td><td class="good">等多久看得到</td></tr>
+    <tr><td>和会话里的说法一致</td><td class="good">一致</td><td class="good">一致</td><td class="good">一致</td><td class="bad">得改词</td></tr>
+    <tr><td>列表要不要定时刷新</td><td>不用</td><td>不用</td><td class="mid">跟着数字变</td><td class="bad">每分钟</td></tr>
+    <tr><td>改动量</td><td>—</td><td>三端各改一个分支 + 测试</td><td>最小</td><td>中（加计时器、改词）</td></tr>
+  </table>
+</section>
+
+<section class="b-part" id="part-5">
+  <div class="box">
+    <h2>待定 · 要你拍板</h2>
+    <ol>
+      <li><b>选哪个方案：</b>A / B / C。推荐 <b>A</b>：列表这一行该回答的是“哪个会话、在干嘛”。标题已经说了是哪个会话，时钟说了在排队，剩下最值钱的信息是你说的那句话。等多久、满多少要点进去才看，而会话里已经有现成的弹框。</li>
+      <li><b>要不要加悬停 ④：</b>推荐 Web + macOS 加（只用现成的文字），iOS / Android 先不加，点进会话就能看到弹框。</li>
+      <li><b>前缀规则要不要推广：</b>A 的“状态 · 消息”写法同样适用于 <code>Queued</code>、<code>Runner offline</code>、<code>Runner updating</code> 这几种排队状态。推荐一起改，规则一条，不留例外；不同意就只改 Runner/Run/Batch full 三种。</li>
+    </ol>
+    <h2 style="margin-top:14px">落地（按代价排）</h2>
+    <ol>
+      <li>Web <code>sessionLine</code> 的 QUEUED 分支：有 <code>lastUserText</code> 就拼成 <code>前缀 · sentLine</code>，没有就跟今天一样；颜色沿用 queued 的灰色，前缀稍微加重。</li>
+      <li>OrbitKit <code>SessionLine.make</code> 和 Android <code>SessionLine.kt</code> 按同样的规则改，补上 parity 测试。</li>
+      <li>（如果选了 ④）Web/macOS 行上加 tooltip，内容复用 <code>capacityHeldMessageText</code>。</li>
+    </ol>
+  </div>
+</section>
+</body>
+</html>

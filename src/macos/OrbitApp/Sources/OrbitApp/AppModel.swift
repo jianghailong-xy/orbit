@@ -310,6 +310,7 @@ final class AppModel {
     /// the fallback when the record lives outside the currently loaded Open / agent list scopes.
     func session(id: String) -> Session? {
         sessionDetails.resolve(id, preferring: sessions, agents?.agentSessions ?? [])
+            ?? agents?.scheduledRunSession(id: id)
     }
 
     /// The Open sessions blocked on an approval, and agentID → how many of them each agent holds —
@@ -394,6 +395,10 @@ final class AppModel {
     /// the list in hand IS: this one is latched, so a list that later turns out to be a snapshot's
     /// cannot un-answer it.
     private var openListAnswered = false
+    /// Share to Orbit (ShareHandoff.swift): the entry a tap or an app open asked for, held until
+    /// signed in with a loaded list; and the snapshot last written, so an unchanged list writes nothing.
+    @ObservationIgnored var pendingShareClaim: PendingShareClaim?
+    @ObservationIgnored var lastShareSnapshot: RecentSessionsSnapshot?
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -591,6 +596,10 @@ final class AppModel {
         agentsModel.refreshOpen = { [weak self] in
             guard let self, await self.loadSessions() else { return nil }
             return self.sessions
+        }
+        agentsModel.onWorkspacesLoaded = { [weak self] in
+            guard let self, self.openListLoaded else { return }
+            self.writeShareSnapshot()
         }
         agents = agentsModel
         let runnersModel = RunnersModel(baseURL: url, tokenStore: tokenStore)
@@ -922,6 +931,8 @@ final class AppModel {
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
         launchSnapshots?.remove()
+        // …and so does the share picker's: no snapshot is how the extension knows to say sign in.
+        removeShareSnapshot()
         // Cards read from this account are not ones to draw against the next: the store behind them
         // holds its answers, and a new sign-in builds a new one anyway.
         linkCards?.removeAll()
@@ -1166,28 +1177,12 @@ final class AppModel {
         scheduled?.inspectedID = id
     }
 
-    /// Take a run's session off the Scheduled page: on the Mac a row or a sentence chosen in the timeline puts its
-    /// panel in the right-hand column, where the run was.
-    func closeScheduleRun() {
-        guard selectedSection == .scheduled, !nav.path.isEmpty else { return }
-        nav.path = []
-    }
-
-    /// A run's session, over the Scheduled page: run sessions are in no list (§7.4), so the back swipe returns to
-    /// the schedule they ran for.
-    func openScheduleRun(sessionID: String, scheduleID: String?) {
-        settingsPresented = false
+    /// Open the session in its workspace, with the list on the Scheduled runs folder.
+    func openScheduleRun(sessionID: String) {
         ownerRequests?.inboxPresented = false
         scheduled?.inspectedID = nil
         scheduled?.draftPanel = nil
-        selectedSection = .scheduled
-        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push. On the Mac
-        // the same frame is the Scheduled section's right-hand column (`ScheduledMacDetail`), with Scheduled lit in
-        // the sidebar and the timeline beside it (web board 02 ⑤): never a row of a workspace's list.
-        nav.path = [.console(sessionID: sessionID, origin: .list)]
-        // A run's session is in no list, so its own record is read as a link's is: the console's state band and
-        // its toolbar read that record.
-        refreshUnlistedSession(sessionID, adoptingAgent: false)
+        route(to: .session(sessionID), inScheduledRuns: true)
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
@@ -1503,6 +1498,12 @@ final class AppModel {
         case .tags:
             Task { await loadSessionTags() }
             scheduleControlRefresh()
+        // The translator started or stopped being skipped: the composer's language tag reads the account's
+        // `translationUnavailableUntil`, so the account is read again.
+        case .account:
+            Task { @MainActor [weak self] in
+                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
+            }
         // The reserved `notification` channel, and any type this client does not know: nothing to read.
         case .nothing:
             break
@@ -1889,6 +1890,9 @@ final class AppModel {
         #if os(iOS)
         reconcileDeliveredApprovals(Set(SessionGrouping.group(list).needsYou.map(\.id)))
         #endif
+        // Share to Orbit: the picker's snapshot follows the list, and a share waiting for the list
+        // (to know whether its session is still there) is staged now (ShareHandoff.swift).
+        shareListLoaded()
     }
 
     private func post(_ events: [NotificationEvent]) {
@@ -2431,11 +2435,22 @@ final class AppModel {
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
 
-    /// A press on a notice: the conversation it names, at the card it waits on.
+    /// A press on a notice: the conversation it names, at the card it waits on. An owner request's
+    /// card is opened in the "Waiting on you" inbox, as its push opens it: in the conversation it sits
+    /// where it was asked, under every turn taken since, so landing at the tail showed nothing.
     func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
         dismissNeedsYouToast(notice.id)
         if let item = notice.ownerItem {
             openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else if notice.target.waitingKind == .ownerRequest, let requests = ownerRequests {
+            if let request = OwnerRequests.oldestPending(requests.known, sessionID: notice.target.id) {
+                openOwnerRequest(request.id)
+            } else {
+                // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+                settingsPresented = false
+                requests.tab = .open
+                requests.inboxPresented = true
+            }
         } else {
             openNeedsYouSession(notice.target)
         }
@@ -2492,7 +2507,7 @@ final class AppModel {
     /// (`openSessionRow`, and the selection setter the three-column shells write) have already
     /// decided which frame goes up.
     private func focusConsoleOnOwnerItem(_ sessionID: String) {
-        guard let session = sessions.first(where: { $0.id == sessionID }),
+        guard let session = sessions.first(where: { $0.id == sessionID }) ?? agents?.scheduledRunSession(id: sessionID),
               let item = NeedsYouLogic.oldestOwnerItem([session])?.item else { return }
         consoleRegistry?.model(for: sessionID, agentID: session.agent?.id ?? session.agentId)
             .focus(ownerItem: item)
@@ -2583,7 +2598,6 @@ final class AppModel {
         case .projects: return nav.sectionAtRoot
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
-        // A run's session over the Scheduled page: the same one read.
         case .scheduled: return nav.sectionAtRoot
         }
     }
@@ -2691,6 +2705,9 @@ final class AppModel {
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
         if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
+        if let address = nav.folderColumn, address.isScheduledRuns {
+            await agents?.loadScheduledRuns(address)
+        }
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -3104,6 +3121,16 @@ final class AppModel {
         sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
     }
 
+    /// A new session in a workspace whose draft composer `stage` fills once it exists: where a share
+    /// to a new session, or to one that is gone, lands (ShareHandoff.swift).
+    func openNewSession(inWorkspace workspaceID: String, staging stage: @escaping (ConsoleModel) -> Void) {
+        consoleRegistry?.pendingDraftStaging[workspaceID] = stage
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Whether the Open list has been answered by the server this sign-in (not just restored).
+    var openListLoaded: Bool { openListAnswered }
+
     /// A new session in a workspace, its composer holding `text` to read, change and send.
     func openNewSession(inWorkspace workspaceID: String, text: String) {
         consoleRegistry?.pendingDraftText[workspaceID] = text
@@ -3394,6 +3421,13 @@ final class AppModel {
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
     }
 
+    /// "Land without the check" on a landing in flight (§2.4 J-S5), from the landing card. Throws
+    /// what the server answered, for the card to say; the page reads its line again itself.
+    func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+    }
+
     /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out
     /// doors and the landing page. The page re-reads what it drew from afterwards.
     func abandonIntegrationJob(_ projectID: String, jobID: String) async throws {
@@ -3543,6 +3577,7 @@ final class AppModel {
         // workspace's list (§3.3 — the folder is gone, so there is no page to be on). Only an
         // answer that landed can say that; a failed read leaves the library as it stands.
         if let open = nav.folderPage ?? nav.folderColumn,
+           !open.isScheduledRuns,
            !folders.contains(where: { $0.id == open.folderID }) {
             nav.leaveFolder(open.folderID)
         }
@@ -3560,6 +3595,15 @@ final class AppModel {
     /// the page on top on a phone and the list's page in a wide shell's column.
     func openFolder(_ address: SessionFolderAddress) {
         nav.enterFolder(address)
+    }
+
+    func pollScheduledRuns(_ address: SessionFolderAddress) async {
+        guard let agents else { return }
+        await agents.loadScheduledRuns(address)
+        // Run creation isn't pushed on the session stream, even when it's connected.
+        await ViewPoll.run(self, every: 30, inFlight: { 30 }) {
+            await agents.loadScheduledRuns(address)
+        }
     }
 
     /// Back out of a folder's page — the wide shell's column back button. A phone's system back
@@ -3858,10 +3902,14 @@ final class AppModel {
     /// is five chances to leave one out, and the one that gets left out is silent — the page opens
     /// under a pane still showing another agent's list. A no-op agent switch leaves the frame alone,
     /// so re-opening a session you are already on does not disturb the page beneath it.
-    private func show(_ node: NavNode, agent agentID: String? = nil) {
+    private func show(_ node: NavNode, agent agentID: String? = nil, folder: SessionFolderAddress? = nil) {
         selectedSection = .agents
         if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }
-        nav.replaceTop(with: node)
+        if let folder {
+            nav.path = [.folder(folder), node]
+        } else {
+            nav.replaceTop(with: node)
+        }
     }
 
     /// The app's only door for navigation that arrives from *outside* it: an `orbit://` URL, a
@@ -3869,7 +3917,7 @@ final class AppModel {
     /// menu bar. In-app affordances (a list row, the drawer's Recents and Workspace rows, the
     /// needs-you banner, ⌘N, ⌘1…⌘9) call their entry point directly instead: a `Route` carries
     /// neither an origin nor an agent, and a frame pushed for a drawer row has to say both.
-    func route(to route: Route) {
+    func route(to route: Route, inScheduledRuns: Bool = false) {
         // A link or a notification goes somewhere, and Settings would cover it — and while Settings
         // is up a push lands on its stack, not on the route's.
         settingsPresented = false
@@ -3880,7 +3928,7 @@ final class AppModel {
         // public-id rewrite), while every list row and detail record spells it base62 — and the
         // console finds its record by `==`. A UUID frame found none, so its header fell back to the
         // agent's name. The frame takes the lists' spelling here, once, for everything downstream.
-        case .session(let id): openSession(PublicID.toPublic(id))
+        case .session(let id): openSession(PublicID.toPublic(id), inScheduledRuns: inScheduledRuns)
         case .task(let id):
             // A deep link or dependency jump may target a task outside the currently selected
             // named list. Aggregate scope guarantees the row and detail can resolve together.
@@ -3961,12 +4009,13 @@ final class AppModel {
     /// the id right away lets the console paint while the agent + lifecycle context resolve in the
     /// background; retaining that response is what lets Completed / Trash headers and composers
     /// render correctly on a cold launch.
-    private func openSession(_ id: String) {
+    private func openSession(_ id: String, inScheduledRuns: Bool) {
         // A route replaces what the detail pane / stack top is showing (a draft included) — the same
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
-        show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))
-        refreshUnlistedSession(id, adoptingAgent: true)
+        let folder = inScheduledRuns ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:)) : nil
+        show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)
+        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns)
     }
 
     /// Another session's conversation over the one on screen — a link in a conversation, on a phone —
@@ -4027,8 +4076,9 @@ final class AppModel {
     /// control-plane refreshed; everything else (including an old detail-cache hit) is read again so
     /// repeated search/deep-link navigation cannot resurrect stale lifecycle or capability state.
     /// `adoptingAgent`: a route also makes the session's agent the one whose sessions are listed.
-    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool) {
+    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false) {
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
+        let openingPath = nav.path
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
         // send an old route's id to a newly configured instance before the identity guard exists.
         let generation = apiGeneration
@@ -4045,6 +4095,11 @@ final class AppModel {
                 guard adoptingAgent, self.selectedSection == .agents,
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
+                // A cold route learns its folder from the detail. Keep any navigation made while it loaded.
+                if inScheduledRuns, self.nav.path == openingPath,
+                   let folder = SessionFolderAddress.scheduledRuns(for: resolved), self.nav.folderColumn != folder {
+                    self.nav.path = [.folder(folder)] + openingPath.suffix(1)
+                }
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
                 // No session of yours: it may be one somebody shared with you. The web asks the guest
@@ -4103,6 +4158,8 @@ final class AppModel {
         case .runners: selectedSection = .runners
         }
         didResolveDefaultLanding = true
+        // A share waiting on the launch: it goes over the landing, not under it (ShareHandoff.swift).
+        drainShareClaim()
         provisionalLandingAgentID = nil
     }
 
@@ -4200,10 +4257,12 @@ final class AppModel {
             ownerRequests?.tab = .open
             ownerRequests?.inboxPresented = true
             Task { await ownerRequests?.loadTerminalRequests() }
+        case .openShare(let entryID):
+            requestShareClaim(entryID: entryID)
         case let .openSchedule(scheduleID, sessionID):
             // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
             if let sessionID {
-                openScheduleRun(sessionID: PublicID.toPublic(sessionID), scheduleID: PublicID.toPublic(scheduleID))
+                openScheduleRun(sessionID: sessionID)
             } else {
                 openSchedule(PublicID.toPublic(scheduleID))
             }

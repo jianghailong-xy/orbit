@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -89,6 +90,66 @@ func TestAttachLocalReplyFilesUploadsAndRewrites(t *testing.T) {
 	defer mu.Unlock()
 	if uploads != 1 {
 		t.Fatalf("uploads = %d, want 1 (one file, three references)", uploads)
+	}
+}
+
+// An agent asked to change a mock redraws it under the same name and links it again, in a later turn
+// of the same warm run. That reply must carry the new drawing: the memo that spares a retried batch
+// a second upload knows the path, but the bytes behind it are not the ones it uploaded.
+func TestAttachLocalReplyFilesUploadsAMockRedrawnInPlace(t *testing.T) {
+	dir := t.TempDir()
+	mock := filepath.Join(dir, "set-as-default-prototype.png")
+	if err := os.WriteFile(mock, []byte("\x89PNG\r\n\x1a\nfirst"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("upload without a file part: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		var body strings.Builder
+		if _, err := io.Copy(&body, file); err != nil {
+			t.Error(err)
+		}
+		mu.Lock()
+		bodies = append(bodies, body.String())
+		n := len(bodies)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":"att-%d"}`, n)
+	}))
+	defer srv.Close()
+	transport := NewTransport(srv.URL, "token")
+	memo := newReplyAttachmentIDs()
+	reply := func() string {
+		events := []RunEvent{{Seq: 1, Type: evAssistant, Payload: map[string]interface{}{"text": "![prototype](" + mock + ")"}}}
+		attachLocalReplyFiles(context.Background(), transport, "s1", events, []string{dir}, memo)
+		return events[0].Payload["text"].(string)
+	}
+
+	if got := reply(); got != "![prototype](orbit-attachment:att-1)" {
+		t.Fatalf("first reply = %q", got)
+	}
+	if err := os.WriteFile(mock, []byte("\x89PNG\r\n\x1a\nsecond, redrawn"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := reply(); got != "![prototype](orbit-attachment:att-2)" {
+		t.Fatalf("reply after the redraw = %q, want the redrawn file's own attachment", got)
+	}
+	// Linked again unchanged, it is the same bytes: no third upload.
+	if got := reply(); got != "![prototype](orbit-attachment:att-2)" {
+		t.Fatalf("reply linking the unchanged redraw = %q", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(bodies) != 2 || !strings.HasSuffix(bodies[1], "second, redrawn") {
+		t.Fatalf("uploaded bodies = %q, want the first drawing then the redrawn one", bodies)
 	}
 }
 

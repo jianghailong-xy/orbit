@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
+import { helpAskMarkerOf } from '../help/help-ask-marker';
 import {
   AgentProvider,
   isAccountEngine,
@@ -10,6 +11,7 @@ import {
   credentialEngines,
   credentialIsAnthropicBound,
   fastModeAvailable,
+  HELP_ASK_V1,
   openCodeKeyOf,
   type AnthropicBoundCredential,
   type PlanUsageSnapshot,
@@ -78,6 +80,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { sessionDiskHoldSql } from '../common/runner-disk-gate';
 import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
@@ -633,6 +636,15 @@ export class QueueService {
                   AND 'provider:cursor' = ANY(r.capabilities)
               ))
             )
+            -- An Ask (migration 0850) only to a runner whose heartbeat declares help-ask/v1: one that does not would
+            -- start it in its default folder with every tool, instead of read-only among the help articles.
+            AND (
+              s."help_ask" IS NULL
+              OR EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND ${HELP_ASK_V1} = ANY(r.capabilities)
+              )
+            )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
             -- rows to a pre-0.1.82 process during a rolling release: a session recorded on
@@ -703,6 +715,9 @@ export class QueueService {
             -- reports it READY the work dir is not there, and an engine started in it would fail. Shared with the
             -- session list, which names this gate (WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED) to the person waiting.
             AND NOT ${workspaceCloneHoldSql(Prisma.sql`s."workspace_id"`)}
+            -- Keep Free (runner-disk-gate.ts): a session that has never run waits while its workspace's disk is below the
+            -- runner's floor; one that has run takes its next message. Shared with the session list (disk_below_floor).
+            AND NOT ${sessionDiskHoldSql('s')}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use
@@ -1152,8 +1167,9 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob).
-    const naming = engineNamingJob(session, provider, configuredRow);
+    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
+    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
+    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
@@ -1163,6 +1179,9 @@ export class QueueService {
       prompt: session.prompt,
       // The project directory the runtime runs in comes from the session's workspace.
       workDir: workspace?.workDir ?? undefined,
+      // An Ask (migration 0850): the runner starts it read-only in a scratch folder of help articles, never in a
+      // workDir (help/help-ask.ts). Only when set, so every other claim keeps the shape it had.
+      ...(session.helpAsk != null ? { helpAsk: helpAskMarkerOf(session.helpAsk) ?? { page: null } } : {}),
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
@@ -1239,7 +1258,6 @@ export class QueueService {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(session.scheduleRun),
           provider,
-          session.assignedRunner?.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
@@ -1251,10 +1269,8 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(session.scheduleRun), provider),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

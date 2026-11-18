@@ -49,6 +49,7 @@ class ScheduleDisplayTest {
                 is TimelineItem.Schedule -> item.schedule.title
                 is TimelineItem.Run -> item.schedule.title
                 is TimelineItem.Draft -> item.card.title ?: ""
+                is TimelineItem.Task -> item.task.title
             }
         }
         "${g.title}|${g.subtitle ?: "nil"}|${items.joinToString(",")}"
@@ -176,6 +177,11 @@ class ScheduleDisplayTest {
             schedule(state = "PAUSED"), schedule())))
     }
 
+    @Test fun landMayCopy() {
+        assertEquals("Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.", ScheduleDisplay.mayText("LAND"))
+        assertEquals(2, ScheduleDisplay.accessOrder["LAND"])
+    }
+
     // lines
 
     @Test fun rowLinesReadLikeBoardOne() {
@@ -275,7 +281,7 @@ class ScheduleDisplayTest {
         assertNull(ScheduleDisplay.reportedFailureClause("REPORTED_FAILED", "server words", "x"))
     }
 
-    /** S5's schedule names its agent and engine: a hold says which agent, and a run's head line has its engine first. */
+    /** S5's schedule names its agent and engine. A hold says which agent. */
     @Test fun theScheduleNamesItsAgentAndEngine() {
         val s = ScheduleView.parse(json("""{"id":"a","title":"Weekly dependency audit","rule":{"kind":"WEEKLY","time":"09:00","weekdays":["MON"]},
             "timezone":"UTC","workspaceId":"w","workspaceName":"web","state":"HELD","heldReason":"AGENT_DISABLED",
@@ -284,25 +290,13 @@ class ScheduleDisplayTest {
         assertEquals("It could not start on Monday 09:00: the agent \"auditor\" in workspace web is disabled. Nothing runs until it is " +
             "enabled and you resume.", ScheduleDisplay.heldWaiting(s.title, s.heldReason, sh("2025-11-10T09:00"), s.agentName, s.workspaceName,
                 at("2025-11-10T09:01"), tz).body)
-        val run = ScheduleRunView(id = "r", scheduleId = "a", plannedAt = sh("2025-11-13T10:00"), state = "RUNNING", startedAt = sh("2025-11-14T12:15"))
-        assertEquals("Codex agent · 4 min", ScheduleDisplay.runHeadText(null, ScheduleDisplay.runAgentName(s.engine, null), run.startedAt, run.endedAt, now))
+        assertEquals("codex", s.engine)
         val card = ScheduleCard.parse(json("""{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"""))!!
         assertEquals("You'll hear about new versions and failures only.", card.notice)
     }
 
-    /** The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own. */
-    @Test fun theRunHeadNamesTheSchedulesEngineFirst() {
-        assertEquals("Codex", ScheduleDisplay.runAgentName("codex", "claude"))
-        // OrbitKit names a session's engine by ProviderEngines.cliName ("Claude Code"); core has no engine list, so the id, capitalized.
-        assertEquals("Claude", ScheduleDisplay.runAgentName(null, "claude"))
-        assertNull(ScheduleDisplay.runAgentName(null, null))
-        assertEquals("Open · Codex agent · 5 min", ScheduleDisplay.runHeadText("Open", ScheduleDisplay.runAgentName("codex", "claude"),
-            sh("2025-11-13T10:01"), sh("2025-11-13T10:06"), now))
-        assertEquals("5 min", ScheduleDisplay.runHeadText(null, null, sh("2025-11-13T10:01"), sh("2025-11-13T10:06"), now))
-    }
-
     @Test fun theRunsSession() {
-        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list",
+        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only",
             ScheduleDisplay.runStripText(sh("2025-11-13T10:00"), sh("2025-11-13T10:01"), "CHECK_ONLY", tz))
         assertEquals("run of Nov 13", ScheduleDisplay.runOfText(sh("2025-11-13T10:00"), tz))
         assertEquals("Run of Nov 13", ScheduleDisplay.capitalizedRunOf(sh("2025-11-13T10:00"), tz))
@@ -310,11 +304,7 @@ class ScheduleDisplayTest {
         assertEquals("Reported: No change", ScheduleDisplay.reportedText("NO_CHANGE", null))
     }
 
-    /** `scheduleRunHeadText`: state · agent · how long, the unknown parts left out; at least a minute. */
-    @Test fun theRunHeadLine() {
-        assertEquals("Open · Codex agent · 4 min", ScheduleDisplay.runHeadText("Open", "Codex", sh("2025-11-13T10:01"), sh("2025-11-13T10:05"), now))
-        assertEquals("1 min", ScheduleDisplay.runHeadText(null, null, sh("2025-11-14T12:19"), null, now))
-        assertEquals("Completed", ScheduleDisplay.runHeadText("Completed", null, null, null, now))
+    @Test fun theDeleteConfirmationNamesTheSchedule() {
         assertEquals("Delete “Codex stable check”?", ScheduleDisplay.deleteTitle("Codex stable check"))
     }
 

@@ -2344,6 +2344,14 @@ func TestIntegrationBaselineAttribution(t *testing.T) {
 			}
 			if expected == 2 {
 				baseline := result.Checks[1]
+				expectedTree, err := git(r.work, "rev-parse", "main^{tree}")
+				if err != nil {
+					t.Fatal(err)
+				}
+				expectedTree = strings.TrimSpace(expectedTree)
+				if baseline.TreeSha != expectedTree {
+					t.Fatalf("baseline tree = %q, want task-free tree %q", baseline.TreeSha, expectedTree)
+				}
 				if baseline.Scope != "BASELINE" {
 					t.Fatalf("scope: %+v", baseline)
 				}

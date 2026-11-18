@@ -25,7 +25,7 @@ final class TranslationWiringTests: XCTestCase {
     func testTheBubblesDrawTheFootAndTheToggle() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped && !bilingual)"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,"))
         XCTAssertTrue(bubbles.contains("PlatformPasteboard.copyString(words)"), "copy hands back the words on screen")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,"))
@@ -39,12 +39,14 @@ final class TranslationWiringTests: XCTestCase {
     func testTheBubblesDrawBothLanguagesWhenTheAccountSaysSo() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("private var bilingual: Bool { translationActions?.bilingual == true }"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual && !originalHidden)"))
         XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation,"))
+        // "Hide original" (docs/mocks/translation-hide-original): each bubble hides its own original.
+        XCTAssertEqual(bubbles.components(separatedBy: "case .hideOriginal: originalHidden.toggle()").count - 1, 2)
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual && !originalHidden)"))
         XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)"))
         // A reply whose blocks pair is drawn block by block, its originals under them (03-interleaved.png).
-        XCTAssertTrue(bubbles.contains("SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)"))
         XCTAssertTrue(bubbles.contains("if bubble.isFinalized, let pairs {"))
         XCTAssertTrue(bubbles.contains("InterleavedReplyView(pairs: pairs)"))
         let views = try source(app + "Views/Console/TranslationViews.swift")
@@ -94,7 +96,28 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(composer.contains("ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),"))
         XCTAssertTrue(composer.contains("agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),"))
         let tag = try source(app + "Views/Console/TranslationViews.swift")
-        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage))"), "the tag names the agent language")
+        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage, unavailable: unavailable))"),
+                      "the tag names the agent language, and says when messages will wait")
+        // Frame 6 of docs/ux/translation-failure-policy.html: the tag reads the account's skip, redraws when it
+        // passes, and the account is read again when the server announces a change.
+        XCTAssertTrue(composer.contains("unavailableUntil: SessionTranslation.temporarilyUnavailableUntil(app.user),"))
+        XCTAssertTrue(tag.contains("TimelineView(.explicit([until])) { context in"))
+        let appModel = try source(app + "AppModel.swift")
+        XCTAssertTrue(appModel.contains("case .account:\n            Task { @MainActor [weak self] in\n                if let self, let me = try? await self.api?.me() { self.assignIfChanged(\\.user, me) }"))
+        // A refused card answer draws the reason its 422 gave.
+        XCTAssertTrue(cards.contains("if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {"))
+        XCTAssertTrue(tag.contains("TranslationFootView(parts: held.foot) { action in"))
+        // A reason's sentence wraps under the bubble, its presses on the line below, instead of being cut off.
+        XCTAssertTrue(tag.contains("ViewThatFits(in: .horizontal) {"))
+        XCTAssertTrue(tag.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(tag.contains(".minimumScaleFactor(0.85)"))
+        // The project done card's "Not yet" refusal is a card answer too: it draws the reason its 422 gave.
+        let done = try source(app + "Views/ProjectDoneCards.swift")
+        XCTAssertTrue(done.contains("if let refusedFoot = notYetRefused, let onNotYet {"))
+        XCTAssertTrue(done.contains("TranslationFootView(parts: refusedFoot) { action in"))
+        for file in ["ConsoleModel.swift", "ProjectsModel.swift"] {
+            XCTAssertTrue(try source(app + file).contains("? SessionTranslation.refusedAnswerFoot(after: error) : nil"), file)
+        }
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .general)"))
     }
 

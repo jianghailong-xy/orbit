@@ -45,6 +45,8 @@ import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 
@@ -80,6 +82,11 @@ internal object SessionListCopy {
     fun startSessionIn(folder: String) = "Start a new session in $folder"
     fun noSessions(view: SessionView) = "No ${view.label.lowercase()} sessions"
     fun folderSessions(count: Int) = "$count sessions"
+}
+
+internal object ScheduledRunsFolderCopy {
+    const val TITLE = "Scheduled runs"
+    const val EMPTY = "No scheduled runs here."
 }
 
 /** The time on a row's first line (OrbitKit `SessionListTime`): how long the turn has run while its spinner shows, nothing if the
@@ -157,32 +164,52 @@ internal fun RowSpinner(modifier: Modifier = Modifier) {
 
 /** A folder's row (iOS `SessionFolderRowView`): its name, what the sessions it holds would have said — how many wait on you, else a
  * spinner, else the breathing mark, by the drawer's rule — their count and a chevron. A tap opens it and a long press is its menu. */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun FolderRow(folder: Folder, sessions: List<DirectorySession>, runnerOffline: Boolean, watching: Map<String, WatchSessionSummary>,
     onOpen: () -> Unit, onOptions: () -> Unit) {
+    FolderRow(folder.id, folder.name, FolderRowSummary(
+        count = sessions.size,
+        needsYou = sessions.folderNeedsYouCount(),
+        running = !runnerOffline && sessions.any { it.isRunning() },
+        jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) },
+    ), onOpen, onOptions)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun FolderRow(id: String, name: String, summary: FolderRowSummary, onOpen: () -> Unit, onOptions: (() -> Unit)? = null) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val waiting = sessions.count { it.pendingApprovals > 0 && it.waitingKind != "START_REQUEST" }
-    val running = !runnerOffline && sessions.any { it.isRunning() }
-    val jobs = !runnerOffline && sessions.any { it.isRunningJob(watching[watchKey(it.id)]) }
-    val words = when {
+    val scheduled = id == ScheduledRunsFolder.ID
+    val (count, waiting, running, jobs) = summary
+    val words = if (scheduled) listOfNotNull(
+        SessionListCopy.folderSessions(count),
+        DrawerCopy.waitingForYou(waiting).takeIf { waiting > 0 },
+        SessionListCopy.FOLDER_RUNNING.takeIf { running },
+    ).joinToString(". ") else when {
         waiting > 0 -> DrawerCopy.waitingForYou(waiting)
         running -> SessionListCopy.FOLDER_RUNNING
         jobs -> SessionListCopy.FOLDER_JOBS
-        else -> SessionListCopy.folderSessions(sessions.size)
+        else -> SessionListCopy.folderSessions(count)
     }
+    val openFolder = if (onOptions == null) Modifier.clickable(role = Role.Button, onClick = onOpen)
+        else Modifier.combinedClickable(role = Role.Button, onLongClickLabel = "Options for $name",
+            onLongClick = onOptions, onClick = onOpen)
     Row(Modifier.fillMaxWidth()
-        .combinedClickable(role = Role.Button, onLongClickLabel = "Options for ${folder.name}", onLongClick = onOptions, onClick = onOpen)
-        .semantics { stateDescription = words }.testTag("folder-row:${folder.id}")
+        .then(openFolder).semantics { stateDescription = words }.testTag("folder-row:$id")
         .padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
-        Text(folder.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+        Box(Modifier.size(22.dp)) {
+            Icon(painterResource(if (scheduled) R.drawable.ic_clock else R.drawable.ic_folder), null,
+                Modifier.fillMaxSize(), tint = MaterialTheme.colorScheme.primary)
+            if (scheduled && running) Box(Modifier.align(Alignment.BottomEnd).size(7.dp)
+                .background(LocalOrbitColors.current.running, CircleShape))
+        }
+        Text(name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
         when {
             waiting > 0 -> NeedsYouCount(waiting)
-            running -> RowSpinner()
+            running && !scheduled -> RowSpinner()
             jobs -> BreathingTerminal()
         }
-        Text("${sessions.size}", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
+        Text("$count", style = MaterialTheme.typography.labelMedium, color = muted, modifier = Modifier.clearAndSetSemantics {})
         Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = muted.copy(alpha = 0.6f))
     }
 }
@@ -316,12 +343,15 @@ internal fun SessionOptionsMenu(view: SessionView, tags: List<Tag>, tag: String?
  * the account's list, as iOS reads it (`AgentsModel.loadSessions`), because a project's row is worded by a coordinator that may be
  * filed in another workspace. iOS reads it again every 4 s; here it is read when the scope is chosen, on a pull and behind a change
  * this phone asked for ([show]'s `asks`), and held meanwhile, so a session opened over the list comes back to its rows.
+ * Scheduled runs use their own instance, scoped to a workspace even when the view is Open.
  */
 @Stable
-internal class SessionScopeList(private val api: DirectoryApi) {
+internal class SessionScopeList(private val api: DirectoryApi, private val scheduledWorkspace: String? = null) {
     private class Read(val view: SessionView, val asks: Long, val rows: List<DirectorySession>)
     private var held by mutableStateOf<Read?>(null)
     private var failed by mutableStateOf<Pair<SessionView, String>?>(null)
+    // A pull may overlap a poll. Keep their snapshots in read order.
+    private val readLock = Mutex()
 
     fun rows(view: SessionView): List<DirectorySession>? = held?.takeIf { it.view == view }?.rows
     fun error(view: SessionView): String? = failed?.takeIf { it.first == view }?.second
@@ -335,11 +365,12 @@ internal class SessionScopeList(private val api: DirectoryApi) {
         if (current == null || current.view != view || current.asks != asks) read(view, asks)
     }
 
-    suspend fun read(view: SessionView, asks: Long) {
+    suspend fun read(view: SessionView, asks: Long) = readLock.withLock {
         failed = null
         try {
             val rows = withContext(Dispatchers.Default) {
-                api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view.query))
+                if (scheduledWorkspace != null) api.scheduledSessions(scheduledWorkspace, view)
+                else api.read(listOf("sessions"), ListSerializer(DirectorySession.serializer()), listOf("view" to view.query))
             }
             held = Read(view, asks, rows)
         } catch (cancel: CancellationException) { throw cancel }

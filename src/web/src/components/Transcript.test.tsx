@@ -1690,40 +1690,28 @@ describe('injected context in a user bubble', () => {
       <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
-    // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
+    // Over the whole markup: the block is nowhere in it — not in the body, and not in an
     // attribute either, where it used to ride as a tooltip.
     expect(html).toContain('把这个项目协调起来');
     expect(html).not.toContain('list-conditions');
     expect(html).not.toContain('的协调会话');
   });
 
-  it('keeps the block one click away, so what the model read is not lost', () => {
-    const events = [userEvent(`把这个项目协调起来${appended}`, appended)];
+  it('omits the appended note from both the live transcript and the export', () => {
+    const events = [userEvent(`Keep this project coordinated${appended}`, appended)];
     const html = renderToStaticMarkup(<Transcript events={events} />);
     const exported = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <Transcript events={events} live={false} />
       </ExportCtx.Provider>,
     );
-
-    // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
-    // here (⊕), and already open in an export (⊖), where there is nothing to click.
-    const entry = (expanded: boolean) =>
-      new RegExp(
-        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: list conditions</button>`,
-      );
-    expect(html).toMatch(entry(false));
-    expect(exported).toMatch(entry(true));
-    expect(exported).toContain('的协调会话');
-  });
-
-  it('says that something was attached, so the reply is not unexplained', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
-    );
-
-    expect(html).toContain('Orbit attached');
-    expect(html).toContain('list conditions');
+    for (const markup of [html, exported]) {
+      expect(markup).toContain('Keep this project coordinated');
+      expect(markup).not.toContain('Orbit attached');
+      expect(markup).not.toContain('chat-injected');
+      expect(markup).not.toContain('list-conditions');
+      expect(markup).not.toContain('的协调会话');
+    }
   });
 
   it('leaves a message nobody appended to completely alone', () => {
@@ -2695,5 +2683,33 @@ describe('an auto-retry card whose task a newer run has taken', () => {
 
     expect(html).toContain('chat-quota');
     expect(html).not.toContain('A newer run has this task');
+  });
+});
+
+describe('legacy secret patch notices', () => {
+  const pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.";
+  const unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.";
+  const legacy = (seq: number, template = pending, turnId = 'one'): RunEvent => ({
+    seq, type: 'system', turnId,
+    payload: { subtype: 'secret_patch_withheld', path: `file${seq}`, notice: `file${seq}: ${template}` },
+  });
+  it('folds consecutive temporary templates and preserves real matches, unknown notices and summaries', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), legacy(2, unreadable),
+      { seq: 3, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'real', notice: 'real holds the value of a secret' } },
+      { seq: 4, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'unknown', notice: 'Unknown notice' } },
+      { seq: 5, type: 'system', payload: { subtype: 'secret_patches_withheld', count: 3, reason: 'record_unreadable', notice: 'Record summary' } },
+    ]} />);
+    expect(html).toContain("Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.");
+    expect(html).not.toContain('file1:');
+    expect(html).toContain('real holds the value of a secret');
+    expect(html).toContain('Unknown notice');
+    expect(html).toContain('Record summary');
+  });
+  it('does not fold across a different event or turn', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), { seq: 2, type: 'system', payload: { notice: 'Boundary' } }, legacy(3), legacy(4, pending, 'two'),
+    ]} />);
+    expect(html.match(/Orbit held back the diff of 1 file while/g)).toHaveLength(3);
   });
 });

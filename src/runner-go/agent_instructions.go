@@ -89,19 +89,32 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches, delega
 	}
 	command := shellQuote(executable)
 	return agentPrimer + "\n\n" +
+		orbitSubAgentInstructions +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitNotifyInstructions +
 		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
-		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
-		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
-		"the work to you; it needs `" + command + " capabilities --json` first to discover its commands, then run the " +
-		"returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; " +
-		"`--json` prints the entity alone. Do not run `" + command + " mcp` directly."
+		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
+		"no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes the work " +
+		"to you: find a command with `" + command + " guide [topic] --json` or `" + command + " capabilities --id <id> " +
+		"--json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its " +
+		"MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
+
+// orbitSubAgentInstructions is §0 rule 1 for the engine's own sub-agents (Claude Code's Agent tool, a Codex sub-agent):
+// they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
+// agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
+// have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
+// was handed off, with no Orbit record and no receipt. Measured again on 2026-11-16: told "task_start if task_list shows
+// it recorded, else task_create with startNow or session_create", claude-sonnet-5-5 called no task_list in six runs of
+// six and filed the recorded work a second time, so the paragraph says to look first.
+const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
+	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
+	"task_create with startNow or session_create.\n\n"
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its
@@ -153,6 +166,14 @@ func orbitWaitInstructionsFor(watches bool) string {
 	}
 	return orbitWaitInstructions
 }
+
+// orbitNotifyInstructions says when notify is called: when a wait the person asked to hear about ends. On
+// 2026-11-17 an agent told "tell me when the upgrade is complete" waited on a bg_run job with wakeOnExit, woke,
+// answered in the conversation and stopped: nothing in these instructions named notify, and in Claude Code its
+// description, which says exactly this, was behind ToolSearch. Every session is offered notify, so every form of
+// these instructions carries it. ASCII like the rest of the paragraph.
+const orbitNotifyInstructions = "When the person asked to hear once something is done, tell them with notify when " +
+	"it is: an answer in this conversation reaches them only when they next look.\n\n"
 
 // orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
 // does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
@@ -289,8 +310,8 @@ func withOrbitCLIInstructions(configured, executable string, insideRecordedWork,
 	return strings.TrimRight(configured, "\r\n") + "\n\n" + orbit
 }
 
-// orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json`, and one Bash rule per
-// command the operation catalogue offers an agent's session. It is generated from the catalogue (orbitCLICommands)
+// orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json` and its graded views
+// (`capabilities *`), and one Bash rule per command the operation catalogue offers an agent's session. It is generated from the catalogue (orbitCLICommands)
 // rather than enumerated, so no command `capabilities --json` tells an agent to run is pre-approved for nobody: a
 // command missing here is one the agent hits a permission prompt for, which is what happened to every verb the
 // hand-written list fell behind on. Each rule is still one command, never `task *`, so a verb added to the CLI is
@@ -317,6 +338,10 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
+		// The graded views of the same document (--summary, --family, --id): reads of the catalogue that ask the
+		// server nothing, and where the instructions send an agent instead of the whole document. The guide is a
+		// catalogued command, so its rule comes from the loop below like every other.
+		rules = append(rules, "Bash("+command+" capabilities *)")
 		for _, cli := range orbitCLICommands() {
 			if cli.orchestration && !allowOrchestration {
 				continue

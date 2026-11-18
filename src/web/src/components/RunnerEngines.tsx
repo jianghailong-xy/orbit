@@ -70,6 +70,7 @@ import {
 } from '../lib/claudeRegionCopy';
 import {
   RUNNER_ENGINE_COULDNT_CHECK,
+  RUNNER_ENGINE_NO_PROVIDER_KEY,
   RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_NO_READING,
   RUNNER_ENGINE_RENEW,
@@ -87,6 +88,8 @@ import {
   RUNNER_DEFAULT_USE_AGAIN,
   runnerAccountInUseMany,
   runnerAccountInUseOne,
+  runnerAccountMovingMany,
+  runnerAccountMovingOne,
   runnerAccountRemoveDetailAutomatic,
   RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
@@ -268,9 +271,11 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, 
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
   // With a sign-in, the badge says the check failed and the line keeps the version alone rather
-  // than saying it twice. Without one (OpenCode), the CLI's own answer is the whole story.
+  // than saying it twice. Without one (OpenCode), the line says what the Unknown is about — the
+  // sign-in, not the version beside it — and, when the CLI listed no key at all, that it found none.
   if (kind === 'unknown') {
-    return signIn ? versionOf(engine, health) : `${versionOf(engine, health)} · the CLI wouldn't say`;
+    if (signIn) return versionOf(engine, health);
+    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? RUNNER_ENGINE_NO_PROVIDER_KEY : 'sign-in unknown'}`;
   }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.
@@ -1310,6 +1315,8 @@ function AccountRow({
   const refused = mine?.status === 'failed' ? mine.message : null;
   // The sessions the machine named as running in it, when that is why it refused.
   const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
+  // The sessions a removal under way moved to another account and waits on to leave this one.
+  const moving = mine?.status === 'pending' ? (mine.moving ?? 0) : 0;
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1472,6 +1479,15 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
+      {moving > 0 && (
+        <div className="re-dup">
+          <span>
+            {moving === 1
+              ? runnerAccountMovingOne(engineNameOf(engine))
+              : runnerAccountMovingMany(engineNameOf(engine), moving)}
+          </span>
+        </div>
+      )}
       {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
           <div className="re-panel-row">

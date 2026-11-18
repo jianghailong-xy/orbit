@@ -2911,6 +2911,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
+      // 0518 constrains enqueue event causes only; no preserved rows or DONE fence changes.
+      '0518_integration_baseline_hold',
       // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
       // triggers or DONE fence change.
       '0519_wiki_repo_attention',
@@ -3061,6 +3063,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // catalog-only but for the check's validating scan, `owner_request` is none of the preserved relations, no
       // trigger, function or DONE fence changes, and no row is written.
       '0840_schedule_attention',
+      // 0850 adds a nullable `session.help_ask` JSONB (catalog-only) and a BEFORE UPDATE OF help_ask trigger that
+      // refuses changing it; no preserved rows, no DONE fence change, and no row is written.
+      '0850_help_ask_session',
       // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
       // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
       // one of the preserved relations, and no trigger, function or DONE fence changes.
@@ -3070,6 +3075,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // changes.
       '0870_managed_runner_image_roll',
       '0880_attachment_guest_uploader',
+      // 0890 creates `help_ask_admin_request` only; no existing table, trigger or DONE fence is touched.
+      '0890_help_ask_admin_request',
+      // 0900 creates `help_feedback` only; no existing table, trigger or DONE fence is touched.
+      '0900_help_feedback',
       // 0910_account_remove_sessions adds runner.codex_account_remove_sessions (UUID[], NOT NULL with a constant
       // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
       // changes.
@@ -3082,9 +3091,63 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
       // DONE fence changes.
       '0930_managed_runner_no_default_workspace',
+      // 0940 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
+      // ingest), taking the lock in short tries inside one DO block as 0478 does; catalog-only, no preserved rows,
+      // triggers or DONE fence change, and no row is written. Written as 0770 on the project line, it was renumbered
+      // after main took 0770 and 0910 to 0930; it lands below main's 0950, so no number is used twice.
+      '0940_session_agent_tools',
       // 0950 adds a nullable schedule.read_back and fills it from each schedule's own create card; schedule is not one
       // of the preserved relations, and no trigger, function or DONE fence changes.
-      '0950_schedule_read_back'],
+      '0950_schedule_read_back',
+      // 0970_project_ruling adds the project_ruling table (owner rulings kept on their project); no preserved relation,
+      // trigger, function or DONE fence changes.
+      '0970_project_ruling',
+      // 0980 moves workspace.work_dir from /var/lib/orbit/home to /home/orbit for workspaces on managed runners (one
+      // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
+      // fence changes.
+      '0980_managed_runner_home_orbit',
+      // 0990 sets runner.min_free_disk_mb's default to 10240 (new rows only); runner is not one of the preserved
+      // relations, and no trigger, function or DONE fence changes.
+      '0990_runner_keep_free_default',
+      // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
+      '0990_schedule_land',
+      // 1030 adds the condition, condition_sample and condition_event tables with their enum types, a nullable
+      // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
+      // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1030_conditions',
+      // 1040 widens schedule_run_trigger by CONDITION and adds a nullable schedule.envelope_command_hash and
+      // condition.resumed_at; none is a preserved relation, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1040_schedule_when_rule',
+      // 1050 adds a nullable condition.repeat_seconds with condition_repeat_chk, a nullable condition.repeat_from and
+      // condition_event.repeat with a constant default; none is a preserved relation, no trigger, function or DONE
+      // fence changes, and no row is written.
+      '1050_condition_repeat',
+      // 1060 adds a nullable task.start_when_condition_id (FK to condition, SET NULL) with a unique index and a CHECK
+      // every stored row passes, a nullable condition.keep_waiting_since, widens owner_request_kind_chk by
+      // CONDITION_STILL_WAITING, and adds two triggers that write only `condition` and pg_notify; no task row is
+      // rewritten, and no judgment relation, function or DONE fence changes.
+      '1060_task_start_when',
+      // 1070 adds nullable translation JSONB columns to project_open_item and owner_request (ADD COLUMN IF NOT
+      // EXISTS, no default); neither is one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1070_owner_card_translation',
+      // 1080 adds nullable translation JSONB columns (ADD COLUMN IF NOT EXISTS, no default) to
+      // task_completion_evidence — a preserved relation, ALTERed only by this one addition, so no existing row,
+      // `evidence` value or digest is read or rewritten — and to task_owner_confirmation_review_record and
+      // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
+      // no trigger, function or DONE fence changes.
+      '1080_owner_card_translation_more',
+      // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
+      // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
+      // and no trigger, function or DONE fence changes.
+      '1100_conversation_turn_translation_failure',
+      // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
+      '1101_integration_enqueue_skip_check',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
@@ -3136,10 +3199,19 @@ test('after 0246, no migration number is used twice: a duplicate reorders the le
   // Everything at or below this number predates the rule and is exempt; the failure message says
   // why that floor cannot be lowered.
   const EXEMPT_THROUGH = '0246';
+  // One shared number above the floor, for the same reason as the ones below it: both halves were applied on
+  // production (0990_schedule_land at 2026-11-17 08:24Z, 0990_runner_keep_free_default with the 15:39Z release)
+  // before the collision was seen, so renaming either would run it again there, and 0990_schedule_land's
+  // `ALTER TYPE … ADD VALUE 'LAND'` would then fail the deploy. The two touch unrelated tables, so their order does
+  // not matter. Exactly this pair: any other number shared after 0246 still fails below.
+  const APPLIED_SHARED: Readonly<Record<string, readonly string[]>> = {
+    '0990': ['0990_runner_keep_free_default', '0990_schedule_land'],
+  };
   const byNumber = new Map<string, string[]>();
   for (const dir of dirs) {
     const number = dir.slice(0, 4);
     if (number <= EXEMPT_THROUGH) continue;
+    if (APPLIED_SHARED[number]?.includes(dir)) continue;
     byNumber.set(number, [...(byNumber.get(number) ?? []), dir]);
   }
   const shared = [...byNumber].filter(([, group]) => group.length > 1);

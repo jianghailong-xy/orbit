@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, PROVIDER_CHANGE_NOTE, PROVIDER_MODELS_REPLACE, WORKSPACE_WRITE_NOTE, contextSize, decliningPrefix } from './ApprovalPanel';
+import { ApprovalPanel, rememberRulesFor, CREATE_CRITERIA_CONFIRMED_AT_START, PROVIDER_CHANGE_NOTE, PROVIDER_MODELS_REPLACE, WORKSPACE_WRITE_NOTE, contextSize, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
@@ -397,7 +397,7 @@ describe('workspace write approval', () => {
       description: 'builds at night',
       defaultMergeTarget: 'develop',
     }));
-    for (const line of ['Working directory', '/srv/other', 'System prompt', 'Answer in French.', 'Appended system prompt',
+    for (const line of ['Working directory', '/srv/other', 'Base instructions', 'Answer in French.', 'Runtime instructions',
       'And briefly.', 'Runner', 'gpu-2', 'Worktree', 'Sessions run in the shared folder', 'Name', 'renamed', 'Description',
       'builds at night', 'Merge target', 'develop']) {
       expect(html).toContain(line);
@@ -593,13 +593,13 @@ describe('merge check change approval', () => {
   it('shows the check as it stands beside the check being asked for', () => {
     const html = render(change());
 
-    expect(html).toContain('Confirm: change the merge check of Checkout rewrite?');
+    expect(html).toContain('Change project integration settings?');
     // Both commands, because their difference is the whole decision. The CURRENT one is the fact
     // the agent's proposal is checked against, so a card with only the new command would be asking
     // the owner to take the agent's word for what is being replaced.
     expect(html).toContain('npm run lint');
     expect(html).toContain('npm test');
-    expect(html).toContain('Change the check');
+    expect(html).toContain('Confirm');
     expect(html).toContain('Chat about this');
     expect(html).not.toContain('orbit_project_update_integration');
   });
@@ -608,17 +608,32 @@ describe('merge check change approval', () => {
     // An empty line under "after" reads as a card that failed to load rather than as "no check".
     const html = render(change({ input: { mergeCheckCommand: null } }));
 
-    expect(html).toContain('no check — nothing runs on the combined tree');
+    expect(html).toContain('Uses merge check');
     expect(html).toContain('no check configured');
   });
 
-  it('names the budget only when the proposal named one', () => {
+  it('shows the effective budget before and after the proposal', () => {
     // Absent means "leave the budget as it is", which is not the same as "no budget" — a card that
     // printed a zero would be describing a write nobody proposed.
     expect(render(change())).not.toContain('killed after');
     expect(render(change({
       input: { mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 900 },
-    }))).toContain('killed after 900s');
+    }))).toContain('900 seconds');
+  });
+
+  it('shows two check columns, preserves omitted values and treats explicit null as inheritance', () => {
+    const html = render(change({ input: {
+      currentLandingCheckCommand: '  make fast  ', currentLandingCheckTimeoutSeconds: 300,
+      currentMergeCheckCommand: 'make all', currentMergeCheckTimeoutSeconds: 900,
+      landingCheckTimeoutSeconds: null,
+    } }));
+    expect(html).toContain('landing-check-confirmation');
+    expect(html.indexOf('<h4>Landing check')).toBeLessThan(html.indexOf('<h4>Merge check'));
+    expect(html.match(/  make fast  /g)).toHaveLength(2);
+    expect(html.match(/make all/g)).toHaveLength(2);
+    expect(html).toContain('300 seconds');
+    expect(html).toContain('Uses merge check timeout: 900 seconds');
+    expect(html).toContain('Applies to the next claimed landing job.');
   });
 
   it('offers no standing yes', () => {
@@ -890,7 +905,7 @@ describe('DAG change approval', () => {
     expect(html).toContain('No task changes state');
   });
 
-  it('still renders an ordinary tool approval as the raw input', () => {
+  it('renders an ordinary tool approval as the call itself', () => {
     const html = renderToStaticMarkup(
       <ApprovalPanel
         approval={{ id: 'b1', toolName: 'Bash', input: { command: 'ls -la' } } as ApprovalInfo}
@@ -898,7 +913,8 @@ describe('DAG change approval', () => {
       />,
     );
 
-    expect(html).toContain('Approve tool call: Bash');
+    expect(html).toContain('Run a command?');
+    expect(html).toContain('approval-tool-chip');
     expect(html).toContain('ls -la');
   });
 });
@@ -1235,3 +1251,11 @@ describe('one waiting completion decision on the session page', () => {
 
 // The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
 vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
+
+it('shows and remembers the complete command for a check-only scheduled approval', () => {
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  const approval = { id: 'exact-card', toolName: 'Bash', input: { command, orbitScheduleCheckOnly: true }, status: 'PENDING' } as ApprovalInfo;
+  expect(rememberRulesFor(approval)).toEqual([{ toolName: 'Bash', ruleContent: command }]);
+  expect(render(approval)).toContain('print(open(&#x27;watched.txt&#x27;).read())');
+  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([{ toolName: 'Bash', ruleContent: 'python3:*' }]);
+});

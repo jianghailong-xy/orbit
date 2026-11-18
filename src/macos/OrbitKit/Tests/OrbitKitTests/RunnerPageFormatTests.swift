@@ -120,6 +120,26 @@ final class RunnerPageFormatTests: XCTestCase {
 
     // MARK: the list row and the page head
 
+    func testManagedFirstKeepsTheOtherMachinesInTheirSavedOrder() throws {
+        let first = try macMini()
+        let second = try wikova()
+        let managed = try runner(Self.hpcJSON, ["managed": true])
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed, second], managedRunnerID: nil),
+                       [managed, first, second])
+    }
+
+    func testManagedFirstUsesTheStatusIDOnOlderServers() throws {
+        let first = try macMini()
+        let managed = try wikova()
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed], managedRunnerID: managed.id),
+                       [managed, first])
+    }
+
+    func testManagedFirstKeepsTheSavedOrderWithoutAManagedRunner() throws {
+        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-managed"])]
+        XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
+    }
+
     func testTheHeadAndTheRowSayWhereTheMachineStands() throws {
         let wikova = try wikova()
         XCTAssertEqual(RunnerPageFormat.presence(wikova, now: now), .online)
@@ -566,7 +586,7 @@ final class RunnerPageFormatTests: XCTestCase {
 
         let removal = try XCTUnwrap(RunnerPageFormat.removal(state, engine: "codex", account: "1fda3f43"))
         XCTAssertEqual(removal.refused,
-                       "This Codex account can’t be removed while 3 sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account")
+                       "This Codex account can’t be removed while 3 sessions on it can’t move to another account — sign in another account, or end them below; then remove the account")
         XCTAssertEqual(removal.blocking.map(\.title), ["Fix login", "Untitled session", "Old"])
         XCTAssertEqual(removal.blocking.map(\.label), ["Running", "Waiting for input", nil])
         XCTAssertEqual(removal.blocking.map(\.tone), [.ok, .warn, .muted])
@@ -574,7 +594,7 @@ final class RunnerPageFormatTests: XCTestCase {
         let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "failed", message: "in use",
                                            sessions: [RunnerAccountRemoveSession(id: "a", title: "Fix login", status: .pending)])
         XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.refused,
-                       "This Claude Code account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account")
+                       "This Claude Code account can’t be removed while a session on it can’t move to another account — sign in another account, or end the session below; then remove the account")
 
         // From an older server: no list, and the machine's own words.
         let older = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
@@ -582,6 +602,23 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(older.sessions, [])
         XCTAssertEqual(RunnerPageFormat.removal(older, engine: "codex", account: "1fda3f43"),
                        RunnerPageFormat.AccountRemoval(pending: false, refused: "in use"))
+    }
+
+    /// A removal under way that moved the account's sessions to another account says so while it waits
+    /// for them to leave (web `runnerAccountMovingOne`/`Many`).
+    func testARemovalWaitingOnTheSessionsItMovedSaysSo() throws {
+        let many = try JSONDecoder().decode(RunnerAccountRemoveState.self, from: Data(
+            #"{"engine":"codex","account":"1fda3f43","status":"pending","message":null,"moving":16}"#.utf8))
+        let removal = try XCTUnwrap(RunnerPageFormat.removal(many, engine: "codex", account: "1fda3f43"))
+        XCTAssertTrue(removal.pending)
+        XCTAssertNil(removal.refused)
+        XCTAssertEqual(removal.moving,
+                       "Moving 16 sessions to another Codex account — this one is removed once they have left, after their turns if any are running")
+        let one = RunnerAccountRemoveState(engine: "claude", account: "5dd14473", status: "pending", message: nil, moving: 1)
+        XCTAssertEqual(RunnerPageFormat.removal(one, engine: "claude", account: "5dd14473")?.moving,
+                       "Moving a session to another Claude Code account — this one is removed once it has left, after its turn if one is running")
+        let none = RunnerAccountRemoveState(engine: "codex", account: "1fda3f43", status: "pending", message: nil)
+        XCTAssertNil(RunnerPageFormat.removal(none, engine: "codex", account: "1fda3f43")?.moving)
     }
 
     func testUpdateEnginesNowSaysWhereItGot() {
