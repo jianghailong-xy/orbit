@@ -187,3 +187,55 @@ export function delegateRunId(content: unknown): string | null {
     return null;
   }
 }
+
+/** Whether a run that has ended did not finish: failed, interrupted or stopped (OrbitKit's `outcomeIsFailure`). */
+export const subagentRunFailed = (run: SubagentRunView): boolean =>
+  run.status === 'FAILED' || run.status === 'INTERRUPTED' || run.status === 'STOPPED';
+
+/** How long a run took, once it has ended (`50s`, `4m 12s`); null while it runs. */
+export function subagentDuration(run: SubagentRunView): string | null {
+  if (run.status === 'RUNNING' || !run.endedAt) return null;
+  return wikiDuration((Date.parse(run.endedAt) - Date.parse(run.createdAt)) / 1000);
+}
+
+/**
+ * The session's Agents, as the composer band's line and its list draw them — the web's copy of OrbitKit's
+ * `SubagentSessionSummary` (docs/mocks/subagent-ios-highlight ③). No cost anywhere.
+ */
+export interface SubagentSessionSummary {
+  count: number;
+  running: number;
+  /** The running ones first, then the rest, each newest first. */
+  rows: SubagentRunView[];
+  /** The words after "Agents" (see `subagentSessionSummary`). */
+  band: string;
+  /** How the newest run ended, for the band's right edge while nothing runs; null while one does. */
+  last: { failed: boolean; duration: string | null } | null;
+}
+
+/**
+ * Null when the session started no Agent. While one runs the band says what it is doing, by its `delegate`
+ * description; several running lead with how many (`2 running · Deploy …`), naming the newest; a running run
+ * with no description keeps the counts (`2 · 1 running`). With none running it is the count and the newest
+ * run's description (`2 · Deploy …`), or the count alone when that run has none.
+ */
+export function subagentSessionSummary(runs: Iterable<SubagentRunView>): SubagentSessionSummary | null {
+  const all = [...runs];
+  if (all.length === 0) return null;
+  const newestFirst = (a: SubagentRunView, b: SubagentRunView) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0);
+  const going = all.filter((run) => run.status === 'RUNNING').sort(newestFirst);
+  const rows = [...going, ...all.filter((run) => run.status !== 'RUNNING').sort(newestFirst)];
+  const count = all.length;
+  const running = going.length;
+  const described = (run: SubagentRunView | undefined) => run?.description?.trim() ?? '';
+  let band: string;
+  if (running === 0) {
+    const newest = described(rows[0]);
+    band = newest ? `${count} · ${newest}` : `${count}`;
+  } else {
+    const newest = described(going[0]);
+    band = !newest ? `${count} · ${running} running` : running > 1 ? `${running} running · ${newest}` : newest;
+  }
+  const last = running === 0 ? { failed: subagentRunFailed(rows[0]), duration: subagentDuration(rows[0]) } : null;
+  return { count, running, rows, band, last };
+}
