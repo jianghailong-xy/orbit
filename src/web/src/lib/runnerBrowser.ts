@@ -77,6 +77,8 @@ export interface VncClient {
   scaleViewport: boolean;
   resizeSession: boolean;
   focusOnClick: boolean;
+  /** The CSS background around the scaled picture. */
+  background: string;
   addEventListener(type: 'connect' | 'disconnect', listener: (event: Event) => void): void;
   disconnect(): void;
   focus(): void;

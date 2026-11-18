@@ -126,6 +126,8 @@ export function VncCanvas({
         rfb.viewOnly = viewOnlyNow.current;
         rfb.scaleViewport = true;
         rfb.resizeSession = false;
+        // The letterbox around the picture scaled to fit reads as the drawer's own surface, not noVNC's dark grey.
+        rfb.background = 'var(--bg-sunken)';
         rfb.addEventListener('connect', () => onLinkNow.current('live'));
         rfb.addEventListener('disconnect', () => onLinkNow.current('disconnected'));
         client.current = rfb;
