@@ -1,0 +1,37 @@
+Printing with useUnmergedTree = 'true'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #53 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #54 at (l=16.0, t=16.0, r=395.0, b=875.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #55 at (l=16.0, t=22.0, r=395.0, b=115.0)px, Tag: 'schedule-run-strip'
+       |  |-Node #56 at (l=16.0, t=22.0, r=160.0, b=40.0)px, Tag: 'schedule-run-crumb'
+       |  | Focused = 'false'
+       |  | Actions = [OnClick, RequestFocus]
+       |  | MergeDescendants = 'true'
+       |  |  |-Node #57 at (l=16.0, t=22.0, r=25.0, b=40.0)px
+       |  |  | Text = '[‹ ]'
+       |  |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |  |-Node #58 at (l=25.0, t=22.0, r=160.0, b=40.0)px
+       |  |    Text = '[Ceph capacity guard]'
+       |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #59 at (l=16.0, t=46.0, r=140.0, b=70.0)px
+       |  | Text = '[Run of Nov 14]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #60 at (l=16.0, t=76.0, r=201.0, b=91.0)px
+       |  | Text = '[Open · Claude Code agent · 9 min]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #61 at (l=16.0, t=97.0, r=322.0, b=115.0)px, Tag: 'schedule-run-fired'
+       |     |-Node #63 at (l=40.0, t=97.0, r=322.0, b=115.0)px
+       |       Text = '[Fired 03:12 · 90.4% for 10 min · Check only]'
+       |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #64 at (l=16.0, t=133.0, r=395.0, b=218.0)px, Tag: 'schedule-run-report'
+          |-Node #65 at (l=16.0, t=133.0, r=19.0, b=218.0)px
+          |-Node #69 at (l=53.0, t=145.0, r=318.0, b=163.0)px
+          | Text = '[Reported: Changed · above-90@Nov 14]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #70 at (l=31.0, t=167.0, r=383.0, b=206.0)px
+            Text = '[Raw used 90.4%. Cause: old snapshots in kubernetes.]'
+            Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

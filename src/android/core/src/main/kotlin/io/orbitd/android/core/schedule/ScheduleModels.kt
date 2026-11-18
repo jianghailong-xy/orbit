@@ -23,20 +23,28 @@ internal fun JsonObject.scheduleStrings(key: String): List<String>? = (get(key) 
 internal fun <T> JsonObject.scheduleList(key: String, parse: (JsonElement?) -> T?): List<T>? =
     (get(key) as? JsonArray)?.mapNotNull(parse)
 
-/** A schedule's rule: one slot, every day, or some days of the week. */
+/** A schedule's rule: one slot, every day, some days of the week, or whenever its condition fires
+ * (docs/condition-triggers-design.md §6.1). */
 sealed class ScheduleRule {
     data class Once(val at: String) : ScheduleRule()
     data class Daily(override val time: String) : ScheduleRule()
     data class Weekly(override val time: String, val weekdays: List<String>) : ScheduleRule()
+    /** A WHEN rule: starts a run each time its condition fires. [conditionId] is null on a create card, before Create writes the
+     * condition. */
+    data class When(val conditionId: String?, val runsPerWeek: Int, override val condition: ScheduleWhenCondition) : ScheduleRule()
 
-    /** The slot's wall-clock time; a one-off has none. */
+    /** The slot's wall-clock time; a one-off and a WHEN rule have none. */
     open val time: String? get() = null
+
+    /** A WHEN rule's condition; null for a timed rule. */
+    open val condition: ScheduleWhenCondition? get() = null
 
     fun toJson(): JsonObject = buildJsonObject {
         when (this@ScheduleRule) {
             is Once -> { put("kind", "ONCE"); put("at", at) }
             is Daily -> { put("kind", "DAILY"); put("time", time) }
             is Weekly -> { put("kind", "WEEKLY"); put("time", time); put("weekdays", JsonArray(weekdays.map(::JsonPrimitive))) }
+            is When -> { put("kind", "WHEN"); put("conditionId", conditionId); put("runsPerWeek", runsPerWeek); put("condition", condition.toJson()) }
         }
     }
 
@@ -47,6 +55,8 @@ sealed class ScheduleRule {
             return when (o.scheduleText("kind") ?: return null) {
                 "ONCE" -> Once(o.scheduleText("at") ?: return null)
                 "DAILY" -> Daily(o.scheduleText("time") ?: return null)
+                "WHEN" -> When(o.scheduleText("conditionId"), o.scheduleInt("runsPerWeek") ?: 0,
+                    ScheduleWhenCondition.parse(o["condition"]) ?: return null)
                 else -> Weekly(o.scheduleText("time") ?: return null, o.scheduleStrings("weekdays") ?: emptyList())
             }
         }
@@ -54,12 +64,14 @@ sealed class ScheduleRule {
 }
 
 /** What the owner allowed: where it runs, what it may do, how often and how long. */
-data class ScheduleEnvelope(val workspaceId: String, val accessLevel: String, val runsPerWeek: Int, val runLimitMinutes: Int) {
+data class ScheduleEnvelope(val workspaceId: String, val accessLevel: String, val runsPerWeek: Int, val runLimitMinutes: Int,
+    /** A WHEN rule's approved probe command, as its sha256; null for a timed schedule. */
+    val commandHash: String? = null) {
     companion object {
         fun parse(json: JsonElement?): ScheduleEnvelope? {
             val o = json as? JsonObject ?: return null
             return ScheduleEnvelope(o.scheduleText("workspaceId") ?: return null, o.scheduleText("accessLevel") ?: return null,
-                o.scheduleInt("runsPerWeek") ?: return null, o.scheduleInt("runLimitMinutes") ?: return null)
+                o.scheduleInt("runsPerWeek") ?: return null, o.scheduleInt("runLimitMinutes") ?: return null, o.scheduleText("commandHash"))
         }
     }
 }
@@ -160,6 +172,8 @@ data class ScheduleView(
     val lastRun: ScheduleRunView? = null,
     /** The list's rows only: when a PAUSED schedule was paused. */
     val pausedAt: String? = null,
+    /** A WHEN rule's condition and its newest reading; null for a timed schedule. */
+    val condition: ScheduleConditionReading? = null,
 ) {
     companion object {
         fun parse(json: JsonElement?): ScheduleView? {
@@ -198,6 +212,7 @@ data class ScheduleView(
                 endedAt = o.scheduleText("endedAt"),
                 lastRun = ScheduleRunView.parse(o["lastRun"]),
                 pausedAt = o.scheduleText("pausedAt"),
+                condition = ScheduleConditionReading.parse(o["condition"]),
             )
         }
     }
@@ -209,12 +224,14 @@ data class ScheduleListResponse(
     /** The runs of the page's window, for every listed schedule: each run under way, and the ended runs planned in the
      * last 24 hours. Null from a server before W2, where the page reads each schedule's detail instead. */
     val runs: List<ScheduleRunView>? = null,
+    /** The OPEN tasks waiting for their startWhen condition (condition-triggers board ④); null from a server before conditions. */
+    val waitingTasks: List<ScheduleWaitingTask>? = null,
 ) {
     companion object {
         fun parse(json: JsonElement?): ScheduleListResponse? {
             val o = json as? JsonObject ?: return null
             return ScheduleListResponse(o.scheduleList("schedules", ScheduleView::parse) ?: return null,
-                o.scheduleList("runs", ScheduleRunView::parse))
+                o.scheduleList("runs", ScheduleRunView::parse), o.scheduleList("waitingTasks", ScheduleWaitingTask::parse))
         }
     }
 }
@@ -338,12 +355,14 @@ data class ScheduleEnvelopeLines(val runsIn: RunsIn, val may: May, val costs: Co
     }
 }
 
-/** A create card's When. */
-data class ScheduleCardWhen(val rule: ScheduleRule, val timezone: String?, val firstRunAt: String?) {
+/** A create card's When. [condition] is a WHEN rule's lines: the condition, the re-arm and how it is checked, and the command; null
+ * for a timed rule. */
+data class ScheduleCardWhen(val rule: ScheduleRule, val timezone: String?, val firstRunAt: String?, val condition: ScheduleWhenLines? = null) {
     companion object {
         fun parse(json: JsonElement?): ScheduleCardWhen? {
             val o = json as? JsonObject ?: return null
-            return ScheduleCardWhen(ScheduleRule.parse(o["rule"]) ?: return null, o.scheduleText("timezone"), o.scheduleText("firstRunAt"))
+            return ScheduleCardWhen(ScheduleRule.parse(o["rule"]) ?: return null, o.scheduleText("timezone"), o.scheduleText("firstRunAt"),
+                ScheduleWhenLines.parse(o["condition"]))
         }
     }
 }

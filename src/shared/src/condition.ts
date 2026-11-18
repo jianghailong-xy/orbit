@@ -115,6 +115,9 @@ export interface ConditionView {
   /** Its workspace is on an Orbit Cloud (managed) runner, kept awake while the condition is active (§4.2): the
    *  inspector's How it checks block then carries CONDITION_KEEPS_AWAKE_LINE. */
   keepsWorkspaceAwake: boolean;
+  /** The runner its workspace's probes run on, for the inspector's "Every 5 min on workstation-gpu"; null when its
+   *  workspace has none. */
+  runnerName: string | null;
   /** Newest first. */
   samples: ConditionSampleView[];
   /** Newest first. */

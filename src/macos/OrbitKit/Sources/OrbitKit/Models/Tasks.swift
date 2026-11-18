@@ -72,6 +72,9 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// When the task starts by itself, once (`Start at`); on list rows too, for their "Starts …".
     /// Nil = not scheduled.
     public let runAt: String?
+    /// Its startWhen, the peer of `runAt` (docs/condition-triggers-design.md §6.2): what it waits for, the newest
+    /// reading, and "Waiting for: …" while it waits. Detail payload only; nil on a task without one.
+    public var startWhen: TaskStartWhenView? = nil
     /// The grouping labels (a batch, a shard, a topic); a row names its first.
     public let labels: [String]?
     /// The project it is filed under, named — the detail read's. Nil on a task in no project.
@@ -140,7 +143,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case completionPolicy, verifiesTaskId, verificationState, verifier
-        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
+        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, startWhen, attachments
         case labels, project
         case supersededByTaskIdAbsentReason, supersedes, successorChain, forkSource, runsWith
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
