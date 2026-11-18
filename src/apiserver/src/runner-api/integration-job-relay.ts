@@ -666,6 +666,18 @@ async function claimOne(
          -- the runner. With both tips in it, the source lands by J-S4 MERGE and that landing closes
          -- the item. Without them, it meets the same conflict and opens another item, and every
          -- other task's landing waits as before.
+         --
+         -- And except the landings of a task filed to fix that item (fixes_open_item_id). That is
+         -- the other way the absorb reaches the line, and the one task_create documents: a separate
+         -- task whose source branch is the merge commit. Held here, it would wait on the item it
+         -- exists to close, and the line would never move again. Only that item is passed over: a
+         -- fix for any other item, and every other landing, is held as before. Its landing does
+         -- not close the item, because the item is also the record that the conflicted task's own
+         -- work is not on the line, and whether the fix carried it is not something the server can
+         -- read; the landing hands the item back to the coordinator instead (X-D4 (5),
+         -- rearmItemFixedBy). Without both tips, it meets the same conflict and opens an item of
+         -- its own, on the fix task and assigned as any landing's failure is, which the fix's next
+         -- landing is exempt from as the conflicted task's is.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -673,7 +685,10 @@ async function claimOne(
               AND f."phase" = 'MAIN_SYNC'
               AND i."kind" = 'INTEGRATION_CONFLICT'
               AND i."state" = 'OPEN'
-              AND f."task_id" IS DISTINCT FROM c."task_id")
+              AND f."task_id" IS DISTINCT FROM c."task_id"
+              AND NOT EXISTS (
+                SELECT 1 FROM "task" fix
+                 WHERE fix."id" = c."task_id" AND fix."fixes_open_item_id" = i."id"))
          AND (
            -- A queued job whose repository and target ref nobody holds. A QUEUED row somebody asked
            -- to stop is never claimed: J-T8 ends those in the transaction that asks, so one that is
