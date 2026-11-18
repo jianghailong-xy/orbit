@@ -102,6 +102,9 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     /** The owner's Retry on a landing job the integration read says can be retried: its silent generation ends and the next one is
      * queued. Answers the integration view read again. */
     suspend fun retryJob(id: String, jobId: String) = send("retry:$jobId", listOf("projects", id, "integration", "jobs", jobId, "retry")) as? JsonObject
+    suspend fun skipLandingCheck(id: String, taskId: String) =
+        send("skip-check:$taskId", listOf("projects", id, "tasks", taskId, "integration", "skip-merge-check"),
+            body = buildJsonObject { put("reason", ProjectPage.landingSkipCheckReason) })
     /** J-T8's owner stop of a task's in-flight landing (the landing page's Stop landing), before the push boundary only. */
     suspend fun stopTaskIntegration(id: String, taskId: String) =
         send("stop:$taskId", listOf("projects", id, "tasks", taskId, "integration", "stop"))

@@ -457,6 +457,13 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
         try { projects.retryJob(projectId, jobId)?.let { view -> state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false }; null }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { "${ProjectPage.landingRetryFailed} — ${failureReason(failure).trimEnd('.')}." }
+    suspend fun skipLandingCheck(taskId: String): String? {
+        val error = try { projects.skipLandingCheck(projectId, taskId); null }
+        catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { failureReason(failure) }
+        loadIntegration()
+        return error
+    }
     /** One of the timed-out merge card's doors — Re-run the check (J-T9) or Abandon (J-T10): the page's landing read and the
      *  candidate are read again when it answers; a refusal comes back in the server's words. */
     suspend fun landingDoor(press: suspend () -> Unit): String? =
@@ -534,7 +541,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                     item(key = "landing") {
                         ProjectLandingCardView(card, onOpenJobs = if (ProjectPage.inFlightJobs(integration) != null) ({ showsJobs = true }) else null,
                             onOpenProject = ::openProject, openLanding = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) },
-                            retry = { retryJob(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                            retry = { retryJob(it) }, skipCheck = { skipLandingCheck(it) }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     }
                 }
             }
