@@ -370,7 +370,7 @@ describe('the run\'s session (board 2/2 ⑥)', () => {
     const s = schedule();
     const r = run(s, 'CHANGED', sh('2025-11-13T10:00'), { startedAt: sh('2025-11-13T10:01'), key: 'codex@0.49.0' });
     expect(scheduleRunStripText(r, 'CHECK_ONLY', TZ)).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Check only',
     );
     expect(scheduleRunOfText(r, TZ)).toBe('run of Nov 13');
     expect(scheduleReportedText(r, { notified: true })).toBe('Reported: Changed · codex@0.49.0 · you were notified');

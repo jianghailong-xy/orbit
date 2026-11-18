@@ -647,6 +647,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// What opened the session; SCHEDULE marks a scheduled run's, which only the workspace's Scheduled runs folder lists.
+    public let runSource: String?
     /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
     /// read; nil for every other session. What puts the run's header over its conversation.
     public var scheduleRunId: String? = nil
@@ -889,6 +891,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        runSource = try values.decodeIfPresent(String.self, forKey: .runSource)
         scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
@@ -939,7 +942,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 ownerItems: [SessionOwnerItem]? = nil, taskId: String? = nil,
                 branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
-                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil,
+                effort: String? = nil, fastMode: Bool? = nil, source: String? = nil, runSource: String? = nil,
                 projectId: String? = nil, projectTitle: String? = nil,
                 lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil,
@@ -1016,6 +1019,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.effort = effort
         self.fastMode = fastMode
         self.source = source
+        self.runSource = runSource
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.projectMembership = projectMembership

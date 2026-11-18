@@ -129,8 +129,9 @@ public enum SessionFilter {
     /// ignores pinning, and that timestamp isn't in the list payload, so the client can't reproduce
     /// it — the server order is preserved verbatim, exactly as web's AgentView does
     /// (`if view === 'completed' return rows`). Without these two rules the clients disagree on order.
-    public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView) -> [Session] {
-        let scoped = forAgent(sessions, agentID: agentID)
+    public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView,
+                                scheduled: Bool = false) -> [Session] {
+        let scoped = forAgent(sessions, agentID: agentID).filter { ($0.runSource == "SCHEDULE") == scheduled }
         return view == .completed ? scoped : consoleSorted(scoped)
     }
 

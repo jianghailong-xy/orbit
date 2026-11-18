@@ -312,6 +312,13 @@ object Translation {
     }
 
     /**
+     * A reply's translation as it is drawn: none when the translator handed back the reply itself, spaces aside — the agent already
+     * wrote in the owner's language, so the reply is drawn as it is, with no foot (web `translationUnchanged`).
+     */
+    fun shownReply(value: JsonElement?, original: String): Reply? =
+        reply(value)?.takeUnless { it.text != null && it.text.trim() == original.trim() }
+
+    /**
      * A live `translation` event (seq 0, TranslationEventPayload) folded into the event it translates, under that event's payload as
      * `translation` — exactly as a replay would have delivered it. Null when it names no event this list holds (outside the window,
      * where its replay will carry it) or is not one.

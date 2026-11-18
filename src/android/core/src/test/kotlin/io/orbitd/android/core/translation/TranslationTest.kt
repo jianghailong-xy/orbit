@@ -135,6 +135,12 @@ class TranslationTest {
         assertNull(Translation.reply(obj("""{"lang":"xx","text":"x"}""")))
     }
 
+    @Test fun aReplyAlreadyInTheOwnersLanguageIsDrawnWithNoTranslation() {
+        assertNull(Translation.shownReply(obj("""{"lang":"zh-Hans","text":"找到了\n"}"""), "找到了"))
+        assertEquals(Translation.Reply("zh-Hans", "找到了", false), Translation.shownReply(obj("""{"lang":"zh-Hans","text":"找到了"}"""), "Found it"))
+        assertEquals(Translation.Reply("zh-Hans", null, true), Translation.shownReply(obj("""{"lang":"zh-Hans","failed":true}"""), "找到了"))
+    }
+
     @Test fun aLiveTranslationFoldsIntoTheEventItTranslatesAsAReplayCarriesIt() {
         val reply = RunEvent("assistant", 5, obj("""{"text":"Found it."}"""))
         val transcript = Transcript().page(EventPage(listOf(RunEvent("user", 4, obj("""{"text":"Fix it"}""")), reply)))

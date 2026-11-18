@@ -279,7 +279,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     await render(<RunSession sessionId="sess-codex-run-nov13" />);
     expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Nov 13');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
     const report = host.querySelector('[data-schedule-report]')!;
     expect(report.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · 0.49.0 · you were notified');
@@ -294,7 +294,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     await render(<RunSession sessionId="sess-codex-run-jun02" />);
     expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Jun 2');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: No change · 0.31.0');
     expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-codex-run-jun02/schedule-cards', '/schedules/sch-codex']);

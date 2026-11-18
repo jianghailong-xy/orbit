@@ -310,6 +310,7 @@ final class AppModel {
     /// the fallback when the record lives outside the currently loaded Open / agent list scopes.
     func session(id: String) -> Session? {
         sessionDetails.resolve(id, preferring: sessions, agents?.agentSessions ?? [])
+            ?? agents?.scheduledRunSession(id: id)
     }
 
     /// The Open sessions blocked on an approval, and agentID → how many of them each agent holds —
@@ -2509,7 +2510,7 @@ final class AppModel {
     /// (`openSessionRow`, and the selection setter the three-column shells write) have already
     /// decided which frame goes up.
     private func focusConsoleOnOwnerItem(_ sessionID: String) {
-        guard let session = sessions.first(where: { $0.id == sessionID }),
+        guard let session = sessions.first(where: { $0.id == sessionID }) ?? agents?.scheduledRunSession(id: sessionID),
               let item = NeedsYouLogic.oldestOwnerItem([session])?.item else { return }
         consoleRegistry?.model(for: sessionID, agentID: session.agent?.id ?? session.agentId)
             .focus(ownerItem: item)
@@ -2708,6 +2709,9 @@ final class AppModel {
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
         if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
+        if let address = nav.folderColumn, address.isScheduledRuns {
+            await agents?.loadScheduledRuns(address)
+        }
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -3567,6 +3571,7 @@ final class AppModel {
         // workspace's list (§3.3 — the folder is gone, so there is no page to be on). Only an
         // answer that landed can say that; a failed read leaves the library as it stands.
         if let open = nav.folderPage ?? nav.folderColumn,
+           !open.isScheduledRuns,
            !folders.contains(where: { $0.id == open.folderID }) {
             nav.leaveFolder(open.folderID)
         }
@@ -3584,6 +3589,15 @@ final class AppModel {
     /// the page on top on a phone and the list's page in a wide shell's column.
     func openFolder(_ address: SessionFolderAddress) {
         nav.enterFolder(address)
+    }
+
+    func pollScheduledRuns(_ address: SessionFolderAddress) async {
+        guard let agents else { return }
+        await agents.loadScheduledRuns(address)
+        // Run creation isn't pushed on the session stream, even when it's connected.
+        await ViewPoll.run(self, every: 30, inFlight: { 30 }) {
+            await agents.loadScheduledRuns(address)
+        }
     }
 
     /// Back out of a folder's page — the wide shell's column back button. A phone's system back

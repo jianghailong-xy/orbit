@@ -320,7 +320,7 @@ object ScheduleCopy {
     object RunSession {
         const val crumb = "Scheduled"
         const val runOf = "run of {date}"
-        const val strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
+        const val strip = "Scheduled run · planned {planned}, started {started} · access {access}"
         const val reported = "Reported: {state}"
         const val agent = "{engine} agent"
         const val duration = "{minutes} min"
