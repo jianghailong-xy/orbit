@@ -707,11 +707,21 @@ type OnDecide = (
 ) => unknown;
 
 /** "Couldn't translate, so it wasn't sent · Retry · Send as written" under a card whose decision the
- *  server refused 422 TRANSLATION_FAILED: each press posts the held decision again. */
+ *  server refused 422 TRANSLATION_FAILED, its first sentence saying why when the refusal did (frame 5):
+ *  each press posts the held decision again. */
 function UntranslatedFoot({ id, held, onDecide }: { id: string; held: HeldDecision; onDecide: OnDecide }) {
   const post = (sendAsWritten: boolean) => async () =>
     onDecide(id, held.behavior, held.answers, held.message, held.rememberRules, held.startAfterCreate, sendAsWritten || undefined);
-  return <UntranslatedDecisionFoot onRetry={post(false)} onSendAsWritten={post(true)} />;
+  return (
+    <div className="approval-untranslated-row">
+      <UntranslatedDecisionFoot
+        onRetry={post(false)}
+        onSendAsWritten={post(true)}
+        failureReason={held.failureReason}
+        httpStatus={held.httpStatus}
+      />
+    </div>
+  );
 }
 
 /** A question form's picks and typed answers seeded from a held decision's answers, so the card

@@ -224,7 +224,7 @@ final class QueuedTurnRestoreTests: XCTestCase {
     func testTheConsoleFoldsBackOnlyWhatAStopDroppedAndSomebodyTyped() throws {
         let console = try source(Self.consolePath)
         let fold = try section(console, from: "private func foldQueuedBackIntoComposer(before ev: RunEvent) {",
-                               to: "func attachFile(url: URL) async {")
+                               to: "func attachFile(url: URL")
         XCTAssertTrue(fold.contains("guard TranscriptReducer.dropsQueue(ev),"),
                       "folds back only on an interrupt that dropped the queue — not a runner restart")
         XCTAssertTrue(fold.contains(".compactMap(ComposerLogic.restorableText(of:))"),

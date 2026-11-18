@@ -22,6 +22,8 @@ struct OrbitApp: App {
                 .frame(minWidth: 820, minHeight: 520)
                 .hidesTitlebarSeparator()   // seamless, ChatGPT-style floating top (no hard rule)
                 .onOpenURL { url in
+                    // `orbit-session://<id>?share=<entry>`: the Share extension's Add (share-to-orbit §3.3).
+                    if let entryID = ShareHandoffLink.entryID(in: url) { model.requestShareClaim(entryID: entryID); return }
                     // `orbit://owner-request/<id>`: the inbox, with that request's card open on its input.
                     if let request = OwnerRequestLink.parse(url) { model.openOwnerRequest(request); return }
                     if let route = DeepLink.parse(url) { model.route(to: route) }
@@ -42,6 +44,8 @@ struct OrbitApp: App {
                 }
                 .task {
                     model.bootstrap()
+                    // A share left in the App Group inbox: sweep a day-old one, open a fresh one.
+                    model.noticeSharedItems(launching: true)
                     HotKeyManager.register { HotKeyManager.summonApp() }   // ⌥Space summons Orbit
                 }
         }

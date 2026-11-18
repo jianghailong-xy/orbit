@@ -763,29 +763,8 @@ object ScheduleDisplay {
             "access" to accessCopy(accessLevel).label,
         ))
 
-    /** "Run of Nov 13": the run's own page's title (board 01 ⑦). */
+    /** "Run of Nov 13": the condition history's run label. */
     fun capitalizedRunOf(plannedAt: String, timezone: String): String = capitalize(runOfText(plannedAt, timezone))
-
-    /** A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
-     * engine it ran on, and how long the run took (until now while it runs). A part not known is left out. */
-    fun runHeadText(state: String?, engine: String?, startedAt: String?, endedAt: String?, now: Instant): String {
-        val parts = mutableListOf<String>()
-        if (!state.isNullOrEmpty()) parts += state
-        if (!engine.isNullOrEmpty()) parts += fill(C.RunSession.agent, mapOf("engine" to engine))
-        startedAt?.let(::parse)?.let { started ->
-            val end = endedAt?.let(::parse) ?: now
-            val minutes = maxOf(1L, Math.round(Duration.between(started, end).toMillis() / 60_000.0))
-            parts += fill(C.RunSession.duration, mapOf("minutes" to minutes.toString()))
-        }
-        return parts.joinToString(C.separator)
-    }
-
-    /** The agent a run's header names (the web's `scheduleRunAgentName`): the engine its schedule's view carries
-     * ("Codex"), else the session's own engine, capitalized. */
-    fun runAgentName(scheduleEngine: String?, sessionEngine: String?): String? {
-        if (!scheduleEngine.isNullOrEmpty()) return engineName(scheduleEngine)
-        return sessionEngine?.let(::engineName)
-    }
 
     /** The delete question's title: "Delete “Codex stable check”?". */
     fun deleteTitle(title: String): String = fill(C.DeleteConfirm.title, mapOf("title" to title))

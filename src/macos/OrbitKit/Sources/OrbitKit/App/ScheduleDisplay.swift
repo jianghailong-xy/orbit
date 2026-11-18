@@ -948,41 +948,9 @@ public enum ScheduleDisplay {
         ])
     }
 
-    /// "Run of Nov 13": the run's own page's title (board 01 ⑦).
+    /// "Run of Nov 13": the label for a run in a schedule's history.
     public static func capitalizedRunOf(plannedAt: String, timezone: String) -> String {
         capitalize(runOfText(plannedAt: plannedAt, timezone: timezone))
-    }
-
-    /// A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word,
-    /// the engine it ran on, and how long the run took (until now while it runs). A part not known is left out.
-    public static func runHeadText(state: String?, engine: String?, startedAt: String?, endedAt: String?,
-                                   now: Date) -> String {
-        var parts: [String] = []
-        if let state, !state.isEmpty { parts.append(state) }
-        if let engine, !engine.isEmpty { parts.append(fill(C.RunSession.agent, ["engine": engine])) }
-        if let started = startedAt.flatMap(parse) {
-            let end = endedAt.flatMap(parse) ?? now
-            let minutes = max(1, Int((end.timeIntervalSince(started) / 60).rounded()))
-            parts.append(fill(C.RunSession.duration, ["minutes": String(minutes)]))
-        }
-        return parts.joined(separator: C.separator)
-    }
-
-    /// A run's session's head line from the session's own read (its detail, which every run session has, in the
-    /// app's lists or not): its lifecycle word, its engine's name as the web's ENGINE_CLI_NAMES gives it, and how long
-    /// the run took. "Open · Codex agent · 5 min".
-    public static func runHeadText(session: Session?, run: ScheduleRunView, scheduleEngine: String? = nil,
-                                   now: Date) -> String {
-        runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
-                    engine: runAgentName(scheduleEngine: scheduleEngine, sessionEngine: session?.engine),
-                    startedAt: run.startedAt, endedAt: run.endedAt, now: now)
-    }
-
-    /// The agent a run's header names (the web's `scheduleRunAgentName`): the engine its schedule's view carries
-    /// ("Codex"), else the session's own, as the engine lists name it.
-    public static func runAgentName(scheduleEngine: String?, sessionEngine: String?) -> String? {
-        if let scheduleEngine, !scheduleEngine.isEmpty { return engineName(scheduleEngine) }
-        return sessionEngine.map(ProviderEngines.cliName)
     }
 
     /// The delete question's title: "Delete “Codex stable check”?".

@@ -415,28 +415,12 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // SCHEDULED — the timeline (board 01 ②); a row's detail is the page's own bottom panel, and a run's
-        // session is pushed over the page, so back returns to the schedule it ran for.
+        // SCHEDULED — the timeline and its bottom panel.
         case .scheduled:
-            NavigationStack(path: $model.nav.path) {
+            NavigationStack {
                 ScheduledPage()
                     .drawerToggle(open: openDrawer)
                     .refreshable { await model.scheduled?.load() }
-                    .navigationDestination(for: NavNode.self) { node in
-                        switch node {
-                        case .console(let sessionID, _):
-                            AgentConsolePage(sessionID: sessionID)
-                                .environment(\.opensPagesOverConsole, true)
-                        // What a console opens over itself, as on the Agents stack.
-                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
-                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
-                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
-                        case .watches:                      FollowingListView(rowNavigation: .push)
-                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
-                        default:                            EmptyView()
-                        }
-                    }
             }
 
         // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a

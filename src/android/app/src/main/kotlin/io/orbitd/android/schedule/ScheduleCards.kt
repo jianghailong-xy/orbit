@@ -2,7 +2,6 @@ package io.orbitd.android.schedule
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -231,22 +230,11 @@ fun ScheduleRecordLine(record: ScheduleChangeRecord, undo: (suspend () -> String
     }
 }
 
-/** A run's head (board 01 ⑦): "‹ Codex stable check", "Run of Nov 13", "Open · Codex agent · 4 min", and the strip that says it is a
- * scheduled run and not in the session list. */
+/** The run's timing and access in its conversation. */
 @Composable
-fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, sessionState: String?, sessionEngine: String?,
-    condition: ConditionView? = null, openSchedule: () -> Unit) {
+fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, condition: ConditionView? = null) {
     val zone = java.util.TimeZone.getDefault().id
-    val head = ScheduleDisplay.runHeadText(sessionState, ScheduleDisplay.runAgentName(schedule.engine,
-        // The session's engine as the engine lists name it (OrbitKit `ProviderEngines.cliName`): "Claude Code".
-        sessionEngine?.let { io.orbitd.android.composer.ProviderEngines.ENGINE_CLI_NAMES[it] ?: it }), run.startedAt, run.endedAt, Instant.now())
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-run-strip"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(Modifier.clickable(onClick = openSchedule).testTag("schedule-run-crumb"), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹ ", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
-            Text(schedule.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(ScheduleDisplay.capitalizedRunOf(run.plannedAt, zone), style = MaterialTheme.typography.titleLarge)
-        if (head.isNotEmpty()) Text(head, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (run.trigger == "CONDITION") {
             // A run its condition started names the firing, not a planned time (condition-triggers board ⑤ ②).
             Row(Modifier.testTag("schedule-run-fired"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -323,9 +311,9 @@ sealed class ScheduleInsert {
     }
 }
 
-/** One [ScheduleInsert] drawn in its conversation. [sessionState] and [sessionEngine] are the session's own read, for a run's head. */
+/** One [ScheduleInsert] drawn in its conversation. */
 @Composable
-fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, sessionId: String, sessionState: String?, sessionEngine: String?,
+fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, sessionId: String,
     openSchedule: (String) -> Unit) {
     val state by store.state.collectAsState()
     when (insert) {
@@ -354,7 +342,7 @@ fun ScheduleConversationInsert(insert: ScheduleInsert, store: ScheduledStore, se
             val conditionId = (schedule.rule as? ScheduleRule.When)?.conditionId ?: schedule.condition?.id
             val fired = insert.context.run.trigger == "CONDITION"
             LaunchedEffect(conditionId, fired) { if (fired) conditionId?.let(store::loadCondition) }
-            ScheduleRunStrip(schedule, insert.context.run, sessionState, sessionEngine, state.condition(conditionId)) { openSchedule(schedule.id) }
+            ScheduleRunStrip(schedule, insert.context.run, state.condition(conditionId))
         }
         is ScheduleInsert.RunReport -> ScheduleRunReport(insert.context.run, insert.context.detail?.findings.orEmpty())
     }
