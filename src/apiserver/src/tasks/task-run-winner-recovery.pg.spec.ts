@@ -1201,10 +1201,12 @@ test('a bulk item that fails uncertainly leaves the press retryable, then settle
         VALUES (${target.ownerId}::uuid, ${TASK_RUN_ACTION.batchExecute}, ${press},
                 ${`tasks:${target.taskId}|max:`}, 'BOUND', ${JSON.stringify(plan)}::jsonb,
                 statement_timestamp())`;
-      // The runner goes away AFTER the plan is frozen: the effect now fails for a reason that is
-      // about the world, not about this task's row.
+      // The workspace is switched off AFTER the plan is frozen: the effect now fails for a reason that
+      // is about the world, not about this task's row. Its runner stays bound, so no dispatch pin
+      // changes and the repeat keeps the plan as bound (a moved runner would re-plan the item:
+      // replanStaleBatchItems, task-auto-run-stale-batch-plan.pg.spec).
       await opening.db.workspace.update({
-        where: { id: target.agentId }, data: { runnerId: null, enabled: false },
+        where: { id: target.agentId }, data: { enabled: false },
       });
     } finally {
       await opening.db.$disconnect();
@@ -1239,7 +1241,7 @@ test('a bulk item that fails uncertainly leaves the press retryable, then settle
     const repair = connect();
     try {
       await repair.db.workspace.update({
-        where: { id: target.agentId }, data: { runnerId: target.runnerId, enabled: true },
+        where: { id: target.agentId }, data: { enabled: true },
       });
     } finally {
       await repair.db.$disconnect();

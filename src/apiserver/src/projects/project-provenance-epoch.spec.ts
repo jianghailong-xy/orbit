@@ -148,6 +148,8 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // These files do not read Task.sourceSessionId (the L2 project-provenance column): they validate,
   // persist, and render the source session on an append-only completion-evidence fact. The value is
   // never consulted by project authorization, dispatch, scheduling, or acceptance counting.
+  'src/apiserver/src/projects/evidence-undecided.ts':
+    'copies the completion-evidence source session onto the item as a backlink',
   'src/apiserver/src/tasks/dto.ts':
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':

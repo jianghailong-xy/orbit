@@ -10,10 +10,12 @@ import Foundation
 public struct MachineToSetUp: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+    public let isManaged: Bool
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, isManaged: Bool = false) {
         self.id = id
         self.name = name
+        self.isManaged = isManaged
     }
 }
 

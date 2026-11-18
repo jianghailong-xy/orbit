@@ -120,6 +120,26 @@ final class RunnerPageFormatTests: XCTestCase {
 
     // MARK: the list row and the page head
 
+    func testManagedFirstKeepsTheOtherMachinesInTheirSavedOrder() throws {
+        let first = try macMini()
+        let second = try wikova()
+        let managed = try runner(Self.hpcJSON, ["managed": true])
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed, second], managedRunnerID: nil),
+                       [managed, first, second])
+    }
+
+    func testManagedFirstUsesTheStatusIDOnOlderServers() throws {
+        let first = try macMini()
+        let managed = try wikova()
+        XCTAssertEqual(RunnerPageFormat.managedFirst([first, managed], managedRunnerID: managed.id),
+                       [managed, first])
+    }
+
+    func testManagedFirstKeepsTheSavedOrderWithoutAManagedRunner() throws {
+        let runners = [try macMini(), try runner(Self.wikovaJSON, ["name": "orbit-managed"])]
+        XCTAssertEqual(RunnerPageFormat.managedFirst(runners, managedRunnerID: nil), runners)
+    }
+
     func testTheHeadAndTheRowSayWhereTheMachineStands() throws {
         let wikova = try wikova()
         XCTAssertEqual(RunnerPageFormat.presence(wikova, now: now), .online)

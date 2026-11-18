@@ -3139,7 +3139,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no trigger, function or DONE fence changes.
       '1080_owner_card_translation_more',
       // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
-      '1101_integration_enqueue_skip_check'],
+      '1101_integration_enqueue_skip_check',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

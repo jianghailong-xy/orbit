@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -219,6 +220,8 @@ type engineHealth struct {
 	installError  string
 	// Kimi only: the site its own login is on (kimi_region.go), "" when there is none.
 	kimiRegion string
+	// OpenCode only: `opencode auth list` listed no key at all (probeOpenCodeAuth).
+	openCodeNoKey bool
 	// Claude Code only: doctor's region check found Claude's connection to Anthropic in a region Anthropic does
 	// not offer Claude in (doctorRegion). Its line says so, and doctor suggests no sign-in for it.
 	regionBlocked bool
@@ -316,6 +319,10 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
+	} else if spec.bin == providerOpenCode {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		h.auth, h.openCodeNoKey = probeOpenCodeAuth(ctx, abs, nil)
 	} else {
 		h.auth = probeAuth(spec.bin, abs)
 	}
@@ -453,30 +460,45 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		// KIMI_CODE_HOME in env (kimiSlotLoginStatus).
 		return probeKimiACPAuth(ctx, binPath, env)
 	case providerOpenCode:
-		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
-		if err != nil {
-			// A provider may be local/no-auth, and older OpenCode builds may not
-			// support this probe. Never turn either case into a startup blocker.
-			return authUnknown
-		}
-		// `opencode auth list` reports the number of stored/environment credentials.
-		// A successful but unfamiliar format stays unknown so local/no-auth providers
-		// are never rejected by a best-effort probe.
-		lower := strings.ToLower(string(out))
-		if strings.Contains(lower, "0 credentials") || strings.Contains(lower, "0 credential") {
-			// OpenCode also supports local and built-in providers that require no
-			// stored credential, so zero is not equivalent to signed out.
-			return authUnknown
-		}
-		if strings.Contains(lower, "credential") || strings.Contains(lower, "environment") {
-			return authYes
-		}
-		return authUnknown
+		auth, _ := probeOpenCodeAuth(ctx, binPath, env)
+		return auth
 	case providerAntigravity:
 		auth, _, _ := probeAntigravityAuth(ctx, binPath, env)
 		return auth
 	}
 	return authUnknown
+}
+
+// openCodeCountRe matches the totals `opencode auth list` closes each of its sections with:
+// "2 credentials" under the auth store, "1 environment variable" under the provider keys it found
+// in its environment.
+var openCodeCountRe = regexp.MustCompile(`(?i)\b(\d+)\s+(?:credentials?|environment variables?)\b`)
+
+// probeOpenCodeAuth asks `opencode auth list` for the provider keys OpenCode can use: those in its
+// own auth store and those in its environment. Any key is a yes. None is still unknown, never
+// no: OpenCode runs its own free models without one, and a key in its config file is not listed
+// here — so noKey says only that the list came back empty. A failed or unfamiliar answer is
+// unknown with noKey false. (Before 2026-11-17 a "0 credentials" anywhere made it unknown, so a
+// key found in the environment, listed under its own "0 credentials" store, never read as one.)
+func probeOpenCodeAuth(ctx context.Context, binPath string, env []string) (auth authState, noKey bool) {
+	cmd := exec.CommandContext(ctx, binPath, "auth", "list")
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// A provider may be local/no-auth, and older OpenCode builds may not
+		// support this probe. Never turn either case into a startup blocker.
+		return authUnknown, false
+	}
+	matches := openCodeCountRe.FindAllStringSubmatch(stripANSI(string(out)), -1)
+	if len(matches) == 0 {
+		return authUnknown, false
+	}
+	for _, m := range matches {
+		if strings.TrimLeft(m[1], "0") != "" {
+			return authYes, false
+		}
+	}
+	return authUnknown, true
 }
 
 // codexLoginStatus is probeAuth's codex question, asked with env as the CLI's environment (nil:

@@ -473,7 +473,10 @@ async function evidenceMessages(db: PrismaClient, sessionId: string, taskId: str
     select: { clientTurnId: true, content: true, status: true, deliveredAt: true },
     orderBy: { seq: 'asc' },
   });
-  return turns.filter((turn) => (turn.content ?? '').includes('task_evidence_decide')
+  // Not the opening: a successor's lists every task by id in its state digest, beside standing
+  // instructions that name task_evidence_decide, and is no message about this revision.
+  return turns.filter((turn) => !turn.clientTurnId.startsWith('initial-')
+    && (turn.content ?? '').includes('task_evidence_decide')
     && (turn.content ?? '').includes(uuidToBase62(taskId)));
 }
 
