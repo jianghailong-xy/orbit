@@ -8291,15 +8291,6 @@ button.chat-jump-start:hover {
   display: flex;
   margin: 6px 0 0;
 }
-/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
-   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
-.chat-translate-foot.is-error {
-  flex-wrap: wrap;
-  white-space: normal;
-}
-.chat-translate-foot.is-error .chat-translate-action {
-  white-space: nowrap;
-}
 /* On an approval card (frame 5) the line sits inside the card's own 14px inset, as .approval-stale does. */
 .approval-untranslated-row {
   padding: 8px 14px 0;
@@ -8344,7 +8335,11 @@ button.chat-jump-start:hover {
     opacity: 1;
   }
 }
+/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
+   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
 .chat-translate-foot.is-error {
+  flex-wrap: wrap;
+  white-space: normal;
   color: var(--error-solid);
 }
 .chat-translate-sep {
@@ -8360,6 +8355,7 @@ button.chat-jump-start:hover {
   cursor: pointer;
 }
 .chat-translate-foot.is-error .chat-translate-action {
+  white-space: nowrap;
   color: var(--error-solid);
 }
 .chat-translate-action:disabled {
