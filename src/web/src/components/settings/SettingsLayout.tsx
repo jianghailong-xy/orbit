@@ -215,7 +215,11 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const runners = (useQuery(runnersQuery()).data ?? []) as Runner[];
   const workspaces = (useQuery(workspacesQuery()).data ?? []) as SettingsWorkspace[];
   const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, runners);
-  const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
   const pools = useQuery(providerPoolsQuery());
   // The account's managed runner (docs/managed-runner-existing-account-entry-design.md): an entry while the
   // server offers one, then its own machine row in the shared state words. Nothing is read with the feature off.

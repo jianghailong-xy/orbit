@@ -965,8 +965,9 @@ async function readInFlightJobsForProjects(
            AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
-      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
-      -- The claim reads the item, not a handling generation (T17), so this does too.
+      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
+      -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
+      -- claim. The claim reads the item, not a handling generation (T17), so this does too.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
@@ -980,6 +981,9 @@ async function readInFlightJobsForProjects(
            AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM j."task_id"
+           AND NOT EXISTS (
+             SELECT 1 FROM "task" fix
+              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref, whichever project queued it.
