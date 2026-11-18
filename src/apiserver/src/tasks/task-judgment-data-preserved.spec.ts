@@ -3139,6 +3139,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1090 adds nullable managed_runner.image_outdated_since and current_image_sha (no default); `managed_runner`
       // is none of the preserved relations, no row is written, and no trigger, function or DONE fence changes.
       '1090_managed_runner_image_outdated',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item',
       // 1120 adds nullable managed_runner.update_requested_at, update_requested_by and update_completed_at (no
       // default); `managed_runner` is none of the preserved relations, no row is written, and no trigger, function or
       // DONE fence changes.

@@ -32,6 +32,7 @@ import {
   toUuid,
   type MoveCriterionRefusal,
   type MoveCriterionResult,
+  type TaskSignInHold,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -66,6 +67,7 @@ import {
   MAX_TASK_PAGE_SIZE,
   decodeTaskPageCursor,
   encodeTaskPageCursor,
+  mayBeSweepCandidate,
 } from '../tasks/tasks.service';
 import {
   // §13.3 DEP's epoch, the same fragments the run gate and the sweeps read: the graph counts them
@@ -3350,7 +3352,8 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, integrations] = await Promise.all([
+    const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
+    const [dependencies, workStates, integrations, holds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3371,6 +3374,10 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
+      // Why the sweep holds a row that reads Ready (the task read's `hold`, by the same read).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
+        : new Map<string, TaskSignInHold>(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3401,6 +3408,7 @@ export class ProjectsService {
         // report dependencies" rather than as "this task has none".
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
+        hold: holds.get(task.id) ?? null,
       };
     });
     return {

@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `171cbcea63edce02cc55ff09bfd5b1cd514bde63717d467abc30abf424dc9034`.
+> Content hash: `01098db1035ad6304692a2c82d9e1a06d137938a2ac6fbbf4893d52e8508f217`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -104,6 +104,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `session_interrupt` | session | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit session interrupt` | Interrupt a session's turn. |
 | `session_list` | session | low | no | none | no | read | runs | orchestration | orchestration — `orbit session list` | See the sessions this agent may read. |
 | `session_merge` | session | high | yes | none | no | none | refused | orchestration | orchestration — `orbit session merge` | Merge a session's branch into its target. |
+| `session_move` | session | medium | yes | none | no | none | refused | orchestration | orchestration — `orbit session move` | File a session in a folder, or move it to another workspace. |
 | `session_reply` | session | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit session reply` | Answer a request this session was sent. |
 | `session_search` | session | low | no | none | no | read | runs | orchestration | orchestration — `orbit session search` | Search sessions by their text. |
 | `session_send` | session | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit session send` | Send a message to a session. |
