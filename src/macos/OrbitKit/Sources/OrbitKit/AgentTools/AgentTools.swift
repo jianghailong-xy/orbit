@@ -253,7 +253,7 @@ public enum AgentTools {
 
     /// One row of the sheet's Tools section (board ⑤): the families in one state, each with its count —
     /// "Tasks 21 · Projects 19 · …" — beside the state's word. Session orchestration's family keeps a row of its
-    /// own, "Sessions, agents and runners · 22", as the switch it answers to does.
+    /// own, "Sessions, agents and runners · 23", as the switch it answers to does.
     public struct ToolsRow: Equatable, Sendable, Identifiable {
         public let id: String
         public let text: String
