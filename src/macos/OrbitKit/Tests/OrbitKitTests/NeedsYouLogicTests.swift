@@ -549,6 +549,17 @@ final class NeedsYouLogicTests: XCTestCase {
                       "a later turn of the same conversation is the same wait")
     }
 
+    /// Any wait the server names says the row's own words, never the tool call's "Needs your reply".
+    func testANamedWaitIsNoticedInTheRowsWords() throws {
+        let confirming = Session(id: "c", title: "Task: Ship it", status: .awaitingInput, agentId: "w",
+                                 assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerConfirmation,
+                                 branch: nil, updatedAt: nil,
+                                 agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                                 lastTurnAt: "2026-11-18T01:00:00Z")
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([confirming], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting for your confirmation · orbit-develop")
+    }
+
     // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)
 
     /// The conversation's own capsule: its cards first, in their words and direction; its approvals

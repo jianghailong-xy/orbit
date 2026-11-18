@@ -71,6 +71,16 @@ class NeedsYouLogicTest {
         assertTrue("a later turn is the same wait", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:52:34Z")), seen).isEmpty())
     }
 
+    /** Any wait the server names says the row's own words, never the tool call's "Needs your reply" (OrbitKit's twin). */
+    @Test fun aNamedWaitIsNoticedInTheRowsWords() {
+        val confirming = buildJsonObject {
+            put("id", "c"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_CONFIRMATION")
+            put("title", "Task: Ship it"); put("lastTurnAt", "2026-11-18T01:00:00Z")
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting for your confirmation · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(confirming), emptySet()).single().line)
+    }
+
     /** The first look only takes stock; at most three notices, the rest "and N more"; a notice whose wait ended goes. */
     @Test fun theNoticesTakeStockFirstAndShowAtMostThree() {
         val notices = NeedsYouNotices()

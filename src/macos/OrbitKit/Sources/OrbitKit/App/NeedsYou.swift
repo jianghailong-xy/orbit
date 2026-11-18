@@ -314,8 +314,7 @@ public enum NeedsYouLogic {
             let key = waitKey(entry.target)
             guard !seen.contains(key) else { return nil }
             let session = entry.target
-            let what = entry.ownerItem.map(ownerItemWord)
-                ?? (session.waitingKind == .ownerRequest ? OwnerRequests.waitingOnYou : replyWord)
+            let what = entry.ownerItem.map(ownerItemWord) ?? noticeWord(session)
             let line = [what, named(session.agent?.name)].compactMap { $0 }.joined(separator: " · ")
             return NeedsYouToast(id: key, target: session,
                                  title: named(session.title) ?? named(session.agent?.name) ?? "A session",
@@ -325,6 +324,15 @@ public enum NeedsYouLogic {
 
     /// What a blocked tool call waits on, in the push's own words.
     public static let replyWord = "Needs your reply"
+
+    /// What a conversation with no owner item waits on: the row's own words for a wait the server
+    /// names a kind for (an owner request's "Waiting on you", a confirmation's "Waiting for your
+    /// confirmation", …), and the push's for a blocked tool call. "Needs your reply" over a wait with
+    /// nothing to reply to sent the reader looking for a card that was not there.
+    static func noticeWord(_ session: Session) -> String {
+        guard let kind = session.waitingKind, kind != .unknown else { return replyWord }
+        return SessionHeader.waitingWord(for: session)
+    }
 
     /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
     public static let unfoldedLimit = 5

@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.SessionHeader
 import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.ProjectDoc
@@ -188,13 +189,18 @@ object NeedsYouLogic {
             val session = entry.target
             val workspace = named(session.obj("agent")?.text("name"))
             NeedsYouToast(key, session, named(session.text("title")) ?: workspace ?: "A session",
-                listOfNotNull(entry.ownerItem?.let(::ownerItemWord)
-                    ?: if (session.text("waitingKind") == "OWNER_REQUEST") OwnerRequests.waitingOnYou else replyWord,
-                    workspace).joinToString(" · "), entry.ownerItem)
+                listOfNotNull(entry.ownerItem?.let(::ownerItemWord) ?: noticeWord(session), workspace).joinToString(" · "), entry.ownerItem)
         }
 
     /** What a blocked tool call waits on, in the push's own words. */
     const val replyWord = "Needs your reply"
+
+    /** What a conversation with no owner item waits on (OrbitKit `noticeWord`): the row's own words for a wait the server names a
+     * kind for, and the push's for a blocked tool call. */
+    fun noticeWord(row: JsonObject): String {
+        val kind = row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" } ?: return replyWord
+        return SessionHeader.waitingWord(kind, ownerItems(row))
+    }
 
     /** At most this many notices at once; the rest are said as "and N more" (12-once). */
     const val toastLimit = 3
