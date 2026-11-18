@@ -135,7 +135,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// lands on Settings' stack, not the route's — so the sheet goes down before anything moves.
     func testARouteClosesSettingsBeforeItMoves() throws {
         let app = code(try appSource("AppModel.swift"))
-        let route = try slice(app, from: "func route(to route: Route) {", to: "switch route {")
+        let route = try slice(app, from: "func route(to route: Route,", to: "switch route {")
         let close = try XCTUnwrap(route.range(of: "settingsPresented = false"))
         let move = try XCTUnwrap(route.range(of: "selectedSection = AppSection.forRoute(route)"))
         XCTAssertLessThan(close.lowerBound, move.lowerBound)
