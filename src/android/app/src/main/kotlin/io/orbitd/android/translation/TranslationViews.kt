@@ -225,6 +225,36 @@ private fun FootAction(label: String, color: Color, onPress: (() -> Unit)?) {
         color = color, style = MaterialTheme.typography.labelSmall, textDecoration = TextDecoration.Underline)
 }
 
+/**
+ * One of Orbit's own cards drawn in the owner's language (board 04-owner-cards.html, part 2): one foot for the whole card, as a reply's,
+ * "Translated · Show original" ↔ "Original · Show translation".
+ */
+@Composable
+fun CardTranslationFoot(flipped: Boolean, onFlip: () -> Unit, modifier: Modifier = Modifier) {
+    val muted = footColor()
+    Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (flipped) TranslationCopy.ORIGINAL else TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+        Sep(muted); FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
+    }
+}
+
+/**
+ * An owner card's answer the server could not translate (422 TRANSLATION_FAILED, board 04-owner-cards.html mark B): nothing was
+ * recorded, and the card says so with the conversation's words, "Couldn't translate, so it wasn't sent · Retry · Send as written".
+ * Send as written sends the words again untranslated (`sendAsWritten: true`).
+ */
+@Composable
+fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    val error = MaterialTheme.colorScheme.error
+    Row(modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
+        Text(TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = retry, enabled = enabled) { Text(TranslationCopy.RETRY) }
+        Sep(error)
+        androidx.compose.material3.TextButton(onClick = sendAsWritten, enabled = enabled) { Text(TranslationCopy.SEND_AS_WRITTEN) }
+    }
+}
+
 @Composable
 fun TranslationChip(text: String) {
     Text(text, Modifier.testTag("translation-chip").clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)

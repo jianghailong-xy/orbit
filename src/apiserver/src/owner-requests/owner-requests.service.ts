@@ -18,6 +18,9 @@ import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
 import { isScheduleItemKind } from '../schedules/schedule-attention';
+import { OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import { isConditionItemKind } from '../conditions/condition-attention';
 import { answerStillWaiting } from '../conditions/condition-still-waiting';
 import { CONDITION_STILL_WAITING_KIND } from '@orbit/shared';
@@ -91,6 +94,8 @@ const VIEW = {
   resolvedClient: true,
   resolutionNote: true,
   answer: true,
+  // Settings › Translation (migration 1070): the agent-written fields in the owner's language, or null.
+  translation: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.OwnerRequestSelect;
@@ -239,6 +244,10 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       // Told after the row is committed, and never awaited: the request is the fact, the banner a reader of it.
       void this.push?.notifyOwnerRequest(created.id);
       this.realtime?.publishSessionUpdated(created.askedBySessionId);
+      // And translated for the owner in the background, when their translation is on (decision 1A).
+      void translationLanguages(this.prisma, ownerId)
+        .then((langs) => { if (langs) this.queueTranslation(ownerId, created, langs); })
+        .catch((error: Error) => this.logger.warn(`translating request ${created.id} failed to queue: ${error.message}`));
       return { ...created, created: true };
     }
     // A WIKI_CREATE meeting the card already waiting for its repository answers that card, and the owner is not told again.
@@ -316,7 +325,56 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
       take: LIST_LIMIT,
       select: VIEW,
     });
+    await this.translateUntranslated(ownerId, requests).catch((error: Error) =>
+      this.logger.warn(`queueing request translations failed: ${error.message}`));
     return { requests: await this.withGrants(ownerId, requests) };
+  }
+
+  /**
+   * Queue the translation of one request's card into the owner's language (sessions/card-translation.ts): stored
+   * in `translation` while the request is still PENDING, and the asking session's row announced (`session.updated`,
+   * as filing it is) so clients read it again. A SCHEDULE_* item is Orbit's own words, not an agent's, and is not
+   * translated. Returns at once: true when it queued one.
+   */
+  queueTranslation(
+    ownerId: string,
+    request: { id: string; kind: string; askedBySessionId: string },
+    langs: TranslationLanguages,
+  ): boolean {
+    if (isScheduleItemKind(request.kind)) return false;
+    return queueOwnerCardTranslation({
+      key: `owner-request:${request.id}`,
+      read: async () => {
+        const row = await this.prisma.ownerRequest.findFirst({
+          where: { id: request.id, ownerId, state: 'PENDING' },
+          select: { title: true, why: true, ifUnanswered: true, options: true, steps: true, verifyHint: true, translation: true },
+        });
+        return row ? { source: row, fields: OWNER_REQUEST_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.ownerRequest.updateMany({
+        where: { id: request.id, ownerId, state: 'PENDING' },
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.realtime?.publishSessionUpdated(request.askedBySessionId),
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: a PENDING request with no translation in the owner's current language — translation was turned on
+   * after it was filed, or the language changed — gets one queued as the list is read; one already tried in this
+   * language, failed or not, is left, and one queued or running is not queued again.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    requests: ReadonlyArray<{ id: string; kind: string; state: string; askedBySessionId: string; translation: unknown }>,
+  ): Promise<void> {
+    const pending = requests.filter((r) => r.state === 'PENDING' && !isScheduleItemKind(r.kind));
+    if (pending.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const request of pending) {
+      if (!translatedInto(request.translation, langs)) this.queueTranslation(ownerId, request, langs);
+    }
   }
 
   async get(ownerId: string, id: string): Promise<OwnerRequestView> {
@@ -370,7 +428,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   async complete(
     ownerId: string,
     id: string,
-    given: { option?: number; text?: string },
+    given: { option?: number; text?: string; sendAsWritten?: boolean },
     client: OwnerRequestClient | null = null,
   ): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
@@ -400,8 +458,13 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'DECISION' && option === undefined && !text) {
       throw new BadRequestException('a decision needs an option or some text');
     }
+    // Settings › Translation: the owner's words reach the asking session in the agent language, or the answer is
+    // refused whole (422 TRANSLATION_FAILED) before anything is written. The option goes by index either way.
+    const translation = text
+      ? await ownerWordsForAgent(text, await translationLanguages(this.prisma, ownerId), given.sendAsWritten)
+      : null;
     const answer = option !== undefined || text
-      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}) }
+      ? { ...(option !== undefined ? { option } : {}), ...(text ? { text } : {}), ...(translation ? { translation } : {}) }
       : null;
     return this.settle(ownerId, id, 'DONE', {
       resolvedByUserId: ownerId,
@@ -504,12 +567,26 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** The owner refuses the request. The reason is what the asking session reads. */
-  async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
+  async decline(
+    ownerId: string,
+    id: string,
+    reason: string,
+    client: OwnerRequestClient | null = null,
+    sendAsWritten?: boolean,
+  ): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
     const request = await this.get(ownerId, id);
     this.refuseAnsweredElsewhere(request.kind);
-    return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
+    // Settings › Translation: the reason reaches the asking session in the agent language, kept in `answer` beside
+    // the owner's own words in resolution_note, or the decline is refused whole (422 TRANSLATION_FAILED).
+    const translation = await ownerWordsForAgent(note, await translationLanguages(this.prisma, ownerId), sendAsWritten);
+    return this.settle(ownerId, id, 'DECLINED', {
+      resolvedByUserId: ownerId,
+      resolvedClient: client,
+      resolutionNote: note,
+      ...(translation ? { answer: json({ translation }) } : {}),
+    });
   }
 
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */

@@ -227,7 +227,10 @@ private class EvidencePictures(private val resources: ReaderResources, private v
  * it. A device's effects already do. Under a Compose test rule an effect resumes on the thread that resumed it: a decode that finished
  * on a Default worker applied the snapshot and ran the next frame there, and that frame touched views off their thread
  * (EvidenceFilesCardTest, CalledFromWrongThreadException).
+ *
+ * Lint cannot see that [producer] assigns `value` through `scope.producer()`, so its produceState check is suppressed here.
  */
+@Suppress("ProduceStateDoesNotAssignValue")
 @Composable
 private fun <T> producePicture(initial: T, key: Any?, producer: suspend ProduceStateScope<T>.() -> Unit): State<T> =
     produceState(initial, key) { val scope = this; withContext(Dispatchers.Main.immediate) { scope.producer() } }

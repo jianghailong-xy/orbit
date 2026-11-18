@@ -989,15 +989,18 @@ struct ProjectDetailView: View {
 
     private func openItem(_ row: ProjectOpenItemRow, store: ProjectDetailModel, now: Date) -> some View {
         let owner = row.assignee != .coordinator
+        // In the owner's language while a usable translation exists; the card it opens offers Show original.
+        let language = OwnerCardTranslations.ownerLanguage(model.user)
+        let detailLine = row.listDetailLine(owner: language)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Circle().fill(owner ? Color.orange : Color.accentColor).frame(width: 8, height: 8)
                 Text(ProjectPage.who(row)).font(.orbitMeta).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.title).font(.orbitSubtext.weight(.semibold))
-                if !row.detailLine.isEmpty {
-                    Text(row.detailLine).font(.orbitLabel).foregroundStyle(.secondary)
+                Text(row.listTitle(owner: language)).font(.orbitSubtext.weight(.semibold))
+                if !detailLine.isEmpty {
+                    Text(detailLine).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 // §4.7 H1 / §10.8: the rerun or observation handling it, while that is in flight —
                 // the row is still open, and says so rather than "handled", as the web's row does.
@@ -2463,7 +2466,7 @@ struct ProjectDetailView: View {
                 ForEach(ProjectCrossings.ordered(rows)) { row in
                     let asking = crossingAsk?.id == row.id
                     ProjectCrossingRow(
-                        row: row,
+                        source: row,
                         confirming: asking ? crossingAsk?.decision : nil,
                         busy: store.answeringCrossing == row.id,
                         locked: store.answeringCrossing.map { $0 != row.id } ?? false,
@@ -2826,6 +2829,8 @@ private struct ProjectDoneSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var record: ProjectDoneRecord?
     @State private var error: String?
+    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    @State private var showOriginal = false
 
     var body: some View {
         NavigationStack {
@@ -2853,9 +2858,11 @@ private struct ProjectDoneSheet: View {
             let subject = document.doneSubject
             let row = ProjectDone.live(openItems: store.openItems, status: document.status.rawValue)
             let digest = store.confirmation?.currentVersion.digest
+            let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
                 subject: subject,
-                request: row?.doneRequest,
+                // Drawn translated; Record as done sends `row`'s own request, as written.
+                request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: store.confirmation?.confirmation?.confirmedAt,
                 openItems: ProjectDone.openItemsCount(store.openItems),
@@ -2875,7 +2882,11 @@ private struct ProjectDoneSheet: View {
                     confirm: { id, body in await store.confirmCriterion(id, body) },
                     upload: { data, name, mime in
                         try await store.uploadConfirmationShot(data, filename: name, mimeType: mime)
-                    }))
+                    }),
+                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                onFlipTranslation: { showOriginal.toggle() },
+                notYetRefused: store.doneDeclineRefusedUntranslated,
+                onNotYetAsWritten: notYet(row, sendAsWritten: true))
         } else {
             ProgressView().frame(maxWidth: .infinity)
         }
@@ -2897,13 +2908,14 @@ private struct ProjectDoneSheet: View {
     }
 
     /// "Not yet…", on a card the coordinator asked for: the note goes, and the sheet gives way.
-    private func notYet(_ row: ProjectOpenItemRow?) -> ((String) async -> Bool)? {
+    private func notYet(_ row: ProjectOpenItemRow?, sendAsWritten: Bool = false) -> ((String) async -> Bool)? {
         guard let row else { return nil }
         return { note in
-            if let refused = await store.declineDone(itemID: row.itemId, note: note) {
+            if let refused = await store.declineDone(itemID: row.itemId, note: note, sendAsWritten: sendAsWritten) {
                 error = refused
                 return false
             }
+            if store.doneDeclineRefusedUntranslated { return false }
             dismiss()
             return true
         }

@@ -19,10 +19,10 @@ import {
   OWNER_CONFIRMATION_SHOW_LESS,
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
-import { bashCommandRules } from '@orbit/shared';
+import { bashCommandRules, type ApprovalTranslation } from '@orbit/shared';
 import { shownQuestions } from '../lib/translation';
 import type { HeldDecision } from '../lib/approvalDecisions';
-import { UntranslatedDecisionFoot } from './TranslationParts';
+import { CardTranslationFoot, UntranslatedDecisionFoot } from './TranslationParts';
 import { CONDITION_COPY } from '../lib/conditions';
 
 /**
@@ -563,7 +563,7 @@ interface BlockerResolveInput {
   subjectTitle: string;
 }
 
-function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
+function blockerResolveInput(a: ApprovalInfo, shown?: ApprovalTranslation): BlockerResolveInput | null {
   if (!isBlockerResolve(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
   const blocker = (obj.blocker ?? {}) as Record<string, unknown>;
@@ -571,13 +571,15 @@ function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
   return {
     projectTitle: text(obj.projectTitle),
     requiredAction: text(blocker.requiredAction),
-    reason: text(obj.reason),
+    reason: shown?.reason || text(obj.reason),
     kind: text(blocker.kind),
     subjectTitle: text(blocker.subjectTitle),
   };
 }
 
-function createInput(a: ApprovalInfo): CreateInput | null {
+/** `shown`: the card's translation (orbitCardTranslation) while it is drawn translated; each field it
+ *  lacks is the original's. */
+function createInput(a: ApprovalInfo, shown?: ApprovalTranslation): CreateInput | null {
   const project = isProjectCreate(a);
   if (!project && !isTaskCreate(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
@@ -585,15 +587,15 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   const items = Array.isArray(obj.acceptanceCriteriaItems) ? obj.acceptanceCriteriaItems : [];
   return {
     isProject: project,
-    title: text(obj.title),
-    prose: text(project ? obj.goal : obj.description),
+    title: shown?.title || text(obj.title),
+    prose: (project ? shown?.goal : shown?.description) || text(project ? obj.goal : obj.description),
     criteria: project
       ? items
-          .map((c) => text((c as { text?: unknown } | null)?.text))
+          .map((c, i) => shown?.acceptanceCriteriaItems?.[i]?.text || text((c as { text?: unknown } | null)?.text))
           .filter(Boolean)
           .map((t) => `- ${t}`)
           .join('\n')
-      : text(obj.acceptanceCriteria),
+      : shown?.acceptanceCriteria || text(obj.acceptanceCriteria),
     // The same key the batch card reads, for the same reason: the counts are the decision and the
     // body is not. A project create has no dispatch to report, so it carries none.
     preview: project ? null : (obj.preview as BatchPreview | undefined) ?? null,
@@ -601,17 +603,43 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   };
 }
 
-function batchPreview(input: unknown): BatchPreview {
+/** `shown`: the card's translation while it is drawn translated; `shown.tasks[i]` is `preview.tasks[i]`. */
+function batchPreview(input: unknown, shown?: ApprovalTranslation): BatchPreview {
   const obj = (input ?? {}) as { preview?: BatchPreview };
-  return obj.preview ?? {};
+  const preview = obj.preview ?? {};
+  if (!shown?.tasks || !preview.tasks) return preview;
+  return { ...preview, tasks: preview.tasks.map((t, i) => ({ ...t, title: shown.tasks?.[i]?.title || t.title })) };
 }
 
-function dagInput(input: unknown): { preview: DagPreview; note: string } {
+function dagInput(input: unknown, shown?: ApprovalTranslation): { preview: DagPreview; note: string } {
   const obj = (input ?? {}) as { preview?: DagPreview; note?: unknown };
   return {
     preview: obj.preview ?? {},
-    note: typeof obj.note === 'string' ? obj.note : '',
+    note: shown?.note || (typeof obj.note === 'string' ? obj.note : ''),
   };
+}
+
+/**
+ * Settings › Translation on Orbit's own cards (board docs/mocks/session-translation/04-owner-cards.html,
+ * part 2): the card's translation when it carries a field this card draws. Undefined when there is
+ * none, it failed (the card is drawn as the agent wrote it), or the card is not one of these five.
+ * macOS/iOS and Android draw the same fields.
+ */
+export function orbitCardTranslation(a: ApprovalInfo): ApprovalTranslation | undefined {
+  const t = a.translation;
+  if (!t || t.failed) return undefined;
+  const has = isTaskCreate(a)
+    ? Boolean(t.title || t.description || t.acceptanceCriteria)
+    : isProjectCreate(a)
+      ? Boolean(t.title || t.goal || t.acceptanceCriteriaItems?.some((c) => c.text))
+      : isBatch(a)
+        ? Boolean(t.tasks?.some((task) => task.title))
+        : isBlockerResolve(a)
+          ? Boolean(t.reason)
+          : isDagChange(a)
+            ? Boolean(t.note)
+            : false;
+  return has ? t : undefined;
 }
 
 function planText(input: unknown): string {
@@ -751,6 +779,10 @@ export function ApprovalPanel({
   const isQuestion = approval.toolName === 'AskUserQuestion';
   const narrow = useIsMobile();
   const [reviewOpen, setReviewOpen] = useState(false);
+  // One flip for the whole card (board 04-owner-cards, mark A), never persisted.
+  const cardTranslation = orbitCardTranslation(approval);
+  const [cardOriginal, setCardOriginal] = useState(false);
+  const cardShown = cardOriginal ? undefined : cardTranslation;
   const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
@@ -796,10 +828,10 @@ export function ApprovalPanel({
   const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
   const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
   const translatedDescription = shown?.description;
-  const dag = isDagChange(approval) ? dagInput(approval.input) : null;
-  const batch = isBatch(approval) ? batchPreview(approval.input) : null;
-  const create = createInput(approval);
-  const blocker = blockerResolveInput(approval);
+  const dag = isDagChange(approval) ? dagInput(approval.input, cardShown) : null;
+  const batch = isBatch(approval) ? batchPreview(approval.input, cardShown) : null;
+  const create = createInput(approval, cardShown);
+  const blocker = blockerResolveInput(approval, cardShown);
   const skipCheck = skipMergeCheckInput(approval);
   const mergeCheck = mergeCheckChangeInput(approval);
   const deleting = deleteInput(approval, Date.now());
@@ -813,7 +845,8 @@ export function ApprovalPanel({
     : batch
       ? `${batch.taskCount ?? 0} new task${batch.taskCount === 1 ? '' : 's'}`
       : create
-        ? create.title
+        // The agent reads this: the title as it wrote it, whichever language the card is in.
+        ? (createInput(approval)?.title ?? create.title)
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : skipCheck
@@ -909,6 +942,9 @@ export function ApprovalPanel({
             {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
             <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
           </>
+        )}
+        {cardTranslation && (
+          <CardTranslationFoot flipped={cardOriginal} onFlip={() => setCardOriginal((v) => !v)} />
         )}
       </div>
       {!answerable && <UnanswerableNote />}
