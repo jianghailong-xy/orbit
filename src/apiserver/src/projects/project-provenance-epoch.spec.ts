@@ -162,6 +162,11 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // completion-evidence fact above, not Task.sourceSessionId) into its summary; nothing compares it.
   'src/runner-go/bounded_views.go':
     'copies completion-evidence source provenance into a bounded summary; decides nothing',
+  // The undecided-evidence sweep copies an evidence revision's `source_session_id` (the N10
+  // completion-evidence fact, not Task.sourceSessionId) into the open item's session_id so the item
+  // addresses the submitting session; no WHERE, JOIN or branch reads it.
+  'src/apiserver/src/projects/evidence-undecided.ts':
+    'addresses the undecided-evidence open item to the submitting session; decides nothing',
   'src/shared/src/project-progress.ts':
     'types the landing attempt source session for the wire; reads no task provenance',
   // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted
