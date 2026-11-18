@@ -8,11 +8,16 @@ public enum APIError: Error, Equatable {
     case unauthorized
     case invalidResponse
     case notConfigured
+    /// A request was answered 401 and the refresh that should have renewed it could not reach the
+    /// server (timeout, no network, 5xx, 429). Transient: both tokens are still stored, so a caller
+    /// keeps its last good state and retries; it must not sign out.
+    case refreshUnavailable
 }
 
 /// Async REST client for the Orbit control plane (`/api`). Short-lived JWT bearer; on a 401 it makes
 /// one single-flight `POST /auth/refresh` (via the shared `SessionRefresher`) and retries the request
-/// once. `.unauthorized` surfaces only when that refresh fails — the app then prompts re-login.
+/// once. `.unauthorized` surfaces only when the server refuses that refresh — the app then prompts
+/// re-login; a refresh that cannot reach the server surfaces `.refreshUnavailable` instead.
 ///
 /// Uses `dataTask` + a continuation rather than `data(for:)` so it compiles on Linux
 /// Foundation too; the surface is plain `async`/`await`.
@@ -129,7 +134,7 @@ public final class APIClient: @unchecked Sendable {
     public func refreshSession() async -> Bool {
         let refresher = await SessionRefresherRegistry.shared.refresher(
             baseURL: baseURL, tokenStore: tokenStore, session: session)
-        return await refresher.refresh()
+        return await refresher.refresh() == .refreshed
     }
 
     /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
@@ -889,6 +894,7 @@ public final class APIClient: @unchecked Sendable {
             case .unauthorized:    return "you're signed out"
             case .invalidResponse: return "the server's reply couldn't be read"
             case .notConfigured:   return "no server is configured"
+            case .refreshUnavailable: return "the server couldn't be reached to renew your sign-in"
             }
         }
         if error is URLError {
@@ -2626,14 +2632,20 @@ public final class APIClient: @unchecked Sendable {
                 return (data, response)
             case 401:
                 // Try one single-flight refresh, then retry the request with the fresh token.
-                // `.unauthorized` (→ re-login) surfaces only if that refresh also fails.
+                // `.unauthorized` (→ re-login) surfaces only if the server refuses that refresh; a
+                // refresh that can't reach it is transient and leaves both tokens stored.
                 if !didRefresh {
                     let refresher = await SessionRefresherRegistry.shared.refresher(
                         baseURL: baseURL, tokenStore: tokenStore, session: session)
-                    if await refresher.refresh() {
+                    switch await refresher.refresh() {
+                    case .refreshed:
                         didRefresh = true
                         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
                         continue
+                    case .unreachable:
+                        throw APIError.refreshUnavailable
+                    case .refused:
+                        break
                     }
                 }
                 throw APIError.unauthorized

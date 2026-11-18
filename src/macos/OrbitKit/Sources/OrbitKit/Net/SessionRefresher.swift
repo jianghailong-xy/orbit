@@ -14,7 +14,7 @@ actor SessionRefresher {
     private let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
-    private var inFlight: Task<Bool, Never>?
+    private var inFlight: Task<RefreshOutcome, Never>?
 
     init(baseURL: URL, tokenStore: TokenStore, session: URLSession) {
         self.baseURL = baseURL
@@ -22,49 +22,63 @@ actor SessionRefresher {
         self.session = session
     }
 
-    /// Attempt a refresh, coalescing concurrent callers onto one in-flight request. Resolves to
-    /// whether a fresh access token is now stored. Never throws — a failure just means "couldn't
-    /// refresh", and the caller falls through to its normal 401 handling (re-login).
-    func refresh() async -> Bool {
+    /// Attempt a refresh, coalescing concurrent callers onto one in-flight request. Never throws:
+    /// the outcome says whether a fresh access token is now stored, and if not, whether the server
+    /// refused the refresh token (re-login) or simply could not be reached (keep it, try later).
+    func refresh() async -> RefreshOutcome {
         if let inFlight { return await inFlight.value }
-        let task = Task<Bool, Never> { [self] in await performRefresh() }
+        let task = Task<RefreshOutcome, Never> { [self] in await performRefresh() }
         inFlight = task
         let ok = await task.value
         inFlight = nil
         return ok
     }
 
-    private func performRefresh() async -> Bool {
+    private func performRefresh() async -> RefreshOutcome {
         guard let refreshToken = tokenStore.refreshToken(for: baseURL),
               let body = try? JSONEncoder().encode(RefreshRequest(refreshToken: refreshToken))
-        else { return false }
+        else { return .refused }
         var req = URLRequest(url: baseURL.appendingPathComponent("api/auth/refresh"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
-        guard let data = try? await rawData(req),
+        guard let (data, status) = try? await rawResponse(req) else { return .unreachable }
+        // Only the server saying no to this refresh token ends the session. A 5xx, a 429, a proxy's
+        // page or a body we can't read says nothing about the token: keep it and try again later.
+        if status == 401 || status == 403 { return .refused }
+        guard (200..<300).contains(status),
               let decoded = try? JSONDecoder().decode(RefreshResponse.self, from: data)
-        else { return false }
+        else { return .unreachable }
         tokenStore.setToken(decoded.accessToken, for: baseURL)
         tokenStore.setRefreshToken(decoded.refreshToken, for: baseURL)
-        return true
+        return .refreshed
     }
 
-    /// Raw request → body bytes for a 2xx only; throws otherwise. Deliberately does NOT go through
-    /// `APIClient.send`, so a refresh can never re-enter the 401 refresh-retry path (no recursion).
-    private func rawData(_ req: URLRequest) async throws -> Data {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
+    /// Raw request → body bytes and status; throws only on a transport failure. Deliberately does NOT
+    /// go through `APIClient.send`, so a refresh can never re-enter the 401 refresh-retry path.
+    private func rawResponse(_ req: URLRequest) async throws -> (Data, Int) {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(Data, Int), Error>) in
             let task = session.dataTask(with: req) { data, response, error in
                 if let error { cont.resume(throwing: error); return }
-                guard let http = response as? HTTPURLResponse, let data,
-                      (200..<300).contains(http.statusCode) else {
+                guard let http = response as? HTTPURLResponse else {
                     cont.resume(throwing: APIError.invalidResponse); return
                 }
-                cont.resume(returning: data)
+                cont.resume(returning: (data ?? Data(), http.statusCode))
             }
             task.resume()
         }
     }
+}
+
+/// How a refresh ended.
+enum RefreshOutcome: Sendable {
+    /// A fresh token pair is stored.
+    case refreshed
+    /// The server answered 401/403 to the refresh, or no refresh token is stored: the session is over.
+    case refused
+    /// The server could not be reached or answered something else (timeout, 5xx, 429, unreadable
+    /// body). The stored tokens are left as they were.
+    case unreachable
 }
 
 /// Process-wide registry: one `SessionRefresher` per server host, so every `APIClient` for that host

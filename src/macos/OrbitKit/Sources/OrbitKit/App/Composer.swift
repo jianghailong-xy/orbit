@@ -330,7 +330,7 @@ public enum ComposerLogic {
         if let apiError = error as? APIError {
             switch apiError {
             case .http(let status, _):          return status >= 500
-            case .invalidResponse:              return true
+            case .invalidResponse, .refreshUnavailable: return true
             case .unauthorized, .notConfigured: return false
             }
         }
