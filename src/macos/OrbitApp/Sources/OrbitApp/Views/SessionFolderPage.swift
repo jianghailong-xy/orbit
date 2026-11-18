@@ -20,16 +20,36 @@ import OrbitKit
 /// A folder's row at the top of a workspace's session list (§3.3): the folder glyph, its name, and
 /// the one state it reports for the sessions inside it plus how many there are.
 struct SessionFolderRowView: View {
-    let row: SessionFolderRow
+    private let name: String
+    private let icon: String
+    private let sessionCount: Int
+    private let status: WorkspaceNavigationStatus
+    private let runningDot: Bool
+
+    init(row: SessionFolderRow) {
+        name = row.folder.name
+        icon = "folder"
+        sessionCount = row.sessionCount
+        status = row.status
+        runningDot = false
+    }
+
+    init(scheduledRuns: ScheduledRunsFolder.Summary) {
+        name = ScheduledRunsCopy.title
+        icon = "clock"
+        sessionCount = scheduledRuns.sessionCount
+        status = scheduledRuns.needsYou > 0 ? .needsYou(scheduledRuns.needsYou) : .idle
+        runningDot = scheduledRuns.running
+    }
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "folder")
+            Image(systemName: icon)
                 .font(.orbitGlyph)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 24)
                 .accessibilityHidden(true)
-            Text(row.folder.name)
+            Text(name)
                 .lineLimit(1)
                 .foregroundStyle(.primary)
                 .layoutPriority(2)
@@ -37,7 +57,7 @@ struct SessionFolderRowView: View {
             // The same three marks, in the same order and the same words, as the drawer's Workspace
             // row (`WorkspaceNavigationRow`): the folder stands in for the sessions it hides, so it
             // has to say what they would have said.
-            switch row.status {
+            switch status {
             case .needsYou(let count):
                 NeedsYouCountCapsule(count: count)
             case .running:
@@ -49,7 +69,11 @@ struct SessionFolderRowView: View {
             case .idle:
                 EmptyView()
             }
-            Text("\(row.sessionCount)")
+            if runningDot {
+                Circle().fill(Color.accentColor).frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            }
+            Text("\(sessionCount)")
                 .font(.orbitMeta)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
@@ -61,17 +85,17 @@ struct SessionFolderRowView: View {
         .padding(.vertical, 6)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityValue(folderStatusWords)
+        .accessibilityValue(runningDot ? "\(folderStatusWords), session running" : folderStatusWords)
     }
 
     /// What VoiceOver reads for the state the trailing slot draws — the same words the session rows
     /// use for the same facts.
     private var folderStatusWords: String {
-        switch row.status {
+        switch status {
         case .needsYou(let count): return "\(count) waiting for you"
         case .running:             return "Session running"
         case .jobs:                return "Background job running"
-        case .idle:                return "\(row.sessionCount) sessions"
+        case .idle:                return "\(sessionCount) sessions"
         }
     }
 }
@@ -177,7 +201,8 @@ struct SessionFolderPage: View {
         SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)
     }
     private var query: String {
-        searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !address.isScheduledRuns else { return "" }
+        return searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
     private var isSearching: Bool { !query.isEmpty }
 
@@ -205,14 +230,16 @@ struct SessionFolderPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: actionPlacement) { folderMenu }
-            ToolbarItem(placement: actionPlacement) {
-                Button {
-                    app.startComposingSession(inFolder: address.folderID, of: address.agentID)
-                } label: {
-                    Label("New session", systemImage: "square.and.pencil")
+            if !address.isScheduledRuns {
+                ToolbarItem(placement: actionPlacement) { folderMenu }
+                ToolbarItem(placement: actionPlacement) {
+                    Button {
+                        app.startComposingSession(inFolder: address.folderID, of: address.agentID)
+                    } label: {
+                        Label("New session", systemImage: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Start a new session in \(titleText)")
                 }
-                .accessibilityLabel("Start a new session in \(titleText)")
             }
         }
         // The two management asks, in the same words the row's long-press menu asks them in.
@@ -236,7 +263,11 @@ struct SessionFolderPage: View {
         // Completed keeps its poll; Open is served by the app's shared snapshot, so one read is
         // enough there. The poll follows the control stream, as the workspace's own Completed list
         // does (`ViewPoll`, docs/list-freshness-design.md §4 R6).
-        .task(id: "\(address.agentID)|\(address.view.rawValue)") {
+        .task(id: address) {
+            if address.isScheduledRuns {
+                await app.pollScheduledRuns(address)
+                return
+            }
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
             await app.projects?.load()
             guard address.view != .open else { return }
@@ -253,11 +284,11 @@ struct SessionFolderPage: View {
         @Bindable var app = app
         // One grouping, regrouped only when its inputs change, which the list's closures and its
         // empty state share (see the workspace list's `body`).
-        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
-        let sessions = grouping.folderListing.sessions
-        let timeSections = grouping.timeSections
-        let projectRows = grouping.projectRows
-        let projectMarks = grouping.projectListing.marks
+        let grouping = address.isScheduledRuns ? nil : listingMemo.value(for: listInputs, compute: Self.grouping)
+        let sessions = grouping?.folderListing.sessions ?? app.agents?.scheduledRuns(in: address) ?? []
+        let timeSections = grouping?.timeSections ?? SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)
+        let projectRows = grouping?.projectRows ?? [:]
+        let projectMarks = grouping?.projectListing.marks ?? [:]
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
                 searchResults
@@ -275,7 +306,11 @@ struct SessionFolderPage: View {
         .rowSwipeList(rowSwipe)
         #endif
         .refreshable {
-            await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            if address.isScheduledRuns {
+                await app.agents?.loadScheduledRuns(address)
+            } else {
+                await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
+            }
         }
         .overlay {
             if isSearching {
@@ -283,6 +318,8 @@ struct SessionFolderPage: View {
                     ContentUnavailableView("No matches", systemImage: "magnifyingglass",
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
+            } else if sessions.isEmpty && address.isScheduledRuns {
+                ContentUnavailableView(ScheduledRunsCopy.empty, systemImage: "clock")
             } else if sessions.isEmpty && !(app.agents?.sessionsLoading ?? false) {
                 ContentUnavailableView("Nothing in this folder", systemImage: "folder")
             }
@@ -307,7 +344,7 @@ struct SessionFolderPage: View {
         .accessibilityAddTraits(.isHeader)
     }
 
-    private var titleText: String { folder?.name ?? "Folder" }
+    private var titleText: String { address.isScheduledRuns ? ScheduledRunsCopy.title : folder?.name ?? "Folder" }
 
     /// The way back to the workspace's list and the page's actions, where each platform's bar puts
     /// them (as the project's sessions page places its own).
