@@ -322,6 +322,15 @@ export interface ProjectIntegrationJob<Instant = string> {
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
   retryable: boolean;
+  /** Whether the owner's "Land without the check" (`POST /projects/:id/tasks/:taskId/integration/
+   *  skip-merge-check`) takes this landing now: a task's landing in flight, before its push, that
+   *  runs a landing check and was not already asked to stop. The server's answer, so a client never
+   *  draws the button on a landing the door would refuse. Absent from an older server. */
+  skippable?: boolean;
+  /** Where a skip of this landing's check stands: `STOPPING` while the generation the owner skipped
+   *  is still answering its stop, `SKIPPED` on the generation that runs without the check; null
+   *  otherwise. Absent from an older server. */
+  skipCheck?: 'STOPPING' | 'SKIPPED' | null;
 }
 
 // ── The landing session's view (contract §2.9 LS1, LS6) ─────────────────────────────────────────

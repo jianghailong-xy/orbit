@@ -133,7 +133,9 @@ import {
 } from './project-integration-retry';
 import {
   INTEGRATION_SKIP_CHECK_NOT_THIS_PROJECT,
+  SKIP_CHECK_STOP_CAUSE,
   decideIntegrationSkipCheck,
+  inFlightSkipRefusal,
   isApprovalId,
   notAnApprovalId,
 } from './project-integration-skip-check';
@@ -479,6 +481,26 @@ export interface IntegrationObserved {
  */
 export interface IntegrationSkipChecked extends IntegrationRetried {
   /** The check that did not run, who approved skipping it, and the card it was approved on. */
+  skippedCheck: SkippedMergeCheckRecord;
+}
+
+/**
+ * The owner skipped the landing check of a landing that was still in flight (§2.4 J-S5): the
+ * generation in flight was stopped, and the next one lands without the check.
+ */
+export interface InFlightLandingSkipped {
+  taskId: string;
+  /** The generation that was in flight, and was stopped for this. */
+  stoppedJobId: string;
+  /** QUEUED: the stopped generation ended on the spot and the one without the check is queued.
+   *  STOPPING: its runner was asked to stop, and the one without the check is queued when it
+   *  answers — unless that answer is that it landed. */
+  state: 'QUEUED' | 'STOPPING';
+  /** The generation without the check, once queued; null while STOPPING. */
+  jobId: string | null;
+  generation: number | null;
+  landingSessionId: string | null;
+  reason: string;
   skippedCheck: SkippedMergeCheckRecord;
 }
 
@@ -2540,6 +2562,23 @@ export class ProjectOpenItemService {
    * all. The check is skipped, never passed: the row says so, and so does any item the landing goes
    * on to open.
    */
+  // The coordinator's door only ever answers a failed landing; the owner's may also answer one in
+  // flight (`skipInFlightLandingCheck`), so only the owner's call is typed with both answers.
+  skipIntegrationMergeCheck(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string; approvalId?: string },
+    actingSessionId: string | undefined,
+  ): Promise<IntegrationSkipChecked>;
+  skipIntegrationMergeCheck(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string; approvalId?: string },
+    actingSessionId: string | undefined,
+    requester: { userId: string },
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped>;
   async skipIntegrationMergeCheck(
     ownerId: string,
     projectId: string,
@@ -2547,7 +2586,7 @@ export class ProjectOpenItemService {
     given: { reason?: string; approvalId?: string },
     actingSessionId: string | undefined,
     requester?: { userId: string },
-  ): Promise<IntegrationSkipChecked> {
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped> {
     const reason = rerunReason(given);
     const approvalId = typeof given?.approvalId === 'string' ? given.approvalId.trim() : '';
     const project = await this.prisma.project.findFirst({
@@ -2593,6 +2632,12 @@ export class ProjectOpenItemService {
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
+      if (ownerRequester && newestLanding
+        && (newestLanding.state === 'QUEUED' || newestLanding.state === 'RUNNING')) {
+        return this.skipInFlightLandingCheck(tx, {
+          ownerId, projectId, taskId, taskStatus: locked.status, jobId: newestLanding.id, reason,
+        });
+      }
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -2701,14 +2746,116 @@ export class ProjectOpenItemService {
     }, loggedRetry(this.logger, 'projectOpenItem.skipIntegrationMergeCheck'));
   }
 
-  /** The account owner's user-channel door for skipping one landing's merge check. */
+  /**
+   * The account owner's user-channel door for skipping one landing's merge check — a failed one, as
+   * the coordinator's card-gated door does, or one still in flight (`skipInFlightLandingCheck`).
+   */
   async skipIntegrationMergeCheckAsOwner(
     ownerId: string,
     projectId: string,
     taskId: string,
     given: { reason?: string },
-  ): Promise<IntegrationSkipChecked> {
+  ): Promise<IntegrationSkipChecked | InFlightLandingSkipped> {
     return this.skipIntegrationMergeCheck(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
+  }
+
+  /**
+   * The owner's "Land without the check" on a landing still in flight (§2.4 J-S5): the same skip
+   * as after a failed check, asked before the check has answered — the check is long, and the owner
+   * has decided this landing does not wait for it.
+   *
+   * J3 allows one landing of a task in flight, so the generation in flight is stopped first, by the
+   * stop every door uses (`stopInFlightJob`, J-T8). A QUEUED one, or one whose runner went silent
+   * past its limit, ends on the spot, and the generation without the check is queued here. A live
+   * claim is only ASKED, and the stop's own line carries the skip: the result transaction queues the
+   * generation without the check once the runner has answered (`queueSkippedLandingAfterStop`).
+   *
+   * Refused when the landing is past the push (it may already have landed), already asked to stop,
+   * already the generation without the check, or when the project runs no landing check at all —
+   * the same rule (`inFlightSkipRefusal`) that decides whether the landing card offers the button.
+   * The owner's press is the approval: no card, and the skip columns name them.
+   */
+  private async skipInFlightLandingCheck(
+    tx: Prisma.TransactionClient,
+    input: {
+      ownerId: string; projectId: string; taskId: string; taskStatus: string; jobId: string; reason: string;
+    },
+  ): Promise<InFlightLandingSkipped> {
+    const { ownerId, projectId, taskId, reason } = input;
+    if (input.taskStatus !== 'DONE') {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: `this task is ${input.taskStatus}, not DONE, so its landing is about to be stopped `
+          + 'anyway: its next DONE lands the work.',
+      });
+    }
+    // Rank 55 before the job row's rank-60 write, as the stop door takes it: this orders the stop
+    // against a result or a DONE that would queue the next generation.
+    const [codebase] = await tx.$queryRaw<Array<{
+      landingCheckCommand: string | null; mergeCheckCommand: string | null;
+    }>>(Prisma.sql`
+      SELECT "landing_check_command" AS "landingCheckCommand",
+             "merge_check_command" AS "mergeCheckCommand"
+        FROM "project_codebase"
+       WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
+         FOR UPDATE`);
+    const job = await tx.projectIntegrationJob.findUnique({
+      where: { id: input.jobId },
+      select: {
+        id: true, kind: true, state: true, phase: true, cancelRequestedAt: true, skipMergeCheck: true,
+        progressProtocol: true, pushReportedGeneration: true, claimGeneration: true,
+      },
+    });
+    if (!job) throw new NotFoundException('landing not found');
+    const refusal = inFlightSkipRefusal({
+      ...job,
+      landingCheckCommand: codebase?.landingCheckCommand ?? null,
+      mergeCheckCommand: codebase?.mergeCheckCommand ?? null,
+    });
+    if (refusal) throw new ConflictException(refusal);
+
+    const skippedCheck = { reason, approvedByUserId: ownerId, approvalId: null };
+    const stopped = await stopInFlightJob(tx, {
+      projectId,
+      jobId: job.id,
+      now: new Date(),
+      cause: SKIP_CHECK_STOP_CAUSE,
+      actor: { type: 'OWNER', userId: ownerId },
+      reason,
+      data: { skip: { reason, approvedByUserId: ownerId } },
+    });
+    if (stopped.outcome === 'NONE') {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'this landing moved on while the skip was being decided — it was claimed, finished '
+          + 'or stopped by another press. Read the landing again.',
+      });
+    }
+    if (stopped.outcome === 'STOP_REQUESTED') {
+      return {
+        taskId, stoppedJobId: job.id, state: 'STOPPING',
+        jobId: null, generation: null, landingSessionId: null, reason, skippedCheck,
+      };
+    }
+    // A stopped generation releases the enqueue a reopened task's second DONE was owed (J-T8),
+    // exactly as the stop door does; that generation is the new work's, and it runs the check.
+    await this.queueDeferredDoneAfterStop(tx, ownerId, taskId);
+    const queued = await queueLandingRetry(tx, {
+      ownerId, projectId, taskId, skipMergeCheck: skippedCheck,
+    });
+    if (!queued) {
+      throw new ConflictException({
+        code: INTEGRATION_RETRY_NOT_APPLICABLE,
+        message: 'the landing was stopped but could not be queued again: the task has no work branch '
+          + 'to hand the line, the project no longer integrates on a branch of its own, or another '
+          + 'landing of this task was queued first.',
+      });
+    }
+    return {
+      taskId, stoppedJobId: job.id, state: 'QUEUED',
+      jobId: queued.jobId, generation: queued.generation, landingSessionId: queued.landingSessionId,
+      reason, skippedCheck,
+    };
   }
 
   /**
