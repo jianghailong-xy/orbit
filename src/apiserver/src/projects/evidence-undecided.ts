@@ -1,5 +1,8 @@
 import { Prisma } from '@prisma/client';
 
+import { completionEvidenceWakeKeySql } from './completion-input';
+import { projectCoordinatorCanTake } from './project-open-item';
+
 /**
  * The owner's item about evidence its coordinator has not decided (`EVIDENCE_UNDECIDED`, migration 1110).
  *
@@ -14,15 +17,30 @@ import { Prisma } from '@prisma/client';
  *
  * THE RULE
  * ========
- * The coordinator is still asked first: nothing about the evidence delivery changes. The escalation
- * clock (`ProjectOpenItemEscalationService`) opens ONE owner item per waiting revision once
+ * The coordinator is still asked first: nothing about the evidence delivery changes. And the clock
+ * keeps the owner's rule for every exception item (decision of 2026-10-08, contract revision 13 §4.6,
+ * `escalatesAt`): once a coordinator that is still live has taken the work up, no timer hands it to
+ * the owner, and while the coordinator can still take it, the work waits for it with no deadline. So
+ * the escalation clock (`ProjectOpenItemEscalationService`) opens ONE owner item per waiting revision
+ * only when
  *
- *  - its project's coordinator switch is on (a project without one has the owner's evidence card from
- *    the start, so there is no coordinator to have failed to decide);
+ *  - the revision went the coordinator-first way: its project's coordinator switch is on, or a
+ *    delivery of it was attempted in this project (a project that was never Automatic has the owner's
+ *    evidence card from the start, so there is no coordinator to have failed to decide);
  *  - the revision is its task's latest, carries no decision, and the task is still OPEN or IN_PROGRESS
  *    under EVIDENCE_JUDGMENT;
- *  - and the project's `exceptionEscalationSeconds` — the window an exception item escalates after —
- *    have passed since the revision was submitted.
+ *  - the project's coordinator can NOT take a turn now: it is switched off, has no conversation, or
+ *    that conversation is ended, filed, trashed, down with no retry pending, or has a cancel requested.
+ *    "Can take" is `projectCoordinatorCanTake` — the very predicate the open-item clock uses
+ *    (`openItemCoordinatorCanTake`, commit b27c6bfcfc) — plus the cancel the evidence delivery itself
+ *    refuses on (`CoordinatorDeliveryService`). A live coordinator, or one parked on a retry it armed,
+ *    holds the revision whether it has taken the delivery up or not;
+ *  - and the project's `exceptionEscalationSeconds` have passed since the last delivery of this
+ *    revision a coordinator took up (its turn's `delivered_at`), or since submission when no delivery
+ *    was ever taken up.
+ *
+ * An item already open stays the owner's if the coordinator comes back; deciding it, from either side,
+ * ends it.
  *
  * The item is OWNER / ESCALATED from birth (it is never delivered to the coordinator: the coordinator
  * already had the evidence), keyed `EV:<evidenceId>`, so a tick a minute opens it once, and a revision
@@ -208,17 +226,43 @@ export function openUndecidedEvidenceStatement(): Prisma.Sql {
   // PostgreSQL to infer a type for inside the title's concatenation.
   const kind = Prisma.raw(`'${EVIDENCE_UNDECIDED_KIND}'`);
   const title = Prisma.raw(`'${EVIDENCE_UNDECIDED_TITLE}: '`);
+  // The revision's delivery keys: its own, and the one a confirmed move hands it into this project under.
+  const ownKey = completionEvidenceWakeKeySql(Prisma.sql`t."id"`, 'e');
+  const handedKey = completionEvidenceWakeKeySql(Prisma.sql`t."id"`, 'e', Prisma.sql`t."project_id"`);
   return Prisma.sql`
       WITH due AS MATERIALIZED (
         SELECT e."id" AS "evidenceId", t."id" AS "taskId", t."project_id" AS "projectId"
           FROM "task_completion_evidence" e
           JOIN "task" t ON t."id" = e."task_id" AND t."owner_id" = e."owner_id"
           JOIN "project" p ON p."id" = t."project_id" AND p."owner_id" = t."owner_id"
-         WHERE p."coordinator_enabled" = true
-           AND p."status" = 'OPEN'
+         WHERE p."status" = 'OPEN'
            AND t."completion_criterion" = 'EVIDENCE_JUDGMENT'
            AND t."status" IN ('OPEN', 'IN_PROGRESS')
-           AND (e."submitted_at" AT TIME ZONE 'UTC')
+           -- The coordinator-first way: Automatic now, or this revision was put to a coordinator here.
+           AND (p."coordinator_enabled" = true OR EXISTS (
+             SELECT 1 FROM "project_coordinator_wake" asked
+              WHERE asked."project_id" = t."project_id"
+                AND asked."idempotency_key" IN (${ownKey}, ${handedKey})))
+           -- No timer while the coordinator can still take its turn (the open-item clock's rule).
+           AND NOT (${projectCoordinatorCanTake(Prisma.sql`t."project_id"`)}
+                    AND NOT EXISTS (
+                      SELECT 1 FROM "project" cancelled_project
+                        JOIN "session" cancelled ON cancelled."id" = cancelled_project."coordinator_session_id"
+                       WHERE cancelled_project."id" = t."project_id"
+                         AND cancelled."cancel_requested_at" IS NOT NULL))
+           -- The window, from the last delivery of this revision a coordinator took up, else from
+           -- submission.
+           AND COALESCE((
+                 SELECT max(taken."delivered_at" AT TIME ZONE 'UTC')
+                   FROM "project_coordinator_wake" delivered
+                   JOIN "conversation_turn" taken
+                     ON taken."session_id" = delivered."session_id"
+                    AND taken."client_turn_id" = delivered."delivery"->>'clientTurnId'
+                  WHERE delivered."project_id" = t."project_id"
+                    AND delivered."status" = 'DELIVERED'
+                    AND delivered."idempotency_key" IN (${ownKey}, ${handedKey})
+                    AND taken."delivered_at" IS NOT NULL),
+               e."submitted_at" AT TIME ZONE 'UTC')
                + (p."exception_escalation_seconds" * interval '1 second') <= now()
            AND NOT EXISTS (
              SELECT 1 FROM "task_evidence_decision" d WHERE d."evidence_id" = e."id")

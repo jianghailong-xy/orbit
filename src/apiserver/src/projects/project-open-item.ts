@@ -954,11 +954,22 @@ export function openItemDeliveredAt(alias: string): Prisma.Sql {
  */
 export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
+  return projectCoordinatorCanTake(Prisma.sql`${item}."project_id"`);
+}
+
+/**
+ * `openItemCoordinatorCanTake`'s rule for any project, named by the SQL expression `projectId`: its
+ * coordinator conversation is switched on, not filed, trashed or completed, and live or FAILED with an
+ * auto-retry pending. The one definition, shared by the open-item clock and the evidence clock
+ * (`evidence-undecided.ts`), so the two cannot come to disagree about whether a coordinator can still
+ * take its turn. Parameter-free when `projectId` is.
+ */
+export function projectCoordinatorCanTake(projectId: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
     SELECT 1
       FROM "project" taker_project
       JOIN "session" taker ON taker."id" = taker_project."coordinator_session_id"
-     WHERE taker_project."id" = ${item}."project_id"
+     WHERE taker_project."id" = ${projectId}
        AND taker_project."coordinator_enabled" = true
        AND taker."deleted_at" IS NULL
        AND taker."completed_at" IS NULL
