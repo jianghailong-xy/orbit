@@ -57,6 +57,7 @@ import {
 } from '../sessions/card-translation';
 import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { ownerWordsForAgent } from '../sessions/reply-translation';
+import { EVIDENCE_UNDECIDED_KIND, evidenceUndecidedDetailLine } from './evidence-undecided';
 import {
   AskedQuestion,
   CoordinatorQuestion,
@@ -1745,6 +1746,17 @@ export class ProjectOpenItemService {
     // §10.7: the owner's from birth and never delivered to a coordinator — it asks about authority,
     // which no conversation holds — so there is nowhere to send it either. Undoing the work is a
     // task the coordinator files when asked in "Chat about this", not this door.
+    // 1110: the coordinator already had this evidence and did not decide it; the item is the owner's.
+    // To ask the coordinator again, "Chat about this" sends it a message.
+    if (item.kind === EVIDENCE_UNDECIDED_KIND) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_RETURNABLE,
+        message:
+          'this item is never delivered to a coordinator conversation: the coordinator was already '
+          + 'handed this evidence and has not decided it. Review the evidence and confirm it or send '
+          + 'it back, or use Chat about this to ask the coordinator to decide.',
+      });
+    }
     if (item.kind === LANDED_WITHOUT_CONFIRMATION_KIND) {
       throw new ConflictException({
         code: OPEN_ITEM_NOT_RETURNABLE,
@@ -4362,6 +4374,7 @@ function detailLine(kind: string, payload: unknown): string {
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind === LANDING_UNOBSERVED_KIND) return landingUnobservedDetailLine(payload);
   if (kind === LANDED_WITHOUT_CONFIRMATION_KIND) return landedWithoutConfirmationDetailLine(payload);
+  if (kind === EVIDENCE_UNDECIDED_KIND) return evidenceUndecidedDetailLine(payload);
   // §10.5 O-L8: what the error code alone would have a reader conclude about the task is not so.
   const outdatedRunner = outdatedRunnerOf(payload);
   if (kind === 'INTEGRATION_ERROR' && outdatedRunner) {

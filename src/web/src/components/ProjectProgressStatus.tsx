@@ -297,6 +297,8 @@ export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
 export const REVIEW_ACTION_LABEL = ACTION_LABEL.REVIEW!;
 export const RETRY_ACTION_LABEL = ACTION_LABEL.RETRY!;
 export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
+/** What Review does on an `EVIDENCE_UNDECIDED` item (1110): it opens the task's evidence, not a merge card. */
+export const EVIDENCE_REVIEW_CONSEQUENCE = 'Open the task’s evidence to confirm it or send it back.';
 export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
 export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
 export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
@@ -344,6 +346,7 @@ function actionConsequence(
   row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind' | 'lease'>,
   action: OpenItemAction,
 ): string {
+  if (action === 'REVIEW' && row.kind === 'EVIDENCE_UNDECIDED') return EVIDENCE_REVIEW_CONSEQUENCE;
   if (action === 'RETRY') {
     // Three doors under one name, each wearing the words for what it actually re-runs: a
     // candidate's check, a task's landing, or — on a failed task — the task itself
@@ -407,6 +410,10 @@ function actionHref(
 ): string | null {
   switch (action) {
     case 'REVIEW':
+      // 1110: undecided evidence is reviewed on its task, whose Evidence section shows the revision.
+      if (row.kind === 'EVIDENCE_UNDECIDED') {
+        return row.taskId ? `/tasks/${encodeURIComponent(encodeId(row.taskId))}` : null;
+      }
       // The merge card, mounted beside this list by both hosts — the same anchor the question's
       // press uses, and for the same reason: one merge, confirmed in one place (§7.5).
       return row.promotionId != null

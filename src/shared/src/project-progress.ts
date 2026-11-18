@@ -955,7 +955,10 @@ export type OpenItemKind =
   | 'DELIVERY_REVIEW'
   | 'LANDING_LEASE_EXPIRED'
   | 'LANDING_UNOBSERVED'
-  | 'LANDED_WITHOUT_CONFIRMATION';
+  | 'LANDED_WITHOUT_CONFIRMATION'
+  /** 1110: a task's latest evidence revision its coordinator has not decided within the project's
+   *  window, the owner's from birth. */
+  | 'EVIDENCE_UNDECIDED';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
