@@ -15,7 +15,7 @@ FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb98
 # Preserve the whole native layout, including codex-path/rg and package resources.
 # Invoke its native binary directly so there is no npm wrapper in the signal path.
 RUN test "$(node --version)" = v26.10.0 \
- && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.169.1 \
+ && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.170.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex \
  && test -x /opt/codex/bin/codex \
  && test -x /opt/codex/codex-path/rg
@@ -74,10 +74,10 @@ RUN case "$TARGETARCH" in \
  && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
  && rm /tmp/kimi
 RUN case "$TARGETARCH" in \
-      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=713ae840845d74736e2d4a96f5d84e3353d614e73a875793ddf500997ccee09595448cebfd8e94fdd90ce2a0fa97707bd1cc29763dcfe01c945d80c92234378f ;; \
-      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=f9f5c7ebc47a8b8de536acca8116b1f5a43dca614cde94008fe5a510517b23535fb281d85416930d76e76478858bf3dc66ea6d1b0c9b6eeadcfabe4d8ef2a807 ;; \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=dad3c015e8964fcdc1639b13b7152f4cb84cb1bde385707e2bcdf095d6f1831f4f6521199aec499cc052f9e99906b7fdbc52c273df064d5cb7c84b068ba3ce50 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=5f703c88e01851061c87c07b1a4ca54c1f5a6826ffada9fb005974a099e9a552ddb1f9ba2fe1194e2829803482c86084babf8cf91530a528bc7f659613600585 ;; \
       *) exit 1 ;; esac \
- && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.10-5253791805734912/$path" \
+ && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.11-6132547114106880/$path" \
  && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
  && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
  && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
@@ -219,8 +219,8 @@ store = Path(os.environ['ORBIT_ENGINE_STORE'])
 if platform.machine() == 'x86_64':
     actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
     actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
-expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.169.1',
-                     'claude': '2.1.327 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.10'}
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.170.0',
+                     'claude': '2.1.327 (Claude Code)', 'opencode': '1.19.6', 'kimi': '2.6.3', 'agy': '1.5.11'}
 expected_versions.update(chromium='Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)',
                          xvfb='2:21.1.16-1.3+deb13u4', x11vnc='x11vnc: 0.9.17 lastmod: 2025-04-11',
                          fontsNotoCjk='1:20240730+repack1-1', fontsNotoColorEmoji='2.051-0+deb13u1',
