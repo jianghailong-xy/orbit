@@ -1,11 +1,24 @@
 // Settings › Translation in a conversation (board docs/mocks/session-translation/01-board.png,
 // frames 4–6): the foot under a translated message, its per-message Show original toggle, and the
 // held and failed states. The server translates; these only draw what it wrote and call its doors.
-import { DEFAULT_AGENT_LANGUAGE, type ReplyTranslation, type TranslationLanguage, type TurnTranslation } from '@orbit/shared';
+import {
+  DEFAULT_AGENT_LANGUAGE,
+  translationFailureSentence,
+  type ReplyTranslation,
+  type TranslationFailureReason,
+  type TranslationLanguage,
+  type TurnTranslation,
+} from '@orbit/shared';
 import { QueryClientContext } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { meQuery, type Me } from '../lib/queries';
-import { answerRefusedUntranslated, ownerLanguageTranslation, sentToAgentLabel, TRANSLATION_COPY as COPY } from '../lib/translation';
+import {
+  answerRefusedUntranslated,
+  ownerLanguageTranslation,
+  refusalReasonOf,
+  sentToAgentLabel,
+  TRANSLATION_COPY as COPY,
+} from '../lib/translation';
 
 /** What the open conversation can do about a translation, provided by WorkspaceView. `on` is the
  *  account's switch with the server able to translate: a reply streaming then is greyed (2A). */
@@ -90,7 +103,8 @@ const Sep = () => <span className="chat-translate-sep">·</span>;
 /**
  * The owner's message: "Show original" ↔ "Show translation" once delivered, the press alone after
  * the copy button and time (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation
- * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written".
+ * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written" — the first sentence saying why
+ * when the turn carries `failureReason` (docs/ux/translation-failure-policy.html, frames 4B and 7).
  */
 export function UserTranslationFoot({
   translation,
@@ -114,7 +128,7 @@ export function UserTranslationFoot({
     case 'FAILED':
       return (
         <span className="chat-translate-foot is-error">
-          <span>{COPY.sendFailed}</span>
+          <span>{translationFailureSentence('message', translation.failureReason, translation.httpStatus)}</span>
           <Sep />
           <FootAction label={COPY.retry} onPress={actions && turnId ? () => actions.retryTurn(turnId) : undefined} />
           <Sep />
@@ -143,18 +157,23 @@ export function UserTranslationFoot({
 
 /**
  * An approval card whose answer the server could not translate, so nothing was recorded (1A): the
- * same "Couldn't translate, so it wasn't sent · Retry · Send as written" as a held message.
+ * same "Couldn't translate, so it wasn't sent · Retry · Send as written" as a held message; with the refusal's
+ * `failureReason`, the first sentence says why and names "your answer" (policy board frame 5).
  */
 export function UntranslatedDecisionFoot({
   onRetry,
   onSendAsWritten,
+  failureReason,
+  httpStatus,
 }: {
   onRetry: () => Promise<unknown>;
   onSendAsWritten: () => Promise<unknown>;
+  failureReason?: TranslationFailureReason;
+  httpStatus?: number;
 }) {
   return (
     <span className="chat-translate-foot is-error approval-untranslated" role="alert">
-      <span>{COPY.sendFailed}</span>
+      <span>{translationFailureSentence('answer', failureReason, httpStatus)}</span>
       <Sep />
       <FootAction label={COPY.retry} onPress={onRetry} />
       <Sep />
@@ -297,12 +316,18 @@ export function useOwnerCardFlip(...translations: AnyCardTranslation[]): {
 /**
  * An owner card's answer the server refused 422 TRANSLATION_FAILED, so nothing was recorded (2A):
  * "Couldn't translate, so it wasn't sent · Retry · Send as written", each press posting the same
- * answer again, Send as written with `sendAsWritten: true`.
+ * answer again, Send as written with `sendAsWritten: true`. `error` is the refusal, which says why.
  */
-export function RefusedAnswerFoot({ resend }: { resend: (sendAsWritten: boolean) => Promise<unknown> }) {
+export function RefusedAnswerFoot({
+  resend,
+  error,
+}: {
+  resend: (sendAsWritten: boolean) => Promise<unknown>;
+  error?: unknown;
+}) {
   // A press that fails again is drawn by the card from its own state; nothing here rethrows.
   const press = (sendAsWritten: boolean) => () => resend(sendAsWritten).catch(() => undefined);
-  return <UntranslatedDecisionFoot onRetry={press(false)} onSendAsWritten={press(true)} />;
+  return <UntranslatedDecisionFoot onRetry={press(false)} onSendAsWritten={press(true)} {...refusalReasonOf(error)} />;
 }
 
 /**
@@ -327,7 +352,7 @@ export function RefusedSendBack<V extends object>({
   if (!mutation.isError || !press || !answerRefusedUntranslated(mutation.error) || !when(press)) return null;
   return (
     <div className="composer-translate-refused">
-      <RefusedAnswerFoot resend={(sendAsWritten) => mutation.mutateAsync({ ...press, sendAsWritten })} />
+      <RefusedAnswerFoot resend={(sendAsWritten) => mutation.mutateAsync({ ...press, sendAsWritten })} error={mutation.error} />
     </div>
   );
 }

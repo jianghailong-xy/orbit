@@ -1,0 +1,94 @@
+{
+  "_comment": "The failure line's first sentence per reason (docs/ux/translation-failure-policy.html, frame 7, B column), before ' · Retry · Send as written'. message: a held message (frame 4B); answer: a card answer refused 422 TRANSLATION_FAILED (frame 5). Walked by translationFailureLines.spec.ts here, and by the OrbitKit and Android copies.",
+  "unavailableTag": "unavailable, messages will wait",
+  "cases": [
+    {
+      "name": "TIMEOUT",
+      "reason": "TIMEOUT",
+      "message": "The translator didn't answer in time, so it wasn't sent",
+      "answer": "The translator didn't answer in time, so your answer wasn't sent"
+    },
+    {
+      "name": "NETWORK",
+      "reason": "NETWORK",
+      "message": "The translator was unreachable, so it wasn't sent",
+      "answer": "The translator was unreachable, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 429",
+      "reason": "HTTP",
+      "httpStatus": 429,
+      "message": "The translator was unreachable, so it wasn't sent",
+      "answer": "The translator was unreachable, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 500",
+      "reason": "HTTP",
+      "httpStatus": 500,
+      "message": "The translator was unreachable, so it wasn't sent",
+      "answer": "The translator was unreachable, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 503",
+      "reason": "HTTP",
+      "httpStatus": 503,
+      "message": "The translator was unreachable, so it wasn't sent",
+      "answer": "The translator was unreachable, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 401",
+      "reason": "HTTP",
+      "httpStatus": 401,
+      "message": "The translator refused the message, so it wasn't sent",
+      "answer": "The translator refused the message, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 400",
+      "reason": "HTTP",
+      "httpStatus": 400,
+      "message": "The translator refused the message, so it wasn't sent",
+      "answer": "The translator refused the message, so your answer wasn't sent"
+    },
+    {
+      "name": "TRUNCATED",
+      "reason": "TRUNCATED",
+      "message": "Too long to translate, so it wasn't sent",
+      "answer": "Too long to translate, so your answer wasn't sent"
+    },
+    {
+      "name": "MANGLED",
+      "reason": "MANGLED",
+      "message": "The translation came back damaged, so it wasn't sent",
+      "answer": "The translation came back damaged, so your answer wasn't sent"
+    },
+    {
+      "name": "EMPTY",
+      "reason": "EMPTY",
+      "message": "The translation came back damaged, so it wasn't sent",
+      "answer": "The translation came back damaged, so your answer wasn't sent"
+    },
+    {
+      "name": "UNAVAILABLE",
+      "reason": "UNAVAILABLE",
+      "message": "Translation is unavailable right now, so it wasn't sent",
+      "answer": "Translation is unavailable right now, so your answer wasn't sent"
+    },
+    {
+      "name": "no reason",
+      "message": "Couldn't translate, so it wasn't sent",
+      "answer": "Couldn't translate, so it wasn't sent"
+    },
+    {
+      "name": "NO_KEY",
+      "reason": "NO_KEY",
+      "message": "Couldn't translate, so it wasn't sent",
+      "answer": "Couldn't translate, so it wasn't sent"
+    },
+    {
+      "name": "a reason this client does not know",
+      "reason": "SOMETHING_NEW",
+      "message": "Couldn't translate, so it wasn't sent",
+      "answer": "Couldn't translate, so it wasn't sent"
+    }
+  ]
+}

@@ -280,6 +280,80 @@ export function isTranslationFailureReason(value: unknown): value is Translation
   return typeof value === 'string' && (TRANSLATION_FAILURE_REASONS as readonly string[]).includes(value);
 }
 
+/**
+ * The failure line's first sentence, before " · Retry · Send as written" (policy board
+ * docs/ux/translation-failure-policy.html, the B column of frame 7): `message` under a held message (frame 4B),
+ * `answer` under a card whose answer was refused 422 TRANSLATION_FAILED (frame 5). The same words on web, Apple and
+ * Android: OrbitKit and Android core mirror this table, and all three walk `translation-failure-lines.fixture.json`.
+ * GENERIC is today's line, for no reason, NO_KEY (frame 7 has no row for it) or a reason a client does not know.
+ */
+export const TRANSLATION_FAILURE_LINES = {
+  TIMEOUT: {
+    message: "The translator didn't answer in time, so it wasn't sent",
+    answer: "The translator didn't answer in time, so your answer wasn't sent",
+  },
+  UNREACHABLE: {
+    message: "The translator was unreachable, so it wasn't sent",
+    answer: "The translator was unreachable, so your answer wasn't sent",
+  },
+  REFUSED: {
+    message: "The translator refused the message, so it wasn't sent",
+    answer: "The translator refused the message, so your answer wasn't sent",
+  },
+  TRUNCATED: {
+    message: "Too long to translate, so it wasn't sent",
+    answer: "Too long to translate, so your answer wasn't sent",
+  },
+  DAMAGED: {
+    message: "The translation came back damaged, so it wasn't sent",
+    answer: "The translation came back damaged, so your answer wasn't sent",
+  },
+  UNAVAILABLE: {
+    message: "Translation is unavailable right now, so it wasn't sent",
+    answer: "Translation is unavailable right now, so your answer wasn't sent",
+  },
+  GENERIC: {
+    message: "Couldn't translate, so it wasn't sent",
+    answer: "Couldn't translate, so it wasn't sent",
+  },
+} as const;
+export type TranslationFailureLine = keyof typeof TRANSLATION_FAILURE_LINES;
+
+/** Which row of TRANSLATION_FAILURE_LINES a failure draws. HTTP is "unreachable" for 429 and 5xx (the statuses
+ *  that were retried) and "refused" for any other status; MANGLED and EMPTY are both "damaged". */
+export function translationFailureLineOf(reason: unknown, httpStatus?: number | null): TranslationFailureLine {
+  switch (reason) {
+    case 'TIMEOUT':
+      return 'TIMEOUT';
+    case 'NETWORK':
+      return 'UNREACHABLE';
+    case 'HTTP':
+      return httpStatus === 429 || (typeof httpStatus === 'number' && httpStatus >= 500) ? 'UNREACHABLE' : 'REFUSED';
+    case 'TRUNCATED':
+      return 'TRUNCATED';
+    case 'MANGLED':
+    case 'EMPTY':
+      return 'DAMAGED';
+    case 'UNAVAILABLE':
+      return 'UNAVAILABLE';
+    default:
+      return 'GENERIC';
+  }
+}
+
+/** The failure line's first sentence for a held message (`message`) or a refused card answer (`answer`). */
+export function translationFailureSentence(
+  of: 'message' | 'answer',
+  reason: unknown,
+  httpStatus?: number | null,
+): string {
+  return TRANSLATION_FAILURE_LINES[translationFailureLineOf(reason, httpStatus)][of];
+}
+
+/** The composer tag's suffix while translation is unavailable (frame 6): "Chinese → English · unavailable, messages
+ *  will wait", drawn in the warning style while MeTranslation.translationUnavailableUntil is in the future. */
+export const TRANSLATION_UNAVAILABLE_TAG = 'unavailable, messages will wait';
+
 /** The answer to Retry and to Send as written. */
 export interface TranslationActionResponse {
   turnId: string;

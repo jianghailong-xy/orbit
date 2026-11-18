@@ -554,6 +554,7 @@ function AgentRequestCard({ request: given, now = Date.now(), onChat }: {
         ) : null}
         {end.isError && answerRefusedUntranslated(end.error) && end.variables && end.variables.to !== 'create-wiki' ? (
           <RefusedAnswerFoot
+            error={end.error}
             resend={(sendAsWritten) => {
               const ending = end.variables!;
               return end.mutateAsync(

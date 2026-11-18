@@ -214,6 +214,36 @@ describe('an answer refused because it could not be translated', () => {
     expect((container.querySelector('.chat-q-custom') as HTMLInputElement).value).toBe('先别改，我想想');
   });
 
+  // docs/ux/translation-failure-policy.html, frame 7, B column, naming "your answer" as frame 5 shows.
+  const REASONS: Array<[Record<string, unknown>, string]> = [
+    [{ failureReason: 'TIMEOUT' }, "The translator didn't answer in time, so your answer wasn't sent"],
+    [{ failureReason: 'NETWORK' }, "The translator was unreachable, so your answer wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 429 }, "The translator was unreachable, so your answer wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 502 }, "The translator was unreachable, so your answer wasn't sent"],
+    [{ failureReason: 'HTTP', httpStatus: 403 }, "The translator refused the message, so your answer wasn't sent"],
+    [{ failureReason: 'TRUNCATED' }, "Too long to translate, so your answer wasn't sent"],
+    [{ failureReason: 'MANGLED' }, "The translation came back damaged, so your answer wasn't sent"],
+    [{ failureReason: 'EMPTY' }, "The translation came back damaged, so your answer wasn't sent"],
+    [{ failureReason: 'UNAVAILABLE' }, "Translation is unavailable right now, so your answer wasn't sent"],
+    [{ failureReason: 'NO_KEY' }, "Couldn't translate, so it wasn't sent"],
+  ];
+  for (const [why, sentence] of REASONS) {
+    it(`refused ${String(why.failureReason)}${why.httpStatus ? ` ${String(why.httpStatus)}` : ''}: "${sentence}", then Retry and Send as written`, async () => {
+      decideMock.mockRejectedValueOnce(
+        new ApiError("Couldn't translate the answer", 422, 'TRANSLATION_FAILED', { code: 'TRANSLATION_FAILED', ...why }),
+      );
+      await act(async () => root.render(<Cards initial={QUESTION} />));
+      await act(async () => button('预加载脚本').click());
+      await act(async () => button('Submit').click());
+      await flush();
+      expect(foot()?.textContent).toBe(`${sentence}·Retry·Send as written`);
+      decideMock.mockResolvedValueOnce(QUESTION);
+      await act(async () => button('Send as written').click());
+      await flush();
+      expect(decideMock.mock.calls[1]).toEqual(['s1', 'ap1', 'allow', undefined, { '要用哪种修法？': ['预加载脚本'] }, undefined, undefined, true]);
+    });
+  }
+
   it('Retry posts the same decision again', async () => {
     await answerThenRefuse();
     decideMock.mockResolvedValueOnce(QUESTION);

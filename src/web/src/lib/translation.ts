@@ -3,15 +3,19 @@
 import {
   DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
+  isTranslationFailureReason,
   isTranslationLanguage,
   TRANSLATION_FAILED_CODE,
   TRANSLATION_LANGUAGE_NAMES,
   type ApprovalTranslation,
   type ReplyTranslation,
   type TranslationEventPayload,
+  type TranslationFailureReason,
   type TranslationLanguage,
   type TurnTranslation,
+  TRANSLATION_UNAVAILABLE_TAG,
 } from '@orbit/shared';
+import { useEffect, useState } from 'react';
 import type { Me } from './queries';
 
 /** The copy every client shows, kept identical across Web, iOS/macOS and Android. */
@@ -72,6 +76,42 @@ export function answerRefusedUntranslated(err: unknown): boolean {
   return !!e && typeof e === 'object' && e.status === 422 && e.code === TRANSLATION_FAILED_CODE;
 }
 
+/** Why a 422 TRANSLATION_FAILED refused the owner's words (TranslationFailedBody), read off the error's body; empty
+ *  when it says none (an older server), which draws the generic line. */
+export function refusalReasonOf(err: unknown): { failureReason?: TranslationFailureReason; httpStatus?: number } {
+  const body = (err as { body?: { failureReason?: unknown; httpStatus?: unknown } } | null)?.body;
+  if (!body || !isTranslationFailureReason(body.failureReason)) return {};
+  return {
+    failureReason: body.failureReason,
+    ...(typeof body.httpStatus === 'number' ? { httpStatus: body.httpStatus } : {}),
+  };
+}
+
+/** Whether translation is unavailable now (frame 6): /users/me's `translationUnavailableUntil` is in the future. */
+export function translationUnavailableAt(me: Me | undefined, now: number): boolean {
+  const until = me?.translationUnavailableUntil ? Date.parse(me.translationUnavailableUntil) : NaN;
+  return Number.isFinite(until) && until > now;
+}
+
+/** `translationUnavailableAt` now, turning false by itself when `translationUnavailableUntil` passes: the server
+ *  announces nothing then (the breaker closes on the next call), so a timer, not a refetch, ends it. */
+export function useTranslationUnavailable(me: Me | undefined): boolean {
+  const until = me?.translationUnavailableUntil ?? null;
+  const [, expire] = useState(0);
+  const unavailable = translationUnavailableAt(me, Date.now());
+  useEffect(() => {
+    if (!unavailable || !until) return;
+    const timer = setTimeout(() => expire((n) => n + 1), Math.max(0, Date.parse(until) - Date.now()) + 1);
+    return () => clearTimeout(timer);
+  }, [unavailable, until]);
+  return unavailable;
+}
+
+/** The composer tag while translation is unavailable (frame 6): "Chinese → English · unavailable, messages will wait". */
+export function unavailableTranslationTag(lang: TranslationLanguage, agentLang: TranslationLanguage = DEFAULT_AGENT_LANGUAGE): string {
+  return `${translationTag(lang, agentLang)} · ${TRANSLATION_UNAVAILABLE_TAG}`;
+}
+
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */
 export function translationOn(me: Me | undefined): boolean {
   return me?.preferences?.translationEnabled === true && me.translationAvailable === true;
@@ -101,7 +141,13 @@ export function turnTranslationOf(value: unknown): TurnTranslation | undefined {
   if (t.state !== 'TRANSLATING' && t.state !== 'FAILED' && t.state !== 'DONE' && t.state !== 'SENT_AS_WRITTEN') {
     return undefined;
   }
-  return { state: t.state, from: t.from, original: t.original };
+  return {
+    state: t.state,
+    from: t.from,
+    original: t.original,
+    ...(t.state === 'FAILED' && isTranslationFailureReason(t.failureReason) ? { failureReason: t.failureReason } : {}),
+    ...(t.state === 'FAILED' && typeof t.httpStatus === 'number' ? { httpStatus: t.httpStatus } : {}),
+  };
 }
 
 /** A translated `assistant` / `prompt_suggestion` payload's `translation`, when it is one. */

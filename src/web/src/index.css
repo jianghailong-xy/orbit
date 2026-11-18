@@ -8291,6 +8291,19 @@ button.chat-jump-start:hover {
   display: flex;
   margin: 6px 0 0;
 }
+/* A failure line says why (docs/ux/translation-failure-policy.html, frame 7), which can outrun a narrow column:
+   it wraps rather than running out of its card, and Retry and Send as written each stay whole. */
+.chat-translate-foot.is-error {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+.chat-translate-foot.is-error .chat-translate-action {
+  white-space: nowrap;
+}
+/* On an approval card (frame 5) the line sits inside the card's own 14px inset, as .approval-stale does. */
+.approval-untranslated-row {
+  padding: 8px 14px 0;
+}
 /* A send-back the composer finished and the server could not translate: above the composer. */
 .composer-translate-refused {
   margin-bottom: 8px;
@@ -8438,6 +8451,21 @@ button.chat-jump-start:hover {
 }
 .composer-translation-tag:hover {
   color: var(--text-1);
+}
+/* Translation unavailable (docs/ux/translation-failure-policy.html, frame 6): the warning style, before a send.
+   Longer than the plain tag, so in a narrow toolbar it gives way before the model picker does (the whole of it
+   stays in the title). */
+.composer-translation-tag.is-unavailable {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.composer-translation-tag.is-unavailable:hover {
+  color: var(--warning);
 }
 /* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
    suggestion card (or the failure line) above the composer, as the slash menu sits. */
