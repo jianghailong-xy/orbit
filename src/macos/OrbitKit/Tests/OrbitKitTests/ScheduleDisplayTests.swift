@@ -383,7 +383,7 @@ final class ScheduleDisplayTests: XCTestCase {
     func testTheRunsSession() {
         XCTAssertEqual(ScheduleDisplay.runStripText(plannedAt: sh("2025-11-13T10:00"), startedAt: sh("2025-11-13T10:01"),
                                                     accessLevel: "CHECK_ONLY", timezone: Self.tz),
-                       "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list")
+                       "Scheduled run · planned 10:00, started 10:01 · access Check only")
         XCTAssertEqual(ScheduleDisplay.runOfText(plannedAt: sh("2025-11-13T10:00"), timezone: Self.tz), "run of Nov 13")
         XCTAssertEqual(ScheduleDisplay.reportedText(state: "CHANGED", key: "codex@0.49.0", notified: true),
                        "Reported: Changed · codex@0.49.0 · you were notified")

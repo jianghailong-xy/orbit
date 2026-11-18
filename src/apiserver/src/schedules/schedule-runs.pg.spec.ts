@@ -573,7 +573,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   assert.equal(session.runSource, SessionRunSource.SCHEDULE);
   assert.equal(session.scheduleRunId, run.id);
   assert.equal(session.workspaceId, w.workspaceId);
-  assert.equal(session.permissionMode, PermissionMode.DEFAULT, 'CHECK_ONLY on Claude Code runs in Default (schedule-access.ts)');
+  assert.equal(session.permissionMode, PermissionMode.AUTO, 'every scheduled run on Claude Code is opened in Auto (schedule-access.ts)');
   assert.equal(session.branch, null, 'with no worktree');
   assert.equal(session.promptByOrbit, true, 'the control plane wrote its first turn');
   assert.equal(session.openedBy, 'SCHEDULE', 'not a person\'s conversation, so never the workspace default');
@@ -597,7 +597,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   );
 });
 
-test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspace has them, with the merge and release tools taken away', { skip }, async () => {
+test('§6.2 an OPEN_PR run on Claude Code runs in Auto, in a worktree when its workspace has them, with the merge and release tools taken away', { skip }, async () => {
   reset();
   at('2026-11-14T00:00:00Z');
   const w = await world('open-pr');
@@ -610,7 +610,7 @@ test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspac
     where: { id: run.sessionId! },
     include: { scheduleRun: { select: { schedule: { select: { accessLevel: true } } } } },
   });
-  assert.equal(session.permissionMode, PermissionMode.ACCEPT_EDITS);
+  assert.equal(session.permissionMode, PermissionMode.AUTO, 'the mode it runs in, which the session shows');
   assert.notEqual(session.branch, null, 'its own worktree');
   assert.deepEqual(
     scheduleRunDisallowedTools([], session.scheduleRun?.schedule.accessLevel, session.provider),

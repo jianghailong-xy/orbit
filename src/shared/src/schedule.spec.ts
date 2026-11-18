@@ -12,7 +12,6 @@ import {
   scheduleHeldWaiting,
   scheduleNeedsYou,
   scheduleReportedText,
-  scheduleRunHeadText,
   scheduleRowLine,
   scheduleRunCircle,
   scheduleRunLine,
@@ -370,19 +369,11 @@ describe('the run\'s session (board 2/2 ⑥)', () => {
     const s = schedule();
     const r = run(s, 'CHANGED', sh('2025-11-13T10:00'), { startedAt: sh('2025-11-13T10:01'), key: 'codex@0.49.0' });
     expect(scheduleRunStripText(r, 'CHECK_ONLY', TZ)).toBe(
-      'Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list',
+      'Scheduled run · planned 10:00, started 10:01 · access Check only',
     );
     expect(scheduleRunOfText(r, TZ)).toBe('run of Nov 13');
     expect(scheduleReportedText(r, { notified: true })).toBe('Reported: Changed · codex@0.49.0 · you were notified');
     expect(scheduleReportedText({ state: 'NO_CHANGE', key: null })).toBe('Reported: No change');
   });
 
-  it('header line: state · agent · duration, leaving out what is not known', () => {
-    const ended = { startedAt: sh('2025-11-13T10:01'), endedAt: sh('2025-11-13T10:05') };
-    expect(scheduleRunHeadText({ state: 'Open', engine: 'Codex', run: ended, now: NOW })).toBe('Open · Codex agent · 4 min');
-    const running = { startedAt: sh('2025-11-14T12:17'), endedAt: null };
-    expect(scheduleRunHeadText({ state: 'Open', engine: null, run: running, now: NOW })).toBe('Open · 2 min');
-    expect(scheduleRunHeadText({ state: 'Completed', engine: 'Codex', run: { startedAt: null, endedAt: null }, now: NOW }))
-      .toBe('Completed · Codex agent');
-  });
 });

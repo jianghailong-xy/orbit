@@ -755,7 +755,7 @@ object ScheduleDisplay {
 
     // A run's session
 
-    /** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+    /** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
     fun runStripText(plannedAt: String, startedAt: String?, accessLevel: String, timezone: String): String =
         fill(C.RunSession.strip, mapOf(
             "planned" to (parse(plannedAt)?.let { localParts(it, timezone).time } ?: ""),

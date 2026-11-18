@@ -124,6 +124,17 @@ export const FOLDER_COPY = {
   more: 'Folder actions',
 } as const;
 
+/**
+ * A workspace's Scheduled runs folder (owner 2026-11-18): built in, never filed into, listing the sessions this
+ * workspace's scheduled runs opened, which every other list leaves out. Its page is `?folder=scheduled`.
+ */
+export const SCHEDULED_RUNS_FOLDER = 'scheduled';
+
+export const SCHEDULED_RUNS_COPY = {
+  title: 'Scheduled runs',
+  empty: 'No scheduled runs here.',
+} as const;
+
 export const MOVE_COPY = {
   title: 'Move',
   action: 'Move…',

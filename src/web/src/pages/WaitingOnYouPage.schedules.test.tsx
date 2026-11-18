@@ -141,7 +141,7 @@ describe('Waiting on you: a scheduled task’s four kinds of card (board 2/2 ④
     serve();
     await open();
     await press(card('SCHEDULE_FAILED'), 'Open run');
-    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-pg-run-nov14?schedule=sch-pg&run=run-pg-nov14');
+    expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-pg-run-nov14?folder=scheduled');
   });
 
   it('a hold: why, and Open agent settings and Resume', async () => {

@@ -117,6 +117,12 @@ export function replyTranslationOf(value: unknown): ReplyTranslation | undefined
   return undefined;
 }
 
+/** Whether a reply's translation came back as the reply itself: the agent already wrote in the
+ *  owner's language. Such a reply is drawn as it is, with no foot and no "Translated". */
+export function translationUnchanged(translation: ReplyTranslation | undefined, original: string): boolean {
+  return translation?.text !== undefined && translation.text.trim() === original.trim();
+}
+
 /** Whether a held message is still waiting on its translation (not delivered to the engine). */
 export function heldForTranslation(translation: TurnTranslation | undefined): boolean {
   return translation?.state === 'TRANSLATING' || translation?.state === 'FAILED';
@@ -146,8 +152,8 @@ export function foldTranslationEvent<T extends EventLike>(events: readonly T[], 
 
 interface QuestionLike {
   question?: string;
-  header?: string;
-  options?: Array<{ label?: string; description?: string }>;
+  header?: string | null;
+  options?: Array<{ label?: string; description?: string | null }>;
 }
 
 /**
@@ -164,7 +170,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
     return {
       ...q,
       question: t.question || q.question,
-      ...(q.header !== undefined ? { header: t.header || q.header } : {}),
+      ...(q.header != null ? { header: t.header || q.header } : {}),
       ...(q.options
         ? {
             options: q.options.map((o, j) => {
@@ -173,7 +179,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
               return {
                 ...o,
                 label: to.label || o.label,
-                ...(o.description !== undefined ? { description: to.description || o.description } : {}),
+                ...(o.description != null ? { description: to.description || o.description } : {}),
               };
             }),
           }

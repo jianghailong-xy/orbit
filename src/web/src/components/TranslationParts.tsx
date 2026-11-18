@@ -1,7 +1,7 @@
 // Settings › Translation in a conversation (board docs/mocks/session-translation/01-board.png,
 // frames 4–6): the foot under a translated message, its per-message Show original toggle, and the
 // held and failed states. The server translates; these only draw what it wrote and call its doors.
-import { DEFAULT_AGENT_LANGUAGE, type ReplyTranslation, type TranslationLanguage, type TurnTranslation } from '@orbit/shared';
+import { DEFAULT_AGENT_LANGUAGE, type ApprovalTranslation, type ReplyTranslation, type TranslationLanguage, type TurnTranslation } from '@orbit/shared';
 import { QueryClientContext } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { meQuery, type Me } from '../lib/queries';
@@ -22,6 +22,10 @@ export interface TranslationActions {
 }
 
 export const TranslationCtx = createContext<TranslationActions | null>(null);
+
+/** The owner-language text of the session's question cards, by the call's tool_use id
+ *  (ApprovalInfo.translation): an answered question's record shows what its card showed. */
+export const QuestionTranslationsCtx = createContext<ReadonlyMap<string, ApprovalTranslation>>(new Map());
 
 /** Which messages are flipped to their original, by key. Per message and never persisted: a reload
  *  shows every one translated again (board frame 5). Held by the transcript, so the turn's copy

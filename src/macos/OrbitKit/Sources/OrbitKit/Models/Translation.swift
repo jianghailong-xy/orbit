@@ -463,6 +463,14 @@ public struct ReplyTranslation: Codable, Equatable, Sendable {
         if value["failed"]?.boolValue == true { return ReplyTranslation(lang: lang, failed: true) }
         return nil
     }
+
+    /// Whether the translation came back as the reply itself: the agent already wrote in the
+    /// owner's language. Such a reply is drawn as it is, with no foot (web `translationUnchanged`).
+    public func unchanged(from original: String) -> Bool {
+        guard let text else { return false }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            == original.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 /// One AskUserQuestion question as shown in the owner's language, index for index with
@@ -628,6 +636,35 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
             })
         }
         return .object(obj)
+    }
+
+    /// An AskUserQuestion's questions as its card showed them: translated, index for index, where the
+    /// server translated them, so an answered question's record keeps the owner's language. The
+    /// answer is read off the English beforehand; options keep their index (web: `shownQuestions`).
+    public static func shownQuestions(_ questions: [AskQuestion], _ translation: ApprovalTranslation?) -> [AskQuestion] {
+        guard let translation, !translation.failed, let translated = translation.questions else { return questions }
+        return questions.enumerated().map { i, q in
+            guard i < translated.count else { return q }
+            let t = translated[i]
+            let options = q.options.enumerated().map { j, o in
+                guard j < t.options.count else { return o }
+                return AskOption(label: nonEmpty(t.options[j].label) ?? o.label,
+                                 description: o.description == nil ? nil : nonEmpty(t.options[j].description) ?? o.description)
+            }
+            return AskQuestion(header: q.header == nil ? nil : nonEmpty(t.header) ?? q.header,
+                               question: nonEmpty(t.question) ?? q.question,
+                               options: options,
+                               multiSelect: q.multiSelect)
+        }
+    }
+
+    /// The translated question cards of a session, by their call's tool_use id.
+    public static func byToolUse(_ approvals: [ApprovalInfo]) -> [String: ApprovalTranslation] {
+        var out: [String: ApprovalTranslation] = [:]
+        for a in approvals where Approvals.isQuestion(toolName: a.toolName ?? "") {
+            if let id = a.toolUseId, let t = parse(a.translation) { out[id] = t }
+        }
+        return out
     }
 
     private static func nonEmpty(_ s: String?) -> String? {

@@ -179,7 +179,6 @@
 .sched-record.is-undone { opacity: 0.7; }
 
 /* ---- A run's session ---- */
-.sched-crumb { color: var(--text-3); font-size: 13px; margin-bottom: 4px; }
 .sched-crumb a { color: var(--brand); text-decoration: none; }
 .sched-strip {
   display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2); background: var(--bg-subtle);
@@ -194,7 +193,6 @@
 .sched-report-head { font-weight: 600; display: flex; gap: 6px; align-items: center; }
 .sched-report-head .sched-icon { color: var(--success-solid); }
 .sched-report.is-failed .sched-report-head .sched-icon { color: var(--error); }
-.workspace-split.is-schedule-run > .session-col { display: none; }
 
 /* ---- Waiting on you ---- */
 .sched-command {
