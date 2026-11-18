@@ -166,7 +166,10 @@ final class TranslationCopyParityTests: XCTestCase {
         assertContains(web, "<span>{flipped ? COPY.original : COPY.translated}</span> <Sep /> "
             + #"<button type="button" className="chat-translate-action" onClick={onFlip}> "#
             + "{flipped ? COPY.showTranslation : COPY.showOriginal} </button>", in: Self.parts)
-        assertContains(web, "<span>{COPY.sendFailed}</span> <Sep /> <FootAction label={COPY.retry} onPress={onRetry} /> "
+        // The first sentence names why (failure policy B, frame 5); with no reason it is the generic line above,
+        // which translationFailureLines.spec.ts and TranslationFailureLinesParityTests hold to the same fixture.
+        assertContains(web, "<span>{translationFailureSentence('answer', failureReason, httpStatus)}</span> <Sep /> "
+            + "<FootAction label={COPY.retry} onPress={onRetry} /> "
             + "<Sep /> <FootAction label={COPY.sendAsWritten} onPress={onSendAsWritten} />", in: Self.parts)
         // Every web owner card draws the flip from useOwnerCardTranslation/useOwnerCardFlip, and the
         // ones whose answer can be refused draw it with RefusedAnswerFoot/RefusedSendBack.
