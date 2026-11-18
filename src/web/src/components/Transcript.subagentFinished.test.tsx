@@ -258,7 +258,7 @@ describe('a SubAgent’s finished wake in the transcript', () => {
     expect(shown()).not.toContain('It ended while you were working');
   });
 
-  it('keeps a background job’s news in the same note as its own line, and anything else in the fold', async () => {
+  it('keeps a background job’s news as its own line and omits unrelated appended context', async () => {
     const job = [
       '<background-job-wake>',
       '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
@@ -278,7 +278,8 @@ describe('a SubAgent’s finished wake in the transcript', () => {
     await mount([wakeEvent(`${SUBAGENT_DONE}\n\n${extra}`)]);
     expect(container.querySelectorAll('.bgwake')).toHaveLength(1);
     expect(container.querySelector('.chat-user')).toBeNull();
-    expect(fold().querySelector('.bgwake-body')?.textContent).toContain('Orbit attached');
+    expect(fold().querySelector('.bgwake-body')?.textContent).not.toContain('Orbit attached');
+    expect(fold().textContent).not.toContain('You coordinate project P.');
     expect(shown()).not.toContain('Orbit attached');
   });
 

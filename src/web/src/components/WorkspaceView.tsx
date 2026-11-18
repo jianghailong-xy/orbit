@@ -623,6 +623,8 @@ import {
   waitingNoticeScope,
 } from '../lib/runnerSlots';
 import {
+  CAPACITY_HELD_LINE,
+  capacityHeldHint,
   capacityHeldMessageText,
   capacityHeldTag,
   capacityHeldTitle,
@@ -1193,6 +1195,8 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
+  /** The row's tooltip, where the line leaves out why: a full runner, run or batch says which. */
+  hint?: string;
 };
 // The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
 // Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
@@ -1363,6 +1367,11 @@ export const sessionLine = (
   }
   if (live && state === 'QUEUED') {
     const held = claudeRegionHeldWords(s, machine);
+    // A full runner, run or batch reads in plain words, and the tooltip says which one is full and how
+    // the slots are taken (board session-row-runner-full: the owner picked C, plain words only, since
+    // the row's own time already counts the wait).
+    if (!held && isCapacityHeld(s))
+      return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
     return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
@@ -9851,6 +9860,7 @@ export function WorkspaceView({
                       )}
                       <div
                         className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                        title={line.hint}
                       >
                         {line.text}
                       </div>
@@ -13051,8 +13061,10 @@ export function usePendingTray({
       // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
       // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
       // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
-      // nobody typed come back (`returnsToComposer`).
-      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
+      // nobody typed come back (`returnsToComposer`). Translated, it comes back as the owner wrote it,
+      // not as the English delivered (Settings › Translation).
+      const body =
+        withdrawn && returnsToComposer(withdrawn) ? (withdrawn.translation?.original ?? withdrawn.content).trim() : '';
       if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
@@ -13169,7 +13181,7 @@ export function usePendingTray({
         busy: withdrawing,
         onWithdraw:
           !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
-            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.translation?.original ?? steer.text, steer.attachmentRefs)
             : undefined,
       };
     };
@@ -13195,7 +13207,7 @@ export function usePendingTray({
         busy: withdrawing || steering,
         // Not handed to a runner yet, either way: the server takes it back alone.
         onWithdraw: turn.placement === 'steer'
-          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.translation?.original ?? turn.content, refs) : undefined
           : () => void cancelQueued(turn.turnId),
         onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
       };

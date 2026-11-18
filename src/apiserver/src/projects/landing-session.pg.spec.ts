@@ -1190,12 +1190,18 @@ test('the landing’s todos list its owed INTEGRATION_* item and not another kin
       const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
       await stack.openItems.deliverForItems([failedId]);
       for (const status of [RunStatus.FAILED, RunStatus.PENDING, RunStatus.RUNNING]) {
-        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status } });
+        // A FAILED coordinator still takes the turn only with an auto-retry pending.
+        const retryAt = status === RunStatus.FAILED ? new Date(Date.now() + 60 * 60_000) : null;
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status, retryAt } });
         assert.deepEqual(await todosOf(stack, w, landing.sessionId), [],
           `${status}: an unread coordinator item is not an owner-facing landing todo`);
         assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
           `${status}: the unread item does not mark the landing as awaiting a decision`);
       }
+      // Down with no retry coming, the coordinator never reads it: the owner sees it on the landing.
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.FAILED, retryAt: null } });
+      assert.deepEqual(await todosOf(stack, w, landing.sessionId), [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'an item its coordinator cannot take is an owner-facing landing todo');
       await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { status: RunStatus.AWAITING_INPUT } });
       await receiveOpenItem(stack.db, failedId);
 
