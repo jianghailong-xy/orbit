@@ -68,6 +68,12 @@ public enum TranslationLanguage: String, CaseIterable, Codable, Equatable, Senda
     public func tag(to agent: TranslationLanguage) -> String {
         "\(shortName) → \(agent.shortName)"
     }
+
+    /// The composer tag while the server is skipping a failing translator (policy board
+    /// docs/ux/translation-failure-policy.html, frame 6): "Chinese → English · unavailable, messages will wait".
+    public func tag(to agent: TranslationLanguage, unavailable: Bool) -> String {
+        unavailable ? "\(tag(to: agent)) · \(TranslationCopy.unavailableTag)" : tag(to: agent)
+    }
 }
 
 /// The words every client shows about translation, byte for byte the web's (`TRANSLATION_COPY` in
@@ -105,10 +111,38 @@ public enum TranslationCopy {
     public static let original = "Original"
     public static let translating = "Translating…"
     public static let sendFailed = "Couldn't translate, so it wasn't sent"
+    /// Frame 6 of docs/ux/translation-failure-policy.html: after the composer tag while translation is unavailable.
+    public static let unavailableTag = "unavailable, messages will wait"
     public static let retry = "Retry"
     public static let sendAsWritten = "Send as written"
     public static let replyPending = "Translates when the reply is done"
     public static let replyFailed = "Couldn't translate this reply"
+    /// Why a held message (or a card answer, `answer: true`) was not sent: the B column of frame 7 of
+    /// docs/ux/translation-failure-policy.html, drawn before "· Retry · Send as written". With no
+    /// reason, or one the board gives no sentence for (NO_KEY, HTTP without a status), it is the
+    /// generic `sendFailed`.
+    public static func sendFailed(_ reason: TranslationFailureReason?, httpStatus: Int? = nil,
+                                  answer: Bool = false) -> String {
+        guard let cause = failureCause(reason, httpStatus: httpStatus) else { return sendFailed }
+        return "\(cause), so \(answer ? "your answer" : "it") wasn't sent"
+    }
+
+    private static func failureCause(_ reason: TranslationFailureReason?, httpStatus: Int?) -> String? {
+        switch reason {
+        case .timeout: return "The translator didn't answer in time"
+        case .network: return "The translator was unreachable"
+        case .http:
+            guard let status = httpStatus else { return nil }
+            if status == 429 || status >= 500 { return "The translator was unreachable" }
+            if (400..<500).contains(status) { return "The translator refused the message" }
+            return nil
+        case .truncated: return "Too long to translate"
+        case .mangled, .empty: return "The translation came back damaged"
+        case .unavailable: return "Translation is unavailable right now"
+        case .noKey, nil: return nil
+        }
+    }
+
     // "Show both languages" in a conversation (02-bilingual.png, frames 2–4).
     public static let sentToAgent = "Sent to the agent in"
     public static let show = "Show"
@@ -785,6 +819,22 @@ public enum SessionTranslation {
         return (reason, (object["httpStatus"] as? NSNumber)?.intValue)
     }
 
+    /// The line under a card answer the server refused with 422 TRANSLATION_FAILED (frame 5): why,
+    /// naming "your answer", then Retry and Send as written. `.retryTurn` sends the answer again and
+    /// `.sendAsWritten` sends it with `sendAsWritten: true`.
+    public static func refusedAnswerFoot(_ reason: TranslationFailureReason?, httpStatus: Int? = nil) -> [FootPart] {
+        [.text(TranslationCopy.sendFailed(reason, httpStatus: httpStatus, answer: true)),
+         .action(TranslationCopy.retry, .retryTurn),
+         .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
+    }
+
+    /// The same line read straight off the refusal (`refusalReason`); the generic line when the
+    /// server did not say why.
+    public static func refusedAnswerFoot(after error: Error) -> [FootPart] {
+        let why = refusalReason(error)
+        return refusedAnswerFoot(why?.reason, httpStatus: why?.httpStatus)
+    }
+
     /// One piece of the line under a translated message.
     public enum FootPart: Equatable, Sendable {
         /// Plain words ("Translated", "Couldn't translate, so it wasn't sent").
@@ -814,7 +864,7 @@ public enum SessionTranslation {
         case .translating:
             return [.chip(TranslationCopy.translating)]
         case .failed:
-            return [.text(TranslationCopy.sendFailed),
+            return [.text(TranslationCopy.sendFailed(translation.failureReason, httpStatus: translation.httpStatus)),
                     .action(TranslationCopy.retry, .retryTurn),
                     .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
         case .done:

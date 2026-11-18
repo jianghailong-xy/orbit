@@ -38,11 +38,10 @@ struct TranslationFootView: View {
     var alignment: HorizontalAlignment = .leading
     let onAction: (SessionTranslation.FootAction) -> Void
 
+    /// A failure's line, whatever its sentence: only a failure offers Retry.
     private var failed: Bool {
         parts.contains {
-            if case .text(let t) = $0 {
-                return t == TranslationCopy.sendFailed || t == TranslationCopy.replyFailed
-            }
+            if case .action(_, let action) = $0 { return action == .retryTurn || action == .retryReply }
             return false
         }
     }
@@ -215,34 +214,45 @@ private struct DashedDivider: View {
 struct ComposerTranslationTag: View {
     let language: TranslationLanguage
     let agentLanguage: TranslationLanguage
+    /// Until when the server is skipping a failing translator (`SessionTranslation.temporarilyUnavailableUntil`,
+    /// policy board frame 6): till then the tag reads "… · unavailable, messages will wait". The server
+    /// does not announce the instant passing, so the tag redraws itself then.
+    var unavailableUntil: Date? = nil
     let open: () -> Void
 
     var body: some View {
+        if let until = unavailableUntil {
+            TimelineView(.explicit([until])) { context in
+                tag(unavailable: context.date < until)
+            }
+        } else {
+            tag(unavailable: false)
+        }
+    }
+
+    private func tag(unavailable: Bool) -> some View {
         Button(action: open) {
-            Text(language.tag(to: agentLanguage))
+            Text(language.tag(to: agentLanguage, unavailable: unavailable))
                 .font(.orbitMeta)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(unavailable ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Color.primary.opacity(0.06), in: Capsule())
+                .background(unavailable ? Color.orange.opacity(0.12) : Color.primary.opacity(0.06), in: Capsule())
         }
         .buttonStyle(.plain)
         .help(TranslationCopy.title)
-        .accessibilityLabel(language.tag(to: agentLanguage))
+        .accessibilityLabel(language.tag(to: agentLanguage, unavailable: unavailable))
     }
 }
 
-/// An approval card refused because the owner's words could not be translated (1A): the same
-/// "Couldn't translate, so it wasn't sent · Retry · Send as written" as a message, each press sending
-/// the same decision again.
+/// An approval card refused because the owner's words could not be translated (1A): why, naming "your
+/// answer" (policy board frame 5), then Retry and Send as written, each press sending the same decision again.
 struct UntranslatedDecisionRow: View {
     let console: ConsoleModel
     let approval: PendingApproval
 
     var body: some View {
         if let held = console.untranslatedDecisions[approval.id] {
-            TranslationFootView(parts: [.text(TranslationCopy.sendFailed),
-                                        .action(TranslationCopy.retry, .retryTurn),
-                                        .action(TranslationCopy.sendAsWritten, .sendAsWritten)]) { action in
+            TranslationFootView(parts: held.foot) { action in
                 Task {
                     await console.decide(approval, behavior: held.behavior, answers: held.answers,
                                          remember: held.remember, sendAsWritten: action == .sendAsWritten)
