@@ -710,7 +710,7 @@ export function OwnerConfirmationCard({
           {/* Right above the buttons: the card is taller than a phone's screen, and this is what is
               in view at the press. A refused press says why between it and the buttons. */}
           <OwnerConfirmationIfYouConfirm ifConfirmed={view.ifConfirmed} />
-          {refused ? <RefusedAnswerFoot resend={refused} /> : null}
+          {refused ? <RefusedAnswerFoot resend={refused} error={error} /> : null}
           {error && refusal ? (
             <Alert
               className="evidence-decision-error"

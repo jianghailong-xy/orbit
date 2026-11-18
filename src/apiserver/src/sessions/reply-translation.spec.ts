@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { AgentProvider, RunEventType, type NormalizedRunEvent } from '@orbit/shared';
@@ -8,6 +9,9 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RealtimeService } from '../realtime/realtime.service';
 import { replyTranslationsSettled } from './reply-translation';
 import { SessionsService } from './sessions.service';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 /**
  * Settings › Translation, what the agent says (task A2, @orbit/shared translation.ts), with a stubbed DeepSeek:
@@ -488,6 +492,8 @@ test('an answer the owner types is translated into the agent language; a failure
   assert.equal(w.approvals[0].status, 'PENDING', 'nothing reached the engine');
 
   deepSeek.failing = false;
+  // Its pieces failed 500 together, which is enough to open the circuit breaker; the translator is back now.
+  resetTranslationBreaker();
   await w.sessions.decideApproval(OWNER, SESSION, row.id, typed);
   assert.deepEqual(w.approvals[0].answers, { 'Which database should I use?': [EN('用 MySQL')] });
   assert.equal(w.approvals[0].message, EN('谢谢'));

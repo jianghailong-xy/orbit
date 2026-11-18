@@ -3034,6 +3034,11 @@ model ConversationTurn {
   translationState String?  @map("translation_state")
   /// The language the owner wrote in (TRANSLATION_LANGUAGES).
   translationLang  String?  @map("translation_lang")
+  /// Why the translation failed (migration 1100, TranslationFailureReason): set only while translationState is FAILED,
+  /// cleared when it leaves FAILED. Null on a FAILED turn written before 1100.
+  translationFailureReason String? @map("translation_failure_reason")
+  /// The translator's HTTP status beside translationFailureReason HTTP; null otherwise.
+  translationHttpStatus    Int?    @map("translation_http_status")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A

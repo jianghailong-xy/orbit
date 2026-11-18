@@ -11,13 +11,17 @@
  * in production.
  */
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from '../sessions/translation';
 import { ConfigService } from '@nestjs/config';
 import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { PushService } from './push.service';
 import { COORDINATOR_QUESTION_FIELDS, CROSSING_FIELDS, OWNER_REQUEST_FIELDS, queueOwnerCardTranslation, type CardFields } from '../sessions/card-translation';
 import { replyTranslationsSettled, translateApprovalCard } from '../sessions/reply-translation';
 import { renderFeishuCard, shownQuestionsOf, type FeishuAlert } from '../feishu/cards/feishu-cards';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 function enabledConfig(): ConfigService {
   const values: Record<string, string> = {
