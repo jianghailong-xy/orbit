@@ -172,8 +172,8 @@ export interface FeishuTestMessageResult {
 }
 
 /**
- * Group chats connected to Orbit (§8.1, §8.3). The owner sends `@<bot> connect` in a group; the bot answers with a card
- * whose button opens Orbit's confirm page with a one-time ticket, where the owner chooses the workspace, the permission
+ * Group chats connected to Orbit (§8.1, §8.3). The owner sends `@<bot> connect` in a group; the bot sends the owner, in
+ * their direct chat with it, a card (§15.1) whose button opens Orbit's confirm page with a one-time ticket, where the owner chooses the workspace, the permission
  * mode, who may start sessions and two limits. Confirming is an owner-channel action: a personal access token is refused.
  */
 export const FEISHU_CONNECT_GROUP_PATH = '/settings/integrations/feishu/connect-group';

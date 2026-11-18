@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>飞书机器人：可以不露出 Orbit（设计稿）</title>
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<style>
+  /* Board chrome is prefixed b- (index.css has bare short classes). The cards use the shipped
+     .orbit-card / .admin-signin-* / .feishu-hint / .orbit-badge classes; switches, radios, selects,
+     number boxes and the alert are drawn with index.css tokens. */
+  body { margin: 0; background: #e9ecef; font-family: Inter, "Noto Sans SC", sans-serif; color: var(--text-1); }
+  .b-part { width: 1520px; box-sizing: border-box; padding: 34px 40px 40px; background: #f4f5f7; border-bottom: 6px solid #e9ecef; }
+  .b-h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
+  .b-sub { color: var(--text-2); font-size: 15px; margin: 0 0 22px; line-height: 1.6; }
+  .b-cols { display: grid; gap: 28px; align-items: start; }
+  .b-col-title { font-size: 15px; font-weight: 600; margin: 0 0 10px; color: var(--text-2); }
+  .b-frame { position: relative; background: var(--bg-base); border: 1px solid #dfe2e6; border-radius: 12px; padding: 22px 22px 22px 46px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .b-mark { position: absolute; left: -34px; top: 1px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/1 Inter, sans-serif; }
+  .b-rel { position: relative; }
+  .b-notes { display: grid; gap: 10px; font-size: 14px; line-height: 1.65; }
+  .b-note { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .b-note .b-dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #e8590c; color: #fff; font: 700 12px/1 Inter, sans-serif; margin-top: 1px; }
+  .b-note b { font-weight: 600; }
+  .b-q { font-family: Inter, sans-serif; background: #fff; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 1px 6px; color: var(--text-2); font-size: 13px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+  .b-tag-today { background: #e9ecef; color: #495057; }
+  .b-tag-new { background: #fff0e6; color: #d9480f; }
+  .b-drawn { color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+  /* Settings controls, drawn with the page's tokens. */
+  .b-card-stack { display: grid; gap: 16px; }
+  .b-radio-row { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; padding: 10px 0; }
+  .b-radio { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #c9cdd4; background: #fff; box-sizing: border-box; margin-top: 3px; }
+  .b-radio.on { border: 5px solid var(--brand); }
+  .b-indent { margin-left: 28px; padding: 14px 16px 16px; border-left: 2px solid var(--brand-border); background: var(--bg-subtle); border-radius: 0 8px 8px 0; display: grid; gap: 18px; }
+  .b-sec-label { font-size: 13px; font-weight: 600; color: var(--text-2); letter-spacing: .02em; }
+  .b-select { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 220px; height: 32px; box-sizing: border-box; padding: 0 10px 0 12px; border: 1px solid #d0d3d9; border-radius: 6px; background: #fff; font-size: 14px; }
+  .b-select::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid #8f959e; border-bottom: 1.5px solid #8f959e; transform: rotate(45deg) translateY(-2px); }
+  .b-num { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 30px; border: 1px solid #d0d3d9; border-radius: 6px; background: #fff; font-size: 14px; margin: 0 6px; }
+  .b-limits { display: grid; gap: 8px; font-size: 14px; }
+  .b-limits .b-lrow { display: grid; grid-template-columns: 150px auto; align-items: center; }
+  .b-nowrap { display: inline-flex; align-items: center; white-space: nowrap; }
+  .b-indent .admin-signin-row > div:first-child { flex: 1; min-width: 0; }
+  .b-switch { width: 40px; height: 22px; border-radius: 11px; background: #c9cdd4; position: relative; flex: none; }
+  .b-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .b-switch.on { background: var(--brand); }
+  .b-switch.on::after { left: 20px; }
+  .b-alert { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 12px 14px; border: 1px solid var(--warning-border); background: var(--warning-bg); border-radius: 8px; font-size: 13px; line-height: 1.6; }
+  .b-alert .b-bang { width: 20px; height: 20px; border-radius: 50%; background: var(--warning-solid); color: #fff; font: 700 13px/20px Inter, sans-serif; text-align: center; margin-top: 1px; }
+  .b-alert-title { font-size: 14px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
+  .b-link { color: var(--brand); }
+  .b-btns { display: flex; justify-content: flex-end; gap: 10px; align-items: center; }
+  .b-btn { height: 32px; padding: 0 15px; border-radius: 6px; border: 1px solid #d0d3d9; background: #fff; font-size: 14px; display: inline-flex; align-items: center; }
+  .b-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .b-btn.danger { color: var(--error); border-color: var(--error-border); }
+  .b-group { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 14px 0; border-top: 1px solid var(--border-subtle); }
+  .b-group:first-of-type { border-top: 0; }
+  .b-group-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .b-group-actions { display: flex; align-items: center; gap: 10px; }
+
+  /* Feishu chat panes (drawn). */
+  .b-chat { background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; overflow: hidden; }
+  .b-chat-head { padding: 10px 16px; border-bottom: 1px solid #eceef1; font-weight: 600; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  .b-chat-head .b-pill { font-size: 11px; font-weight: 500; color: #646a73; background: #f1f1f4; padding: 1px 7px; border-radius: 9px; }
+  .b-chat-body { padding: 14px 16px 16px; display: grid; gap: 12px; background: #fafbfc; }
+  .b-msg { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: start; }
+  .b-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font: 600 12px/1 Inter, sans-serif; }
+  .b-av.bot { background: #3370ff; }
+  .b-av.p1 { background: #7c5cff; } .b-av.p2 { background: #10a37f; } .b-av.p3 { background: #d97706; } .b-av.me { background: #495057; }
+  .b-who { font-size: 12px; color: #8f959e; margin-bottom: 3px; }
+  .b-who .b-botbadge { font-size: 10px; font-weight: 600; color: #b7791f; background: #fdf3d8; padding: 0 5px; border-radius: 4px; margin-left: 4px; }
+  .b-bubble { display: inline-block; max-width: 520px; background: #fff; border: 1px solid #e4e6ea; border-radius: 10px; padding: 8px 12px; font-size: 14px; line-height: 1.55; }
+  .b-bubble.mine { background: #e1ebff; border-color: #c9dbff; }
+  .b-at { color: #3370ff; }
+  .b-thread { margin-left: 42px; padding-left: 12px; border-left: 2px solid #dfe2e6; display: grid; gap: 10px; }
+  .b-thread-label { font-size: 12px; color: #8f959e; }
+  .b-fcard { max-width: 520px; border: 1px solid #e4e6ea; border-radius: 10px; overflow: hidden; background: #fff; }
+  .b-fcard-head { padding: 10px 14px; background: linear-gradient(90deg, #fdebd8, #fff6ee); }
+  .b-fcard-head .t { color: #c05621; font-weight: 600; font-size: 15px; }
+  .b-fcard-head .s { color: #c05621; font-size: 13px; margin-top: 2px; }
+  .b-fcard-body { padding: 10px 14px 12px; font-size: 13px; display: grid; gap: 8px; }
+  .b-fbtns { display: flex; gap: 8px; }
+  .b-fbtn { border: 1px solid #c9cdd4; border-radius: 6px; padding: 3px 12px; font-size: 13px; background: #fff; }
+  .b-fbtn.allow { color: #3370ff; border-color: #3370ff; }
+  .b-fbtn.deny { color: #d4380d; border-color: #f5a08a; }
+  .b-new { outline: 2px dashed #e8590c; outline-offset: 3px; border-radius: 6px; }
+  .b-bubble.b-new { margin-top: 6px; }
+
+  /* Decisions and phases. */
+  .b-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; overflow: hidden; font-size: 14px; line-height: 1.6; }
+  .b-table th { text-align: left; background: #f1f3f5; color: #495057; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid #dfe2e6; }
+  .b-table td { padding: 12px 14px; border-bottom: 1px solid #eceef1; vertical-align: top; }
+  .b-table tr:last-child td { border-bottom: 0; }
+  .b-rec { color: #2b8a3e; font-weight: 600; }
+  .b-box { background: #fff; border: 1px solid #dfe2e6; border-radius: 12px; padding: 16px 20px; font-size: 14px; line-height: 1.7; }
+  .b-box h3 { margin: 0 0 8px; font-size: 16px; }
+  .b-box ol, .b-box ul { margin: 0; padding-left: 20px; }
+</style>
+<style>
+  .b-fcard-head.blue { background: linear-gradient(90deg, #e1ebff, #f3f7ff); }
+  .b-fcard-head.blue .t, .b-fcard-head.blue .s { color: #245ae0; }
+  .b-fcard-head.grey { background: linear-gradient(90deg, #d9dce1, #eef0f3); }
+  .b-fcard-head.grey .t, .b-fcard-head.grey .s { color: #fff; }
+  .b-strike { text-decoration: line-through; text-decoration-color: #e8590c; text-decoration-thickness: 2px; color: #8f959e; }
+  .b-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .b-cap { font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+  .b-plain { display: inline-block; max-width: 520px; background: #fff; border: 1px solid #e4e6ea; border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+  td .b-q { display: inline; white-space: normal; line-height: 1.7; }
+</style>
+</head>
+<body>
+<!-- ============================== Part 1 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">飞书机器人：可以不露出 Orbit · ① 开关和你的私聊</h1>
+  <p class="b-sub">「Your app」卡片里，在「Answer approvals in Feishu」下面加一个开关「Show Orbit in Feishu」，默认开着，也就是今天的样子。
+    关掉以后，卡片上不再有「Open in Orbit」按钮，机器人也不会把通往 Orbit 的链接发给任何人。审批照样能在卡片上答复。</p>
+  <div class="b-cols" style="grid-template-columns: 640px 1fr;">
+    <div>
+      <div class="b-col-title"><span class="b-tag b-tag-new">建议</span>「Your app」卡片里的新开关（关掉的样子）</div>
+      <div class="b-frame">
+        <section class="orbit-card feishu-card" style="margin:0">
+          <div class="orbit-card-head"><h2 class="orbit-card-title">Your app</h2><span class="orbit-badge orbit-badge-success">Saved</span></div>
+          <div class="orbit-card-body" style="display:grid; gap:18px">
+            <div class="admin-signin-row" style="opacity:.55">
+              <div><div class="admin-signin-label">Answer approvals in Feishu</div><div class="admin-signin-hint">On, a tool approval's card has Allow once and Deny, answered by you only.</div></div>
+              <span class="b-switch on"></span>
+            </div>
+            <div class="admin-signin-row b-rel">
+              <span class="b-mark" style="left:-58px">1</span>
+              <div><div class="admin-signin-label">Show Orbit in Feishu</div>
+                <div class="admin-signin-hint">Off, cards have no Open in Orbit button and the bot sends nobody a link to Orbit. Your alerts still arrive and approvals can still be answered on the card; open Orbit yourself for anything else.</div></div>
+              <span class="b-switch"></span>
+            </div>
+            <div class="admin-signin-row" style="opacity:.55">
+              <div><div class="admin-signin-label">Default workspace</div><div class="admin-signin-hint">A new direct message to the bot starts a session here.</div></div>
+              <span class="b-select" style="min-width:180px">orbit-develop</span>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="b-drawn">半透明的两行是今天已有的开关，只用来标出新开关的位置。</div>
+    </div>
+
+    <div style="display:grid; gap:16px">
+      <div class="b-col-title" style="margin:0">你的私聊：<span class="b-tag b-tag-today">开着（今天）</span>对照 <span class="b-tag b-tag-new">关掉</span></div>
+      <div class="b-pair">
+        <div>
+          <div class="b-cap">agent 发来的消息</div>
+          <div class="b-fcard"><div class="b-fcard-head blue"><div class="t">Reply with OK and stop</div><div class="s">The agent sent you a message</div></div>
+            <div class="b-fcard-body"><div style="color:#646a73">Reply to this message to reply to the session.</div><div class="b-fbtns"><span class="b-fbtn">Open in Orbit</span></div></div></div>
+        </div>
+        <div class="b-rel">
+          <span class="b-mark" style="left:-30px">2</span>
+          <div class="b-cap">关掉后</div>
+          <div class="b-fcard"><div class="b-fcard-head blue"><div class="t">Reply with OK and stop</div><div class="s">The agent sent you a message</div></div>
+            <div class="b-fcard-body"><div style="color:#646a73">Reply to this message to reply to the session.</div></div></div>
+        </div>
+      </div>
+      <div class="b-pair">
+        <div>
+          <div class="b-cap">审批卡</div>
+          <div class="b-fcard"><div class="b-fcard-head"><div class="t">Create file with touch command</div><div class="s">Needs your reply · Bash</div></div>
+            <div class="b-fcard-body"><div style="color:#8f959e">Details hidden by your settings</div><div class="b-fbtns"><span class="b-fbtn allow">Allow once</span><span class="b-fbtn deny">Deny</span><span class="b-fbtn">Open in Orbit</span></div></div></div>
+        </div>
+        <div class="b-rel">
+          <span class="b-mark" style="left:-30px">3</span>
+          <div class="b-cap">关掉后</div>
+          <div class="b-fcard"><div class="b-fcard-head"><div class="t">Create file with touch command</div><div class="s">Needs your reply · Bash</div></div>
+            <div class="b-fcard-body"><div style="color:#8f959e">Details hidden by your settings</div><div class="b-fbtns"><span class="b-fbtn allow">Allow once</span><span class="b-fbtn deny">Deny</span></div></div></div>
+        </div>
+      </div>
+      <div class="b-pair">
+        <div>
+          <div class="b-cap">话题里的回复</div>
+          <div class="b-fcard" style="max-width:360px"><div class="b-fcard-body" style="padding-top:12px"><div>DONE</div><div class="b-fbtns"><span class="b-fbtn">Open in Orbit</span></div></div></div>
+        </div>
+        <div class="b-rel">
+          <span class="b-mark" style="left:-30px">4</span>
+          <div class="b-cap">关掉后</div>
+          <span class="b-plain">DONE</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes" style="margin-top:22px; grid-template-columns: 1fr 1fr; column-gap: 28px">
+    <div class="b-note"><span class="b-dot">1</span><div><b>一个开关，默认开着。</b>不想让人知道背后是 Orbit 的人才去关。设置页和 Orbit 里的其他地方都不受影响。</div></div>
+    <div class="b-note"><span class="b-dot">2</span><div><b>按钮没了，提醒照常到。</b>要处理，你自己打开 Orbit。只能在 Orbit 里处理的卡片（owner item、编排确认卡），关掉后只剩一句说明，没有按钮。</div></div>
+    <div class="b-note"><span class="b-dot">3</span><div><b>审批照样能答。</b>Allow once 和 Deny 不受影响。细节本来就是隐藏的，所以关掉后，在飞书里只能看到工具名。要在飞书里看清命令，把「Include details in alerts」打开。</div></div>
+    <div class="b-note"><span class="b-dot">4</span><div><b>回复变成纯文本。</b>今天的回复卡片只多一个按钮，关掉后直接发文字，看上去和普通聊天消息一样。</div></div>
+  </div>
+</section>
+
+<!-- ============================== Part 2 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">② 别人能看到的地方：不管开关，都不提 Orbit</h1>
+  <p class="b-sub">群里和非主人收到的话，今天有不少写着 Orbit。别人用不上这个名字，所以建议这些话一律改成中性说法（见③ H1）。
+    群接入卡片原本发在群里，任何人都能点开它的按钮，进到 Orbit 的登录页。现在改成私发给你。</p>
+  <table class="b-table">
+    <tr><th style="width:190px">在哪里</th><th>今天</th><th>建议</th></tr>
+    <tr><td>你在群里发 @bot connect</td>
+      <td>群里出现一张卡片「<span class="b-strike">Connect this group to Orbit</span>」，按钮是「<span class="b-strike">Connect in Orbit</span>」，群里每个人都能看到。</td>
+      <td>群里只回一句 <span class="b-q">I've sent you a link in our direct chat to finish connecting this group.</span>
+          你的私聊里收到卡片「Connect Platform team」，按钮是「Choose settings」。</td></tr>
+    <tr><td>没接入的群</td>
+      <td><span class="b-q">This group isn't connected to <span class="b-strike">Orbit</span>, so nothing was started. The bot's owner can connect it by sending "@Orbitd connect" here.</span></td>
+      <td><span class="b-q">This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@Orbitd connect" here.</span></td></tr>
+    <tr><td>群被关掉</td>
+      <td><span class="b-q">This group's connection to <span class="b-strike">Orbit</span> is switched off, so nothing was started. The bot's owner can switch it back on in <span class="b-strike">Orbit</span>, or send "@Orbitd connect" here.</span></td>
+      <td><span class="b-q">The bot is switched off in this group, so nothing was started. Ask the bot's owner to switch it back on.</span></td></tr>
+    <tr><td>不在允许名单里</td>
+      <td><span class="b-q">This group's <span class="b-strike">Orbit</span> connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you <span class="b-strike">in Orbit</span>.</span></td>
+      <td><span class="b-q">This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.</span></td></tr>
+    <tr><td>超出上限、没开成</td>
+      <td><span class="b-q"><span class="b-strike">Orbit didn't start a session</span>: this group already has 2 sessions running, the most its connection allows at a time. Try again when one finishes.</span></td>
+      <td><span class="b-q">Nothing was started: this group already has 2 sessions running, the most its connection allows at a time. Try again when one finishes.</span></td></tr>
+    <tr><td>话题没关联会话</td>
+      <td><span class="b-q">This topic isn't linked to an <span class="b-strike">Orbit</span> session. To start one, send "@Orbitd &lt;request&gt;" in the group, not in a topic.</span></td>
+      <td><span class="b-q">This topic isn't linked to a session. To start one, send "@Orbitd &lt;request&gt;" in the group, not in a topic.</span></td></tr>
+    <tr><td>外部群</td>
+      <td><span class="b-q"><span class="b-strike">Orbit connects</span> only groups inside your organization. This group has members from other organizations.</span></td>
+      <td><span class="b-q">This bot works only in groups inside your organization. This group has members from other organizations.</span></td></tr>
+    <tr><td>还没有主人时，别人私聊</td>
+      <td><span class="b-q">This bot has no owner yet. To become its owner, generate a code in <span class="b-strike">Orbit (Settings → Feishu → Connect your Feishu account)</span> and send it here.</span></td>
+      <td><span class="b-q">This bot isn't set up yet.</span></td></tr>
+  </table>
+  <div class="b-notes" style="margin-top:18px">
+    <div class="b-note"><span class="b-dot" style="background:#868e96">·</span><div><b>Orbit 管不到的地方</b>：机器人的名字、头像和简介（你现在是「Orbitd」和「It's a Orbitd apps」）都在飞书开发者后台设置。想让它看起来像你们自己的工具，去那里改。</div></div>
+    <div class="b-note"><span class="b-dot" style="background:#868e96">·</span><div><b>agent 写的正文原样转发</b>，正文里可能自己提到 Orbit（比如「Orbit says it was delivered」）。要不要在给 agent 的前言里加一句「回复里不要提 Orbit」，见③ H3。</div></div>
+  </div>
+</section>
+
+<!-- ============================== Part 3 ============================== -->
+<section class="b-part">
+  <h1 class="b-h1">③ 待定 · 要你拍板</h1>
+  <p class="b-sub">每一项都给了推荐。和「开放给可用范围内的人」那张图板的 D1–D5 一样，你回「按推荐」，或者说要改的编号。</p>
+  <table class="b-table">
+    <tr><th style="width:52px">#</th><th style="width:220px">问题</th><th>方案 A</th><th>方案 B</th><th style="width:110px">推荐</th></tr>
+    <tr><td>H1</td><td>别人看到的话里还提不提 Orbit</td><td>一律不提，跟开关无关（②那张表）。少一套分支，别人本来也用不上这个名字。</td><td>由开关决定：开着照旧提 Orbit，关掉才换成中性说法。</td><td class="b-rec">A</td></tr>
+    <tr><td>H2</td><td>群接入链接发到哪里</td><td>一律私发给你，群里只回一句「已私信给你」。这个链接本来就只有你能用。</td><td>只有开关关掉时才私发；开着时照旧发在群里。</td><td class="b-rec">A</td></tr>
+    <tr><td>H3</td><td>agent 的正文里提到 Orbit</td><td>开关关掉时，给 agent 的前言加一句：回复会发给飞书里的人，不要提 Orbit。</td><td>不管，正文原样转发。</td><td class="b-rec">A</td></tr>
+    <tr><td>H4</td><td>开关的默认值</td><td>开着，也就是今天的样子。想隐藏的人自己关。</td><td>关着，新接入的应用默认不露出 Orbit。</td><td class="b-rec">A</td></tr>
+  </table>
+  <div class="b-box" style="margin-top:20px">
+    <h3>落地（按代价排）</h3>
+    <ol>
+      <li><b>服务端文案（S）</b>：②表里的话改成中性说法；群接入卡改成私发（H1、H2）。改的是 feishu-chat-route、feishu-group、feishu-owner 这几处回复和接入卡片，相关 spec 跟着更新。</li>
+      <li><b>开关（M）</b>：
+        <ul>
+          <li>feishu_app 加一个字段，迁移号取 0800 以上，默认开着；</li>
+          <li>卡片渲染按这个字段决定要不要放 Open in Orbit 按钮，涉及提醒卡、私聊状态卡、回复卡和终态卡；</li>
+          <li>设置页的「Your app」卡片加这个开关；</li>
+          <li>补单元测试，并跑全部飞书 pg spec。</li>
+        </ul>
+      </li>
+      <li><b>runner 前言（S）</b>：开关关掉时加一句不要提 Orbit（H3），并写 runner-go 单元测试。</li>
+    </ol>
+    <div style="margin-top:8px; color:var(--text-2)">和开放模式（D1–D5）互不依赖，可以先做这一项。开放模式里新增的那几句拒绝语，本来就没有写 Orbit。</div>
+  </div>
+</section>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"ebcf6121ab9249e6863f238032b499e6","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>

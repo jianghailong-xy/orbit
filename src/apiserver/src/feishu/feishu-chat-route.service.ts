@@ -21,21 +21,25 @@ import { FeishuOutbound, feishuDedupeUuid } from './feishu-outbound';
 import type { FeishuGroupRoute } from './feishu-group.service';
 import { credentialsOf, type FeishuOwnerApp } from './feishu-owner.service';
 
-/** What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5). */
+/**
+ * What the bot answers in a group (§8.1). English, as every word the bot sends (CLAUDE.md §5); and, since everyone in
+ * the group reads it, never naming Orbit (§15.1) — the bot's own name, which the owner gives it in Feishu, aside.
+ */
 export const FEISHU_GROUP_REPLIES = {
+  /** `connect` from the owner: the card went to the owner's direct chat with the bot (§15.1). */
+  connectSent: "I've sent you a link in our direct chat to finish connecting this group.",
   /** `connect` from anyone but the owner. */
-  strangerConnect: 'Only the owner of this bot can connect this group to Orbit.',
+  strangerConnect: 'Only the owner of this bot can connect this group.',
   /** `connect` in a group with people from another organization. */
-  external: 'Orbit connects only groups inside your organization. This group has members from other organizations.',
+  external: 'This bot works only in groups inside your organization. This group has members from other organizations.',
   /** `connect` when Feishu would not say what the group is. */
   unreadable:
-    "Orbit couldn't read this group's information from Feishu. Check that the app has the im:chat:readonly permission, then try again.",
+    "The bot couldn't read this group's information from Feishu. Ask its owner to check the app's im:chat:readonly permission.",
   /** A mention in a group that was never connected, or whose connection was never confirmed (§8.1). */
   notConnected: (bot: string) =>
-    `This group isn't connected to Orbit, so nothing was started. The bot's owner can connect it by sending "@${bot} connect" here.`,
+    `This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@${bot} connect" here.`,
   /** A mention in a connected group that is switched off. */
-  switchedOff: (bot: string) =>
-    `This group's connection to Orbit is switched off, so nothing was started. The bot's owner can switch it back on in Orbit, or send "@${bot} connect" here.`,
+  switchedOff: "The bot is switched off in this group, so nothing was started. Ask the bot's owner to switch it back on.",
 } as const;
 
 /** The app as the router read it, with the bot's name for the replies. */
@@ -90,10 +94,11 @@ function present(row: FeishuChatRouteRow): FeishuChatRoute {
  *
  * The owner sends `@<bot> connect` in a group (`handleGroupMessage`). From anyone else it is refused with one sentence and
  * writes nothing; a group with members from another organization, or one Feishu will not describe, likewise. Otherwise the
- * group's row is made, or found, holding a one-time ticket bound to the owner's open_id and the group, and the bot answers
- * with a card whose button opens Orbit's confirm page. The ticket is derived from the event (`chatTicketFor`), and the row
+ * group's row is made, or found, holding a one-time ticket bound to the owner's open_id and the group; the bot sends the
+ * owner, in their direct chat with it, a card whose button opens Orbit's confirm page, and answers the group with one
+ * sentence saying so (§15.1). The ticket is derived from the event (`chatTicketFor`), and the row
  * is not touched again by the event that already issued its ticket, so the same event processed twice issues one ticket,
- * one card (Feishu's uuid), and never reopens a ticket that was used.
+ * one card and one sentence (Feishu's uuid), and never reopens a ticket that was used.
  *
  * Confirming (`confirm`, an owner-channel route: a personal access token is refused) writes the workspace, the permission
  * mode, the allowed senders and the limits, switches the route on and clears the ticket, in one conditional UPDATE: a
@@ -131,7 +136,7 @@ export class FeishuChatRouteService {
     }
     if (!route.enabled) {
       this.logger.log(`feishu app ${app.appId}: a mention in a group whose connection is off; nothing started`);
-      await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.switchedOff(bot));
+      await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.switchedOff);
       return null;
     }
     // A confirmed route always holds both (the confirm writes them together).
@@ -175,12 +180,18 @@ export class FeishuChatRouteService {
         "ticket_expires_at" = EXCLUDED."ticket_expires_at",
         "updated_at" = now()
       WHERE "feishu_chat_route"."ticket_event_id" IS DISTINCT FROM EXCLUDED."ticket_event_id"`;
-    this.logger.log(`feishu app ${app.appId} of account ${app.ownerId}: the owner asked to connect a group; card sent`);
+    // The card goes to the owner's direct chat with the bot, never into the group (§15.1): only the owner can use its
+    // link, and the group reads one sentence saying so.
     const card = renderConnectGroupCard(chat.name, confirmUrl(ticket), FEISHU_CHAT_TICKET_TTL_MINUTES);
-    const sent = await this.outbound.reply(credentials, message.messageId, { msgType: 'interactive', content: card }, {
+    const sent = await this.outbound.send(credentials, { receiveIdType: 'open_id', receiveId: message.openId }, { msgType: 'interactive', content: card }, {
       uuid: feishuDedupeUuid('connect-card', app.appId, message.messageId),
     });
-    if (!sent.ok) this.logger.warn(`feishu app ${app.appId}: the connect card was not delivered (code ${sent.feishuCode ?? sent.status})`);
+    if (!sent.ok) {
+      this.logger.warn(`feishu app ${app.appId}: the connect card was not delivered to the owner (code ${sent.feishuCode ?? sent.status})`);
+      return;
+    }
+    this.logger.log(`feishu app ${app.appId} of account ${app.ownerId}: the owner asked to connect a group; card sent to the owner`);
+    await this.replyText(app, message.messageId, FEISHU_GROUP_REPLIES.connectSent);
   }
 
   /** `im.chat.member.bot.deleted_v1` (§8.1): the group's route is switched off, and any live ticket stops working. */

@@ -422,7 +422,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 ### 8.1 接入一个群
 
 1. 主人把自己的机器人拉进群（只能是应用所在租户的内部群），在群里发 `@<bot> connect`。只有主人发的 connect 受理。
-2. 机器人回一张 `Connect this group to Orbit` 卡片，按钮打开 Orbit 的确认页（LOGIN）。确认页凭一次性 ticket 进入。
+2. 机器人把一张 `Connect <群名>` 卡片私发给主人，按钮打开 Orbit 的确认页（LOGIN）；群里只回一句已私信（§15.1）。确认页凭一次性 ticket 进入。
 3. 主人在确认页上选：
    - workspace；
    - permission mode，并写明后果：「群里的人能让 agent 在 <runner> 上以 <mode> 做事」；确认页默认选 Auto（所有者 2026-11-18）；
@@ -453,10 +453,10 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 
 - `FeishuChatRouteService.handleGroupMessage` 对已确认且开着的路由返回路由，由 `FeishuGroupService` 接手；`connect`、未接入与已停用的群照旧由前者回一句。
 - 允许名单：主人总是可以；`allowed_open_ids` 为空即群里所有人；不在名单的人回
-  `This group's Orbit connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you in Orbit.`，零写入。
+  `This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.`（§15.1），零写入。
 - 顶层 @：`SessionsService.create(route.ownerId, { workspaceId: route.workspaceId, prompt, permissionMode: route.permissionMode })`，
   会话 id 由 appId 与 message_id 派生；该消息就是 `feishu_thread` 的根，回执 `Started · <title>` 以 `reply_in_thread` 发出，
-  此后 §7.5 的发件箱把每轮正文回到这个话题。建会话前的拒绝把原因回到话题（`Orbit didn't start a session: <原因>.`）；上限与预检的细化归 F3-4。
+  此后 §7.5 的发件箱把每轮正文回到这个话题。建会话前的拒绝把原因回到话题（`Nothing was started: <原因>.`，§15.1）；上限与预检的细化归 F3-4。
 - 话题里 @（事件带 `root_id`）：根在 `feishu_thread` 里属于会话 S，就以 `createTurn` 进 S，不带 intent，按常规 steer / 排队；
   clientTurnId 由 appId 与 event_id 派生。根不属于任何会话时回一句说明，不开会话。
 - 每个新会话 / 新 turn 写一行 activity（`feishu.group.session.created` / `feishu.group.session.turn`，credential_kind FEISHU）。
@@ -470,9 +470,9 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   所以两条同时到达的请求只有一条能占到最后一个名额。占位行在会话建成后由开话题的事务改成 now()，只有改到它的那次写 activity。
   占了位但会话始终没建成的（进程中途死掉）10 分钟后不再占名额；同一事件再处理时找到自己的占位直接用。
 - 超限不建会话、零写入，在话题里回
-  `Orbit didn't start a session: this group already has <n> session(s) running, the most its connection allows at a time. Try again when one finishes.`
-  或 `Orbit didn't start a session: this group has started <n> session(s) today, the most its connection allows in a day. Try again after midnight UTC.`
-- 预检拒绝（没有能跑的 runner、引擎没登录、配额用完）时删掉占位，名额还回去，照 F3-2 回 `Orbit didn't start a session: <原因>.`。
+  `Nothing was started: this group already has <n> session(s) running, the most its connection allows at a time. Try again when one finishes.`
+  或 `Nothing was started: this group has started <n> session(s) today, the most its connection allows in a day. Try again after midnight UTC.`（§15.1）
+- 预检拒绝（没有能跑的 runner、引擎没登录、配额用完）时删掉占位，名额还回去，照 F3-2 回 `Nothing was started: <原因>.`（§15.1）。
 
 落地（F3-5，迁移 0502，发送者署名）：
 
@@ -592,3 +592,67 @@ F0 → F1 → F2 → F3 串行，F3n 在 F3 之后两端并行。以后再做：
 - **决定 3 读作「只有每账号应用」**，不另做部署级的共享应用。要两种都支持，在 §4 加一种「部署应用 + 每人绑定」的接法。
 - **决定 5 的「详情」指提醒卡上的内容。** 在飞书里进行的对话（从飞书开的会话、在飞书里回复过的会话）每轮的回复照常回传，
   否则群派活没有结果。默认模式下审批卡只有工具名，与 iOS 锁屏横幅一致；要求看清细节才能批的，把详情切成 `FULL`。
+
+## 15. 不露出 Orbit（所有者决定 2026-11-19，H1–H4 都按推荐 A）
+
+图板：docs/mocks/feishu-hide-orbit/（01-hide-orbit.html 与三张 PNG，②那张表是要改的句子）。
+
+### 15.1 别人看到的话
+
+群里的话、发给非主人的话一律不提 Orbit，与开关无关。机器人在飞书里的名字（比如 @Orbitd）不算，它是所有者在飞书后台起的。
+
+**群接入**
+
+主人在群里发 `@<bot> connect` 之后：
+
+- 群里只回一句：`I've sent you a link in our direct chat to finish connecting this group.`
+- 接入卡片私发给主人（发 connect 的主人本人的 open_id）：
+  - 标题是 `Connect <群名>`，没有群名时写 `Connect this group`；
+  - 按钮是 `Choose settings`；
+  - 正文写 `Choose the workspace, the permission mode, who in this group can start sessions, and the limits. Nothing runs from this group until you confirm.`；
+  - 提示照旧写 `Only you can use this link, once, within 30 minutes.`。
+- 确认页、ticket、一次性、30 分钟的规则都不变（§8.1）。
+
+**其他句子**
+
+| 情形 | 新句子 |
+| --- | --- |
+| 没接入 | `This group isn't connected, so nothing was started. The bot's owner can connect it by sending "@<bot> connect" here.` |
+| 群被关掉 | `The bot is switched off in this group, so nothing was started. Ask the bot's owner to switch it back on.` |
+| 不在允许名单 | `This group's connection doesn't take requests from you, so nothing was started. Ask the bot's owner to add you.` |
+| 超出上限等没开成 | `Orbit didn't start a session:` 一律换成 `Nothing was started:`；gone 换成 `Nothing was started: this group is no longer connected.` |
+| notSent | `This wasn't sent to the session: <reason>.` |
+| 话题没关联会话 | `This topic isn't linked to a session. To start one, send "@<bot> <request>" in the group, not in a topic.` |
+| 外部群 | `This bot works only in groups inside your organization. This group has members from other organizations.` |
+| 非主人发 connect | `Only the owner of this bot can connect this group.` |
+| 读不到群信息 | `The bot couldn't read this group's information from Feishu. Ask its owner to check the app's im:chat:readonly permission.` |
+| 还没有主人时别人私聊 | `This bot isn't set up yet.` |
+
+- 拼进这些句子的 reason（服务端拒绝的原因）要检查：含 Orbit 的，改成中性说法。
+
+落地（P1）：
+
+- 句子在 feishu-chat-route.service.ts 的 `FEISHU_GROUP_REPLIES`、feishu-group.service.ts 的 `FEISHU_GROUP_WORK_REPLIES`、
+  feishu-owner.service.ts 的 `noOwner`；接入卡片是 cards/feishu-cards.ts 的 `renderConnectGroupCard`，经
+  `POST /open-apis/im/v1/messages`（`receive_id_type=open_id`）发给主人，卡片与群里那一句各带自己的飞书 uuid，同一事件再处理只到一次。
+  卡片没发出去时群里不回那一句（只记日志），免得说「已私信」而主人什么也没收到。
+- reason 的中性说法：服务端的拒绝是写给账号主人的，可能提到 Orbit、它的页面或工具。含 `orbit`（不分大小写）的原因整句换成
+  `the bot's owner needs to look into it`，不做局部替换，免得留下半句关于 Orbit 的话；不含的原样拼入（`groupReason`）。
+- 另外两句群里看得到的话也按本节改了，表里没列：主人在群里发绑定码时的回复（`FEISHU_OWNER_REPLIES.group`）去掉
+  「in Orbit」；群里回传的正文被截断时的说明改成 `(Cut to fit a Feishu message.)`（私聊里的照旧写 `The rest is in Orbit.`）。
+- 只发给主人的话（私聊里的回执、拒绝、帮助、卡片）不在本节，可以提 Orbit。
+
+### 15.2 「Show Orbit in Feishu」开关（P2）
+
+- 默认开。
+- 关掉后，发给主人的卡片和回复都不带 Open in Orbit 按钮，也不带任何 Orbit URL。
+- 发给主人的文字仍然可以提到 Orbit，比如 `Answer this in Orbit.`，因为只有主人看得到。
+- 审批照样能在卡片上答复。
+
+### 15.3 agent 前言（P3）
+
+开关关掉时，runner 给飞书来源的轮次的前言加一句英文：`Your reply goes to people in Feishu; do not mention Orbit.`
+
+### 15.4 Orbit 管不到的地方
+
+机器人的名字、头像和简介都在飞书开发者后台设置。

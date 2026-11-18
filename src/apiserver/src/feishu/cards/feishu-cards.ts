@@ -155,21 +155,32 @@ const openInOrbit = (url: string): Element => ({
   tag: 'button', text: plain('Open in Orbit'), type: 'default', behaviors: [{ type: 'open_url', default_url: url }],
 });
 
-/** The card the bot answers the owner's `@<bot> connect` in a group with (§8.1): one button, to Orbit's confirm page. */
-export const CONNECT_GROUP_TITLE = 'Connect this group to Orbit';
-export const CONNECT_GROUP_BUTTON = 'Connect in Orbit';
+/**
+ * The card the owner gets in their direct chat with the bot after sending `@<bot> connect` in a group (§8.1, §15.1):
+ * one button, to the confirm page. Sent to the owner alone, never into the group, so the group reads no link and no
+ * name but the bot's own.
+ */
+export const CONNECT_GROUP_TITLE = 'Connect this group';
+export const CONNECT_GROUP_BUTTON = 'Choose settings';
+export const CONNECT_GROUP_BODY =
+  'Choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
+  + 'Nothing runs from this group until you confirm.';
+
+/** `Connect <group name>`, or `Connect this group` when Feishu gave no name. */
+export function connectGroupTitle(chatName: string | null): string {
+  return chatName ? `Connect ${chatName}` : CONNECT_GROUP_TITLE;
+}
+
 export function renderConnectGroupCard(chatName: string | null, confirmUrl: string, ttlMinutes: number): FeishuCard {
+  const title = connectGroupTitle(chatName);
   return {
     schema: '2.0',
-    config: { update_multi: true, summary: { content: CONNECT_GROUP_TITLE } },
-    header: { title: plain(CONNECT_GROUP_TITLE), subtitle: plain(chatName ?? ''), template: 'blue' },
+    config: { update_multi: true, summary: { content: title } },
+    header: { title: plain(title), subtitle: plain(''), template: 'blue' },
     body: {
       direction: 'vertical',
       elements: [
-        text(
-          'Open Orbit to choose the workspace, the permission mode, who in this group can start sessions, and the limits. '
-          + 'Nothing runs from this group until you confirm there.',
-        ),
+        text(CONNECT_GROUP_BODY),
         note(`Only you can use this link, once, within ${ttlMinutes} minutes.`),
         row([{ tag: 'button', text: plain(CONNECT_GROUP_BUTTON), type: 'primary', behaviors: [{ type: 'open_url', default_url: confirmUrl }] }]),
       ],
