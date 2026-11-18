@@ -104,13 +104,15 @@ import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
 import { mainBranchOf, taskLandingSql } from './project-criterion-landing';
 import {
-  RetryableLandingFailureClass,
+  LandingRetryFailureClass,
   SkippedMergeCheckRecord,
   endTimedOutLanding,
   enqueueForDoneTask,
   pushBoundaryPassed,
   queueLandingRetry,
+  readLandingSourceRefs,
 } from './project-integration-job';
+import { probeBranchCarriesTips } from './branch-carries-tips';
 import {
   ProjectIntegrationView,
   projectIntegrationView,
@@ -451,8 +453,11 @@ export interface IntegrationRetried {
   landingSessionId: string | null;
   /** The failed generation it reruns, and what that one failed of. */
   retryOfJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  failureClass: LandingRetryFailureClass;
   reason: string;
+  /** What this rerun does differently, when it is not the plain one: a MAIN_SYNC conflict whose
+   *  branch now carries both tips lands by a merge (§3.1 M3). */
+  message?: string;
   /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
    *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
    *  none was open — it may already have been closed by hand. */
@@ -516,7 +521,7 @@ export interface PromotionCheckRetried {
   landingSessionId: string | null;
   /** The failed job it reruns — the candidate's check or its landing — and what that one failed of. */
   retryOfJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  failureClass: LandingRetryFailureClass;
   reason: string;
   /** The coordinator's open items about the candidate, now being handled by this check. */
   handlingItemIds: string[];
@@ -2305,6 +2310,11 @@ export class ProjectOpenItemService {
           + 'project\'s landings again. The task\'s own project, and its coordinator, decide this one.',
       });
     }
+    // §3.1 M3: a landing that stopped at MAIN_SYNC is rerun once the task's branch carries both the
+    // project line and main. That is a question for the repository, asked here, outside the row lock
+    // (it fetches), and held to the landing it was asked about: the decision below uses the answer
+    // only while that landing is still the newest.
+    const absorbed = await this.probeMainSyncAbsorbed(ownerId, projectId, taskId);
 
     return withTransactionRetry(this.prisma, async (tx) => {
       const [locked] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
@@ -2352,6 +2362,7 @@ export class ProjectOpenItemService {
         newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
         openItems,
         ownerBlockers,
+        branchCarriesBothTips: absorbed !== null && absorbed === newestLanding?.id,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
       if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent, 'RETRY') : null) === null) {
@@ -2397,9 +2408,27 @@ export class ProjectOpenItemService {
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,
+        ...(decision.message ? { message: decision.message } : {}),
         handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
+  }
+
+  /**
+   * The newest landing's id when it is a CONFLICT that stopped at MAIN_SYNC and the task's branch tip
+   * now contains both the project-line tip and main's tip (`probeBranchCarriesTips`); null otherwise,
+   * including whenever the repository could not answer — which keeps the refusal.
+   */
+  private async probeMainSyncAbsorbed(ownerId: string, projectId: string, taskId: string): Promise<string | null> {
+    const newest = await this.prisma.projectIntegrationJob.findFirst({
+      where: { taskId, kind: 'LAND_TASK' },
+      orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: { id: true, state: true, phase: true },
+    });
+    if (newest?.state !== 'CONFLICT' || newest.phase !== 'MAIN_SYNC') return null;
+    const refs = await readLandingSourceRefs(this.prisma, { ownerId, projectId, taskId });
+    if (!refs) return null;
+    return (await probeBranchCarriesTips(refs)) === 'BOTH' ? newest.id : null;
   }
 
   /** The account owner's user-channel door for a failed task landing. */

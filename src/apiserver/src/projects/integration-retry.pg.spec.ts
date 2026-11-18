@@ -1,6 +1,10 @@
 import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -49,6 +53,8 @@ import { ProjectOpenItemEscalationService } from './open-item-escalation.service
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
+import { MAIN_SYNC_ABSORBED_MESSAGE } from './project-integration-retry';
+import { canonicalRepoUrl } from './project-criterion-landing';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -951,6 +957,141 @@ test('a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb 
       const [stillOpen] = await itemsOf(stack.db, clash.task.taskId);
       assert.equal(stillOpen?.state, 'OPEN', 'and its item is left for the decision it needs');
     } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/** Run git in a fixture directory, as a script would. */
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', args, {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@retry.invalid',
+      GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@retry.invalid',
+      GIT_CONFIG_NOSYSTEM: '1', HOME: cwd,
+    },
+  }).toString().trim();
+}
+
+function commit(work: string, file: string): void {
+  writeFileSync(path.join(work, file), `${file} ${randomUUID()}\n`);
+  git(work, 'add', file);
+  git(work, 'commit', '--quiet', '-m', file);
+}
+
+/**
+ * A MAIN_SYNC conflict over a real repository: a bare `origin` the workspace pushes to, main and the
+ * project line diverged from one base, and the DONE task's landing reported as having stopped at
+ * MAIN_SYNC. `work` is a clone with the task's branch checked out on the project line's tip and one
+ * commit of its own on it, not yet pushed — each case decides what else the branch carries.
+ */
+async function mainSyncConflictOverGit(stack: Stack, label: string) {
+  const w = await world(stack, label);
+  const root = mkdtempSync(path.join(tmpdir(), `orbit-${label}-`));
+  const origin = path.join(root, 'origin');
+  git(root, 'init', '--quiet', '--bare', origin);
+  // The workspace pushes to the fixture, and the project's line is bound to that repository.
+  await stack.db.workspace.update({ where: { id: w.workspaceId }, data: { repoUrl: origin } });
+  const codebase = await stack.db.projectCodebase.findFirstOrThrow({
+    where: { projectId: w.projectId, slot: 'primary' },
+    select: { id: true, integrationRef: true, upstreamRef: true },
+  });
+  await stack.db.projectCodebase.update({
+    where: { id: codebase.id }, data: { canonicalRepoUrl: canonicalRepoUrl(origin)! },
+  });
+  const clash = await failedLanding(stack, w, label, { ...CONFLICTED, phase: 'MAIN_SYNC' });
+  const work = path.join(root, 'work');
+  git(root, 'init', '--quiet', work);
+  commit(work, 'base.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.upstreamRef}`);
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.integrationRef}`);
+  commit(work, 'line.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.integrationRef}`);
+  git(work, 'checkout', '--quiet', '-b', 'main-side', 'HEAD~1');
+  commit(work, 'main.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.upstreamRef}`);
+  git(work, 'checkout', '--quiet', '-b', clash.task.branch, `HEAD~1`);
+  git(work, 'fetch', '--quiet', origin, `${codebase.integrationRef}:refs/remotes/o/line`, `${codebase.upstreamRef}:refs/remotes/o/main`);
+  git(work, 'reset', '--quiet', '--hard', 'refs/remotes/o/line');
+  commit(work, 'task.txt');
+  const push = () => git(work, 'push', '--quiet', '--force', origin, `HEAD:refs/heads/${clash.task.branch}`);
+  return { w, clash, origin, work, codebase, push, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test('a MAIN_SYNC conflict whose branch now carries the project line and main is rerun, and lands by a merge',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const fixture = await mainSyncConflictOverGit(stack, 'retry-main-sync-absorbed');
+    try {
+      const { w, clash, work, push } = fixture;
+      // §3.1 M3, done on the task's branch: a merge of main into a branch that already sits on the
+      // project line's tip — both tips are now ancestors of the branch.
+      git(work, 'merge', '--quiet', '--no-ff', '-m', 'absorb main', 'refs/remotes/o/main');
+      push();
+
+      const retried = await retry(stack, w, clash.task.taskId, 'the branch absorbed main and the project line');
+      assert.equal(retried.message, MAIN_SYNC_ABSORBED_MESSAGE);
+      assert.equal(retried.message, 'Landing again: the branch now contains the project line and main, so it lands by a merge.');
+      assert.equal(retried.failureClass, 'CONFLICT');
+      assert.equal(retried.generation, 2);
+      assert.equal(retried.retryOfJobId, clash.job.jobId);
+      const [conflictItem] = await itemsOf(stack.db, clash.task.taskId);
+      assert.deepEqual(retried.handlingItemIds, [conflictItem!.id], 'the conflict item is handled by the rerun');
+      const [, second] = await landings(stack.db, clash.task.taskId);
+      assert.equal(second?.state, 'QUEUED');
+      assert.equal(second?.retryFailureClass, 'CONFLICT', 'the rerun records what it reruns (migration 1090)');
+      assert.equal(second?.sourceRef, `refs/heads/${clash.task.branch}`);
+
+      // The landing proceeds: the heartbeat hands the generation out (M2 does not hold the conflicted
+      // task's own landing), and the runner's LANDED closes the conflict item as HANDLED.
+      const [next] = await claim(stack, w, 'lease-retry-main-sync-absorbed-2');
+      assert.equal(next?.jobId, retried.jobId, 'the rerun is claimed');
+      const landed = await report(stack, w, next!, LANDED);
+      assert.equal(landed.accepted, true);
+      assert.equal((await landings(stack.db, clash.task.taskId))[1]?.state, 'LANDED');
+      const [closed] = await itemsOf(stack.db, clash.task.taskId);
+      assert.equal(closed?.state, 'RESOLVED');
+      assert.equal(closed?.resolution, 'HANDLED');
+    } finally {
+      fixture.cleanup();
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a MAIN_SYNC conflict whose branch lacks main, or lacks the project tip, is still refused with the M3 wording',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const lacksMain = await mainSyncConflictOverGit(stack, 'retry-main-sync-no-main');
+    const lacksLine = await mainSyncConflictOverGit(stack, 'retry-main-sync-no-line');
+    try {
+      const assertRefused = async (fixture: typeof lacksMain) => {
+        const refused = await denied(() => retry(stack, fixture.w, fixture.clash.task.taskId, 'try again'));
+        assert.equal(refused.status, 409);
+        assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+        assert.match(refused.message, /stopped at MAIN_SYNC/);
+        assert.match(refused.message, /running it again meets the same conflict, and so does sending the task back to redo its work/);
+        assert.match(refused.message, /Absorb the upstream on the project line first/);
+        assert.match(refused.message, /lands by J-S4 MERGE/);
+        assert.equal((await landings(stack.db, fixture.clash.task.taskId)).length, 1, 'nothing queued');
+        assert.equal((await itemsOf(stack.db, fixture.clash.task.taskId))[0]?.state, 'OPEN');
+      };
+
+      // On the project line's tip, but main never merged in.
+      lacksMain.push();
+      await assertRefused(lacksMain);
+
+      // Both merged in — and then the project line moved on: the branch lacks its current tip.
+      git(lacksLine.work, 'merge', '--quiet', '--no-ff', '-m', 'absorb main', 'refs/remotes/o/main');
+      lacksLine.push();
+      git(lacksLine.work, 'checkout', '--quiet', '-b', 'line-moves', 'refs/remotes/o/line');
+      commit(lacksLine.work, 'line-2.txt');
+      git(lacksLine.work, 'push', '--quiet', lacksLine.origin, `HEAD:${lacksLine.codebase.integrationRef}`);
+      await assertRefused(lacksLine);
+    } finally {
+      lacksMain.cleanup();
+      lacksLine.cleanup();
       await stack.db.$disconnect();
     }
   });

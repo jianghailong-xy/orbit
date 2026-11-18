@@ -1,6 +1,6 @@
 import {
   LandingFailureClass,
-  RetryableLandingFailureClass,
+  LandingRetryFailureClass,
   isRetryableLandingFailure,
   landingFailureClass,
 } from './project-integration-job';
@@ -60,7 +60,18 @@ export interface IntegrationRetryFacts {
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
   /** The task's open `project_blocker` episodes that wait on the account owner. */
   ownerBlockers: ReadonlyArray<{ id: string; kind: string }>;
+  /**
+   * Measured only for a CONFLICT that stopped at MAIN_SYNC (`branch-carries-tips.ts`): true when the
+   * task's current branch tip contains both the current project-line tip and current main, so the
+   * next landing skips the main sync and lands by J-S4 MERGE (§3.1 M3). Anything else — not
+   * measured, a tip missing, or nobody could tell — keeps the refusal.
+   */
+  branchCarriesBothTips?: boolean;
 }
+
+/** What the rerun of an absorbed MAIN_SYNC conflict says it is doing. */
+export const MAIN_SYNC_ABSORBED_MESSAGE = 'Landing again: the branch now contains the project line and main, '
+  + 'so it lands by a merge.';
 
 /** A refusal, in the shape the service throws it: the status, and the body the caller reads. */
 export interface IntegrationRetryRefusal {
@@ -73,7 +84,9 @@ export type IntegrationRetryDecision =
   | {
       ok: true;
       retryOfJobId: string;
-      failureClass: RetryableLandingFailureClass;
+      failureClass: LandingRetryFailureClass;
+      /** Set when the rerun is not the plain one: what it will do differently. */
+      message?: string;
       /**
        * The open items the rerun will be HANDLING: the coordinator's own, about this failure. They stay
        * OPEN while the rerun is in flight and are ended by its result (§4.7 H1–H4) — HANDLED when it
@@ -137,13 +150,19 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       + 'stops reporting past its limit, it can be retried then.',
       { newestLanding: landing });
   }
-  const failureClass: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
-  if (!isRetryableLandingFailure(failureClass)) {
+  const classified: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
+  // §3.1 M3: the line's conflict is answered once the source branch carries both tips — measured
+  // now, against the tips as they are, not read off the landing that stopped.
+  const absorbed = classified === 'CONFLICT' && newest.phase === 'MAIN_SYNC'
+    && facts.branchCarriesBothTips === true;
+  if (!absorbed && !isRetryableLandingFailure(classified)) {
     return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
-      notRetryable(newest.state, failureClass, newest.phase ?? null), {
-        newestLanding: { ...landing, failureClass },
+      notRetryable(newest.state, classified, newest.phase ?? null), {
+        newestLanding: { ...landing, failureClass: classified },
       });
   }
+  const failureClass = classified as LandingRetryFailureClass;
+  const message = absorbed ? { message: MAIN_SYNC_ABSORBED_MESSAGE } : {};
 
   const requester = facts.requester ?? 'COORDINATOR';
   if (requester === 'OWNER') {
@@ -162,6 +181,7 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       retryOfJobId: newest.id,
       failureClass,
       handle: mine.map((item) => item.id),
+      ...message,
       ...(timedOut ? { endsTimedOutJob: true } : {}),
     };
   }
@@ -181,6 +201,7 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
     retryOfJobId: newest.id,
     failureClass,
     handle: mine.map((item) => item.id),
+    ...message,
     ...(timedOut ? { endsTimedOutJob: true } : {}),
   };
 }

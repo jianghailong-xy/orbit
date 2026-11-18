@@ -20,6 +20,7 @@ import {
   INTEGRATION_RETRY_OWNER_BLOCKER,
   INTEGRATION_RETRY_OWNER_ITEM,
   IntegrationRetryFacts,
+  MAIN_SYNC_ABSORBED_MESSAGE,
   PromotionRetryFacts,
   decideIntegrationRetry,
   decidePromotionRetry,
@@ -421,6 +422,33 @@ test('integration_retry still refuses a MAIN_SYNC conflict, and says to absorb t
     }));
     assert.match(other.message, /reworked against the line as it is now/, String(phase));
   }
+});
+
+test('integration_retry reruns a MAIN_SYNC conflict once the branch carries both tips, and only that conflict', () => {
+  const item = { id: 'item-1', kind: 'INTEGRATION_CONFLICT', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' };
+  const mainSync = { id: 'j', generation: 1, state: 'CONFLICT', checks: [], phase: 'MAIN_SYNC' };
+  const accepted = decideIntegrationRetry(facts({ newestLanding: mainSync, openItems: [item], branchCarriesBothTips: true }));
+  assert.ok(accepted.ok);
+  assert.equal(accepted.failureClass, 'CONFLICT');
+  assert.equal(accepted.retryOfJobId, 'j');
+  assert.deepEqual(accepted.handle, ['item-1']);
+  assert.equal(accepted.message, MAIN_SYNC_ABSORBED_MESSAGE);
+  // A tip missing, or nobody could tell: today's refusal.
+  for (const branchCarriesBothTips of [false, undefined]) {
+    const refused = refusalOf(facts({ newestLanding: mainSync, openItems: [item], branchCarriesBothTips }));
+    assert.match(refused.message, /stopped at MAIN_SYNC/, String(branchCarriesBothTips));
+  }
+  // A conflict of the task's own commits is not answered by both tips.
+  const rebase = refusalOf(facts({
+    newestLanding: { ...mainSync, phase: 'REBASE' }, openItems: [item], branchCarriesBothTips: true,
+  }));
+  assert.match(rebase.message, /reworked against the line as it is now/);
+  // A plain rerun says nothing extra.
+  const red = decideIntegrationRetry(facts({
+    newestLanding: { id: 'k', generation: 1, state: 'CHECK_FAILED', checks: [] }, branchCarriesBothTips: true,
+  }));
+  assert.ok(red.ok);
+  assert.equal(red.message, undefined);
 });
 
 // ── a blocked candidate's check (§4.7 H1): the item about a merge into main, which names no task ──

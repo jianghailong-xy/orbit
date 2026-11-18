@@ -206,6 +206,9 @@ export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 /** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
 export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
+/** What a queued rerun records it reruns: a retryable failure, or a MAIN_SYNC conflict whose branch
+ *  has since absorbed both tips (§3.1 M3, migration 1090). */
+export type LandingRetryFailureClass = RetryableLandingFailureClass | 'CONFLICT';
 
 /**
  * The class of a finished job, or null for a state that is not a failure.
@@ -918,7 +921,7 @@ export function skippedMergeCheck(job: {
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
-  failureClass: RetryableLandingFailureClass;
+  failureClass: LandingRetryFailureClass;
   reason: string;
   /** Exactly one requester is recorded by migration 0380. */
   requestedBySessionId?: string;
@@ -1106,6 +1109,36 @@ export async function queueLandingRetry(
     generation: job.generation,
     sourceRef: job.sourceRef,
     landingSessionId: queued.landingSessionId,
+  };
+}
+
+/**
+ * Where a rerun of this task's landing would fetch from, and the three refs it would read: the
+ * branch `queueLandingRetry` would hand the line (the same `landingWorkSession` choice), the remote
+ * its workspace pushes to, and the binding's two refs. Null when there is no such landing to ask
+ * about — no work branch, no repository recorded, or a project that lands straight into main.
+ */
+export async function readLandingSourceRefs(
+  db: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string },
+): Promise<{ repoUrl: string; sourceRef: string; integrationRef: string; upstreamRef: string } | null> {
+  const task = await db.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
+    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  const repoUrl = work?.workspace?.repoUrl;
+  if (!task || task.codeless || !work?.branch || !repoUrl) return null;
+  const codebase = await db.projectCodebase.findFirst({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { integrationRef: true, upstreamRef: true },
+  });
+  if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
+  return {
+    repoUrl,
+    sourceRef: `refs/heads/${work.branch}`,
+    integrationRef: codebase.integrationRef,
+    upstreamRef: codebase.upstreamRef,
   };
 }
 
