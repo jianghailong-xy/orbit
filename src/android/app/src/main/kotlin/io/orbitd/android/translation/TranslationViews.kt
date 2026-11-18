@@ -88,6 +88,45 @@ object TranslationCopy {
         "$SHOW ${Translation.name(agentLanguage)} · $lines $LINES"
 }
 
+/**
+ * Why the owner's words were not sent (policy board docs/ux/translation-failure-policy.html, frame 7's B column): the sentence before
+ * "· Retry · Send as written" on a held message (4B) and, naming "your answer", on a card answer refused 422 TRANSLATION_FAILED (5).
+ * No reason, or one the board has no line for (NO_KEY), is null: the drawing says today's generic [TranslationCopy.SEND_FAILED]. Same words as the web's.
+ */
+object TranslationFailureCopy {
+    const val TIMEOUT = "The translator didn't answer in time"
+    const val UNREACHABLE = "The translator was unreachable"
+    const val REFUSED = "The translator refused the message"
+    const val TOO_LONG = "Too long to translate"
+    const val DAMAGED = "The translation came back damaged"
+    const val UNAVAILABLE = "Translation is unavailable right now"
+    const val MESSAGE_NOT_SENT = ", so it wasn't sent"
+    const val ANSWER_NOT_SENT = ", so your answer wasn't sent"
+    /** After the composer tag while the server skips a failing translator (frame 6): "Chinese → English · unavailable, messages will wait". */
+    const val COMPOSER_UNAVAILABLE = "unavailable, messages will wait"
+
+    /** The reason's clause, or null for none: HTTP 429 and 5xx were retried and read as unreachable, any other status as refused. */
+    fun clause(reason: Translation.FailureReason?, httpStatus: Int?): String? = when (reason) {
+        Translation.FailureReason.TIMEOUT -> TIMEOUT
+        Translation.FailureReason.NETWORK -> UNREACHABLE
+        Translation.FailureReason.HTTP -> if (httpStatus != null && (httpStatus == 429 || httpStatus >= 500)) UNREACHABLE else REFUSED
+        Translation.FailureReason.TRUNCATED -> TOO_LONG
+        Translation.FailureReason.MANGLED, Translation.FailureReason.EMPTY -> DAMAGED
+        Translation.FailureReason.UNAVAILABLE -> UNAVAILABLE
+        Translation.FailureReason.NO_KEY, null -> null
+    }
+
+    /** A held message's line: "The translator didn't answer in time, so it wasn't sent"; null without a reason (draw SEND_FAILED). */
+    fun message(reason: Translation.FailureReason?, httpStatus: Int?): String? = clause(reason, httpStatus)?.let { it + MESSAGE_NOT_SENT }
+
+    /** A card answer's line: "The translator was unreachable, so your answer wasn't sent"; null without a reason (draw SEND_FAILED). */
+    fun answer(reason: Translation.FailureReason?, httpStatus: Int?): String? = clause(reason, httpStatus)?.let { it + ANSWER_NOT_SENT }
+
+    /** The composer tag: "Chinese → English", and while [unavailable] "Chinese → English · unavailable, messages will wait". */
+    fun composerTag(language: String, agentLanguage: String, unavailable: Boolean): String =
+        Translation.tag(language, agentLanguage).let { if (unavailable) "$it · $COMPOSER_UNAVAILABLE" else it }
+}
+
 /** The English under a translated message with both languages on: null draws no block (held, failed, pending, sent as written, or off). */
 object BilingualShown {
     fun userEnglish(english: String, turn: Translation.Turn?, bilingual: Boolean): String? =
@@ -246,14 +285,16 @@ fun CardTranslationFoot(flipped: Boolean, onFlip: () -> Unit, modifier: Modifier
 
 /**
  * An owner card's answer the server could not translate (422 TRANSLATION_FAILED, board 04-owner-cards.html mark B): nothing was
- * recorded, and the card says so with the conversation's words, "Couldn't translate, so it wasn't sent · Retry · Send as written".
+ * recorded, and the card says why ([TranslationFailureCopy.answer], policy board frame 5: "The translator was unreachable, so your
+ * answer wasn't sent"), or without a reason "Couldn't translate, so it wasn't sent", then "· Retry · Send as written".
  * Send as written sends the words again untranslated (`sendAsWritten: true`).
  */
 @Composable
-fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier,
+    reason: Translation.FailureReason? = null, httpStatus: Int? = null) {
     val error = MaterialTheme.colorScheme.error
     Row(modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
-        Text(TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
+        Text(TranslationFailureCopy.answer(reason, httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
         Sep(error)
         androidx.compose.material3.TextButton(onClick = retry, enabled = enabled) { Text(TranslationCopy.RETRY) }
         Sep(error)
@@ -276,8 +317,8 @@ fun TranslationChip(text: String) {
 
 /**
  * The owner's message (board frames 4–6, web `UserTranslationFoot`): "Show original" ↔ "Show translation" once delivered, the press
- * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), "Couldn't
- * translate, so it wasn't sent · Retry · Send as written". A message sent as written has no foot.
+ * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), why
+ * ([TranslationFailureCopy.message], e.g. "The translator didn't answer in time, so it wasn't sent") · Retry · Send as written. A message sent as written has no foot.
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
@@ -296,7 +337,9 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
         Translation.TurnState.FAILED -> {
             val error = MaterialTheme.colorScheme.error
             Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(TranslationCopy.SEND_FAILED, color = error, style = MaterialTheme.typography.labelSmall)
+                // The reason's sentence wraps on a narrow phone; Retry and Send as written keep their width beside it.
+                Text(TranslationFailureCopy.message(turn.failureReason, turn.httpStatus) ?: TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false),
+                    color = error, style = MaterialTheme.typography.labelSmall)
                 Sep(error); FootAction(TranslationCopy.RETRY, error, retry)
                 Sep(error); FootAction(TranslationCopy.SEND_AS_WRITTEN, error, sendAsWritten)
             }

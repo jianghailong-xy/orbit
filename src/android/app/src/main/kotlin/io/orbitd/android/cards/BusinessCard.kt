@@ -146,7 +146,9 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
         // Settings › Translation (3A, 1A): the answer's words could not be translated, so nothing was recorded — send it again, or as
         // it was written (422 TRANSLATION_FAILED).
         val untranslated = lastVerb?.takeIf { result.response?.text("code") == Translation.FAILED_CODE && !result.busy }
-        if (untranslated != null) AnswerNotTranslated({ submit(untranslated, input) }, { submit(untranslated, input.copy(sendAsWritten = true)) }, fresh)
+        val why = Translation.refusalReason(result.response)
+        if (untranslated != null) AnswerNotTranslated({ submit(untranslated, input) }, { submit(untranslated, input.copy(sendAsWritten = true)) }, fresh,
+            reason = why?.first, httpStatus = why?.second)
         else result.message?.let { Text(it, Modifier.testTag("card-result"), color = if (result.uncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }

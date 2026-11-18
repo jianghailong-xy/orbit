@@ -54,6 +54,9 @@ object Translation {
     const val DEFAULT_AGENT_LANGUAGE = "en"
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
+    /** The account event announcing that `translationUnavailableUntil` changed (ControlEventType.TRANSLATION_STATUS_CHANGED): read
+     *  `users/me` again. Its passing by itself is never announced. */
+    const val STATUS_CHANGED_EVENT = "translation.status_changed"
 
     /** Whether a door refused the owner's words because they could not be translated: nothing was recorded, and the card offers
      * Retry and Send as written. */
@@ -290,7 +293,12 @@ object Translation {
      * the translator's status. Null for any other error, or a refusal from a server that does not say why. */
     fun refusalReason(error: Throwable?): Pair<FailureReason, Int?>? {
         if (!refused(error)) return null
-        val body = (error as io.orbitd.android.core.net.ApiError).body as? JsonObject ?: return null
+        return refusalReason((error as io.orbitd.android.core.net.ApiError).body as? JsonObject)
+    }
+
+    /** The same, read off a 422 TRANSLATION_FAILED body a door answered with (a card's `response`). Null for any other body. */
+    fun refusalReason(body: JsonObject?): Pair<FailureReason, Int?>? {
+        if (body?.string("code") != FAILED_CODE) return null
         val reason = failureReason(body) ?: return null
         return reason to httpStatus(body)
     }
