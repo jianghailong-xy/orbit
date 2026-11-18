@@ -236,18 +236,11 @@ internal fun MainCheckoutBar(model: MainCheckoutModel, workspaceId: String, isol
     }
 }
 
-/** The review sheet and the push warning, wherever the model is opened from: the card, the bar, a result line. */
+/** The review sheet, wherever the model is opened from: the card, the bar, a result line. */
 @Composable
 internal fun MainCheckoutSheets(model: MainCheckoutModel, isolated: Boolean, sessionBranch: String?, sessionTitle: String?) {
     val state by model.state.collectAsState()
     if (state.sheet == MainCheckoutState.Sheet.REVIEW) MainCheckoutReviewSheet(model, isolated, sessionBranch, sessionTitle) { model.open(null) }
-    state.confirmPush?.let { project ->
-        val upstream = state.view?.snapshot?.let { it.upstream ?: "origin/${it.branch ?: "HEAD"}" } ?: "origin"
-        AlertDialog(onDismissRequest = model::dismissPush, title = { Text(MainCheckout.pushLabel(upstream) + "?") },
-            text = { Text(MainCheckout.managedBranchWarning(project)) },
-            confirmButton = { TextButton(onClick = { model.push(confirmed = true) }) { Text("Push") } },
-            dismissButton = { TextButton(onClick = model::dismissPush) { Text("Cancel") } })
-    }
 }
 
 private fun checkedAgo(checkedAt: String?, now: Long): String? {
