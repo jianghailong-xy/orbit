@@ -87,7 +87,7 @@ if [ -n "$fwk" ]; then
 fi
 echo "▶ assemble OrbitShare.appex (App Group $APP_GROUP)"
 # SPM has no app-extension product: the OrbitShare executable (Package.swift) was built with the app
-# above, entry NSExtensionMain, and is wrapped here into a bundle with its own Info.plist.
+# above (its main hands over to NSExtensionMain) and is wrapped here into a bundle with its own Info.plist.
 appex="$app/Contents/PlugIns/OrbitShare.appex"
 mkdir -p "$appex/Contents/MacOS"
 cp "$(dirname "$bin")/OrbitShare" "$appex/Contents/MacOS/OrbitShare"

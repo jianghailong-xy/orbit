@@ -25,13 +25,12 @@ let package = Package(
             resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),
         // Share to Orbit's macOS Share-menu extension (docs/share-to-orbit-design.md §3.3). SPM has no
-        // app-extension product, so this is an executable whose entry is Foundation's NSExtensionMain;
-        // build-dmg.sh wraps it into Orbit.app/Contents/PlugIns/OrbitShare.appex. ShareModel.swift and
-        // ShareView.swift are symlinks to the iOS extension's sources: one picker for both.
+        // app-extension product, so this is an executable whose main hands over to Foundation's
+        // NSExtensionMain; build-dmg.sh wraps it into Orbit.app/Contents/PlugIns/OrbitShare.appex.
+        // ShareModel.swift and ShareView.swift are symlinks to the iOS extension's sources: one picker.
         .executableTarget(
             name: "OrbitShare",
-            dependencies: [.product(name: "OrbitKit", package: "OrbitKit")],
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+            dependencies: [.product(name: "OrbitKit", package: "OrbitKit")]
         ),
         // The stores live here (they are the app shell's), so the tests that drive a reload with an
         // unchanged answer have to live beside them. macOS-only, like the app target.
