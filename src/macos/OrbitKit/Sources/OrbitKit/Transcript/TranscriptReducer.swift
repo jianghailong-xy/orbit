@@ -1189,19 +1189,21 @@ public struct TranscriptReducer: Sendable, Codable {
             state.items.append(.error(id: nextID(), message: settled))
             return
         }
+        // Already in the owner's language: the translation is the reply, so draw the reply alone.
+        let shown = { (text: String) in translation?.unchanged(from: text) == true ? nil : translation }
         if let i = openAssistant, case .assistant(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
             b.seq = seq
             b.turnId = turnId ?? b.turnId
             if ts != nil { b.ts = ts }
-            b.translation = translation
+            b.translation = shown(b.text)
             b.awaitsTranslation = translation == nil && turnTranslated ? true : nil
             state.items[i] = .assistant(b)
         } else {
             state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "",
                                                           seq: seq, turnId: turnId, ts: ts,
-                                                          translation: translation,
+                                                          translation: shown(full),
                                                           awaitsTranslation: translation == nil && turnTranslated ? true : nil)))
         }
         openAssistant = nil
@@ -1226,7 +1228,7 @@ public struct TranscriptReducer: Sendable, Codable {
             if case .assistant(let b) = $0 { return b.seq == of }
             return false
         }), case .assistant(var b) = state.items[i] else { return }
-        b.translation = translation
+        b.translation = translation.unchanged(from: b.text) ? nil : translation
         b.awaitsTranslation = nil
         state.items[i] = .assistant(b)
     }

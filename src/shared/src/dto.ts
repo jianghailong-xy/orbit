@@ -4039,6 +4039,8 @@ export interface IntegrationCheckSpec {
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
   scope?: 'COMBINED' | 'BASELINE';
+  /** The exact tree measured by the baseline check, before it ran (K4). */
+  treeSha?: string;
   skipped?: 'PATHS_EXEMPT';
   files?: string[];
   exitCode: number | null;

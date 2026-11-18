@@ -378,7 +378,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -513,7 +513,6 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
-  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -9457,14 +9456,6 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
-    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
-    : selected && isScheduleRun && scheduleRun
-      ? scheduleRunHeadText({
-          state: headLifecycleWord,
-          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
-          run: scheduleRun.run,
-          now: new Date(),
-        })
     : selected
       ? [
           headRunWord,
@@ -10231,7 +10222,6 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
-            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10331,8 +10321,7 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>

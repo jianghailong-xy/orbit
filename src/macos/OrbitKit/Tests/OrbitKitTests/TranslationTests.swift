@@ -426,6 +426,22 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(replies(reducer.state).first?.awaitsTranslation, true)
     }
 
+    func testAReplyAlreadyInTheOwnersLanguageIsDrawnAsItIs() {
+        var reducer = TranscriptReducer()
+        reducer.apply(user(1, english: "Fix it", original: "修一下"))
+        // On replay: the translator handed back the reply itself, spaces aside.
+        reducer.apply(event(2, .assistant, ["text": .string("找到了。"),
+                                            "translation": .object(["lang": .string("zh-Hans"), "text": .string("找到了。\n")])]))
+        XCTAssertNil(replies(reducer.state).first?.translation)
+        XCTAssertNil(replies(reducer.state).first?.awaitsTranslation, "nor waits for one")
+        // Live: the same, once the translation event arrives.
+        reducer.apply(event(3, .assistant, ["text": .string("改好了。")]))
+        XCTAssertEqual(replies(reducer.state).last?.awaitsTranslation, true)
+        reducer.apply(event(0, .translation, ["of": .int(3), "lang": .string("zh-Hans"), "text": .string("改好了。")], turn: nil))
+        XCTAssertNil(replies(reducer.state).last?.translation)
+        XCTAssertNil(replies(reducer.state).last?.awaitsTranslation)
+    }
+
     func testAReplyInAnUntranslatedTurnIsLeftAlone() {
         var reducer = TranscriptReducer()
         reducer.apply(event(1, .user, ["text": .string("Fix it")]))

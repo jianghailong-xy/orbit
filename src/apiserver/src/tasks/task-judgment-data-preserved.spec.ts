@@ -2911,6 +2911,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
+      // 0518 constrains enqueue event causes only; no preserved rows or DONE fence changes.
+      '0518_integration_baseline_hold',
       // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
       // triggers or DONE fence change.
       '0519_wiki_repo_attention',
@@ -3139,6 +3141,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1090 adds two nullable runner columns, browser_state (JSONB) and browser_clear_requested_at, with no default;
       // runner is not a preserved relation, no row is written, and no trigger, function or DONE fence changes.
       '1090_runner_browser_state',
+      // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
+      '1101_integration_enqueue_skip_check',
       // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
       // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
       // fence changes.

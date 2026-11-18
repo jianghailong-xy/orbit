@@ -427,12 +427,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
-  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
-  // its session lights Scheduled, and no workspace row.
-  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
+  // A scheduled task's run is a session of its workspace like any other (owner 2026-11-19): it lights that workspace's
+  // row, whose list holds it in the Scheduled runs folder.
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId && !onScheduleRun
+    (sessionId
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -492,8 +491,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
-    : onScheduleRun
-    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||

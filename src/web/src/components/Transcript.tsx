@@ -190,7 +190,7 @@ import {
   DEFAULT_AGENT_LANGUAGE,
   type BilingualPair,
 } from '@orbit/shared';
-import { replyTranslationOf, shownQuestions, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import { replyTranslationOf, shownQuestions, showEnglishLabel, translationUnchanged, turnTranslationOf } from '../lib/translation';
 import {
   QuestionTranslationsCtx,
   ReplyTranslationFoot,
@@ -1501,13 +1501,15 @@ function buildTranscript(
             const siblings = into(parent);
             agentWorked();
             // A sub-agent's report to its caller is never translated (parentToolUseId).
-            const replyTranslation = parent ? undefined : replyTranslationOf(p.translation);
+            const translation = parent ? undefined : replyTranslationOf(p.translation);
+            // Already in the owner's language: the translation is the reply, so draw the reply alone.
+            const replyTranslation = translationUnchanged(translation, text) ? undefined : translation;
             siblings.push({
               kind: 'assistant',
               seq: ev.seq,
               text,
               ...(replyTranslation ? { replyTranslation } : {}),
-              ...(!parent && !replyTranslation && turnTranslated ? { awaitsTranslation: true } : {}),
+              ...(!parent && !translation && turnTranslated ? { awaitsTranslation: true } : {}),
             });
             if (siblings === roots) {
               turnReply = text;
