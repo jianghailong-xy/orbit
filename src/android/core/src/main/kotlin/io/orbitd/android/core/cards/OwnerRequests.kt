@@ -132,6 +132,24 @@ object OwnerRequests {
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
+    /** Orbit's mark on the turn it queues when a request ends (apiserver `ownerRequestResolutionTurn`). */
+    const val RESOLUTION_MARK = "This turn was queued by Orbit when the request ended, not typed by a person."
+    private val resolutionHead = Regex("""^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN)[:.] """)
+    private val resolutionLabels = mapOf(
+        "DONE" to "Owner action resolved", "DECLINED" to "Owner declined the request",
+        "EXPIRED" to "Owner request expired", "WITHDRAWN" to "Owner request withdrawn",
+    )
+
+    /**
+     * The divider drawn for the turn Orbit starts when a request ends, or null for any other turn: nobody typed it, so it is not a
+     * bubble in the owner's name. The web's `resolutionTurnLabel` and OrbitKit's `OwnerRequests.resolutionTurnLabel`.
+     */
+    fun resolutionTurnLabel(text: String?): String? {
+        if (text == null || !text.contains(RESOLUTION_MARK)) return null
+        val ending = resolutionHead.find(text)?.groupValues?.get(1) ?: return null
+        return "${resolutionLabels.getValue(ending)} · turn started automatically"
+    }
+
     /** Talking about a request rather than answering it, as every card that hands a reply to the composer says it. */
     const val chatAction = "Chat about this"
     /**

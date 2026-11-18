@@ -38,6 +38,7 @@ import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.core.cards.BackgroundWakeCard
 import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.cards.OrbitEventLine
 import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
@@ -221,8 +222,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // The turn Orbit sent to continue a turn the owner's Update Now cut: Orbit's words, written for the agent, so one grey Orbit line
     // rather than a message in the reader's name (web `runner-update-resume`).
     val updateResume = event.type == "user" && RunnerUpdateNow.isResume(shown.fields.string("text"))
+    // The turn Orbit queued when an owner request ended: prose and JSON for the agent, so one divider (web `owner-request-turn-divider`).
+    val requestEnding = if (event.type == "user") OwnerRequests.resolutionTurnLabel(shown.fields.string("text")) else null
     val bg = when { highlighted -> MaterialTheme.colorScheme.secondaryContainer
-        event.type == "user" && answerLine == null && bubble == null && !updateResume -> MaterialTheme.colorScheme.surfaceVariant
+        event.type == "user" && answerLine == null && bubble == null && !updateResume && requestEnding == null -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.surface }
     // The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x) and a Workflow.
     val taskKind = (shown.fields.string("name") ?: shown.fields.string("toolName")).takeIf { event.type == "tool_use" && it in setOf("Agent", "Task", "Workflow") }
@@ -240,6 +243,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             // What delivery appended — the background jobs that ended while the runner was away — rides under it.
             shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
+            return@Column
+        }
+        if (requestEnding != null) {
+            Row(Modifier.fillMaxWidth().testTag("owner-request-turn-divider"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HorizontalDivider(Modifier.weight(1f))
+                Text(requestEnding, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                HorizontalDivider(Modifier.weight(1f))
+            }
             return@Column
         }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }

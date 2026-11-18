@@ -125,4 +125,17 @@ class OwnerRequestsTest {
         assertEquals(4, OwnerRequests.waitingCount(listOf(secret, early), listOf(project, quiet), emptyMap(), now))
         assertEquals(0, OwnerRequests.waitingCount(emptyList(), listOf(quiet), emptyMap(), now))
     }
+
+    @Test fun theResolutionTurnIsADividerNotTheOwnersBubble() {
+        fun turn(head: String) = listOf(head, "", OwnerRequests.RESOLUTION_MARK + " The request is final and will not wake this session again.",
+            "", "```json", "{}", "```").joinToString("\n")
+        assertEquals("Owner action resolved · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (MANUAL_STEP) ended DONE: the owner did what was asked.")))
+        assertEquals("Owner request expired · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (DECISION) ended EXPIRED: its deadline passed.")))
+        assertEquals("Owner action resolved · turn started automatically",
+            OwnerRequests.resolutionTurnLabel(turn("Orbit owner request 34uabc (WIKI_CREATE) ended DONE. The owner created the wiki w.")))
+        assertNull(OwnerRequests.resolutionTurnLabel("Orbit owner request 34uabc (SECRET) ended DONE: looks wrong to me"))
+        assertNull(OwnerRequests.resolutionTurnLabel(null))
+    }
 }

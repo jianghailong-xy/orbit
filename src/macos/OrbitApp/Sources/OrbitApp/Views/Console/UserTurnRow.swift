@@ -206,6 +206,21 @@ struct UserTurnRow: View {
                     .help(b.text)
             }
             .accessibilityIdentifier("runner-update-resume")
+        } else if queued == nil, let ending = OwnerRequests.resolutionTurnLabel(b.text) {
+            // The turn Orbit queued when an owner request ended: prose and JSON for the agent, so one
+            // divider rather than a bubble in the reader's name (web parity: `.owner-request-turn-divider`).
+            HStack(spacing: 12) {
+                VStack { Divider() }
+                Text(ending)
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(b.text)
+                VStack { Divider() }
+            }
+            .padding(.vertical, 4)
+            .accessibilityIdentifier("owner-request-turn-divider")
         } else if let wake = WatchWakeText.parse(b.text) {
             // A turn a watch queued is the watch's to show, not a message the user typed: it opens
             // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
