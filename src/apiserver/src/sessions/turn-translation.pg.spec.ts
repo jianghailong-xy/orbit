@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { after, afterEach, before, test } from 'node:test';
+import { after, afterEach, before, beforeEach, test } from 'node:test';
+import { resetTranslationBreaker } from './translation';
 import { RunStatus } from '@prisma/client';
 import { RunEventType, TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { Logger } from '@nestjs/common';
@@ -13,6 +14,9 @@ import { QueueService } from '../queue/queue.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
+
+// The translator's circuit breaker is the process's: each test starts with it closed and nothing counted.
+beforeEach(() => resetTranslationBreaker());
 
 /**
  * Settings › Translation against the real schema (migration 0532) and the real delivery SQL: a HELD
