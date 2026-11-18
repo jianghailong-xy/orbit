@@ -303,6 +303,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /managed-runner/ensure',
   'POST /managed-runner/retry',
   'POST /managed-runner/sleep',
+  'POST /managed-runner/update-now',
   'POST /managed-runner/wake',
   'POST /owner-requests/:id/create-wiki',
   'POST /owner-requests/:id/decline',

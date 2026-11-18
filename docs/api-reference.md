@@ -173,6 +173,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/managed-runner/ensure` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.ensure` |
 | `POST` | `/api/managed-runner/retry` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.retry` |
 | `POST` | `/api/managed-runner/sleep` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.sleep` |
+| `POST` | `/api/managed-runner/update-now` | body `ManagedRunnerUpdateNowDto` | `ManagedRunnerController.updateNow` |
 | `POST` | `/api/managed-runner/wake` | body `ManagedRunnerWriteDto` | `ManagedRunnerController.wake` |
 | `GET` | `/api/metrics` | — | `MetricsController.read` |
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
