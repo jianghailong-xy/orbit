@@ -147,6 +147,25 @@ public extension ProjectOpenItemRow {
         shownTranslation(owner, showOriginal)?.detailLine ?? detailLine
     }
 
+    /// The coordinator's hand-over note as the who-fixes card draws it under
+    /// `ExceptionCards.handoverNoteCaption` (the browser's `handoverNoteShown`): translated while the
+    /// card is drawn translated, as written otherwise, and nil when the item carries no note.
+    func shownHandoverNote(owner: TranslationLanguage?, showOriginal: Bool) -> String? {
+        let note = handoverNote?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !note.isEmpty else { return nil }
+        let translated = shownTranslation(owner, showOriginal)?.handoverNote?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return translated.isEmpty ? note : translated
+    }
+
+    /// The flip under the hand-over note: drawn only while a usable translation changes it.
+    func handoverNoteFoot(owner: TranslationLanguage?, showOriginal: Bool) -> [SessionTranslation.FootPart] {
+        let note = shownHandoverNote(owner: owner, showOriginal: true)
+        return OwnerCardTranslations.foot(
+            translates: note != nil && shownHandoverNote(owner: owner, showOriginal: false) != note,
+            showOriginal: showOriginal)
+    }
+
     /// The project page's list row title: the server's title built from the translated question
     /// ("Coordinator asks: " kept in English) while a usable translation exists, `title` otherwise. A
     /// list row has no flip of its own: the card it opens offers Show original.

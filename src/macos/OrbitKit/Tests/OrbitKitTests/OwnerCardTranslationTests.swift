@@ -153,6 +153,30 @@ final class OwnerCardTranslationTests: XCTestCase {
         XCTAssertEqual(none.listDetailLine(owner: zh), "d")
     }
 
+    func testAHandedOverItemsNoteIsDrawnTranslatedUnderItsCaption() throws {
+        XCTAssertEqual(ExceptionCards.handoverNoteCaption, "Why the coordinator handed it over")
+        let base = #""itemId":"i1","kind":"INTEGRATION_CONFLICT","title":"t","detailLine":"d","assigneeReason":"HANDED_OVER""#
+        let row = try decode(ProjectOpenItemRow.self, #"{"# + base + #","handoverNote":"Your retry policy","translation":{"lang":"zh-Hans","handoverNote":"你的重试策略"}}"#)
+        XCTAssertEqual(row.shownHandoverNote(owner: zh, showOriginal: false), "你的重试策略", "translated while usable")
+        XCTAssertEqual(row.handoverNoteFoot(owner: zh, showOriginal: false),
+                       OwnerCardTranslations.foot(translates: true, showOriginal: false))
+        XCTAssertEqual(row.shownHandoverNote(owner: zh, showOriginal: true), "Your retry policy", "flipped: the original")
+        XCTAssertEqual(row.handoverNoteFoot(owner: zh, showOriginal: true),
+                       OwnerCardTranslations.foot(translates: true, showOriginal: true))
+        XCTAssertEqual(row.shownHandoverNote(owner: .ja, showOriginal: false), "Your retry policy", "another language")
+        XCTAssertEqual(row.shownHandoverNote(owner: nil, showOriginal: false), "Your retry policy", "translation off")
+        XCTAssertEqual(row.handoverNoteFoot(owner: nil, showOriginal: false), [])
+        let failed = try decode(ProjectOpenItemRow.self, #"{"# + base + #","handoverNote":"Your retry policy","translation":{"lang":"zh-Hans","failed":true}}"#)
+        XCTAssertEqual(failed.shownHandoverNote(owner: zh, showOriginal: false), "Your retry policy")
+        XCTAssertEqual(failed.handoverNoteFoot(owner: zh, showOriginal: false), [])
+        let absent = try decode(ProjectOpenItemRow.self, #"{"# + base + #","handoverNote":"Your retry policy"}"#)
+        XCTAssertEqual(absent.shownHandoverNote(owner: zh, showOriginal: false), "Your retry policy", "no translation")
+        XCTAssertEqual(absent.handoverNoteFoot(owner: zh, showOriginal: false), [])
+        let none = try decode(ProjectOpenItemRow.self, #"{"# + base + #","translation":{"lang":"zh-Hans","handoverNote":"x"}}"#)
+        XCTAssertNil(none.shownHandoverNote(owner: zh, showOriginal: false), "nothing when the note is null")
+        XCTAssertEqual(none.handoverNoteFoot(owner: zh, showOriginal: false), [])
+    }
+
     func testAnAnsweredQuestionsRecordIsDrawnTranslated() throws {
         let closed = try decode(ProjectClosedQuestion.self, """
         {"itemId":"i1","question":{"question":"Keep?","options":[{"label":"Yes"}]},"askedAt":"a",

@@ -556,6 +556,14 @@ const TRANSLATED_ITEM_FIELDS: Readonly<Partial<Record<string, CardFields>>> = {
   DONE_REQUEST: DONE_REQUEST_FIELDS,
 };
 
+/** The fields translated on an open item's card: its kind's payload fields, and the coordinator's hand-over note
+ *  (`handoverNote`, beside the payload) on an item handed to the owner. Undefined when nothing is translated. */
+function itemTranslatedFields(kind: string, handoverNote: string | null | undefined): CardFields | undefined {
+  const fields = TRANSLATED_ITEM_FIELDS[kind];
+  if (!handoverNote?.trim()) return fields;
+  return { ...fields, handoverNote: true };
+}
+
 /**
  * Exception items after the fact that opened them has committed: delivering them to the project's
  * coordinator, handing them to the owner when there is nobody to deliver to, closing them when the
@@ -1008,9 +1016,9 @@ export class ProjectOpenItemService {
   /**
    * Queue the translation of one open item's card into the owner's language (sessions/card-translation.ts): stored
    * in `translation` while the item is still OPEN, and the project announced changed (`project.changed`, which
-   * re-reads its open items) so clients swap the card in place. A kind with no translated card
-   * (TRANSLATED_ITEM_FIELDS), an item no longer open, or a translation of it into that language already queued,
-   * translates nothing. Returns at once: true when it queued one.
+   * re-reads its open items) so clients swap the card in place. An item with nothing to translate (no
+   * TRANSLATED_ITEM_FIELDS for its kind and no hand-over note), an item no longer open, or a translation of it into
+   * that language already queued, translates nothing. Returns at once: true when it queued one.
    */
   /** After an item is filed: queue its card's translation when the owner's translation is on (decision 1A). Never
    *  awaited and never a reason the filing fails. */
@@ -1021,18 +1029,25 @@ export class ProjectOpenItemService {
   }
 
   queueItemTranslation(ownerId: string, projectId: string, itemId: string, langs: TranslationLanguages): boolean {
+    let note: string | null = null;
     return queueOwnerCardTranslation({
       key: `open-item:${itemId}`,
       read: async () => {
         const item = await this.prisma.projectOpenItem.findFirst({
           where: { id: itemId, ownerId, state: 'OPEN' },
-          select: { kind: true, payload: true, translation: true },
+          select: { kind: true, payload: true, translation: true, handoverNote: true },
         });
-        const fields = item ? TRANSLATED_ITEM_FIELDS[item.kind] : undefined;
-        return item && fields ? { source: item.payload, fields, translation: item.translation } : null;
+        if (!item) return null;
+        // The coordinator's hand-over note is translated with the card, as `handoverNote`, on any kind.
+        note = item.handoverNote;
+        const fields = itemTranslatedFields(item.kind, note);
+        if (!fields) return null;
+        const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+        return { source: note ? { ...payload, handoverNote: note } : payload, fields, translation: item.translation };
       },
+      // Stored only while the note is still the one translated: a hand-over while this ran queues its own.
       write: async (translation) => (await this.prisma.projectOpenItem.updateMany({
-        where: { id: itemId, ownerId, state: 'OPEN' },
+        where: { id: itemId, ownerId, state: 'OPEN', handoverNote: note },
         data: { translation: translation as unknown as Prisma.InputJsonValue },
       })).count > 0,
       published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, projectId),
@@ -1800,7 +1815,7 @@ export class ProjectOpenItemService {
       UPDATE "project_open_item" item
          SET "assignee" = 'OWNER', "assignee_reason" = 'HANDED_OVER',
              "assigned_at" = now(), "escalate_at" = NULL,
-             "handover_note" = ${note}, "handed_over_at" = now(),
+             "handover_note" = ${note}, "handed_over_at" = now(), "translation" = NULL,
              "handed_over_by_session_id" = ${sessionId}::uuid, "updated_at" = now()
        WHERE item."id" = ${item.id}::uuid
          AND item."project_id" = ${projectId}::uuid AND item."owner_id" = ${ownerId}::uuid
@@ -1818,6 +1833,8 @@ export class ProjectOpenItemService {
     // The owner notification is deliberately after the CAS commit.  A failed push is harmless:
     // the committed OWNER row is re-discovered by the normal owner-item notification sweep.
     void this.push?.notifyOwnerItem(item.id);
+    // The card is translated again with the note (decision 1A): its translation was cleared above.
+    this.translateFiledItem(ownerId, projectId, item.id, 'handed-over item');
     return {
       itemId: item.id,
       assignee: 'OWNER',
@@ -3635,7 +3652,7 @@ export class ProjectOpenItemService {
   }
 
   /**
-   * Decision 1A: an open item whose card is translated (TRANSLATED_ITEM_FIELDS) and that has no translation in the
+   * Decision 1A: an open item whose card is translated (TRANSLATED_ITEM_FIELDS, or a hand-over note) and that has no translation in the
    * owner's current language — translation was turned on after it was filed, or the language changed — gets one
    * queued as it is read. At most one per item and language is queued at a time (`queueItemTranslation`), so a
    * list read again while it runs queues nothing more; one already tried in this language, failed or not, is left.
@@ -3643,13 +3660,13 @@ export class ProjectOpenItemService {
   private async translateUntranslatedItems(
     ownerId: string,
     projectId: string,
-    rows: ReadonlyArray<{ id: string; kind: string; translation: unknown }>,
+    rows: ReadonlyArray<{ id: string; kind: string; translation: unknown; handoverNote: string | null }>,
   ): Promise<void> {
-    if (!rows.some((row) => TRANSLATED_ITEM_FIELDS[row.kind])) return;
+    if (!rows.some((row) => itemTranslatedFields(row.kind, row.handoverNote))) return;
     const langs = await translationLanguages(this.prisma, ownerId);
     if (!langs) return;
     for (const row of rows) {
-      if (TRANSLATED_ITEM_FIELDS[row.kind] && !translatedInto(row.translation, langs)) {
+      if (itemTranslatedFields(row.kind, row.handoverNote) && !translatedInto(row.translation, langs)) {
         this.queueItemTranslation(ownerId, projectId, row.id, langs);
       }
     }

@@ -63,6 +63,27 @@ class OwnerCardTranslationTest {
         assertEquals("a translation served without one keeps row.detailLine", "d", OwnerCardTranslation.openItem(older, "ja")!!.text("detailLine"))
     }
 
+    @Test fun aHandedOverItemsNoteIsDrawnTranslatedUnderItsCaptionOrAsWritten() {
+        assertEquals("Why the coordinator handed it over", ExceptionCards.handoverNoteCaption)
+        val base = """{"kind":"INTEGRATION_CONFLICT","title":"t","assigneeReason":"HANDED_OVER""""
+        val row = j("""$base,"handoverNote":"Your retry policy","translation":{"lang":"ja","handoverNote":"再試行ポリシー"}}""")
+        assertEquals("translated while usable", "再試行ポリシー", OwnerCardTranslation.handoverNote(row, "ja", showOriginal = false))
+        assertTrue(OwnerCardTranslation.handoverNoteTranslates(row, "ja"))
+        assertEquals("flipped: the original", "Your retry policy", OwnerCardTranslation.handoverNote(row, "ja", showOriginal = true))
+        listOf(
+            row to "ko",
+            row to null,
+            j("""$base,"handoverNote":"Your retry policy","translation":{"lang":"ja","failed":true}}""") to "ja",
+            j("""$base,"handoverNote":"Your retry policy"}""") to "ja",
+        ).forEach { (r, owner) ->
+            assertEquals("Your retry policy", OwnerCardTranslation.handoverNote(r, owner, showOriginal = false))
+            assertFalse("no flip without a usable translation", OwnerCardTranslation.handoverNoteTranslates(r, owner))
+        }
+        val none = j("""$base,"handoverNote":null,"translation":{"lang":"ja","handoverNote":"x"}}""")
+        assertNull("nothing when the note is null", OwnerCardTranslation.handoverNote(none, "ja", showOriginal = false))
+        assertFalse(OwnerCardTranslation.handoverNoteTranslates(none, "ja"))
+    }
+
     @Test fun theProjectPagesListRowDrawsTheTranslatedTitleAndDetailLineOrTheOriginals() {
         val base = """{"kind":"COORDINATOR_QUESTION","title":"Coordinator asks: Q?","detailLine":"If you don’t answer: it waits","question":{"question":"Q?"}"""
         val row = j("""$base,"translation":{"lang":"ja","question":"問？","title":"Coordinator asks: 問？","detailLine":"If you don’t answer: 待つ"}}""")

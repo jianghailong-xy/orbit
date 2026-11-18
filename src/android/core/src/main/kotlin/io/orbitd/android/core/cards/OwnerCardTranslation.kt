@@ -100,6 +100,19 @@ object OwnerCardTranslation {
     fun listDetailLine(row: JsonObject, owner: String?): String =
         usable(row["translation"], owner)?.let { words(it, "detailLine") } ?: row.text("detailLine").orEmpty()
 
+    /** A handed-over item's `handoverNote` as the who-fixes card draws it under [ExceptionCards.handoverNoteCaption] (web
+     * `handoverNoteShown`, iOS `shownHandoverNote`): the row's `translation.handoverNote` while a usable translation exists and the card
+     * is not flipped, the note as the coordinator wrote it otherwise, and null when the item carries no note. */
+    fun handoverNote(row: JsonObject, owner: String?, showOriginal: Boolean): String? {
+        val note = row.text("handoverNote")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (showOriginal) return note
+        return usable(row["translation"], owner)?.let { words(it, "handoverNote") }?.trim()?.takeIf { it.isNotEmpty() } ?: note
+    }
+
+    /** Whether the hand-over note has a translation to flip to: the card draws "Translated · Show original" under it only then. */
+    fun handoverNoteTranslates(row: JsonObject, owner: String?): Boolean =
+        handoverNote(row, owner, showOriginal = false) != handoverNote(row, owner, showOriginal = true)
+
     /** A question that has ended (ProjectClosedQuestion): its `question`, as it was translated while open. */
     fun closedQuestion(record: JsonObject, owner: String?): JsonObject? = nested(record, "question", QUESTION_FIELDS, owner)
 

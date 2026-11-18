@@ -333,7 +333,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// this" (`ExceptionCards.heading`). False from a server that predates it.
     public let coordinatorUnreachable: Bool
     /// The coordinator's own words when it handed the item to the owner on purpose — what the
-    /// owner exception card's coordinator row quotes (`ExceptionCards.coordinatorRowSentence`).
+    /// owner exception card's coordinator row draws under `ExceptionCards.handoverNoteCaption`
+    /// (`shownHandoverNote`).
     /// Nil for every other item, and from a server that predates it.
     public let handoverNote: String?
     /// "Chat about this": where the item's handling stands, and whether a message about it can reach

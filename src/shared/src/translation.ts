@@ -336,6 +336,9 @@ export interface OwnerCardTranslation {
   title?: string;
   /** An owner request's `why`. */
   why?: string;
+  /** An open item's `handoverNote` (`ProjectOpenItemRow.handoverNote`): the coordinator's reason for handing it
+   *  to the owner (open_item_hand_over), on an item of any kind. Absent from an older server. */
+  handoverNote?: string;
   /** A MANUAL_STEP request's `steps`, the text of each. */
   steps?: Array<{ text?: string }>;
   /** An owner request's `verifyHint`. */
