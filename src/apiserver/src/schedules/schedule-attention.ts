@@ -5,6 +5,8 @@
  *   | NO_CHANGE                        | no       |                                        |
  *   | CHANGED, new key                 | once     | push, opens the run's session          |
  *   | CHANGED, known key               | no       | lastSeenRunId moves and links merge    |
+ *   | a CONDITION run reports          | once     | push, opens the run's session, any key |
+ *   |   (NO_CHANGE or CHANGED; a LAND run when its landing settles; the finding rows move as above)          |
  *   | FAILED                           | yes      | push and Waiting on you                |
  *   | HELD, AWAITING_APPROVAL          | yes      | push and Waiting on you                |
  *   | the run ended its own schedule   | once     | push, opens the schedule               |
@@ -257,6 +259,32 @@ export function findingCollapseId(scheduleId: string, key: string): string {
 
 export function findingCopy(title: string, summary: string): { title: string; body: string } {
   return { title: line(title, 120), body: line(summary) };
+}
+
+/**
+ * A WHEN schedule's firing, told once when its run reports (docs/condition-triggers-design.md §5.2), whatever key the
+ * run chose: the board's frame 5, "Ceph capacity guard: raw used above 90%, read 90.4%", then what the run found, or
+ * that it found nothing. `firing` is null when the schedule's rule no longer names the condition that fired.
+ */
+export function firingCopy(input: {
+  title: string;
+  firing: { text: string; reading: string } | null;
+  outcome: 'CHANGED' | 'NO_CHANGE';
+  summary: string | null;
+}): { title: string; body: string } {
+  const f = input.firing;
+  const words = f ? (/^[A-Z][a-z]/.test(f.text) ? f.text[0].toLowerCase() + f.text.slice(1) : f.text) : null;
+  const title = f ? `${input.title}: ${words}, read ${f.reading}` : `${input.title}: its condition fired`;
+  const summary = input.summary?.trim() || null;
+  const body = input.outcome === 'CHANGED'
+    ? summary ?? 'The condition fired and the run reported a change.'
+    : `The condition fired and the run found nothing to report.${summary ? ` ${summary}` : ''}`;
+  return { title: line(title, 120), body: line(body) };
+}
+
+/** One banner per firing: a repeat is its own run, so its own banner. */
+export function firingCollapseId(runId: string): string {
+  return `schedule-firing-${runId}`;
 }
 
 export function goalReachedCopy(title: string): { title: string; body: string } {

@@ -177,6 +177,16 @@ One transaction: write the `FIRED` event, set the state, and start the work.
 - **Schedule:** insert a run (`trigger: CONDITION`). From there everything is the schedule's own: overlap,
   the weekly budget, start checks, the report, findings, who hears. A crossing over budget is a run recorded
   MISSED (`OVER_BUDGET`), and the condition still waits for `rearm` before it can fire again.
+- **A firing always tells the owner, once** (owner, 2026-11-18). For a timed schedule the news is the finding, so a
+  CHANGED report under a known key is rightly silent. For a `WHEN` schedule the news is the crossing: the server
+  already recorded it (the `FIRED` event), and the run only describes it, so the key the run chooses cannot silence
+  it. When a `CONDITION` run reports, the owner gets one push whatever the key: CHANGED says what it found, even under
+  a known key or the create's baseline; NO_CHANGE says the condition fired and the run found nothing to report. The
+  finding is still written or refreshed under its key as for any run, so the history and the run block's "Already
+  reported" list stay right, and a new key is not a second banner. A `LAND` run is told when its landing settles.
+  Exactly one push per firing: a firing whose run is MISSED (`OVER_BUDGET`), FAILED (its report, its landing, its
+  limit) or ends on `APPROVAL_TIMEOUT` is told by that outcome's own notice and nothing else. A repeat (§5.1) is its
+  own firing, with its own run and its own push. Runs of time (`SCHEDULED`, `CATCH_UP`, `MANUAL`) notify as before.
 - **Task:** make the task due, as an arrived `runAt` does. `SCHEDULED_DUE_SQL` in `tasks.service.ts` gains the
   disjunct "its condition is FIRED"; the retained-not-consumed rule holds, so an unassigned or held task stays
   due and starts when it can. The start clears the condition (ENDED), as a start clears `runAt`. `task_start`
@@ -210,7 +220,12 @@ while it waits." (§4.2). The condition's read says so as `keepsWorkspaceAwake`.
 
 A run started by a condition gets the firing in its run block: the reading, since when, and the recent samples. A
 repeat's block also says that it is a repeat, when the condition first fired, and how many runs it has started since.
-The run's report key is its own choice, as today (`above-90@2026-11-21`).
+The run's report key is its own choice, as today (`above-90@2026-11-21`), but it decides only the finding row, never
+whether the owner hears: a firing is told once when its run reports (§5.2). The push is the board's frame 5: its title
+names the schedule, the condition's words and the firing reading ("Ceph capacity guard: raw used above 90%, read
+90.4%"), its body the run's summary, or "The condition fired and the run found nothing to report." for NO_CHANGE. It
+opens the run's session, rings as the schedule's `FINDING` kind (no new push kind), and collapses per run, so a
+repeat's banner does not replace the crossing's.
 
 ### 6.2 A task's startWhen (P3: A)
 

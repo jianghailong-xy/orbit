@@ -49,7 +49,8 @@ export interface RunBlockFiring {
 /** At most this many recent samples are listed in a firing. */
 export const RUN_BLOCK_MAX_SAMPLES = 10;
 
-function reading(value: number | null, unit: string | null): string {
+/** A reading in words, with its unit: "90.4%", "3 OSDs", "no reading". */
+export function reading(value: number | null, unit: string | null): string {
   if (value === null) return 'no reading';
   if (!unit) return String(value);
   return unit === '%' ? `${value}%` : `${value} ${unit}`;

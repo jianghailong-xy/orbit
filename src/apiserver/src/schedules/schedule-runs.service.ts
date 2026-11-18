@@ -62,6 +62,8 @@ import {
   fileScheduleItem,
   findingCollapseId,
   findingCopy,
+  firingCollapseId,
+  firingCopy,
   heldCopy,
   onceMissedCopy,
   overBudgetCopy,
@@ -73,7 +75,7 @@ import {
 } from './schedule-attention';
 import type { ConditionFiring } from '../conditions/conditions.service';
 import { sampleHolds } from '../conditions/condition-evaluation';
-import { RUN_BLOCK_MAX_SAMPLES, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
+import { RUN_BLOCK_MAX_SAMPLES, reading, scheduledRunTurn, type RunBlockFiring } from './schedule-run-block';
 import {
   scheduleBudgetStarts,
   scheduleOverBudget,
@@ -762,6 +764,7 @@ export class ScheduleRunsService {
         ...(failed ? { state: 'FAILED', failureReason } : {}),
       } });
       if (status !== 'MERGING') {
+        if (!failed && run.trigger === 'CONDITION' && run.sessionId) alerts.push(await this.firingAlert(tx, schedule, run, run.sessionId));
         await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: failed ? { increment: 1 } : 0 } });
         await this.settleItems(tx, schedule, run, failed ? 'FAILED' : 'SUCCEEDED', this.clock(), alerts, {
           reason: failureReason, summary: reason ?? null, consecutiveFailures: failed ? schedule.consecutiveFailures + 1 : 0,
@@ -880,7 +883,8 @@ export class ScheduleRunsService {
               },
             });
             newFinding = true;
-            alerts.push({
+            // A CONDITION run's one push is its firing's, below.
+            if (run.trigger !== 'CONDITION') alerts.push({
               kind: 'FINDING',
               ownerId: schedule.ownerId,
               scheduleId: schedule.id,
@@ -891,6 +895,12 @@ export class ScheduleRunsService {
               collapseId: findingCollapseId(schedule.id, report.key),
             });
           }
+        }
+        // A firing is told once, whatever key the run chose (docs/condition-triggers-design.md §5.2): the news is the
+        // crossing the server already recorded. A LAND run's is told when its landing settles, so a failed landing's
+        // own notice stays the one push.
+        if (run.trigger === 'CONDITION' && report.outcome !== 'FAILED' && !waitsForLanding) {
+          alerts.push(await this.firingAlert(tx, schedule, ended, sessionId));
         }
         if (!waitsForLanding) await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
           reason: 'REPORTED_FAILED',
@@ -1503,6 +1513,26 @@ export class ScheduleRunsService {
       runLimitMinutes: schedule.runLimitMinutes,
       firing: run.trigger === 'CONDITION' ? await this.firingOf(tx, schedule, run) : null,
     });
+  }
+
+  /** The one push a CONDITION run's report sends (§5.2): the schedule, the condition's words and reading, the result. */
+  private async firingAlert(tx: Tx, schedule: Schedule, run: ScheduleRun, sessionId: string): Promise<ScheduleAlert> {
+    const firing = await this.firingOf(tx, schedule, run);
+    return {
+      kind: 'FINDING',
+      ownerId: schedule.ownerId,
+      scheduleId: schedule.id,
+      runId: run.id,
+      opens: { sessionId },
+      ownerRequestId: null,
+      ...firingCopy({
+        title: schedule.title,
+        firing: firing ? { text: firing.text, reading: reading(firing.value, firing.unit) } : null,
+        outcome: run.state === 'CHANGED' ? 'CHANGED' : 'NO_CHANGE',
+        summary: run.summary,
+      }),
+      collapseId: firingCollapseId(run.id),
+    };
   }
 
   /**
