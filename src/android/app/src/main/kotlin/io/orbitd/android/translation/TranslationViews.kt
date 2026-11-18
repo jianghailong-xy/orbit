@@ -248,7 +248,9 @@ fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: B
     val error = MaterialTheme.colorScheme.error
     Row(modifier.testTag("card-translation-failed"), verticalAlignment = Alignment.CenterVertically) {
         Text(TranslationCopy.SEND_FAILED, Modifier.weight(1f, fill = false), color = error, style = MaterialTheme.typography.bodySmall)
+        Sep(error)
         androidx.compose.material3.TextButton(onClick = retry, enabled = enabled) { Text(TranslationCopy.RETRY) }
+        Sep(error)
         androidx.compose.material3.TextButton(onClick = sendAsWritten, enabled = enabled) { Text(TranslationCopy.SEND_AS_WRITTEN) }
     }
 }
