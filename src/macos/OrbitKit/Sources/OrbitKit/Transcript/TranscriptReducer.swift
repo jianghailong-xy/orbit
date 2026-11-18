@@ -2052,7 +2052,8 @@ public struct TranscriptReducer: Sendable, Codable {
         let appr = PendingApproval(id: id, kind: approvalKind(ev),
                                    toolName: str(ev, "toolName") ?? str(ev, "name"),
                                    input: ev.payload["input"],
-                                   translation: ApprovalTranslation.parse(ev.payload["translation"]))
+                                   translation: ApprovalTranslation.parse(ev.payload["translation"]),
+                                   toolUseId: str(ev, "toolUseId"))
         // A translated card is published again under the same id (3A): it replaces the one drawn.
         if let i = state.pendingApprovals.firstIndex(where: { $0.id == id }) {
             state.pendingApprovals[i] = appr
