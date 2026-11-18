@@ -8,6 +8,9 @@ import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, transla
 import { isSlashCommand, translationLanguages, turnTranslationOf } from './turn-translation';
 import { Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ownerWordsForAgent } from './reply-translation';
+import { ConfigService } from '@nestjs/config';
+import { RealtimeService } from '../realtime/realtime.service';
+import { HELD_MESSAGE_PUSH_BODY, PushService } from '../push/push.service';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
@@ -46,7 +49,7 @@ function matches(row: Row, where: Row): boolean {
   });
 }
 
-function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row } = {}) {
+function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row; realtime?: (prisma: never) => object } = {}) {
   const session: Row = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -122,10 +125,10 @@ function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row } 
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const queue = { notifySessionQueued: () => wakes.queue++ } as never;
-  const realtime = {
+  const realtime = Object.assign(opts.realtime?.(prisma) ?? {}, {
     notifyInbox: () => wakes.inbox++,
     publishQueuedTurnsChanged: () => wakes.turnsChanged++,
-  } as never;
+  }) as never;
   const service = new SessionsService(prisma, queue, realtime);
   const send = (content = ORIGINAL, clientTurnId = 'client-1') =>
     service.createTurn(OWNER_ID, SESSION_ID, { clientTurnId, content, intent: 'NEXT_TURN' }, { translate: true });
@@ -771,4 +774,210 @@ test('Send as written on a card answer asks no translator, so there is nothing t
   });
   assert.equal(bodies.length, 0);
   assert.deepEqual(lines, []);
+});
+
+// ── the held-message push (frame 4B of docs/ux/translation-failure-policy.html) ─────────────────
+
+const SESSION_TITLE = 'Fix login redirect';
+
+/**
+ * The harness above with the real RealtimeService (whether the owner is viewing) and the real PushService behind it,
+ * whose transport is stubbed: `pushes` is every alert it hands APNs, with the collapse id it rings under.
+ */
+function pushHarness() {
+  const pushes: Array<{ title: string; body: string; sessionID: string; kind: string; collapseId?: string }> = [];
+  let realtime!: RealtimeService;
+  const h = harness({
+    session: { title: SESSION_TITLE, notificationsMuted: false },
+    realtime: (prisma) => {
+      const config = {
+        get: (key: string) => ({ APNS_KEY_ID: 'key-id', APNS_TEAM_ID: 'team-id', APNS_KEY: Buffer.from('k').toString('base64') } as Record<string, string>)[key],
+      } as ConfigService;
+      const device = { id: 'd-1', token: 'device', userId: OWNER_ID, platform: 'ios', bundleId: 'io.orbitd.app', environment: 'production', loginSessionId: null };
+      const push = new PushService({ ...(prisma as object), deviceToken: { findMany: async () => [device] } } as never, config);
+      (push as unknown as { deliver: unknown }).deliver = async (_t: unknown, body: string, _type: unknown, _p: unknown, collapseId?: string) => {
+        const payload = JSON.parse(body) as { aps: { alert: { title: string; body: string } }; sessionID: string; kind: string };
+        pushes.push({ ...payload.aps.alert, sessionID: payload.sessionID, kind: payload.kind, collapseId });
+        return 1;
+      };
+      realtime = new RealtimeService(prisma, push);
+      return realtime;
+    },
+  });
+  /** Pass `ms` on the fake clock and let what it fired settle. */
+  const after = async (ms: number) => {
+    mock.timers.tick(ms);
+    for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve));
+  };
+  /** The owner opens the session (GET /sessions/:id/events) until the result is called. */
+  const view = () => {
+    const sub = realtime.streamForRun(SESSION_ID, { owner: true }).subscribe();
+    return () => sub.unsubscribe();
+  };
+  return { ...h, pushes, after, view, realtime };
+}
+
+/** Send a message whose translation the translator refuses (HTTP 400: not retried), and let it go FAILED. */
+async function sendFailed(h: ReturnType<typeof pushHarness>) {
+  const { turnId } = await h.send();
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'FAILED');
+  return turnId;
+}
+
+test('held and unseen for 60 s: exactly one push, titled with the session, the 4B copy, opening that session', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS - 1);
+  assert.equal(h.pushes.length, 0, 'not before 60 s');
+  await h.after(1);
+  assert.deepEqual(h.pushes, [{
+    title: SESSION_TITLE,
+    body: "Your message wasn't sent: it couldn't be translated.",
+    sessionID: SESSION_ID, // what OrbitKit and Android route a tap to: that session
+    kind: 'held-message',
+    collapseId: `held-${turnId}`,
+  }]);
+  assert.equal(HELD_MESSAGE_PUSH_BODY, "Your message wasn't sent: it couldn't be translated.");
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 1, 'never repeated for the same turn');
+});
+
+test('a new session\'s held opening message is pushed the same way', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  // The opening turn as createSession holds it, then translated by the same path (startTurnTranslation).
+  const openingId = '00000000-0000-4000-8000-0000000000aa';
+  h.turns.push({
+    id: openingId, sessionId: SESSION_ID, seq: 1, kind: 'message', clientTurnId: `initial-${SESSION_ID}`,
+    content: ORIGINAL, status: 'HELD', displayPrompt: ORIGINAL, translationState: 'TRANSLATING', translationLang: 'zh-Hans',
+  });
+  (h.service as unknown as { startTurnTranslation(o: string, s: string, t: string): void }).startTurnTranslation(OWNER_ID, SESSION_ID, openingId);
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'FAILED');
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 1);
+  assert.equal(h.pushes[0].collapseId, `held-${openingId}`);
+});
+
+test('the owner viewing the session when the 60 s are up: no push', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  const leave = h.view();
+  await sendFailed(h);
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
+  // Leaving afterwards does not bring the push back: there was one check, and they had seen it.
+  leave();
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
+});
+
+test('a guest\'s stream of the session is not the owner viewing it', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  h.realtime.streamForRun(SESSION_ID).subscribe();
+  await sendFailed(h);
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 1);
+});
+
+test('Retry that translates before 60 s: no push', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400, ENGLISH]);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(30_000);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'DONE');
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
+});
+
+test('Retry still translating when the 60 s are up: no push', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400, 'hang']);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(50_000);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+  await h.after(10_000);
+  assert.equal(h.turns[0].translationState, 'TRANSLATING');
+  assert.equal(h.pushes.length, 0);
+  // Let the Retry time out here, so it does not outlive the test.
+  await h.after(TRANSLATION_TIMEOUT_MS);
+  await h.service.translationsSettled();
+});
+
+test('Send as written before 60 s: no push', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(30_000);
+  await h.service.sendTurnAsWritten(OWNER_ID, SESSION_ID, turnId);
+  assert.equal(h.turns[0].translationState, 'SENT_AS_WRITTEN');
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
+});
+
+test('withdrawn before 60 s: no push', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  await sendFailed(h);
+  await h.after(30_000);
+  // What DELETE /sessions/:id/turns/:turnId does to a held message (cancelQueuedTurn): the row is deleted.
+  h.turns.splice(0, 1);
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
+});
+
+test('a Retry that fails again before 60 s: one push, 60 s after the second failure', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400, 400]);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(30_000);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'FAILED');
+  await h.after(30_000);
+  assert.equal(h.pushes.length, 0, 'the first failure\'s check was replaced');
+  await h.after(30_000);
+  assert.equal(h.pushes.length, 1);
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 1);
+});
+
+test('a second failure after Retry, once the first was pushed, sends at most one more', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400, 400]);
+  const h = pushHarness();
+  const turnId = await sendFailed(h);
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 1);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'FAILED');
+  await h.after(10 * SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 2);
+  assert.equal(h.pushes[1].collapseId, h.pushes[0].collapseId, 'the second replaces the first banner');
+});
+
+test('a muted session is not pushed', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  stubDeepSeek([400]);
+  const h = pushHarness();
+  h.session.notificationsMuted = true;
+  await sendFailed(h);
+  await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+  assert.equal(h.pushes.length, 0);
 });

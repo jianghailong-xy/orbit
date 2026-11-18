@@ -1073,7 +1073,7 @@ export class SessionsController {
         );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so
         // a replay never carries them and the history stream is left exactly as it was.
-        const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());
+        const live$ = this.realtime.streamForRun(id, { owner: true }).pipe(coalesceDeltas());
         return replayThenLive(history$, live$, () => this.realtime.turnPrefix(id));
       }),
       map((e: StreamedEvent) => {

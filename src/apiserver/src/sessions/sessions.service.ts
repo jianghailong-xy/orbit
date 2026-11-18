@@ -7520,7 +7520,35 @@ export class SessionsService {
       data: failedTurnColumns(failure),
     });
     logOwnerTranslationFailure(failure, { door: 'held-turn', sessionId, turnId });
-    if (failed.count > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+    if (failed.count > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+      this.scheduleHeldMessagePush(sessionId, turnId);
+    }
+  }
+
+  /** How long a held message stays FAILED before its owner is pushed (frame 4B of translation-failure-policy.html). */
+  static readonly HELD_MESSAGE_PUSH_DELAY_MS = 60_000;
+
+  /** turnId → its pending held-message check, one per turn: a Retry that fails again replaces the earlier one. */
+  private readonly heldMessagePushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * One check, HELD_MESSAGE_PUSH_DELAY_MS after a held message's translation failed: RealtimeService.heldMessageUnseen
+   * pushes the owner unless they are viewing the session, and PushService.notifyHeldMessage only while the turn is
+   * still HELD and FAILED — so a Retry, Send as written, withdrawal or translation before then sends nothing.
+   * The check lives in this process's memory: a restart (or a deploy) inside the 60 s loses it, and that message
+   * is not pushed; the message itself stays held with Retry and Send as written, so only the reminder is lost.
+   */
+  private scheduleHeldMessagePush(sessionId: string, turnId: string): void {
+    clearTimeout(this.heldMessagePushes.get(turnId));
+    const timer = setTimeout(() => {
+      this.heldMessagePushes.delete(turnId);
+      void Promise.resolve().then(() => this.realtime.heldMessageUnseen(sessionId, turnId)).catch((error: unknown) => {
+        this.logger.warn(`held message push for turn ${turnId} failed: ${(error as Error)?.message ?? error}`);
+      });
+    }, SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+    timer.unref?.();
+    this.heldMessagePushes.set(turnId, timer);
   }
 
   /**
