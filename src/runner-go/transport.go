@@ -32,7 +32,7 @@ const (
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
-	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	// (heartbeatMerge); a commit runs beside a live background job.
 	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
@@ -120,6 +120,7 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
 		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
@@ -129,6 +130,7 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
 		subagentRemoteResumeCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
@@ -649,6 +651,11 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	}
 	if r.TurnID == "" {
 		return nil, nil
+	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
 	}
 	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil

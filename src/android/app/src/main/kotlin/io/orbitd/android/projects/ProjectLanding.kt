@@ -82,24 +82,33 @@ internal fun LandingRing(running: Boolean, size: Dp) {
 
 /**
  * The landing in flight as a card of its own (iOS `ProjectLandingCardView`, owner decision 2026-10-11, docs/mocks/project-landing-card),
- * in the merge card's shape and colours: grey while a job is in flight, amber once the server judged its runner silent, and one press —
- * Retry — only where the server offers it. Its head is the landing row's; its body says what is landing — the task's title, or a row
- * per job with each one's own state — the branch it lands on, and the sentence that takes the reader off the hook, or, timed out,
+ * in the merge card's shape and colours: grey while a job is in flight, amber once the server judged its runner silent. Retry and
+ * Land without the check appear where the server offers them. Its head is the landing row's; its body says what is landing — the
+ * task's title, or a row per job with each one's own state — the branch it lands on, and the sentence that takes the reader off the hook, or, timed out,
  * where the runner stopped. A press opens the jobs in flight ([onOpenJobs]) or, from a server that lists none, [onOpenProject]; with
- * neither the card is a read. [retry] answers why a Retry did not go through, null when it did.
+ * neither the card is a read. [retry] returns a formatted refusal and [skipCheck] returns the reason for a refusal. Both return null on success.
  *
  * 方案 A's explicit way in (owner 2026-10-19): one job names its landing at the card's foot; several name one per row, drawn OUTSIDE
  * the press — a link may not live inside a button — and the row of a merge into main carries none, as the merge card is that round's
  * way in. [openLanding] opens the session; a server that names none says so in grey in the same slot.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?, onOpenProject: (() -> Unit)?, openLanding: (String) -> Unit,
-    retry: suspend (String) -> String?, modifier: Modifier = Modifier) {
+    retry: suspend (String) -> String?, skipCheck: suspend (String) -> String?, modifier: Modifier = Modifier) {
     val warning = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val scope = rememberCoroutineScope()
-    var retrying by remember { mutableStateOf(false) }
+    val skipTaskId = card.skipTaskId
+    var submitting by remember { mutableStateOf(false) }
+    var askingToSkip by remember(skipTaskId) { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    fun submit(action: suspend () -> String?) {
+        if (submitting) return
+        submitting = true
+        actionError = null
+        scope.launch { try { actionError = action() } finally { submitting = false } }
+    }
     val shape = RoundedCornerShape(14.dp)
     val chrome = if (card.timedOut) Modifier.background(warning.copy(alpha = 0.08f), shape).border(1.dp, warning.copy(alpha = 0.3f), shape)
         else Modifier.background(muted.copy(alpha = 0.1f), shape)
@@ -115,7 +124,7 @@ internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?
                 Text(it, Modifier.testTag("landing-card:what"), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             if (!several) TargetLine(card.target)
-            if (!several) Sentence(card)
+            if (!several) Sentence(card, showNothingToDo = actionError == null)
         }
         if (several) {
             // Each job in its own ink, so a queued job behind a running one does not wear the running one's colour; and each names
@@ -130,28 +139,44 @@ internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?
                 } }
             }
             TargetLine(card.target)
-            Sentence(card)
+            Sentence(card, showNothingToDo = actionError == null)
         }
-        if (card.retryJobId != null || onOpenJobs != null || lead != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (card.retryJobId != null || skipTaskId != null || onOpenJobs != null || lead != null) {
+            val foot: @Composable RowScope.() -> Unit = {
                 card.retryJobId?.let { jobId ->
-                    Button(onClick = {
-                        if (!retrying) {
-                            retrying = true; actionError = null
-                            scope.launch { try { actionError = retry(jobId) } finally { retrying = false } }
-                        }
-                    }, enabled = !retrying, modifier = Modifier.heightIn(min = 40.dp).testTag("landing-card:retry")) { Text(ProjectPage.landingRetry) }
+                    Button(onClick = { submit { retry(jobId) } }, enabled = !submitting,
+                        modifier = Modifier.heightIn(min = 40.dp).testTag("landing-card:retry")) { Text(ProjectPage.landingRetry) }
                 }
                 lead?.let { LandingEntryLink(landingEntry(it.landingSessionId), "landing-card:open-landing", openLanding) }
+                if (skipTaskId != null) TextButton(onClick = { askingToSkip = true }, enabled = !submitting,
+                    modifier = Modifier.testTag("landing-card:skip-check")) { Text(ProjectPage.landingSkipCheck) }
                 Spacer(Modifier.weight(1f))
                 // Only where there is a list to open: elsewhere the card's press goes to the project page, and "All jobs" would name nothing.
                 onOpenJobs?.let { TextButton(onClick = it, modifier = Modifier.testTag("landing-card:all-jobs")) {
                     Text("${ProjectPage.landingAllJobs} ›", fontWeight = FontWeight.SemiBold) } }
             }
+            val spacing = Arrangement.spacedBy(8.dp)
+            if (skipTaskId == null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = spacing, content = foot)
+            else FlowRow(Modifier.fillMaxWidth(), itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = spacing) { foot() }
         }
         actionError?.let { Text(it, Modifier.testTag("landing-card:error"), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis) }
     }
+    if (askingToSkip && skipTaskId != null) AlertDialog(
+        onDismissRequest = { askingToSkip = false },
+        text = { Text(ProjectPage.landingSkipCheckConfirm) },
+        confirmButton = {
+            TextButton(onClick = {
+                askingToSkip = false
+                submit {
+                    skipCheck(skipTaskId)?.let {
+                        "${ProjectPage.landingSkipCheckFailed} — ${it.trimEnd { char -> char == '.' || char.isWhitespace() }}."
+                    }
+                }
+            }, enabled = !submitting) { Text(ProjectPage.landingSkipCheckGo) }
+        },
+        dismissButton = { TextButton(onClick = { askingToSkip = false }) { Text(ProjectPage.landingSkipCheckCancel) } },
+    )
 }
 
 /** "Open landing ›" — the explicit way into the landing session a job belongs to (contract §2.9 LS6, 方案 A). A server that names
@@ -177,9 +202,11 @@ private fun TargetLine(target: String?) {
 /** What a timed-out runner did before it stopped, or the sentence that takes the reader off the hook while it lands — which a card
  * holding only a merge job does not say: that job lands no task, and board v4 04 draws nothing under its head. */
 @Composable
-private fun Sentence(card: LandingCard) {
+private fun Sentence(card: LandingCard, showNothingToDo: Boolean) {
     if (card.timedOut) card.detail?.let { Text(it, Modifier.testTag("landing-card:detail"), style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    else if (card.jobs.size > 1 || !card.mergeJob) Text(ProjectPage.landingNothingToDo, style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    else if (card.jobs.size > 1 || !card.mergeJob) {
+        val note = card.skipNote ?: ProjectPage.landingNothingToDo.takeIf { showNothingToDo }
+        note?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
 }

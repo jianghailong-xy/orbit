@@ -288,7 +288,7 @@ const PART_6: Array<{
     row: conflict({ assigneeReason: 'HANDED_OVER', handoverNote: 'The conflict is in your retry policy' }),
     qc: () => seeded(null),
     heading: 'Now yours — the coordinator handed it over',
-    sentence: '“The conflict is in your retry policy” — it handed this to you on purpose.',
+    sentence: 'It handed this to you on purpose.',
     presses: ['Ask the coordinator again', CHAT_FIRST_LINK],
     leads: null,
   },

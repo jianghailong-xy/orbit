@@ -121,8 +121,8 @@ export const RUNNER_KEEP_FREE_10_GB = '10 GB';
 export const RUNNER_KEEP_FREE_20_GB = '20 GB';
 export const RUNNER_KEEP_FREE_50_GB = '50 GB';
 export const RUNNER_CAPACITY_FOOTER =
-  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task ' +
-  'runs stop being sent here and finished worktrees are cleaned up sooner.';
+  'Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and ' +
+  'task runs wait until space frees up, and finished worktrees are cleaned up sooner.';
 
 /** An amount of disk, already formatted by runnerAttention's formatDiskGb (`9.4`, `197`). */
 export function runnerGb(amount: string): string {
@@ -473,7 +473,7 @@ export function attentionDiskNoReserve(free: string, total: string): string {
 }
 
 export function attentionDiskBelowReserve(free: string, total: string, reserve: string): string {
-  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — task runs stop being sent here until space frees up.`;
+  return `${free} GB free of ${total} GB, under the ${reserve} GB it keeps free — new sessions and task runs wait until space frees up.`;
 }
 
 // MARK: Needs Attention — the runner can't replace its own binary

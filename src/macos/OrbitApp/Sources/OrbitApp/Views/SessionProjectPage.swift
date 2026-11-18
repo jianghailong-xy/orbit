@@ -829,6 +829,10 @@ struct SessionProjectPage: View {
                         retry: { jobID in
                             try await app.retryIntegrationJob(address.projectID, jobID: jobID)
                             await app.loadProjectIntegration(address)
+                        },
+                        skipCheck: { taskID in
+                            try await app.skipLandingCheck(address.projectID, taskID: taskID)
+                            await app.loadProjectIntegration(address)
                         })
                 }
             }

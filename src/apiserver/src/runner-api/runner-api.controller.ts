@@ -3,8 +3,9 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
+import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
 import {
   BadRequestException,
@@ -581,6 +582,7 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  scheduleRunDeniesApproval,
   checkOnlyRuleCoversApproval,
   runAccessLevel,
   scheduleRunAgentFields,
@@ -1718,6 +1720,7 @@ export class RunnerApiController {
      * by the handoff sweep instead.
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
+    @Optional() private readonly conditions?: ConditionsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2664,6 +2667,16 @@ export class RunnerApiController {
         unwritten.add('agentDirProbes');
       }
     }
+    // What the runner read for its conditions (docs/condition-triggers-design.md §4.2): stored and evaluated for a
+    // condition whose workspace this runner serves, refused for any other (conditions.service.ts intake).
+    if (this.conditions && Array.isArray(dto?.conditionSamples) && dto.conditionSamples.length > 0) {
+      try {
+        await this.conditions.intake({ id: runner.id, ownerId: updated.ownerId }, dto.conditionSamples);
+      } catch (error) {
+        this.logger.warn(`condition samples of runner ${runner.id} were not taken: ${error instanceof Error ? error.message : String(error)}`);
+        unwritten.add('conditionSamples');
+      }
+    }
     // Where each clone the runner was asked for stands (§5.4): moves this runner's own GitHub workspaces only, before
     // the answer below lists what is still to clone, so a clone reported done is not handed out again.
     if (this.githubWorkspaces && Array.isArray(dto?.cloneReports) && dto.cloneReports.length > 0) {
@@ -2680,6 +2693,7 @@ export class RunnerApiController {
       cloneRequests = await this.githubWorkspaces.cloneRequestsFor(runner.id).catch(() => undefined);
     }
     let cancelSessionIds: string[] = [];
+    let keepWorkSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
@@ -2689,6 +2703,7 @@ export class RunnerApiController {
     let claudeAccountSwapRequest: RunnerHeartbeatResponse['claudeAccountSwapRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
+    let conditionProbes: RunnerHeartbeatResponse['conditionProbes'];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
@@ -2758,6 +2773,11 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
+      // The conditions of this runner's workspaces, the whole list on every full answer, like agentDirs; only to a
+      // runner that declares condition-probe/v1. A read that fails leaves the field out: "keep what you have".
+      if (this.conditions && runnerSupportsCapability(capabilities, CONDITION_PROBE_CAPABILITY)) {
+        conditionProbes = await this.conditions.probesFor(runner.id).catch(() => undefined);
+      }
       // Last, after everything this beat owes the runner anyway. It is the one entry here whose
       // request survives being skipped — the timestamp stays on the row until a beat claims it —
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
@@ -2775,6 +2795,13 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
+    // Which of those cancels are a coordinator handing over (RealtimeService.keepingWork), read apart: a read that
+    // fails leaves the field out and drops nothing else, and the runner still learns it from the session's end turn.
+    // A read that answers nothing at all is read as none kept, as one that throws is.
+    keepWorkSessionIds = await Promise.resolve()
+      .then(() => this.realtime.keepingWork(cancelSessionIds))
+      .then((ids) => (Array.isArray(ids) ? ids : []))
+      .catch(() => []);
     // The secrets this runner may hold (design §6.3). A read that fails leaves both fields out, which the runner reads
     // as "nothing stated" — never as "remove everything".
     let secretReconcile: Awaited<ReturnType<OwnerSecretsService['reconcileFor']>> | undefined;
@@ -2811,6 +2838,7 @@ export class RunnerApiController {
     // runner's floor is the owner's too when set; otherwise its storage answer's default.
     const answer: RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints } = {
       cancelSessionIds,
+      ...(keepWorkSessionIds.length > 0 ? { keepWorkSessionIds } : {}),
       leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       minFreeDiskMb: managedStorage ? managedStorage.minFreeDiskMb : updated.minFreeDiskMb,
@@ -2823,6 +2851,7 @@ export class RunnerApiController {
       claudeAccountSwapRequest,
       installRequest,
       agentDirs,
+      ...(conditionProbes ? { conditionProbes } : {}),
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,
@@ -6404,8 +6433,12 @@ export class RunnerApiController {
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
     // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
     // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
-    const checkOnly = await this.isCheckOnlyRun(session);
-    const refused = checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
+    const accessLevel = await this.scheduledRunLevel(session);
+    const checkOnly = accessLevel === 'CHECK_ONLY';
+    const deniedByLevel = !!accessLevel && scheduleRunDeniesApproval(
+      accessLevel, await sessionEngine(this.prisma, session), stripNul(dto.toolName), dto.input,
+    );
+    const refused = deniedByLevel || checkOnly && checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName), stripNul(dto.backgroundJobId ?? ''));
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
@@ -6461,7 +6494,9 @@ export class RunnerApiController {
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
-      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: CHECK_ONLY_REFUSED_MESSAGE } : {}),
+      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: deniedByLevel && !checkOnly
+        ? 'Not run: this tool or command is denied by the scheduled run’s access level.'
+        : CHECK_ONLY_REFUSED_MESSAGE } : {}),
     };
     let held = false;
     let fallback: string | null = null;
@@ -6517,9 +6552,9 @@ export class RunnerApiController {
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
       // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
       // the owner's language once it is translated.
-      if (cardHasText(approval.input)) {
+      if (cardHasText(approval.input, approval.toolName)) {
         const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
-        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs, approval.toolName);
       }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
@@ -6598,18 +6633,18 @@ export class RunnerApiController {
     }
   }
 
-  /** Whether the session belongs to a run that started at CHECK_ONLY, even if its schedule has since changed. */
-  private async isCheckOnlyRun(
+  /** The level this session's scheduled run started with, even if its schedule has since changed. */
+  private async scheduledRunLevel(
     session: SessionEngineFacts & { scheduleRunId: string | null },
-  ): Promise<boolean> {
-    if (!session.scheduleRunId) return false;
+  ): Promise<ReturnType<typeof runAccessLevel>> {
+    if (!session.scheduleRunId) return null;
     // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
     // does not open this check to cards for other tools (runAccessLevel).
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: session.scheduleRunId },
       select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    return runAccessLevel(run) === 'CHECK_ONLY';
+    return runAccessLevel(run);
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AttachmentsModule } from '../attachments/attachments.module';
 import { SessionsModule } from '../sessions/sessions.module';
+import { GuestInvitationGuard } from './guest-invitation.guard';
 import { GuestSessionsController, SessionGuestsController } from './session-guests.controller';
 import { SessionGuestsService } from './session-guests.service';
 
@@ -9,6 +10,6 @@ import { SessionGuestsService } from './session-guests.service';
 @Module({
   imports: [SessionsModule, AttachmentsModule],
   controllers: [SessionGuestsController, GuestSessionsController],
-  providers: [SessionGuestsService],
+  providers: [SessionGuestsService, GuestInvitationGuard],
 })
 export class SessionGuestsModule {}

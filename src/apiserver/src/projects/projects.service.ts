@@ -100,8 +100,11 @@ import {
   criteriaDecisionRecorded,
   criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
+  stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -1855,11 +1858,61 @@ export class ProjectsService {
     // an empty queue, so this route cannot be used to learn which project ids exist by the
     // difference between two successful answers.
     await this.assertOwned(ownerId, projectId);
-    return readPendingCriteriaDecisionsForOwner(
+    const queue = await readPendingCriteriaDecisionsForOwner(
       this.prisma as unknown as Prisma.TransactionClient,
       ownerId,
       projectId,
     );
+    // Decision 1A: a pending proposal with no translation in the owner's current language gets one queued as it
+    // is read; one already tried in this language, failed or not, is left.
+    if (queue.pending.length > 0) {
+      await translationLanguages(this.prisma, ownerId)
+        .then((langs) => {
+          if (!langs) return;
+          for (const row of queue.pending) {
+            if (!translatedInto(row.translation, langs)) this.queueProposalTranslation(ownerId, projectId, row.intentId, langs);
+          }
+        })
+        .catch((error: Error) => this.logger.warn(`queueing proposal translations failed: ${error.message}`));
+    }
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one criteria proposal's words into the owner's language
+   * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
+   * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
+   */
+  queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `criteria-change:${intentId}`,
+      read: async () => {
+        const db = this.prisma as unknown as Prisma.TransactionClient;
+        const rows = await db.projectRatifiedActionIntent.findMany({
+          where: { ownerId, projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+          select: { id: true, action: true },
+        });
+        const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
+        if (!open) return null;
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
+          where: { intentId },
+          select: { translation: true },
+        });
+        const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
+      },
+      write: async (translation) => {
+        const value = translation as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
+          where: { intentId },
+          create: { intentId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -4084,6 +4137,11 @@ export class ProjectsService {
       // owner's own read.
       if (held) {
         this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+        // And translated for the owner in the background, when their translation is on (decision 1A).
+        const { intentId } = held;
+        void translationLanguages(this.prisma, ownerId)
+          .then((langs) => { if (langs) this.queueProposalTranslation(ownerId, id, intentId, langs); })
+          .catch((error: Error) => this.logger.warn(`translating proposal ${intentId} failed to queue: ${error.message}`));
       }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
@@ -4850,7 +4908,9 @@ export class ProjectsService {
     // coordinate, so a swap that left this one open would demote a conversation still being written
     // to — it would go on being talked to and quietly stop being able to act. Already-completed is
     // the no-op case, and the one this call reached through the ordinary route.
-    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
+    // A handoff's outgoing coordinator leaves its SubAgent runs and bg_run jobs running; their end wakes the
+    // successor (docs/coordinator-handoff-v2-design.md §1).
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id, { handingOver: handoff != null });
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of

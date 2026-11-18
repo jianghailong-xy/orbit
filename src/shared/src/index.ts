@@ -58,6 +58,7 @@ export * from './wikiChat';
 export * from './feishu';
 export * from './github';
 export * from './translation';
+export * from './help';
 export * from './prompt-optimizer';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
@@ -77,3 +78,4 @@ export * from './push';
 export * from './orbit-turn-cards';
 export * from './mainCheckoutGit';
 export * from './schedule';
+export * from './condition';

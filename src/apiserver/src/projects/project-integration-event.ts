@@ -173,7 +173,7 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -195,6 +195,8 @@ export function enqueuedText(input: {
   switch (input.cause) {
     case 'RETRY':
       return `Queued again to land on ${target}`;
+    case 'SKIP_CHECK':
+      return `Queued again to land on ${target} · without the landing check`;
     case 'BACKFILL':
       return `Queued to land on ${target} · the project started integrating`;
     case 'BEHIND_WORK':

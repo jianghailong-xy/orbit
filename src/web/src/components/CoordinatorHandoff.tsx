@@ -134,6 +134,7 @@ export function CoordinatorHandoffConfirm({
 }) {
   const waitsQ = useQuery({
     queryKey: ['project', projectId, 'coordinator', 'pending-waits'],
+    meta: { entities: ['watch'] },
     queryFn: () => coordinatorPendingWaits(projectId),
     staleTime: 0,
   });

@@ -48,6 +48,9 @@ public struct BatchPreviewTask: Equatable, Sendable {
     /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
     /// picture without being one overall, and the row says so.
     public let dependsOnTaskIds: [String]?
+    /// A task that starts when its condition holds: the card's Starts when, Today and If never (condition-triggers
+    /// board frame 2). Nil on a task without one.
+    public var startWhen: StartWhenCardLines? = nil
 }
 
 public struct BatchApprovalPreview: Equatable, Sendable {
@@ -115,6 +118,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
     /// The project's criteria arrive one per item; a task's arrive as one Markdown block.
     public var criteriaText: String {
         isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
+    }
+
+    /// A task that starts when its condition holds: the server's Starts when, Today and If never lines (condition-
+    /// triggers board frame 2). Nil for a project or a task without one.
+    public var startWhen: StartWhenCardLines? {
+        isProject ? nil : preview?.tasks.first?.startWhen
     }
 
     /// The noun the fold's label names, so a project's goal is never called a description.
@@ -581,7 +590,8 @@ public extension Approvals {
             }
             return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
                                     dependsOnRefs: strings("dependsOnRefs"),
-                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"),
+                                    startWhen: StartWhenCardLines(json: t["startWhen"]))
         }
     }
 

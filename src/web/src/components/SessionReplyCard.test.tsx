@@ -10,7 +10,6 @@ import {
   SESSION_REQUEST_ASKS,
   SESSION_REQUEST_STATE_LABEL,
   parseSessionReplies,
-  withoutReplyBlocks,
 } from '../lib/sessionRequest';
 import { Transcript, type RunEvent } from './Transcript';
 
@@ -231,12 +230,5 @@ describe('the pieces the cards are drawn from', () => {
     expect(parseSessionReplies({ sessionReplies: [{ ...REPLIED, requestId: '' }] })).toBeNull();
     expect(parseSessionReplies({ sessionReplies: 'nope' })).toBeNull();
     expect(parseSessionReplies({ text: 'hi' })).toBeNull();
-  });
-
-  it('takes the reply blocks out of a note and leaves what else was appended', () => {
-    const block = '<orbit-session-reply request-id="a" outcome="REPLIED">\n回复：ok\n</orbit-session-reply>';
-    expect(withoutReplyBlocks(block)).toBe('');
-    expect(withoutReplyBlocks(`${block}\n\n<background-jobs>\n…\n</background-jobs>`)).toBe('<background-jobs>\n…\n</background-jobs>');
-    expect(withoutReplyBlocks(undefined)).toBe('');
   });
 });

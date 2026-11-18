@@ -15,6 +15,7 @@ import {
   MenuUnfoldOutlined,
   MoreOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -105,6 +106,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
+import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -382,6 +384,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -624,7 +627,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<Workspace[]>('/workspaces'),
+  });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
@@ -1349,6 +1356,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               label: 'Settings',
               onSelect: () => navigate('/settings'),
             },
+            // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
+            {
+              key: 'help',
+              icon: <QuestionCircleOutlined />,
+              label: 'Help center',
+              onSelect: () => navigate(HELP_PATH),
+            },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
             // Admin stays reachable with the panel collapsed.
@@ -1389,6 +1403,25 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
+        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
+        <Tooltip
+          side="top"
+          content={
+            <>
+              Help<kbd className="tp-help-key">?</kbd>
+            </>
+          }
+        >
+          <button
+            type="button"
+            className={`tp-help${help.open ? ' is-open' : ''}`}
+            aria-label="Help"
+            aria-pressed={help.open}
+            onClick={help.toggleHelp}
+          >
+            <QuestionCircleOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       <div

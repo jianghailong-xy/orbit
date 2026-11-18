@@ -29,6 +29,14 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     /** The inspector: the schedule, its last runs, findings, this month's use, history and pending cards. */
     suspend fun detail(id: String): ScheduleDetailResponse = read(get(listOf("schedules", id)), ScheduleDetailResponse::parse)
 
+    /** `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8). */
+    suspend fun condition(id: String): ConditionView = read(get(listOf("conditions", id)), ConditionView::parse)
+
+    /** A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). */
+    suspend fun answerConditionItem(id: String, option: Int) {
+        send(listOf("owner-requests", id, "done"), HttpMethod.POST, buildJsonObject { put("option", option) })
+    }
+
     suspend fun runs(id: String, limit: Int = 20): List<ScheduleRunView> =
         read(get(listOf("schedules", id, "runs"), listOf("limit" to limit.toString()))) { e ->
             (e as? JsonObject)?.scheduleList("runs", ScheduleRunView::parse)

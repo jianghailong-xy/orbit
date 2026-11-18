@@ -469,7 +469,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SCHEDULED -> ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
                                     workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
                                     openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
-                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) })
+                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) },
+                                    openTask = { open(OrbitRoute(Destination.TASK, it, origin = Origin.LIST)) })
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }

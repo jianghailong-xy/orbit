@@ -14,6 +14,7 @@
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
+import type { OwnerCardTranslation } from './translation';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -321,6 +322,15 @@ export interface ProjectIntegrationJob<Instant = string> {
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
   retryable: boolean;
+  /** Whether the owner's "Land without the check" (`POST /projects/:id/tasks/:taskId/integration/
+   *  skip-merge-check`) takes this landing now: a task's landing in flight, before its push, that
+   *  runs a landing check and was not already asked to stop. The server's answer, so a client never
+   *  draws the button on a landing the door would refuse. Absent from an older server. */
+  skippable?: boolean;
+  /** Where a skip of this landing's check stands: `STOPPING` while the generation the owner skipped
+   *  is still answering its stop, `SKIPPED` on the generation that runs without the check; null
+   *  otherwise. Absent from an older server. */
+  skipCheck?: 'STOPPING' | 'SKIPPED' | null;
 }
 
 // ── The landing session's view (contract §2.9 LS1, LS6) ─────────────────────────────────────────
@@ -1270,6 +1280,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from —
    *  and null for every other kind. Absent from a server that predates done requests. */
   doneRequest?: DoneRequest | null;
+  /** The card's agent-written words in the owner's language (Settings › Translation): a
+   *  `COORDINATOR_QUESTION`'s `question`, `options` and `ifUnanswered`; a `START_REQUEST`'s `why`; a
+   *  `DONE_REQUEST`'s `judgment` and `gaps`. Absent until translated, on
+   *  every item translation was off for, and from a server that predates it. */
+  translation?: OwnerCardTranslation;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -1315,6 +1330,9 @@ export interface ProjectClosedQuestion<Instant = string> {
   delivery: { sessionId: string; at: Instant } | null;
   /** The reason it was withdrawn with; null for an answered question. */
   withdrawReason: string | null;
+  /** `question` in the owner's language, as it was translated while the question was open; absent
+   *  when it never was. An ended question is never translated again. */
+  translation?: OwnerCardTranslation;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */

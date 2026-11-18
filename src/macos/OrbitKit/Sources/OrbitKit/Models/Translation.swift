@@ -482,14 +482,45 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
     public var description: String?
     public var plan: String?
     public var questions: [TranslatedQuestion]?
+    // Orbit's own cards (orbit_task_create, orbit_task_batch, orbit_project_create,
+    // orbit_blocker_resolve, orbit_dag_change): each the input field of the same name translated,
+    // present only when the original has text; arrays go index for index with the input's.
+    /// `input.title` (orbit_task_create, orbit_project_create).
+    public var title: String?
+    /// `input.acceptanceCriteria` (orbit_task_create).
+    public var acceptanceCriteria: String?
+    /// `input.tasks` (orbit_task_batch): `tasks[i]` is `input.tasks[i]` and `input.preview.tasks[i]`.
+    public var tasks: [TranslatedTaskBody]?
+    /// `input.goal` (orbit_project_create).
+    public var goal: String?
+    /// `input.instructions` (orbit_project_create).
+    public var instructions: String?
+    /// `input.acceptanceCriteriaItems` (orbit_project_create), index for index.
+    public var acceptanceCriteriaItems: [TranslatedCriterionItem]?
+    /// `input.reason` (orbit_blocker_resolve).
+    public var reason: String?
+    /// `input.note` (orbit_dag_change).
+    public var note: String?
 
     public init(lang: TranslationLanguage, failed: Bool = false, description: String? = nil,
-                plan: String? = nil, questions: [TranslatedQuestion]? = nil) {
+                plan: String? = nil, questions: [TranslatedQuestion]? = nil,
+                title: String? = nil, acceptanceCriteria: String? = nil,
+                tasks: [TranslatedTaskBody]? = nil, goal: String? = nil, instructions: String? = nil,
+                acceptanceCriteriaItems: [TranslatedCriterionItem]? = nil,
+                reason: String? = nil, note: String? = nil) {
         self.lang = lang
         self.failed = failed
         self.description = description
         self.plan = plan
         self.questions = questions
+        self.title = title
+        self.acceptanceCriteria = acceptanceCriteria
+        self.tasks = tasks
+        self.goal = goal
+        self.instructions = instructions
+        self.acceptanceCriteriaItems = acceptanceCriteriaItems
+        self.reason = reason
+        self.note = note
     }
 
     public static func parse(_ value: JSONValue?) -> ApprovalTranslation? {
@@ -507,9 +538,29 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
                                           header: q["header"]?.stringValue, options: options)
             }
         }
+        var tasks: [TranslatedTaskBody]?
+        if case .array(let ts)? = value["tasks"] {
+            tasks = ts.map {
+                TranslatedTaskBody(title: $0["title"]?.stringValue, description: $0["description"]?.stringValue,
+                                   acceptanceCriteria: $0["acceptanceCriteria"]?.stringValue)
+            }
+        }
+        var items: [TranslatedCriterionItem]?
+        if case .array(let cs)? = value["acceptanceCriteriaItems"] {
+            items = cs.map {
+                TranslatedCriterionItem(text: $0["text"]?.stringValue,
+                                        verificationMethod: $0["verificationMethod"]?.stringValue)
+            }
+        }
         return ApprovalTranslation(lang: lang, failed: value["failed"]?.boolValue == true,
                                    description: value["description"]?.stringValue,
-                                   plan: value["plan"]?.stringValue, questions: questions)
+                                   plan: value["plan"]?.stringValue, questions: questions,
+                                   title: value["title"]?.stringValue,
+                                   acceptanceCriteria: value["acceptanceCriteria"]?.stringValue,
+                                   tasks: tasks, goal: value["goal"]?.stringValue,
+                                   instructions: value["instructions"]?.stringValue,
+                                   acceptanceCriteriaItems: items,
+                                   reason: value["reason"]?.stringValue, note: value["note"]?.stringValue)
     }
 
     /// The card's `input` as it is shown: the questions, a tool card's description and a plan in the
@@ -520,6 +571,39 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
         guard let translation, !translation.failed, case .object(var obj)? = input else { return input }
         if let d = nonEmpty(translation.description), obj["description"] != nil { obj["description"] = .string(d) }
         if let p = nonEmpty(translation.plan), obj["plan"] != nil { obj["plan"] = .string(p) }
+        // Orbit's own cards: each field over its original, and only where the original has one.
+        put(&obj, "title", translation.title)
+        put(&obj, "acceptanceCriteria", translation.acceptanceCriteria)
+        put(&obj, "goal", translation.goal)
+        put(&obj, "instructions", translation.instructions)
+        put(&obj, "reason", translation.reason)
+        put(&obj, "note", translation.note)
+        if let translated = translation.tasks {
+            // A batch card draws `preview.tasks[i]` and opens `tasks[i]`: the same task twice.
+            func tasks(_ value: JSONValue?) -> JSONValue? {
+                guard case .array(let ts)? = value else { return value }
+                return .array(ts.enumerated().map { i, t in
+                    guard i < translated.count, case .object(var to) = t else { return t }
+                    put(&to, "title", translated[i].title)
+                    put(&to, "description", translated[i].description)
+                    put(&to, "acceptanceCriteria", translated[i].acceptanceCriteria)
+                    return .object(to)
+                })
+            }
+            if obj["tasks"] != nil { obj["tasks"] = tasks(obj["tasks"]) }
+            if case .object(var preview)? = obj["preview"], preview["tasks"] != nil {
+                preview["tasks"] = tasks(preview["tasks"])
+                obj["preview"] = .object(preview)
+            }
+        }
+        if let translated = translation.acceptanceCriteriaItems, case .array(let cs)? = obj["acceptanceCriteriaItems"] {
+            obj["acceptanceCriteriaItems"] = .array(cs.enumerated().map { i, c in
+                guard i < translated.count, case .object(var co) = c else { return c }
+                put(&co, "text", translated[i].text)
+                put(&co, "verificationMethod", translated[i].verificationMethod)
+                return .object(co)
+            })
+        }
         if let translated = translation.questions, case .array(let qs)? = obj["questions"] {
             obj["questions"] = .array(qs.enumerated().map { i, q in
                 guard i < translated.count, case .object(var qo) = q else { return q }
@@ -545,6 +629,36 @@ public struct ApprovalTranslation: Codable, Equatable, Sendable {
     private static func nonEmpty(_ s: String?) -> String? {
         guard let s, !s.isEmpty else { return nil }
         return s
+    }
+
+    /// `obj[key]` = `value`, when both the original and its translation have text.
+    private static func put(_ obj: inout [String: JSONValue], _ key: String, _ value: String?) {
+        if let v = nonEmpty(value), obj[key] != nil { obj[key] = .string(v) }
+    }
+}
+
+/// One task of a batch card as shown in the owner's language (`ApprovalTranslation.tasks`).
+public struct TranslatedTaskBody: Codable, Equatable, Sendable {
+    public var title: String?
+    public var description: String?
+    public var acceptanceCriteria: String?
+
+    public init(title: String? = nil, description: String? = nil, acceptanceCriteria: String? = nil) {
+        self.title = title
+        self.description = description
+        self.acceptanceCriteria = acceptanceCriteria
+    }
+}
+
+/// One of a new project's criteria as shown in the owner's language
+/// (`ApprovalTranslation.acceptanceCriteriaItems`).
+public struct TranslatedCriterionItem: Codable, Equatable, Sendable {
+    public var text: String?
+    public var verificationMethod: String?
+
+    public init(text: String? = nil, verificationMethod: String? = nil) {
+        self.text = text
+        self.verificationMethod = verificationMethod
     }
 }
 
@@ -681,5 +795,176 @@ public enum SessionTranslation {
     public static func shownReplyText(_ text: String, _ translation: ReplyTranslation?, flipped: Bool) -> String {
         guard let t = translation?.text, !flipped else { return text }
         return t
+    }
+}
+
+/// An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language:
+/// a coordinator's question, start or done request (`ProjectOpenItemRow.translation`,
+/// `ProjectClosedQuestion.translation`), an owner request, an owner-confirmation review or PROBLEMS
+/// record, a crossing or a criteria-change proposal (@orbit/shared `OwnerCardTranslation`). Each field
+/// is the card's field of the same name translated, present only when the original has text; arrays go
+/// index for index with the card's. Read leniently: a field this build cannot read is a field it does
+/// not draw, never a card that fails to decode. `lang` is kept as the server spelled it, so one this
+/// build does not know is a translation that matches no owner language.
+public struct OwnerCardTranslation: Codable, Equatable, Sendable {
+    public struct Option: Codable, Equatable, Sendable {
+        public var label: String?
+        public var description: String?
+        public init(label: String? = nil, description: String? = nil) {
+            self.label = label
+            self.description = description
+        }
+    }
+    /// A step's, a PROBLEMS record's problem's or any other entry's `text`.
+    public struct Text: Codable, Equatable, Sendable {
+        public var text: String?
+        public init(text: String? = nil) { self.text = text }
+    }
+    public struct Gap: Codable, Equatable, Sendable {
+        public var title: String?
+        public var whyNotProven: String?
+        public var coordinatorChecked: String?
+        public init(title: String? = nil, whyNotProven: String? = nil, coordinatorChecked: String? = nil) {
+            self.title = title
+            self.whyNotProven = whyNotProven
+            self.coordinatorChecked = coordinatorChecked
+        }
+    }
+    public struct NeedsYou: Codable, Equatable, Sendable {
+        public var text: String?
+        public var options: [Option]?
+        public init(text: String? = nil, options: [Option]? = nil) {
+            self.text = text
+            self.options = options
+        }
+    }
+
+    public var lang: String
+    /// The card could not be translated: draw it as the agent wrote it. Nothing else is set.
+    public var failed: Bool
+    public var question: String?
+    public var options: [Option]?
+    public var ifUnanswered: String?
+    public var title: String?
+    public var why: String?
+    public var steps: [Text]?
+    public var verifyHint: String?
+    public var judgment: String?
+    public var gaps: [Gap]?
+    public var needsYou: [NeedsYou]?
+    public var reason: String?
+    public var problems: [Text]?
+    public var proposed: [TranslatedCriterionItem]?
+    /// An open coordinator question's `detailLine` built from the translated `ifUnanswered`, served by the
+    /// open-items read beside a whole translation in the owner's language. Absent from an older server.
+    public var detailLine: String?
+    /// An open item's `handoverNote`: the coordinator's reason for handing it to the owner. Absent from
+    /// an older server.
+    public var handoverNote: String?
+
+    public init(lang: String, failed: Bool = false, question: String? = nil, options: [Option]? = nil,
+                ifUnanswered: String? = nil, title: String? = nil, why: String? = nil,
+                steps: [Text]? = nil, verifyHint: String? = nil, judgment: String? = nil,
+                gaps: [Gap]? = nil, needsYou: [NeedsYou]? = nil, reason: String? = nil,
+                problems: [Text]? = nil, proposed: [TranslatedCriterionItem]? = nil,
+                detailLine: String? = nil, handoverNote: String? = nil) {
+        self.lang = lang
+        self.failed = failed
+        self.question = question
+        self.options = options
+        self.ifUnanswered = ifUnanswered
+        self.title = title
+        self.why = why
+        self.steps = steps
+        self.verifyHint = verifyHint
+        self.judgment = judgment
+        self.gaps = gaps
+        self.needsYou = needsYou
+        self.reason = reason
+        self.problems = problems
+        self.proposed = proposed
+        self.detailLine = detailLine
+        self.handoverNote = handoverNote
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case lang, failed, question, options, ifUnanswered, title, why, steps, verifyHint, judgment
+        case gaps, needsYou, reason, problems, proposed, detailLine, handoverNote
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lang = (try? c.decodeIfPresent(String.self, forKey: .lang)) ?? ""
+        failed = ((try? c.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) == true
+        question = (try? c.decodeIfPresent(String.self, forKey: .question)) ?? nil
+        options = (try? c.decodeIfPresent([Option].self, forKey: .options)) ?? nil
+        ifUnanswered = (try? c.decodeIfPresent(String.self, forKey: .ifUnanswered)) ?? nil
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+        why = (try? c.decodeIfPresent(String.self, forKey: .why)) ?? nil
+        steps = (try? c.decodeIfPresent([Text].self, forKey: .steps)) ?? nil
+        verifyHint = (try? c.decodeIfPresent(String.self, forKey: .verifyHint)) ?? nil
+        judgment = (try? c.decodeIfPresent(String.self, forKey: .judgment)) ?? nil
+        gaps = (try? c.decodeIfPresent([Gap].self, forKey: .gaps)) ?? nil
+        needsYou = (try? c.decodeIfPresent([NeedsYou].self, forKey: .needsYou)) ?? nil
+        reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
+        problems = (try? c.decodeIfPresent([Text].self, forKey: .problems)) ?? nil
+        proposed = (try? c.decodeIfPresent([TranslatedCriterionItem].self, forKey: .proposed)) ?? nil
+        detailLine = (try? c.decodeIfPresent(String.self, forKey: .detailLine)) ?? nil
+        handoverNote = (try? c.decodeIfPresent(String.self, forKey: .handoverNote)) ?? nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lang, forKey: .lang)
+        if failed { try c.encode(true, forKey: .failed) }
+        try c.encodeIfPresent(question, forKey: .question)
+        try c.encodeIfPresent(options, forKey: .options)
+        try c.encodeIfPresent(ifUnanswered, forKey: .ifUnanswered)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(why, forKey: .why)
+        try c.encodeIfPresent(steps, forKey: .steps)
+        try c.encodeIfPresent(verifyHint, forKey: .verifyHint)
+        try c.encodeIfPresent(judgment, forKey: .judgment)
+        try c.encodeIfPresent(gaps, forKey: .gaps)
+        try c.encodeIfPresent(needsYou, forKey: .needsYou)
+        try c.encodeIfPresent(reason, forKey: .reason)
+        try c.encodeIfPresent(problems, forKey: .problems)
+        try c.encodeIfPresent(proposed, forKey: .proposed)
+        try c.encodeIfPresent(detailLine, forKey: .detailLine)
+        try c.encodeIfPresent(handoverNote, forKey: .handoverNote)
+    }
+}
+
+/// A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+/// pending evidence judgment, @orbit/shared `EvidenceTranslation`). `gaps` goes index for index.
+public struct EvidenceTranslation: Codable, Equatable, Sendable {
+    public var lang: String
+    public var failed: Bool
+    public var claim: String?
+    public var gaps: [String]?
+
+    public init(lang: String, failed: Bool = false, claim: String? = nil, gaps: [String]? = nil) {
+        self.lang = lang
+        self.failed = failed
+        self.claim = claim
+        self.gaps = gaps
+    }
+
+    private enum CodingKeys: String, CodingKey { case lang, failed, claim, gaps }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lang = (try? c.decodeIfPresent(String.self, forKey: .lang)) ?? ""
+        failed = ((try? c.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) == true
+        claim = (try? c.decodeIfPresent(String.self, forKey: .claim)) ?? nil
+        gaps = (try? c.decodeIfPresent([String].self, forKey: .gaps)) ?? nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lang, forKey: .lang)
+        if failed { try c.encode(true, forKey: .failed) }
+        try c.encodeIfPresent(claim, forKey: .claim)
+        try c.encodeIfPresent(gaps, forKey: .gaps)
     }
 }

@@ -294,7 +294,7 @@ final class EvidenceDecisionWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let press = try section(console, from: "func decideEvidence(",
                                 to: "/// Confirm the standard set as it stands.")
-        XCTAssertTrue(press.contains("guard let request = EvidenceDecisions.request(row: row, decision: decision, note: note,"),
+        XCTAssertTrue(press.contains("guard let drafted = EvidenceDecisions.request(row: row, decision: decision, note: note,"),
                       "nothing is sent that OrbitKit would not build — and a send-back with no "
                           + "reason builds nothing")
         XCTAssertTrue(press.contains("decidingSessionID: sessionID) else { return }"),

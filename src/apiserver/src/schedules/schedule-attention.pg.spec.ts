@@ -97,6 +97,7 @@ before(async () => {
   sessionsService = new SessionsService(db as never, quiet as never, quiet as never);
   const real = new SessionsScheduleRunPort(sessionsService);
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: (input) => real.open(input),
     interrupt: async () => undefined,
     complete: async (_owner, sessionId) => {
@@ -156,15 +157,15 @@ function input(over: Partial<ScheduleCreateInput> = {}): ScheduleCreateInput {
 }
 
 /** A person's conversation in the workspace: where a schedule is created from, and what the lists must show. */
-async function conversation(w: World, title = 'A conversation'): Promise<string> {
+async function conversation(w: World, title = 'A conversation', engine?: string): Promise<string> {
   const id = randomUUID();
-  await sessionsService.create(w.ownerId, { workspaceId: w.workspaceId, title, prompt: 'hello' }, { id });
+  await sessionsService.create(w.ownerId, { workspaceId: w.workspaceId, title, prompt: 'hello', ...(engine ? { engine, provider: engine } : {}) }, { id });
   return id;
 }
 
 /** The way a schedule is born in v1: a session's create card, pressed Create by the owner. */
-async function created(w: World, over: Partial<ScheduleCreateInput> = {}) {
-  const from = await conversation(w, `Origin ${randomUUID().slice(0, 4)}`);
+async function created(w: World, over: Partial<ScheduleCreateInput> = {}, engine?: string) {
+  const from = await conversation(w, `Origin ${randomUUID().slice(0, 4)}`, engine);
   const asked = await schedules.create({ kind: 'SESSION', ownerId: w.ownerId, sessionId: from }, input(over));
   assert.equal(asked.outcome, 'PENDING');
   const decided = await schedules.decide(w.owner, (asked as { request: { id: string } }).request.id, 'ALLOW');
@@ -535,7 +536,6 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
       { workspaceId: w.workspaceId, toolName: 'mcp__orbit__bg_run', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python:*' },
-      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: command },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python3:*', fromScheduleRun: true },
     ],
   });
@@ -558,8 +558,7 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
     behavior: 'allow',
     rememberRules: [{ toolName: 'Bash', ruleContent: 'python3:*' }],
   });
-  // H1: the rule is now marked as a scheduled card's (an interactive session had written the same row first); the
-  // interactive python:* is not.
+  // H1: a new exact command is scheduled data; the interactive python:* keeps its origin.
   const marked = await db.workspacePermissionRule.findMany({ where: { workspaceId: w.workspaceId, toolName: 'Bash' } });
   assert.deepEqual(
     marked.map((r) => [r.ruleContent, r.fromScheduleRun]).sort(),
@@ -1005,4 +1004,65 @@ test('Waiting on you: an item whose run session was purged stays readable and st
   await report(w, three.sessionId, { outcome: 'FAILED', summary: 'Down again.' });
   const [again] = await pendingItems(schedule.id);
   assert.equal((await ownerRequests.decline(w.ownerId, again.id, 'known outage')).state, 'DECLINED');
+});
+
+for (const accessLevel of ['OPEN_PR', 'LAND'] as const) {
+  test(`scheduled ${accessLevel} Codex approvals deny level restrictions before workspace grants`, { skip }, async () => {
+    at('2026-11-14T00:00:00Z');
+    const w = await world(`deny-level-${accessLevel}`);
+    await db.workspace.update({ where: { id: w.workspaceId }, data: { enableWorktree: true } });
+    const { schedule, from } = await created(w, { accessLevel }, 'codex');
+    const { sessionId } = await nextRun(schedule.id);
+    await heldByRunner(w, sessionId, 'codex');
+    await heldByRunner(w, from, 'codex');
+    await db.workspacePermissionRule.createMany({ data: [
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'gh pr:*' },
+      { workspaceId: w.workspaceId, toolName: 'mcp__orbit__session_merge', ruleContent: '' },
+    ] });
+    const door = approvalDoor();
+    const ask = (id: string, toolName: string, input: Record<string, unknown>) =>
+      door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, id,
+        { toolName, input, toolUseId: randomUUID() });
+    assert.equal((await ask(from, 'Bash', { command: 'gh pr merge 12' })).status, 'ALLOWED');
+    assert.equal((await ask(from, 'Bash', { command: "/bin/bash -lc 'gh pr merge 12'" })).status, 'PENDING',
+      'interactive wrapper matching is unchanged');
+    for (const command of [
+      "/bin/bash -lc 'gh pr merge 12'", 'gh pr merge 12', 'sh -c "gh pr merge 12"',
+      "echo safe && gh pr merge 12", "git push origin HEAD:main", "gh release create v1",
+      "npm publish", "docker push example/image",
+    ]) {
+      assert.equal((await ask(sessionId, 'Bash', { command })).status, 'DENIED', command);
+    }
+    for (const [toolName, input] of [
+      ['mcp__orbit__session_merge', {}], ['mcp__orbit__integration_example', {}],
+      ['Skill', { skill: 'release' }], ['Skill', { skill: 'upgrade' }],
+    ] as const) {
+      assert.equal((await ask(sessionId, toolName, input)).status, 'DENIED', toolName);
+    }
+    assert.equal((await ask(sessionId, 'Bash', { command: 'gh pr view 12' })).status, 'ALLOWED');
+  });
+}
+
+test("a scheduled check's Always allow preserves an identical interactive rule's origin", { skip }, async () => {
+  at('2026-11-14T00:00:00Z');
+  const w = await world('preserve-rule-origin');
+  const { schedule, from } = await created(w);
+  const { sessionId } = await nextRun(schedule.id);
+  await heldByRunner(w, sessionId);
+  await db.workspacePermissionRule.create({ data: {
+    workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'npm test', createdById: w.ownerId,
+  } });
+  const door = approvalDoor();
+  const ask = () => door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, sessionId,
+    { toolName: 'Bash', input: { command: 'npm test' }, toolUseId: randomUUID() });
+  const card = await ask();
+  assert.equal(card.status, 'PENDING');
+  await sessionsService.decideApproval(w.ownerId, sessionId, card.id, {
+    behavior: 'allow', rememberRules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
+  });
+  const rules = await db.workspacePermissionRule.findMany({ where: { workspaceId: w.workspaceId } });
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].fromScheduleRun, false, 'a duplicate insert must not change the existing origin');
+  assert.ok((await claimLists(from)).allowed.includes('Bash(npm test)'), 'interactive dispatch retains the rule');
+  assert.equal((await ask()).status, 'PENDING', 'the existing interactive rule remains outside scheduled exact grants');
 });

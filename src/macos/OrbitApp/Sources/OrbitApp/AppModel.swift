@@ -2431,11 +2431,22 @@ final class AppModel {
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
 
-    /// A press on a notice: the conversation it names, at the card it waits on.
+    /// A press on a notice: the conversation it names, at the card it waits on. An owner request's
+    /// card is opened in the "Waiting on you" inbox, as its push opens it: in the conversation it sits
+    /// where it was asked, under every turn taken since, so landing at the tail showed nothing.
     func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
         dismissNeedsYouToast(notice.id)
         if let item = notice.ownerItem {
             openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else if notice.target.waitingKind == .ownerRequest, let requests = ownerRequests {
+            if let request = OwnerRequests.oldestPending(requests.known, sessionID: notice.target.id) {
+                openOwnerRequest(request.id)
+            } else {
+                // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+                settingsPresented = false
+                requests.tab = .open
+                requests.inboxPresented = true
+            }
         } else {
             openNeedsYouSession(notice.target)
         }
@@ -3392,6 +3403,13 @@ final class AppModel {
     func retryIntegrationJob(_ projectID: String, jobID: String) async throws {
         guard let api else { throw APIError.notConfigured }
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
+    }
+
+    /// "Land without the check" on a landing in flight (§2.4 J-S5), from the landing card. Throws
+    /// what the server answered, for the card to say; the page reads its line again itself.
+    func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.skipLandingCheck(projectID, taskID: taskID)
     }
 
     /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out

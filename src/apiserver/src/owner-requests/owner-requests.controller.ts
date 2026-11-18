@@ -51,7 +51,7 @@ export class OwnerRequestsController {
     @Body() dto: DeclineOwnerRequestDto,
     @Headers('x-orbit-client') client?: string,
   ) {
-    return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client));
+    return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client), dto.sendAsWritten);
   }
 
   /**

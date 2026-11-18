@@ -49,6 +49,7 @@ class ScheduleDisplayTest {
                 is TimelineItem.Schedule -> item.schedule.title
                 is TimelineItem.Run -> item.schedule.title
                 is TimelineItem.Draft -> item.card.title ?: ""
+                is TimelineItem.Task -> item.task.title
             }
         }
         "${g.title}|${g.subtitle ?: "nil"}|${items.joinToString(",")}"
@@ -174,6 +175,11 @@ class ScheduleDisplayTest {
         // The drawer's number: failing or held, nothing else.
         assertEquals(2, ScheduleDisplay.needsYouCount(listOf(schedule(consecutiveFailures = 2), schedule(state = "HELD"),
             schedule(state = "PAUSED"), schedule())))
+    }
+
+    @Test fun landMayCopy() {
+        assertEquals("Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.", ScheduleDisplay.mayText("LAND"))
+        assertEquals(2, ScheduleDisplay.accessOrder["LAND"])
     }
 
     // lines

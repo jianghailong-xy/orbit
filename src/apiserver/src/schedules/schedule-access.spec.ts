@@ -53,6 +53,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
     'mcp__orbit__schedule_run_report',
     'mcp__orbit__schedule_get',
     'mcp__orbit__schedule_list',
+    'mcp__orbit__condition_get',
     'mcp__orbit__schedule_update',
     'mcp__orbit__schedule_end',
     'mcp__orbit__notify',
@@ -284,7 +285,14 @@ test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; 
     assert.ok(denied.includes(tool), tool);
   }
   // Every other run keeps its mode whatever the runner says.
-  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.ACCEPT_EDITS);
+  // Editing levels on Claude Code run in Auto (owner 2026-11-18); every other engine keeps the session's mode.
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.AUTO);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', 'claude', []), PermissionMode.AUTO);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', null, []), PermissionMode.AUTO);
+  for (const engine of ['codex', 'cursor', 'kimi', 'opencode', 'antigravity', 'dsh']) {
+    assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'LAND', engine, []), PermissionMode.ACCEPT_EDITS, engine);
+    assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', engine, []), PermissionMode.ACCEPT_EDITS, engine);
+  }
   assert.equal(scheduleRunPermissionMode(PermissionMode.PLAN, 'CHECK_ONLY', 'codex', []), PermissionMode.PLAN);
   assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, null, 'claude', []), PermissionMode.DEFAULT);
 });
@@ -297,4 +305,16 @@ test('migration 0860 marks no existing rule: only a CHECK_ONLY card\'s server-co
   assert.match(statements, /ADD COLUMN "from_schedule_run" BOOLEAN NOT NULL DEFAULT false/);
   assert.doesNotMatch(statements, /UPDATE\s+"workspace_permission_rule"/i, 'no backfill marks a rule');
   assert.match(statements, /UPDATE "schedule_run" r\s+SET "access_level"/);
+});
+
+
+test('LAND has OPEN_PR modes on every engine and the same denied tools, including main pushes and release skills', () => {
+  for (const engine of ['claude', 'codex', 'kimi', 'dsh', 'opencode', 'antigravity', null]) {
+    assert.equal(scheduleRunMode('LAND', engine), scheduleRunMode('OPEN_PR', engine));
+    assert.deepEqual(scheduleRunDisallowedTools(['X'], 'LAND', engine), ['X', ...OPEN_PR_DISALLOWED_TOOLS]);
+  }
+  assert.equal(scheduleRunMode('LAND', 'claude'), PermissionMode.ACCEPT_EDITS);
+  for (const tool of ['mcp__orbit__session_merge', 'Bash(gh pr merge:*)', 'Skill(release)', 'Skill(upgrade)', 'Bash(git push * *:main)']) {
+    assert.ok(OPEN_PR_DISALLOWED_TOOLS.includes(tool));
+  }
 });

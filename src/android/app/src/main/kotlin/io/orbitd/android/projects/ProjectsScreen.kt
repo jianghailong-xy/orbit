@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -508,7 +509,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
-        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) }, retry = { retryJob(it) }) {
+        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) },
+            retry = { retryJob(it) }, skipCheck = { taskId -> attempt("") { api.skipLandingCheck(id, taskId) } }) {
             dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
             if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace }, change = { dialog = ProjectDialog.Change })
@@ -879,8 +881,10 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
             Text(ProjectPage.who(row), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(row.text("title").orEmpty(), fontWeight = FontWeight.SemiBold)
-            row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            // In the owner's language while a usable translation exists; the card it opens offers Show original.
+            val language = LocalTranslation.current.cardLanguage
+            Text(OwnerCardTranslation.listTitle(row, language), fontWeight = FontWeight.SemiBold)
+            OwnerCardTranslation.listDetailLine(row, language).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             ExceptionCards.handlingLine(row, now, main)?.let { line ->
                 Row(Modifier.testTag("$tag:handling"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(ExceptionCards.handlingLabel, Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
@@ -898,7 +902,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
 }
 
 private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit,
-    openLanding: (String) -> Unit, retry: suspend (String) -> String?, openJobs: () -> Unit) {
+    openLanding: (String) -> Unit, retry: suspend (String) -> String?, skipCheck: suspend (String) -> String?, openJobs: () -> Unit) {
     val panorama = state.panorama ?: return
     val buckets = panorama.obj("buckets") ?: JsonObject(emptyMap())
     val status = ProjectDoc.status(doc)
@@ -914,7 +918,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
             state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
                 ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
-                    openLanding = openLanding, retry = retry) } }
+                    openLanding = openLanding, retry = retry, skipCheck = skipCheck) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
                     // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).
@@ -1299,8 +1303,14 @@ private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: B
  * A question offers two presses; the second names the subject and both ends, says what the answer does, shows the crossing key it
  * echoes, and sends it. A refusal stays on its row with the door's own code and reason, the second press still open. */
 @Composable
-private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
+private fun CrossingRow(asked: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
     ask: (Boolean) -> Unit, cancel: () -> Unit, answer: (Boolean) -> Unit) {
+    // Its title and reason in the owner's language (Settings › Translation), flipped whole to the agent's words by the foot; the
+    // answer is pressed with the row as it came.
+    var showOriginal by remember(asked.text("id")) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.crossing(asked, owner) }
+    val row = if (translated != null && !showOriginal) translated else asked
     val id = row.text("id")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val mono = SpanStyle(fontFamily = FontFamily.Monospace, color = secondary)
@@ -1334,6 +1344,8 @@ private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, lo
                 ProjectCrossings.moveWithdrawnCriterionNote) }
         }
         row.text("reason")?.let { Text(ProjectCrossings.reasonGiven(it), style = MaterialTheme.typography.labelMedium, color = secondary) }
+        if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal },
+            Modifier.testTag("crossing:$id:translation-foot"))
         refusal?.let { refused ->
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(8.dp)
                 .testTag("crossing:$id:refusal"), verticalArrangement = Arrangement.spacedBy(2.dp)) {

@@ -1,6 +1,6 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes, TaskEvidenceDecisionValue } from '@prisma/client';
-import type { EvidenceGapClause } from '@orbit/shared';
+import type { EvidenceGapClause, EvidenceTranslation } from '@orbit/shared';
 import { type CoordinatorEvidencePlace, coordinatorHolds } from '../projects/coordinator-evidence-queue';
 import { ownerEvidenceCard, reviewerHolds, type OwnerEvidenceCard } from './evidence-review';
 import {
@@ -173,6 +173,9 @@ export interface PendingEvidenceJudgment {
    *  when none do (`EvidenceGapClause` in @orbit/shared). A field of its own beside `gaps`, so a
    *  client that does not know it still renders every gap as text. */
   gapClauses: EvidenceGapClause[];
+  /** `claim` and `gaps` in the owner's language (Settings › Translation); absent until translated and on every
+   *  revision translation is off for. */
+  translation?: EvidenceTranslation;
   /** One per cited check, in the submitted order, resolved against the rows as they are NOW. */
   citations: EvidenceCitation[];
   /** Whether the door would refuse every decision about this evidence, whoever is reading. */
@@ -364,6 +367,8 @@ async function unansweredLatestEvidence(
           submittedAt: true,
           sourceSessionId: true,
           evidence: true,
+          // Settings › Translation (migration 1080): the claim and gaps in the owner's language, or null.
+          translation: true,
           decisions: { select: { id: true }, take: 1 },
         },
       },
@@ -510,6 +515,7 @@ export async function readPendingEvidenceJudgments(
       claim: envelope?.claim ?? '',
       gaps: envelope?.gaps ?? [],
       gapClauses: envelope?.gapClauses ?? [],
+      ...(latest.translation ? { translation: latest.translation as unknown as EvidenceTranslation } : {}),
       citations: envelope
         ? await describeEvidenceCitations(tx, { ownerId, taskId: task.id }, envelope.checks)
         : [],

@@ -150,7 +150,20 @@ final class RunnersModel {
     /// restarts; each interrupted turn continues once it is back. Nil once taken; else why not.
     @discardableResult
     func updateNow(_ id: String) async -> String? {
-        await press { _ = try await self.api.updateRunnerNow(id) }
+        if let reason = await press({ _ = try await self.api.updateRunnerNow(id) }) { return reason }
+        // The runner answers on its next heartbeat, after the read `press` made: read again until it
+        // reports the restart, so the card moves without a pull.
+        Task { await self.awaitUpdateNowAnswer(id) }
+        return nil
+    }
+
+    private func awaitUpdateNowAnswer(_ id: String) async {
+        let started = Date()
+        while !RunnerUpdateNow.answered(runner(id)),
+              Date().timeIntervalSince(started) < RunnerUpdateNow.answerWait {
+            try? await Task.sleep(for: .seconds(RunnerUpdateNow.answerPollInterval))
+            await load()
+        }
     }
 
     /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
@@ -212,6 +225,21 @@ final class RunnersModel {
             await load()
             return state.status == "failed" ? state.message : nil
         } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Make an added Claude Code account the Default: POST …/set-default. A control-plane refusal
+    /// (offline, busy, too old) comes back in its own words; a machine failure rides in
+    /// `claudeAccountSwap` after the list is read again.
+    @discardableResult
+    func setDefaultAccount(_ id: String, engine: LoginEngine, account: String) async -> String? {
+        do {
+            _ = try await api.setDefaultRunnerAccount(id, engine: engine, account: account)
+            await load()
+            return nil
+        } catch {
+            await load()
             return APIClient.failureReason(error)
         }
     }

@@ -96,22 +96,14 @@ final class MainCheckoutModel {
         }
     }
 
-    /// A push waiting on the managed-branch warning (the bar's or a line's Push): the read it pushes.
-    var pushWarning: MainCheckoutRead?
-
     /// Push the branch as the runner sees it now: Push checks only the HEAD part of the fingerprint,
-    /// so a fresh read's is what the person is pushing. A branch a project lands on asks first
-    /// (`pushWarning`); the warning informs and never blocks.
+    /// so a fresh read's is what the person is pushing.
     func push(workspaceID: String) async {
         guard let view = try? await api.mainCheckout(workspaceId: workspaceID) else {
             onOutcome(ToastRequest(message: MainCheckoutCopy.readFailed, tone: .error))
             return
         }
-        if view.managedBranch != nil {
-            pushWarning = view
-        } else {
-            await push(view, workspaceID: workspaceID)
-        }
+        await push(view, workspaceID: workspaceID)
     }
 
     @discardableResult

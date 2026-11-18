@@ -205,12 +205,34 @@ test('translate fails on the 20 s timeout, on an error answer, and without a key
   await assert.rejects(pending, (e: unknown) => e instanceof TranslationFailed && e.reason === 'TIMEOUT');
   mock.timers.reset();
 
-  stubDeepSeek([503]);
+  stubDeepSeek([400]);
   await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
 
   delete process.env.DEEPSEEK_API_KEY;
   assert.equal(translationAvailable(), false);
   await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'NO_KEY');
+});
+
+test('translate tries a 429/5xx or unreachable translator again, three times in all, and not a 4xx', async () => {
+  let bodies = stubDeepSeek([503, 429, ENGLISH]);
+  assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
+  assert.equal(bodies.length, 3);
+
+  bodies = stubDeepSeek([500, 502, 503, ENGLISH]);
+  await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
+  assert.equal(bodies.length, 3, 'gives up after the third');
+
+  bodies = stubDeepSeek([400, ENGLISH]);
+  await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
+  assert.equal(bodies.length, 1, 'a 4xx is final');
+
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    if (calls++ === 0) throw new TypeError('fetch failed');
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: ENGLISH } }] }) } as Response;
+  }) as typeof fetch;
+  assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
+  assert.equal(calls, 2);
 });
 
 test('the owner preference: absent is off, a language defaults to zh-Hans, the agent\'s to English, and no key means none', async () => {
@@ -312,7 +334,7 @@ test('a message sent while a turn runs is released into the queue behind it, and
 });
 
 test('a failed translation holds the message and delivers nothing (1A)', async () => {
-  stubDeepSeek([500]);
+  stubDeepSeek([500, 500, 500]);
   const h = harness();
   await h.send();
   await h.service.translationsSettled();
@@ -340,7 +362,7 @@ test('a translation past 20 s counts as failed, and the message is not delivered
 });
 
 test('Retry translates a failed message again and delivers it', async () => {
-  stubDeepSeek([500, ENGLISH]);
+  stubDeepSeek([500, 500, 500, ENGLISH]);
   const h = harness();
   const { turnId } = await h.send();
   await h.service.translationsSettled();
@@ -358,7 +380,7 @@ test('Retry translates a failed message again and delivers it', async () => {
 });
 
 test('Send as written delivers the original, untranslated', async () => {
-  stubDeepSeek([500]);
+  stubDeepSeek([500, 500, 500]);
   const h = harness();
   const { turnId } = await h.send();
   await h.service.translationsSettled();
