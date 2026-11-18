@@ -5,19 +5,27 @@ import Foundation
 // leniently: a closed set is a String here, so a state or reason a newer server adds costs one word, not
 // the list; the display rules (`ScheduleDisplay`) say what each one draws.
 
-/// A schedule's rule: one slot, every day, or some days of the week.
+/// A schedule's rule: one slot, every day, some days of the week, or whenever its condition fires
+/// (docs/condition-triggers-design.md §6.1).
 public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
     case once(at: String)
     case daily(time: String)
     case weekly(time: String, weekdays: [String])
+    /// A WHEN rule: starts a run each time its condition fires. `conditionId` is nil on a create card, before Create
+    /// writes the condition.
+    case when(conditionId: String?, runsPerWeek: Int, condition: ScheduleWhenCondition)
 
-    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays }
+    private enum CodingKeys: String, CodingKey { case kind, at, time, weekdays, conditionId, runsPerWeek, condition }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .kind) {
         case "ONCE": self = .once(at: try c.decode(String.self, forKey: .at))
         case "DAILY": self = .daily(time: try c.decode(String.self, forKey: .time))
+        case "WHEN":
+            self = .when(conditionId: try? c.decodeIfPresent(String.self, forKey: .conditionId),
+                         runsPerWeek: (try? c.decode(Int.self, forKey: .runsPerWeek)) ?? 0,
+                         condition: try c.decode(ScheduleWhenCondition.self, forKey: .condition))
         default:
             self = .weekly(time: try c.decode(String.self, forKey: .time),
                            weekdays: (try? c.decode([String].self, forKey: .weekdays)) ?? [])
@@ -37,6 +45,11 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
             try c.encode("WEEKLY", forKey: .kind)
             try c.encode(time, forKey: .time)
             try c.encode(weekdays, forKey: .weekdays)
+        case .when(let conditionId, let runsPerWeek, let condition):
+            try c.encode("WHEN", forKey: .kind)
+            try c.encode(conditionId, forKey: .conditionId)
+            try c.encode(runsPerWeek, forKey: .runsPerWeek)
+            try c.encode(condition, forKey: .condition)
         }
     }
 
@@ -49,9 +62,137 @@ public enum ScheduleRule: Equatable, Hashable, Sendable, Codable {
 
     public var time: String? {
         switch self {
-        case .once: return nil
+        case .once, .when: return nil
         case .daily(let time), .weekly(let time, _): return time
         }
+    }
+
+    /// A WHEN rule's condition; nil for a timed rule.
+    public var condition: ScheduleWhenCondition? {
+        if case .when(_, _, let condition) = self { return condition }
+        return nil
+    }
+
+    /// A WHEN rule's condition id, once Create has written it.
+    public var conditionId: String? {
+        if case .when(let id, _, _) = self { return id }
+        return nil
+    }
+}
+
+/// A comparison a condition's readings are held to: `GT` 90, or `EXIT_ZERO` with no value.
+public struct ConditionCompare: Codable, Equatable, Hashable, Sendable {
+    public let op: String
+    public let value: Double?
+    public init(op: String, value: Double?) {
+        self.op = op
+        self.value = value
+    }
+    private enum CodingKeys: String, CodingKey { case op, value }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        op = try c.decode(String.self, forKey: .op)
+        value = try? c.decodeIfPresent(Double.self, forKey: .value)
+    }
+}
+
+/// A WHEN rule's condition (shared `ScheduleWhenCondition`), every default written out.
+public struct ScheduleWhenCondition: Codable, Equatable, Hashable, Sendable {
+    public let text: String
+    public let command: String
+    public let compare: ConditionCompare
+    public let holdSeconds: Int
+    public let rearm: ConditionCompare?
+    public let intervalSeconds: Int
+    public let unit: String?
+    public let timeoutSeconds: Int
+    /// Fire again every this many seconds while it still holds; nil fires once.
+    public let repeatSeconds: Int?
+
+    public init(text: String, command: String, compare: ConditionCompare, holdSeconds: Int = 0,
+                rearm: ConditionCompare? = nil, intervalSeconds: Int = 300, unit: String? = nil,
+                timeoutSeconds: Int = 20, repeatSeconds: Int? = nil) {
+        self.text = text
+        self.command = command
+        self.compare = compare
+        self.holdSeconds = holdSeconds
+        self.rearm = rearm
+        self.intervalSeconds = intervalSeconds
+        self.unit = unit
+        self.timeoutSeconds = timeoutSeconds
+        self.repeatSeconds = repeatSeconds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case text, command, compare, holdSeconds, rearm, intervalSeconds, unit, timeoutSeconds, repeatSeconds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try c.decode(String.self, forKey: .text)
+        command = (try? c.decode(String.self, forKey: .command)) ?? ""
+        compare = try c.decode(ConditionCompare.self, forKey: .compare)
+        holdSeconds = (try? c.decode(Int.self, forKey: .holdSeconds)) ?? 0
+        rearm = try? c.decodeIfPresent(ConditionCompare.self, forKey: .rearm)
+        intervalSeconds = (try? c.decode(Int.self, forKey: .intervalSeconds)) ?? 300
+        unit = try? c.decodeIfPresent(String.self, forKey: .unit)
+        timeoutSeconds = (try? c.decode(Int.self, forKey: .timeoutSeconds)) ?? 20
+        repeatSeconds = try? c.decodeIfPresent(Int.self, forKey: .repeatSeconds)
+    }
+}
+
+/// A WHEN schedule's condition, or a waiting task's, as a list shows it: the newest reading and its age
+/// (condition-triggers board ④).
+public struct ScheduleConditionReading: Codable, Equatable, Hashable, Sendable {
+    public let id: String
+    public let text: String
+    public let unit: String?
+    /// WAITING, HOLDING, FIRED, UNKNOWN or ENDED.
+    public let state: String
+    public let lastValue: Double?
+    public let lastSampleAt: String?
+
+    public init(id: String, text: String, unit: String? = nil, state: String = "WAITING", lastValue: Double? = nil,
+                lastSampleAt: String? = nil) {
+        self.id = id
+        self.text = text
+        self.unit = unit
+        self.state = state
+        self.lastValue = lastValue
+        self.lastSampleAt = lastSampleAt
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, text, unit, state, lastValue, lastSampleAt }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        text = (try? c.decode(String.self, forKey: .text)) ?? ""
+        unit = try? c.decodeIfPresent(String.self, forKey: .unit)
+        state = (try? c.decode(String.self, forKey: .state)) ?? "WAITING"
+        lastValue = try? c.decodeIfPresent(Double.self, forKey: .lastValue)
+        lastSampleAt = try? c.decodeIfPresent(String.self, forKey: .lastSampleAt)
+    }
+
+    /// The probe cannot be read: the row goes under Needs you (§5.3).
+    public var cantRead: Bool { state == "UNKNOWN" }
+}
+
+/// A task that starts when its condition holds, as the Scheduled page lists it (shared `ScheduleWaitingTask`).
+public struct ScheduleWaitingTask: Codable, Equatable, Hashable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let workspaceId: String
+    public let workspaceName: String?
+    public let condition: ScheduleConditionReading
+
+    public init(id: String, title: String, workspaceId: String, workspaceName: String? = nil,
+                condition: ScheduleConditionReading) {
+        self.id = id
+        self.title = title
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.condition = condition
     }
 }
 
@@ -61,12 +202,16 @@ public struct ScheduleEnvelope: Codable, Equatable, Hashable, Sendable {
     public let accessLevel: String
     public let runsPerWeek: Int
     public let runLimitMinutes: Int
+    /// A WHEN rule's approved probe command, as its sha256; nil for a timed schedule.
+    public var commandHash: String? = nil
 
-    public init(workspaceId: String, accessLevel: String, runsPerWeek: Int, runLimitMinutes: Int) {
+    public init(workspaceId: String, accessLevel: String, runsPerWeek: Int, runLimitMinutes: Int,
+                commandHash: String? = nil) {
         self.workspaceId = workspaceId
         self.accessLevel = accessLevel
         self.runsPerWeek = runsPerWeek
         self.runLimitMinutes = runLimitMinutes
+        self.commandHash = commandHash
     }
 
     public init?(json: JSONValue?) {
@@ -192,6 +337,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     public let lastRun: ScheduleRunView?
     /// The list's rows only: when a PAUSED schedule was paused.
     public var pausedAt: String? = nil
+    /// A WHEN rule's condition and its newest reading; nil for a timed schedule.
+    public var condition: ScheduleConditionReading? = nil
 
     public init(id: String, title: String, intent: String = "", prompt: String = "", rule: ScheduleRule,
                 timezone: String, workspaceId: String, workspaceName: String? = nil, agentId: String? = nil,
@@ -233,7 +380,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     private enum CodingKeys: String, CodingKey {
         case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, agentName, engine, accessLevel
         case runLimitMinutes, runsPerWeek, envelope, state, heldReason, endedReason, note, revision, startAt, endAt
-        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt
+        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt, condition
     }
 
     public init(from decoder: Decoder) throws {
@@ -269,6 +416,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         endedAt = try? c.decodeIfPresent(String.self, forKey: .endedAt)
         lastRun = try? c.decodeIfPresent(ScheduleRunView.self, forKey: .lastRun)
         pausedAt = try? c.decodeIfPresent(String.self, forKey: .pausedAt)
+        condition = try? c.decodeIfPresent(ScheduleConditionReading.self, forKey: .condition)
     }
 }
 
@@ -278,15 +426,21 @@ public struct ScheduleListResponse: Decodable, Sendable {
     /// The runs of the page's window, for every listed schedule: each run under way, and the ended runs planned in
     /// the last 24 hours. Nil from a server before W2, where the page reads each schedule's detail instead.
     public let runs: [ScheduleRunView]?
-    private enum CodingKeys: String, CodingKey { case schedules, runs }
-    public init(schedules: [ScheduleView], runs: [ScheduleRunView]? = nil) {
+    /// The OPEN tasks waiting for their startWhen condition (condition-triggers board ④); nil from a server before
+    /// conditions.
+    public let waitingTasks: [ScheduleWaitingTask]?
+    private enum CodingKeys: String, CodingKey { case schedules, runs, waitingTasks }
+    public init(schedules: [ScheduleView], runs: [ScheduleRunView]? = nil, waitingTasks: [ScheduleWaitingTask]? = nil) {
         self.schedules = schedules
         self.runs = runs
+        self.waitingTasks = waitingTasks
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schedules = try c.decode([ScheduleLenient<ScheduleView>].self, forKey: .schedules).compactMap(\.value)
         runs = (try? c.decodeIfPresent([ScheduleLenient<ScheduleRunView>].self, forKey: .runs))?.map { $0.compactMap(\.value) }
+        waitingTasks = (try? c.decodeIfPresent([ScheduleLenient<ScheduleWaitingTask>].self, forKey: .waitingTasks))?
+            .map { $0.compactMap(\.value) }
     }
 }
 
@@ -444,15 +598,51 @@ public struct ScheduleEnvelopeLines: Codable, Equatable, Hashable, Sendable {
     }
 }
 
+/// A WHEN rule's lines on the create card, as the server words them (shared `ScheduleWhenLines`, board ③).
+public struct ScheduleWhenLines: Codable, Equatable, Hashable, Sendable {
+    /// "Raw used above 90% for 10 min".
+    public let text: String
+    /// "Fires again only after it drops below 85%. Checked every 5 min on workstation-gpu, no model."
+    public let detail: String
+    /// The probe command, verbatim: what Create approves.
+    public let command: String
+    /// "And again every 2 hours while it stays that way."; nil with no repeat.
+    public let `repeat`: String?
+    /// "Keeps this cloud workspace awake while it waits."; nil off Orbit Cloud.
+    public let awake: String?
+
+    public init(text: String, detail: String, command: String, repeat: String? = nil, awake: String? = nil) {
+        self.text = text
+        self.detail = detail
+        self.command = command
+        self.repeat = `repeat`
+        self.awake = awake
+    }
+
+    private enum CodingKeys: String, CodingKey { case text, detail, command, `repeat`, awake }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        text = try c.decode(String.self, forKey: .text)
+        detail = (try? c.decode(String.self, forKey: .detail)) ?? ""
+        command = (try? c.decode(String.self, forKey: .command)) ?? ""
+        `repeat` = try? c.decodeIfPresent(String.self, forKey: .repeat)
+        awake = try? c.decodeIfPresent(String.self, forKey: .awake)
+    }
+}
+
 /// A create card's When.
 public struct ScheduleCardWhen: Codable, Equatable, Hashable, Sendable {
     public let rule: ScheduleRule
     public let timezone: String?
     public let firstRunAt: String?
-    public init(rule: ScheduleRule, timezone: String?, firstRunAt: String?) {
+    /// A WHEN rule's lines: the condition, the re-arm and how it is checked, and the command; nil for a timed rule.
+    public var condition: ScheduleWhenLines? = nil
+    public init(rule: ScheduleRule, timezone: String?, firstRunAt: String?, condition: ScheduleWhenLines? = nil) {
         self.rule = rule
         self.timezone = timezone
         self.firstRunAt = firstRunAt
+        self.condition = condition
     }
 }
 

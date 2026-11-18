@@ -615,6 +615,21 @@ export interface ScheduleListResponse {
    * ended runs planned in the last 24 hours (the viewer's today, in any zone). The page needs no other read.
    */
   runs?: ScheduleTimelineRun[];
+  /**
+   * On the REST list only: the OPEN tasks that wait for their startWhen condition (docs/condition-triggers-design.md
+   * §9), which the page lists beside the WHEN schedules in "Waiting for a condition", or under Needs you when it
+   * cannot be read. A task whose condition has fired or ended is not waiting and is not here.
+   */
+  waitingTasks?: ScheduleWaitingTask[];
+}
+
+/** A task that starts when its condition holds, as the Scheduled page lists it (condition-triggers board ④). */
+export interface ScheduleWaitingTask {
+  id: string;
+  title: string;
+  workspaceId: string;
+  workspaceName: string | null;
+  condition: ScheduleConditionReading;
 }
 
 export interface ScheduleFindingView {

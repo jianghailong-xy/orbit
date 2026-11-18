@@ -115,6 +115,7 @@ export function SharedWikiDocRoute() {
   const { token = '', slug = '' } = useParams();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['shared', token, 'd', slug],
+    meta: { entities: ['wiki'] },
     queryFn: () => getSharedWikiDoc(token, slug),
     enabled: !!token && !!slug,
     retry: false,

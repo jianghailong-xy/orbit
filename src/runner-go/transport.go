@@ -32,7 +32,7 @@ const (
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
-	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	// (heartbeatMerge); a commit runs beside a live background job.
 	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).

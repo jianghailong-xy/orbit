@@ -964,7 +964,7 @@ export function timedOutErrorCode(job: {
 /** Which door ended a timed-out attempt, for the timeline's `TIMED_OUT` fact (§2.9 LS2). The two
  *  the job row cannot tell apart from an ordinary J-T9 end are the candidate's recheck gate and
  *  M-T13's retirement, which today write the same `error_detail` as the retry door. */
-export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN';
+export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN' | 'SKIP_CHECK';
 
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
@@ -1064,7 +1064,10 @@ export async function queueLandingRetry(
     ownerId: string;
     projectId: string;
     taskId: string;
-    retry: LandingRetryRequest;
+    /** The failed generation this one reruns. Omitted only for the owner's skip of a landing that
+     *  was still in flight: the one it replaces was stopped rather than failed, so there is no
+     *  failure to rerun, and the skip columns alone say who asked and why. */
+    retry?: LandingRetryRequest;
     /**
      * Set only by `integration_skip_merge_check`: this generation runs no merge check (§2.4 J-S5,
      * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
@@ -1091,7 +1094,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
-    cause: 'RETRY',
+    cause: input.retry ? 'RETRY' : 'SKIP_CHECK',
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1104,6 +1107,68 @@ export async function queueLandingRetry(
     sourceRef: job.sourceRef,
     landingSessionId: queued.landingSessionId,
   };
+}
+
+/** The stop a skip of an in-flight landing asks for: the cause its `STOP_REQUESTED` line carries,
+ *  and what the result transaction reads to queue the generation without the check once the stopped
+ *  one has answered (`queueSkippedLandingAfterStop`). */
+export const SKIP_CHECK_STOP_CAUSE = 'SKIP_CHECK';
+
+/** What a `STOP_REQUESTED` line asked by a skip carries in its data. */
+export interface SkipCheckStopData {
+  cause: typeof SKIP_CHECK_STOP_CAUSE;
+  skip: { reason: string; approvedByUserId: string };
+}
+
+/** The skip a stop line's data asked for, or null when the stop was not a skip's. */
+export function skipCheckStopOf(data: unknown): SkipCheckStopData['skip'] | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as { cause?: unknown; skip?: { reason?: unknown; approvedByUserId?: unknown } };
+  if (row.cause !== SKIP_CHECK_STOP_CAUSE || !row.skip) return null;
+  const { reason, approvedByUserId } = row.skip;
+  if (typeof reason !== 'string' || !reason || typeof approvedByUserId !== 'string' || !approvedByUserId) {
+    return null;
+  }
+  return { reason, approvedByUserId };
+}
+
+/**
+ * The owner skipped the landing check of a landing that was still RUNNING: the runner was asked to
+ * stop, and the generation without the check waits for its answer, because J3 allows one landing of
+ * a task in flight. Called by the result transaction once the stopped generation is terminal.
+ *
+ * Whatever it answered, unless it landed — a runner that never read the stop (a legacy one reads it
+ * only when it starts) may report LANDED, ALREADY_LANDED or NOTHING_TO_LAND, and then there is
+ * nothing left to land. CANCELLED, CHECK_FAILED, ERROR and CONFLICT all queue it: the owner asked
+ * for this work to land without the check, and a conflict the next generation meets again is
+ * reported by that generation as an ordinary failure, with its item — a stopped generation opens
+ * none (J-T8).
+ *
+ * Nothing is queued when the task is no longer DONE (reopened since: its next DONE lands the new
+ * work, with the check), or when another generation is already in flight (the reopened DONE the
+ * same result just queued).
+ */
+export async function queueSkippedLandingAfterStop(
+  tx: Prisma.TransactionClient,
+  job: { id: string; ownerId: string; projectId: string; taskId: string },
+  endedAs: string,
+): Promise<void> {
+  if (endedAs === 'LANDED' || endedAs === 'ALREADY_LANDED' || endedAs === 'NOTHING_TO_LAND') return;
+  const stop = await tx.projectIntegrationJobEvent.findFirst({
+    where: { jobId: job.id, kind: 'STOP_REQUESTED' },
+    orderBy: { seq: 'desc' },
+    select: { data: true },
+  });
+  const skip = skipCheckStopOf(stop?.data);
+  if (!skip) return;
+  const task = await tx.task.findFirst({ where: { id: job.taskId }, select: { status: true } });
+  if (task?.status !== 'DONE') return;
+  await queueLandingRetry(tx, {
+    ownerId: job.ownerId,
+    projectId: job.projectId,
+    taskId: job.taskId,
+    skipMergeCheck: { reason: skip.reason, approvedByUserId: skip.approvedByUserId, approvalId: null },
+  });
 }
 
 // ── the delivered identity (§10.5 O-L4) ────────────────────────────────────────────────────────
