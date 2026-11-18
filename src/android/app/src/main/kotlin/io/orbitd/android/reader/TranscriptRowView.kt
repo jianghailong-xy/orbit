@@ -142,6 +142,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
     val bilingual = LocalTranslation.current.bilingual
     val flipped = !bilingual && shownOriginals?.has(translationKey) == true
+    // "Hide original" leaves this message's own language alone (docs/mocks/translation-hide-original); per message, never kept.
+    val hiddenKey = ShownOriginals.hidden(translationKey)
+    val originalHidden = bilingual && shownOriginals?.has(hiddenKey) == true
+    val showsBoth = bilingual && !originalHidden
     fun shownWords(source: RunEvent): String = when {
         source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
         source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
@@ -362,28 +366,29 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, revealed = highlighted) else TranscriptCardView(it, open, shown) }
             if (cards.isEmpty() && !attachmentOnly) { if (shown.fields.string("controlPlaneNote").isNullOrBlank() || words.isNotBlank()) {
                 // Both languages, block by block, when the reply pairs with its translation (03-interleaved.png).
-                val pairs = if (event.type == "assistant") BilingualShown.replyPairs(shown.body(), replyTranslation, bilingual) else null
+                val pairs = if (event.type == "assistant") BilingualShown.replyPairs(shown.body(), replyTranslation, showsBoth) else null
                 if (pairs != null) InterleavedReply(pairs, open)
                 else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
-                (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, bilingual)
-                    else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, bilingual) else null)
+                (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, showsBoth)
+                    else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, showsBoth) else null)
                     ?.let { BilingualEnglish(it, collapsible = event.type == "assistant") }
             } }
             val doors = console?.composer
             val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }
+            val hide = shownOriginals?.let { { it.toggle(hiddenKey) } }
             turnTranslation?.let { turn ->
                 val turnId = event.turnId
                 UserTranslationFoot(turn, flipped, toggle,
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
                     sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
-                    bilingual = bilingual)
+                    bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
             }
             if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
                 retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,
-                bilingual = bilingual)
+                bilingual = bilingual, originalHidden = originalHidden, onHideOriginal = hide)
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)

@@ -147,6 +147,34 @@ class ManagementPanelTest {
         assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
     }
 
+    @Test fun orbitCloudStaysFirstAndADragMovesOnlyTheOtherMachines() {
+        fixture.secondRunner = true
+        fixture.runnerOrder = listOf(fixture.RUNNER, fixture.RUNNER_TWO, fixture.CLOUD_RUNNER)
+        val api = api()
+        compose.setContent { MachinesAndModelsPage(api, revision, {}, part = MachinesAndModelsPart.MACHINES) }
+        await("Orbit Cloud")
+        fun row(name: String) = compose.onNode(hasText(name) and hasClickAction())
+        fun top(name: String) = row(name).fetchSemanticsNode().positionInRoot.y
+        assertTrue(top("Orbit Cloud") < top("Old alias"))
+        assertTrue(top("Old alias") < top("Spare box"))
+        compose.onNodeWithTag("managed-runner-icon", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("managed-runner-divider").assertExists()
+        compose.onNodeWithTag("runner-handle:${fixture.CLOUD_RUNNER}").assertDoesNotExist()
+        row("Orbit Cloud").assert(!hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))
+        row("Old alias").assert(!hasCustomAction("Move up"))
+
+        compose.onNodeWithTag("runner-handle:${fixture.RUNNER_TWO}").performScrollTo().performTouchInput {
+            down(center)
+            repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, -20f)) }
+            up()
+        }
+        // Orbit Cloud leads the order saved, too, for a client that does not pin it.
+        compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.CLOUD_RUNNER, fixture.RUNNER_TWO, fixture.RUNNER) }
+        assertEquals(listOf(listOf(fixture.CLOUD_RUNNER, fixture.RUNNER_TWO, fixture.RUNNER)), fixture.reorderRequests.toList())
+        compose.waitUntil(60_000) { top("Spare box") < top("Old alias") }
+        assertTrue(top("Orbit Cloud") < top("Spare box"))
+    }
+
     /** Each row opens its runner, TalkBack moves it with the row's own actions, and Remove… is in its ⋯ menu, asked
      * first with Cancel beside it — all without an Edit mode. */
     @Test fun aRunnerRowOpensMovesForTalkBackAndRemovesFromItsMenu() {

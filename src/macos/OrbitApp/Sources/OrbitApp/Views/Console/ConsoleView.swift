@@ -1764,7 +1764,7 @@ struct TranscriptView: View {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
         case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
-             .ownerConfirmation, .coordinatorQuestion, .crossingBatch:
+             .ownerConfirmation, .coordinatorQuestion, .crossingBatch, .projectDone:
             openApprovalReview(.delivered(card))
         default:
             break

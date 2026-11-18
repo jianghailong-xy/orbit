@@ -67,6 +67,16 @@ public enum RunnerPageFormat {
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
+    /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
+    public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
+        guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),
+              index != runners.startIndex else { return runners }
+        var order = runners
+        let managed = order.remove(at: index)
+        order.insert(managed, at: 0)
+        return order
+    }
+
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
     /// whose count would say nothing true, or for one with no limit reported.
     public struct Slots: Equatable, Sendable {
@@ -382,6 +392,13 @@ public enum RunnerPageFormat {
     public static func engineSite(_ health: RunnerEngineHealth) -> String? {
         guard (health.accounts ?? []).count < 2 else { return nil }
         return KimiSite.current(of: health)?.domain
+    }
+
+    /// OpenCode's note after its version when its CLI listed no provider key (web's
+    /// `1.19.5 · no provider key found`): its Unknown is about a key, never the version. Nil otherwise.
+    public static func engineKeyNote(_ health: RunnerEngineHealth) -> String? {
+        health.engine == "opencode" && health.openCodeNoKey == true && health.auth != "yes"
+            ? RunnerPageCopy.RUNNER_ENGINE_NO_PROVIDER_KEY : nil
     }
 
     /// Whether the Engines row offers Sign In: an engine Orbit signs in, installed, with a login

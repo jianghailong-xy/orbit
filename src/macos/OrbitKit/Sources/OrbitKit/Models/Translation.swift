@@ -101,6 +101,10 @@ public enum TranslationCopy {
     // MARK: In a conversation (frames 4–6)
     public static let translated = "Translated"
     public static let showOriginal = "Show original"
+    /// "Show both languages": hides one message's original, and brings it back (not "Show original",
+    /// which swaps the translation for the original).
+    public static let hideOriginal = "Hide original"
+    public static let showBoth = "Show both"
     public static let showTranslation = "Show translation"
     public static let original = "Original"
     public static let translating = "Translating…"
@@ -736,6 +740,8 @@ public enum SessionTranslation {
 
     public enum FootAction: Equatable, Sendable {
         case flip, retryTurn, sendAsWritten, retryReply
+        /// "Show both languages": hide this message's original, or bring it back.
+        case hideOriginal
     }
 
     /// The line under the owner's message (frames 4–6): "Show original" ↔ "Show translation" once
@@ -744,11 +750,15 @@ public enum SessionTranslation {
     /// held because the translation failed (1A), "Couldn't translate, so it wasn't sent · Retry ·
     /// Send as written". Nothing for a message sent as written.
     /// With both languages on (`bilingual`) a delivered message's English is in the bubble, so its foot
-    /// reads "Sent to the agent in English" (naming `agentLanguage`) and offers no flip (02-bilingual.png, mark C).
+    /// reads "Sent to the agent in English" (naming `agentLanguage`) and offers no flip (02-bilingual.png, mark C),
+    /// but "Hide original" ↔ "Show both" for its English (`originalHidden`, docs/mocks/translation-hide-original).
     public static func userFoot(_ translation: TurnTranslation?, flipped: Bool, bilingual: Bool = false,
-                                agentLanguage: TranslationLanguage = .agentDefault) -> [FootPart] {
+                                agentLanguage: TranslationLanguage = .agentDefault,
+                                originalHidden: Bool = false) -> [FootPart] {
         guard let translation else { return [] }
-        if bilingual, translation.state == .done { return [.text(TranslationCopy.sentToAgentLabel(agentLanguage))] }
+        if bilingual, translation.state == .done {
+            return [.text(TranslationCopy.sentToAgentLabel(agentLanguage)), hideOriginalAction(originalHidden)]
+        }
         switch translation.state {
         case .translating:
             return [.chip(TranslationCopy.translating)]
@@ -767,19 +777,27 @@ public enum SessionTranslation {
     /// The line under an agent reply: "Translated · Show original" ↔ "Original · Show translation";
     /// failed (2A), "Couldn't translate this reply · Retry"; still to come, the chip "Translates when
     /// the reply is done".
-    /// With both languages on, a translated reply's foot is "Translated" alone (mark D).
+    /// With both languages on, a translated reply's foot is "Translated · Hide original" ↔ "Translated ·
+    /// Show both" (`originalHidden`, docs/mocks/translation-hide-original).
     public static func replyFoot(_ translation: ReplyTranslation?, pending: Bool, flipped: Bool,
-                                 bilingual: Bool = false) -> [FootPart] {
+                                 bilingual: Bool = false, originalHidden: Bool = false) -> [FootPart] {
         if let translation, translation.failed {
             return [.text(TranslationCopy.replyFailed), .action(TranslationCopy.retry, .retryReply)]
         }
-        if bilingual, translation?.text != nil { return [.text(TranslationCopy.translated)] }
+        if bilingual, translation?.text != nil {
+            return [.text(TranslationCopy.translated), hideOriginalAction(originalHidden)]
+        }
         if translation?.text != nil {
             return flipped
                 ? [.text(TranslationCopy.original), .action(TranslationCopy.showTranslation, .flip)]
                 : [.text(TranslationCopy.translated), .action(TranslationCopy.showOriginal, .flip)]
         }
         return pending ? [.chip(TranslationCopy.replyPending)] : []
+    }
+
+    /// "Hide original", or "Show both" once this message's original is hidden.
+    private static func hideOriginalAction(_ hidden: Bool) -> FootPart {
+        .action(hidden ? TranslationCopy.showBoth : TranslationCopy.hideOriginal, .hideOriginal)
     }
 
     /// The words the owner's bubble shows: what they wrote, unless a delivered message is flipped to

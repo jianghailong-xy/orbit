@@ -82,6 +82,7 @@ internal object RunnerCopy {
     /** About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to. */
     const val MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     const val SEP = " · "
+    const val NO_PROVIDER_KEY = "no provider key found"
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
     fun runningOf(active: Int, max: Int) = "$active of $max running"
@@ -1119,6 +1120,10 @@ internal object RunnerPage {
     fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
         managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
+    /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
+    fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
+        runners.sortedByDescending { isManaged(it, managedRunnerId) }
+
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
 
@@ -1238,6 +1243,10 @@ internal object RunnerPage {
      * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
     fun engineSite(health: JsonObject): String? =
         if (health.str("engine") != "kimi" || health.list("accounts").size >= 2) null else KimiSite.of(health.str("kimiRegion"))?.domain
+    /** OpenCode's note after its version when its CLI listed no provider key (`1.19.5 · no provider key found`): its
+     * unknown sign-in is about a key, never the version. Null otherwise. */
+    fun engineKeyNote(health: JsonObject): String? =
+        if (health.str("engine") == "opencode" && health.bool("openCodeNoKey") == true && health.str("auth") != "yes") RunnerCopy.NO_PROVIDER_KEY else null
     /** The engines whose quota a runner reads: the ones Orbit signs in. */
     fun reportsQuota(engine: String) = isLoginEngine(engine)
 

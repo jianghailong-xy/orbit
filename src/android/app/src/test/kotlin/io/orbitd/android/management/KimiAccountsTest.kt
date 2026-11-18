@@ -91,6 +91,16 @@ class KimiAccountsTest {
         assertNull("before Kimi's first sign-in", RunnerPage.engineSite(json("""{"engine":"kimi","installed":true,"auth":"no"}""")))
     }
 
+    /** OpenCode's row says after its version that its CLI listed no provider key, so its unknown sign-in never reads as the
+     * version in doubt — only for OpenCode, and never beside a yes. */
+    @Test fun theEnginesRowSaysOpenCodeFoundNoKey() {
+        assertEquals("no provider key found",
+            RunnerPage.engineKeyNote(json("""{"engine":"opencode","installed":true,"auth":"unknown","openCodeNoKey":true}""")))
+        assertNull(RunnerPage.engineKeyNote(json("""{"engine":"opencode","installed":true,"auth":"unknown"}""")))
+        assertNull(RunnerPage.engineKeyNote(json("""{"engine":"opencode","installed":true,"auth":"yes","openCodeNoKey":true}""")))
+        assertNull(RunnerPage.engineKeyNote(json("""{"engine":"codex","installed":true,"auth":"unknown","openCodeNoKey":true}""")))
+    }
+
     // three windows each, the month once
 
     @Test fun eachAccountHasItsOwnThreeWindowsWithTheMonthDrawnOnce() {

@@ -648,6 +648,47 @@ describe('reordering machines in the nav', () => {
     expect(toast.error).toHaveBeenCalledWith("Couldn't reorder the machines", 'Machine order is stale');
   });
 
+  describe('with Orbit Cloud among them', () => {
+    // The account's managed runner, saved second: the nav pins it first all the same.
+    const WITH_CLOUD = [RUNNERS[0], { id: 'cloud', name: 'orbit-managed', online: true, engines: [signedIn], managed: true }, ...RUNNERS.slice(1)];
+    beforeEach(() => {
+      runners = WITH_CLOUD as typeof RUNNERS;
+      reorder = async (ids) => {
+        runners = ids.map((id) => WITH_CLOUD.find((r) => r.id === id)!) as typeof RUNNERS;
+        return runners;
+      };
+    });
+
+    it('pins it first with its cloud, no grip, and a line before the machines you drag', async () => {
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'gpu-box', 'old-laptop', 'Studio Mac']);
+      const pinned = group('Machines').querySelector('.settings-nav-cloud')!;
+      expect(pinned.querySelector('.settings-nav-label')!.textContent).toBe('Orbit Cloud');
+      expect(pinned.querySelector('.settings-nav-icon .anticon-cloud')).not.toBeNull();
+      expect(pinned.querySelector('.settings-nav-divider')).not.toBeNull();
+      expect(pinned.closest('.settings-nav-sortable')).toBeNull();
+      expect([...group('Machines').querySelectorAll('button.settings-nav-grip')].map((g) => g.getAttribute('aria-label'))).toEqual([
+        'Reorder gpu-box',
+        'Reorder old-laptop',
+        'Reorder Studio Mac',
+      ]);
+    });
+
+    it('a drag moves only your machines, and keeps Orbit Cloud first in the order it saves', async () => {
+      await visit('/settings/general');
+      await dragRow('gpu-box', 2 * ROW_HEIGHT);
+      expect(reorderCalls()).toEqual([{ method: 'POST', body: { ids: ['cloud', 'oldLaptop', 'studioMac', 'gpuBox'] } }]);
+      expect(machineOrder()).toEqual(['Orbit Cloud', 'old-laptop', 'Studio Mac', 'gpu-box']);
+    });
+
+    it('draws no line when Orbit Cloud is the only machine', async () => {
+      runners = [WITH_CLOUD[1]] as typeof RUNNERS;
+      await visit('/settings/general');
+      expect(machineOrder()).toEqual(['Orbit Cloud']);
+      expect(group('Machines').querySelector('.settings-nav-divider')).toBeNull();
+    });
+  });
+
   it('a plain click on a machine still opens its page, and sends no reorder', async () => {
     await visit('/settings/general');
     await dragRow('old-laptop', 0);

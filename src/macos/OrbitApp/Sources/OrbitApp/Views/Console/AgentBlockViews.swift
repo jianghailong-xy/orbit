@@ -309,7 +309,7 @@ struct AgentsBandRow: View {
     }
 }
 
-/// Every Agent the session started: two figures and the runs — the running ones first. No cost is shown,
+/// Every Agent the session started, the running ones first. No cost is shown,
 /// not even a run's own. A row closes the sheet and scrolls the conversation to its block.
 struct AgentsSheet: View {
     let summary: SubagentSessionSummary
@@ -320,13 +320,6 @@ struct AgentsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack(spacing: 10) {
-                        figure("\(summary.count)", summary.running > 0 ? "runs · \(summary.running) running" : "runs · all done")
-                        figure(summary.spread.components(separatedBy: " · ").first ?? summary.spread,
-                               summary.spread.components(separatedBy: " · ").dropFirst().first ?? " ")
-                    }
-                }
                 let running = summary.rows.filter(\.isRunning)
                 let ended = summary.rows.filter { !$0.isRunning }
                 if !running.isEmpty { Section("Running") { ForEach(running) { row($0) } } }
@@ -343,14 +336,6 @@ struct AgentsSheet: View {
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 420)
         #endif
-    }
-
-    private func figure(_ value: String, _ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
-            Text(caption).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ run: SubagentRunView) -> some View {

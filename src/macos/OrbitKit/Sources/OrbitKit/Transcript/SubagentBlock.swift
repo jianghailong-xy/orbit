@@ -162,9 +162,14 @@ public struct SubagentBlock: Equatable, Sendable {
             while let first = clean.first, "#>*-".contains(first) {
                 clean = String(clean.dropFirst()).trimmingCharacters(in: .whitespaces)
             }
-            if !clean.isEmpty { return clean }
+            // `{`, `]`, a code fence: the shape of what came back, not a word of it.
+            if !clean.isEmpty, !isStructural(clean) { return clean }
         }
         return nil
+    }
+
+    private static func isStructural(_ line: String) -> Bool {
+        line.hasPrefix("```") || line.allSatisfy { "{}[](),:".contains($0) }
     }
 
     private static func why(_ run: SubagentRunView?) -> String? {
@@ -217,6 +222,9 @@ public enum SubagentResult {
         }
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // The call's JSON clipped to a preview (the server trims a long result): the run's own
+            // text, never the receipt's opening brace.
+            if text.hasPrefix("{") { return endedSummary(run) }
             return text
         }
         if let handedBack = object["result"] as? String, !handedBack.isEmpty { return handedBack }
@@ -308,8 +316,6 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let running: Int
     /// `4`: the capsule's words after its mark.
     public let capsule: String
-    /// How many engines and machines: the sheet's second figure (`3 engines · 2 machines`).
-    public let spread: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
 
@@ -357,13 +363,9 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }
         let running = runs.filter(\.isRunning).count
-        let engines = Set(runs.compactMap(\.engine).filter { !$0.isEmpty }).count
-        let machines = Set(runs.map { $0.workspaceName ?? "" }).count
-        var spread = engines == 1 ? "1 engine" : "\(engines) engines"
-        if machines > 1 { spread += " · \(machines) machines" }
         let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
             + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
         return SubagentSessionSummary(count: runs.count, running: running, capsule: "\(runs.count)",
-                                      spread: spread, rows: rows)
+                                      rows: rows)
     }
 }

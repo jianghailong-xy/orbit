@@ -119,6 +119,34 @@ public enum ScheduleDisplay {
         return fill(inline ? C.CreateCard.firstRunInline : C.CreateCard.firstRun, ["day": lowered])
     }
 
+    // MARK: - A press that failed
+
+    /// What a failed press on a schedule says. The server's own sentence when it sent one; otherwise it names what
+    /// went wrong, so a reply this app could not read (Orbit was reached and may have done it) never reads as
+    /// "Couldn't reach Orbit".
+    public static func pressFailure(_ error: Error) -> String {
+        switch error {
+        case APIError.http(let status, let body):
+            if let body, let data = body.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let message = object["message"] as? String, !message.isEmpty {
+                return message
+            }
+            return fill(PressFailure.refused, ["status": String(status)])
+        case APIError.unauthorized: return PressFailure.signedOut
+        case APIError.invalidResponse, is DecodingError: return PressFailure.unreadable
+        default: return PressFailure.unreachable
+        }
+    }
+
+    public enum PressFailure {
+        public static let unreachable = "Couldn't reach Orbit. Try again."
+        public static let unreadable = "Orbit answered, but this version of the app couldn't read the reply. "
+            + "Update the app; the card shows what Orbit did."
+        public static let refused = "Orbit couldn't do this (error {status}). Try again."
+        public static let signedOut = "You're signed out. Sign in and try again."
+    }
+
     // MARK: - Rules and costs
 
     public enum RuleForm: Sendable { case short, long }
