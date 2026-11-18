@@ -6,8 +6,8 @@ import XCTest
 /// `AttachmentLinkTests`) and the three places a reader can tap one.
 ///
 /// SwiftUI does not exist on Linux and these files compile only in the macOS and iOS jobs, so what
-/// the views do with the reading is asserted over the source, the way `ReferencedTaskWiringTests`
-/// does — each assertion written so that CUTTING the wire turns it red.
+/// the views do with the reading is asserted over the source — each assertion written so that
+/// CUTTING the wire turns it red.
 ///
 /// What the wires are for: a reply that links a file by where the agent wrote it used to be a dead
 /// end on every client — a paperclip chip whose tap did nothing — because the bytes are on the

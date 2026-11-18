@@ -168,17 +168,6 @@ public struct SessionReply: Codable, Equatable, Sendable {
         return cards.isEmpty ? nil : cards
     }
 
-    /// A recorded note without the `<orbit-session-reply>` blocks in it: what is left for the folded
-    /// "Orbit attached" entry once the reply cards have drawn those — the web's `withoutReplyBlocks`.
-    public static func withoutReplyBlocks(_ note: String?) -> String {
-        guard let note else { return "" }
-        guard let blocks = try? NSRegularExpression(
-            pattern: "<orbit-session-reply[\\s>][\\s\\S]*?\\n</orbit-session-reply>") else { return note }
-        let stripped = blocks.stringByReplacingMatches(
-            in: note, range: NSRange(note.startIndex..., in: note), withTemplate: "")
-        return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     public static func parseCard(_ value: JSONValue) -> SessionReply? {
         guard case .object(let card) = value,
               let requestId = card["requestId"]?.stringValue, !requestId.isEmpty,

@@ -4474,7 +4474,6 @@ struct CoordinatorQuestionRecordView: View {
                     .padding(8)
                     .background(Color.secondary.opacity(0.08),
                                 in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
-                if let attached = told.attached { AttachedNoteEntry(attached: attached) }
             }
             .padding(.top, 4)
         } label: {

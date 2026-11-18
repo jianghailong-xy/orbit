@@ -537,10 +537,14 @@ describe('sessionLine names the gate holding a queued session', () => {
     });
   });
 
-  it('says the runner is full when a slot really is what is missing', () => {
+  it('says it waits for a free slot when a slot really is what is missing, and names the gate in the tooltip', () => {
     expect(
       sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
-    ).toEqual({ text: 'Runner full', tone: 'queued' });
+    ).toEqual({
+      text: 'Waiting for a free slot',
+      tone: 'queued',
+      hint: 'Runner full\nThe runner is using all its slots. This message is sent as soon as one frees up.',
+    });
   });
 });
 
