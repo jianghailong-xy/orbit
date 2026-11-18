@@ -818,8 +818,7 @@ extension ScheduleDetailPanel {
                 .compactMap { $0 }.joined(separator: SC.separator)
             Button {
                 if let session = run?.sessionId {
-                    scheduled.inspectedID = nil
-                    model.openScheduleRun(sessionID: session, scheduleID: s.id)
+                    model.openScheduleRun(sessionID: session)
                 }
             } label: {
                 HStack(alignment: .center, spacing: 8) {
@@ -848,8 +847,7 @@ extension ScheduleDetailPanel {
             } ?? false
             Button {
                 if let session = run.sessionId {
-                    scheduled.inspectedID = nil
-                    model.openScheduleRun(sessionID: session, scheduleID: s.id)
+                    model.openScheduleRun(sessionID: session)
                 }
             } label: {
                 HStack(alignment: .center, spacing: 8) {
@@ -930,13 +928,7 @@ struct ScheduleDraftPanel: View {
                 }
                 Button(SC.Actions.openConversation) {
                     scheduled?.draftPanel = nil
-                    #if os(iOS)
-                    model.openScheduleRun(sessionID: panel.sessionID, scheduleID: nil)
-                    #else
-                    // The conversation the line opened is the owner's own, listed in its workspace (board 01 ④ 5):
-                    // the Mac opens it there, as the web does.
                     model.route(to: .session(panel.sessionID))
-                    #endif
                 }
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(Color.accentColor)

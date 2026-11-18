@@ -173,7 +173,7 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -199,6 +199,8 @@ export function enqueuedText(input: {
       return `Queued again to land on ${target} · without the landing check`;
     case 'BACKFILL':
       return `Queued to land on ${target} · the project started integrating`;
+    case 'BASELINE_HELD':
+      return `Queued to land on ${target} · waiting for the baseline to be fixed`;
     case 'BEHIND_WORK':
       return `Queued to land on ${target} · the task's work ended on another branch`;
     default:
@@ -251,6 +253,7 @@ export function checkStartedText(
 }
 
 export function checkFinishedText(check: {
+  scope?: 'COMBINED' | 'BASELINE';
   skipped?: 'PATHS_EXEMPT';
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK' | 'LANDING_CHECK';
   exitCode: number | null;
@@ -258,9 +261,14 @@ export function checkFinishedText(check: {
   timedOut: boolean;
   durationMs: number;
 }): string {
-  const label = checkLabel(check.name);
+  const label = check.scope === 'BASELINE'
+    ? 'Checked the project branch with main, without this task'
+    : checkLabel(check.name);
   if (check.skipped === 'PATHS_EXEMPT') return `${label} skipped · only exempt paths changed`;
   if (check.timedOut) return `${label} timed out after ${durationText(check.durationMs)}`;
+  if (check.scope === 'BASELINE' && check.exitCode != null) {
+    return `${label} · ${check.exitCode === check.expectedExitCode ? 'passes' : 'also fails'}`;
+  }
   if (check.exitCode !== check.expectedExitCode) {
     const code = check.exitCode == null ? 'no exit code' : `exit ${check.exitCode}`;
     return `${label} failed · ${code} · ${durationText(check.durationMs)}`;

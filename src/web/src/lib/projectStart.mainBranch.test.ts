@@ -70,7 +70,7 @@ const SENTENCES: Array<[string, (main?: string) => string, string]> = [
     + 'failed checks. Merging into main always asks you — to skip that card, choose “The agent pushes it” '
     + 'under Delivery. The criteria and anything irreversible stay yours.'],
   ['the merge check', runMergeCheckHint,
-    'Runs on the combined tree before anything lands — on the project branch and again before main.'],
+    'Runs before merging into main.'],
   ['no merge check', runNoMergeCheckWarning,
     'No merge check: with Automatic on, the branch merges into main with nothing run on the combined tree.'],
   ['Automatic on, checked', (main) => runAutomaticSays(true, 'PROJECT_BRANCH', true, main),

@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, baselineTitle } from '../lib/landingCheck';
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -157,6 +158,7 @@ const TITLED_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
 ]);
 
 function itemHeading(row: ProjectOpenItemRow): string {
+  if (row.baseline) return baselineTitle(row.facts?.targetRef?.replace(/^refs\/heads\//u, '') ?? 'the project branch');
   if (row.kind === 'DELIVERY_REVIEW') {
     const reason = row.facts?.review?.reason;
     return (reason ? REVIEW_HEADING[reason] : undefined) ?? row.title;
@@ -1391,7 +1393,8 @@ export function OpenItemCard({
       onChat={onChat}
       main={main}
     >
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -1497,6 +1500,17 @@ function ItemFactRows({
   folded?: { projectName: string | null };
 }): JSX.Element | null {
   const facts = row.facts;
+  if (row.baseline) return <div className="project-open-item-facts" data-baseline-card="true">
+    <p>{LANDING_CHECK_COPY.BASELINE_BODY}</p>
+    <FactRow label={LANDING_CHECK_COPY.HELD}>{row.heldTaskIds?.length ?? 0}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.UPSTREAM}>{row.baseline.upstreamSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.TIP}>{row.baseline.targetSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.BASELINE}>{row.baseline.mergeTreeSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.LABEL}>{row.baseline.check.command}</FactRow>
+    <details><summary>{LANDING_CHECK_COPY.VIEW_HELD}</summary>{row.heldTaskIds?.map((id) =>
+      <div key={id}><Link to={`/tasks/${encodeId(id)}`}>{id}</Link></div>)}</details>
+    <p>{LANDING_CHECK_COPY.RESUMES}</p>
+  </div>;
   // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
   // which runner and since when, and where the runner had got to. An item an older build opened
   // carries none of it and keeps the sentence it always did.
@@ -1988,7 +2002,8 @@ export function EscalatedItemCard({
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -2095,6 +2110,8 @@ function ItemCard({
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
+  const requiredAction = row.requiredAction?.trim() || row.detailLine?.trim()
+    || (row.baseline ? null : REQUIRED_ACTION_FALLBACK);
   return (
     <div
       className={`approval-card project-open-item-card is-${tone}`}
@@ -2116,10 +2133,8 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
-        <div className="project-open-item-next">
-          <p className="project-open-item-required-action">
-            {row.requiredAction ?? row.detailLine ?? REQUIRED_ACTION_FALLBACK}
-          </p>
+        {requiredAction || row.handledBy?.length || children ? <div className="project-open-item-next">
+          {requiredAction ? <p className="project-open-item-required-action">{requiredAction}</p> : null}
           {row.handledBy?.length ? (
             <p className="project-open-item-handled-by">
               {row.handledBy.map((task, index) => (
@@ -2131,7 +2146,7 @@ function ItemCard({
             </p>
           ) : null}
           {children ? <div className="project-open-item-actions">{children}</div> : null}
-        </div>
+        </div> : null}
         <ItemFactRows row={row} heading={heading} />
         <ItemHandlingRows row={row} now={now} main={main} />
         <ItemChatRow row={row} onChat={onChat} />
