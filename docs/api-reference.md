@@ -48,7 +48,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `runner` | 202 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **752** |
+| **Total** | **753** |
 
 ## Public routes
 
