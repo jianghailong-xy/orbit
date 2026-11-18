@@ -14,6 +14,9 @@
  *   thirty-day-question        a condition that has not fired for 30 days asks the owner once; Keep waiting asks again
  *                              30 days later and not before; Stop ends the condition and leaves the task OPEN, which no
  *                              sweep then starts;
+ *   scheduled-page-reads       GET /schedules lists an OPEN task waiting on its startWhen under `waitingTasks`, with the
+ *                              newest reading, in its owner's list only and until the task leaves OPEN; the condition's
+ *                              read names its runner; the 30-day question names its condition (the iOS client, C6);
  * and: a startWhen beside runAt is refused; a baseline that already holds fires at once; an unfired startWhen vetoes
  * the project's independent auto-run; cancelling the task ends the condition; and the runner is woken when a
  * condition is created and when it ends (probe-handed-out-and-withdrawn-at-once).
@@ -26,7 +29,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
-import { CONDITION_STILL_WAITING_KIND, type TaskStartWhenInput } from '@orbit/shared';
+import { CONDITION_STILL_WAITING_KIND, type ScheduleWaitingTask, type TaskStartWhenInput } from '@orbit/shared';
 import { CreatorType, PrismaClient, RunnerStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -39,6 +42,7 @@ import { establishProjectContractForPgTest } from '../projects/project-contract-
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RUNNER_WAKE_CHANNEL } from '../realtime/runner-wake';
+import { ScheduleReadsService } from '../schedules/schedule-reads.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TASK_START_WHEN_AND_RUN_AT } from './task-start-when';
 import { TasksService } from './tasks.service';
@@ -378,4 +382,47 @@ test('probe-handed-out-and-withdrawn-at-once', { skip, timeout: 60_000 }, async 
   await waitForWake(w.runnerId, ending);
   // The probe is gone from what the heartbeat hands out.
   assert.deepEqual((await conditions.probesFor(w.runnerId)).map((p) => p.id), []);
+});
+
+test('scheduled-page-reads', { skip, timeout: 120_000 }, async () => {
+  const w = await world('scheduled-page');
+  const other = await world('scheduled-page-other');
+  const reads = new ScheduleReadsService(db as unknown as PrismaService);
+  const task = await startWhenTask(w);
+  const c = await conditionOf(task.id);
+  await read(w, c.id, 2);
+  await startWhenTask(other);
+
+  type Page = { waitingTasks?: ScheduleWaitingTask[] };
+  const page = async (filter: { timeline?: boolean; workspaceId?: string }) =>
+    (await reads.list(w.ownerId, filter)) as unknown as Page;
+  const list = await page({ timeline: true });
+  assert.equal(list.waitingTasks?.length, 1, "the owner's waiting task, and not another account's");
+  const row = list.waitingTasks![0];
+  assert.equal(row.id, task.id);
+  assert.equal(row.title, 'Set the kubernetes pool to 3 copies');
+  assert.equal(row.workspaceId, w.workspaceId);
+  assert.equal(row.workspaceName, 'scheduled-page-ws');
+  assert.equal(row.condition.id, c.id);
+  assert.equal(row.condition.text, '3 or more OSDs are in');
+  assert.equal(row.condition.unit, 'in');
+  assert.equal(row.condition.lastValue, 2);
+  assert.ok(row.condition.lastSampleAt, 'the newest reading has its age');
+  assert.equal((await page({ timeline: true, workspaceId: other.workspaceId })).waitingTasks?.length, 0,
+    'the workspace filter applies');
+  assert.equal((await page({})).waitingTasks, undefined, 'only the REST timeline read carries it');
+
+  // The condition's own read names the runner its probes run on: "Every 5 min on scheduled-page-runner".
+  assert.equal((await conditions.get(w.ownerId, c.id)).runnerName, 'scheduled-page-runner');
+
+  // The 30-day question carries its condition, which a client reads to name the task.
+  await db.condition.update({ where: { id: c.id }, data: { createdFromSessionId: randomUUID() } });
+  assert.equal(await conditions.askStillWaiting(new Date(c.createdAt.getTime() + 31 * DAY)), 1);
+  const open = await requests.list(w.ownerId, 'open');
+  const question = open.requests.find((r) => r.kind === CONDITION_STILL_WAITING_KIND) as { conditionId?: string } | undefined;
+  assert.equal(question?.conditionId, c.id);
+
+  // A task that leaves OPEN is no longer waiting, and leaves the page.
+  await db.task.update({ where: { id: task.id }, data: { status: TaskStatus.CANCELLED } });
+  assert.equal((await page({ timeline: true })).waitingTasks?.length, 0);
 });

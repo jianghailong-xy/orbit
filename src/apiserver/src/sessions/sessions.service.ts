@@ -4053,6 +4053,8 @@ export class SessionsService {
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
+      /** A workspace's Scheduled runs folder: its scheduled runs' sessions alone, which every other read leaves out. */
+      scheduled?: boolean;
     },
     /** The Open list's data version the caller read for this list (`openListVersion`). Given, a flat
      *  Open read is shared with every other read of the same version and filters (`sharedOpenList`). */
@@ -4134,14 +4136,18 @@ export class SessionsService {
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
-      // A scheduled task's run is reached from its schedule's history and its notification, never from a list
-      // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
-      // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
-      visibility: view === 'system' ? visibility : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+      // A scheduled task's run is listed only in its workspace's Scheduled runs folder (`scheduled`), never among
+      // a workspace's own sessions (docs/scheduled-tasks-design.md §7.4): every other view, folder and project read,
+      // and the delta that reads this, leave it out. `listRowsByIds` names its sessions: a link card to a run is by id.
+      visibility: view === 'system'
+        ? visibility
+        : filters.scheduled
+          ? Prisma.sql`(${visibility}) AND s.run_source = 'SCHEDULE'`
+          : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
-    if (version === undefined || view !== 'open' || filters.projectId !== undefined) return build();
+    if (version === undefined || view !== 'open' || filters.projectId !== undefined || filters.scheduled) return build();
     return this.sharedOpenList(JSON.stringify([
       ownerId, version, filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null,
       filters.confinedTo ?? null,
@@ -4281,6 +4287,8 @@ export class SessionsService {
       permissionMode: string | null;
       effort: string | null;
       fastMode: boolean;
+      /** SCHEDULE marks a scheduled run's session, which only a workspace's Scheduled runs folder lists. */
+      runSource: string;
       lastAssistantText: string | null;
       lastToolUse: string | null;
       lastUserText: string | null;
@@ -4386,6 +4394,7 @@ export class SessionsService {
         s.permission_mode AS "permissionMode",
         s.effort,
         s.fast_mode       AS "fastMode",
+        s.run_source      AS "runSource",
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
@@ -4671,6 +4680,7 @@ export class SessionsService {
         permissionMode: r.permissionMode,
         effort: r.effort,
         fastMode: r.fastMode,
+        runSource: r.runSource,
         lastAssistantText: r.lastAssistantText,
         lastToolUse: r.lastToolUse,
         lastUserText: r.lastUserText,
@@ -6975,9 +6985,19 @@ export class SessionsService {
        * `dto`; every platform delivery and every session-to-session door leaves it unset.
        */
       translate?: boolean;
+      /**
+       * The owner's words this turn carries were translated already, by a door that refuses them whole when
+       * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
+       * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
+       * message in the agent language, which is what the engine receives. Written as a translated turn that was
+       * never held (display_prompt, translation_state DONE, translation_lang `from`). An option of this call and
+       * never a field of `dto`.
+       */
+      translated?: { content: string; from: TranslationLanguage };
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    if (opts?.translated) assertPromptSize(opts.translated.content, 'message');
     if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
       throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
     }
@@ -7281,7 +7301,10 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
-        content: dto.content,
+        content: opts?.translated && dto.content ? opts.translated.content : dto.content,
+        ...(opts?.translated && dto.content
+          ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
+          : {}),
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
@@ -9777,7 +9800,7 @@ export class SessionsService {
    * asks for any other status is untouched, and the question an unanswered evidence card was about
    * is still on the decision rail's derived read (`pending-evidence-judgments.ts`).
    */
-  async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
+  async listApprovals(ownerId: string, id: string, status?: string, toolName?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, status: true, engineTurnActive: true, runningBgShells: true,
@@ -9785,7 +9808,7 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const approvals = await this.prisma.approval.findMany({
-      where: { sessionId: id, ...(status ? { status } : {}) },
+      where: { sessionId: id, ...(status ? { status } : {}), ...(toolName ? { toolName } : {}) },
       orderBy: { createdAt: 'asc' },
     });
     const answerable = status === 'PENDING' ? await this.stillBeingAsked(session, approvals) : approvals;

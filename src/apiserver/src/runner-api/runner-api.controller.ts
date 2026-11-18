@@ -277,6 +277,7 @@ import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
@@ -1708,6 +1709,7 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -4403,17 +4405,14 @@ export class RunnerApiController {
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(s.scheduleRun),
           provider,
-          runner.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
-          scheduleRunPermissionMode(
-            permissionMode, runAccessLevel(s.scheduleRun), provider, runner.capabilities,
-          ),
+          // A scheduled run on Claude Code runs in Auto, whatever its level (schedule-access.ts).
+          scheduleRunPermissionMode(permissionMode, runAccessLevel(s.scheduleRun), provider),
           customRow?.enabled === true,
           runner.runsAsRoot,
           s.assignedRunner?.modelCatalog,
@@ -6398,9 +6397,9 @@ export class RunnerApiController {
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
       // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
       // the owner's language once it is translated.
-      if (cardHasText(approval.input)) {
+      if (cardHasText(approval.input, approval.toolName)) {
         const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
-        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs, approval.toolName);
       }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
@@ -8226,6 +8225,7 @@ export class RunnerApiController {
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
       await this.tasks?.deliverLooksFinishedOwedTo?.(sessionId);
+      await this.coordinatorFacts?.deliverOwedTo(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverSendBacksOwedTo(sessionId);

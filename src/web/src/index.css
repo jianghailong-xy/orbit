@@ -1363,6 +1363,17 @@ button.toast--pill:focus-visible {
 .tp-account-machine-dot[data-online='true'] {
   background: var(--success-solid);
 }
+/* Orbit Cloud, pinned first in that level (docs/mocks/orbit-cloud-pinned, A): its cloud in the brand colour and
+   its name in semibold. */
+.tp-account-machine-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.tp-account-machine-cloud > .anticon {
+  color: var(--brand);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -5449,6 +5460,28 @@ button.toast--pill:focus-visible {
   flex-basis: 100%;
   color: var(--error);
 }
+/* "Land without the check", asked once before it stops anything: the sentence takes the whole line,
+   and the two answers sit under it. */
+.session-project-landing .spl-confirm {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.session-project-landing .spl-confirm-text {
+  flex-basis: 100%;
+  color: var(--text-2);
+}
+/* What a skip of this landing's check has started: in the note's place, in the note's ink, because
+   it is a fact about the landing rather than something wanted of the reader. */
+.session-project-landing .spl-skip {
+  color: var(--text-2);
+}
+/* A refusal under the foot says something is wrong; "Nothing to do" above it would say the opposite. */
+.session-project-landing:has(.spl-error) .spl-note {
+  display: none;
+}
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
    2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
    page waiting on the reader. */
@@ -8264,6 +8297,15 @@ button.chat-jump-start:hover {
   line-height: 1.4;
   color: var(--text-3);
   white-space: nowrap;
+}
+.chat-translate-foot.is-card {
+  display: flex;
+  margin: 6px 0 0;
+}
+/* A send-back the composer finished and the server could not translate: above the composer. */
+.composer-translate-refused {
+  margin-bottom: 8px;
+  padding: 0 2px;
 }
 .chat-translate-foot.is-reply {
   display: flex;
@@ -25506,6 +25548,23 @@ button.project-open-item-action:disabled {
 .project-open-item-who-status b {
   color: var(--text-1);
 }
+/* The coordinator's hand-over note, under its caption, in the coordinator row. */
+.project-open-item-handover {
+  margin: 6px 0 0;
+}
+.project-open-item-handover-caption {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.project-open-item-handover-note {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
+}
 .project-open-item-actions.project-open-item-who-presses {
   display: flex;
   flex-wrap: wrap;
@@ -28512,6 +28571,10 @@ button.agent-progress-agent:hover {
   font-size: 12.5px;
 }
 
+.landing-check-confirmation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) { .landing-check-confirmation { grid-template-columns: 1fr; } }
+
+.orbit-number-input.project-check-timeout { width: min(100%, 24rem); max-width: 100%; }
 /* The Providers page's Tier column (docs/subagent-design.md §7, board docs/mocks/subagent/05.png). */
 .model-tiers {
   width: 100%;
@@ -29081,4 +29144,36 @@ button.agent-progress-agent:hover {
    `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
 .approval-card.coordinator-question {
   border: 1.5px solid var(--warning-solid);
+}
+
+/* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
+   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   then its facts. */
+.ag-head {
+  flex: none;
+}
+/* The Agent tone's purple, as Apple draws the band's sparkle. */
+.bg-tray-ico.ag-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .bg-tray-ico.ag-mark {
+  color: #a78bfa;
+}
+.ag-band {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-section {
+  flex: none;
+  padding: 4px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ag-row .ag-title {
+  font-family: inherit;
 }

@@ -296,7 +296,8 @@ struct AgentContentColumn: View {
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
-                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
+                           isEnabled: rowNavigation != .selection ||
+                               (app.projectSessionsColumn == nil && app.folderColumn?.isScheduledRuns != true))
         // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
         // keeps it: search mode ends only at the field's close button, and the hits span every
         // workspace anyway.
@@ -426,6 +427,12 @@ struct AgentPanes: View {
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
 
+    private var scheduledRunsAddress: SessionFolderAddress? {
+        let byTag = tagFilter != nil || groupByTag
+        guard !isSearching, SessionFolderGrouping.listShowsFolders(view: view, byTag: byTag) else { return nil }
+        return .scheduledRuns(agentID: agent.id, view: view)
+    }
+
     var body: some View {
         // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
         // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
@@ -444,6 +451,10 @@ struct AgentPanes: View {
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
+        let scheduledAddress = scheduledRunsAddress
+        let scheduledRuns = scheduledAddress.flatMap {
+            ScheduledRunsFolder.summary(agents.scheduledRuns(in: $0) ?? [], view: view, byTag: false)
+        }
         List(selection: listSelection) {
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
@@ -459,11 +470,13 @@ struct AgentPanes: View {
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
-                                projectRows: projectRows, projectMarks: projectMarks)
+                                projectRows: projectRows, projectMarks: projectMarks,
+                                scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             }
             #else
             groupedSections(folderListing: folderListing, timeSections: timeSections,
-                            projectRows: projectRows, projectMarks: projectMarks)
+                            projectRows: projectRows, projectMarks: projectMarks,
+                            scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             #endif
         }
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -491,7 +504,7 @@ struct AgentPanes: View {
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
                 #endif
-            } else if agents.agentSessions.isEmpty {
+            } else if agents.agentSessions.isEmpty && scheduledRuns == nil {
                 #if os(iOS)
                 // No list saved yet (a fresh install, a new account): grey rows where the sessions
                 // will be, while the title's line says "Loading sessions…" (board 02 ④).
@@ -509,7 +522,10 @@ struct AgentPanes: View {
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
-        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        .refreshable {
+            await agents.loadSessions(agentID: agent.id, view: view)
+            if let scheduledAddress { await agents.loadScheduledRuns(scheduledAddress) }
+        }
         // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
         // every workspace, scope and message text — and the hits show here in place of the sections;
         // clearing the field restores them.
@@ -563,6 +579,9 @@ struct AgentPanes: View {
             await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
+        }
+        .task(id: scheduledAddress) {
+            if let scheduledAddress { await app.pollScheduledRuns(scheduledAddress) }
         }
         #if os(macOS)
         // The scope over the list it filters, centred and content-width; the pane's own surface
@@ -706,13 +725,24 @@ struct AgentPanes: View {
     /// neither searching nor grouped by tag, on every platform (web's list draws the same).
     @ViewBuilder private func groupedSections(folderListing: SessionFolderListing, timeSections: [SessionTimeSection],
                                               projectRows: [String: SessionProjectRow],
-                                              projectMarks: [String: SessionProjectMark]) -> some View {
+                                              projectMarks: [String: SessionProjectMark],
+                                              scheduledAddress: SessionFolderAddress?,
+                                              scheduledRuns: ScheduledRunsFolder.Summary?) -> some View {
+        if let scheduledAddress, let scheduledRuns {
+            Button {
+                app.openFolder(scheduledAddress)
+            } label: {
+                SessionFolderRowView(scheduledRuns: scheduledRuns)
+            }
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden, edges: .top)
+        }
         // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
         // §3.3): the sessions filed in one are drawn behind its row and not in the time
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            folderListRow(row, first: index == 0)
+            folderListRow(row, first: index == 0 && scheduledRuns == nil)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -723,7 +753,7 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty && scheduledRuns == nil,
                         projectRows: projectRows, projectMarks: projectMarks)
         }
     }
@@ -1283,6 +1313,7 @@ struct AgentConsoleDetail: View {
     /// placeholder.
     private var showsDraft: Bool {
         #if os(iOS)
+        if app.folderColumn?.isScheduledRuns == true { return app.composingAgentSession }
         return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil
         #else
         return app.composingAgentSession
@@ -1349,7 +1380,7 @@ struct AgentConsoleDetail: View {
                 } description: {
                     Text("The session transcript appears here.")
                 } actions: {
-                    if app.selectedAgentID != nil {
+                    if app.selectedAgentID != nil, app.folderColumn?.isScheduledRuns != true {
                         Button {
                             app.startComposingSession()
                         } label: {

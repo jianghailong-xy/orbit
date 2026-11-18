@@ -6,6 +6,7 @@ import { CompletionEvidenceProducer } from './completion-evidence.producer';
 import { CompletionInputRouter } from './completion-input-router.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
+import { CoordinatorFactQueueService } from './coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from './coordinator-evidence-queue.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
 import { CoordinatorWakeService } from './coordinator-wake.service';
@@ -97,6 +98,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskRunStoppedProducer,
     CompletionEvidenceProducer,
     CoordinatorEvidenceQueueService,
+    CoordinatorFactQueueService,
     WakeDispositionService,
   ],
   exports: [
@@ -117,6 +119,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     TaskRunStoppedProducer,
     CompletionEvidenceProducer,
     CoordinatorEvidenceQueueService,
+    CoordinatorFactQueueService,
     WakeDispositionService,
   ],
 })

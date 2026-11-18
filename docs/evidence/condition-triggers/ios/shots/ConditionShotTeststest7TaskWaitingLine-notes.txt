@@ -1,0 +1,2 @@
+task: Set kubernetes pool to 3 copies shown
+task: 2 in · 3 min ago shown

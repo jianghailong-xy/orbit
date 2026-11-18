@@ -8,6 +8,7 @@ import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.Wire
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -28,6 +29,14 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
 
     /** The inspector: the schedule, its last runs, findings, this month's use, history and pending cards. */
     suspend fun detail(id: String): ScheduleDetailResponse = read(get(listOf("schedules", id)), ScheduleDetailResponse::parse)
+
+    /** `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8). */
+    suspend fun condition(id: String): ConditionView = read(get(listOf("conditions", id)), ConditionView::parse)
+
+    /** A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). */
+    suspend fun answerConditionItem(id: String, option: Int) {
+        send(listOf("owner-requests", id, "done"), HttpMethod.POST, buildJsonObject { put("option", option) })
+    }
 
     suspend fun runs(id: String, limit: Int = 20): List<ScheduleRunView> =
         read(get(listOf("schedules", id, "runs"), listOf("limit" to limit.toString()))) { e ->
@@ -94,9 +103,20 @@ class ScheduleApi(private val api: OrbitApi, private val handle: SessionHandle) 
     companion object {
         const val STALE = "SCHEDULE_REQUEST_STALE"
         const val UNREACHABLE = "Couldn't reach Orbit. Try again."
+        const val UNREADABLE = "Orbit answered, but this version of the app couldn't read the reply. " +
+            "Update the app; the card shows what Orbit did."
+        const val REFUSED = "Orbit couldn't do this (error {status}). Try again."
+        const val SIGNED_OUT = "You're signed out. Sign in and try again."
         const val WITHDRAWN = "This card was withdrawn."
 
-        /** What a refused press says: the server's own message, else that Orbit could not be reached. */
-        fun refusal(error: Throwable): String = (error as? ApiError)?.messages?.firstOrNull()?.takeIf { it.isNotBlank() } ?: UNREACHABLE
+        /** What a refused press says: the server's own message, else what went wrong, so a reply this build could not
+         * read (Orbit was reached and may have done it) never reads as "Couldn't reach Orbit" (OrbitKit's
+         * `ScheduleDisplay.pressFailure`). */
+        fun refusal(error: Throwable): String = when (error) {
+            is ApiError -> error.messages.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: if (error.status == 401) SIGNED_OUT else REFUSED.replace("{status}", error.status.toString())
+            is ProtocolException, is SerializationException -> UNREADABLE
+            else -> UNREACHABLE
+        }
     }
 }

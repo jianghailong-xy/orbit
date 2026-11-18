@@ -38,6 +38,7 @@ import {
   uuidToBase62,
   type ControlTaskChanged,
   type PlanUsage,
+  type TaskSignInHold as SignInHold,
   withEnginePlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
@@ -101,6 +102,7 @@ import {
   projectStandsStill,
 } from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from './evidence-review.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
@@ -126,7 +128,13 @@ import {
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import {
+  ENGINE_LABELS,
+  isClaudeRegionRefused,
+  isEngineSignedOut,
+  signedOutEngineRefusal,
+} from '../sessions/engine-signin-preflight';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -707,6 +715,97 @@ function boundRunTask(
   };
 }
 
+/**
+ * Why a bound single-run plan no longer describes the task it was bound for, or null while it still
+ * does: one of the dispatch-relevant pins — the engine, the provider, the model, the assignee
+ * workspace or its runner — has changed since the plan was bound.
+ *
+ * Only a CREATE plan is ever judged: a RESUME or ADOPT names a run that already exists. And this is
+ * only half of the rule `abandonStaleCreatePlan` applies — the other half is that the plan's Session
+ * provably does not exist — because a plan whose effect may have landed is taken over, never replaced.
+ *
+ * The plan's pins are read the way `boundRunTask` reads them back (a routed plan pins only what the
+ * task pinned), and a plan bound before targets carried an engine reads its engine beside the task's
+ * current pins (`taskRunEngine`), exactly as carrying it out would.
+ */
+function staleCreatePlan(
+  // A single run's target, or a bulk Run's item with its plan read off it (the same frozen fields).
+  target: Pick<
+    TaskRunExecuteTarget,
+    'plan' | 'taskId' | 'title' | 'engine' | 'provider' | 'model' | 'effort' | 'route' | 'workspaceId' | 'runnerId' | 'fromVersion'
+  >,
+  current: {
+    engine: string | null;
+    provider: string | null;
+    model: string | null;
+    workspaceId: string | null;
+    runnerId: string | null;
+  },
+): string | null {
+  if (target.plan.kind !== 'CREATE') return null;
+  const bound = boundRunTask(target);
+  const engine = target.fromVersion ? taskRunEngine(target, current) : bound.engine ?? null;
+  const changed: string[] = [];
+  const compare = (field: string, was: string | null | undefined, now: string | null) => {
+    if ((was ?? null) !== now) changed.push(`${field} ${was ?? 'none'} -> ${now ?? 'none'}`);
+  };
+  compare('engine', engine, current.engine);
+  compare('provider', bound.provider, current.provider);
+  compare('model', bound.model, current.model);
+  compare('workspace', target.workspaceId, current.workspaceId);
+  compare('runner', target.runnerId, current.runnerId);
+  return changed.length > 0 ? changed.join(', ') : null;
+}
+
+/**
+ * What a bulk Run reads off each task it plans: what it classifies the task by, and everything one
+ * item of its plan is built from (planBatchItem), scoped to the owner as its subtask read is. Shared with the re-plan of a stale item
+ * (replanStaleBatchItems), so a re-planned item is built from exactly what a fresh press would read.
+ */
+const batchRunTaskSelect = (ownerId: string) => ({
+  id: true,
+  title: true,
+  description: true,
+  // What the run is judged against, read here because the prompt now carries it.
+  acceptanceCriteria: true,
+  acceptanceCommand: true,
+  acceptanceExpectedExitCode: true,
+  projectId: true,
+  engine: true,
+  provider: true,
+  model: true,
+  // The suggested tier, which routing reads for a fresh run, as the single Run does.
+  modelHint: true,
+  modelHintReason: true,
+  status: true,
+  runAt: true,
+  startWhenConditionId: true,
+  // Same inputs the single-task Run assembles its prompt from: a task must not get a
+  // different prompt depending on which button started it.
+  isForeman: true,
+  verifiesTaskId: true,
+  // §13.6 SU6, read here so a retired task — or a check of replaced work — is CLASSIFIED
+  // before anything with an effect. See the skip below.
+  supersededByTaskId: true,
+  terminalReason: true,
+  // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
+  // about whether a row is work. Owner-scoped like every other reader of this predicate.
+  completionPolicy: true,
+  completionCriterion: true,
+  children: { where: { ownerId }, select: { id: true }, take: 1 },
+  verifies: { select: { supersededByTaskId: true, terminalReason: true } },
+  // Whether its project was cancelled — the gate `execute` applies third, classified here —
+  // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
+  codeless: true,
+  project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
+  // The standard the prompt states for its evidence (step 3).
+  ...TASK_STANDARD_SELECT,
+  list: { select: { instructions: true } },
+  assignee: { select: { id: true, runnerId: true } },
+}) satisfies Prisma.TaskSelect;
+
+type BatchRunTask = Prisma.TaskGetPayload<{ select: ReturnType<typeof batchRunTaskSelect> }>;
+
 export { buildTaskExecutionPrompt };
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
@@ -1157,6 +1256,21 @@ const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
  * were then dropped — 0290 took the fanout, 0329 the rest — so there is no column here to read even
  * by mistake.
  */
+/**
+ * Facts every sweep candidate has (AUTO_RUN_READY_SQL and PROJECT_INDEPENDENT_READY_SQL both require
+ * them), read off a row already in hand: a task without them is never held by the sweep, so the hold
+ * read (signInHolds) is not asked about it at all.
+ */
+export function mayBeSweepCandidate(task: {
+  status: string;
+  autoRunWhenReady?: boolean | null;
+  assigneeId?: string | null;
+  assignee?: { id: string } | null;
+}): boolean {
+  return task.status === TaskStatus.OPEN && task.autoRunWhenReady === true
+    && (task.assigneeId ?? task.assignee?.id) != null;
+}
+
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
@@ -2227,6 +2341,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * one over THIS prisma, so a startWhen is written exactly as the injected one writes it.
      */
     @Optional() conditions?: ConditionsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.conditions = conditions ?? new ConditionsService(prisma);
     // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
@@ -2692,6 +2807,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // hands it over too; that is the latency, and this is the guarantee that one which is back and
       // has no turn ending is not left with revisions waiting (coordinator-evidence-queue.service.ts).
       .then(() => this.deliverLooksFinishedOwedTo())
+      .then(() => this.coordinatorFacts?.deliverOwedTo())
       .then(() => this.evidenceQueue?.deliverToIdleCoordinators())
       .then(() => this.evidenceReviews?.deliverOwedTo())
       .then(() => this.evidenceReviews?.deliverSendBacksOwedTo())
@@ -8113,11 +8229,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const hasMore = rows.length > limit;
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
-    const [withRun, states, runnableIds, awaitingIds] = await Promise.all([
+    const openIds = pageTasks.filter(mayBeSweepCandidate).map((task) => task.id);
+    const [withRun, states, runnableIds, awaitingIds, holds] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
       this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
       this.runnableTaskIds(ownerId, pageTasks.map((task) => task.id)),
       this.awaitingOwnerConfirmation(ownerId, pageTasks),
+      openIds.length > 0
+        ? this.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
+        : new Map<string, SignInHold>(),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -8128,6 +8248,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnable: runnableIds.has(task.id),
         awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
         confirmationUnderReview: awaitingIds.underReview.has(task.id),
+        // The row's Held pill: the task read's `hold`, by the same read (signInHolds).
+        hold: holds.get(task.id) ?? null,
       };
     });
     const nextCursor =
@@ -9474,7 +9596,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
-      forkSource, runsWith,
+      forkSource, runsWith, signInHolds,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9493,6 +9615,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
         forkSourceLine(this.prisma, task),
         this.runsWith(ownerId, task),
+        mayBeSweepCandidate(task)
+          ? this.signInHolds(ownerId, Prisma.sql`t.id = ${task.id}::uuid`)
+          : new Map<string, SignInHold>(),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9506,6 +9631,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       autoRunSkipped,
+      // Why the auto-run sweep holds this task although it reads Ready: its engine is signed out on its
+      // runner (signInHolds, the sweep's own rule). Null while nothing of the kind holds it.
+      hold: signInHolds.get(task.id) ?? null,
       // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
       // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
       startWhen: startWhenView(task.startWhenCondition),
@@ -11702,150 +11830,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // below costs no extra round trip. They arrive as bigint (BIGINT column) and number. So do the
     // task's provider pin and whether smart selection is on for its run — its Agent's switch, and
     // its account's above it — which say which engine the quota gate judges (dispatchEngines).
-    const rows = await this.prisma.$queryRaw<
-      {
-        id: string;
-        ownerId: string;
-        workspaceId: string;
-        runnerId: string | null;
-        freeBytes: bigint | null;
-        minFreeDiskMb: number | null;
-        cloneState: string | null;
-        listId: string | null;
-        dispatchEpoch: bigint | null;
-        priority: number;
-        projectId: string | null;
-        taskEngine: string | null;
-        taskProvider: string | null;
-        modelRouting: boolean | null;
-      }[]
-    >`
-      SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
-             t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
-             t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
-             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
-      FROM task t
-      LEFT JOIN workspace a ON a.id = t.assignee_id
-      LEFT JOIN runner r ON r.id = a.runner_id
-      -- 0137's dispatch epoch, joined here because it NAMES this sweep's dispatch and fences it:
-      -- two passes over the same moment are one request and derive the same Session id, and a pass
-      -- whose moment has been overtaken between this scan and the dispatch is told so rather than
-      -- starting work for it. Read in the SAME statement as the predicate below, so the epoch is
-      -- the one every clause of AUTO_RUN_READY_SQL was evaluated against — a snapshot, not two.
-      -- Riding on this scan rather than a second round trip.
-      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
-      WHERE ${AUTO_RUN_READY_SQL}`;
-    // The sweep's SECOND candidate set, merged into the first rather than dispatched on its own:
-    // a coordinated project's tasks that depend on NOTHING. The two scans cannot select the same
-    // task — one requires an edge and the other requires none — so this is a union, not a race.
-    //
-    // Merged HERE, before the gates below, because those gates are the sweep's and not the
-    // dependency scan's: the quota gate, the failure backoff, the disk floor, the materialisation
-    // budget and the dispatch epoch fence each answer a question about starting a run, and a
-    // second starter that reached `execute` around them would be a second set of rules to keep in
-    // step. Riding this scan is also why the service still owns ONE timer rather than two: a
-    // second one is how this reconciler once ran twice a minute (see onModuleInit).
-    //
-    // The candidate predicate is PROJECT_INDEPENDENT_READY_SQL unchanged, which is the predicate
-    // the completion edge's release already applies (dispatchIndependentSiblingsOf). One clock and
-    // one completion reaching the same tasks is fine; two spellings of "may this task start on its
-    // own" is how they come to disagree, and the flags they read are on the task itself.
-    //
-    // The project join is both the gate and the entry point. Whether the project moves by itself is
-    // the switch — started by its owner and not paused (projectMovesSql); it was `coordinator_enabled`
-    // while the Automatic setting doubled as the project's on switch — and it is also the only
-    // SELECTIVE thing this scan has, standing where AUTO_RUN_READY_SQL puts its dependency anchor: a
-    // candidate has to belong to one of the few projects that move, rather than be any OPEN task in
-    // the deployment. The condition is on the project row (77 of them on 2026-09-29), so the plan is
-    // the one it was: filter the projects, then reach each one's tasks through
-    // `task_project_id_idx`. Selective only while those projects are small: on 2026-09-29 one of
-    // them held 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run
-    // tasks to find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
-    //
-    // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
-    // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
-    // row the window emitted, re-counting the same project every time — measured 2026-09-29: 53
-    // candidates of that one project, 294ms a count, 15.6s of a 16.3s statement. Entered through
-    // the few sessions that occupy anything and grouped by project it is one pass of ~6ms, and it
-    // is MATERIALIZED so that "once" is the statement's shape rather than the planner's choice.
-    // The same count per project in the same snapshot, so the same rows; a project nothing occupies
-    // has no `occupied` row, which is the zero the subquery counted.
-    //
-    // `project.status` is read by both predicates rather than by this join — through
-    // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
-    rows.push(...(await this.prisma.$queryRaw<typeof rows>`
-      -- Counted exactly as every other door counts it (PROJECT_OCCUPIED_SQL): a slot is held by an
-      -- OUTSTANDING task that a work session carries — a turn queued or running, or a session parked
-      -- with something that will wake it. So the parked AWAITING_INPUT run of a task that has just
-      -- finished does not fill the budget it was released into, and neither does a session parked
-      -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
-      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
-      SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
-             c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
-             c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
-             a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
-      FROM (
-        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
-               t.engine, t.provider,
-               -- The project's own budget, so this scan offers no project more than it has room
-               -- for; the loop below spends that same budget across both candidate sets
-               -- (projectBudgetSpent), and takeBudget the RUNNER's cap and a paused list's. Ranked
-               -- by priority and then oldest first, so a project with more ready tasks than room
-               -- releases the one it raised, and among equals the one that has waited longest —
-               -- which, with nothing raised, is the whole of the order, exactly as it was.
-               row_number() OVER (
-                 PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
-               ) AS "rank",
-               p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
-          FROM task t
-          JOIN project p ON p.id = t.project_id AND ${Prisma.raw(projectMovesSql('p'))}
-          LEFT JOIN occupied ON occupied.project_id = p.id
-         WHERE ${PROJECT_INDEPENDENT_READY_SQL}
-      ) c
-      LEFT JOIN workspace a ON a.id = c.assignee_id
-      LEFT JOIN runner r ON r.id = a.runner_id
-      LEFT JOIN task_dispatch_epoch e ON e.task_id = c.id
-      WHERE c."rank" <= c."free"
-      ORDER BY c.created_at, c.id
-      LIMIT ${INDEPENDENT_DISPATCH_MAX_PER_SWEEP}`));
-    if (rows.length === 0) return;
-    // The engine each run would be created on, as dispatch plans it (dispatchEngines): the quota
-    // gate below judges that engine's quota and no other. Only the READY tasks reach here, so this
-    // stays proportional to the work, like the filter above.
-    const engines = await this.dispatchEngines(rows);
-    // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
-    // can only match (the predicate requires an assignee with a runner), so assignee is never
-    // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
-    //
-    // In the order the loop below offers slots: each list's candidates re-dealt by priority over
-    // the positions the two scans gave that list, everything else where the scans put it. The
-    // dependency scan states no ORDER BY, so "where the scan put it" is the plan's order — the one
-    // this loop has always consumed, and kept exactly while nothing is raised (orderWithinLists).
-    const ready = orderWithinLists(rows).map((row) => ({
-      id: row.id,
-      ownerId: row.ownerId,
-      assignee: {
-        provider: engines.get(row.id)!.provider,
-        login: engines.get(row.id)!.login,
-        runnerId: row.runnerId,
-        workspaceId: row.workspaceId,
-      },
-      diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
-      // A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): no run starts on it.
-      cloneHeld: workspaceCloneReason(row.cloneState) !== null,
-      listId: row.listId,
-      projectId: row.projectId,
-      // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
-      // previously unscheduled task is the commonest way for this scan to be overtaken, and it is
-      // one of the transitions that advances this counter — so is the task reopening, and so is any
-      // prerequisite's status moving. One number, compared once, rather than a value per fact.
-      dispatchEpoch: row.dispatchEpoch ?? 0n,
-    }));
+    const ready = await this.autoRunCandidates();
+    if (ready.length === 0) return;
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
+    // A third, beside the disk floor: the engine the run would start on is signed out on its runner,
+    // so sessions.create would refuse it (signedOutEngineRefusal) on every pass until somebody signs in.
+    const signedOut = await this.signedOutGate(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
     // whose run would spend a quota nothing reports are named so the backoff can damp a usage
     // limit the gate above had no reset time to hold on.
@@ -11875,6 +11867,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let cloneHeld = 0;
+    // Per runner and engine, for the one line below: "on which machine, and which sign-in".
+    const signedOutHeld = new Map<string, number>();
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11919,6 +11913,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
       if (t.cloneHeld) {
         cloneHeld += 1;
+        continue;
+      }
+      // The sign-in gate, for the same reason again: the run would be refused before it was created,
+      // with the warning the sweep used to log for every such task every minute. It lifts on the sweep
+      // after the runner's next heartbeat reports the engine signed in; nothing here can sign it in.
+      const hold = signedOut.get(t.id);
+      if (hold) {
+        const where = `${hold.engineLabel} on runner "${hold.runnerName}"`;
+        signedOutHeld.set(where, (signedOutHeld.get(where) ?? 0) + 1);
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11972,6 +11975,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (diskHeld > 0) {
       this.logger.log(
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
+      );
+    }
+    if (signedOutHeld.size > 0) {
+      const total = [...signedOutHeld.values()].reduce((sum, n) => sum + n, 0);
+      this.logger.log(
+        `auto-run: ${total} ready task(s) held — engine signed out on their runner: ` +
+          [...signedOutHeld].map(([where, n]) => `${where} (${n})`).join(', '),
       );
     }
     if (atCapacity > 0) {
@@ -12426,6 +12436,70 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Of these sweep candidates, the ones whose current moment's request (`dep:<task>:<epoch>`) is BOUND
+   * to a single-run CREATE plan that dispatch will carry out AS BOUND — mapped, by task id, to the
+   * engine and credential that plan creates its run on (null each: resolved at create, as the task's
+   * own unpinned fields are).
+   *
+   * The same rule abandonStaleCreatePlan applies, read without a lease: a plan whose pins still match
+   * the task is kept, and so is one whose Session exists. A stale plan with no Session is absent here,
+   * because dispatch will plan afresh from the task's current pins — which is what the gates judge
+   * for every task not in this map. Without a lease the read can be overtaken by a concurrent
+   * delivery; the next sweep reads it again, and dispatch itself decides under the lease.
+   */
+  private async boundPlansInForce(
+    rows: Array<{ id: string; ownerId: string; dispatchEpoch: bigint | null }>,
+  ): Promise<Map<string, { engine: string | null; provider: string | null }>> {
+    const inForce = new Map<string, { engine: string | null; provider: string | null }>();
+    if (rows.length === 0) return inForce;
+    const receipts = await this.prisma.$queryRaw<Array<{ ownerId: string; target: unknown }>>(Prisma.sql`
+      SELECT r."owner_id"::text AS "ownerId", r."target"
+        FROM "task_run_request" r
+        JOIN unnest(${rows.map((t) => t.ownerId)}::uuid[], ${rows.map((t) =>
+          TASK_RUN_TRIGGER.dependency(t.id, t.dispatchEpoch ?? 0n))}::text[]) AS c(owner_id, token)
+          ON r."owner_id" = c.owner_id AND r."request_token" = c.token
+       WHERE r."action_kind" = ${TASK_RUN_ACTION.execute}
+         AND r."status" = 'BOUND'`);
+    const plans = new Map<string, TaskRunExecuteTarget>();
+    for (const receipt of receipts) {
+      const run = readExecuteTarget(receipt.target);
+      if (run && run.plan.kind === 'CREATE') plans.set(run.taskId, run);
+    }
+    if (plans.size === 0) return inForce;
+    const tasks = await this.prisma.task.findMany({
+      where: { id: { in: [...plans.keys()] } },
+      select: {
+        id: true, ownerId: true, engine: true, provider: true, model: true,
+        assignee: { select: { id: true, runnerId: true } },
+      },
+    });
+    const sessionOf = new Map(
+      (
+        await this.prisma.session.findMany({
+          where: { id: { in: [...plans.values()].map((p) => p.plan.sessionId) } },
+          select: { id: true, ownerId: true, taskId: true },
+        })
+      ).map((s) => [s.id, s]),
+    );
+    for (const task of tasks) {
+      const run = plans.get(task.id)!;
+      const current = {
+        engine: task.engine, provider: task.provider, model: task.model,
+        workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+      };
+      // readOwnRun's test, on the batch read.
+      const own = sessionOf.get(run.plan.sessionId);
+      const created = own != null && own.ownerId === task.ownerId && (own.taskId == null || own.taskId === task.id);
+      if (staleCreatePlan(run, current) && !created) continue;
+      inForce.set(task.id, {
+        engine: run.fromVersion ? taskRunEngine(run, current) : run.engine,
+        provider: run.provider,
+      });
+    }
+    return inForce;
+  }
+
+  /**
    * The engine and the credential each task's next fresh run would be created on, as dispatch plans it
    * — what the sweep's quota gate judges, so that it holds back the quota a run will spend and not
    * another (docs/model-routing-design.md §6, docs/provider-engine-contract.md §4.5). The routed pair
@@ -12448,6 +12522,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       taskProvider?: string | null;
       modelRouting?: boolean | null;
     }>,
+    /** Bound plans dispatch will carry out as bound, by task id (boundPlansInForce): their pair is judged instead. */
+    inForce: ReadonlyMap<string, { engine: string | null; provider: string | null }> = new Map(),
   ): Promise<Map<string, DispatchCredential>> {
     const engines = new Map<string, DispatchCredential>();
     if (candidates.length === 0) return engines;
@@ -12473,11 +12549,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const reads = new Map<string, TaskRouteReads>();
     for (const c of candidates) {
       const task = tasks.get(c.id);
+      const bound = inForce.get(c.id);
       let credential = dispatchCredentialOf(
-        { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
+        bound ?? { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
         anchors.get(c.id) ?? seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
       );
-      if (task && c.runnerId) {
+      // A bound plan was routed (or not) when it was bound, and is carried out with what it names.
+      if (task && c.runnerId && !bound) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
         const route = await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
@@ -12625,6 +12703,262 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
+  }
+
+  /**
+   * The sweep's candidates, in the order it offers them slots, each with the engine and credential its
+   * run would be created on (dispatchEngines over boundPlansInForce) and the facts its disk and clone
+   * holds read. The sweep reads every candidate; the hold read (signInHolds) reads the same two scans
+   * narrowed by `scope`, a predicate on the task row `t`, so the two judge one candidate set.
+   */
+  private async autoRunCandidates(scope?: Prisma.Sql) {
+    // Nothing at all without a scope, so the sweep's statements stay exactly what they were.
+    const narrowed = scope ? Prisma.sql` AND ${scope}` : Prisma.empty;
+    const rows = await this.prisma.$queryRaw<
+      {
+        id: string;
+        ownerId: string;
+        workspaceId: string;
+        runnerId: string | null;
+        freeBytes: bigint | null;
+        minFreeDiskMb: number | null;
+        cloneState: string | null;
+        listId: string | null;
+        dispatchEpoch: bigint | null;
+        priority: number;
+        projectId: string | null;
+        taskEngine: string | null;
+        taskProvider: string | null;
+        modelRouting: boolean | null;
+      }[]
+    >`
+      SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
+             t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
+             t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
+      FROM task t
+      LEFT JOIN workspace a ON a.id = t.assignee_id
+      LEFT JOIN runner r ON r.id = a.runner_id
+      -- 0137's dispatch epoch, joined here because it NAMES this sweep's dispatch and fences it:
+      -- two passes over the same moment are one request and derive the same Session id, and a pass
+      -- whose moment has been overtaken between this scan and the dispatch is told so rather than
+      -- starting work for it. Read in the SAME statement as the predicate below, so the epoch is
+      -- the one every clause of AUTO_RUN_READY_SQL was evaluated against — a snapshot, not two.
+      -- Riding on this scan rather than a second round trip.
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
+      WHERE ${AUTO_RUN_READY_SQL}${narrowed}`;
+    // The sweep's SECOND candidate set, merged into the first rather than dispatched on its own:
+    // a coordinated project's tasks that depend on NOTHING. The two scans cannot select the same
+    // task — one requires an edge and the other requires none — so this is a union, not a race.
+    //
+    // Merged HERE, before the gates below, because those gates are the sweep's and not the
+    // dependency scan's: the quota gate, the failure backoff, the disk floor, the materialisation
+    // budget and the dispatch epoch fence each answer a question about starting a run, and a
+    // second starter that reached `execute` around them would be a second set of rules to keep in
+    // step. Riding this scan is also why the service still owns ONE timer rather than two: a
+    // second one is how this reconciler once ran twice a minute (see onModuleInit).
+    //
+    // The candidate predicate is PROJECT_INDEPENDENT_READY_SQL unchanged, which is the predicate
+    // the completion edge's release already applies (dispatchIndependentSiblingsOf). One clock and
+    // one completion reaching the same tasks is fine; two spellings of "may this task start on its
+    // own" is how they come to disagree, and the flags they read are on the task itself.
+    //
+    // The project join is both the gate and the entry point. Whether the project moves by itself is
+    // the switch — started by its owner and not paused (projectMovesSql); it was `coordinator_enabled`
+    // while the Automatic setting doubled as the project's on switch — and it is also the only
+    // SELECTIVE thing this scan has, standing where AUTO_RUN_READY_SQL puts its dependency anchor: a
+    // candidate has to belong to one of the few projects that move, rather than be any OPEN task in
+    // the deployment. The condition is on the project row (77 of them on 2026-09-29), so the plan is
+    // the one it was: filter the projects, then reach each one's tasks through
+    // `task_project_id_idx`. Selective only while those projects are small: on 2026-09-29 one of
+    // them held 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run
+    // tasks to find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
+    //
+    // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
+    // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
+    // row the window emitted, re-counting the same project every time — measured 2026-09-29: 53
+    // candidates of that one project, 294ms a count, 15.6s of a 16.3s statement. Entered through
+    // the few sessions that occupy anything and grouped by project it is one pass of ~6ms, and it
+    // is MATERIALIZED so that "once" is the statement's shape rather than the planner's choice.
+    // The same count per project in the same snapshot, so the same rows; a project nothing occupies
+    // has no `occupied` row, which is the zero the subquery counted.
+    //
+    // `project.status` is read by both predicates rather than by this join — through
+    // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
+    rows.push(...(await this.prisma.$queryRaw<typeof rows>`
+      -- Counted exactly as every other door counts it (PROJECT_OCCUPIED_SQL): a slot is held by an
+      -- OUTSTANDING task that a work session carries — a turn queued or running, or a session parked
+      -- with something that will wake it. So the parked AWAITING_INPUT run of a task that has just
+      -- finished does not fill the budget it was released into, and neither does a session parked
+      -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
+      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
+      SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
+             c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
+             c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
+             a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
+      FROM (
+        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
+               t.engine, t.provider,
+               -- The project's own budget, so this scan offers no project more than it has room
+               -- for; the loop below spends that same budget across both candidate sets
+               -- (projectBudgetSpent), and takeBudget the RUNNER's cap and a paused list's. Ranked
+               -- by priority and then oldest first, so a project with more ready tasks than room
+               -- releases the one it raised, and among equals the one that has waited longest —
+               -- which, with nothing raised, is the whole of the order, exactly as it was.
+               row_number() OVER (
+                 PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
+               ) AS "rank",
+               p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
+          FROM task t
+          JOIN project p ON p.id = t.project_id AND ${Prisma.raw(projectMovesSql('p'))}
+          LEFT JOIN occupied ON occupied.project_id = p.id
+         WHERE ${PROJECT_INDEPENDENT_READY_SQL}${narrowed}
+      ) c
+      LEFT JOIN workspace a ON a.id = c.assignee_id
+      LEFT JOIN runner r ON r.id = a.runner_id
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = c.id
+      WHERE c."rank" <= c."free"
+      ORDER BY c.created_at, c.id
+      LIMIT ${INDEPENDENT_DISPATCH_MAX_PER_SWEEP}`));
+    if (rows.length === 0) return [];
+    // The engine each run would be created on, as dispatch plans it (dispatchEngines): the quota
+    // gate below judges that engine's quota and no other. Only the READY tasks reach here, so this
+    // stays proportional to the work, like the filter above.
+    //
+    // Except where this moment's request already has a bound plan that dispatch will carry out as
+    // bound (boundPlansInForce): then it is that plan's engine and credential, so the holds below
+    // judge the run that will be attempted and not one that will not.
+    const engines = await this.dispatchEngines(rows, await this.boundPlansInForce(rows));
+    // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
+    // can only match (the predicate requires an assignee with a runner), so assignee is never
+    // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
+    //
+    // In the order the loop below offers slots: each list's candidates re-dealt by priority over
+    // the positions the two scans gave that list, everything else where the scans put it. The
+    // dependency scan states no ORDER BY, so "where the scan put it" is the plan's order — the one
+    // this loop has always consumed, and kept exactly while nothing is raised (orderWithinLists).
+    return orderWithinLists(rows).map((row) => ({
+      id: row.id,
+      ownerId: row.ownerId,
+      assignee: {
+        provider: engines.get(row.id)!.provider,
+        login: engines.get(row.id)!.login,
+        runnerId: row.runnerId,
+        workspaceId: row.workspaceId,
+      },
+      diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
+      // A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): no run starts on it.
+      cloneHeld: workspaceCloneReason(row.cloneState) !== null,
+      listId: row.listId,
+      projectId: row.projectId,
+      // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
+      // previously unscheduled task is the commonest way for this scan to be overtaken, and it is
+      // one of the transitions that advances this counter — so is the task reopening, and so is any
+      // prerequisite's status moving. One number, compared once, rather than a value per fact.
+      dispatchEpoch: row.dispatchEpoch ?? 0n,
+    }));
+  }
+
+  /**
+   * Of these tasks, the ones whose run would start on an engine's own sign-in that their runner reports
+   * signed out — mapped, by task id, to how the hold names it (`Claude Code on runner "mac"`). The run
+   * would never be created: sessions.create refuses it with EngineSignedOutConflict, which the sweep
+   * logged as a warning per task per pass for as long as nobody signed in (2026-11-17: 308 in 2.5 hours
+   * for two tasks).
+   *
+   * Judged by the preflight itself (signedOutEngineRefusal), on the facts it reads — the runner's
+   * heartbeat `engines`, its accounts, its liveness — and for the account the run would use, picked the
+   * way quotaGate and sessions.create pick it (automaticAccount). Everything the preflight lets through
+   * is let through here: an offline runner, an `unknown` probe, an engine not installed, a credential the
+   * workspace's env brings. A run on a key or a pool (`login` false) brings its own credential and is
+   * never held.
+   */
+  private async signedOutGate(
+    tasks: Array<{
+      id: string;
+      assignee: { provider: string; login?: boolean; runnerId: string | null; workspaceId: string } | null;
+    }>,
+  ): Promise<Map<string, SignInHold>> {
+    const held = new Map<string, SignInHold>();
+    const judged = tasks.filter((t) => t.assignee?.login === true && t.assignee.runnerId);
+    if (judged.length === 0) return held;
+    const runners = await this.prisma.runner.findMany({
+      where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
+      select: {
+        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+      },
+    });
+    const runnerById = new Map(runners.map((r) => [r.id, r]));
+    const workspaceById = new Map(
+      (
+        await this.prisma.workspace.findMany({
+          where: { id: { in: [...new Set(judged.map((t) => t.assignee!.workspaceId))] } },
+          select: {
+            id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        })
+      ).map((w) => [w.id, w]),
+    );
+    const now = this.now();
+    for (const t of judged) {
+      const { provider, runnerId, workspaceId } = t.assignee!;
+      const runner = runnerById.get(runnerId!);
+      const workspace = workspaceById.get(workspaceId);
+      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      const automatic = automaticAccount(provider, workspace, runner, now);
+      const refusal = signedOutEngineRefusal({
+        runtime: provider,
+        bringsOwnCredentials: false,
+        workspaceEnv: workspace.env,
+        accounts: automatic ? { ...workspace, [ACCOUNT_CHOICE[provider]]: automatic } : workspace,
+        runner,
+        nowMs: now.getTime(),
+      });
+      if (refusal) {
+        held.set(t.id, {
+          kind: 'ENGINE_SIGNED_OUT',
+          engine: provider,
+          engineLabel: ENGINE_LABELS[provider],
+          runnerId: runner.id,
+          runnerName: runner.displayName || runner.name,
+        });
+      }
+    }
+    return held;
+  }
+
+  /**
+   * Of the owner's tasks that `scope` names (a predicate on the task row `t`), the ones the auto-run
+   * sweep holds right now because their engine is signed out on their runner — mapped, by task id, to
+   * the hold. The sweep's own rule, not a copy of it: the same candidate scans (autoRunCandidates), the
+   * same gates (quotaGate, signedOutGate), and the same order the sweep's loop asks them in, so a task
+   * that a spent quota, a disk below the floor or a clone not ready holds first is not reported here,
+   * exactly as the sweep counts it under that hold instead. Lifts on the read after the runner's next
+   * heartbeat reports the engine signed in, as the sweep's hold does.
+   *
+   * What the task read (`hold`) and the project's Needs you (`signIns`) say. A decoration on both: a
+   * failure reads as no hold, logged, never as a failed read.
+   */
+  async signInHolds(ownerId: string, scope: Prisma.Sql): Promise<Map<string, SignInHold>> {
+    try {
+      const ready = await this.autoRunCandidates(Prisma.sql`t.owner_id = ${ownerId}::uuid AND ${scope}`);
+      if (ready.length === 0) return new Map();
+      const [{ blocked }, signedOut] = await Promise.all([this.quotaGate(ready), this.signedOutGate(ready)]);
+      const held = new Map<string, SignInHold>();
+      for (const t of ready) {
+        if (blocked.has(t.id) || t.diskShort || t.cloneHeld) continue;
+        const hold = signedOut.get(t.id);
+        if (hold) held.set(t.id, hold);
+      }
+      return held;
+    } catch (e) {
+      this.logger.warn(`sign-in holds not read: ${(e as Error)?.message ?? e}`);
+      return new Map();
+    }
   }
 
   /**
@@ -13881,6 +14215,75 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND "request_token" = ${claim.requestToken}
          AND "status" <> 'OPEN'`;
     return row?.target ?? null;
+  }
+
+  /**
+   * Give back a bound CREATE plan that is stale, so this delivery plans afresh. True when it did.
+   *
+   * THE RULE. A bound plan is normally carried out exactly as bound, never re-planned: that is what
+   * makes a takeover of a half-done create finish the same create. But a plan whose create was
+   * refused before it wrote anything — Claude Code signed out on the runner, an engine the provider
+   * cannot run — stays BOUND (releaseRunRequest keeps the target), and a pin change does not move the
+   * task's dispatch epoch, so the same refused plan used to be replayed on every pass for as long as
+   * the token named the moment, whatever the task now said (2026-11-18: one `dep:` request at attempt
+   * 908, replaying a Claude plan for a task re-pinned to Cursor). So a bound plan is abandoned when
+   * BOTH hold:
+   *
+   *  1. it no longer describes the task: a dispatch-relevant pin changed since it was bound
+   *     (staleCreatePlan). Nothing else counts. The other facts a plan was decided with — the
+   *     prerequisites, the hold, the schedule — are the ones a takeover must not re-read, and a plan
+   *     on unchanged pins replays to the same create whatever refused it last time.
+   *  2. its effect provably never happened, and never can: the Session the plan names does not
+   *     exist. That read is sound only because this delivery holds the lease. The Session insert
+   *     proves its own lease inside its transaction with `SELECT … FOR UPDATE` on this request's row
+   *     (SessionsService.assertFenceHeld), so an older holder's create either committed before this
+   *     lease was taken — the lease UPDATE waited for its lock, and the read below sees the row — or
+   *     it will find its holder replaced and write nothing. A plan whose Session exists, or whose
+   *     create is in flight, is therefore still taken over, never replaced.
+   *
+   * Given back by a compare-and-set fenced on this lease, BOUND -> OPEN with the target cleared, so
+   * the fresh plan is bound by the ordinary `bindRunRequest` and every gate in `executeLeased` is
+   * asked again — the moment fence included. The token, and so the Session id a fresh CREATE names,
+   * stays the same. Only single-run CREATE plans: a RESUME or ADOPT names a run that exists, a
+   * stand-down is not judged, and a bulk Run's items are judged by replanStaleBatchItems.
+   *
+   * signedOutGate and quotaGate judge the same rule (boundPlansInForce), so the sweep's holds and
+   * this dispatch agree about which plan will run.
+   */
+  private async abandonStaleCreatePlan(
+    ownerId: string,
+    lease: Extract<TaskRunLease, { held: true }>,
+  ): Promise<boolean> {
+    const run = readExecuteTarget(lease.target);
+    if (!run || run.plan.kind !== 'CREATE') return false;
+    const task = await this.prisma.task.findFirst({
+      where: { id: run.taskId, ownerId },
+      select: { engine: true, provider: true, model: true, assignee: { select: { id: true, runnerId: true } } },
+    });
+    if (!task) return false;
+    const stale = staleCreatePlan(run, {
+      engine: task.engine, provider: task.provider, model: task.model,
+      workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+    });
+    if (!stale) return false;
+    if (await this.readOwnRun(ownerId, { id: run.taskId, title: run.title }, run.plan.sessionId)) return false;
+    const reopened = await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "status" = 'OPEN', "target" = NULL, "bound_at" = NULL,
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${lease.claim.ownerId}::uuid
+         AND "action_kind" = ${lease.claim.actionKind}
+         AND "request_token" = ${lease.claim.requestToken}
+         AND "status" = 'BOUND'
+         AND "lease_holder" = ${lease.claim.leaseHolder}
+         AND "attempt" = ${lease.claim.attempt}`;
+    // Lost the lease in between: the request is somebody else's to carry out, as bound.
+    if (reopened === 0) throw taskRunInProgress(lease.claim.actionKind, lease.claim.requestToken);
+    this.logger.log(
+      `task ${uuidToBase62(run.taskId)}: run request ${lease.claim.requestToken} had a bound plan that never ` +
+        `created its session and no longer matches the task (${stale}); planning it again`,
+    );
+    return true;
   }
 
   /**
@@ -15270,7 +15673,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // them wrote down what it decided with, and re-reading a world that has moved is how a repeat
     // of one press answers something the press never asked — a 400 where it got a Session, a second
     // Session where it got one, a trigger on a Project it never named.
-    if (lease.status === 'BOUND') {
+    //
+    // Except a CREATE plan that never produced its Session and no longer describes the task
+    // (abandonStaleCreatePlan): that one is given back, and this delivery plans afresh below.
+    if (lease.status === 'BOUND' && !(await this.abandonStaleCreatePlan(ownerId, lease))) {
       const bound = lease.target as TaskRunTargetRecord;
       // Dispatched on what the row SAYS it is, never on which door read it: a bulk Run's plan and a
       // single run's are both `BOUND` receipts, and reading one as the other sends this takeover
@@ -15944,10 +16350,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Already decided. As at the single door, not one mutable check may run again: a bulk Run's
       // answer is a tally over rows that all move, so re-classifying is answering a different
       // question with the same name on it.
+      //
+      // Except an item whose CREATE never produced its Session and no longer describes its task
+      // (replanStaleBatchItems): that item is planned afresh, and the rest of the plan is kept.
       if (lease.status === 'BOUND') {
         const bound = readBatchPlan(lease.target);
         if (!bound) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
-        return await this.applyBatchPlan(lease, bound);
+        return await this.applyBatchPlan(lease, await this.replanStaleBatchItems(lease, bound));
       }
       return await this.batchExecuteLeased(ownerId, taskIds, maxConcurrent, pressToken, lease);
     } catch (e) {
@@ -15957,6 +16366,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       throw e;
     }
+  }
+
+  /**
+   * One task's item in a bulk Run's plan: where its run goes and everything applying it needs,
+   * decided now. What a fresh press does per runnable task, and what a stale item is planned again
+   * with (replanStaleBatchItems).
+   */
+  private async planBatchItem(
+    ownerId: string,
+    routeReads: TaskRouteReads,
+    t: BatchRunTask,
+    pressToken: string,
+  ): Promise<TaskRunBatchItemPlan> {
+    const prompt = this.buildExecutePrompt(t);
+    const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
+    const itemPlan = await this.planWorkspaceRun(
+      ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
+    );
+    // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
+    // the route only when the item's Agent has smart selection on.
+    const route = itemPlan.kind === 'CREATE'
+      ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+      : null;
+    return {
+      taskId: t.id,
+      title: `Task: ${t.title}`,
+      prompt,
+      workspaceId: workspace.id,
+      runnerId: workspace.runnerId,
+      ...taskRunDispatch(t, route),
+      route,
+      runAt: t.runAt ? t.runAt.toISOString() : null,
+      startWhenConditionId: t.startWhenConditionId ?? null,
+      clearFailed: t.status === TaskStatus.FAILED,
+      projectId: t.projectId ?? null,
+      ...itemPlan,
+    };
   }
 
   /** `batchExecute` with the right to answer this press in hand. See `executeLeased`. */
@@ -15969,47 +16415,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TaskBatchRunResult> {
     const tasks = await this.prisma.task.findMany({
       where: { id: { in: taskIds }, ownerId },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        // What the run is judged against, read here because the prompt now carries it.
-        acceptanceCriteria: true,
-        acceptanceCommand: true,
-        acceptanceExpectedExitCode: true,
-        projectId: true,
-        engine: true,
-        provider: true,
-        model: true,
-        // The suggested tier, which routing reads for a fresh run, as the single Run does.
-        modelHint: true,
-        modelHintReason: true,
-        status: true,
-        runAt: true,
-        startWhenConditionId: true,
-        // Same inputs the single-task Run assembles its prompt from: a task must not get a
-        // different prompt depending on which button started it.
-        isForeman: true,
-        verifiesTaskId: true,
-        // §13.6 SU6, read here so a retired task — or a check of replaced work — is CLASSIFIED
-        // before anything with an effect. See the skip below.
-        supersededByTaskId: true,
-        terminalReason: true,
-        // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
-        // about whether a row is work. Owner-scoped like every other reader of this predicate.
-        completionPolicy: true,
-        completionCriterion: true,
-        children: { where: { ownerId }, select: { id: true }, take: 1 },
-        verifies: { select: { supersededByTaskId: true, terminalReason: true } },
-        // Whether its project was cancelled — the gate `execute` applies third, classified here —
-        // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
-        codeless: true,
-        project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
-        // The standard the prompt states for its evidence (step 3).
-        ...TASK_STANDARD_SELECT,
-        list: { select: { instructions: true } },
-        assignee: { select: { id: true, runnerId: true } },
-      },
+      select: batchRunTaskSelect(ownerId),
     });
 
     const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
@@ -16158,37 +16564,110 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
     const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
-    for (const t of runnable) {
-      const prompt = this.buildExecutePrompt(t);
-      const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
-      const itemPlan = await this.planWorkspaceRun(
-        ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
-      );
-      // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
-      // the route only when the item's Agent has smart selection on.
-      const route = itemPlan.kind === 'CREATE'
-        ? await this.routeFreshRun(routeReads, t, workspace, prompt)
-        : null;
-      planned.items.push({
-        taskId: t.id,
-        title: `Task: ${t.title}`,
-        prompt,
-        workspaceId: workspace.id,
-        runnerId: workspace.runnerId,
-        ...taskRunDispatch(t, route),
-        route,
-        runAt: t.runAt ? t.runAt.toISOString() : null,
-        startWhenConditionId: t.startWhenConditionId ?? null,
-        clearFailed: t.status === TaskStatus.FAILED,
-        projectId: t.projectId ?? null,
-        ...itemPlan,
-      });
-    }
+    for (const t of runnable) planned.items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
     const bound = await this.bindRunRequest(lease.claim, planned);
     if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
     const plan = readBatchPlan(bound);
     if (!plan) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
     return this.applyBatchPlan(lease, plan);
+  }
+
+  /**
+   * The bulk Run's half of abandonStaleCreatePlan: re-plan the items of a bound press whose CREATE
+   * never produced its Session and no longer describes the task, and keep every other item as bound.
+   * Returns the plan in force — the bound one when nothing was stale.
+   *
+   * A refused item (Claude Code signed out on the runner, an engine the provider cannot run) leaves
+   * the press unsettled with its plan BOUND, and a repeat of the press used to replay that item's
+   * refused create whatever the task had been re-pinned to since. The rule is the single run's,
+   * item by item: an item is planned again only when BOTH
+   *
+   *  1. a dispatch-relevant pin of its task changed since the press was bound (staleCreatePlan), and
+   *  2. the Session it names provably does not exist. Sound under this press's lease for the same
+   *     reason as the single run's: the item's Session insert proves the press's fence with
+   *     `SELECT … FOR UPDATE` on this request row (SessionsService.assertFenceHeld), so an older
+   *     holder's create either committed before this lease was taken, and is read below, or will
+   *     find its holder replaced and write nothing. An item whose run exists, or whose create is in
+   *     flight, is taken over, never replaced.
+   *
+   * The stale item is planned from what a fresh press reads (planBatchItem) under the same request
+   * name, so a fresh CREATE names the same Session. The press's classification is not re-run: which
+   * tasks it covers is the press's decision. Only an item that can no longer be placed at all — its
+   * task lost its assignee or that Agent its runner — is moved to the skipped, with the reason a
+   * fresh press gives. The new plan replaces the old one by a compare-and-set fenced on this lease,
+   * BOUND -> BOUND; a holder that lost its lease matches nothing and is told the press is in progress.
+   *
+   * The sweep's holds (boundPlansInForce) have nothing to judge here: no sweep delivers a press.
+   */
+  private async replanStaleBatchItems(
+    lease: Extract<TaskRunLease, { held: true }>,
+    plan: TaskRunBatchPlan,
+  ): Promise<TaskRunBatchPlan> {
+    const { ownerId, requestToken: pressToken } = lease.claim;
+    const creates = plan.items.filter((item) => item.kind === 'CREATE');
+    if (creates.length === 0) return plan;
+    const tasks = new Map((await this.prisma.task.findMany({
+      where: { id: { in: creates.map((item) => item.taskId) }, ownerId },
+      select: batchRunTaskSelect(ownerId),
+    })).map((t) => [t.id, t] as const));
+    const stale = new Map<string, string>();
+    for (const item of creates) {
+      const task = tasks.get(item.taskId);
+      // A task that is gone is applied as bound, and its item resolves as gone.
+      if (!task) continue;
+      const why = staleCreatePlan({ ...item, plan: item, fromVersion: plan.fromVersion }, {
+        engine: task.engine, provider: task.provider, model: task.model,
+        workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+      });
+      if (!why) continue;
+      if (await this.readOwnRun(ownerId, { id: item.taskId, title: item.title }, item.sessionId)) continue;
+      stale.set(item.taskId, why);
+    }
+    if (stale.size === 0) return plan;
+
+    const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
+    const items: TaskRunBatchItemPlan[] = [];
+    const skipped = [...plan.skipped];
+    for (const item of plan.items) {
+      const t = stale.has(item.taskId) ? tasks.get(item.taskId)! : null;
+      if (!t) {
+        // Kept as bound. The rewritten plan is v3, so an item read back from an older receipt names
+        // the engine its apply would have read beside the task's pins (withReceiptEngine), now.
+        items.push(plan.fromVersion ? await this.withReceiptEngine(item, plan.fromVersion) : item);
+        continue;
+      }
+      if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
+      else if (!t.assignee.runnerId) skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
+      else items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+    }
+    const { fromVersion: _fromVersion, ...bound } = plan;
+    const replanned: TaskRunBatchPlan = {
+      ...bound,
+      v: 3,
+      items,
+      skipped,
+      runnerIds: [...new Set(items.map((item) => item.runnerId))],
+    };
+    const rebound = await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "target" = ${JSON.stringify(replanned)}::jsonb,
+             "bound_at" = statement_timestamp(),
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${lease.claim.ownerId}::uuid
+         AND "action_kind" = ${lease.claim.actionKind}
+         AND "request_token" = ${lease.claim.requestToken}
+         AND "status" = 'BOUND'
+         AND "lease_holder" = ${lease.claim.leaseHolder}
+         AND "attempt" = ${lease.claim.attempt}`;
+    // Lost the lease in between: the press is somebody else's to carry out, as bound.
+    if (rebound === 0) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
+    for (const [taskId, why] of stale) {
+      this.logger.log(
+        `task ${uuidToBase62(taskId)}: bulk run request ${pressToken} had a bound plan that never ` +
+          `created its session and no longer matches the task (${why}); planning it again`,
+      );
+    }
+    return replanned;
   }
 
   /**

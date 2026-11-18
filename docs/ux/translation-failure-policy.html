@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>UX sketch · When translating the owner's message fails</title>
+<style>
+/* Tokens copied from src/web/src/index.css so the sketch is measurable against the real app. */
+:root {
+  color-scheme: light;
+  --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+  --bg-hover:#f5f6f7; --fill-muted:#f1f1f4; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+  --brand:#3370ff; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+  --success:#1a7f37; --success-border:#b6e7c4;
+  --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+  --page:#eef0f3; --frame-shadow:0 10px 34px rgba(20,24,31,.12);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--page); color:var(--text-1); padding:32px 28px 64px;
+  font:14px/1.5 -apple-system,"SF Pro Text","Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+.head { max-width:1180px; margin:0 auto 24px; }
+.head h1 { font-size:20px; font-weight:650; }
+.head p { color:var(--text-2); font-size:13px; margin-top:5px; max-width:820px; }
+.grid { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+.wide { grid-column:1 / -1; }
+.frame { background:var(--bg-base); border-radius:12px; box-shadow:var(--frame-shadow); overflow:hidden; }
+.frame-h { padding:12px 18px; border-bottom:1px solid var(--border-subtle); display:flex; gap:10px; align-items:center; }
+.frame-h b { font-size:13px; font-weight:650; }
+.frame-h span { font-size:12px; color:var(--text-3); }
+.tag { font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; margin-left:auto; }
+.tag.now { background:var(--fill-muted); color:var(--text-2); }
+.tag.rec { background:var(--brand-tint); color:var(--brand); }
+.tag.alt { background:var(--warning-bg); color:var(--warning); }
+.tag.chosen { background:var(--success-border); color:var(--success); }
+.tag.no { background:var(--fill-muted); color:var(--text-3); }
+.dropped { opacity:.55; }
+.frame-b { padding:22px 20px; }
+.note { margin-top:14px; font-size:12px; color:var(--text-2); border-left:3px solid var(--border); padding-left:10px; }
+
+/* the owner's bubble, as the web draws a translated message */
+.row { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.bubble { max-width:520px; background:#f0f4ff; border:1px dashed var(--brand-border); border-radius:14px;
+  padding:12px 16px; font-size:14.5px; }
+.bubble.plain { border-style:solid; border-color:var(--border-subtle); background:var(--bg-sunken); }
+.foot { font-size:12.5px; color:var(--text-3); display:flex; gap:7px; align-items:center; }
+.foot.err { color:var(--error); }
+.foot.quiet { color:var(--text-3); }
+.foot a { color:inherit; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.foot .dot { color:var(--text-4); }
+.chip { font-size:12px; color:var(--brand); background:var(--brand-tint); border-radius:99px; padding:2px 10px; }
+.spin { display:inline-block; width:10px; height:10px; border:2px solid var(--brand-border); border-top-color:var(--brand);
+  border-radius:50%; vertical-align:-1px; margin-right:5px; }
+
+/* flow */
+.flow { display:flex; align-items:center; gap:0; font-size:12.5px; }
+.node { border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--bg-subtle); min-width:120px; }
+.node b { display:block; font-size:12.5px; }
+.node small { color:var(--text-3); font-size:11.5px; display:block; margin-top:2px; }
+.node.ok { border-color:var(--success-border); }
+.node.rec { border-color:var(--brand-border); background:var(--brand-tint); }
+.node.alt { border-color:var(--warning-border); background:var(--warning-bg); }
+.node.err { border-color:var(--error-border); background:var(--error-bg); }
+.arrow { align-self:center; color:var(--text-4); padding:0 8px; font-size:16px; }
+.branch { display:flex; flex-direction:column; gap:8px; }
+.brk { margin-top:14px; display:flex; gap:8px; align-items:center; font-size:12px; color:var(--text-2); }
+
+/* card */
+.card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; max-width:520px; }
+.card h4 { font-size:13.5px; font-weight:600; margin-bottom:8px; }
+.opt { border:1px solid var(--border-subtle); border-radius:8px; padding:7px 10px; font-size:13px; margin-bottom:6px; color:var(--text-2); }
+.opt.mine { border-color:var(--brand-border); color:var(--text-1); }
+.card .foot { margin-top:8px; }
+
+/* composer */
+.composer { border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+.composer .ph { color:var(--text-4); font-size:14px; padding:4px 2px 12px; }
+.composer .bar { display:flex; gap:8px; align-items:center; font-size:12px; }
+.lang { border:1px solid var(--border); border-radius:99px; padding:2px 10px; color:var(--text-2); }
+.lang.down { border-color:var(--warning-border); color:var(--warning); background:var(--warning-bg); }
+.send { margin-left:auto; background:var(--brand); color:#fff; border-radius:8px; padding:5px 12px; }
+
+/* push */
+.push { width:360px; background:rgba(245,245,247,.96); border-radius:18px; padding:12px 14px; box-shadow:0 6px 24px rgba(0,0,0,.12);
+  display:flex; gap:10px; }
+.push .ic { width:30px; height:30px; border-radius:7px; background:var(--brand); flex:none; }
+.push b { font-size:13px; } .push p { font-size:13px; color:var(--text-1); }
+.push small { font-size:11px; color:var(--text-3); margin-left:auto; }
+
+table { border-collapse:collapse; width:100%; font-size:12.5px; }
+th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--border-subtle); vertical-align:top; }
+th { color:var(--text-3); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; }
+td code { font-size:11.5px; background:var(--fill-muted); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>When translating the owner's message fails</h1>
+  <p>Owner → agent only. Agent → owner (replies and cards) already falls back to the agent's own words with Retry, so it is unchanged.
+  <b>Decision (2026-11-18): B.</b> A failed translation still holds the message (decision 1A stands), but the owner is told why, and told even when not looking.
+  A (send the original automatically) was considered and not chosen; it is kept below for the record.</p>
+</div>
+
+<div class="grid">
+
+  <!-- 1. Flow -->
+  <div class="frame wide">
+    <div class="frame-h"><b>1 · Flow</b><span>One send, start to delivery</span></div>
+    <div class="frame-b">
+      <div class="flow">
+        <div class="node"><b>Owner sends</b><small>translation on</small></div>
+        <div class="arrow">→</div>
+        <div class="node"><b>Translating…</b><small>held, chip shown</small></div>
+        <div class="arrow">→</div>
+        <div class="node"><b>Up to 3 tries</b><small>network / 429 / 5xx retried<br>0.5 s, 1.5 s pauses · all within 20 s</small></div>
+        <div class="arrow">→</div>
+        <div class="branch">
+          <div class="node ok"><b>Translated → delivered</b><small>state DONE (as today)</small></div>
+          <div class="node dropped"><b>A · Failed → original delivered</b><small>not chosen</small></div>
+          <div class="node alt"><b>B · Failed → held (chosen)</b><small>FAILED + reason · push after 60 s if unseen</small></div>
+        </div>
+      </div>
+      <div class="brk"><span class="node err" style="min-width:0;padding:4px 10px"><b style="display:inline">Translator down</b></span>
+        → after several failures in a minute, skip the translator for 60 s and hold the message (FAILED, reason UNAVAILABLE) immediately, with no 20 s wait.</div>
+    </div>
+  </div>
+
+  <!-- 2. Today -->
+  <div class="frame">
+    <div class="frame-h"><b>2 · Today</b><span>FAILED, decision 1A</span><span class="tag now">Current</span></div>
+    <div class="frame-b">
+      <div class="row">
+        <div class="bubble">US_TTP 里使用 usttp-exec 和其他的运维经验，你问 tea-cli @ US_TTP 要一下，然后写进去</div>
+        <div class="foot err">Couldn't translate, so it wasn't sent <span class="dot">·</span> <a>Retry</a> <span class="dot">·</span> <a>Send as written</a></div>
+      </div>
+      <div class="note">No reason, no notification. The agent sits idle until the owner comes back and notices.</div>
+    </div>
+  </div>
+
+  <!-- 3. Translating -->
+  <div class="frame">
+    <div class="frame-h"><b>3 · While translating</b><span>TRANSLATING, retries invisible</span></div>
+    <div class="frame-b">
+      <div class="row">
+        <div class="bubble">US_TTP 里使用 usttp-exec 和其他的运维经验，你问 tea-cli @ US_TTP 要一下，然后写进去</div>
+        <div class="foot"><span class="chip"><span class="spin"></span>Translating…</span></div>
+      </div>
+      <div class="note">Retries are not shown separately; the chip stays until the message is delivered or the translation fails, never longer than 20 s.</div>
+    </div>
+  </div>
+
+  <!-- 4. A -->
+  <div class="frame dropped">
+    <div class="frame-h"><b>4A · Sent untranslated</b><span>SENT_UNTRANSLATED</span><span class="tag no">Not chosen</span></div>
+    <div class="frame-b">
+      <div class="row">
+        <div class="bubble plain">US_TTP 里使用 usttp-exec 和其他的运维经验，你问 tea-cli @ US_TTP 要一下，然后写进去</div>
+        <div class="foot quiet">Sent as written <span class="dot">·</span> the translator didn't answer in time</div>
+      </div>
+      <div class="note">Delivered; the agent is already working. Quiet grey, not red: nothing for the owner to do.
+        The solid bubble (no dashed border) is the same look as an untranslated message. Nothing to Retry, because the agent already has it.</div>
+    </div>
+  </div>
+
+  <!-- 4B -->
+  <div class="frame">
+    <div class="frame-h"><b>4B · Held, with reason</b><span>FAILED + reason</span><span class="tag chosen">Chosen</span></div>
+    <div class="frame-b">
+      <div class="row">
+        <div class="bubble">US_TTP 里使用 usttp-exec 和其他的运维经验，你问 tea-cli @ US_TTP 要一下，然后写进去</div>
+        <div class="foot err">The translator didn't answer in time, so it wasn't sent <span class="dot">·</span> <a>Retry</a> <span class="dot">·</span> <a>Send as written</a></div>
+      </div>
+      <div style="margin-top:18px;display:flex;justify-content:flex-end">
+        <div class="push"><div class="ic"></div><div style="flex:1">
+          <div style="display:flex"><b>Fix login redirect</b><small>now</small></div>
+          <p>Your message wasn't sent: it couldn't be translated.</p></div></div>
+      </div>
+      <div class="note">The push goes out when the message is still held after 60 s and the owner isn't viewing the session. Tapping it opens the message.</div>
+    </div>
+  </div>
+
+  <!-- 5. Card answer -->
+  <div class="frame">
+    <div class="frame-h"><b>5 · Answering a question card</b><span>owner's own words, B</span><span class="tag chosen">Chosen</span></div>
+    <div class="frame-b">
+      <div class="card">
+        <h4>Which environment should the runbook cover?</h4>
+        <div class="opt">Production only</div>
+        <div class="opt">Production and staging</div>
+        <div class="opt mine">Other: 先只写生产环境，预发环境下周再补</div>
+        <div class="foot err">The translator was unreachable, so your answer wasn't sent <span class="dot">·</span> <a>Retry</a> <span class="dot">·</span> <a>Send as written</a></div>
+      </div>
+      <div class="note">As today, the answer is not recorded (422, TRANSLATION_FAILED) and the card stays open with Retry and Send as written; B adds the reason, with the same wording as a message.</div>
+    </div>
+  </div>
+
+  <!-- 6. Translator down -->
+  <div class="frame">
+    <div class="frame-h"><b>6 · Translator down</b><span>circuit open</span></div>
+    <div class="frame-b">
+      <div class="composer">
+        <div class="ph">Message the agent…</div>
+        <div class="bar"><span class="lang down">Chinese → English · unavailable, messages will wait</span><span class="send">Send</span></div>
+      </div>
+      <div class="note">Warned before sending, not after: a message sent now is held until the owner chooses Retry or Send as written, or switches translation off for now.
+        Settings › Translation shows the same notice.</div>
+    </div>
+  </div>
+
+  <!-- 7. Copy -->
+  <div class="frame wide">
+    <div class="frame-h"><b>7 · Reason copy</b><span>stored with the failure; one line per reason, same on web, Apple and Android</span></div>
+    <div class="frame-b">
+      <table>
+        <tr><th>Reason</th><th>Retried?</th><th class="dropped">A · footer (not chosen)</th><th>B · footer (before "· Retry · Send as written")</th></tr>
+        <tr><td><code>TIMEOUT</code></td><td>within 20 s</td><td class="dropped">Sent as written · the translator didn't answer in time</td><td>The translator didn't answer in time, so it wasn't sent</td></tr>
+        <tr><td><code>NETWORK</code>, <code>HTTP</code> 429/5xx</td><td>yes, 3 tries</td><td class="dropped">Sent as written · the translator was unreachable</td><td>The translator was unreachable, so it wasn't sent</td></tr>
+        <tr><td><code>HTTP</code> other 4xx</td><td>no</td><td class="dropped">Sent as written · the translator refused the message</td><td>The translator refused the message, so it wasn't sent</td></tr>
+        <tr><td><code>TRUNCATED</code></td><td>no</td><td class="dropped">Sent as written · too long to translate</td><td>Too long to translate, so it wasn't sent</td></tr>
+        <tr><td><code>MANGLED</code>, <code>EMPTY</code></td><td>no</td><td class="dropped">Sent as written · the translation came back damaged</td><td>The translation came back damaged, so it wasn't sent</td></tr>
+        <tr><td>Circuit open (<code>UNAVAILABLE</code>)</td><td>—</td><td class="dropped">Sent as written · translation is unavailable right now</td><td>Translation is unavailable right now, so it wasn't sent</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

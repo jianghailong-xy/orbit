@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, baselineTitle } from '../lib/landingCheck';
 import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
@@ -9,9 +10,11 @@ import type {
   OpenItemFacts,
   OpenItemHandling,
   OpenItemKind,
+  OwnerCardTranslation,
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectSignInWait,
 } from '@orbit/shared';
 import { SessionLifecycleState } from '@orbit/shared';
 import { api } from '../api';
@@ -58,8 +61,10 @@ import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
 import { ago, formatSpan } from '../lib/watches';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { useOwnerCardTranslation, useOwnerLanguageTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
+import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 
@@ -153,6 +158,7 @@ const TITLED_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
 ]);
 
 function itemHeading(row: ProjectOpenItemRow): string {
+  if (row.baseline) return baselineTitle(row.facts?.targetRef?.replace(/^refs\/heads\//u, '') ?? 'the project branch');
   if (row.kind === 'DELIVERY_REVIEW') {
     const reason = row.facts?.review?.reason;
     return (reason ? REVIEW_HEADING[reason] : undefined) ?? row.title;
@@ -293,6 +299,8 @@ export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
 export const REVIEW_ACTION_LABEL = ACTION_LABEL.REVIEW!;
 export const RETRY_ACTION_LABEL = ACTION_LABEL.RETRY!;
 export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
+/** What Review does on an `EVIDENCE_UNDECIDED` item (1110): it opens the task's evidence, not a merge card. */
+export const EVIDENCE_REVIEW_CONSEQUENCE = 'Open the task’s evidence to confirm it or send it back.';
 export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
 export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
 export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
@@ -340,6 +348,7 @@ function actionConsequence(
   row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind' | 'lease'>,
   action: OpenItemAction,
 ): string {
+  if (action === 'REVIEW' && row.kind === 'EVIDENCE_UNDECIDED') return EVIDENCE_REVIEW_CONSEQUENCE;
   if (action === 'RETRY') {
     // Three doors under one name, each wearing the words for what it actually re-runs: a
     // candidate's check, a task's landing, or — on a failed task — the task itself
@@ -403,6 +412,10 @@ function actionHref(
 ): string | null {
   switch (action) {
     case 'REVIEW':
+      // 1110: undecided evidence is reviewed on its task, whose Evidence section shows the revision.
+      if (row.kind === 'EVIDENCE_UNDECIDED') {
+        return row.taskId ? `/tasks/${encodeURIComponent(encodeId(row.taskId))}` : null;
+      }
       // The merge card, mounted beside this list by both hosts — the same anchor the question's
       // press uses, and for the same reason: one merge, confirmed in one place (§7.5).
       return row.promotionId != null
@@ -1380,7 +1393,8 @@ export function OpenItemCard({
       onChat={onChat}
       main={main}
     >
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -1486,6 +1500,17 @@ function ItemFactRows({
   folded?: { projectName: string | null };
 }): JSX.Element | null {
   const facts = row.facts;
+  if (row.baseline) return <div className="project-open-item-facts" data-baseline-card="true">
+    <p>{LANDING_CHECK_COPY.BASELINE_BODY}</p>
+    <FactRow label={LANDING_CHECK_COPY.HELD}>{row.heldTaskIds?.length ?? 0}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.UPSTREAM}>{row.baseline.upstreamSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.TIP}>{row.baseline.targetSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.BASELINE}>{row.baseline.mergeTreeSha}</FactRow>
+    <FactRow label={LANDING_CHECK_COPY.LABEL}>{row.baseline.check.command}</FactRow>
+    <details><summary>{LANDING_CHECK_COPY.VIEW_HELD}</summary>{row.heldTaskIds?.map((id) =>
+      <div key={id}><Link to={`/tasks/${encodeId(id)}`}>{id}</Link></div>)}</details>
+    <p>{LANDING_CHECK_COPY.RESUMES}</p>
+  </div>;
   // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
   // which runner and since when, and where the runner had got to. An item an older build opened
   // carries none of it and keeps the sentence it always did.
@@ -1977,7 +2002,8 @@ export function EscalatedItemCard({
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat} main={main}>
-      <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} />
+      {cardActions(row, currentPromotionId).length > 0 || (row.assignee === 'OWNER' && HAND_CLOSABLE_KINDS.has(row.kind))
+        ? <CardActions projectId={projectId} row={row} currentPromotionId={currentPromotionId} /> : null}
     </ItemCard>
   );
 }
@@ -2084,6 +2110,8 @@ function ItemCard({
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
+  const requiredAction = row.requiredAction?.trim() || row.detailLine?.trim()
+    || (row.baseline ? null : REQUIRED_ACTION_FALLBACK);
   return (
     <div
       className={`approval-card project-open-item-card is-${tone}`}
@@ -2105,10 +2133,8 @@ function ItemCard({
         </span>
       </div>
       <div className="approval-body is-plan project-open-item-body">
-        <div className="project-open-item-next">
-          <p className="project-open-item-required-action">
-            {row.requiredAction ?? row.detailLine ?? REQUIRED_ACTION_FALLBACK}
-          </p>
+        {requiredAction || row.handledBy?.length || children ? <div className="project-open-item-next">
+          {requiredAction ? <p className="project-open-item-required-action">{requiredAction}</p> : null}
           {row.handledBy?.length ? (
             <p className="project-open-item-handled-by">
               {row.handledBy.map((task, index) => (
@@ -2120,7 +2146,7 @@ function ItemCard({
             </p>
           ) : null}
           {children ? <div className="project-open-item-actions">{children}</div> : null}
-        </div>
+        </div> : null}
         <ItemFactRows row={row} heading={heading} />
         <ItemHandlingRows row={row} now={now} main={main} />
         <ItemChatRow row={row} onChat={onChat} />
@@ -2163,7 +2189,9 @@ export const ASK_AGAIN_ONCE_BACK =
 export const RUNNER_DOWN_SENTENCE = 'Its runner is offline. Ask again comes back here as soon as it is.';
 export const COORDINATOR_ENDED_SENTENCE = 'Its conversation was completed.';
 export const NO_COORDINATOR_SENTENCE = 'This project isn’t coordinated.';
-export const HANDED_OVER_SENTENCE = 'it handed this to you on purpose.';
+export const HANDED_OVER_SENTENCE = 'It handed this to you on purpose.';
+/** The caption over the coordinator's hand-over note (`row.handoverNote`), in the coordinator row. */
+export const HANDOVER_NOTE_CAPTION = 'Why the coordinator handed it over';
 export const CLOSES_BY_ITSELF =
   'Closes by itself once this work lands — push a fix to the task branch and you’re done.';
 export const ALREADY_SETTLED = 'Already settled?';
@@ -2315,13 +2343,26 @@ export function coordinatorRowSentence(row: ProjectOpenItemRow, reading: Coordin
       return NO_COORDINATOR_SENTENCE;
     case 'ESCALATED':
       return `Reachable. It had this for ${waitedBeforeEscalation(row)} and didn’t get to it.`;
-    case 'HANDED_OVER': {
-      const note = row.handoverNote?.trim();
-      return note
-        ? `“${note}” — ${HANDED_OVER_SENTENCE}`
-        : `${HANDED_OVER_SENTENCE.charAt(0).toUpperCase()}${HANDED_OVER_SENTENCE.slice(1)}`;
-    }
+    case 'HANDED_OVER':
+      // The coordinator's own note is drawn under its caption (`handoverNoteShown`), not in here.
+      return HANDED_OVER_SENTENCE;
   }
+}
+
+/**
+ * The coordinator's hand-over note as the coordinator row draws it under HANDOVER_NOTE_CAPTION: its
+ * translation while the card is drawn translated (`translated`, the card's flip), the note as written
+ * otherwise, and null when the item was not handed over or carries no note.
+ */
+export function handoverNoteShown(
+  row: ProjectOpenItemRow,
+  reading: CoordinatorReading,
+  translated: OwnerCardTranslation | undefined,
+): string | null {
+  if (reading.cause !== 'HANDED_OVER') return null;
+  const note = row.handoverNote?.trim();
+  if (!note) return null;
+  return translated?.handoverNote?.trim() || note;
 }
 
 /** The coordinator row's presses (board part 6, third column), in order, with their weight. */
@@ -2645,6 +2686,9 @@ export function WhoFixesItCard({
   const actions = cardActions(row, currentPromotionId);
   const presses = coordinatorRowPresses(reading);
   const note = coordinatorRowNote(row, reading, escalationSeconds);
+  // The coordinator's hand-over note is agent text: drawn translated with the card's one flip.
+  const translated = useOwnerCardTranslation(row.translation?.handoverNote ? row.translation : null);
+  const handover = handoverNoteShown(row, reading, translated.shown);
   const landingHref = actions.includes('OPEN_LANDING') ? actionHref(row, 'OPEN_LANDING') : null;
   const fixMyself = actions.includes('OPEN_TASK_SESSION');
   // The owner's other ways onto the work the server listed (a failed task's Retry, say): drawn in the
@@ -2663,6 +2707,13 @@ export function WhoFixesItCard({
         <p className="project-open-item-who-status">
           <BoldWorkspace sentence={coordinatorRowSentence(row, reading)} name={reading.workspaceName} />
         </p>
+        {handover ? (
+          <div className="project-open-item-handover">
+            <span className="project-open-item-handover-caption">{HANDOVER_NOTE_CAPTION}</span>
+            <p className="project-open-item-handover-note">{handover}</p>
+            {translated.foot}
+          </div>
+        ) : null}
         <div className="project-open-item-actions project-open-item-who-presses">
           {presses.map((press) =>
             press.kind === 'ASK_AGAIN' ? (
@@ -2919,16 +2970,21 @@ function OpenItemRowView({
   const firstAction = row.primaryAction && actions.includes(row.primaryAction)
     ? row.primaryAction
     : actions[0];
+  // The server's translated title and detail line while a usable translation exists; the row has no
+  // flip of its own, the card it opens offers Show original.
+  const translated = useOwnerLanguageTranslation(row.translation);
+  const title = translated?.title ?? row.title;
+  const detailLine = translated?.detailLine ?? row.detailLine;
   return (
     <li className={`project-open-item-row is-${row.assignee === 'OWNER' ? 'owner' : 'coordinator'}`}>
       <span className="project-open-item-dot" aria-hidden="true" />
       <div className="project-open-item-main">
-        <div className="project-open-item-title" title={row.title}>
-          {row.title}
+        <div className="project-open-item-title" title={title}>
+          {title}
         </div>
-        {row.detailLine ? (
-          <div className="project-open-item-line" title={row.detailLine}>
-            {row.detailLine}
+        {detailLine ? (
+          <div className="project-open-item-line" title={detailLine}>
+            {detailLine}
           </div>
         ) : null}
         {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says
@@ -3033,6 +3089,31 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
       </div>
       <div className="project-open-item-who" />
       <div className="project-open-item-press" />
+    </li>
+  );
+}
+
+/**
+ * One sign-in the project's held tasks wait for (`signIns`): "2 tasks wait for a sign-in", which engine on
+ * which machine, and Sign in into that machine's sign-in. Derived by the server on each read, so it goes
+ * once the engine is signed in.
+ */
+export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner" data-kind="SIGN_IN_WAIT">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
+        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+      </div>
+      <div className="project-open-item-press">
+        <Link className="project-open-item-action is-primary" to={signInHref(wait)}>
+          Sign in
+        </Link>
+      </div>
     </li>
   );
 }
@@ -3177,11 +3258,12 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
+  const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3189,18 +3271,21 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart || ownDone ? (
+      {needsYou.length > 0 || signIns.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
             {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
+            {signIns.map((wait) => (
+              <SignInWaitRowView key={`${wait.runnerId}:${wait.engine}`} wait={wait} />
+            ))}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView

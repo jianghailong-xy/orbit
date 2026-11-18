@@ -126,7 +126,9 @@ export class DependentReadyProducer {
   }
 
   /**
-   * Derive, then deliver each fact to its project's standing coordinator conversation.
+   * Derive, then deliver each fact to its project's standing coordinator conversation. A paused
+   * coordinator leaves its wake waiting for `CoordinatorFactQueueService`, which checks readiness
+   * again on recovery without another prerequisite completing or landing.
    *
    * After the commit and never inside it, for the reason every door on the router gives: the
    * facts are derived from the rows that actually committed, and a delivery writes a turn on
@@ -138,7 +140,7 @@ export class DependentReadyProducer {
     const facts = await this.factsFor(taskIds);
     const delivered: DependentReadyDelivery[] = [];
     for (const fact of facts) {
-      const answer = await this.deliveries.queue(fact, this.authorize);
+      const answer = await this.deliveries.queue(fact, this.authorize, { holdWhilePaused: true });
       delivered.push({
         taskId: fact.subjectId,
         outcome: answer.outcome,

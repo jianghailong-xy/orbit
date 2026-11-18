@@ -329,6 +329,14 @@ final class ProjectDetailModel {
         await load()
     }
 
+    /// "Land without the check" on the landing in flight (§2.4 J-S5): the server stops it and lands
+    /// it again with the landing check not run. Then the page reads everything again, so the card
+    /// says where the skip stands. Throws what the server answered, for the card to say.
+    func skipLandingCheck(_ taskID: String) async throws {
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+        await load()
+    }
+
     /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
     /// the project moving at once, and resuming undoes it.
     func setPaused(_ paused: Bool) async -> String? {
@@ -398,11 +406,24 @@ final class ProjectDetailModel {
 
     /// "Not yet…" on the coordinator's request: the note goes to the coordinator, and the request
     /// ends. Nil when it went through; otherwise the sentence to show.
-    func declineDone(itemID: String, note: String) async -> String? {
-        await runWrite(ProjectDone.notDeclined) {
-            _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)
+    func declineDone(itemID: String, note: String, sendAsWritten: Bool = false) async -> String? {
+        var untranslated = false
+        let refused = await runWrite(ProjectDone.notDeclined) {
+            do {
+                _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note,
+                                                          sendAsWritten: sendAsWritten)
+            } catch {
+                untranslated = OwnerCardTranslations.refused(error)
+                throw error
+            }
         }
+        doneDeclineRefusedUntranslated = untranslated
+        return untranslated ? nil : refused
     }
+
+    /// The last Not yet… note was refused with 422 TRANSLATION_FAILED and not sent: the card offers
+    /// Retry and Send as written.
+    var doneDeclineRefusedUntranslated = false
 
     // MARK: the done card's follow-ups
 

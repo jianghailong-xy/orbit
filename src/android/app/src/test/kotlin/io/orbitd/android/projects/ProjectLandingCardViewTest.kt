@@ -18,6 +18,7 @@ import io.orbitd.android.ui.OrbitTheme
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -46,11 +47,13 @@ class ProjectLandingCardViewTest {
 
     private fun job(id: String, state: String = "RUNNING", phase: String? = "CHECK", title: String = "维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0",
         started: Long = 66, heartbeat: Long? = 0, timedOut: Boolean = false, retryable: Boolean = false, kind: String = "LAND_TASK",
-        landing: String? = "L1") = buildJsonObject {
+        landing: String? = "L1", skippable: Boolean? = null, skipCheck: String? = null) = buildJsonObject {
         put("jobId", id); put("kind", kind); put("state", state); put("phase", phase); put("taskId", "t-$id"); put("taskTitle", title)
         put("generation", 1); put("startedAt", iso(started)); put("queuedAt", iso(started + 34)); put("heartbeatAt", heartbeat?.let(::iso))
         put("runnerName", "workstation-gpu"); put("timedOut", timedOut); put("limitSeconds", 600); put("retryable", retryable)
         landing?.let { put("landingSessionId", it) }
+        skippable?.let { put("skippable", it) }
+        skipCheck?.let { put("skipCheck", it) }
     }
     private fun view(vararg listed: JsonObject, waitMs: Int? = 34_000) = buildJsonObject {
         val lead = listed.first()
@@ -69,12 +72,13 @@ class ProjectLandingCardViewTest {
         put("inFlightJobs", JsonArray(listed.toList()))
     }
 
-    private fun draw(card: LandingCard, listed: Boolean = true, toProject: Boolean = true, refusal: String? = null) {
+    private fun draw(card: LandingCard, listed: Boolean = true, toProject: Boolean = true, refusal: String? = null,
+        skipCheck: suspend (String) -> String? = { null }) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.padding(16.dp)) {
                     ProjectLandingCardView(card, onOpenJobs = if (listed) ({ jobs++ }) else null, onOpenProject = if (toProject) ({ project++ }) else null,
-                        openLanding = { opened += it }, retry = { id -> retried += id; refusal })
+                        openLanding = { opened += it }, retry = { id -> retried += id; refusal }, skipCheck = skipCheck)
                 }
             }
         } } }
@@ -91,11 +95,47 @@ class ProjectLandingCardViewTest {
         says("landing-card:what", "维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0")
         says("landing-card:onto", "onto project/2zwQZ2hd93IvLb59t6p9d")
         compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("landing-card:skip-check").assertDoesNotExist()
         compose.onNodeWithTag("landing-card:retry").assertDoesNotExist(); compose.onNodeWithTag("landing-head:timed-out", useUnmergedTree = true).assertDoesNotExist()
         assertGrey(shot("1-in-flight"))
         // The whole card is the press: the jobs it counts.
         compose.onNodeWithTag("landing-card:body").performClick()
         assertEquals(1, jobs)
+    }
+
+    @Test fun skipAsksBeforeSendingAndShowsARefusalUnderTheFoot() {
+        val pending = CompletableDeferred<String?>()
+        val skipped = mutableListOf<String>()
+        draw(ProjectPage.landingCard(view(job("j-1", skippable = true)), now, now, false)!!) {
+            skipped += it
+            pending.await()
+        }
+        val skip = compose.onNodeWithTag("landing-card:skip-check").assertTextEquals(ProjectPage.landingSkipCheck).assertIsDisplayed()
+        compose.onNodeWithTag("landing-card:open-landing").assertIsDisplayed()
+        compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertExists()
+        skip.performClick()
+        compose.onNodeWithText(ProjectPage.landingSkipCheckConfirm).assertIsDisplayed()
+        compose.onNodeWithText(ProjectPage.landingSkipCheckCancel).performClick()
+        compose.runOnIdle { assertTrue(skipped.isEmpty()) }
+        compose.onNodeWithText(ProjectPage.landingSkipCheckConfirm).assertDoesNotExist()
+
+        skip.performClick()
+        compose.onNodeWithText(ProjectPage.landingSkipCheckGo).performClick()
+        skip.assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(listOf("t-j-1"), skipped) }
+        pending.complete("The landing has already been pushed. ")
+        skip.assertIsEnabled()
+        says("landing-card:error", "Could not skip the check — The landing has already been pushed.")
+        compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun skipStatusReplacesNothingToDo() {
+        for ((status, note) in listOf("STOPPING" to ProjectPage.landingSkipCheckStopping, "SKIPPED" to ProjectPage.landingSkipCheckSkipped)) {
+            draw(ProjectPage.landingCard(view(job("j-1", skippable = false, skipCheck = status)), now, now, false)!!)
+            compose.onNodeWithText(note, useUnmergedTree = true).assertIsDisplayed()
+            compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithTag("landing-card:skip-check").assertDoesNotExist()
+        }
     }
 
     @Test fun queuedTheSameCardStandsStill() {

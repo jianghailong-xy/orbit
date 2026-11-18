@@ -2911,6 +2911,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0517 adds the email_outbox table, its indexes and its foreign key to "user" only; no preserved rows,
       // triggers or DONE fence change, and no row is written.
       '0517_email_outbox',
+      // 0518 constrains enqueue event causes only; no preserved rows or DONE fence changes.
+      '0518_integration_baseline_hold',
       // 0519 adds two nullable wiki_maintenance_run columns and one defaulted wiki_cursor counter; no preserved rows,
       // triggers or DONE fence change.
       '0519_wiki_repo_attention',
@@ -3125,7 +3127,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // every stored row passes, a nullable condition.keep_waiting_since, widens owner_request_kind_chk by
       // CONDITION_STILL_WAITING, and adds two triggers that write only `condition` and pg_notify; no task row is
       // rewritten, and no judgment relation, function or DONE fence changes.
-      '1060_task_start_when'],
+      '1060_task_start_when',
+      // 1070 adds nullable translation JSONB columns to project_open_item and owner_request (ADD COLUMN IF NOT
+      // EXISTS, no default); neither is one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1070_owner_card_translation',
+      // 1080 adds nullable translation JSONB columns (ADD COLUMN IF NOT EXISTS, no default) to
+      // task_completion_evidence — a preserved relation, ALTERed only by this one addition, so no existing row,
+      // `evidence` value or digest is read or rewritten — and to task_owner_confirmation_review_record and
+      // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
+      // no trigger, function or DONE fence changes.
+      '1080_owner_card_translation_more',
+      // 1090 adds nullable translated_note and translation_lang TEXT columns to task_evidence_decision
+      // so queued send-backs retain their translated text. No constraints or defaults are added,
+      // no existing rows are written, and no preserved relation, trigger, function or DONE fence changes.
+      '1090_evidence_send_back_translation',
+      // 1101 widens the enqueue event cause CHECK to admit SKIP_CHECK; no preserved rows or DONE fence changes.
+      '1101_integration_enqueue_skip_check',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

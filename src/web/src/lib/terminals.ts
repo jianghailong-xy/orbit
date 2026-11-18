@@ -68,6 +68,7 @@ export const expiresLine = (terminal: Pick<Terminal, 'expiresAt'>, now: number):
 export const terminalRequestsQuery = () =>
   queryOptions({
     queryKey: ['terminals', 'requests'] as const,
+    meta: { entities: ['terminal'] },
     queryFn: () => api<{ requests: TerminalRequest[] }>('/terminals/requests'),
     refetchInterval: streamPoll(20_000),
     retry: false,
@@ -77,6 +78,7 @@ export const terminalRequestsQuery = () =>
 export const terminalsQuery = () =>
   queryOptions({
     queryKey: ['terminals', 'list'] as const,
+    meta: { entities: ['terminal'] },
     queryFn: () => api<{ terminals: Terminal[] }>('/terminals'),
     retry: false,
   });

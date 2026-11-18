@@ -79,7 +79,7 @@ data class NewWorkspaceRequest(
 }
 
 /** A machine as a Set up row names it (rule 9). */
-data class MachineToSetUp(val id: String, val name: String)
+data class MachineToSetUp(val id: String, val name: String, val managed: Boolean = false)
 
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
@@ -385,8 +385,8 @@ object MachineSetup {
     }
 
     /**
-     * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
-     * on them: an offline one is already what Machines & models says needs you.
+     * Rule 9: the machines that get a Set up row in the drawer, managed first and the rest in the runner list's order. Online, with no
+     * workspace of this account on them: an offline one is already what Machines & models says needs you.
      */
     fun machinesToSetUp(
         runners: List<JsonObject>?,
@@ -395,14 +395,15 @@ object MachineSetup {
         managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
-        return runners.mapNotNull { runner ->
+        val managedId = managedStatus?.runnerId ?: ManagedRunnerIdentity.runnerId
+        return RunnerPage.managedRunnerFirst(runners, managedId).mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
             if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
             ) return@mapNotNull null
-            MachineToSetUp(id = id, name = RunnerPage.displayName(runner))
+            MachineToSetUp(id = id, name = RunnerPage.displayName(runner, managedId), managed = RunnerPage.isManaged(runner, managedId))
         }
     }
 

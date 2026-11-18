@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import { useRef, useState, type JSX } from 'react';
 import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,10 +20,11 @@ import {
   OWNER_CONFIRMATION_SHOW_LESS,
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
-import { bashCommandRules } from '@orbit/shared';
+import { bashCommandRules, type ApprovalTranslation } from '@orbit/shared';
 import { shownQuestions } from '../lib/translation';
 import type { HeldDecision } from '../lib/approvalDecisions';
-import { UntranslatedDecisionFoot } from './TranslationParts';
+import { CardTranslationFoot, UntranslatedDecisionFoot } from './TranslationParts';
+import { CONDITION_COPY } from '../lib/conditions';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -121,8 +123,51 @@ interface BatchPreview {
   externalEdges?: number;
   lists?: Array<{ id: string; title: string }>;
   assignees?: Array<{ id: string; name: string; hasRunner: boolean }>;
-  tasks?: Array<{ title: string; dependsOnRefs?: string[]; dependsOnTaskIds?: string[]; ref?: string | null }>;
+  tasks?: Array<{
+    title: string;
+    dependsOnRefs?: string[];
+    dependsOnTaskIds?: string[];
+    ref?: string | null;
+    /** A task that starts when its condition holds: the card's Starts when, Today and If never lines. */
+    startWhen?: StartWhenCardLines;
+  }>;
   titlesTruncated?: number;
+}
+
+/** The server's lines for a startWhen task's card (apiserver tasks/task-start-when.ts startWhenCardLines). */
+interface StartWhenCardLines {
+  startsWhen: string;
+  checked: string;
+  command: string;
+  today: string;
+  ifNever: string;
+  awake?: string | null;
+}
+
+/** A single create's startWhen lines, when the task starts on a condition (condition-triggers ②). */
+function startWhenOf(input: CreateInput | null): StartWhenCardLines | null {
+  if (!input || input.isProject) return null;
+  return input.preview?.tasks?.[0]?.startWhen ?? null;
+}
+
+/** Starts when, Today and If never (condition-triggers ②): the condition, how it is checked and its command. */
+function StartWhenFacts({ lines }: { lines: StartWhenCardLines }): JSX.Element {
+  const K = CONDITION_COPY.facts;
+  return (
+    <dl className="sched-card-facts create-start-when" data-start-when-facts="">
+      <dt>{K.startsWhen}</dt>
+      <dd data-fact="starts-when">
+        <b>{lines.startsWhen}</b>
+        <div className="sched-card-sub">{lines.checked}</div>
+        {lines.awake ? <div className="sched-card-sub" data-fact="awake">{lines.awake}</div> : null}
+        <code className="sched-command">{lines.command}</code>
+      </dd>
+      <dt>{K.today}</dt>
+      <dd data-fact="today">{lines.today}</dd>
+      <dt>{K.ifNever}</dt>
+      <dd data-fact="if-never">{lines.ifNever}</dd>
+    </dl>
+  );
 }
 
 /**
@@ -275,28 +320,14 @@ const isMergeCheckChange = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_project_update_integration';
 
 interface MergeCheckChangeInput {
+  snapshot: Record<string, unknown>;
   projectTitle: string;
-  /** The check as the project stands, or null when it has none. */
-  current: string | null;
-  /** What it would become; null clears it. */
-  next: string | null;
-  /** The budget for the new check, in seconds, when the proposal named one. */
-  timeout: number | null;
 }
 
 function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
   if (!isMergeCheckChange(a)) return null;
-  const obj = (a.input ?? {}) as Record<string, unknown>;
-  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
-  const timeout = obj.mergeCheckTimeoutSeconds;
-  return {
-    projectTitle: text(obj.projectTitle) ?? '',
-    current: text(obj.currentMergeCheckCommand),
-    next: text(obj.mergeCheckCommand),
-    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
-    // proposal that named none shows no second line rather than a zero.
-    timeout: typeof timeout === 'number' ? timeout : null,
-  };
+  const snapshot = (a.input ?? {}) as Record<string, unknown>;
+  return { snapshot, projectTitle: typeof snapshot.projectTitle === 'string' ? snapshot.projectTitle : '' };
 }
 
 /**
@@ -519,7 +550,7 @@ interface BlockerResolveInput {
   subjectTitle: string;
 }
 
-function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
+function blockerResolveInput(a: ApprovalInfo, shown?: ApprovalTranslation): BlockerResolveInput | null {
   if (!isBlockerResolve(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
   const blocker = (obj.blocker ?? {}) as Record<string, unknown>;
@@ -527,13 +558,15 @@ function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
   return {
     projectTitle: text(obj.projectTitle),
     requiredAction: text(blocker.requiredAction),
-    reason: text(obj.reason),
+    reason: shown?.reason || text(obj.reason),
     kind: text(blocker.kind),
     subjectTitle: text(blocker.subjectTitle),
   };
 }
 
-function createInput(a: ApprovalInfo): CreateInput | null {
+/** `shown`: the card's translation (orbitCardTranslation) while it is drawn translated; each field it
+ *  lacks is the original's. */
+function createInput(a: ApprovalInfo, shown?: ApprovalTranslation): CreateInput | null {
   const project = isProjectCreate(a);
   if (!project && !isTaskCreate(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
@@ -541,15 +574,15 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   const items = Array.isArray(obj.acceptanceCriteriaItems) ? obj.acceptanceCriteriaItems : [];
   return {
     isProject: project,
-    title: text(obj.title),
-    prose: text(project ? obj.goal : obj.description),
+    title: shown?.title || text(obj.title),
+    prose: (project ? shown?.goal : shown?.description) || text(project ? obj.goal : obj.description),
     criteria: project
       ? items
-          .map((c) => text((c as { text?: unknown } | null)?.text))
+          .map((c, i) => shown?.acceptanceCriteriaItems?.[i]?.text || text((c as { text?: unknown } | null)?.text))
           .filter(Boolean)
           .map((t) => `- ${t}`)
           .join('\n')
-      : text(obj.acceptanceCriteria),
+      : shown?.acceptanceCriteria || text(obj.acceptanceCriteria),
     // The same key the batch card reads, for the same reason: the counts are the decision and the
     // body is not. A project create has no dispatch to report, so it carries none.
     preview: project ? null : (obj.preview as BatchPreview | undefined) ?? null,
@@ -557,17 +590,43 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   };
 }
 
-function batchPreview(input: unknown): BatchPreview {
+/** `shown`: the card's translation while it is drawn translated; `shown.tasks[i]` is `preview.tasks[i]`. */
+function batchPreview(input: unknown, shown?: ApprovalTranslation): BatchPreview {
   const obj = (input ?? {}) as { preview?: BatchPreview };
-  return obj.preview ?? {};
+  const preview = obj.preview ?? {};
+  if (!shown?.tasks || !preview.tasks) return preview;
+  return { ...preview, tasks: preview.tasks.map((t, i) => ({ ...t, title: shown.tasks?.[i]?.title || t.title })) };
 }
 
-function dagInput(input: unknown): { preview: DagPreview; note: string } {
+function dagInput(input: unknown, shown?: ApprovalTranslation): { preview: DagPreview; note: string } {
   const obj = (input ?? {}) as { preview?: DagPreview; note?: unknown };
   return {
     preview: obj.preview ?? {},
-    note: typeof obj.note === 'string' ? obj.note : '',
+    note: shown?.note || (typeof obj.note === 'string' ? obj.note : ''),
   };
+}
+
+/**
+ * Settings › Translation on Orbit's own cards (board docs/mocks/session-translation/04-owner-cards.html,
+ * part 2): the card's translation when it carries a field this card draws. Undefined when there is
+ * none, it failed (the card is drawn as the agent wrote it), or the card is not one of these five.
+ * macOS/iOS and Android draw the same fields.
+ */
+export function orbitCardTranslation(a: ApprovalInfo): ApprovalTranslation | undefined {
+  const t = a.translation;
+  if (!t || t.failed) return undefined;
+  const has = isTaskCreate(a)
+    ? Boolean(t.title || t.description || t.acceptanceCriteria)
+    : isProjectCreate(a)
+      ? Boolean(t.title || t.goal || t.acceptanceCriteriaItems?.some((c) => c.text))
+      : isBatch(a)
+        ? Boolean(t.tasks?.some((task) => task.title))
+        : isBlockerResolve(a)
+          ? Boolean(t.reason)
+          : isDagChange(a)
+            ? Boolean(t.note)
+            : false;
+  return has ? t : undefined;
 }
 
 function planText(input: unknown): string {
@@ -707,6 +766,10 @@ export function ApprovalPanel({
   const isQuestion = approval.toolName === 'AskUserQuestion';
   const narrow = useIsMobile();
   const [reviewOpen, setReviewOpen] = useState(false);
+  // One flip for the whole card (board 04-owner-cards, mark A), never persisted.
+  const cardTranslation = orbitCardTranslation(approval);
+  const [cardOriginal, setCardOriginal] = useState(false);
+  const cardShown = cardOriginal ? undefined : cardTranslation;
   const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
@@ -752,10 +815,10 @@ export function ApprovalPanel({
   const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
   const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
   const translatedDescription = shown?.description;
-  const dag = isDagChange(approval) ? dagInput(approval.input) : null;
-  const batch = isBatch(approval) ? batchPreview(approval.input) : null;
-  const create = createInput(approval);
-  const blocker = blockerResolveInput(approval);
+  const dag = isDagChange(approval) ? dagInput(approval.input, cardShown) : null;
+  const batch = isBatch(approval) ? batchPreview(approval.input, cardShown) : null;
+  const create = createInput(approval, cardShown);
+  const blocker = blockerResolveInput(approval, cardShown);
   const skipCheck = skipMergeCheckInput(approval);
   const mergeCheck = mergeCheckChangeInput(approval);
   const deleting = deleteInput(approval, Date.now());
@@ -769,7 +832,8 @@ export function ApprovalPanel({
     : batch
       ? `${batch.taskCount ?? 0} new task${batch.taskCount === 1 ? '' : 's'}`
       : create
-        ? create.title
+        // The agent reads this: the title as it wrote it, whichever language the card is in.
+        ? (createInput(approval)?.title ?? create.title)
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : skipCheck
@@ -792,13 +856,15 @@ export function ApprovalPanel({
                   ? `📁 Confirm: create project “${create.title}”?`
                   // A task's own name is the card's first row, where it can wrap to as many lines
                   // as it needs; the header carries the count, exactly as the batch card's does.
-                  : '📝 Confirm: create 1 task?'
+                  : startWhenOf(create)
+                    ? CONDITION_COPY.createTaskHeading
+                    : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
                   : skipCheck
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
                     : mergeCheck
-                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      ? LANDING_CHECK_COPY.CONFIRM_TITLE
                       : deleting
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
                         : writing
@@ -864,6 +930,9 @@ export function ApprovalPanel({
             <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
           </>
         )}
+        {cardTranslation && (
+          <CardTranslationFoot flipped={cardOriginal} onFlip={() => setCardOriginal((v) => !v)} />
+        )}
       </div>
       {!answerable && <UnanswerableNote />}
       {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
@@ -889,7 +958,7 @@ export function ApprovalPanel({
                     : skipCheck
                       ? 'Land it without the check'
                       : mergeCheck
-                        ? 'Change the check'
+                        ? LANDING_CHECK_COPY.CONFIRM_ACTION
                         : deleting
                           ? 'Delete it'
                           : writing
@@ -1093,19 +1162,34 @@ function WorkspaceWriteBody({ input }: { input: WorkspaceWriteInput }): JSX.Elem
  * state, not as "no check at all".
  */
 function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
-  const current = input.current ?? 'no check configured';
-  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  const raw = input.snapshot;
+  const command = (value: unknown): string | null => typeof value === 'string' ? value : null;
+  const seconds = (value: unknown): number | null => typeof value === 'number' ? value : null;
+  const value = (key: string, after: boolean): unknown =>
+    after && Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : raw[`current${key[0].toUpperCase()}${key.slice(1)}`];
   return (
     <div className="dag-approval">
-      <p className="dag-approval-note">
-        Run on the combined tree before this project's work lands. Nothing else about the
-        project's integration line changes.
-      </p>
-      <Command label="now" command={current} />
-      <Command label="after" command={next} />
-      {input.timeout !== null && (
-        <p className="dag-approval-caption">killed after {input.timeout}s</p>
-      )}
+      {input.projectTitle && <p className="dag-approval-note">{input.projectTitle}</p>}
+      <div className="landing-check-confirmation">
+        {(['landing', 'merge'] as const).map((layer) => (
+          <section key={layer}>
+            <h4>{layer === 'landing' ? LANDING_CHECK_COPY.LABEL : 'Merge check'}</h4>
+            <p className="dag-approval-caption">{layer === 'landing' ? LANDING_CHECK_COPY.HINT : 'Runs before merging into main.'}</p>
+            {[false, true].map((after) => {
+              const check = command(value(`${layer}CheckCommand`, after));
+              const timeout = seconds(value(`${layer}CheckTimeoutSeconds`, after));
+              return <div key={String(after)}>
+                <Command label={after ? 'after' : 'now'} command={check ?? (layer === 'landing'
+                  ? inheritedLandingCommand(command(value('mergeCheckCommand', after))) : 'no check configured')} />
+                <p className="dag-approval-caption">{LANDING_CHECK_COPY.TIMEOUT}: {timeout === null
+                  ? layer === 'landing' ? inheritedLandingTimeout(seconds(value('mergeCheckTimeoutSeconds', after))) : '3600 seconds'
+                  : `${timeout} seconds`}</p>
+              </div>;
+            })}
+          </section>
+        ))}
+      </div>
+      <p className="dag-approval-caption">{LANDING_CHECK_COPY.APPLIES}</p>
     </div>
   );
 }
@@ -1176,6 +1260,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const noun = createFoldNoun(input);
   const detail = createDetail(input);
+  const startWhen = startWhenOf(input);
   // A task's criteria is one prose block written as a prompt for the agent that will run it — the
   // field that turns into a wall. Its marks taken off, its lines kept, and folded at the ceiling the
   // owner-confirmation card folds a run's report at, which is the same kind of field read by the
@@ -1188,6 +1273,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
       <ImpactPills preview={input.preview} withZeroStarting={false} />
       {detail && <p className="dag-approval-foot">{detail}</p>}
       {!input.isProject && input.title && <p className="create-title">{input.title}</p>}
+      {startWhen && <StartWhenFacts lines={startWhen} />}
       {input.prose && (
         <details
           className="create-fold"

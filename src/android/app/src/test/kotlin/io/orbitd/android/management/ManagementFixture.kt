@@ -74,6 +74,8 @@ object ManagementFixture {
     /** Whether each runner is online; offline, it last checked in yesterday. */
     @Volatile var runnerOnline = true
     @Volatile var runnerTwoOnline = true
+    const val CLOUD_RUNNER = "0198f3a2-7777-7000-8000-000000000008"
+    val reorderRequests = CopyOnWriteArrayList<List<String>>()
     @Volatile var runnerOrder = listOf(RUNNER, RUNNER_TWO)
     @Volatile var removedRunners = emptySet<String>()
     /** The runner's selfUpdate report's state; null is a runner too old to report one. */
@@ -144,7 +146,7 @@ object ManagementFixture {
         wikiLinks = false
         viewerRole = "ADMIN"; viewerCreates = true; membersCanAdd = false; membersCanAddAccounts = false; loginState = "ACTIVE"
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
-        runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
+        reorderRequests.clear(); runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
         defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         agentFixBodies.clear(); onAgentFix = {}; agentFixRefusal = null
@@ -194,7 +196,13 @@ object ManagementFixture {
         "preferences":{"theme":"$theme","defaultPermissionMode":"auto","enableOrchestration":true${modelRouting?.let { ",\"modelRouting\":$it" }.orEmpty()}${recaps?.let { ",\"recaps\":$it" }.orEmpty()}${subagentBlocked?.let { ",\"subagentBlockedProviders\":" + JsonArray(it.map(::JsonPrimitive)) }.orEmpty()}}}"""
     private fun workspace() = """{"id":"$WORKSPACE","name":"$workspaceName","runnerId":"$RUNNER","enabled":true,"workDir":"/srv/alpha",
         "lastProvider":"claude","effort":"","modelRouting":false,"env":{},"position":0,"createdAt":"2026-09-01T00:00:00Z"$workspaceExtra}"""
-    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") { if (it == RUNNER) runner() else runnerTwo() }
+    private fun runners() = runnerOrder.filter { (it == RUNNER || secondRunner) && it !in removedRunners }.joinToString(",", "[", "]") {
+        when (it) {
+            RUNNER -> runner()
+            CLOUD_RUNNER -> """{"id":"$CLOUD_RUNNER","name":"orbit-managed","managed":true,"online":true,"lastHeartbeatAt":"$now"}"""
+            else -> runnerTwo()
+        }
+    }
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
         "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
@@ -271,7 +279,12 @@ object ManagementFixture {
             "auth/capabilities" -> capabilities?.let(::ok) ?: fail(404, "Cannot GET /api/auth/capabilities")
             "managed-runner" -> ok(managedStatus)
             "managed-runner/ensure" -> { ensureBodies += body(); ensureRefusal?.let { fail(403, it) } ?: run { onEnsure(); ok(ensured) } }
-            "runners/reorder" -> { runnerOrder = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }; ok(runners()) }
+            "runners/reorder" -> {
+                val ids = body()["ids"]!!.jsonArray.map { it.jsonPrimitive.content }
+                reorderRequests += ids
+                runnerOrder = ids + runnerOrder.filterNot { it in ids }
+                ok(runners())
+            }
             "runners/$RUNNER_TWO" -> if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER_TWO; ok("{}") } else ok(runnerTwo())
             "runners/$RUNNER" -> {
                 if (api.method == HttpMethod.DELETE) { removedRunners = removedRunners + RUNNER; return@HttpTransport ok("{}") }

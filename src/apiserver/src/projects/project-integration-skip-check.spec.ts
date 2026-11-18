@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  INTEGRATION_SKIP_CHECK_ALREADY_ASKED,
+  INTEGRATION_SKIP_CHECK_NO_CHECK,
+  INTEGRATION_SKIP_CHECK_PUSHED,
+  InFlightSkipFacts,
+  inFlightSkipRefusal,
   INTEGRATION_SKIP_CHECK_APPROVAL_MISMATCHED,
   INTEGRATION_SKIP_CHECK_APPROVAL_REQUIRED,
   INTEGRATION_SKIP_CHECK_NOT_A_CHECK_FAILURE,
@@ -303,4 +308,44 @@ test('a landing reads back as skipped-with-a-reason rather than as a green one',
   // A row that ran its check carries no skip, so nothing about it reads as one.
   const ran = integrationJobView({ ...row, skipMergeCheck: false, skipReason: null, skipApprovedByUserId: null, skipApprovalId: null } as unknown as IntegrationJobRow);
   assert.equal(ran.skippedCheck, null);
+});
+
+// ── the owner's skip of a landing still in flight ─────────────────────────────────────────────────
+
+/** A landing claimed under a v2 protocol and checking, on a project with a landing check. */
+function inFlight(over: Partial<InFlightSkipFacts> = {}): InFlightSkipFacts {
+  return {
+    kind: 'LAND_TASK',
+    state: 'RUNNING',
+    phase: 'CHECK',
+    cancelRequestedAt: null,
+    skipMergeCheck: false,
+    progressProtocol: 'v2',
+    pushReportedGeneration: null,
+    claimGeneration: 1n,
+    landingCheckCommand: null,
+    mergeCheckCommand: 'npm test',
+    ...over,
+  };
+}
+
+test('a landing still checking, or still queued, may be skipped', () => {
+  assert.equal(inFlightSkipRefusal(inFlight()), null);
+  assert.equal(inFlightSkipRefusal(inFlight({ state: 'QUEUED', phase: null })), null);
+  assert.equal(inFlightSkipRefusal(inFlight({ landingCheckCommand: 'npm run check', mergeCheckCommand: null })), null);
+});
+
+test('a landing past the push, already stopping, already unchecked or with no check is refused', () => {
+  assert.equal(inFlightSkipRefusal(inFlight({ phase: 'PUSH' }))?.code, INTEGRATION_SKIP_CHECK_PUSHED);
+  assert.equal(inFlightSkipRefusal(inFlight({ phase: 'VERIFY', progressProtocol: null }))?.code,
+    INTEGRATION_SKIP_CHECK_PUSHED);
+  assert.equal(inFlightSkipRefusal(inFlight({ pushReportedGeneration: 1n }))?.code, INTEGRATION_SKIP_CHECK_PUSHED);
+  // A PUSH reported under an earlier claim says nothing about this one.
+  assert.equal(inFlightSkipRefusal(inFlight({ pushReportedGeneration: 1n, claimGeneration: 2n })), null);
+  assert.equal(inFlightSkipRefusal(inFlight({ cancelRequestedAt: new Date() }))?.code,
+    INTEGRATION_SKIP_CHECK_ALREADY_ASKED);
+  assert.equal(inFlightSkipRefusal(inFlight({ skipMergeCheck: true }))?.code, INTEGRATION_SKIP_CHECK_ALREADY_ASKED);
+  assert.equal(inFlightSkipRefusal(inFlight({ mergeCheckCommand: null }))?.code, INTEGRATION_SKIP_CHECK_NO_CHECK);
+  assert.equal(inFlightSkipRefusal(inFlight({ kind: 'CHECK_PROMOTION' }))?.code,
+    INTEGRATION_SKIP_CHECK_NOT_A_CHECK_FAILURE);
 });

@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -28,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.cards.NeedsYouMenuIcon
@@ -233,7 +235,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus()
-            navigation = navigation.select(key, root) { id -> data.folders.any { ObjectId.same(it.id, id) } }
+            navigation = navigation.select(key, root) { id ->
+                id == ScheduledRunsFolder.ID || data.folders.any { ObjectId.same(it.id, id) }
+            }
             scope.launch { drawer.close() }
         }
         // A page sending the reader to a destination: its root, whatever was showing.
@@ -362,15 +366,23 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
                                 onClick = { select(workspace.id, OrbitRoute(Destination.WORKSPACE, workspace.id, workspace.id, origin = Origin.DRAWER)) })
                         }
-                        machinesToSetUp.forEach { machine ->
+                        machinesToSetUp.forEachIndexed { index, machine ->
                             val dest = machineDraftDestination(machine.id)
                             val selected = navigation.section == dest ||
                                 (route.destination == Destination.DRAFT && route.workspaceId == null && ObjectId.same(route.id, machine.id))
                             NavigationDrawerItem(selected = selected,
-                                label = { Text(MachineSetupCopy.setupTitle(machine.name), color = MaterialTheme.colorScheme.primary) },
-                                icon = { Icon(painterResource(R.drawable.ic_folder_plus), null, tint = MaterialTheme.colorScheme.primary) },
+                                label = { Text(MachineSetupCopy.setupTitle(machine.name), color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold.takeIf { machine.managed }) },
+                                icon = {
+                                    if (machine.managed) Icon(painterResource(R.drawable.ic_cloud), null,
+                                        Modifier.testTag("setup-managed-runner-icon"), tint = MaterialTheme.colorScheme.primary)
+                                    else Icon(painterResource(R.drawable.ic_folder_plus), null, tint = MaterialTheme.colorScheme.primary)
+                                },
                                 onClick = { select(dest, OrbitRoute(Destination.DRAFT, id = machine.id, origin = Origin.DRAWER)) },
                                 modifier = Modifier.testTag("setup-machine:${machine.id}"))
+                            if (machine.managed && index < machinesToSetUp.lastIndex) {
+                                HorizontalDivider(Modifier.testTag("setup-managed-runner-divider"), thickness = with(LocalDensity.current) { 1f.toDp() })
+                            }
                         }
                         // A drawer project row: the project's sessions page as its root, over its coordinator's workspace — or the one
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
@@ -469,7 +481,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.SCHEDULED -> ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
                                     workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
                                     openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
-                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) })
+                                    change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) },
+                                    openTask = { open(OrbitRoute(Destination.TASK, it, origin = Origin.LIST)) })
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
                         }
@@ -503,7 +516,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
 private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (route.destination) {
     Destination.WORKSPACES -> ""
     Destination.WORKSPACE -> data.workspaces.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Workspace"
-    Destination.FOLDER -> data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
+    Destination.FOLDER -> if (route.id == ScheduledRunsFolder.ID) ScheduledRunsFolderCopy.TITLE
+        else data.folders.firstOrNull { ObjectId.same(it.id, route.id) }?.name ?: "Folder unavailable"
     Destination.SEARCH -> "Search sessions"
     Destination.DRAFT -> "New session"
     Destination.PROJECT_SESSIONS -> "Project"

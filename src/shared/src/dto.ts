@@ -2209,6 +2209,10 @@ export interface RunnerEngineHealth {
    *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
    *  runner. */
   kimiRegion?: KimiRegion;
+  /** OpenCode only: `opencode auth list` listed no provider key, neither in its auth store nor in its
+   *  environment. `auth` stays `unknown`: OpenCode runs its own free models without a key, and a key in
+   *  its config file is not listed. Absent otherwise, and from an older runner. */
+  openCodeNoKey?: true;
   /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: the Default the owner removed from
    *  Orbit on this runner (`DELETE /runners/:id/accounts/:engine/default`), which `POST
    *  /runners/:id/accounts/:engine/default/restore` brings back. Present only while the runner reports
@@ -3987,6 +3991,8 @@ export interface IntegrationCheckSpec {
 /** What one check came to. `exitCode` is null when the command never produced one. */
 export interface IntegrationCheckResult extends Omit<IntegrationCheckSpec, 'timeoutSeconds'> {
   scope?: 'COMBINED' | 'BASELINE';
+  /** The exact tree measured by the baseline check, before it ran (K4). */
+  treeSha?: string;
   skipped?: 'PATHS_EXEMPT';
   files?: string[];
   exitCode: number | null;

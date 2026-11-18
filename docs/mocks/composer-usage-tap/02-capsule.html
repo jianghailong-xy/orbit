@@ -1,0 +1,128 @@
+<!doctype html>
+<!-- Design mock: whether the merged plan usage + context gauge (board 01) reads as one tappable
+     control, with and without a neutral capsule behind it. iOS dark appearance. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Composer usage · capsule behind the gauge</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+</svg>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">02 · 合并后的用量按钮：看起来像不像"一个能点的东西"</h1>
+  <p class="m-sub zh">01 里点击区域是看不见的，用户看到的还是两个分开的小读数。这里比较三种画法（都是 2 倍放大，同一个底栏）。</p>
+
+  <div class="m-grid3z">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">A · 无底色</span><span class="zh">01 已实现的样子</span></div>
+      <div class="zoom"><div class="card"><div class="ph">Message…</div>
+        <div class="tb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b>Opus 5.5</b><span>Medium</span></span>
+          <span class="gp" style="padding:0 16px"><span class="gbar"><i style="width:10%"></i></span><span class="ring" data-p="35"></span></span>
+          <span class="send"><svg><use href="#i-up"/></svg></span>
+        </div><div class="under"></div></div></div>
+      <p class="hint zh">条和圆环像两个独立的状态指示，<b>看不出能点，也看不出是一个整体</b>。</p>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">B · 胶囊底色（推荐）</span><span class="zh">中性系统填充色，常驻</span></div>
+      <div class="zoom m-mark" style="outline-offset:3px"><span class="m-n">1</span><div class="card"><div class="ph">Message…</div>
+        <div class="tb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b>Opus 5.5</b><span>Medium</span></span>
+          <span class="gp capd cap"><span class="gbar"><i style="width:10%"></i></span><span class="ring" data-p="35"></span></span>
+          <span class="send"><svg><use href="#i-up"/></svg></span>
+        </div><div class="under"></div></div></div>
+      <p class="hint zh">一个胶囊把两者框在一起，<b>读起来像一个可以点的小标签</b>，高度和发送按钮一样。</p>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">B · 按下</span><span class="zh">胶囊颜色加深</span></div>
+      <div class="zoom"><div class="card"><div class="ph">Message…</div>
+        <div class="tb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b>Opus 5.5</b><span>Medium</span></span>
+          <span class="gp capd cap press"><span class="gbar"><i style="width:10%"></i></span><span class="ring" data-p="35"></span></span>
+          <span class="send"><svg><use href="#i-up"/></svg></span>
+        </div><div class="under"></div></div></div>
+      <p class="hint zh">按下时整块一起变深，确认点的是一个东西。</p>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:20px">
+    <div class="m-stage-l"><span class="m-k state">B 的各种状态</span><span class="zh">胶囊只是底色，条和圆环的颜色规则不变</span></div>
+    <div class="states m-mark" style="outline-offset:6px">
+      <span class="m-n">2</span>
+      <div class="rs"><span class="gp capd cap"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-p="35"></span></span><p><b>正常</b>套餐 12%，上下文 35%</p></div>
+      <div class="rs"><span class="gp capd cap"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-p="82" data-c="#ff9f0a"></span></span><p><b>上下文 ≥ 75%</b>圆环橙色</p></div>
+      <div class="rs"><span class="gp capd cap"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="35"></span></span><p><b>套餐 ≥ 90%</b>用量条橙色</p></div>
+      <div class="rs"><span class="gp capd cap"><span class="gbar red"><i style="width:100%"></i></span><span class="ring" data-p="93" data-c="#ff453a"></span></span><p><b>都快满</b>条红、圆环红</p></div>
+      <div class="rs"><span class="gp capd cap" style="padding:0;width:32px;justify-content:center"><span class="ring" data-p="35"></span></span><p><b>没有套餐数据</b>只有圆环，胶囊变成 32pt 圆形</p></div>
+      <div class="rs"><span class="gp capd cap"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-dash></span></span><p><b>Cursor CLI</b>虚线圆环</p></div>
+    </div>
+  </div>
+
+  <div class="m-grid3" style="margin-top:20px">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">A · 手机实际大小</span></div>
+      <div class="phone" style="height:300px"><div class="screen">
+        <div class="chat">Retries now back off 1s, 2s, 4s, capped at 30s. Running the client tests next.</div>
+        <div class="pcomp"><div class="ph">Message…</div><div class="ptb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b>Opus 5.5</b> Medium</span>
+          <span class="gp" style="padding:0 8px"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41"></span></span>
+          <span class="send"><svg><use href="#i-up"/></svg></span>
+        </div></div>
+      </div></div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">B · 手机实际大小</span></div>
+      <div class="phone m-mark" style="height:300px;outline-offset:3px"><span class="m-n">3</span><div class="screen">
+        <div class="chat">Retries now back off 1s, 2s, 4s, capped at 30s. Running the client tests next.</div>
+        <div class="pcomp"><div class="ph">Message…</div><div class="ptb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b>Opus 5.5</b> Medium</span>
+          <span class="gp capd cap"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41"></span></span>
+          <span class="send"><svg><use href="#i-up"/></svg></span>
+        </div></div>
+      </div></div>
+    </div>
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">B · 浅色模式</span></div>
+      <div class="phone" style="height:300px;background:#d1d1d6"><div class="screen" style="background:#f2f2f7">
+        <div class="chat" style="color:#1c1c1e">Retries now back off 1s, 2s, 4s, capped at 30s. Running the client tests next.</div>
+        <div class="pcomp" style="background:#fff;border-color:#e5e5ea"><div class="ph" style="color:#a1a1a6">Message…</div><div class="ptb">
+          <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+          <span class="model"><b style="color:#1c1c1e">Opus 5.5</b> Medium</span>
+          <span class="gp capd" style="background:rgba(118,118,128,.12);border-radius:999px"><span class="gbar amber" style="background:#e5e5ea"><i style="width:94%"></i></span><span class="ring" data-p="41" data-t="#e5e5ea"></span></span>
+          <span class="send" style="background:#e5e5ea"><svg><use href="#i-up"/></svg></span>
+        </div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>胶囊用 iOS 的 tertiarySystemFill</b>（中性灰，深色约 24% 不透明、浅色约 12%），不用强调色——强调色只留给发送按钮、用量条和菜单对勾。尺寸就是 01 里已有的点击区域（约 62×32），不额外占宽度。</span></li>
+    <li><span class="m-n">2</span><span><b>胶囊只是底色</b>，条和圆环各自的颜色规则不变。没有套餐数据时只剩圆环，胶囊收成 32pt 的圆。</span></li>
+    <li><span class="m-n">3</span><span><b>只在 iPhone 上加。</b>iPad 和 macOS 的两个读数带数字，本来就是两个独立控件，不变。代价：底栏多了一块浅灰，视觉上稍重一点。</span></li>
+  </ul>
+</div>
+<script>
+for (const el of document.querySelectorAll('.ring')) {
+  const p = Number(el.dataset.p || 0), c = el.dataset.c || '#0a84ff', t = el.dataset.t || '#3a3a3c';
+  const track = el.hasAttribute('data-dash')
+    ? '<circle cx="18" cy="18" r="14" fill="none" stroke="#8e8e93" stroke-width="3" stroke-dasharray="4.4 4.4"/>'
+    : `<circle cx="18" cy="18" r="14" fill="none" stroke="${t}" stroke-width="5"/>` +
+      (p > 0 ? `<circle cx="18" cy="18" r="14" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="${p} 100"/>` : '');
+  el.innerHTML = `<svg viewBox="0 0 36 36">${track}</svg>`;
+}
+</script>
+</body>
+</html>

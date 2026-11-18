@@ -49,6 +49,7 @@ class ScheduleDisplayTest {
                 is TimelineItem.Schedule -> item.schedule.title
                 is TimelineItem.Run -> item.schedule.title
                 is TimelineItem.Draft -> item.card.title ?: ""
+                is TimelineItem.Task -> item.task.title
             }
         }
         "${g.title}|${g.subtitle ?: "nil"}|${items.joinToString(",")}"
@@ -307,7 +308,7 @@ class ScheduleDisplayTest {
     }
 
     @Test fun theRunsSession() {
-        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list",
+        assertEquals("Scheduled run · planned 10:00, started 10:01 · access Check only",
             ScheduleDisplay.runStripText(sh("2025-11-13T10:00"), sh("2025-11-13T10:01"), "CHECK_ONLY", tz))
         assertEquals("run of Nov 13", ScheduleDisplay.runOfText(sh("2025-11-13T10:00"), tz))
         assertEquals("Run of Nov 13", ScheduleDisplay.capitalizedRunOf(sh("2025-11-13T10:00"), tz))

@@ -114,13 +114,19 @@ final class TranslationTests: XCTestCase {
     func testBothLanguagesOnTheFeetLoseTheFlip() {
         let done = TurnTranslation(state: .done, from: .zhHans, original: "改吧")
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true),
-                       [.text("Sent to the agent in English")])
+                       [.text("Sent to the agent in English"), .action("Hide original", .hideOriginal)])
         // Agents working in another language: the foot names it.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, agentLanguage: .ja),
-                       [.text("Sent to the agent in Japanese")])
+                       [.text("Sent to the agent in Japanese"), .action("Hide original", .hideOriginal)])
         XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
                                                     flipped: false, bilingual: true),
-                       [.text("Translated")])
+                       [.text("Translated"), .action("Hide original", .hideOriginal)])
+        // Hidden (docs/mocks/translation-hide-original): "Show both" brings the original back.
+        XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Sent to the agent in English"), .action("Show both", .hideOriginal)])
+        XCTAssertEqual(SessionTranslation.replyFoot(ReplyTranslation(lang: .zhHans, text: "好"), pending: false,
+                                                    flipped: false, bilingual: true, originalHidden: true),
+                       [.text("Translated"), .action("Show both", .hideOriginal)])
         // Off: exactly today's feet.
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false, bilingual: false),
                        [.action("Show original", .flip)])
@@ -285,6 +291,35 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(failed.shownInput, info.input)
     }
 
+    /// After the answer (3A): the transcript's record finds the card's translation by its call and
+    /// shows the questions as the card did, the answer still read off the English result.
+    func testAnAnsweredQuestionKeepsItsCardsLanguage() throws {
+        let info = try decode([ApprovalInfo].self, """
+        [{"id":"a1","toolName":"AskUserQuestion","status":"ALLOWED","toolUseId":"toolu_q",
+          "input":{"questions":[{"question":"Which one?","header":"Pick",
+            "options":[{"label":"Yes","description":"Do it"},{"label":"No"}]}]},
+          "translation":{"lang":"zh-Hans","questions":[{"question":"哪一个？","header":"选择",
+            "options":[{"label":"是","description":"做"},{"label":"否","description":"不该出现"}]}]}},
+         {"id":"a2","toolName":"Bash","status":"ALLOWED","toolUseId":"toolu_b","input":{},
+          "translation":{"lang":"zh-Hans","description":"列出"}}]
+        """)
+        let byCall = ApprovalTranslation.byToolUse(info)
+        XCTAssertEqual(Array(byCall.keys), ["toolu_q"], "only question cards, by their call")
+        let asked = Approvals.parseQuestions(from: try XCTUnwrap(info[0].input))
+        let outcome = QuestionRecords.outcome(questions: asked, result: #"The user answered: "Which one?"="No". Read the answers carefully."#, isError: false)
+        XCTAssertEqual(outcome, .answered([QuestionAnswer(picked: [1], typed: nil)]))
+        let shown = ApprovalTranslation.shownQuestions(asked, byCall["toolu_q"])
+        XCTAssertEqual(shown.first?.question, "哪一个？")
+        XCTAssertEqual(shown.first?.header, "选择")
+        XCTAssertEqual(shown.first?.options.map(\.label), ["是", "否"])
+        XCTAssertEqual(shown.first?.options.map(\.description), ["做", nil], "no description where the original had none")
+        if case .answered(let answers)? = outcome {
+            XCTAssertEqual(QuestionRecords.answerLine(shown[0], answers[0]), "否")
+        }
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, ApprovalTranslation(lang: .zhHans, failed: true)), asked)
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, nil), asked)
+    }
+
     func testAPlanIsShownTranslated() {
         let input: JSONValue = .object(["plan": .string("Do the thing")])
         let shown = ApprovalTranslation.shownInput(input, ApprovalTranslation(lang: .de, plan: "Mach es"))
@@ -389,6 +424,22 @@ final class TranslationTests: XCTestCase {
         reducer.markReplyRetrying(seq: 2)
         XCTAssertNil(replies(reducer.state).first?.translation)
         XCTAssertEqual(replies(reducer.state).first?.awaitsTranslation, true)
+    }
+
+    func testAReplyAlreadyInTheOwnersLanguageIsDrawnAsItIs() {
+        var reducer = TranscriptReducer()
+        reducer.apply(user(1, english: "Fix it", original: "修一下"))
+        // On replay: the translator handed back the reply itself, spaces aside.
+        reducer.apply(event(2, .assistant, ["text": .string("找到了。"),
+                                            "translation": .object(["lang": .string("zh-Hans"), "text": .string("找到了。\n")])]))
+        XCTAssertNil(replies(reducer.state).first?.translation)
+        XCTAssertNil(replies(reducer.state).first?.awaitsTranslation, "nor waits for one")
+        // Live: the same, once the translation event arrives.
+        reducer.apply(event(3, .assistant, ["text": .string("改好了。")]))
+        XCTAssertEqual(replies(reducer.state).last?.awaitsTranslation, true)
+        reducer.apply(event(0, .translation, ["of": .int(3), "lang": .string("zh-Hans"), "text": .string("改好了。")], turn: nil))
+        XCTAssertNil(replies(reducer.state).last?.translation)
+        XCTAssertNil(replies(reducer.state).last?.awaitsTranslation)
     }
 
     func testAReplyInAnUntranslatedTurnIsLeftAlone() {

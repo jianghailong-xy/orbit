@@ -2901,6 +2901,15 @@ func buildOperationCatalog() []*operation {
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
 			},
 			map[string]interface{}{
+				"name":        "session_move",
+				"description": "File a session in one of its workspace's folders, take it out of its folder, or move it to another workspace — the Move panel's door, under its rules. Only an ended session changes workspace: end it first with session_end, which also commits what it left uncommitted; so a session cannot move itself. A move to another workspace without folderId lands in no folder. A move the rules refuse is answered 409 with the reason, and nothing moves.",
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId":   sessionIDProp,
+					"workspaceId": map[string]interface{}{"type": "string", "description": "The workspace to move it to, an id from agent_list. Omitted, it stays in its own."},
+					"folderId":    map[string]interface{}{"type": []string{"string", "null"}, "description": "A folder of the workspace it ends up in; null takes it out of its folder."},
+				}, "sessionId"),
+			},
+			map[string]interface{}{
 				"name":        "session_complete",
 				"description": "Complete a session. Ends it if live and moves it from Open to Completed; it can still be moved back to Open later.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
@@ -3733,8 +3742,8 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" way is a child of the engine, so recycling the engine (idle TTL, memory pressure) kills it" +
 				" mid-build. A job started here ends only when it exits, when the session ends, or when you" +
 				" kill it. A merge of this session neither waits for it nor stops it: a merge lands only what" +
-				" the branch has committed. A commit of the checkout is refused while it runs, so a file it is" +
-				" still writing is never committed half-written. Read its output with bg_output. To be woken when it ends or has news, set" +
+				" the branch has committed. A commit of the checkout runs beside it too and names it in its" +
+				" receipt. Read its output with bg_output. To be woken when it ends or has news, set" +
 				" wakeOnExit or wakeOnOutput; to be woken if it goes quiet while still running, set wakeOnStall:" +
 				" Orbit then tells this session what happened, even if this coding-engine process has been" +
 				" recycled in the meantime — so a wait for CI or a deploy can end your turn instead of holding it" +
@@ -4080,6 +4089,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--wait-seconds <n> (1-300; wait for the outcome and return the receipt instead of just queueing)", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+	{Tool: "session_move", Argv: []string{"orbit", "session", "move"}, Usage: "orbit session move SESSION_ID [--workspace-id ID] [--folder-id ID | --no-folder] [--json]", Arguments: []string{"[session-id] (required)", "--workspace-id <id>", "--folder-id <id>", "--no-folder", "--json"}, Mutates: true},
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_delete", Argv: []string{"orbit", "session", "delete"}, Usage: "orbit session delete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 }
@@ -5051,6 +5061,10 @@ var catalogMetadata = map[string]operationMeta{
 	"session_end": {
 		Object: objectSession,
 		Intent: "End a session.",
+	},
+	"session_move": {
+		Object: objectSession,
+		Intent: "File a session in a folder, or move it to another workspace.",
 	},
 	"session_complete": {
 		Object: objectSession,

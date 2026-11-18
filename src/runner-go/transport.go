@@ -32,7 +32,7 @@ const (
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
-	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	// (heartbeatMerge); a commit runs beside a live background job.
 	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
@@ -2838,6 +2838,17 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// moveSession files a session in a folder of its workspace (or in none), or moves an ended one to
+// another workspace: the Move panel's rules, refusals as a 409 with the reason.
+func (t *Transport) moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/move", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

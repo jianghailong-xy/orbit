@@ -577,7 +577,9 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },"))
         XCTAssertTrue(row.contains("onOpenProject: nil,"),
                       "on the project's own page a card with no list to open is a read")
-        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) })"))
+        XCTAssertTrue(row.contains("retry: { jobID in try await store.retryIntegrationJob(jobID) },"))
+        XCTAssertTrue(row.contains("skipCheck: { taskID in try await store.skipLandingCheck(taskID) })"),
+                      "the card's skip goes through the page's own store, which reads the page again")
         XCTAssertFalse(row.contains(".sheet("), "the card redraws every second; the sheet is the page's")
         let kinds = try slice(view, from: "private enum ProjectPageSheet: String, Identifiable {", to: "\n}\n")
         XCTAssertTrue(kinds.contains("case landingJobs"))

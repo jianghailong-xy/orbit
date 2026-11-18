@@ -27,6 +27,7 @@ import {
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { baselineHoldSql } from './baseline-hold';
 import { runnerOfflineSql } from '../runners/runner-presence';
 import { branchName, canonicalRepoUrl, workOnProjectRepository } from './project-criterion-landing';
 import {
@@ -48,6 +49,7 @@ import {
 import { readProjectIntegrationLog } from './project-integration-log';
 import { queueLandingObservationIfPending } from './landing-observation';
 import { medianMs } from './project-promotion';
+import { SKIP_CHECK_STOP_CAUSE, inFlightSkipRefusal } from './project-integration-skip-check';
 import {
   queueBlockingSummary,
   type QueueBlockingFacts,
@@ -565,6 +567,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   outputMovedAt: Date | null;
   currentCheck: unknown;
   cancelRequestedAt: Date | null;
+  /** The claim generation a v2 claim reported PUSH under (§2.2 J-T4), or null. */
+  pushReportedGeneration: bigint | null;
+  /** The stop this generation was asked for is a skip's (`SKIP_CHECK_STOP_CAUSE`). */
+  stoppingToSkip: boolean;
   confirmedAutomatically: boolean;
   upstreamRef: string;
   createdAt: Date;
@@ -588,6 +594,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   runnerWaitName: string | null;
   /** Whether that runner declares `promotion-automatic-land/v1` (M-T12). */
   runnerLandsAutomatically: boolean | null;
+  /** The shared baseline item holding this queued landing (K4). */
+  baselineBlockItemId: string | null;
+  baselineBlockOwnerId: string | null;
+  baselineHeldCount: number | null;
   /** The OPEN MAIN_SYNC item holding every later landing on this serial key (M2). */
   syncBlockJobId: string | null;
   syncBlockOwnerId: string | null;
@@ -658,6 +668,13 @@ function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | n
   }
   if (row.workHeld) {
     return { code: 'WAITING_TASK_WORK', summary: queueBlockingSummary('WAITING_TASK_WORK', queueFacts(row)) };
+  }
+  if (row.baselineBlockItemId) {
+    const itemId = mine(row.baselineBlockOwnerId) ? row.baselineBlockItemId : null;
+    return { code: 'WAITING_BASELINE',
+      summary: queueBlockingSummary('WAITING_BASELINE', {
+        ...queueFacts(row), baselineItemId: itemId, baselineHeldCount: row.baselineHeldCount,
+      }), ...(itemId ? { openItemId: itemId } : {}) };
   }
   if (row.syncBlockJobId) {
     const mineSync = row.syncBlockOwnerId === row.ownerId;
@@ -747,6 +764,19 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     liveness: livenessOf(row, timedOut),
     blockingReason: blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
+    skippable: row.taskId !== null && inFlightSkipRefusal({
+      kind: row.kind,
+      state: row.state,
+      phase: row.phase,
+      cancelRequestedAt: row.cancelRequestedAt,
+      skipMergeCheck: row.skipMergeCheck,
+      progressProtocol: row.progressProtocol,
+      pushReportedGeneration: row.pushReportedGeneration,
+      claimGeneration: row.claimGeneration,
+      landingCheckCommand: row.landingCheckCommand ?? null,
+      mergeCheckCommand: row.mergeCheckCommand,
+    }) === null,
+    skipCheck: row.skipMergeCheck ? 'SKIPPED' : row.stoppingToSkip ? 'STOPPING' : null,
   };
 }
 
@@ -908,6 +938,11 @@ async function readInFlightJobsForProjects(
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
+           j."push_reported_generation" AS "pushReportedGeneration",
+           (j."cancel_requested_at" IS NOT NULL AND EXISTS (
+              SELECT 1 FROM "project_integration_job_event" stop
+               WHERE stop."job_id" = j."id" AND stop."kind" = 'STOP_REQUESTED'
+                 AND stop."data"->>'cause' = ${SKIP_CHECK_STOP_CAUSE})) AS "stoppingToSkip",
            j."progress_protocol" AS "progressProtocol",
            EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
            EXTRACT(EPOCH FROM now() - j."output_moved_at")::float8 AS "outputIdleSeconds",
@@ -929,6 +964,8 @@ async function readInFlightJobsForProjects(
                  AND work."deleted_at" IS NULL AND work."finished_at" IS NULL)) AS "workHeld",
            runner_wait."wait" AS "runnerWait", runner_wait."name" AS "runnerWaitName",
            runner_wait."landsAutomatically" AS "runnerLandsAutomatically",
+           baseline_block."openItemId" AS "baselineBlockItemId",
+           baseline_block."ownerId" AS "baselineBlockOwnerId", baseline_block."heldCount" AS "baselineHeldCount",
            sync_block."jobId" AS "syncBlockJobId", sync_block."ownerId" AS "syncBlockOwnerId",
            sync_block."openItemId" AS "syncBlockOpenItemId", sync_block."taskTitle" AS "syncBlockTaskTitle",
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
@@ -965,8 +1002,9 @@ async function readInFlightJobsForProjects(
            AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
-      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
-      -- The claim reads the item, not a handling generation (T17), so this does too.
+      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
+      -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
+      -- claim. The claim reads the item, not a handling generation (T17), so this does too.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
@@ -980,8 +1018,20 @@ async function readInFlightJobsForProjects(
            AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM j."task_id"
+           AND NOT EXISTS (
+             SELECT 1 FROM "task" fix
+              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
+      LEFT JOIN LATERAL (
+        SELECT i."id" AS "openItemId", i."owner_id" AS "ownerId",
+               (SELECT count(DISTINCT held."task_id")::int FROM "project_integration_job" held
+                 WHERE held."state" = 'QUEUED' AND ${baselineHoldSql('held')}) AS "heldCount"
+          FROM "project_open_item" i
+          JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+         WHERE j."state" = 'QUEUED' AND ${baselineHoldSql('j')}
+         ORDER BY i."created_at", i."id" LIMIT 1
+      ) baseline_block ON true
       -- J1: one RUNNING job per repository and target ref, whichever project queued it.
       LEFT JOIN LATERAL (
         SELECT r."id" AS "jobId", r."owner_id" AS "ownerId", r."kind" AS "kind", rt."title" AS "taskTitle"
@@ -1398,6 +1448,9 @@ export async function stopInFlightJob(
     /** Who pressed, when a person or a conversation did; the platform otherwise. */
     actor?: IntegrationTimelineActorInput;
     reason?: string | null;
+    /** More of what the stop asked, kept on its line: a skip's `SkipCheckStopData`, which the
+     *  result transaction reads back when the runner answers (`queueSkippedLandingAfterStop`). */
+    data?: Record<string, unknown>;
   },
 ): Promise<InFlightStop> {
   const [job] = await readInFlightJobs(tx, input.projectId, input.jobId);
@@ -1453,7 +1506,7 @@ export async function stopInFlightJob(
       phase: job.phase,
       actor: input.actor ?? { type: 'PLATFORM' },
       reason: input.reason ?? null,
-      data: { cause: input.cause ?? 'STOP' },
+      data: { cause: input.cause ?? 'STOP', ...input.data },
       text: stopRequestedText(job.claim ?? null),
       at: input.now,
     });

@@ -55,6 +55,10 @@ object Translation {
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
 
+    /** Whether a door refused the owner's words because they could not be translated: nothing was recorded, and the card offers
+     * Retry and Send as written. */
+    fun refused(error: Throwable?): Boolean = (error as? io.orbitd.android.core.net.ApiError)?.code == FAILED_CODE
+
     fun isLanguage(value: String?): Boolean = LANGUAGES.any { it.first == value }
     fun name(lang: String): String = LANGUAGES.firstOrNull { it.first == lang }?.second ?: lang
     /** The name without its parenthesis: "Chinese (Simplified)" reads "Chinese". */
@@ -268,6 +272,13 @@ object Translation {
     }
 
     /**
+     * A reply's translation as it is drawn: none when the translator handed back the reply itself, spaces aside — the agent already
+     * wrote in the owner's language, so the reply is drawn as it is, with no foot (web `translationUnchanged`).
+     */
+    fun shownReply(value: JsonElement?, original: String): Reply? =
+        reply(value)?.takeUnless { it.text != null && it.text.trim() == original.trim() }
+
+    /**
      * A live `translation` event (seq 0, TranslationEventPayload) folded into the event it translates, under that event's payload as
      * `translation` — exactly as a replay would have delivered it. Null when it names no event this list holds (outside the window,
      * where its replay will carry it) or is not one.
@@ -293,8 +304,9 @@ object Translation {
         reply(fields["translation"])?.text?.trim()?.takeIf { it.isNotEmpty() } ?: fields.string("text")?.trim()?.takeIf { it.isNotEmpty() }
 
     /**
-     * An approval as its card shows it (3A): `input.questions`, `input.description` and `input.plan` in the owner's language where
-     * the server translated them (ApprovalTranslation), index for index; everything else as it is. Answers are keyed by what is shown,
+     * An approval as its card shows it (3A): `input.questions`, `input.description` and `input.plan` — and on Orbit's own cards
+     * ([ORBIT_CARDS]) their title, criteria, batch tasks, goal, reason and note — in the owner's language where the server translated
+     * them (ApprovalTranslation), index for index; everything else as it is. Answers are keyed by what is shown,
      * and the server maps a translated question and label back to the original before the engine reads them. A card the server could
      * not translate, or has not yet, is drawn as it came.
      */
@@ -325,7 +337,44 @@ object Translation {
             })
             JsonObject(next)
         })
+        if ((raw["toolName"] as? JsonPrimitive)?.contentOrNull in ORBIT_CARDS) orbitFields(input, t, shown)
         return JsonObject(raw + ("input" to JsonObject(shown)))
+    }
+
+    /** The Orbit cards whose agent-written fields beyond `description` the server translates (TRANSLATED_ORBIT_CARDS). */
+    val ORBIT_CARDS = setOf("orbit_task_create", "orbit_task_batch", "orbit_project_create", "orbit_blocker_resolve", "orbit_dag_change")
+
+    /** An Orbit card's fields as the card draws them (ApprovalTranslation, board 04-owner-cards.html part 2): each one the original
+     * has, in the owner's language where the server translated it. A batch's `tasks` go index for index with `input.tasks` and with
+     * `input.preview.tasks`, whose titles the review lists. `instructions` is not drawn on Android, so it is left as it came. */
+    private fun orbitFields(input: JsonObject, t: JsonObject, shown: MutableMap<String, JsonElement>) {
+        fun swap(into: MutableMap<String, JsonElement>, from: JsonObject, key: String, original: JsonObject) {
+            if (original[key] != null) from.string(key)?.takeIf { it.isNotEmpty() }?.let { into[key] = JsonPrimitive(it) }
+        }
+        fun swapped(original: JsonObject, from: JsonObject?, keys: List<String>): JsonObject {
+            if (from == null) return original
+            val next = original.toMutableMap()
+            keys.forEach { swap(next, from, it, original) }
+            return JsonObject(next)
+        }
+        listOf("title", "acceptanceCriteria", "goal", "reason", "note").forEach { swap(shown, t, it, input) }
+        val tasks = (t["tasks"] as? JsonArray)?.map { it as? JsonObject }
+        if (tasks != null) {
+            (input["tasks"] as? JsonArray)?.let { originals -> shown["tasks"] = JsonArray(originals.mapIndexed { i, task ->
+                (task as? JsonObject)?.let { swapped(it, tasks.getOrNull(i), listOf("title", "description", "acceptanceCriteria")) } ?: task
+            }) }
+            (input["preview"] as? JsonObject)?.let { preview ->
+                val previewTasks = preview["tasks"] as? JsonArray ?: return@let
+                shown["preview"] = JsonObject(preview + ("tasks" to JsonArray(previewTasks.mapIndexed { i, task ->
+                    (task as? JsonObject)?.let { swapped(it, tasks.getOrNull(i), listOf("title")) } ?: task
+                })))
+            }
+        }
+        val items = (t["acceptanceCriteriaItems"] as? JsonArray)?.map { it as? JsonObject }
+        val originals = input["acceptanceCriteriaItems"] as? JsonArray
+        if (items != null && originals != null) shown["acceptanceCriteriaItems"] = JsonArray(originals.mapIndexed { i, item ->
+            (item as? JsonObject)?.let { swapped(it, items.getOrNull(i), listOf("text", "verificationMethod")) } ?: item
+        })
     }
 
     private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull

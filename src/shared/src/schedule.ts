@@ -418,9 +418,7 @@ export const SCHEDULE_COPY = {
   runSession: {
     crumb: 'Scheduled',
     runOf: 'run of {date}',
-    strip:
-      'Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session '
-      + 'list',
+    strip: 'Scheduled run · planned {planned}, started {started} · access {access}',
     reported: 'Reported: {state}',
     agent: '{engine} agent',
     duration: '{minutes} min',
@@ -615,6 +613,21 @@ export interface ScheduleListResponse {
    * ended runs planned in the last 24 hours (the viewer's today, in any zone). The page needs no other read.
    */
   runs?: ScheduleTimelineRun[];
+  /**
+   * On the REST list only: the OPEN tasks that wait for their startWhen condition (docs/condition-triggers-design.md
+   * §9), which the page lists beside the WHEN schedules in "Waiting for a condition", or under Needs you when it
+   * cannot be read. A task whose condition has fired or ended is not waiting and is not here.
+   */
+  waitingTasks?: ScheduleWaitingTask[];
+}
+
+/** A task that starts when its condition holds, as the Scheduled page lists it (condition-triggers board ④). */
+export interface ScheduleWaitingTask {
+  id: string;
+  title: string;
+  workspaceId: string;
+  workspaceName: string | null;
+  condition: ScheduleConditionReading;
 }
 
 export interface ScheduleFindingView {
@@ -1774,7 +1787,7 @@ export function scheduleApprovalWaiting(input: {
 // A run's session
 // ---------------------------------------------------------------------------------------------------------------
 
-/** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+/** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
 export function scheduleRunStripText(
   run: Pick<ScheduleRunView, 'plannedAt' | 'startedAt'>,
   accessLevel: ScheduleAccessLevel,
@@ -1785,25 +1798,6 @@ export function scheduleRunStripText(
     started: run.startedAt ? localParts(new Date(run.startedAt), timezone).time : '—',
     access: C.access[accessLevel].label,
   });
-}
-
-/**
- * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
- * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
- */
-export function scheduleRunHeadText(input: {
-  state: string | null;
-  engine: string | null;
-  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
-  now: Date;
-}): string {
-  const { run } = input;
-  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
-  if (run.startedAt) {
-    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
-    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
-  }
-  return parts.filter(Boolean).join(C.separator);
 }
 
 /** "run of Nov 13". */

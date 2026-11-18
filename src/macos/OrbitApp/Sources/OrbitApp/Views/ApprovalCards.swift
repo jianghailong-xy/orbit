@@ -110,6 +110,8 @@ struct ApprovalHeader: View {
     let title: String
     let tone: Color
     var badge: String? = nil
+    /// A title that is a sentence the board draws whole ("Create task that starts on a condition?") wraps.
+    var titleLines: Int = 1
 
     var body: some View {
         HStack(spacing: 8) {
@@ -121,7 +123,8 @@ struct ApprovalHeader: View {
             Text(title)
                 .font(.orbitProse.bold())
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(titleLines)
+                .fixedSize(horizontal: false, vertical: titleLines > 1)
                 .layoutPriority(1)      // a long MCP tool name truncates; the ask never does
             Spacer(minLength: 4)
             if let badge {
@@ -201,6 +204,11 @@ struct ToolApprovalCard: View {
     /// of the transcript.
     @State private var descriptionOpen = false
     @State private var criteriaOpen = false
+    /// Orbit's own cards drawn in the owner's language flip back to what the agent wrote, whole card
+    /// at once, from the foot under the body (`Approvals.orbitCardFoot`).
+    @State private var showOriginal = false
+    /// What the Orbit cards below are built from: translated, unless flipped to the original.
+    private var orbitInput: JSONValue? { Approvals.orbitCardInput(approval, showOriginal: showOriginal) }
 
     private var rememberRules: [PermissionRule] {
         // An engine that drops remember rules (Harness) gets Allow / Deny only — asked of the session's
@@ -226,28 +234,40 @@ struct ToolApprovalCard: View {
     /// the card showed a tool name and nothing else — somebody was being asked to approve fifty
     /// tasks they could not see.
     private var batch: BatchApprovalPreview? {
-        guard Approvals.isTaskBatch(toolName: approval.toolName ?? ""), let input = approval.input
+        guard Approvals.isTaskBatch(toolName: approval.toolName ?? ""), let input = orbitInput
         else { return nil }
         return Approvals.batchPreview(from: input)
     }
     private var dag: DagApprovalPreview? {
-        guard Approvals.isDagChange(toolName: approval.toolName ?? ""), let input = approval.input
+        guard Approvals.isDagChange(toolName: approval.toolName ?? ""), let input = orbitInput
         else { return nil }
         return Approvals.dagPreview(from: input)
     }
     private var create: CreateApprovalPreview? {
-        approval.input.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
+        orbitInput.flatMap { Approvals.createPreview(toolName: approval.toolName ?? "", from: $0) }
     }
     /// Ending a project's blocker: the sentence the blocker was filed with — addressed to whoever
     /// reads this — over the agent's argument that it no longer applies. The two sentences are the
     /// decision; web renders the same pair under the same two captions.
     private var blocker: BlockerResolvePreview? {
-        approval.input.flatMap {
+        orbitInput.flatMap {
             Approvals.blockerResolvePreview(toolName: approval.toolName ?? "", from: $0)
         }
     }
     /// Changing a project's merge check: what it is now and what it would become. Without it the
     /// plain card drew no body at all — a yes to a command nobody could see.
+    private func checkLayer(_ preview: MergeCheckChangePreview, layer: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(layer == "landing" ? LandingCheckCopy.label : RunSettings.mergeCheck).font(.orbitSubtext)
+            Text(layer == "landing" ? LandingCheckCopy.hint : "Runs before merging into main.").font(.orbitLabel)
+            ForEach([false, true], id: \.self) { after in
+                Text(after ? "after" : "now").font(.orbitLabel).foregroundStyle(.secondary)
+                workspaceWriteBlock(preview.commandLine(layer, after: after))
+                Text(LandingCheckCopy.timeout + ": " + preview.budgetLine(layer, after: after)).font(.orbitLabel)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var mergeCheck: MergeCheckChangePreview? {
         approval.input.flatMap {
             Approvals.mergeCheckChangePreview(toolName: approval.toolName ?? "", from: $0)
@@ -381,12 +401,20 @@ struct ToolApprovalCard: View {
     }
 
     @ViewBuilder private var details: some View {
+        cardDetails
+        // A translated Orbit card's one foot: "Translated · Show original" flips the whole card.
+        TranslationFootView(parts: Approvals.orbitCardFoot(approval, showOriginal: showOriginal)) { _ in
+            showOriginal.toggle()
+        }
+    }
+
+    @ViewBuilder private var cardDetails: some View {
         if let batch {
             // No header of its own: the review's navigation bar already asks "Create 3 tasks?", and
             // the transcript's preview draws its own. The tasks are listed by level, each one push
             // from its page, which reads the full body the runner is about to send.
             BatchCreateReviewBody(batch: batch,
-                                  details: approval.input.map(Approvals.batchTaskDetails) ?? [],
+                                  details: orbitInput.map(Approvals.batchTaskDetails) ?? [],
                                   close: dismissReview)
         } else if let dag {
             ApprovalHeader(symbol: "point.3.connected.trianglepath.dotted",
@@ -403,13 +431,17 @@ struct ToolApprovalCard: View {
             // criteria is folded at the ceiling the owner-confirmation card already folds a
             // run's report at. Before this the whole of both fields was the card, and on a phone
             // the buttons sat three screens below the header.
-            ApprovalHeader(symbol: create.isProject ? "folder.badge.plus" : "checklist",
+            ApprovalHeader(symbol: create.isProject ? "folder.badge.plus"
+                               : create.startWhen != nil ? "gauge.with.dots.needle.33percent" : "checklist",
                            // A project has no count to lead with, so it keeps its name up here —
                            // the same split web draws.
                            title: create.isProject
                                ? "Create project “\(create.title)”?"
-                               : Approvals.createHeading,
-                           tone: .orange, badge: create.isProject ? "new project" : "new task")
+                               : create.startWhen != nil ? ConditionCopy.createTaskTitle : Approvals.createHeading,
+                           tone: .orange,
+                           // A condition's card says what it is in its title, which needs the row (board frame 2).
+                           badge: create.isProject ? "new project" : create.startWhen != nil ? nil : "new task",
+                           titleLines: create.startWhen != nil ? 2 : 1)
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(create.impactRows) { BatchImpactRowView(row: $0) }
                 if !create.detail.isEmpty {
@@ -419,6 +451,11 @@ struct ToolApprovalCard: View {
                 if !create.titleLine.isEmpty {
                     Text(create.titleLine).font(.orbitProse)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // A task that starts on a condition (condition-triggers board frame 2): what it waits for, how it
+                // is checked and the command, what it reads today, and what happens if it never holds.
+                if let startWhen = create.startWhen {
+                    StartWhenLinesView(lines: startWhen).padding(.vertical, 4)
                 }
                 descriptionFold(create)
                 criteriaBlock(create)
@@ -479,18 +516,17 @@ struct ToolApprovalCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(mergeCheck.projectLine).font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(MergeCheckChangePreview.note).font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("now").font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                workspaceWriteBlock(mergeCheck.currentLine)
-                Text("after").font(.orbitLabel).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                workspaceWriteBlock(mergeCheck.nextLine)
-                if let timeout = mergeCheck.timeoutLine {
-                    Text(timeout).font(.orbitLabel).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 16) {
+                        checkLayer(mergeCheck, layer: "landing")
+                        checkLayer(mergeCheck, layer: "merge")
+                    }
+                    VStack(alignment: .leading, spacing: 16) {
+                        checkLayer(mergeCheck, layer: "landing")
+                        checkLayer(mergeCheck, layer: "merge")
+                    }
                 }
+                Text(LandingCheckCopy.applies).font(.orbitLabel).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if let deleting {
@@ -1242,7 +1278,18 @@ struct EvidenceRestartCard: View {
 /// was checked for them. Every visible string is a field of the row or a count of one.
 private struct EvidenceDecisionFacts: View {
     let console: ConsoleModel
-    let row: EvidenceDecisionRow
+    /// The row as the read published it; `row` below is what the card draws.
+    let source: EvidenceDecisionRow
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the claim and gaps flip back to the submitter's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
+    private var row: EvidenceDecisionRow { source.shown(owner: owner, showOriginal: showOriginal) }
+
+    init(console: ConsoleModel, row: EvidenceDecisionRow) {
+        self.console = console
+        self.source = row
+    }
 
     @State private var claimOpen = false
     @State private var gapsOpen = false
@@ -1260,6 +1307,16 @@ private struct EvidenceDecisionFacts: View {
             Text(row.title)
                 .font(.orbitLabel.bold()).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            TranslationFootView(parts: source.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                showOriginal.toggle()
+            }
+            // A send-back whose reason could not be translated was not sent (decision 2A).
+            if let note = console.evidenceNotesRefusedUntranslated[source.id] {
+                TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                    Task { await console.decideEvidence(source, .sendBack, note: note,
+                                                        sendAsWritten: action == .sendAsWritten) }
+                }
+            }
             standardBlock
             // What the evidence is, right under what it is measured against, and only when the version
             // cites a file: a card with none is the card it has always been, and reads nothing more.
@@ -1479,6 +1536,10 @@ private struct OwnerConfirmationCardView: View {
 
     private var standing: OwnerConfirmationStanding { console.ownerStanding(taskID, requestID) }
     private var staleDetailLabel: String { staleDetailOpen ? "Hide details" : "Details" }
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the report and the review flip back to what was written, together.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
 
     /// The answers so far for the review this card draws now, and the way to change one.
     private func answers(_ review: OwnerConfirmationReviewView?) -> Binding<[String: ReviewChoice]> {
@@ -1509,7 +1570,12 @@ private struct OwnerConfirmationCardView: View {
             if let view = console.ownerConfirmation {
                 lead(view)
             }
-            OwnerConfirmationReviewBarView(review: returned.review, place: .card)
+            TranslationFootView(parts: OwnerCardTranslations.confirmationFoot(
+                report: nil, review: returned.review, owner: owner, showOriginal: showOriginal)) { _ in
+                showOriginal.toggle()
+            }
+            OwnerConfirmationReviewBarView(review: returned.review.shown(owner: owner, showOriginal: showOriginal),
+                                           place: .card)
         } actions: {
             EmptyView()
         }
@@ -1528,12 +1594,31 @@ private struct OwnerConfirmationCardView: View {
 
             if let view = console.ownerConfirmation {
                 lead(view)
+                // Translated · Show original: the run's report and the review flip together.
+                TranslationFootView(parts: OwnerCardTranslations.confirmationFoot(
+                    report: standing.waiting?.report, review: standing.waiting?.review,
+                    owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
                 OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
-                                       report: standing.waiting?.report, foldsCriteria: true)
+                                       report: standing.waiting?.report?.shown(owner: owner, showOriginal: showOriginal),
+                                       foldsCriteria: true)
                 // The reviewer's box, between what the agent said and what confirming sets off
                 // (contract §6 H1): where the review stands, and its questions for the owner.
+                // Drawn translated; answers are keyed by the record's own keys, the same either way.
                 if let review = standing.waiting?.review {
-                    OwnerConfirmationReviewBarView(review: review, place: .card, choices: answers(review))
+                    OwnerConfirmationReviewBarView(review: review.shown(owner: owner, showOriginal: showOriginal),
+                                                   place: .card, choices: answers(review))
+                }
+                // The owner's words on that answer could not be translated, so nothing was recorded.
+                if let refused = console.ownerDecisionsRefusedUntranslated[requestID] {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        Task {
+                            await console.decideOwnerConfirmation(refused.waiting, refused.decision,
+                                                                  note: refused.note, review: refused.review,
+                                                                  sendAsWritten: action == .sendAsWritten)
+                        }
+                    }
                 }
                 // Right above the buttons: the card is taller than a phone's screen, and this is
                 // what is in view at the press. Only while this card's report is the one waiting —
@@ -2513,6 +2598,10 @@ private struct CriteriaDecisionCard: View {
     var asked: PendingCriteriaDecisionRow? = nil
     @State private var deciding = false
     @State private var proposalOpen = false
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the proposed criteria flip back to the proposer's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
 
     private var standing: CriteriaDecisionStanding { console.criteriaStanding(intentID) }
 
@@ -2555,7 +2644,11 @@ private struct CriteriaDecisionCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let row = standing.row {
-                proposal(row)
+                // Drawn translated; an answer still names the proposal by its own digest.
+                proposal(row.shown(owner: owner, showOriginal: showOriginal))
+                TranslationFootView(parts: row.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
                 Text(CriteriaDecisions.nothingIsOnHold)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3029,16 +3122,21 @@ private struct AcceptanceConfirmationReceiptCard: View {
 private struct StartProjectCardView: View {
     let console: ConsoleModel
     let itemID: String
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the coordinator's why flips back to its own words.
+    @State private var showOriginal = false
 
     var body: some View {
         let standing = console.startStanding(itemID)
+        let owner = OwnerCardTranslations.ownerLanguage(app?.user)
         if let row = console.startRequestRow, row.itemId == itemID,
            let request = row.startRequest {
             StartProjectCard(
                 projectID: console.projectID ?? "",
                 projectTitle: console.projectTitle,
                 askedAt: row.waitingSince,
-                request: request,
+                // Only `why` is translated; the digests a press sends are the request's own.
+                request: row.shownStartRequest(owner: owner, showOriginal: showOriginal) ?? request,
                 criteria: console.projectCriteria.sorted { $0.ordinal < $1.ordinal },
                 plan: StartProject.planView(graph: console.projectGraph,
                                             fallbackCount: console.projectTaskCount),
@@ -3058,7 +3156,9 @@ private struct StartProjectCardView: View {
                 onChatAbout: {
                     console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
                 },
-                graph: console.projectGraph)
+                graph: console.projectGraph,
+                translationFoot: row.translationFoot(owner: owner, showOriginal: showOriginal),
+                onFlipTranslation: { showOriginal.toggle() })
         } else {
             VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
                 ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
@@ -3082,13 +3182,15 @@ private struct StartProjectCardView: View {
 /// card with the new request in it. What it draws is `ProjectDoneCard`, which the project page's
 /// own Review and Record as done… open too.
 ///
-/// Drawn whole where it arrived, not as a preview that opens a review: the card is the question
-/// and its receipt is the answer left in the conversation (mock ⑤ ①–③, the browser's
-/// `SessionProjectSettlementCard`), so neither hides behind a press. Clearing the review target
-/// is what puts `ApprovalReviewLayout` on its whole-card path.
+/// In the conversation the question is a small preview — its heading, the project and its tally —
+/// and a press opens the whole card in the review sheet, its answers pinned at the sheet's foot
+/// (the owner, 2026-11-17: six criteria drawn whole took screens of the transcript). The receipt
+/// is short and stays whole where it arrived: it is the answer left in the conversation.
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
     @Environment(AppModel.self) private var model
+    /// Settings › Translation: the coordinator's judgment and gaps flip back to its own words.
+    @State private var showOriginal = false
     @Environment(\.opensPagesOverConsole) private var overConsole
     @State private var doneCheck: ProjectDoneCheck?
     @State private var checkError: String?
@@ -3121,9 +3223,11 @@ private struct ProjectDoneCardView: View {
     var body: some View {
         if let subject = console.projectDone {
             let row = console.doneRequestRow
+            let owner = OwnerCardTranslations.ownerLanguage(model.user)
             ProjectDoneCard(
                 subject: subject,
-                request: row?.doneRequest,
+                // Drawn translated; Record as done sends the console's own request, as written.
+                request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),
                 askedAt: row?.waitingSince,
                 confirmedAt: console.acceptanceConfirmation?.confirmation?.confirmedAt,
                 openItems: ProjectDone.openItemsCount(console.openItems),
@@ -3136,8 +3240,11 @@ private struct ProjectDoneCardView: View {
                 onRecord: { await console.recordProjectDone() },
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() },
-                followUps: followUps)
-                .environment(\.approvalReviewTarget, nil)
+                followUps: followUps,
+                translationFoot: row?.translationFoot(owner: owner, showOriginal: showOriginal) ?? [],
+                onFlipTranslation: { showOriginal.toggle() },
+                notYetRefused: console.doneDeclineRefusedUntranslated,
+                onNotYetAsWritten: row == nil ? nil : { await console.declineDoneRequest(note: $0, sendAsWritten: true) })
                 .task(id: row?.itemId) {
                     guard row == nil else { return }
                     await rereadCheck()
@@ -3217,6 +3324,10 @@ struct StartProjectCard: View {
     /// Started in this review: the settings the start recorded, drawn as one line in place of the
     /// rows that chose them (`RunSettingsSummaryText`) — nil until the read that follows has them.
     var recordSettings: ProjectStartRecord? = nil
+    /// Settings › Translation: "Translated · Show original" under the coordinator's why, and the
+    /// press that flips it. Empty where the request is not translated.
+    var translationFoot: [SessionTranslation.FootPart] = []
+    var onFlipTranslation: () -> Void = {}
     @Environment(\.dismissApprovalReview) private var dismissReview
     @Environment(\.reviewRecord) private var record
     @State private var starting = false
@@ -3311,6 +3422,7 @@ struct StartProjectCard: View {
                     Label(StartProject.coordinator, systemImage: "bubble.left.fill")
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     ClampedText(text: request.why, font: .orbitSubtext, lineLimit: whyOpen ? nil : 3) { whyCut = $0 }
+                    TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() }
                     if whyOpen || whyCut {
                         Button {
                             PlatformHaptics.tap()
@@ -3384,6 +3496,27 @@ struct StartProjectCard: View {
                 mainBranchRow(upstream, editable: editable)
             }
             Divider()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(LandingCheckCopy.label).font(.orbitProse)
+                if draft.line == .main {
+                    Text(LandingCheckCopy.main).font(.orbitLabel).foregroundStyle(.secondary)
+                } else {
+                    TextField(LandingCheckCopy.commandPlaceholder, text: Binding(
+                        get: { draft.landingCheckCommand }, set: { value in update { $0.landingCheckCommand = value } }), axis: .vertical)
+                        .font(.orbitMono).disabled(!editable)
+                    Text(LandingCheckCopy.hint).font(.orbitLabel).foregroundStyle(.secondary)
+                    if draft.landingCheckCommand.isEmpty {
+                        Text(LandingCheckCopy.inheritedCommand(draft.mergeCheckCommand.isEmpty ? nil : draft.mergeCheckCommand)).font(.orbitLabel)
+                    }
+                    TextField(LandingCheckCopy.timeoutPlaceholder, value: Binding(
+                        get: { draft.landingCheckTimeoutSeconds }, set: { value in update { $0.landingCheckTimeoutSeconds = value } }), format: .number)
+                        .accessibilityLabel(LandingCheckCopy.timeout).disabled(!editable)
+                    Text(LandingCheckCopy.timeoutHint).font(.orbitLabel)
+                    if draft.landingCheckTimeoutSeconds == nil {
+                        Text(LandingCheckCopy.inheritedTimeout(draft.mergeCheckTimeoutSeconds)).font(.orbitLabel)
+                    }
+                }
+            }.startRow()
             mergeCheckRow(editable: editable)
             Divider()
             atMostRow(editable: editable)
@@ -4112,6 +4245,10 @@ private struct CoordinatorQuestionCardView: View {
     private var draft: CoordinatorReviewDraft { drafts.coordinator(itemID) }
     @State private var sending = false
     private var standing: CoordinatorQuestionStanding { console.questionStanding(itemID) }
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the whole card flips back to the coordinator's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
 
     var body: some View {
         // Answered — here, which the console draws from the press until the read has it, or at
@@ -4139,7 +4276,7 @@ private struct CoordinatorQuestionCardView: View {
                 .help(CoordinatorQuestions.provenanceTitle)
 
             if case .open(let row) = standing, let question = row.question {
-                asked(row, question)
+                asked(row, row.shownQuestion(owner: owner, showOriginal: showOriginal) ?? question)
             } else if case .unread = standing {
                 Text(CoordinatorQuestions.unreadable)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -4190,6 +4327,10 @@ private struct CoordinatorQuestionCardView: View {
             // it (`CoordinatorQuestionCard`), so bullets and emphasis do not arrive raw.
             MarkdownView(source: question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Translated · Show original (board 04 frame 2, mark A): one switch for the whole card.
+            TranslationFootView(parts: row.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                showOriginal.toggle()
+            }
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(index: index, option: option,
                           recommended: index == question.recommendedOption)
@@ -4211,10 +4352,20 @@ private struct CoordinatorQuestionCardView: View {
                 .padding(.horizontal, 10).padding(.vertical, 8)
                 .background(Color.blue.opacity(0.08),
                             in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+            // Frame 4, mark B: the owner's words could not be translated, so nothing was sent.
+            if console.answersRefusedUntranslated.contains(row.itemId) {
+                TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                    if let original = row.question {
+                        send(row, original, sendAsWritten: action == .sendAsWritten)
+                    }
+                }
+            }
             // What it holds up and what happens if nobody answers, in the server's own words — the
             // same line the project page's row carries, so the two cannot say different things.
-            if !row.detailLine.isEmpty {
-                Text(row.detailLine)
+            // Drawn translated, the server's line built from the translated ifUnanswered.
+            let detailLine = row.shownDetailLine(owner: owner, showOriginal: showOriginal)
+            if !detailLine.isEmpty {
+                Text(detailLine)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -4277,13 +4428,14 @@ private struct CoordinatorQuestionCardView: View {
     /// cannot send an answer to a question that is no longer open. A press the door takes leaves the
     /// card as the record of the answer (`ConsoleModel.answerQuestion`); a refusal leaves it
     /// standing, with the reason in the console's status line.
-    private func send(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion) {
+    private func send(_ row: ProjectOpenItemRow, _ question: CoordinatorQuestion, sendAsWritten: Bool = false) {
         guard !sending, CoordinatorQuestions.sendable(question: question, chosen: draft.chosen, text: draft.text)
         else { return }
         PlatformHaptics.tap()
         sending = true
         Task {
-            _ = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text)
+            _ = await console.answerQuestion(row, chosen: draft.chosen, text: draft.text,
+                                             sendAsWritten: sendAsWritten)
             sending = false
         }
     }
@@ -4311,7 +4463,7 @@ struct CoordinatorQuestionRecordView: View {
     @Environment(\.inApprovalReview) private var inReview
     @Environment(\.approvalReviewTarget) private var target
     @Environment(\.openApprovalReview) private var openReview
-    let record: ProjectClosedQuestion
+    let source: ProjectClosedQuestion
     /// The turn handing the answer over still waits on the queue behind the coordinator's turn.
     var queued = false
     /// What to say when that turn's delivery went unconfirmed.
@@ -4319,6 +4471,19 @@ struct CoordinatorQuestionRecordView: View {
     /// The words that turn told the coordinator, for the sheet.
     var told: OwnerAnswerTold? = nil
     @State private var toldOpen = false
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the record flips back to the coordinator's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
+    /// The record as drawn: the question in the owner's language where it was translated.
+    private var record: ProjectClosedQuestion { source.shown(owner: owner, showOriginal: showOriginal) }
+
+    init(record: ProjectClosedQuestion, queued: Bool = false, notice: String? = nil, told: OwnerAnswerTold? = nil) {
+        self.source = record
+        self.queued = queued
+        self.notice = notice
+        self.told = told
+    }
 
     var body: some View {
         if inReview {
@@ -4442,6 +4607,9 @@ struct CoordinatorQuestionRecordView: View {
             }
             MarkdownView(source: record.question.question).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            TranslationFootView(parts: source.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                showOriginal.toggle()
+            }
             ForEach(Array(record.question.options.enumerated()), id: \.offset) { index, option in
                 let chosen = CoordinatorQuestions.chosenOption(record) == index
                 optionRow(label: option.label, why: option.description,
@@ -4870,6 +5038,14 @@ private struct OwnerItemCardView: View {
                 }
             }
         }
+        if row.baseline != nil {
+            DisclosureGroup(LandingCheckCopy.viewHeld) {
+                ForEach(row.heldTaskIds, id: \.self) { id in
+                    Link(id, destination: URL(string: "orbit-task:\(id)")!).font(.orbitLabel)
+                }
+            }
+        }
+
     }
 
     /// The rerun or observation handling the item while it is in flight (§4.7 H1, §10.8) — the

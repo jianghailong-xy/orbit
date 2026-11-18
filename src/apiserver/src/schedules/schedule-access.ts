@@ -15,19 +15,16 @@
  * before every edit instead of allowing those in the worktree. The table this gives, and what was measured on the
  * real CLIs, is §6.2's and §12's in the design.
  *
- * Claude Code is the exception for CHECK_ONLY: it runs in Default, not Plan. Its headless Plan never permission-checks
- * Bash, so `touch` and `date > file` ran there (measured on 2.1.325). In Default, with the lists below, its own
- * read-only check still runs `git log`, `ls`, `cat` and `grep` with no ask, and every other shell command asks: the
- * ordinary approval card, which Allow once, Always allow (a workspace rule) or Deny answers, as the owner ruled on
- * 2026-11-15. Nothing but a shell command may ask (`checkOnlyRefusesApproval`): the file tools and the Orbit CLI are
- * denied outright, so is every Orbit tool outside a short allow list (`bg_run` would start a shell outside Claude's
- * check, and the runner answers Claude's prompt for an Orbit tool itself, allowing it outside Plan), and any other
- * tool that asks is answered DENY by the server before it becomes a card. Of the workspace's "Always allow" rules only
+ * Claude Code is the exception for CHECK_ONLY: its level resolves to Default, not Plan, since its headless Plan never
+ * permission-checks Bash (`touch` and `date > file` ran there, measured on 2.1.325). Every run on Claude Code, whatever
+ * its level, is then claimed in Auto (`scheduleRunPermissionMode`, owner 2026-11-18). What a check may not do is
+ * denied rather than asked: the file tools and the Orbit CLI outright, every Orbit tool outside a short allow list
+ * (`bg_run` would start a shell outside Claude's check), and any tool but a shell command that still asks is answered
+ * DENY by the server before it becomes a card (`checkOnlyRefusesApproval`). Of the workspace's "Always allow" rules only
  * exact commands a scheduled run's card approved are matched by the server (`checkOnlyRuleCoversApproval`).
- * A run is held to the level it started with (`runAccessLevel`). The runner closes the rest for a claim with `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the
- * CLI denied by its own path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10). Only a runner
- * that advertises CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 is handed Default; any other runs the check in Don't Ask with
- * S2b's lists (`scheduleRunPermissionMode`), where nothing asks.
+ * A run is held to the level it started with (`runAccessLevel`). The runner closes the rest for a claim with
+ * `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the CLI denied by its own
+ * path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10).
  */
 import {
   AgentProvider,
@@ -141,7 +138,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_now', 'mcp__orbit__schedule_run_stop', 'mcp__orbit__schedule_wakeup',
   'mcp__orbit__session_await', 'mcp__orbit__session_complete', 'mcp__orbit__session_create',
   'mcp__orbit__session_delete', 'mcp__orbit__session_end', 'mcp__orbit__session_interrupt',
-  'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_reply', 'mcp__orbit__session_send',
+  'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_move', 'mcp__orbit__session_reply',
+  'mcp__orbit__session_send',
   'mcp__orbit__task_attribution', 'mcp__orbit__task_await', 'mcp__orbit__task_batch_pin', 'mcp__orbit__task_comment',
   'mcp__orbit__task_confirmation_return', 'mcp__orbit__task_confirmation_review', 'mcp__orbit__task_create',
   'mcp__orbit__task_create_batch', 'mcp__orbit__task_delete', 'mcp__orbit__task_dependency_add',
@@ -191,53 +189,21 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
 ];
 
 /**
- * S2b's deny list as it landed, plus CHECK_ONLY_CLAUDE_DENIED_BUILTINS (narrower, never wider): what a CHECK_ONLY run on
- * Claude Code gets in Don't Ask, on a runner that does not advertise CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1. Don't Ask
- * runs nothing an allow rule does not name and asks nobody, so the Orbit tools outside the allow list need no name here.
- */
-export const CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS: readonly string[] = [
-  'Edit',
-  'Write',
-  'NotebookEdit',
-  'Bash(*/orbit *)',
-  "Bash('*/orbit' *)",
-  ...CHECK_ONLY_CLAUDE_DENIED_BUILTINS,
-];
-
-/**
- * The capability a runner advertises when it closes what only the runner can for a CHECK_ONLY run on Claude Code that
- * may ask (runner-go schedule_check_only.go): every Orbit tool prompt refused, no Orbit CLI allow rule and the CLI
- * denied by its own path, and no settings file of the checkout's or the user's loaded. Only such a runner is handed
- * Default; any other runs the check in Don't Ask with S2b's lists, where nothing asks and nothing unlisted runs.
- */
-export const CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 = 'claude-scheduled-check-only-asks/v1';
-
-/** Whether a CHECK_ONLY run on Claude Code may ask on this runner (its advertised capabilities). */
-export function checkOnlyAsksOn(capabilities: readonly string[] | null | undefined): boolean {
-  return (capabilities ?? []).includes(CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1);
-}
-
-/**
- * The permission mode the claim hands the runner: the session's own, except that
- *  - a CHECK_ONLY run on Claude Code claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't
- *    Ask, as S2b ran it;
- *  - an OPEN_PR or LAND run on Claude Code runs in Auto, so that the routine commands an unattended run needs
- *    (`git fetch`, `npm view`, its tests, `git commit`) do not each wait on a card: measured 2026-11-17, a LAND run
- *    waited 278 minutes on them and timed out. The level's denials still hold: Claude's --disallowedTools and the
- *    server door (scheduleRunDeniesApproval) refuse them in every mode. Claude only, as owner-ruled 2026-11-18: no
- *    other engine's Auto has a classifier (permissionSemantics.ts). A model with no Auto runs as Default
- *    (normalizeBuiltinPermissionMode). Interim, until per-schedule grants (docs/scheduled-run-grants-design.md).
+ * The permission mode the claim hands the runner, and a scheduled run's SubAgents get: Auto for every run on Claude
+ * Code, whatever its level (owner 2026-11-18: "scheduled runs use Auto", all schedules), so that no command an
+ * unattended run needs waits on a card nobody is there to answer. Measured 2026-11-17, a LAND run waited 278 minutes
+ * on them and timed out; on 2026-11-18 an OPEN_PR run's SubAgent, which then took the session's stored mode, waited
+ * 2 hours on one. The level's denials still hold: Claude's --disallowedTools (scheduleRunDisallowedTools) and the
+ * server doors (scheduleRunDeniesApproval, checkOnlyRefusesApproval) refuse them in every mode. Claude only: no other
+ * engine's Auto has a classifier (permissionSemantics.ts), so every other engine keeps the session's mode. A model
+ * with no Auto runs as Default (normalizeBuiltinPermissionMode).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,
   accessLevel: AccessLevel | null | undefined,
   provider: string | null | undefined,
-  runnerCapabilities: readonly string[] | null | undefined,
 ): PermissionMode {
-  if (claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities)) return PermissionMode.DONT_ASK;
-  if ((accessLevel === 'OPEN_PR' || accessLevel === 'LAND') && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE) {
-    return PermissionMode.AUTO;
-  }
+  if (accessLevel && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE) return PermissionMode.AUTO;
   return mode;
 }
 
@@ -389,15 +355,10 @@ export function scheduleRunDisallowedTools(
   base: string[],
   accessLevel: AccessLevel | null | undefined,
   provider: string | null | undefined,
-  runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
   if (accessLevel === 'OPEN_PR' || accessLevel === 'LAND') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
-  if (claudeCheckOnly(accessLevel, provider)) {
-    const own = checkOnlyAsksOn(runnerCapabilities)
-      ? CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS
-      : CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS;
-    return [...new Set([...base, ...own])];
-  }
+  // The full list on every runner: Auto runs what it is not denied, so every Orbit write is denied by name.
+  if (claudeCheckOnly(accessLevel, provider)) return [...new Set([...base, ...CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS])];
   return base;
 }
 

@@ -132,6 +132,7 @@ async function sweepOver(rows: Candidate[], room: Record<string, number>): Promi
   internals.rearmEndedAutoRuns = async () => undefined;
   internals.quotaGate = async () => ({ blocked: new Map(), blind: new Set() });
   internals.autoRunHoldOff = async () => new Set();
+  internals.signedOutGate = async () => new Map();
   internals.recordListEvent = async () => undefined;
   internals.materialisationBudget = async () => ({
     runner: new Map(),

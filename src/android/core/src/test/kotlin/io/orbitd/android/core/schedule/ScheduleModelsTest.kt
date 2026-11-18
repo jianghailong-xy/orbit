@@ -6,7 +6,10 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.net.NetworkException
+import io.orbitd.android.core.protocol.ProtocolException
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
@@ -153,6 +156,15 @@ class ScheduleModelsTest {
         assertEquals(409, failure.status)
         assertEquals("no", ScheduleApi.refusal(failure))
         assertEquals(ScheduleApi.UNREACHABLE, ScheduleApi.refusal(IllegalStateException()))
+    }
+
+    @Test fun aFailedPressSaysWhatWentWrong() {
+        assertEquals("Couldn't reach Orbit. Try again.", ScheduleApi.refusal(NetworkException()))
+        assertEquals("Orbit answered, but this version of the app couldn't read the reply. Update the app; the card shows what Orbit did.",
+            ScheduleApi.refusal(ProtocolException()))
+        assertEquals(ScheduleApi.UNREADABLE, ScheduleApi.refusal(SerializationException("bad")))
+        assertEquals("Orbit couldn't do this (error 502). Try again.", ScheduleApi.refusal(ApiError.parse(502, "<html>".encodeToByteArray())))
+        assertEquals("You're signed out. Sign in and try again.", ScheduleApi.refusal(ApiError.parse(401, "{}".encodeToByteArray())))
     }
 
     @Test fun anOlderServersListIsA404() = runTest {

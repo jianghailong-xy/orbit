@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.projects.CoordinatorChange
 import io.orbitd.android.projects.CoordinatorChangeSheet
@@ -159,7 +161,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
             if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         }
-        ExceptionFacts(card.key, row)
+        ExceptionFacts(card.key, row, open)
         // §4.7 H1: what is handling it while that runs — a rerun, or an observation of the line — and the reason it was asked for.
         ExceptionCards.handlingLine(row, main = main)?.let { line ->
             Column(Modifier.testTag("${card.key}:handling"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -214,7 +216,7 @@ private fun Weighted(tier: ExceptionCards.PressTier, label: String, enabled: Boo
 /** What happened, in the rows of the item's payload — or, for a row whose payload this build cannot read, what escalated and the
  * fact that opened it. The failed check's log hangs under the Check row it belongs to. */
 @Composable
-private fun ExceptionFacts(key: String, row: JsonObject) {
+private fun ExceptionFacts(key: String, row: JsonObject, open: (String) -> Unit) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     when (val facts = ExceptionCards.facts(row)) {
         is ExceptionCards.Facts.DetailLine -> Column(Modifier.testTag("$key:facts"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -228,6 +230,12 @@ private fun ExceptionFacts(key: String, row: JsonObject) {
             }
         }
     }
+    if (row.obj("baseline") != null) {
+        var heldOpen by remember { mutableStateOf(false) }
+        TextButton(onClick = { heldOpen = !heldOpen }) { Text(LandingCheckCopy.viewHeld) }
+        if (heldOpen) row.strings("heldTaskIds").forEach { id -> TextButton(onClick = { open("orbit-task:$id") }) { Text(id) } }
+    }
+
 }
 
 /** One fact: its label, and its value in the faces the model gave each run — a command in mono, a check's verdict in red. */
@@ -355,6 +363,8 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
         ExceptionCards.WorkspaceFacts.of(workspaces?.firstOrNull { it.text("id") == parsed.workspaceId }) else null
     val reading = ExceptionCards.readCoordinatorCause(row, parsed, workspace)
     val drawn = ExceptionCards.drawn(row, mergeCard)
+    val owner = LocalTranslation.current.cardLanguage
+    var showOriginalNote by remember(key) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var repairing by remember(key) { mutableStateOf(false) }
     var repairFailed by remember(key) { mutableStateOf<String?>(null) }
@@ -395,6 +405,18 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
                     append(sentence.substring(at + 1 + name.length))
                 }
             }, Modifier.testTag("$key:who:status"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            // The coordinator's hand-over note under its caption, in the owner's language with its own flip while a usable translation exists.
+            if (reading.cause == ExceptionCards.CoordinatorCause.HANDED_OVER) {
+                OwnerCardTranslation.handoverNote(row, owner, showOriginalNote)?.let { note ->
+                    Column(Modifier.testTag("$key:who:handover"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(ExceptionCards.handoverNoteCaption, Modifier.testTag("$key:who:handover:caption"),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold), color = secondary)
+                        Text(note, Modifier.testTag("$key:who:handover:note"), style = MaterialTheme.typography.bodySmall)
+                        if (OwnerCardTranslation.handoverNoteTranslates(row, owner))
+                            CardTranslationFoot(showOriginalNote, { showOriginalNote = !showOriginalNote }, Modifier.testTag("$key:who:handover:foot"))
+                    }
+                }
+            }
             ExceptionCards.coordinatorRowPresses(reading).forEach { press ->
                 val tag = "$key:who:${press.kind.name}"
                 when (press.kind) {

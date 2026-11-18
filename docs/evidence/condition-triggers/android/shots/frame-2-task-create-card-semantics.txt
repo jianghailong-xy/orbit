@@ -1,0 +1,92 @@
+Printing with useUnmergedTree = 'true'
+Node #803 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #855 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #856 at (l=16.0, t=16.0, r=395.0, b=875.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #857 at (l=16.0, t=16.0, r=395.0, b=606.0)px, Tag: 'approval:ap-pool'
+         IsContainer = 'true'
+          |-Node #859 at (l=32.0, t=32.0, r=322.0, b=52.0)px
+          | Text = '[Create task that starts on a condition?]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #861 at (l=32.0, t=60.0, r=86.0, b=73.0)px
+          | Text = '[From Orbit]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #862 at (l=32.0, t=81.0, r=87.0, b=96.0)px
+          | Text = '[PENDING]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #863 at (l=32.0, t=104.0, r=235.0, b=124.0)px
+          | Text = '[Set kubernetes pool to 3 copies]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #864 at (l=32.0, t=136.0, r=379.0, b=300.0)px, Tag: 'start-when-lines'
+          |  |-Node #866 at (l=32.0, t=136.0, r=124.0, b=154.0)px
+          |  | Text = '[Starts when]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #868 at (l=136.0, t=136.0, r=284.0, b=154.0)px
+          |  | Text = '[3 or more OSDs are in]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #869 at (l=136.0, t=158.0, r=379.0, b=197.0)px
+          |  | Text = '[Once. Checked every 5 min on workstation-gpu, no model.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #870 at (l=136.0, t=201.0, r=379.0, b=248.0)px
+          |  | Focused = 'false'
+          |  | Actions = [RequestFocus]
+          |  |  |-Node #872 at (l=146.0, t=208.0, r=369.0, b=241.0)px, Tag: 'condition-command'
+          |  |    Text = '[ceph osd stat -f json | jq .num_in_osds]'
+          |  |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #874 at (l=32.0, t=256.0, r=124.0, b=274.0)px
+          |  | Text = '[Today]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #876 at (l=136.0, t=256.0, r=221.0, b=274.0)px
+          |  | Text = '[2 in. Not yet.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #878 at (l=32.0, t=282.0, r=124.0, b=300.0)px
+          |  | Text = '[If never]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #880 at (l=136.0, t=282.0, r=358.0, b=300.0)px
+          |    Text = '[Asks you after 30 days of waiting]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #882 at (l=32.0, t=312.0, r=148.0, b=327.0)px
+          | Text = '[Completion Criterion]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #883 at (l=32.0, t=331.0, r=194.0, b=351.0)px
+          | Focused = 'false'
+          | Actions = [RequestFocus]
+          |  |-Node #886 at (l=32.0, t=331.0, r=194.0, b=351.0)px
+          |    Text = '[OWNER_CONFIRMED]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #887 at (l=32.0, t=363.0, r=189.0, b=403.0)px
+          | Focused = 'false'
+          | Role = 'Button'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |  |-Node #889 at (l=44.0, t=371.0, r=177.0, b=395.0)px
+          |    Text = '[Show Description]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #891 at (l=32.0, t=415.0, r=96.0, b=430.0)px
+          | Text = '[Done when]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #892 at (l=32.0, t=434.0, r=379.0, b=478.0)px
+          | Focused = 'false'
+          | Actions = [RequestFocus]
+          |  |-Node #895 at (l=32.0, t=434.0, r=379.0, b=478.0)px
+          |    Text = '[The kubernetes pool reads size 3 after the owner approved the change.]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #896 at (l=32.0, t=486.0, r=379.0, b=534.0)px, Tag: 'approval:ap-pool:CREATE_TASK'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |  |-Node #898 at (l=162.0, t=498.0, r=249.0, b=522.0)px
+          |    Text = '[Create task]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #899 at (l=32.0, t=542.0, r=379.0, b=590.0)px, Tag: 'approval:ap-pool:CHAT'
+            Focused = 'false'
+            Role = 'Button'
+            Actions = [OnClick, RequestFocus]
+            MergeDescendants = 'true'
+             |-Node #901 at (l=148.0, t=554.0, r=263.0, b=578.0)px
+               Text = '[Chat about this]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

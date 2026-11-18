@@ -76,6 +76,14 @@ class TaskLandingTest {
         assertEquals("L1", job.landingSessionId)
     }
 
+    @Test fun baselineWaitHasOnlyItsApprovedHeadingAndKeepsTheSummary() {
+        val summary = "Waiting to land: the project branch with the latest main fails its checks on its own; 3 landings wait until that is fixed"
+        val held = job(state = "QUEUED", blockingReason = buildJsonObject { put("code", "WAITING_BASELINE"); put("summary", summary) })
+        assertEquals("Waiting for baseline fix\n$summary\nLandings resume automatically when this open item is resolved.", status(integration("QUEUED", held))!!.reason)
+        val serial = job(state = "QUEUED", blockingReason = buildJsonObject { put("code", "WAITING_SERIAL_SLOT"); put("summary", "Waiting for its turn") })
+        assertEquals("Waiting for its turn", status(integration("QUEUED", serial))!!.reason)
+    }
+
     @Test fun anOldServerDrawsNoSection() {
         // No `integration` at all: a server that predates the unified read model.
         assertNull(TaskIntegrationView.of(task(null)))

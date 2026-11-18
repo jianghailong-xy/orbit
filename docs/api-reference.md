@@ -45,10 +45,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `public` | 37 |
 | `user` | 478 |
 | `admin` | 31 |
-| `runner` | 201 |
+| `runner` | 202 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **751** |
+| **Total** | **752** |
 
 ## Public routes
 
@@ -357,14 +357,14 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/session-tags` | body `CreateSessionTagDto` | `SessionTagsController.create` |
 | `DELETE` | `/api/session-tags/:id` | path `id` | `SessionTagsController.remove` |
 | `PATCH` | `/api/session-tags/:id` | body `UpdateSessionTagDto`; path `id` | `SessionTagsController.update` |
-| `GET` | `/api/sessions` | query `agentId`, `includeLanding`, `limit`, `projectId`, `runnerId`, `since`, `tagId`, `view`, `workspaceId` | `SessionsController.list` |
+| `GET` | `/api/sessions` | query `agentId`, `includeLanding`, `limit`, `projectId`, `runnerId`, `scheduled`, `since`, `tagId`, `view`, `workspaceId` | `SessionsController.list` |
 | `POST` | `/api/sessions` | body `Object` | `SessionsController.create` |
 | `DELETE` | `/api/sessions/:id` | path `id` | `SessionsController.remove` |
 | `GET` | `/api/sessions/:id` | path `id` | `SessionsController.get` |
 | `PATCH` | `/api/sessions/:id` | body `Object`; path `id` | `SessionsController.rename` |
 | `PATCH` | `/api/sessions/:id/account` | body `Object`; path `id` | `SessionsController.switchAccount` |
 | `POST` | `/api/sessions/:id/adopt-branch` | path `id` | `SessionsController.adoptWorktreeBranch` |
-| `GET` | `/api/sessions/:id/approvals` | path `id`; query `status` | `SessionsController.approvals` |
+| `GET` | `/api/sessions/:id/approvals` | path `id`; query `status`, `toolName` | `SessionsController.approvals` |
 | `POST` | `/api/sessions/:id/approvals/:approvalId/decision` | body `Object`; path `approvalId`, `id` | `SessionsController.decideApproval` |
 | `POST` | `/api/sessions/:id/archive` | path `id` | `SessionsController.archiveCompatibility` |
 | `GET` | `/api/sessions/:id/artifacts` | path `id`; query `path` | `SessionsController.artifact` |
@@ -734,6 +734,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/sessions/:id/merge-receipts` | body `RecordMergeReceiptDto`; path `id` | `RunnerSessionsController.recordMergeReceipt` |
 | `POST` | `/api/runner/sessions/:id/merge-result` | body `Object`; path `id` | `RunnerApiController.mergeResult` |
 | `GET` | `/api/runner/sessions/:id/meta` | path `id` | `RunnerApiController.getSessionMeta` |
+| `POST` | `/api/runner/sessions/:id/move` | body `MoveSessionDto`; path `id` | `RunnerSessionsController.moveSession` |
 | `POST` | `/api/runner/sessions/:id/naming` | body `SessionNamingDto`; path `id` | `RunnerApiController.sessionNaming` |
 | `POST` | `/api/runner/sessions/:id/notify` | body `NotifyDto`; path `id` | `RunnerApiController.sessionNotify` |
 | `POST` | `/api/runner/sessions/:id/orchestration-credential` | path `id` | `RunnerApiController.refreshOrchestrationCredential` |

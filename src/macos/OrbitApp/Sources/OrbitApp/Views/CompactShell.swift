@@ -1305,7 +1305,7 @@ struct NavigationDrawer: View {
                 agentRow(agent, agents: agents)
             }
             ForEach(agents.machinesToSetUp) { machine in
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && agents.machinesToSetUp.count > 1)
             }
         }
     }
@@ -1313,20 +1313,24 @@ struct NavigationDrawer: View {
     /// An online machine with no workspace, after every workspace: its new session page, where its first
     /// one is made (board 03 ①, rule 9). In the tint, since it asks for something the rest of the rail
     /// doesn't.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let selected = model.drawerDestination == .machine(runnerID: machine.id)
         return Button {
             open(.machine(runnerID: machine.id))
         } label: {
-            pill(selected: selected) {
-                HStack(spacing: 12) {
-                    Image(systemName: "folder.badge.plus")
-                        .frame(width: 24)
-                    Text(MachineSetupCopy.setupTitle(machine: machine.name))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                pill(selected: selected) {
+                    HStack(spacing: 12) {
+                        Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                            .frame(width: 24)
+                        Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                            .fontWeight(machine.isManaged ? .semibold : nil)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(Color.accentColor)
                 }
-                .foregroundStyle(Color.accentColor)
+                if separates { Divider().padding(.horizontal, DrawerMetrics.textLeading) }
             }
         }
         .buttonStyle(.plain)

@@ -507,6 +507,10 @@ export class ConditionsService {
       createdAt: c.createdAt.toISOString(),
       endedAt: iso(c.endedAt),
       keepsWorkspaceAwake: (await this.keepsAwake([c.workspaceId])).has(c.workspaceId),
+      runnerName: (await this.prisma.workspace.findFirst({
+        where: { id: c.workspaceId, ownerId },
+        select: { runner: { select: { name: true } } },
+      }))?.runner?.name ?? null,
       samples: c.samples.map((s) => ({
         at: s.at.toISOString(), outcome: s.outcome, value: s.value, exitCode: s.exitCode, stderrTail: s.stderrTail,
       })),

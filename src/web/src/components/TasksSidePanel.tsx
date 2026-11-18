@@ -2,6 +2,7 @@ import {
   BgColorsOutlined,
   CaretDownOutlined,
   CheckOutlined,
+  CloudOutlined,
   CodeOutlined,
   DeleteOutlined,
   DesktopOutlined,
@@ -59,7 +60,7 @@ import type {
 } from '@orbit/shared';
 import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
+import { managedFirst, managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -426,12 +427,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
-  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
-  // its session lights Scheduled, and no workspace row.
-  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
+  // A scheduled task's run is a session of its workspace like any other (owner 2026-11-19): it lights that workspace's
+  // row, whose list holds it in the Scheduled runs folder.
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId && !onScheduleRun
+    (sessionId
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -491,8 +491,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
-    : onScheduleRun
-    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -618,12 +616,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     return m;
   }, [runners.data, managedRunnerId]);
 
-  // The account menu's Machines row: every machine, and how many of them are online.
-  const machineList = runners.data ?? [];
+  // The account menu's Machines row: every machine, Orbit Cloud first, and how many of them are online.
+  const machineList = managedFirst(runners.data ?? [], managedRunnerId);
   const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
-  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<Workspace[]>('/workspaces'),
+  });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
@@ -1297,11 +1299,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     </span>
                   ),
                   children: [
-                    ...machineList.map((runner) => {
+                    ...machineList.flatMap((runner, index) => {
                       // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
                       const managedRow = managedRowOf(accountManaged, runner.id);
                       const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
-                      return {
+                      // Orbit Cloud, pinned first: its cloud and a semibold name, then a line before your own machines
+                      // (docs/mocks/orbit-cloud-pinned, A).
+                      const cloud = index === 0 && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+                      const row = {
                         key: `machine-${runner.id}`,
                         textValue: machineName(runner, managedRunnerId),
                         icon: (
@@ -1312,7 +1317,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         label: (
                           <span className="tp-account-appearance-label">
-                            <span>{machineName(runner, managedRunnerId)}</span>
+                            {cloud ? (
+                              <span className="tp-account-machine-cloud">
+                                <CloudOutlined aria-hidden />
+                                {machineName(runner, managedRunnerId)}
+                              </span>
+                            ) : (
+                              <span>{machineName(runner, managedRunnerId)}</span>
+                            )}
                             {!ready && (
                               <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
                             )}
@@ -1320,6 +1332,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         ),
                         onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
                       };
+                      return cloud && machineList.length > 1
+                        ? [row, { type: 'separator' as const, key: 'machines-cloud-separator' }]
+                        : [row];
                     }),
                     { type: 'separator' as const, key: 'machines-add-separator' },
                     {

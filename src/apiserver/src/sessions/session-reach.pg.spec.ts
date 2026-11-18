@@ -240,6 +240,9 @@ test('a session reaches a wider session only as the table says', {
     },
   });
   await prisma.workspace.create({ data: { id: workspaceId, ownerId, runnerId, name: 'orbit', enabled: true } });
+  // Where session_move files a target, so that a move the table allows is one that changes something.
+  const folderId = randomUUID();
+  await prisma.sessionFolder.create({ data: { id: folderId, ownerId, workspaceId, name: 'filed by a move' } });
 
   async function accountDefault(mode: string | null): Promise<void> {
     await prisma.user.update({
@@ -397,12 +400,13 @@ test('a session reaches a wider session only as the table says', {
     };
   }
 
-  /** What a door could have changed on the target: the row's lifecycle, and how many turns it holds. */
+  /** What a door could have changed on the target: the row's lifecycle and folder, and how many turns it holds. */
   async function stateOf(sessionId: string) {
     const row = await prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: {
         status: true, endReason: true, completedAt: true, deletedAt: true, mergeStatus: true, cancelRequestedAt: true,
+        folderId: true,
       },
     });
     const turns = await prisma.conversationTurn.count({ where: { sessionId } });
@@ -515,6 +519,7 @@ test('a session reaches a wider session only as the table says', {
     simple('session_complete, the archive route', {}, async (from, to) => send('POST', `${path(to)}/archive`, {}, await asSession(from))),
     simple('session_delete', {}, async (from, to) => send('DELETE', path(to), undefined, await asSession(from))),
     simple('session_merge', onBranch, async (from, to) => send('POST', `${path(to)}/merge`, {}, await asSession(from))),
+    simple('session_move', {}, async (from, to) => send('POST', `${path(to)}/move`, { folderId: uuidToBase62(folderId) }, await asSession(from))),
   ];
 
   // ── the table: every cell, at every door ─────────────────────────────────────────────────────
@@ -864,6 +869,7 @@ test('a session reaches a wider session only as the table says', {
       ['end', 'POST', /\bend\b/],
       ['complete-session', 'POST', /complete/],
       ['merge', 'POST', /merge/],
+      ['move', 'POST', /\bmove\b/],
     ] as const) {
       const answer = await send(method, `${path(await sessionIn('auto'))}/${route}`, {}, await asSession(await sessionIn('plan')));
       assertRefusedAs(answer, WIDER, route);
@@ -924,7 +930,7 @@ test('a session reaches a wider session only as the table says', {
       const stopper = await sessionIn(mode);
       const stopped = await send('POST', `${path(stopper)}/interrupt`, {}, await asSession(stopper));
       assert.ok(stopped.status < 300, stopped.text);
-      for (const [method, route] of [['POST', 'end'], ['POST', 'complete-session'], ['POST', 'archive'], ['DELETE', ''], ['POST', 'merge']] as const) {
+      for (const [method, route] of [['POST', 'end'], ['POST', 'complete-session'], ['POST', 'archive'], ['DELETE', ''], ['POST', 'merge'], ['POST', 'move']] as const) {
         const own = await sessionIn(mode, route === 'merge' ? onBranch : {});
         const acted = await send(method, route ? `${path(own)}/${route}` : path(own), method === 'DELETE' ? undefined : {}, await asSession(own));
         assert.ok(acted.status < 300, `${mode} on itself, ${method} ${route}: ${acted.text}`);

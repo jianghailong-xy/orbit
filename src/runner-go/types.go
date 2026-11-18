@@ -251,6 +251,9 @@ type EngineHealthReport struct {
 	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
 	// Omitted when it has none (kimi_region.go).
 	KimiRegion string `json:"kimiRegion,omitempty"`
+	// OpenCode only: `opencode auth list` listed no provider key, neither stored nor in its
+	// environment. Auth stays "unknown" — OpenCode's free models need none. Omitted otherwise.
+	OpenCodeNoKey bool `json:"openCodeNoKey,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -808,6 +811,7 @@ type IntegrationCheckSpec struct {
 // IntegrationCheckResult is what one check came to. ExitCode is nil when the command never
 // produced one — it could not start, or its budget killed it.
 type IntegrationCheckResult struct {
+	TreeSha          string   `json:"treeSha,omitempty"`
 	Scope            string   `json:"scope,omitempty"`
 	Skipped          string   `json:"skipped,omitempty"`
 	Files            []string `json:"files,omitempty"`

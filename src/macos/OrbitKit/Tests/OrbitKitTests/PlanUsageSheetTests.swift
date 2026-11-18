@@ -81,8 +81,8 @@ final class PlanUsageSheetTests: XCTestCase {
         // The composer's pill and /status ask with the session's model.
         let app = "src/macos/OrbitApp/Sources/OrbitApp/"
         let composer = try source(app + "Views/ComposerView.swift")
-        XCTAssertTrue(composer.contains("PlanUsageIndicator(usage: usage, model: console.modelID,"))
-        XCTAssertTrue(composer.contains("if let row = usage.bindingRow(model: model) {"))
+        XCTAssertTrue(composer.contains("FooterPlanUsage(usage: usage, model: console.modelID,"))
+        XCTAssertTrue(composer.contains("var row: PlanUsageRow? { usage.bindingRow(model: model) }"))
         XCTAssertTrue(try source(app + "ConsoleModel.swift").contains("let primary = planUsage?.bindingRow(model: modelID)"))
     }
 

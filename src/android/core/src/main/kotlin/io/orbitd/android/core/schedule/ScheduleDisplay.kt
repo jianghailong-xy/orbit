@@ -115,6 +115,9 @@ object ScheduleDisplay {
         val short = form == RuleForm.short
         val daily = if (short) C.Rules.shortDaily else C.Rules.longDaily
         return when (rule) {
+            // "Raw used above 90%" (short), "When raw used above 90%" (long): shared SCHEDULE_CONDITION_COPY.rules.
+            is ScheduleRule.When -> if (short) fill(ScheduleConditionCopy.rulesShort, mapOf("condition" to rule.condition.text))
+                else fill(ScheduleConditionCopy.rulesLong, mapOf("condition" to lowerFirst(rule.condition.text)))
             is ScheduleRule.Once -> if (short) C.Rules.shortOnce else C.Rules.longOnce
             is ScheduleRule.Daily -> fill(daily, mapOf("time" to rule.time))
             is ScheduleRule.Weekly -> {
@@ -187,6 +190,11 @@ object ScheduleDisplay {
     data class CreateWhen(val text: String, val rule: String, val zone: String, val firstRun: String?)
 
     fun createWhen(`when`: ScheduleCardWhen, now: Instant, viewerTimezone: String): CreateWhen {
+        if (`when`.rule is ScheduleRule.When) {
+            // A WHEN rule has no time, so no zone and no first run: its lines are `when.condition`.
+            val rule = `when`.condition?.text ?: ruleText(`when`.rule, RuleForm.short)
+            return CreateWhen(rule, rule, "", null)
+        }
         val zone = `when`.timezone ?: C.CreateCard.zoneFromDevice
         val rule = ruleText(`when`.rule, RuleForm.short)
         val at = `when`.firstRunAt?.let(::parse)
@@ -207,7 +215,8 @@ object ScheduleDisplay {
     enum class TagTone { new, fail, held, mute }
 
     data class Tag(val tone: TagTone, val text: String)
-    data class CircleView(val circle: Circle, val mark: Mark? = null, val tag: Tag? = null)
+    /** [gauge]: a condition's row (condition-triggers board ④ ③), a gauge in place of the circle, in the circle's tone. */
+    data class CircleView(val circle: Circle, val mark: Mark? = null, val tag: Tag? = null, val gauge: Boolean = false)
 
     /** A run's circle. A CHANGED run is `new` when its finding was new, else a grey tick tagged Known. */
     fun runCircle(state: String, newFinding: Boolean = false): CircleView {
@@ -240,16 +249,25 @@ object ScheduleDisplay {
         }
     }
 
-    fun scheduleCircle(schedule: ScheduleView, draft: Boolean = false): CircleView =
-        scheduleCircle(schedule.state, schedule.consecutiveFailures, draft)
+    fun scheduleCircle(schedule: ScheduleView, draft: Boolean = false): CircleView {
+        if (schedule.state == "ACTIVE" && schedule.consecutiveFailures == 0 && schedule.condition?.cantRead == true) {
+            return ConditionDisplay.circle(cantRead = true)
+        }
+        val view = scheduleCircle(schedule.state, schedule.consecutiveFailures, draft)
+        // A WHEN schedule keeps its gauge in every group (condition-triggers board ④ ③).
+        return if (schedule.rule is ScheduleRule.When) view.copy(gauge = true) else view
+    }
 
-    /** Needs you: failing or held (§9.2) — also the count beside Scheduled in the drawer. */
+    /** Needs you: failing or held (§9.2), or a WHEN rule whose condition cannot be read (condition-triggers §9) — also the count
+     * beside Scheduled in the drawer. */
     fun needsYou(state: String, consecutiveFailures: Int): Boolean = state == "HELD" || (state == "ACTIVE" && consecutiveFailures > 0)
 
-    fun needsYou(schedule: ScheduleView): Boolean = needsYou(schedule.state, schedule.consecutiveFailures)
+    fun needsYou(schedule: ScheduleView): Boolean = needsYou(schedule.state, schedule.consecutiveFailures) ||
+        (schedule.state == "ACTIVE" && schedule.condition?.cantRead == true)
 
-    /** The drawer's number: how many schedules need you, nothing at zero. */
-    fun needsYouCount(schedules: List<ScheduleView>): Int = schedules.count(::needsYou)
+    /** The drawer's number: how many schedules, and tasks waiting on a condition, need you; nothing at zero. */
+    fun needsYouCount(schedules: List<ScheduleView>, waitingTasks: List<ScheduleWaitingTask> = emptyList()): Int =
+        schedules.count(::needsYou) + waitingTasks.count { it.condition.cantRead }
 
     // A row's second line
 
@@ -317,8 +335,8 @@ object ScheduleDisplay {
 
     // The timeline
 
-    enum class GroupKey(val rawValue: String) { needsYou("NEEDS_YOU"), today("TODAY"), tomorrow("TOMORROW"), day("DAY"),
-        later("LATER"), paused("PAUSED") }
+    enum class GroupKey(val rawValue: String) { needsYou("NEEDS_YOU"), condition("CONDITION"), today("TODAY"), tomorrow("TOMORROW"),
+        day("DAY"), later("LATER"), paused("PAUSED") }
 
     sealed class TimelineItem {
         abstract val at: String?
@@ -332,6 +350,11 @@ object ScheduleDisplay {
         }
         data class Draft(val card: ScheduleCard, override val at: String) : TimelineItem() {
             override val id: String get() = "draft-${card.id}"
+        }
+        /** A task that starts when its condition holds (condition-triggers board ④ ①). */
+        data class Task(val task: ScheduleWaitingTask) : TimelineItem() {
+            override val at: String? get() = null
+            override val id: String get() = "task-${task.id}"
         }
     }
 
@@ -349,13 +372,15 @@ object ScheduleDisplay {
     internal val inProgress = setOf("QUEUED", "RUNNING", "AWAITING_APPROVAL")
 
     /**
-     * The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held), Today, Tomorrow, each day
-     * of the coming week by its name, Later, Paused. A schedule appears on the day of its next run, a draft on the day of
-     * its first; a run under way on its planned day, an ended one on today's only with [showPastRuns]. Ended schedules
-     * appear nowhere; empty groups are left out; a day is in time order.
+     * The Scheduled page's groups (§9.2), in the viewer's zone: Needs you (failing, then held, then a condition that cannot be
+     * read), Waiting for a condition (WHEN schedules, then tasks waiting on their startWhen: a condition has no day, so it is a group
+     * of its own above Today, condition-triggers §9), Today, Tomorrow, each day of the coming week by its name, Later, Paused. A
+     * schedule appears on the day of its next run, a draft on the day of its first; a run under way on its planned day, an ended one
+     * on today's only with [showPastRuns]. Ended schedules appear nowhere; empty groups are left out; a day is in time order.
      */
     fun timeline(schedules: List<ScheduleView>, runs: List<ScheduleRunView> = emptyList(), drafts: List<ScheduleCard> = emptyList(),
-                 showPastRuns: Boolean = false, now: Instant, timezone: String): List<TimelineGroup> {
+                 showPastRuns: Boolean = false, now: Instant, timezone: String,
+                 waitingTasks: List<ScheduleWaitingTask> = emptyList()): List<TimelineGroup> {
         val today = localParts(now, timezone).dayNumber
         val byId = schedules.associateBy { it.id }
         val days = mutableMapOf<Int, MutableList<Pair<Int, TimelineItem>>>()
@@ -368,7 +393,12 @@ object ScheduleDisplay {
             if (day - today >= 7) later += order to item else days.getOrPut(day) { mutableListOf() } += order to item
         }
         val byTitle = Comparator<ScheduleView> { a, b -> String.CASE_INSENSITIVE_ORDER.compare(a.title, b.title) }
-        val needs = schedules.filter(::needsYou).sortedWith(compareBy<ScheduleView> { if (it.state == "HELD") 1 else 0 }.then(byTitle))
+        val needs = schedules.filter(::needsYou)
+            .sortedWith(compareBy<ScheduleView> { if (it.state == "HELD") 1 else if (it.consecutiveFailures > 0) 0 else 2 }.then(byTitle))
+        val byTaskTitle = Comparator<ScheduleWaitingTask> { a, b -> String.CASE_INSENSITIVE_ORDER.compare(a.title, b.title) }
+        val tasksNeeding = waitingTasks.filter { it.condition.cantRead }.sortedWith(byTaskTitle)
+        val waiting = schedules.filter { it.rule is ScheduleRule.When && it.state == "ACTIVE" && !needsYou(it) }.sortedWith(byTitle)
+        val tasksWaiting = waitingTasks.filter { !it.condition.cantRead }.sortedWith(byTaskTitle)
         val paused = schedules.filter { it.state == "PAUSED" }.sortedWith(byTitle)
 
         for (s in schedules) if (s.state == "ACTIVE") s.nextDueAt?.let { place(TimelineItem.Schedule(s, it), it) }
@@ -385,9 +415,13 @@ object ScheduleDisplay {
 
         val byTime = compareBy<Pair<Int, TimelineItem>> { it.second.at?.let(::parse)?.toEpochMilli() ?: 0L }.thenBy { it.first }
         val groups = mutableListOf<TimelineGroup>()
-        if (needs.isNotEmpty()) {
-            groups += TimelineGroup(GroupKey.needsYou, C.groups.getValue("NEEDS_YOU"), needs.size.toString(),
-                needs.map { TimelineItem.Schedule(it, it.nextDueAt) })
+        if (needs.isNotEmpty() || tasksNeeding.isNotEmpty()) {
+            groups += TimelineGroup(GroupKey.needsYou, C.groups.getValue("NEEDS_YOU"), (needs.size + tasksNeeding.size).toString(),
+                needs.map { TimelineItem.Schedule(it, it.nextDueAt) } + tasksNeeding.map { TimelineItem.Task(it) })
+        }
+        if (waiting.isNotEmpty() || tasksWaiting.isNotEmpty()) {
+            groups += TimelineGroup(GroupKey.condition, ConditionCopy.group, (waiting.size + tasksWaiting.size).toString(),
+                waiting.map { TimelineItem.Schedule(it, null) } + tasksWaiting.map { TimelineItem.Task(it) })
         }
         for (day in days.keys.sorted()) {
             val items = days.getValue(day).sortedWith(byTime).map { it.second }
@@ -418,6 +452,7 @@ object ScheduleDisplay {
         if ((accessOrder[after.accessLevel] ?: 0) > (accessOrder[before.accessLevel] ?: 0)) add("ACCESS_LEVEL")
         if (after.runsPerWeek > before.runsPerWeek) add("RUNS_PER_WEEK")
         if (after.runLimitMinutes > before.runLimitMinutes) add("RUN_LIMIT")
+        if (after.commandHash != null && after.commandHash != before.commandHash) add("PROBE_COMMAND")
     }
 
     /** One side of an envelope card. [lead] is the part set in bold on Asked ("Daily 10:00", "Open a PR"). */
@@ -425,7 +460,7 @@ object ScheduleDisplay {
     data class EnvelopeSides(val now: EnvelopeSide?, val asked: EnvelopeSide)
 
     /** The part a card is about: access first, then where it runs, how often, how long. */
-    internal fun headPart(widens: List<String>): String? = listOf("ACCESS_LEVEL", "WORKSPACE", "RUNS_PER_WEEK", "RUN_LIMIT").firstOrNull { it in widens }
+    internal fun headPart(widens: List<String>): String? = listOf("ACCESS_LEVEL", "WORKSPACE", "PROBE_COMMAND", "RUNS_PER_WEEK", "RUN_LIMIT").firstOrNull { it in widens }
 
     /** An envelope card's Now and Asked lines (board 2/2 ② ③). Now names the run limit only where it differs. */
     fun envelopeSides(widens: List<String>, now: ScheduleEnvelope?, asked: ScheduleEnvelope, ruleNow: ScheduleRule? = null,
@@ -436,6 +471,11 @@ object ScheduleDisplay {
                 val a = accessCopy(e.accessLevel)
                 val detail = if (isNow) a.brief else a.detail
                 return EnvelopeSide(a.label, detail, "${a.label}${C.EnvelopeCard.accessJoin}$detail")
+            }
+            if (part == "PROBE_COMMAND") {
+                // The command verbatim on both sides: what was approved, and what Allow would approve (board ⑥).
+                val command = rule?.condition?.command ?: ""
+                return EnvelopeSide(command, "", command)
             }
             val sameLimit = now?.runLimitMinutes == asked.runLimitMinutes
             val costs = if (isNow && sameLimit) fill(C.Costs.runsOnly, mapOf("runs" to runsPerWeekText(e.runsPerWeek)))
@@ -461,12 +501,14 @@ object ScheduleDisplay {
         if (part == "RUNS_PER_WEEK" && now?.runsPerWeek == 1) return C.keep.getValue("RUNS_PER_WEEK")
         if (part == "RUN_LIMIT" && now != null) return fill(C.keep.getValue("RUN_LIMIT"), mapOf("minutes" to now.runLimitMinutes.toString()))
         if (part == "WORKSPACE" && workspaceName != null) return fill(C.keep.getValue("WORKSPACE"), mapOf("workspace" to workspaceName))
+        if (part == "PROBE_COMMAND") return ScheduleConditionCopy.keep
         return C.keep.getValue("other")
     }
 
     /** The note under an envelope card. */
     fun envelopeNote(widens: List<String>): String =
-        if ("ACCESS_LEVEL" in widens) "${C.EnvelopeCard.appliesFromNextRun} ${C.EnvelopeCard.checkedEachRun}" else C.EnvelopeCard.appliesFromNextRun
+        if ("PROBE_COMMAND" in widens) ScheduleConditionCopy.commandNote
+        else if ("ACCESS_LEVEL" in widens) "${C.EnvelopeCard.appliesFromNextRun} ${C.EnvelopeCard.checkedEachRun}" else C.EnvelopeCard.appliesFromNextRun
 
     /** A widen card in Waiting on you: "<reason> Now: Check only. Asked: Open a PR · edits in its own worktree…". */
     fun widenWaitingText(reason: String, widens: List<String>, now: ScheduleEnvelope?, asked: ScheduleEnvelope,
@@ -713,7 +755,7 @@ object ScheduleDisplay {
 
     // A run's session
 
-    /** "Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list". */
+    /** "Scheduled run · planned 10:00, started 10:01 · access Check only". */
     fun runStripText(plannedAt: String, startedAt: String?, accessLevel: String, timezone: String): String =
         fill(C.RunSession.strip, mapOf(
             "planned" to (parse(plannedAt)?.let { localParts(it, timezone).time } ?: ""),

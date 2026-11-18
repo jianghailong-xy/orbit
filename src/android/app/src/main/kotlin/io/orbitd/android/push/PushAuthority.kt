@@ -85,6 +85,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (session.present("deletedAt") || session.text("lifecycleState") == "TRASH") PushCheck.MISSING
                 else if (ObjectId.same(row.obj("waiting")?.text("sessionId"), payload.sessionId)) PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A can't-read alert stands while its Waiting on you item is still PENDING: a check that reads again closes it.
+            payload.kind == PushPayload.CONDITION && payload.ownerRequestId != null -> {
+                val row = objectRead(listOf("owner-requests", payload.ownerRequestId))
+                if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
+                if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
+            }
             // A schedule alert that opens a run's session falls through to the session's own check below.
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)

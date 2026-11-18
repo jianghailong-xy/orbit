@@ -32,6 +32,7 @@ import {
   toUuid,
   type MoveCriterionRefusal,
   type MoveCriterionResult,
+  type TaskSignInHold,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
@@ -66,6 +67,7 @@ import {
   MAX_TASK_PAGE_SIZE,
   decodeTaskPageCursor,
   encodeTaskPageCursor,
+  mayBeSweepCandidate,
 } from '../tasks/tasks.service';
 import {
   // §13.3 DEP's epoch, the same fragments the run gate and the sweeps read: the graph counts them
@@ -100,8 +102,11 @@ import {
   criteriaDecisionRecorded,
   criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
+  stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -1855,11 +1860,61 @@ export class ProjectsService {
     // an empty queue, so this route cannot be used to learn which project ids exist by the
     // difference between two successful answers.
     await this.assertOwned(ownerId, projectId);
-    return readPendingCriteriaDecisionsForOwner(
+    const queue = await readPendingCriteriaDecisionsForOwner(
       this.prisma as unknown as Prisma.TransactionClient,
       ownerId,
       projectId,
     );
+    // Decision 1A: a pending proposal with no translation in the owner's current language gets one queued as it
+    // is read; one already tried in this language, failed or not, is left.
+    if (queue.pending.length > 0) {
+      await translationLanguages(this.prisma, ownerId)
+        .then((langs) => {
+          if (!langs) return;
+          for (const row of queue.pending) {
+            if (!translatedInto(row.translation, langs)) this.queueProposalTranslation(ownerId, projectId, row.intentId, langs);
+          }
+        })
+        .catch((error: Error) => this.logger.warn(`queueing proposal translations failed: ${error.message}`));
+    }
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one criteria proposal's words into the owner's language
+   * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
+   * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
+   */
+  queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `criteria-change:${intentId}`,
+      read: async () => {
+        const db = this.prisma as unknown as Prisma.TransactionClient;
+        const rows = await db.projectRatifiedActionIntent.findMany({
+          where: { ownerId, projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+          select: { id: true, action: true },
+        });
+        const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
+        if (!open) return null;
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
+          where: { intentId },
+          select: { translation: true },
+        });
+        const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
+      },
+      write: async (translation) => {
+        const value = translation as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
+          where: { intentId },
+          create: { intentId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -3297,7 +3352,8 @@ export class ProjectsService {
     // One pass over the project's graph for the whole page, never one per row: the level a task
     // sits at is a fact about the graph rather than about the row, so it cannot be answered by
     // selecting more columns of `task`.
-    const [dependencies, workStates, integrations] = await Promise.all([
+    const openIds = page.filter(mayBeSweepCandidate).map((task) => task.id);
+    const [dependencies, workStates, integrations, holds] = await Promise.all([
       this.taskDependencyFields(
         ownerId,
         projectId,
@@ -3318,6 +3374,10 @@ export class ProjectsService {
         projectId,
         page.map((task) => task.id),
       ),
+      // Why the sweep holds a row that reads Ready (the task read's `hold`, by the same read).
+      openIds.length > 0 && this.openItems
+        ? this.openItems.signInHolds(ownerId, Prisma.sql`t.id = ANY(${openIds}::uuid[])`)
+        : new Map<string, TaskSignInHold>(),
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
@@ -3348,6 +3408,7 @@ export class ProjectsService {
         // report dependencies" rather than as "this task has none".
         ...dependency,
         blocked: dependency.dependencyState !== 'READY',
+        hold: holds.get(task.id) ?? null,
       };
     });
     return {
@@ -4084,6 +4145,11 @@ export class ProjectsService {
       // owner's own read.
       if (held) {
         this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+        // And translated for the owner in the background, when their translation is on (decision 1A).
+        const { intentId } = held;
+        void translationLanguages(this.prisma, ownerId)
+          .then((langs) => { if (langs) this.queueProposalTranslation(ownerId, id, intentId, langs); })
+          .catch((error: Error) => this.logger.warn(`translating proposal ${intentId} failed to queue: ${error.message}`));
       }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
@@ -4866,9 +4932,12 @@ export class ProjectsService {
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
     // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
-    // §3), read here, after the outgoing conversation is completed, so it is as of the swap.
-    const openingHandoff = handoff
-      ? { note: handoff.note, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap. Every
+    // successor, not only a handoff's: one opened by the owner's replace, a workspace switch or a
+    // recovery has no note, and the digest is all it inherits of the decisions made before it —
+    // including the owner's answers, which are no longer replayed to it one turn each (§5.2 R11).
+    const openingHandoff = handoff || project.coordinatorSessionId
+      ? { note: handoff?.note ?? null, digest: await readStateDigest(this.prisma, ownerId, project.id) }
       : null;
     let session: { id: string };
     try {
@@ -5151,10 +5220,10 @@ export class ProjectsService {
     for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
-    // everything still waiting is handed over rather than left addressed to the conversation before.
-    // The conversation being REPLACED goes with it (§5.2 R11): an owner's answer to a question that
-    // one asked was addressed to it, and this rotation is the moment it stops being able to read it.
-    await this.openItems?.deliverOwed(id, project.coordinatorSessionId ?? undefined);
+    // everything still waiting is handed over rather than left addressed to the conversation before,
+    // with every owner answer no coordinator has read yet (§5.2 R11); the ones already read are in
+    // this conversation's opening digest instead.
+    await this.openItems?.deliverOwed(id);
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);

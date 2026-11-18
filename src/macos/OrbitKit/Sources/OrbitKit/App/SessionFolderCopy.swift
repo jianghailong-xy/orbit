@@ -1,5 +1,10 @@
 import Foundation
 
+public enum ScheduledRunsCopy {
+    public static let title = "Scheduled runs"
+    public static let empty = "No scheduled runs here."
+}
+
 /// The words the folder rows and folder pages say (docs/session-folders-move-design.md §3.3–3.4):
 /// the two management entries a folder offers, the delete confirmation, and what a refused create,
 /// rename or delete tells you. OrbitKit owns them so the entry points that ask the same question —

@@ -24,6 +24,15 @@ final class TaskLandingTests: XCTestCase {
             waitMs: b.waitMs, liveness: b.liveness, runnerName: b.runnerName)
     }
 
+    func testBaselineWaitHasOnlyItsApprovedHeadingAndKeepsTheSummary() throws {
+        let summary = "Waiting to land: the project branch with the latest main fails its checks on its own; 3 landings wait until that is fixed"
+        let held = job { $0.state = "QUEUED"; $0.blockingReason = LandTaskBlockingReason(code: "WAITING_BASELINE", summary: summary) }
+        let status = try XCTUnwrap(TaskLandingLogic.status(TaskIntegrationView(state: "QUEUED", landTask: held), now: now))
+        XCTAssertEqual(status.reason, "Waiting for baseline fix\n" + summary + "\nLandings resume automatically when this open item is resolved.")
+        let serial = job { $0.state = "QUEUED"; $0.blockingReason = LandTaskBlockingReason(code: "WAITING_SERIAL_SLOT", summary: "Waiting for its turn") }
+        XCTAssertEqual(TaskLandingLogic.status(TaskIntegrationView(state: "QUEUED", landTask: serial), now: now)?.reason, "Waiting for its turn")
+    }
+
     private struct JobBuilder {
         let at: (Double) -> String
         var jobId = "j1"
