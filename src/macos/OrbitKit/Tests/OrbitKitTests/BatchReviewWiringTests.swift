@@ -97,7 +97,8 @@ final class BatchReviewWiringTests: XCTestCase {
         let details = try slice(card, from: "@ViewBuilder private var details: some View",
                                 to: "} else if let dag {")
         XCTAssertTrue(details.contains("BatchCreateReviewBody(batch: batch,"))
-        XCTAssertTrue(details.contains("details: approval.input.map(Approvals.batchTaskDetails)"),
+        // `orbitInput` is the input itself, with the owner's language over it once translated.
+        XCTAssertTrue(details.contains("details: orbitInput.map(Approvals.batchTaskDetails)"),
                       "the task pages read the bodies the runner sends, not just the preview's titles")
         XCTAssertFalse(details.contains("ApprovalHeader("),
                        "no second \"Create 3 tasks?\" under the navigation bar's")

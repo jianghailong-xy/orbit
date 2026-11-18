@@ -50,6 +50,8 @@ struct WhoFixesItBody: View {
     @State private var changing = false
     @State private var changingTo: WhoFixesChangePick?
     @State private var changePhase: SessionWorkspaceMove.Phase?
+    /// The hand-over note's flip: "Translated · Show original" ↔ "Original · Show translation".
+    @State private var showOriginal = false
 
     private var askable: Bool { ExceptionCards.askable(row) }
 
@@ -275,6 +277,9 @@ struct WhoFixesItBody: View {
                 #endif
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if reading.cause == .handedOver {
+                handoverNote
+            }
             pressLine {
                 ForEach(Array(presses.enumerated()), id: \.offset) { _, press in
                     coordinatorPress(press, reading: reading)
@@ -293,6 +298,27 @@ struct WhoFixesItBody: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
+
+    /// The coordinator's hand-over note under its caption, drawn translated with its own flip while a
+    /// usable translation exists; nothing when the item carries no note.
+    @ViewBuilder private var handoverNote: some View {
+        let owner = OwnerCardTranslations.ownerLanguage(model.user)
+        if let note = row.shownHandoverNote(owner: owner, showOriginal: showOriginal) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ExceptionCards.handoverNoteCaption)
+                    .font(captionFont.weight(.semibold)).foregroundStyle(.secondary)
+                Text(note)
+                    .font(.orbitLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                TranslationFootView(parts: row.handoverNoteFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
+                .font(captionFont)
+            }
+            .accessibilityElement(children: .contain)
         }
     }
 
