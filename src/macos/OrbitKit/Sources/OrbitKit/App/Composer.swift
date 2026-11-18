@@ -430,6 +430,16 @@ public enum ComposerLogic {
         let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return body.isEmpty ? nil : body
     }
+
+    /// What Withdraw hands back to the composer: the words the reader wrote, not the English a
+    /// translated message delivered (Settings › Translation), as the tray row shows them
+    /// (`PendingTray.text(of:)`). Nil wherever `restorableText` is.
+    public static func withdrawnText(of bubble: UserBubble) -> String? {
+        guard let delivered = restorableText(of: bubble) else { return nil }
+        let typed = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return typed.isEmpty ? delivered : typed
+    }
 }
 
 public struct ComposerStatusSnapshot: Equatable, Sendable {

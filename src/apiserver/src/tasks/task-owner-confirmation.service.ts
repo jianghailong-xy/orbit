@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { CreatorType, Prisma, TaskStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, type OwnerWordsTranslation, type TranslationLanguage } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -16,7 +16,10 @@ import {
 } from './owner-confirmation-read';
 import { confirmationReviewStates, decisionReview, type DecisionReview } from './owner-confirmation-review';
 import { writeOwnerAnswersComment } from './owner-confirmation-review-turn';
-import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
+import { OwnerConfirmationReviewService, queueConfirmationRecordTranslation } from './owner-confirmation-review.service';
+import { translatedInto } from '../sessions/card-translation';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
@@ -52,6 +55,9 @@ export interface DecideOwnerConfirmation {
   reviewRecordId?: string | null;
   /** The owner's answers to that review's questions (Q3). */
   answers?: unknown;
+  /** Deliver the owner's words (a send-back's reason, typed answers) untranslated: the "Send as written" of a
+   *  decision refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean;
 }
 
 /** What the door returns once it has recorded a decision. */
@@ -121,8 +127,25 @@ export class TaskOwnerConfirmationService {
   ) {}
 
   async read(ownerId: string, taskId: string): Promise<OwnerConfirmationView> {
-    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId, this.tasks);
+    const langs = await translationLanguages(this.prisma, ownerId);
+    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId, this.tasks, langs?.owner ?? null);
     if (!view) throw new NotFoundException('task not found');
+    // Decision 1A: the review records of the request waiting on the owner, read without a translation in their
+    // current language, get one queued; one already tried in this language, failed or not, is left.
+    const waiting = view.waiting;
+    const records = [waiting?.review?.review, waiting?.review?.problems].filter((record) => record != null);
+    for (const record of langs && waiting ? records : []) {
+      if (translatedInto(record.translation, langs!)) continue;
+      queueConfirmationRecordTranslation(
+        this.prisma,
+        { ownerId, taskId, recordId: record.recordId, runSessionId: waiting!.sessionId },
+        langs!,
+        () => {
+          this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [taskId], resync: false });
+          this.realtime?.publishSessionUpdated(waiting!.sessionId);
+        },
+      );
+    }
     return view;
   }
 
@@ -217,9 +240,24 @@ export class TaskOwnerConfirmationService {
       decisionReview({ decision: 'SEND_BACK', answering, review: undefined, reviewRecordId: null, answers: input.answers });
     }
 
+    // Settings › Translation, before anything is written: the owner's words reach the run and the reviewer in the
+    // agent language, or the decision is refused whole (422 TRANSLATION_FAILED). A CONFIRM's note is delivered to no
+    // agent and stays as written; options go by index either way.
+    const langs = await translationLanguages(this.prisma, ownerId);
+    const reasonForAgent = input.decision === 'SEND_BACK'
+      ? await ownerWordsForAgent(note, langs, input.sendAsWritten)
+      : null;
+    const answerWords = input.decision === 'CONFIRM'
+      ? await answerWordsForAgent(input.answers, langs, input.sendAsWritten)
+      : new Map<string, OwnerWordsTranslation>();
+
     const { receipt, answered } = input.decision === 'CONFIRM'
-      ? await this.confirm(ownerId, taskId, answering, note, input)
-      : { receipt: await this.sendBack(ownerId, taskId, answering as string | null, note as string), answered: false };
+      ? await this.confirm(ownerId, taskId, answering, note, input, answerWords)
+      : {
+        receipt: await this.sendBack(ownerId, taskId, answering as string | null, note as string,
+          reasonForAgent && langs ? { content: reasonForAgent.text, from: langs.owner } : undefined),
+        answered: false,
+      };
 
     // After the commit: the task's views re-read, and the list row the run's session had lit goes
     // dark — a session row is refreshed by nothing that happens to a task.
@@ -250,6 +288,7 @@ export class TaskOwnerConfirmationService {
     requested: string | null,
     note: string | null,
     input: Pick<DecideOwnerConfirmation, 'reviewRecordId' | 'answers'>,
+    answerWords: ReadonlyMap<string, OwnerWordsTranslation>,
   ): Promise<{ receipt: OwnerDecisionReceipt; answered: boolean }> {
     return withTransactionRetry(this.prisma, async (tx) => {
       let answering = requested;
@@ -263,11 +302,11 @@ export class TaskOwnerConfirmationService {
       }
       const refusal = ownerDecisionRefusal(standing, 'CONFIRM', answering);
       if (refusal) throwOwnerConfirmationRefusal(refusal);
-      const reviewed = await reviewOfDecision(tx, taskId, standing, answering, {
+      const reviewed = withAnswerTranslations(await reviewOfDecision(tx, taskId, standing, answering, {
         decision: 'CONFIRM',
         reviewRecordId: input.reviewRecordId,
         answers: input.answers,
-      });
+      }), answerWords);
       const written = await writeDecision(tx, {
         id: randomUUID(),
         taskId,
@@ -339,6 +378,8 @@ export class TaskOwnerConfirmationService {
     taskId: string,
     answering: string | null,
     note: string,
+    /** The reason in the agent language, when Settings › Translation translated it: what the run receives. */
+    translated?: { content: string; from: TranslationLanguage },
   ): Promise<OwnerDecisionReceipt> {
     const addressed = await unlockedStanding(this.prisma, ownerId, taskId);
     const refusal = ownerDecisionRefusal(addressed, 'SEND_BACK', answering);
@@ -351,6 +392,7 @@ export class TaskOwnerConfirmationService {
       sessionId,
       { clientTurnId: ownerSendBackClientTurnId(decisionId), content: note, intent: 'NEXT_TURN' },
       {
+        translated,
         participateSendTransaction: async (tx) => {
           // A request belongs to one session, so the request still waiting being the one answered
           // is also the session this message was addressed to still being the right one.
@@ -381,6 +423,49 @@ export class TaskOwnerConfirmationService {
     }
     return receiptOf(recorded.row, { completed: false, sessionId, turnId: turn.turnId });
   }
+}
+
+/** An answer's words as the decision row stores them (owner-confirmation-review.ts readOwnerAnswers). */
+function answerWordsKey(text: string): string {
+  return text.replace(/\r\n?/g, '\n').trim().normalize('NFC');
+}
+
+/**
+ * Settings › Translation: each typed answer of a CONFIRM, translated into the agent language before the decision is
+ * written, keyed by its words as they will be stored. Empty when nothing is translated. Throws decisionNotTranslated
+ * when one fails: the decision is refused whole. A malformed list is left to the door's own refusal.
+ */
+async function answerWordsForAgent(
+  answers: unknown,
+  langs: TranslationLanguages | null,
+  sendAsWritten: boolean | undefined,
+): Promise<Map<string, OwnerWordsTranslation>> {
+  const words = new Map<string, OwnerWordsTranslation>();
+  if (!langs || sendAsWritten === true || !Array.isArray(answers)) return words;
+  for (const answer of answers) {
+    const text = (answer as { text?: unknown } | null)?.text;
+    if (typeof text !== 'string') continue;
+    const key = answerWordsKey(text);
+    if (!key || words.has(key)) continue;
+    const translation = await ownerWordsForAgent(key, langs);
+    if (translation) words.set(key, translation);
+  }
+  return words;
+}
+
+/** The recorded answers with their translations beside the owner's words: what the reviewer is told. */
+function withAnswerTranslations(
+  reviewed: DecisionReview,
+  words: ReadonlyMap<string, OwnerWordsTranslation>,
+): DecisionReview {
+  if (!reviewed.answers || words.size === 0) return reviewed;
+  return {
+    ...reviewed,
+    answers: reviewed.answers.map((answer) => {
+      const translation = answer.text !== null ? words.get(answer.text) : undefined;
+      return translation ? { ...answer, translation } : answer;
+    }),
+  };
 }
 
 /**

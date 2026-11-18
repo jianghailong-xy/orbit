@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import type { OwnerCardTranslation } from '@orbit/shared';
 
 import {
   CRITERIA_WEAKENING_EFFECT_CLASS,
@@ -950,6 +951,9 @@ export async function readPendingCriteriaDecisions(
  */
 export interface OwnerPendingCriteriaDecision extends PendingCriteriaDecision {
   commitToken: string;
+  /** `proposed[].text` and `verificationMethod` in the owner's language (Settings › Translation,
+   *  migration 1080); absent until translated and on every proposal translation is off for. */
+  translation?: OwnerCardTranslation;
 }
 
 /** The queue above, on the owner's path, where every row carries its key. */
@@ -994,16 +998,23 @@ export async function readPendingCriteriaDecisionsForOwner(
       select: { id: true, commitToken: true },
     })).map((row) => [row.id, row.commitToken]),
   );
+  // The owner's reading copy of each proposal (Settings › Translation), kept beside the frozen row.
+  const translations = new Map(
+    (await tx.projectCriteriaChangeTranslation.findMany({
+      where: { ownerId, intentId: { in: queue.pending.map((row) => row.intentId) } },
+      select: { intentId: true, translation: true },
+    })).map((row) => [row.intentId, row.translation as unknown as OwnerCardTranslation]),
+  );
   return {
     ...queue,
     // The fallback is unreachable rather than defensive: 0195's BEFORE UPDATE OR DELETE trigger
     // refuses every write to a filed intent, so the row each of these ids came from a moment ago is
     // still there. It is spelled as a fallback because a `!` here would be a claim about that
     // trigger made in a file that cannot see it.
-    pending: queue.pending.map((row) => ({
-      ...row,
-      commitToken: keys.get(row.intentId) ?? '',
-    })),
+    pending: queue.pending.map((row) => {
+      const translation = translations.get(row.intentId);
+      return { ...row, commitToken: keys.get(row.intentId) ?? '', ...(translation ? { translation } : {}) };
+    }),
   };
 }
 

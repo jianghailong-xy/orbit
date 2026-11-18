@@ -341,6 +341,12 @@ public enum OwnerRequests {
             .sorted { (RelativeTime.parse($0.createdAt) ?? .distantPast) < (RelativeTime.parse($1.createdAt) ?? .distantPast) }
     }
 
+    /// The request a press on a session's needs-you notice opens: the oldest one it asked that is still
+    /// pending, or nil when this device holds none of them yet.
+    public static func oldestPending(_ requests: [OwnerRequest], sessionID: String) -> OwnerRequest? {
+        forSession(requests, sessionID: sessionID).first { $0.state == .pending }
+    }
+
     /// Two reads (open, and every state) as one list by id, the newer read of a request winning.
     public static func merged(_ lists: [OwnerRequest]...) -> [OwnerRequest] {
         var byID: [String: OwnerRequest] = [:]

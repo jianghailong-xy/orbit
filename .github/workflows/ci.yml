@@ -114,8 +114,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
+      # `npm audit --audit-level=high`, except for the advisories scripts/npm-audit-allowlist.json names, each
+      # until it expires or its vulnerable range moves (a patch was published): scripts/npm-audit-gate.mjs.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: node scripts/npm-audit-gate.mjs
 
   # `main`'s branch protection requires a check named `Dependency review`. Its own workflow,
   # dependency-review.yml, runs on pull requests only, and its check lands on GitHub's synthetic

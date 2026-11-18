@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -257,4 +258,74 @@ func (s *supervisedSession) countRequests(suffix string) int {
 		}
 	}
 	return n
+}
+
+// A SubAgent that ends FAILED says why in what the runner reports: the engine's own error and the end of its stderr,
+// so a failure like production's kept Codex run (11-17) is diagnosable after the engine and its records are gone.
+// The child here is a kept run whose engine, after its coordinator handed over, writes two stderr lines and ends its
+// turn as an error with only the model's last words for a result.
+func TestKeptSubagentFailureReportsItsEngineStderrTail(t *testing.T) {
+	pool := newSessionPoolWithClock(1, newFakePoolClock())
+	s := superviseClaudeSession(t, pool, oneTurn()...)
+	s.awaitParked("turn-1")
+	bin, marks := t.TempDir(), t.TempDir()
+	child := `#!/bin/sh
+read -r frame
+printf '%s\n' '{"type":"system","subtype":"init","session_id":"child"}'
+touch "$SUBAGENT_MARKS/started"
+while [ ! -f "$SUBAGENT_MARKS/finish" ]; do sleep 0.05; done
+echo 'ERROR: unexpected status 401 Unauthorized: orbit_gateway_token_invalid' >&2
+echo 'stream disconnected before completion' >&2
+printf '%s\n' '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"The first sleep is still running."}'
+`
+	if err := os.WriteFile(filepath.Join(bin, "child.sh"), []byte(child), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := "#!/bin/sh\nif [ -n \"$" + envSubagentRunID + "\" ]; then exec /bin/sh " + filepath.Join(bin, "child.sh") +
+		" \"$@\"; fi\nexec " + filepath.Join(s.fake.Dir, "claude") + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SUBAGENT_MARKS", marks)
+	r := &subagentRig{supervisedSession: s, marks: marks}
+	run := r.delegate(true)
+
+	s.queue(RunInboxResponse{TurnID: "end-1", Kind: "end", Content: keepWorkEnd})
+	waitUntil(t, func() bool { return r.pathIndex("/finalize") >= 0 }, "the session was never finalized")
+	awaitSupervisorDone(t, s)
+	r.finishChild()
+	failed := r.awaitReport(subagentStatusFailed)
+	summary := asString(failed["resultSummary"])
+	t.Logf("reported: %s", summary)
+	for _, want := range []string{
+		"The SubAgent failed: error_during_execution",
+		"The first sleep is still running.",
+		"The engine's stderr ended with:",
+		"unexpected status 401 Unauthorized: orbit_gateway_token_invalid",
+		"stream disconnected before completion",
+	} {
+		if !strings.Contains(summary, want) {
+			t.Errorf("the FAILED report of %s does not carry %q:\n%s", run.RunID, want, summary)
+		}
+	}
+	if failed["wake"] != true {
+		t.Errorf("the kept run's failure owes the successor no wake: %v", failed)
+	}
+}
+
+func TestSubagentStderrTailKeepsTheLastLines(t *testing.T) {
+	var tail subagentStderrTail
+	for i := 0; i < 500; i++ {
+		tail.write(fmt.Sprintf("line %03d of the engine's stderr", i))
+	}
+	got := tail.String()
+	if len(got) > subagentStderrTailBytes || !strings.HasPrefix(got, "line ") || !strings.HasSuffix(got, "line 499 of the engine's stderr") {
+		t.Fatalf("tail is %d bytes, %q…%q", len(got), got[:min(40, len(got))], got[max(0, len(got)-40):])
+	}
+	var none *subagentStderrTail
+	none.write("ignored")
+	if none.String() != "" {
+		t.Fatal("a nil tail keeps something")
+	}
 }

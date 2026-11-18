@@ -64,15 +64,12 @@ export function ReviewRequestedCard({
   seq,
   ts,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: ConfirmationReviewRequestCard;
   seq?: number;
   ts?: string;
   undelivered?: boolean;
-  /** What delivery appended — the block the reviewer was handed. */
-  attached?: ReactNode;
   /** The queue's own line, while the turn still waits behind a running one. */
   queued?: ReactNode;
 }) {
@@ -107,7 +104,6 @@ export function ReviewRequestedCard({
           </div>
         ) : null}
         {undelivered && <div className="crc-undelivered">The session has not confirmed it received this.</div>}
-        {attached}
         {queued && <div className="crc-queued">{queued}</div>}
       </div>
     </div>
@@ -119,14 +115,12 @@ export function SentBackByReviewerCard({
   seq,
   ts,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: ConfirmationReturnCard;
   seq?: number;
   ts?: string;
   undelivered?: boolean;
-  attached?: ReactNode;
   queued?: ReactNode;
 }) {
   const reviewer = card.reviewerTitle?.trim() || REVIEWER_FALLBACK;
@@ -160,7 +154,6 @@ export function SentBackByReviewerCard({
           </ul>
         ) : null}
         {undelivered && <div className="crc-undelivered">The session has not confirmed it received this.</div>}
-        {attached}
         {queued && <div className="crc-queued">{queued}</div>}
       </div>
     </div>
@@ -177,7 +170,6 @@ export function YouConfirmedCard({
   text,
   seq,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: ConfirmationAnswersCard;
@@ -185,8 +177,6 @@ export function YouConfirmedCard({
   text: string;
   seq?: number;
   undelivered?: boolean;
-  /** Anything delivery appended to the turn, as the control plane's note. */
-  attached?: ReactNode;
   queued?: ReactNode;
 }) {
   const task = routeId(card.taskId);
@@ -222,7 +212,6 @@ export function YouConfirmedCard({
             <pre>{text}</pre>
           </details>
         ) : null}
-        {attached}
         {queued && <div className="crc-queued">{queued}</div>}
       </div>
     </div>

@@ -26,6 +26,12 @@ import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { assertSessionMayReach } from '../sessions/session-reach';
 import { SessionsService } from '../sessions/sessions.service';
+import {
+  CONFIRMATION_PROBLEMS_FIELDS,
+  CONFIRMATION_REVIEW_FIELDS,
+  queueOwnerCardTranslation,
+} from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { latestOwnerConfirmationRequest } from './owner-confirmation-read';
 import {
   CONFIRMATION_RETURNS_BEFORE_OWNER,
@@ -250,6 +256,19 @@ export class OwnerConfirmationReviewService {
     }
   }
 
+  /** After a REVIEW or PROBLEMS record is written: its translation for the owner, in the background, when their
+   *  translation is on (decision 1A). Never awaited and never a reason the record fails. */
+  private translateLater(ownerId: string, taskId: string, recordId: string, runSessionId: string): void {
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => {
+        if (langs) {
+          queueConfirmationRecordTranslation(this.prisma, { ownerId, taskId, recordId, runSessionId }, langs,
+            () => this.publishMoved([{ ownerId, taskId, runSessionId }]));
+        }
+      })
+      .catch((error: Error) => this.logger.warn(`translating review record ${recordId} failed to queue: ${error.message}`));
+  }
+
   /** N5: a state the server itself moved — the task's views and the run's row re-read. */
   publishMoved(moved: ReadonlyArray<{ ownerId: string; taskId: string; runSessionId: string }>): void {
     for (const { ownerId, taskId, runSessionId } of moved) {
@@ -301,6 +320,7 @@ export class OwnerConfirmationReviewService {
     if (!written.alreadyRecorded) {
       if (written.raised) await this.push?.notifyConfirmationRaised(written.recordId);
       this.publishMoved([{ ownerId, taskId, runSessionId: written.request.sessionId }]);
+      this.translateLater(ownerId, taskId, written.recordId, written.request.sessionId);
     }
     return {
       recordId: written.recordId,
@@ -444,6 +464,7 @@ export class OwnerConfirmationReviewService {
     }, loggedRetry(this.logger, 'ownerConfirmationReview.problems'));
     if (!written.alreadyRecorded) {
       this.publishMoved([{ ownerId, taskId, runSessionId: written.standing.request.sessionId }]);
+      this.translateLater(ownerId, taskId, written.recordId, written.standing.request.sessionId);
       // L5: once per record, and only about a task that is DONE — a settled task asks nobody anything,
       // so this is the one way the owner learns what was found.
       const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { status: true } });
@@ -592,6 +613,40 @@ async function bindReviewDelivery(
     data: { delivery: 'DELIVERED', deliveryTurnClientId: clientTurnId, deliveredAt: new Date() },
   });
   if (bound.count === 0) throw new ReviewDeliveryRefused('SESSION_UNAVAILABLE', 'the delivery changed');
+}
+
+/**
+ * Queue the translation of one review record into the owner's language (sessions/card-translation.ts): a REVIEW's
+ * `judgment` and `needsYou`, a PROBLEMS record's `reason` and `problems`, stored in the record's `translation`.
+ * A RETURN goes to the run, not the owner, and is not translated. `published` tells the owner's clients to read
+ * the card again. Returns at once: true when it queued one.
+ */
+export function queueConfirmationRecordTranslation(
+  prisma: PrismaService,
+  record: { ownerId: string; taskId: string; recordId: string; runSessionId: string },
+  langs: TranslationLanguages,
+  published: () => void,
+): boolean {
+  const where = { id: record.recordId, ownerId: record.ownerId, kind: { in: ['REVIEW' as const, 'PROBLEMS' as const] } };
+  return queueOwnerCardTranslation({
+    key: `confirmation-record:${record.recordId}`,
+    read: async () => {
+      const row = await prisma.taskOwnerConfirmationReviewRecord.findFirst({
+        where,
+        select: { kind: true, judgment: true, reason: true, body: true, translation: true },
+      });
+      if (!row) return null;
+      const body = (row.body ?? {}) as { needsYou?: unknown; problems?: unknown };
+      return row.kind === 'REVIEW'
+        ? { source: { judgment: row.judgment, needsYou: body.needsYou }, fields: CONFIRMATION_REVIEW_FIELDS, translation: row.translation }
+        : { source: { reason: row.reason, problems: body.problems }, fields: CONFIRMATION_PROBLEMS_FIELDS, translation: row.translation };
+    },
+    write: async (translation) => (await prisma.taskOwnerConfirmationReviewRecord.updateMany({
+      where,
+      data: { translation: translation as unknown as Prisma.InputJsonValue },
+    })).count > 0,
+    published,
+  }, langs);
 }
 
 /** §3.5 row 1: the reviewer is a session, and the header is how it says which. */

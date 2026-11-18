@@ -36,6 +36,9 @@ var agentPrimerHashes = map[string]string{
 	// Agent Contract 1.10.0 (main merged into the project line): the first line names the new contract; no rule
 	// changed.
 	"1.4.0": "1296cbd8056a8227ac243f1a1c44ad12cff908472db13bedee0debdaee5cbe07",
+	// 1.4.1 is 1.4.0 with the first line naming Agent Contract 1.11.0 (conditions: task_create's startWhen,
+	// schedule_create's WHEN rule, condition_get); no rule changed.
+	"1.4.1": "e85c0988eb692270c70546dbd395df98aab546ff292cd300017105e00adf41f8",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

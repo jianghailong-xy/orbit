@@ -1732,6 +1732,8 @@ struct AgentSessionRow: View {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                            // A full runner, run or batch: which one, and how its slots are taken.
+                            .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
                     }
                 }
                 Spacer()

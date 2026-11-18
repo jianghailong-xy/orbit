@@ -9,6 +9,7 @@ import {
   OpenItemStage,
   OwnerAnswerCard,
   OwnerItemKind,
+  OwnerWordsTranslation,
   SessionLifecycleState,
   SessionRunState,
   deriveSessionLifecycleState,
@@ -646,7 +647,10 @@ export interface CoordinatorQuestion {
 /** How the owner answered: an option, free text, or both. */
 export interface OwnerAnswer {
   option?: number;
+  /** The owner's words, as they typed them: what every card shows. */
   text?: string;
+  /** `text` in the agent language, when Settings › Translation translated it: what the coordinator is told. */
+  translation?: OwnerWordsTranslation;
   answeredByUserId: string;
 }
 
@@ -749,8 +753,10 @@ export function ownerAnswerMessage(
   redelivered?: { stillBlocks: boolean },
 ): string {
   const asked = redelivered ? 'a previous coordinator of this project asked' : 'you asked';
+  // The owner's words as the agent reads them: their translation into the agent language when one was made.
+  const words = answer.translation?.text ? { ...answer, text: answer.translation.text } : answer;
   const told = `From Orbit · owner answer: ${asked} "${question.question}". `
-    + `The owner answered: ${answerInWords(question, answer)} (${answeredAt.toISOString()}).`;
+    + `The owner answered: ${answerInWords(question, words)} (${answeredAt.toISOString()}).`;
   if (!redelivered) return told;
   return told + (redelivered.stillBlocks
     ? ' That question still blocks unfinished tasks.'
@@ -914,10 +920,38 @@ export function openItemDeliveredAt(alias: string): Prisma.Sql {
   )`;
 }
 
-/** Owner-facing lists omit coordinator items still waiting in the conversation's queue. */
+/**
+ * Whether the project's coordinator conversation can still take this item's ITEM turn: it is
+ * switched on, not filed, trashed or completed, and either live or FAILED with an auto-retry
+ * pending. Only then does an undelivered item wait for its receipt with no deadline.
+ *
+ * A coordinator that is down with no retry coming (`conversationIsDown`, nobody scheduled one) never
+ * takes the turn. Without this, its item had no deadline and no owner card for ever, and an
+ * INTEGRATION_CONFLICT held every later landing of its lane by M2 with nobody told (production,
+ * 2026-11-13 to 11-18: a landing QUEUED 98 h). Such an item goes to the owner by the clock, one
+ * window after it opened.
+ */
+export function openItemCoordinatorCanTake(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  return Prisma.sql`EXISTS (
+    SELECT 1
+      FROM "project" taker_project
+      JOIN "session" taker ON taker."id" = taker_project."coordinator_session_id"
+     WHERE taker_project."id" = ${item}."project_id"
+       AND taker_project."coordinator_enabled" = true
+       AND taker."deleted_at" IS NULL
+       AND taker."completed_at" IS NULL
+       AND taker."archived_at" IS NULL
+       AND (taker."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+            OR (taker."status" = 'FAILED' AND taker."retry_at" IS NOT NULL)))`;
+}
+
+/** Owner-facing lists omit coordinator items still waiting in the queue of a conversation that can
+ *  take them (`openItemCoordinatorCanTake`). */
 export function openItemVisible(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
-  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL)`;
+  return Prisma.sql`(${item}."assignee" <> 'COORDINATOR' OR ${openItemDeliveredAt(alias)} IS NOT NULL
+    OR NOT ${openItemCoordinatorCanTake(alias)})`;
 }
 
 /**

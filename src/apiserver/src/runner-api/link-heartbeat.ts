@@ -75,6 +75,9 @@ export type HeartbeatFactRole =
  *   managedWorkload                              a managed runner's beat always reconciles in full.
  *   cloneReports                                 a clone's report moves its workspace's state, which decides the
  *                                                cloneRequests the answer lists and whether its sessions dispatch.
+ *   conditionSamples                             every sample is stored and moves a condition's state, which may fire
+ *                                                it (conditions.service.ts intake): a beat that carries any reconciles
+ *                                                in full, so none is dropped by a quiet answer.
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
@@ -98,6 +101,7 @@ export const HEARTBEAT_FACTS = {
   sessions: 'REPORT',
   agentDirProbes: 'REPORT',
   cloneReports: 'DELIVERY',
+  conditionSamples: 'DELIVERY',
   repos: 'REPORT',
   runsAsRoot: 'REPORT',
   reposRoot: 'REPORT',
@@ -268,6 +272,10 @@ export const HEARTBEAT_DELIVERIES = {
       'owner-requests/owner-secrets.service.ts#sweep',
     ],
     pending: 'a grant of the runner being removed (readLinkReconcilePending)',
+  },
+  conditionProbes: {
+    how: 'FULL_ONLY',
+    reads: 'the live conditions of the runner\'s workspaces, on every full reconcile (at least every five minutes); a quiet answer leaves it out, which the runner reads as "keep the probes you have"',
   },
   forkSnapshotsOpen: {
     how: 'FULL_ONLY',

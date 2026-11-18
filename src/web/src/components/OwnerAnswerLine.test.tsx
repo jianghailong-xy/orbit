@@ -131,14 +131,15 @@ describe('the owner’s answer handed to the coordinator', () => {
     expect(container.querySelector('.chat-user')).toBeNull();
   });
 
-  it('keeps what delivery appended inside the line’s fold, as Orbit’s — never in a bubble', async () => {
-    // A block that names itself: a coordinator's role or the jobs inventory draw no entry (owner, 2026-11-14).
+  it('keeps the line’s own content and omits the appended note', async () => {
     const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
     await mount([told(CARD, { text: `${TOLD}\n\n${board}`, controlPlaneNote: `\n\n${board}` })]);
     await act(async () => line()!.click());
 
     expect(container.querySelector('.owner-answer-told pre')?.textContent).toBe(TOLD);
-    expect(container.querySelector('.owner-answer-told .chat-injected'), 'the appended block is not folded in').not.toBeNull();
+    expect(container.querySelector('.owner-answer-told .chat-injected'), 'the appended block is not rendered').toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain('Quota held dispatch');
     expect(container.querySelector('.chat-user')).toBeNull();
   });
 

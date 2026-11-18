@@ -6975,9 +6975,19 @@ export class SessionsService {
        * `dto`; every platform delivery and every session-to-session door leaves it unset.
        */
       translate?: boolean;
+      /**
+       * The owner's words this turn carries were translated already, by a door that refuses them whole when
+       * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
+       * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
+       * message in the agent language, which is what the engine receives. Written as a translated turn that was
+       * never held (display_prompt, translation_state DONE, translation_lang `from`). An option of this call and
+       * never a field of `dto`.
+       */
+      translated?: { content: string; from: TranslationLanguage };
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    if (opts?.translated) assertPromptSize(opts.translated.content, 'message');
     if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
       throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
     }
@@ -7281,7 +7291,10 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
-        content: dto.content,
+        content: opts?.translated && dto.content ? opts.translated.content : dto.content,
+        ...(opts?.translated && dto.content
+          ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
+          : {}),
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
@@ -9928,6 +9941,13 @@ export class SessionsService {
             'create the task with the plain yes, then start it',
         );
       }
+      // A startWhen task starts when its condition fires (docs/condition-triggers-design.md §6.2); "and start" would
+      // write a runAt beside it, which a task may not have.
+      if ((asked.input as { startWhen?: unknown } | null)?.startWhen != null) {
+        throw new BadRequestException(
+          'startAfterCreate does not apply to a task that starts when its condition holds: create it with the plain yes',
+        );
+      }
     }
     const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
     // A workspace write's card holds its variables' values only while it asks (workspace-write-card-values.ts).
@@ -10065,18 +10085,6 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // An identical rule may already exist. Mark it as literal scheduled-command data so it is matched
-    // only at the scheduled approval door, never exported as an engine pattern.
-    if (fromScheduleRun) {
-      await this.prisma.workspacePermissionRule.updateMany({
-        where: {
-          workspaceId,
-          fromScheduleRun: false,
-          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
-        },
-        data: { fromScheduleRun: true },
-      });
-    }
   }
 
   private toApprovalInfo(a: {

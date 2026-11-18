@@ -222,6 +222,19 @@ private class EvidencePictures(private val resources: ReaderResources, private v
     catch (_: Exception) { failed += id; null }
 }
 
+/**
+ * A picture read and decoded for a tile or the viewer, every step of [producer] resuming on the main thread whichever thread answered
+ * it. A device's effects already do. Under a Compose test rule an effect resumes on the thread that resumed it: a decode that finished
+ * on a Default worker applied the snapshot and ran the next frame there, and that frame touched views off their thread
+ * (EvidenceFilesCardTest, CalledFromWrongThreadException).
+ *
+ * Lint cannot see that [producer] assigns `value` through `scope.producer()`, so its produceState check is suppressed here.
+ */
+@Suppress("ProduceStateDoesNotAssignValue")
+@Composable
+private fun <T> producePicture(initial: T, key: Any?, producer: suspend ProduceStateScope<T>.() -> Unit): State<T> =
+    produceState(initial, key) { val scope = this; withContext(Dispatchers.Main.immediate) { scope.producer() } }
+
 /** What a tile draws of a picture, and all that is kept of it: its top as a square, where a page keeps what it is about, at one size. A
  * long screenshot keeps the width a tile needs, and no tile holds more than this however large its picture is. */
 internal fun decodeThumbnail(data: ByteArray): Bitmap {
@@ -270,7 +283,7 @@ private fun TileFace(file: EvidenceFile, pictures: EvidencePictures) {
         EvidenceFiles.isGone(file) -> TileWords(listOfNotNull(EvidenceFiles.expired, file.expiredAt?.let { EvidenceFiles.expiryDate(it) }).joinToString("\n"))
         !EvidenceFiles.isPicture(file) || file.id in pictures.failed -> TileWords(EvidenceFiles.kind(file), FontWeight.SemiBold)
         else -> {
-            val bitmap by produceState(pictures.held(file.id), file.id) { if (value == null) value = pictures.thumbnail(file.id) }
+            val bitmap by producePicture(pictures.held(file.id), file.id) { if (value == null) value = pictures.thumbnail(file.id) }
             bitmap?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize().testTag("evidence-files:picture:${file.id}"), contentScale = ContentScale.Crop) }
         }
     }
@@ -679,7 +692,7 @@ private fun EvidenceFileViewer(paged: List<EvidenceFile>, shown: EvidenceFile, p
 /** One picture, pinched to look closer as every picture the app opens is. A finger alone moves to the next one until it is pinched. */
 @Composable
 private fun ViewerPage(file: EvidenceFile, pictures: EvidencePictures, read: (Int, Int) -> Unit) {
-    val image by produceState<ViewerImage?>(null, file.id) {
+    val image by producePicture<ViewerImage?>(null, file.id) {
         try {
             value = pictures.withBytes(file.id) { data -> withContext(Dispatchers.Default) { decodeViewerImage(data) } }.also { read(it.width, it.height) }
         } catch (cancel: CancellationException) { throw cancel }

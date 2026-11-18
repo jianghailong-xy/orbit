@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { generateKeyPairSync } from 'node:crypto';
+import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { PushService } from './push.service';
 import { fitCollapseId } from './collapse-id';
@@ -14,7 +16,7 @@ const ios = { id: 'ios-row', userId: 'owner', token: 'apns-token', platform: 'io
 const android = { ...ios, id: 'android-row', token: 'fcm-token', platform: 'android',
   bundleId: 'io.orbitd.android', environment: 'production' };
 
-function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both') {
+function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both', overrides: Record<string, string | undefined> = {}) {
   const queries: any[] = [];
   const removed: any[] = [];
   const apns: any[][] = [];
@@ -34,8 +36,9 @@ function harness(channels: 'ios' | 'android' | 'both' | 'none' = 'both') {
       deleteMany: async (q: any) => { removed.push(q); },
     },
   };
+  const values = { ...configValues, ...overrides };
   const config = { get: (k: string) => (channels === 'both' || channels === 'ios' && k.startsWith('APNS_')
-    || channels === 'android' && k.startsWith('FCM_')) ? configValues[k] : undefined } as ConfigService;
+    || channels === 'android' && k.startsWith('FCM_')) ? values[k] : undefined } as ConfigService;
   const service = new PushService(prisma as any, config);
   (service as any).needsYouSessions = async () => pending;
   (service as any).claimApprovalAlert = async (sessionId: string) => {
@@ -137,6 +140,109 @@ test('APNs production host, transport arguments and collapse identity remain unc
     kind: 'finished', sessionID: 'session' });
   assert.equal(await (h.service as any).deliver([{ ...ios, environment: 'production' }], body, 'alert', '10', 'settled-session'), 1);
   assert.deepEqual(h.apns[0], ['api.push.apple.com', 'apns-token', body, 'apns-auth', 'alert', '10', 'settled-session']);
+});
+
+test('APNs signs each host with its own key and JWT cache; legacy credentials still serve either host', async () => {
+  const production = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const sandbox = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const encoded = (key: typeof production.privateKey) => Buffer.from(key.export({ type: 'pkcs8', format: 'pem' })).toString('base64');
+  const values = { APNS_KEY: encoded(production.privateKey), APNS_KEY_ID: 'default-key',
+    APNS_SANDBOX_KEY: encoded(sandbox.privateKey), APNS_SANDBOX_KEY_ID: 'sandbox-key' };
+  const h = harness('ios', values);
+  (h.service as any).authToken = (PushService.prototype as any).authToken;
+  const rows = [{ ...ios, environment: 'production' }, ios];
+  const body = JSON.stringify({ aps: { badge: 1 } });
+  assert.equal(await (h.service as any).deliver(rows, body, 'background', '5'), 2);
+  assert.equal(await (h.service as any).deliver(rows, body, 'background', '5'), 2);
+  for (const [index, pair, keyId, host] of [
+    [0, production, 'default-key', 'api.push.apple.com'],
+    [1, sandbox, 'sandbox-key', 'api.sandbox.push.apple.com'],
+  ] as const) {
+    const token = h.apns[index][3];
+    assert.equal(h.apns[index][0], host);
+    assert.equal(h.apns[index + 2][3], token);
+    assert.equal(jwt.decode(token, { complete: true })!.header.kid, keyId);
+    assert.equal((jwt.verify(token, pair.publicKey.export({ type: 'spki', format: 'pem' }), { algorithms: ['ES256'] }) as jwt.JwtPayload).iss, 'test');
+  }
+  // Expiring one cache never changes the other environment's token.
+  (h.service as any).apnsCredentials.sandbox.cached = { token: 'expired', iat: 0 };
+  assert.notEqual((h.service as any).authToken('sandbox'), 'expired');
+  assert.equal((h.service as any).authToken('production'), h.apns[0][3]);
+
+  const fallback = harness('ios', { APNS_KEY: values.APNS_KEY, APNS_KEY_ID: values.APNS_KEY_ID });
+  (fallback.service as any).authToken = (PushService.prototype as any).authToken;
+  assert.equal(await (fallback.service as any).deliver(rows, body, 'background', '5'), 2);
+  for (const args of fallback.apns) {
+    assert.equal(jwt.decode(args[3], { complete: true })!.header.kid, 'default-key');
+    jwt.verify(args[3], production.publicKey.export({ type: 'spki', format: 'pem' }), { algorithms: ['ES256'] });
+  }
+  const explicit = harness('ios', { ...values, APNS_KEY: undefined, APNS_KEY_ID: undefined,
+    APNS_PRODUCTION_KEY: values.APNS_KEY, APNS_PRODUCTION_KEY_ID: 'production-key' });
+  (explicit.service as any).authToken = (PushService.prototype as any).authToken;
+  assert.equal(await (explicit.service as any).deliver(rows, body, 'background', '5'), 2);
+  assert.equal(jwt.decode(explicit.apns[0][3], { complete: true })!.header.kid, 'production-key');
+});
+
+for (const environment of ['sandbox', 'production'] as const) {
+  test(`APNs ${environment} key rejection logs once, preserves tokens and skips future sends; other channels continue`, async () => {
+    const h = harness();
+    const warnings: string[] = [];
+    (h.service as any).log.warn = (message: string) => warnings.push(message);
+    (h.service as any).send = async (...args: any[]) => {
+      h.apns.push(args);
+      return args[0] === (environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com')
+        ? { status: 403, reason: 'BadEnvironmentKeyInToken' } : { status: 200 };
+    };
+    const rows = [ios, { ...ios, id: 'production-row', environment: 'production' }, android];
+    const body = JSON.stringify({ aps: { alert: { title: 'Orbit', body: 'x' } } });
+    // Concurrent requests can already be in flight when the key is first rejected.
+    assert.deepEqual(await Promise.all([1, 2, 3].map(() => (h.service as any).deliver(rows, body, 'alert', '10'))), [2, 2, 2]);
+    assert.equal(h.apns.length, 6);
+    assert.equal(await (h.service as any).deliver(rows, body, 'alert', '10'), 2);
+    assert.equal(h.apns.length, 7);
+    assert.equal(h.fcm.length, 4);
+    assert.equal(h.removed.length, 0);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], new RegExp(`403 BadEnvironmentKeyInToken for ${environment}`));
+    assert.match(warnings[0], /api\.(sandbox\.)?push\.apple\.com/);
+    assert.ok(!warnings[0].includes(ios.token));
+  });
+}
+
+test('missing or partial environment credentials are skipped once without mixing keys or suppressing the other host', async () => {
+  for (const overrides of [
+    { APNS_KEY: undefined, APNS_KEY_ID: undefined, APNS_PRODUCTION_KEY: 'test', APNS_PRODUCTION_KEY_ID: 'prod' },
+    { APNS_SANDBOX_KEY: 'test' },
+    { APNS_SANDBOX_KEY_ID: 'sandbox' },
+  ]) {
+    const h = harness('ios', overrides);
+    const warnings: string[] = [];
+    (h.service as any).log.warn = (message: string) => warnings.push(message);
+    const body = JSON.stringify({ aps: { badge: 1 } });
+    for (let i = 0; i < 2; i++) {
+      assert.equal(await (h.service as any).deliver([ios, { ...ios, environment: 'production' }], body, 'background', '5'), 1);
+    }
+    assert.equal(h.apns.length, 2);
+    assert.ok(h.apns.every((args) => args[0] === 'api.push.apple.com'));
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /sandbox.*no complete credentials/);
+    assert.equal(h.removed.length, 0);
+  }
+});
+
+test('other APNs 403 errors do not permanently disable an environment', async () => {
+  const h = harness('ios');
+  const warnings: string[] = [];
+  (h.service as any).log.warn = (message: string) => warnings.push(message);
+  (h.service as any).send = async (...args: any[]) => {
+    h.apns.push(args);
+    return h.apns.length === 1 ? { status: 403, reason: 'ExpiredProviderToken' } : { status: 200 };
+  };
+  const body = JSON.stringify({ aps: { badge: 1 } });
+  assert.equal(await (h.service as any).deliver([ios], body, 'background', '5'), 0);
+  assert.equal(await (h.service as any).deliver([ios], body, 'background', '5'), 1);
+  assert.equal(h.removed.length, 0);
+  assert.match(warnings[0], /ExpiredProviderToken for sandbox \(api.sandbox.push.apple.com\)/);
 });
 
 test('a schedule finding with a 200-character key reaches APNs with a collapse id of at most 64 bytes, the same for the same key', async () => {

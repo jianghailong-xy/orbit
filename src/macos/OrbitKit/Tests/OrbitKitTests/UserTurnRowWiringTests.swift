@@ -77,7 +77,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     private var rowBody: [String] {
         get throws {
             statements(try section(try source(Self.rowPath),
-                                   from: "var body: some View {", to: "private func attachedRest"))
+                                   from: "var body: some View {", to: "private func told"))
         }
     }
 

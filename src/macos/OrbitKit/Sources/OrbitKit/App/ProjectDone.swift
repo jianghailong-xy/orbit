@@ -197,7 +197,7 @@ public struct ProjectDerivedDone: Codable, Equatable, Sendable {
 /// Kept as the object it arrived as: the server stores what the owner accepted as it was sent, and
 /// a gap may carry keys this build has no words for. The fields the cards draw are read off it.
 public struct AcceptedGap: Codable, Equatable, Sendable {
-    public let fields: [String: JSONValue]
+    public var fields: [String: JSONValue]
 
     /// The criterion's `key`, as `project_get` gives it.
     public var criterionKey: String { fields["criterionKey"]?.stringValue ?? "" }
@@ -246,9 +246,9 @@ public struct AcceptedGap: Codable, Equatable, Sendable {
 public struct DoneRequest: Codable, Equatable, Sendable {
     public let criteriaDigest: String
     /// The coordinator's call, in a sentence or two.
-    public let judgment: String
+    public var judgment: String
     /// What Orbit cannot prove: the gaps, each naming its criterion.
-    public let gaps: [AcceptedGap]
+    public var gaps: [AcceptedGap]
     public let stateDigest: String?
 
     public init(criteriaDigest: String, judgment: String, gaps: [AcceptedGap] = [],
@@ -463,8 +463,13 @@ public struct ProjectDoneRecord: Codable, Equatable, Sendable {
 /// missing, in their words (`ProjectDoneRequestDeclineBody`).
 public struct ProjectDoneDeclineBody: Codable, Equatable, Sendable {
     public let note: String
+    /// `true` delivers the note untranslated (Send as written); nil is left out of the body.
+    public let sendAsWritten: Bool?
 
-    public init(note: String) { self.note = note }
+    public init(note: String, sendAsWritten: Bool = false) {
+        self.note = note
+        self.sendAsWritten = sendAsWritten ? true : nil
+    }
 }
 
 /// The request ended by "Not yet…", and where the note went (`ProjectDoneRequestDeclined`). Only

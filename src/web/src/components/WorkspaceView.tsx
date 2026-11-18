@@ -339,8 +339,8 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
-import { TranslationCtx, type TranslationActions } from './TranslationParts';
+import { agentLanguageOf, answerRefusedUntranslated, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -623,6 +623,8 @@ import {
   waitingNoticeScope,
 } from '../lib/runnerSlots';
 import {
+  CAPACITY_HELD_LINE,
+  capacityHeldHint,
   capacityHeldMessageText,
   capacityHeldTag,
   capacityHeldTitle,
@@ -1193,6 +1195,8 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
+  /** The row's tooltip, where the line leaves out why: a full runner, run or batch says which. */
+  hint?: string;
 };
 // The line for a message the workspace hasn't answered yet, marked with who sent it (`sentBy`).
 // Prefixed, because the preview line is otherwise the workspace's voice: unmarked, a message and a
@@ -1363,6 +1367,11 @@ export const sessionLine = (
   }
   if (live && state === 'QUEUED') {
     const held = claudeRegionHeldWords(s, machine);
+    // A full runner, run or batch reads in plain words, and the tooltip says which one is full and how
+    // the slots are taken (board session-row-runner-full: the owner picked C, plain words only, since
+    // the row's own time already counts the wait).
+    if (!held && isCapacityHeld(s))
+      return { text: CAPACITY_HELD_LINE, tone: 'queued', hint: capacityHeldHint(s, machine, Date.now()) };
     // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it
     // can last hours, and only the owner can shorten it.
     return { text: held ?? queuedLabel(s), tone: !held && isRunnerUpdating(s) ? 'warning' : 'queued' };
@@ -5106,11 +5115,13 @@ export function WorkspaceView({
   // presses, and re-reads the same views after it; it lives here rather than in the card because
   // the press that finishes it happens at the composer, after the card armed it.
   const ownerDecision = useMutation({
-    mutationFn: (press: { taskId: string; requestId: string; decision: 'SEND_BACK'; note: string }) =>
-      sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note),
+    mutationFn: (press: { taskId: string; requestId: string; decision: 'SEND_BACK'; note: string; sendAsWritten?: boolean }) =>
+      sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note, undefined, press.sendAsWritten),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
-    // reader told only "it failed" has been told the button is broken.
+    // reader told only "it failed" has been told the button is broken. A note the server could not
+    // translate is said above the composer instead, with Retry and Send as written (RefusedSendBack).
     onError: (error: Error) => {
+      if (answerRefusedUntranslated(error)) return;
       const refusal = ownerDecisionRefusal(error);
       message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
     },
@@ -5129,10 +5140,12 @@ export function WorkspaceView({
       taskId: string;
       evidenceRevision: string;
       note: string;
-    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note),
+      sendAsWritten?: boolean;
+    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note, press.sendAsWritten),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
     onError: (error: Error) => {
+      if (answerRefusedUntranslated(error)) return;
       const refusal = evidenceDecisionRefusal(error);
       message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
     },
@@ -7222,18 +7235,19 @@ export function WorkspaceView({
       // an idle agent, with the facts the card is drawn from carried in front of the message
       // because nothing in the session holds them. The card that armed it is untouched: its own
       // primary action is still the other way out. A request talked about is the same turn, with
-      // the request named in front instead of a plan.
+      // the request named in front instead of a plan. A request may ask for a screenshot, and no
+      // door waits on a note, so an image alone goes there too; a plan change still needs words.
       if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'ownerRequest') {
-        if (!c) return;
+        if (!c && (replyTo.target.kind === 'planChange' || readyImages.length === 0)) return;
         pinToBottom();
         const carried = replyTo.context;
         setReplyTo(null);
         setText('');
         setComposerRefs({});
         setHistIdx(-1);
-        const typed = materializeReferences(c, composerRefs);
+        const typed = c ? materializeReferences(c, composerRefs) : '';
         send.mutate({
-          content: carried ? `${carried}\n\n${typed}` : typed,
+          content: [carried, typed].filter(Boolean).join('\n\n'),
           images: readyImages,
           intent,
         });
@@ -9850,6 +9864,7 @@ export function WorkspaceView({
                       )}
                       <div
                         className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                        title={line.hint}
                       >
                         {line.text}
                       </div>
@@ -11262,6 +11277,8 @@ export function WorkspaceView({
           }
         />
         </MainCheckoutCtx.Provider>
+        <RefusedSendBack mutation={ownerDecision} when={(press) => press.taskId === selectedTaskId} />
+        <RefusedSendBack mutation={evidenceDecision} when={(press) => press.sessionId === selectedId} />
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>
@@ -13050,8 +13067,10 @@ export function usePendingTray({
       // in the transcript and restoring would duplicate it. Withdrawn from the tray it comes back
       // as a withdrawn steer does (decided 2026-10-16, docs/mocks/steer-tray): an explicit press,
       // so a draft keeps its place above the words rather than losing them to it. Nor does a turn
-      // nobody typed come back (`returnsToComposer`).
-      const body = withdrawn && returnsToComposer(withdrawn) ? withdrawn.content.trim() : '';
+      // nobody typed come back (`returnsToComposer`). Translated, it comes back as the owner wrote it,
+      // not as the English delivered (Settings › Translation).
+      const body =
+        withdrawn && returnsToComposer(withdrawn) ? (withdrawn.translation?.original ?? withdrawn.content).trim() : '';
       if (body) restoreUndelivered?.(withdrawn?.shell ? `!${body}` : body, withdrawn?.attachments);
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
@@ -13168,7 +13187,7 @@ export function usePendingTray({
         busy: withdrawing,
         onWithdraw:
           !requeued && steerWithdrawal && offersSteerWithdraw(steer.delivery, steer.withdrawable)
-            ? () => steerWithdrawal.withdraw(steer.turnId, steer.text, steer.attachmentRefs)
+            ? () => steerWithdrawal.withdraw(steer.turnId, steer.translation?.original ?? steer.text, steer.attachmentRefs)
             : undefined,
       };
     };
@@ -13194,7 +13213,7 @@ export function usePendingTray({
         busy: withdrawing || steering,
         // Not handed to a runner yet, either way: the server takes it back alone.
         onWithdraw: turn.placement === 'steer'
-          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.content, refs) : undefined
+          ? steerWithdrawal ? () => steerWithdrawal.withdraw(turn.turnId, turn.translation?.original ?? turn.content, refs) : undefined
           : () => void cancelQueued(turn.turnId),
         onSteer: !intoTurn && !turn.shell && steerOffered ? () => void steerQueued(turn.turnId) : undefined,
       };

@@ -32,6 +32,7 @@
 import {
   AgentProvider,
   bashCommandRules,
+  bashSegments,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   PermissionMode,
@@ -82,7 +83,8 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  * Grep, Glob, `git log`, `ls`, …) without asking. Each Orbit tool here is one a check needs:
  *
  *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
- *     schedule the run serves and to its envelope (§8.3);
+ *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
+ *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
  *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
  *   * the guide, which reads the operation catalogue and asks the server nothing.
@@ -94,6 +96,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_report',
   'mcp__orbit__schedule_get',
   'mcp__orbit__schedule_list',
+  'mcp__orbit__condition_get',
   'mcp__orbit__schedule_update',
   'mcp__orbit__schedule_end',
   'mcp__orbit__notify',
@@ -215,8 +218,15 @@ export function checkOnlyAsksOn(capabilities: readonly string[] | null | undefin
 }
 
 /**
- * The permission mode the claim hands the runner: the session's own, except that a CHECK_ONLY run on Claude Code
- * claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't Ask, as S2b ran it.
+ * The permission mode the claim hands the runner: the session's own, except that
+ *  - a CHECK_ONLY run on Claude Code claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't
+ *    Ask, as S2b ran it;
+ *  - an OPEN_PR or LAND run on Claude Code runs in Auto, so that the routine commands an unattended run needs
+ *    (`git fetch`, `npm view`, its tests, `git commit`) do not each wait on a card: measured 2026-11-17, a LAND run
+ *    waited 278 minutes on them and timed out. The level's denials still hold: Claude's --disallowedTools and the
+ *    server door (scheduleRunDeniesApproval) refuse them in every mode. Claude only, as owner-ruled 2026-11-18: no
+ *    other engine's Auto has a classifier (permissionSemantics.ts). A model with no Auto runs as Default
+ *    (normalizeBuiltinPermissionMode). Interim, until per-schedule grants (docs/scheduled-run-grants-design.md).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,
@@ -224,7 +234,11 @@ export function scheduleRunPermissionMode(
   provider: string | null | undefined,
   runnerCapabilities: readonly string[] | null | undefined,
 ): PermissionMode {
-  return claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities) ? PermissionMode.DONT_ASK : mode;
+  if (claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities)) return PermissionMode.DONT_ASK;
+  if ((accessLevel === 'OPEN_PR' || accessLevel === 'LAND') && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE) {
+    return PermissionMode.AUTO;
+  }
+  return mode;
 }
 
 /**
@@ -334,6 +348,41 @@ export const OPEN_PR_DISALLOWED_TOOLS: readonly string[] = [
   'Skill(release)',
   'Skill(upgrade)',
 ];
+
+/** Match level denials at the server door, regardless of the engine asking. */
+export function scheduleRunDeniesApproval(
+  accessLevel: AccessLevel | null | undefined,
+  provider: string | null | undefined,
+  toolName: string,
+  input: unknown,
+): boolean {
+  const card = input as { command?: unknown; skill?: unknown } | null;
+  const glob = (pattern: string, value: string) => {
+    const escaped = pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+    return new RegExp(`^${escaped}$`).test(value);
+  };
+  const commands = (command: string): string[] => bashSegments(command).flatMap((segment) => {
+    // Codex sends argv as a shell-quoted command, e.g. /bin/bash -lc 'gh pr merge 12'.
+    const wrapper = segment.trim().match(/^(?:\/[^\s]+\/)?(?:bash|sh)\s+-(?:lc|c)\s+(['"])([\s\S]*)\1$/);
+    if (!wrapper) return [segment.trim()];
+    const inner = wrapper[1] === "'"
+      ? wrapper[2].replace(/'\\''/g, "'")
+      : wrapper[2].replace(/\\(["\\$`])/g, '$1');
+    return commands(inner);
+  });
+  return scheduleRunDisallowedTools([], accessLevel, provider).some((rule) => {
+    const scoped = rule.match(/^([^()]+)\((.*)\)$/);
+    if (!scoped) return glob(rule, toolName);
+    const [, tool, content] = scoped;
+    if (tool === 'Bash' && (toolName === 'Bash' || toolName === 'Terminal')) {
+      if (typeof card?.command !== 'string') return false;
+      return commands(card.command).some((command) => content.endsWith(':*')
+        ? glob(content.slice(0, -2), command) || glob(`${content.slice(0, -2)} *`, command)
+        : glob(content, command));
+    }
+    return tool === toolName && typeof card?.skill === 'string' && glob(content, card.skill);
+  });
+}
 
 /** The workspace's own disallowed tools, plus the run's when the session serves a schedule's run. */
 export function scheduleRunDisallowedTools(

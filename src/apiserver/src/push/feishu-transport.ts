@@ -236,7 +236,7 @@ export class FeishuTransport {
           this.prisma.approval.findMany({
             where: { sessionId, status: 'PENDING', session: { ownerId: target.ownerId } },
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-            select: { id: true, toolName: true, input: true, coordinatorFallback: true },
+            select: { id: true, toolName: true, input: true, coordinatorFallback: true, translation: true },
           }),
         ]);
         const visible = await visibleQuestions(this.prisma, approvals);
