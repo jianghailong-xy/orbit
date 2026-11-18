@@ -105,6 +105,17 @@ final class TranslationWiringTests: XCTestCase {
         // A refused card answer draws the reason its 422 gave.
         XCTAssertTrue(cards.contains("if let refusedFoot = console.answersRefusedUntranslated[row.itemId] {"))
         XCTAssertTrue(tag.contains("TranslationFootView(parts: held.foot) { action in"))
+        // A reason's sentence wraps under the bubble, its presses on the line below, instead of being cut off.
+        XCTAssertTrue(tag.contains("ViewThatFits(in: .horizontal) {"))
+        XCTAssertTrue(tag.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(tag.contains(".minimumScaleFactor(0.85)"))
+        // The project done card's "Not yet" refusal is a card answer too: it draws the reason its 422 gave.
+        let done = try source(app + "Views/ProjectDoneCards.swift")
+        XCTAssertTrue(done.contains("if let refusedFoot = notYetRefused, let onNotYet {"))
+        XCTAssertTrue(done.contains("TranslationFootView(parts: refusedFoot) { action in"))
+        for file in ["ConsoleModel.swift", "ProjectsModel.swift"] {
+            XCTAssertTrue(try source(app + file).contains("? SessionTranslation.refusedAnswerFoot(after: error) : nil"), file)
+        }
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .general)"))
     }
 

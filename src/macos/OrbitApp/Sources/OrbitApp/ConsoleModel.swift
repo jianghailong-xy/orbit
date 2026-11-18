@@ -5064,11 +5064,12 @@ final class ConsoleModel {
         do {
             _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
                                                  sendAsWritten: sendAsWritten)
-            doneDeclineRefusedUntranslated = false
+            doneDeclineRefusedUntranslated = nil
         } catch {
-            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            // A note that could not be translated was not sent: the card says why, with Retry and Send as written.
             doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
-            if !doneDeclineRefusedUntranslated {
+                ? SessionTranslation.refusedAnswerFoot(after: error) : nil
+            if doneDeclineRefusedUntranslated == nil {
                 statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
             }
             return false
@@ -5077,8 +5078,9 @@ final class ConsoleModel {
         return true
     }
 
-    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
-    var doneDeclineRefusedUntranslated = false
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent: the line the
+    /// card draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.

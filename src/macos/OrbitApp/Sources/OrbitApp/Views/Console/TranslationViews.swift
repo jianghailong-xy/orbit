@@ -48,29 +48,57 @@ struct TranslationFootView: View {
 
     var body: some View {
         if !parts.isEmpty {
-            HStack(spacing: 4) {
-                ForEach(Array(parts.enumerated()), id: \.offset) { i, part in
-                    if i > 0, !isChip(part) { Text("·").foregroundStyle(.tertiary) }
-                    switch part {
-                    case .text(let words):
-                        Text(words).foregroundStyle(failed ? Color.red : Color.secondary)
-                    case .chip(let words):
-                        Text(words)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
-                    case .action(let label, let action):
-                        Button { onAction(action) } label: { Text(label).underline() }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(failed ? Color.red : Color.secondary)
-                            .contentShape(Rectangle())
-                    }
-                }
+            // One line while it fits. A reason's sentence (policy board docs/ux/translation-failure-policy.html,
+            // frame 7) can be longer than the column: then the sentence wraps on its own lines, with its
+            // presses on the line under it, all of it under the bubble rather than cut off.
+            ViewThatFits(in: .horizontal) {
+                row(parts).fixedSize(horizontal: true, vertical: false)
+                wrapped
             }
             .font(.orbitMeta)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
         }
+    }
+
+    /// The words wrapped, then "Retry · Send as written" on a line of their own.
+    private var wrapped: some View {
+        let words = parts.filter { if case .action = $0 { return false } else { return true } }
+        let presses = parts.filter { if case .action = $0 { return true } else { return false } }
+        return VStack(alignment: alignment, spacing: 2) {
+            ForEach(Array(words.enumerated()), id: \.offset) { _, part in
+                if case .text(let w) = part {
+                    Text(w).foregroundStyle(failed ? Color.red : Color.secondary)
+                        .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    row([part])
+                }
+            }
+            if !presses.isEmpty { row(presses).fixedSize(horizontal: true, vertical: false) }
+        }
+        .accessibilityIdentifier("translation.foot.wrapped")
+    }
+
+    private func row(_ parts: [SessionTranslation.FootPart]) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { i, part in
+                if i > 0, !isChip(part) { Text("·").foregroundStyle(.tertiary) }
+                switch part {
+                case .text(let words):
+                    Text(words).foregroundStyle(failed ? Color.red : Color.secondary)
+                case .chip(let words):
+                    Text(words)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
+                case .action(let label, let action):
+                    Button { onAction(action) } label: { Text(label).underline() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(failed ? Color.red : Color.secondary)
+                        .contentShape(Rectangle())
+                }
+            }
+        }
+        .lineLimit(1)
     }
 
     private func isChip(_ part: SessionTranslation.FootPart) -> Bool {
