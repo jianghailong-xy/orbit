@@ -82,10 +82,12 @@ spend the original's refresh token.
    verified or rolled back.
 2. **Credentials.** Read both blobs and exchange their `claudeAiOauth` values (other keys stay).
    - Linux: write each `.credentials.json` with temp file + `rename` in the same directory, keeping mode 0600.
-   - macOS: `security -i` on stdin with
-     `add-generic-password -U -a "<acct>" -s "<service>" -X "<hex of JSON>"`. This is the form
-     Claude Code itself writes. `-U` updates the existing item in place, which keeps its ACL. The
-     token never appears on an argv.
+   - macOS: `security add-generic-password -U -a "<acct>" -s "<service>" -X "<hex of JSON>"`
+     (Claude Code's hex encoding; `-U` updates the item in place and keeps its ACL). Prefer the
+     argv form over `security -i` on stdin: interactive stdin is line-buffered around LINE_MAX
+     (~2 KiB), and Default's blob with `mcpOAuth` is larger, so `-i` truncates the write and
+     corrupts the item (measured 2026-11-18 on longdeMac-mini.local). ARG_MAX is large enough
+     for the hex.
 3. **Identity.** Read each `.claude.json` and exchange the two `oauthAccount` values, leaving every
    other key as read. Write with temp file + `rename`, keeping the mode.
 4. **Verify** (§4). On success, delete the backup.
@@ -217,17 +219,45 @@ owner chose to name the former Default by it.
   were equal to before, so nothing rotated. The swapped window lasted 0.3 s and 1.0 s. `1e84046c`
   had one live `claude` process during the run. That was safe only because both tokens had about
   110 minutes left and the window was about a second. The runner must not rely on this (§2.1).
-- **macOS: not yet measured. See the Mac task, "Mac: measure the Keychain login swap and complete
-  the contract".** The orbit-macos runner (Mac mini) has been offline since 2026-11-16 23:34Z, and
-  no other darwin runner exists. Its last heartbeat reported Claude auth "no" for the machine's
-  login. Whether a `security` rewrite of the two items raises a Keychain dialog is therefore still
-  **unproven**. The probe/swap script is
-  [`claude-default-swap-mac.py`](claude-default-swap-mac.py):
-  `python3 -I claude-default-swap-mac.py <added dir> --probe-only` reads only, and without
-  `--probe-only` it swaps Default with `<added dir>`, verifies, and swaps back. It reads with
-  `security find-generic-password -w` and writes with `security -i add-generic-password -U … -X`,
-  each under a 30 s timeout (a blocked call means a dialog). It rolls back from the backup on any
-  failure and exits 0 only when both logins equal the original state. Expected outcome: no dialog, because Claude Code creates these items through
-  `/usr/bin/security` itself, so `security` is on each item's ACL and `-U` keeps that ACL. The
-  runner's `keychainCredentials` comment does warn of a one-time prompt on first read. This must
-  be measured before the runner and server work continue.
+- **macOS: measured (longdeMac-mini.local), 2026-11-18, Claude Code 2.1.327.** Mixed layout —
+  Default Keychain-backed, added folder file-backed — is the case this Mac had, and the one the
+  runner already prefers when `<dir>/.credentials.json` exists (`claudeKeychainCredentials`).
+
+  **Storage layout**
+  - Default (`~/.claude`, CLAUDE_CONFIG_DIR unset): login-Keychain generic password, service
+    `Claude Code-credentials`, account `$USER`. Blob keys `claudeAiOauth` + `mcpOAuth`. No
+    `~/.claude/.credentials.json`.
+  - Added (`~/.orbit/claude-accounts/mac-swap-probe`): **file only** —
+    `<dir>/.credentials.json` (mode 0600, key `claudeAiOauth` alone). Keychain service
+    `Claude Code-credentials-9ec1515c` (`sha256(dir)[:8]`) is **absent**.
+
+  **Why the added folder is file-based (not a broken half sign-in)**
+  - Signed in from a terminal, not Orbit Add account: owner ran
+    `CLAUDE_CONFIG_DIR=~/.orbit/claude-accounts/mac-swap-probe claude auth login` (and once more
+    after `rm` of the file). Both folders answer `claude auth status` with `loggedIn: true` and
+    `/api/oauth/profile` MATCH — usable logins.
+  - Claude Code 2.1.327's macOS store is `keychain-with-plaintext-fallback`. When the Keychain
+    primary write fails non-transiently it writes `.credentials.json` and records
+    `plaintext_fallback_used` ("Warning: Storing credentials in plaintext."). That is what left
+    the added folder on the file. Default's Keychain write succeeded in the same session
+    (`Claude Code-credentials` created 2026-11-18T11:25:19Z).
+
+  **Mixed-case procedure** (script [`claude-default-swap-mac.py`](claude-default-swap-mac.py)):
+  detect file vs Keychain per folder the way the runner does; back up both credential blobs and
+  both `oauthAccount` values; exchange only `claudeAiOauth` (leave `mcpOAuth`); exchange only
+  `oauthAccount` in `$HOME/.claude.json` and `<dir>/.claude.json`; every `security` call under a
+  30 s timeout; restore from backup on any failure; swap back and require identity equality.
+  Keychain writes use argv `-X` (see §3) — not `security -i`.
+
+  **Results** (Orbit bg job `bgj_5844845638d3`; first attempt `bgj_12e9af4813fc` with `-i` failed
+  by truncating Default's Keychain item, then restored via argv `-X` with no dialog):
+  - Before: Default `jianghailong.rd@gmail.com` / `327d66e0…`; added
+    `jianghailong.orbit@gmail.com` / `5e7da146…`. Profile owner MATCH on both.
+  - After swap: accounts exchanged; both still signed in; profile MATCH on both. Terminal
+    `claude auth status` (CLAUDE_CONFIG_DIR unset) reported the former added account.
+  - After swap-back: refresh/access hashes, `expiresAt` and `oauthAccount` equal to before
+    (nothing rotated). Swapped window **1.3 s**.
+  - **No Keychain dialog. No `security` call blocked.** Slowest `security` call **0.04 s**;
+    all reads/writes exit 0 (except the intentional probe that the added Keychain item is
+    absent, exit 44). This Cursor-session / runner-hosted process can read and `-U` update
+    Default's Keychain item without a prompt.
