@@ -19,10 +19,10 @@ class RunnerUpdatingTest {
         val row = DirectorySession("s", status = "PENDING", runState = "QUEUED", queuedReason = "runner_updating", queuedActive = 2)
         assertEquals(SessionLine("Runner updating", SessionLine.Tone.WARNING), SessionLine.make(row, live = true, machine = "studio-mac"))
         assertEquals("Runner updating", SessionHeader.statusWord(row))
-        // A full runner names itself in the queue's own tone (docs/mocks/queued-card-runner-full); every other queue keeps its word and
-        // its tone, and Trash draws no live line.
+        // A full runner reads in plain words in the queue's own tone (docs/mocks/session-row-runner-full) and the header names it; every
+        // other queue keeps its word and its tone, and Trash draws no live line.
         val capacity = row.copy(queuedReason = "runner_at_capacity")
-        assertEquals(SessionLine("Runner full", SessionLine.Tone.QUEUED), SessionLine.make(capacity, live = true))
+        assertEquals(SessionLine("Waiting for a free slot", SessionLine.Tone.QUEUED), SessionLine.make(capacity, live = true))
         assertEquals("Runner full", SessionHeader.statusWord(capacity))
         val offline = row.copy(queuedReason = "runner_offline")
         assertEquals(SessionLine("Queued", SessionLine.Tone.QUEUED), SessionLine.make(offline, live = true))

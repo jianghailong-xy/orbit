@@ -109,7 +109,7 @@ export const REFERENCES_REPLY: Row = {
   "ts": "2026-09-25T01:13:15.552Z"
 };
 
-/** A message with an `orbit-task:` reference and the `<referenced-task>` note delivery appended (ReferencedTaskNote). (run_event 01a0a2e1-2bc8-76b6-8cde-02a1227751ea: session 62d37865-5c42-5ca9-9b42-1a4606e92531, seq 1953) */
+/** A message with an `orbit-task:` reference and the `<referenced-task>` note delivery appended. (run_event 01a0a2e1-2bc8-76b6-8cde-02a1227751ea: session 62d37865-5c42-5ca9-9b42-1a4606e92531, seq 1953) */
 export const REFERENCED_TASK: Row = {
   "type": "user",
   "payload": {

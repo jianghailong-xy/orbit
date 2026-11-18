@@ -118,10 +118,11 @@ describe('a turn carrying only Orbit’s blocks', () => {
     }
   });
 
-  it('keeps typed words the reader’s bubble, with the attached line under it', async () => {
+  it('keeps typed words in the reader’s bubble and omits the appended note', async () => {
     await mount([userEvent('Ship it', FUTURE)]);
     expect(container.querySelector('.orbitwake')).toBeNull();
     expect(container.querySelector('.chat-user')?.textContent).toContain('Ship it');
-    expect(container.textContent).toContain('Orbit attached');
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.textContent).not.toContain('orbit-future');
   });
 });

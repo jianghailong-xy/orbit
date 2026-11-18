@@ -83,8 +83,9 @@ public struct SessionLine: Equatable, Sendable {
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
-            // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
-            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
+            // A full runner, run or batch reads in plain words, in the queue's own colour (board
+            // session-row-runner-full, web `sessionLine`); the Mac row's tooltip says which is full.
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.CAPACITY_HELD_LINE, tone: .queued) }
             // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
             if QueuedDiskLow.holds(s) { return SessionLine(text: QueuedDiskLow.title, tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
