@@ -198,7 +198,27 @@ export interface ManagedRunnerStatus {
    * predates it, which queued nothing before READY: read `initialProvider` then.
    */
   firstSessionProvider?: string | null;
+  /** The runner runs an older build than the current image's. Absent when it runs the current one, when it is
+   *  not running (asleep, failed, being provisioned), when the server cannot tell, and from an older server. */
+  update?: ManagedRunnerUpdate;
   actions: ManagedRunnerActions;
+}
+
+/** One build of the managed runner image: the source commit it was built from, and when, if known. */
+export interface ManagedRunnerBuild {
+  sha: string;
+  builtAt?: string;
+}
+
+/**
+ * The managed runner's container was made from an older image than the one it would be made from now
+ * (docs/managed-runner-update-now-design.md). `available`: READY on the older build. `updating`: draining to
+ * be made again from the current one.
+ */
+export interface ManagedRunnerUpdate {
+  running: ManagedRunnerBuild;
+  current: ManagedRunnerBuild;
+  phase: 'available' | 'updating';
 }
 
 /** The body of every managed runner write. */

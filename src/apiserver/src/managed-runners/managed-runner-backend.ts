@@ -170,6 +170,10 @@ export interface ManagedInstance {
    *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
    *  container's image against the profile's `runner.image`). Absent otherwise. */
   readonly previousImage?: string;
+  /** With `previousImage`: the source commit the image it is made from now was built from (its
+   *  `org.opencontainers.image.revision` label; Docker: as the channel reports it, Kubernetes: the profile's
+   *  `runner.imageRevision`). Absent when the host or profile does not say. */
+  readonly currentImageRevision?: string;
 }
 
 /** A fencing receipt left for an instance, and what reading it concluded. */

@@ -116,7 +116,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     const runner = mapping
       ? await this.prisma.runner.findUnique({
           where: { id: mapping.runnerId },
-          select: { status: true, ...RUNNER_BEATS, engines: true, defaultRemoved: true, capabilities: true },
+          select: { status: true, ...RUNNER_BEATS, engines: true, defaultRemoved: true, capabilities: true, version: true },
         })
       : null;
     const available = !!this.runtime?.available;

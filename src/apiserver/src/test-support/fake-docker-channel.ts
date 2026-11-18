@@ -57,6 +57,8 @@ export class FakeDockerChannel implements DockerChannel {
   down = false;
   /** Unset: a stop is taken in and the container goes on running, in its grace, until `exit` reports it. */
   stopsAtOnce = true;
+  /** The `org.opencontainers.image.revision` label of `image`, as /v1/info reports it: null when it has none. */
+  imageRevision: string | null = null;
   private failures: Array<{ call: string; failure: Failure }> = [];
 
   /**
@@ -94,7 +96,7 @@ export class FakeDockerChannel implements DockerChannel {
   async info(): Promise<ChannelInfo> {
     this.call('info');
     return {
-      schemaVersion: 1, instanceId: this.instanceId, image: this.image,
+      schemaVersion: 1, instanceId: this.instanceId, image: this.image, imageRevision: this.imageRevision,
       network: { name: 'orbit-managed-runners', internal: true, interContainer: false },
       limits: this.limits, stopGraceSeconds: 240, diskCheckSeconds: 120, host: this.host,
     };

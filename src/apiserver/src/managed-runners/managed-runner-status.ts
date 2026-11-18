@@ -4,6 +4,7 @@ import {
   MANAGED_RUNNER_UNAVAILABLE,
   type ManagedRunnerReason,
   type ManagedRunnerStatus,
+  type ManagedRunnerUpdate,
 } from '@orbit/shared';
 
 import { managedRunnerAccountDisabledReason, managedRunnerNotEligibleReason } from './managed-runner-eligibility';
@@ -26,7 +27,7 @@ export interface ManagedRunnerStatusInput {
   mapping: ManagedRunner | null;
   /** The runner row: its heartbeat (read with RUNNER_BEATS), and what its last heartbeat reported of its
    *  engines (absent: nothing yet). */
-  runner: ({ status: RunnerStatus } & RunnerBeats & Partial<ManagedSupplyRunner>) | null;
+  runner: ({ status: RunnerStatus; version?: string | null } & RunnerBeats & Partial<ManagedSupplyRunner>) | null;
   /** The owner's first own model key this managed runner can run (managedFirstSessionKeyOf), asked only
    *  before the runner has been READY. Absent: none. */
   firstSessionKey?: { slug: string; engine: ManagedEngine } | null;
@@ -48,6 +49,24 @@ function storedReason(value: unknown): ManagedRunnerReason | null {
   const { code, message, retryable } = value as Record<string, unknown>;
   if (typeof code !== 'string' || typeof message !== 'string') return null;
   return { code, message, retryable: retryable === true };
+}
+
+/** The build a managed runner image's runner reports as its version (deploy/managed-runner/image/Dockerfile). */
+const MANAGED_VERSION = /^managed-([0-9a-f]{7,40})$/;
+
+/**
+ * `update`: the manager found the READY instance made from an older image than the current one, whose build it
+ * recorded (`currentImageSha`), and the runner reports the build it runs, another one. While an image roll drains
+ * it, `updating`. Nothing when it is current, not running, or either build is unknown.
+ */
+function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | undefined): ManagedRunnerUpdate | undefined {
+  const phase = mapping.managementState === 'READY' ? 'available' : mapping.managementState === 'DRAINING' && mapping.imageRollTo ? 'updating' : null;
+  const current = mapping.currentImageSha;
+  const running = MANAGED_VERSION.exec(version ?? '')?.[1];
+  if (!phase || !mapping.imageOutdatedSince || !current || !running) return undefined;
+  // One side may be abbreviated: the same commit is no update, whatever the record says of the image.
+  if (current.startsWith(running) || running.startsWith(current)) return undefined;
+  return { running: { sha: running }, current: { sha: current }, phase };
 }
 
 /**
@@ -88,6 +107,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
   const reason = storedReason(mapping.lastError);
   const beat = runnerLastBeatAt(runner);
   const fresh = !!beat && now.getTime() - beat.getTime() <= input.heartbeatFreshMs;
+  const update = disabled ? undefined : managedRunnerUpdate(mapping, runner?.version);
   return {
     contractVersion: MANAGED_RUNNER_CONTRACT_VERSION,
     enabled,
@@ -110,6 +130,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
         ? { engines: runner.engines ?? null, defaultRemoved: runner.defaultRemoved ?? null, capabilities: runner.capabilities ?? null }
         : null,
     ),
+    ...(update ? { update } : {}),
     actions: {
       ...actions,
       canRetry: operable && mapping.managementState === 'FAILED' && reason?.retryable === true,

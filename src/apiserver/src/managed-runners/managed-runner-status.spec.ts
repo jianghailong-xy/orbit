@@ -41,6 +41,8 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     stopRequestedAt: null,
     stopAcknowledgedAt: null,
     imageRollTo: null,
+    imageOutdatedSince: null,
+    currentImageSha: null,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -232,4 +234,24 @@ test('status never exposes a workspace, even for a legacy mapping that still nam
     assert.equal(status.workspaceId, null);
     assert.equal(status.runnerId, 'r');
   }
+});
+
+test('update: an outdated READY runner names both builds; draining for a roll is updating; otherwise none', () => {
+  const outdated = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973' };
+  const status = (change: Partial<ManagedRunner>, version: string | null = 'managed-95884b154f', ownerDisabled = false) =>
+    managedRunnerStatus({
+      enabled: true, available: true, ownerDisabled, mapping: mapping(change), runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH,
+    }).update;
+  assert.deepEqual(status(outdated), { running: { sha: '95884b154f' }, current: { sha: 'a800ca3973' }, phase: 'available' });
+  assert.deepEqual(status({ ...outdated, managementState: 'DRAINING', imageRollTo: 'sha256:x' })?.phase, 'updating');
+  // Draining to sleep, asleep, failed or being provisioned: none.
+  for (const managementState of ['DRAINING', 'SLEEPING', 'FAILED', 'PROVISIONING', 'STARTING'] as const) {
+    assert.equal(status({ ...outdated, managementState }), undefined, managementState);
+  }
+  // Nothing recorded, a build the runner does not report, or the same commit abbreviated: none.
+  assert.equal(status({}), undefined);
+  assert.equal(status(outdated, null), undefined);
+  assert.equal(status(outdated, '0.42.0'), undefined);
+  assert.equal(status(outdated, 'managed-a800ca3'), undefined);
+  assert.equal(status(outdated, 'managed-95884b154f', true), undefined, 'a disabled account is never offered an update');
 });

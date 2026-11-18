@@ -183,6 +183,8 @@ export class DockerBackend implements ManagedRunnerBackend {
   readonly location: { readonly clusterKey: string; readonly namespace: string };
   /** The image the channel reported, on a profile that adopts it (D2), and when it was read. */
   private adopted?: { image: string; at: number };
+  /** The revision label of the image the channel serves (`imageRevision`, null when it has none), and when it was read. */
+  private revision?: { value: string | null; at: number };
   private channelUnreachable = false;
   /** When `recheckReachability` last asked the channel. */
   private rechecked?: number;
@@ -245,6 +247,7 @@ export class DockerBackend implements ManagedRunnerBackend {
       );
     }
     if (adopt) this.adopted = { image: info.image, at: this.now() };
+    this.revision = { value: typeof info.imageRevision === 'string' && info.imageRevision ? info.imageRevision : null, at: this.now() };
     return info;
   }
 
@@ -257,6 +260,13 @@ export class DockerBackend implements ManagedRunnerBackend {
     if (this.profile.runner.image !== DOCKER_IMAGE_FROM_CHANNEL) return this.profile.runner.image;
     if (fresh || !this.adopted || this.now() - this.adopted.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
     return this.adopted!.image;
+  }
+
+  /** The source commit the image new containers are made from was built from, as the channel reports it: read
+   *  afresh once the last reading is older than ADOPTED_IMAGE_TTL_MS. Null when the channel does not say. */
+  private async imageRevision(): Promise<string | null> {
+    if (!this.revision || this.now() - this.revision.at > ADOPTED_IMAGE_TTL_MS) await this.checkedInfo();
+    return this.revision!.value;
   }
 
   computeShare(): ComputeAmounts {
@@ -346,7 +356,13 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<DockerInstance | null> {
     const view = await this.channel.readContainer(managedPodName(mapping.runnerId));
-    return view ? instanceOf(view, await this.image()) : null;
+    if (!view) return null;
+    const instance = instanceOf(view, await this.image());
+    if (!instance.previousImage) return instance;
+    // Only the status reads it: a channel not reached, or not yet restarted on the profile's image, cannot name the
+    // current build, which is no reason to fail the pass that read the container.
+    const revision = await this.imageRevision().catch(() => null);
+    return revision ? { ...instance, currentImageRevision: revision } : instance;
   }
 
   /**
