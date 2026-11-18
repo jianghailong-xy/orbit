@@ -2375,6 +2375,10 @@ private struct ContextWindowIndicator: View {
             // A phone's gauge is a 32pt-tall target like + and Send beside it, never narrower than
             // it is tall.
             .frame(minWidth: gaugeShowsNumber ? nil : 32, minHeight: gaugeShowsNumber ? nil : 32)
+            // A min-only frame lets a full toolbar squeeze it down to 32pt, narrower than the bar,
+            // ring and capsule inside it, which then draw over the model name and ✦ Optimize. Pinned
+            // to its ideal width, the gauge holds its room and the model name truncates instead.
+            .fixedSize()
             // The ring is only a stroke — dashed when there is no reading — and a plain button takes
             // a tap only where it draws: the whole gauge opens the detail, its hollow centre too.
             .contentShape(Rectangle())
