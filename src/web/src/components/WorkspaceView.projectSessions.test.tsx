@@ -933,6 +933,38 @@ describe('the title bar’s Project sessions button', { timeout: 60_000 }, () =>
     expect(button().getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('spins while anything its page shows is active, and stands still once nothing is', async () => {
+    const spinning = (): boolean => button().querySelector('.anticon-loading') !== null;
+    const idleTask = { ...TASK, status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', lastToolUse: null };
+    // A member at work (the fixture's task runs).
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    await until(() => expect(spinning()).toBe(true));
+    await unmount();
+    // Nothing at work: the glyph.
+    rows = [LOOSE, COORDINATOR, idleTask];
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    await settle();
+    expect(spinning()).toBe(false);
+    expect(button().querySelector('.orbit-button-icon svg')).not.toBeNull();
+    await unmount();
+    // A landing job queued on the line, every session idle.
+    integrationView = { line: null, upstreamRef: 'main', integratingCount: 0, queuedCount: 1, inFlight: null };
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(spinning()).toBe(true));
+    await unmount();
+    // A merge into main being checked.
+    integrationView = null;
+    currentPromotion = { id: 'promo-1', state: 'CHECKING' };
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(spinning()).toBe(true));
+  });
+
   it('remembers a hand fold in this browser until the button is pressed again', async () => {
     const stored = new Map<string, string>();
     vi.stubGlobal('localStorage', {
