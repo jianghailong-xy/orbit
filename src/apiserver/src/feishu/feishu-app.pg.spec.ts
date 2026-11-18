@@ -76,7 +76,7 @@ const SECRETS = [APP_X.appSecret, X_ROTATED, APP_Y.appSecret, APP_L.appSecret, W
 
 /** What every answer's app is made of, the id twin the response pipeline adds (common/public-id-body.ts) included. */
 const APP_KEYS = [
-  'appId', 'approvalsInFeishu', 'botName', 'connectedReplicas', 'createdAt', 'defaultWorkspaceId', 'defaultWorkspacePublicId', 'enabled',
+  'access', 'appId', 'approvalsInFeishu', 'botName', 'connectedReplicas', 'createdAt', 'defaultWorkspaceId', 'defaultWorkspacePublicId', 'enabled',
   'hasSecret', 'lastConnectedAt', 'lastError', 'lastEventAt', 'messageDetail', 'ownerName', 'ownerOpenId', 'platform',
   'secretUnreadable', 'updatedAt',
 ];
@@ -179,6 +179,14 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
       'last_error text NULL',
       'created_at timestamptz NOT NULL = CURRENT_TIMESTAMP',
       'updated_at timestamptz NOT NULL = CURRENT_TIMESTAMP',
+      // Who can use the bot (migration 1140, docs/feishu-bot-design.md §14.1).
+      "access_mode text NOT NULL = 'OWNER_ONLY'::text",
+      'open_workspace_id uuid NULL',
+      "open_permission_mode text NOT NULL = 'auto'::text",
+      'open_max_running_per_person int4 NOT NULL = 1',
+      'open_sessions_per_day_per_person int4 NOT NULL = 10',
+      'open_max_running_total int4 NOT NULL = 3',
+      'open_sessions_per_day_total int4 NOT NULL = 50',
     ]);
     assert.deepEqual(await columns('feishu_deployment_setting'), [
       'id int2 NOT NULL = 1',
@@ -190,10 +198,14 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
       (await sql.query(`SELECT conname, contype FROM pg_constraint WHERE conrelid = $1::regclass ORDER BY conname`, [table])).rows
         .map((c) => `${c.conname} ${c.contype}`);
     assert.deepEqual(await constraints('feishu_app'), [
+      'feishu_app_access_mode_chk c',
       'feishu_app_app_id_chk c',
       'feishu_app_app_secret_enc_chk c',
       'feishu_app_default_workspace_id_fkey f',
       'feishu_app_message_detail_chk c',
+      'feishu_app_open_limits_chk c',
+      'feishu_app_open_permission_mode_chk c',
+      'feishu_app_open_workspace_id_fkey f',
       'feishu_app_owner_id_fkey f',
       'feishu_app_pkey p',
       'feishu_app_platform_chk c',
@@ -204,6 +216,7 @@ test('Feishu apps: saved only once Feishu trades the credentials, one account pe
     );
     assert.deepEqual(actions.rows, [
       { conname: 'feishu_app_default_workspace_id_fkey', confdeltype: 'n' },
+      { conname: 'feishu_app_open_workspace_id_fkey', confdeltype: 'n' },
       { conname: 'feishu_app_owner_id_fkey', confdeltype: 'c' },
     ], 'a deleted workspace clears the choice; a deleted account takes its app');
     const unique = await sql.query(
