@@ -247,6 +247,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 | `approval`：工具权限 | 会话标题、工具名、`Details hidden by your settings` | 输入预览（与 Web 审批卡同一份脱敏） | Allow once · Deny · Open in Orbit |
 | `approval`：agent 的提问（AskUserQuestion） | 会话标题、`The agent asked you a question` | 问题与选项 | 详情模式下可在卡上作答；默认只有 Open in Orbit |
 | `approval`：编排确认卡（`orbit_task_create`、`orbit_project_create`、`orbit_agent_create` / `update`、删除 runner、MCP 授权等） | 会话标题、卡的种类 | 摘要 | 只有 Open in Orbit |
+| `approval`：别人发起的会话（上面三行都适用，任务 O5） | 卡片正文第一行多一句 `Started by <name> in <group>`（在接入的群里发起）或 `Started by <name> in a direct message`（私聊发起）；名字取会话首轮的外部发送者，飞书不给名字时写 `a Feishu user`，群没有名字时写 `a group`；主人自己的会话没有这一行。默认模式也显示：名字和群名与标题同级，不是谁说了什么。卡片终态保留这一行 | 同左 | 与对应的行相同；卡只发主人私聊，发起人收不到 |
 | `finished` / `failed` | 会话标题、`Finished` / `Failed` | recap 或失败原因（`settleAlert`） | 回复这条消息即回复会话 · Open in Orbit |
 | `agent-message` | 会话标题、`The agent sent you a message` | agent 写的那句话 | 回复即回复会话 · Open in Orbit |
 | owner item 四种 | 项目标题、事项种类 | `ownerItemAlert` 的正文 | 只有 Open in Orbit |

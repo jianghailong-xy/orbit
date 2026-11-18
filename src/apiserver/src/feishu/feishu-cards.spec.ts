@@ -10,6 +10,7 @@ import {
   approvalClass,
   renderFeishuCard,
   renderFeishuTerminalCard,
+  startedByLine,
   type FeishuAlert,
   type FeishuCard,
   type FeishuCardContext,
@@ -319,4 +320,32 @@ test('decision 1: a tool approval offers Allow once and Deny, never "always allo
   assert.deepEqual(callbacks(card), [FEISHU_CARD_ACTIONS.allow, FEISHU_CARD_ACTIONS.deny]);
   assert.ok(!strings(card).some((s) => /always/i.test(s)), 'no "always allow" anywhere on the card');
   assert.ok(!JSON.stringify(card).includes('remember'), 'no button value asks to remember');
+});
+
+test('who started a session the owner did not start: in a group or a direct message, in both modes, kept once settled', () => {
+  assert.equal(startedByLine('Li Lei', { group: 'Release crew' }), 'Started by Li Lei in Release crew');
+  assert.equal(startedByLine('Li Lei', 'direct-message'), 'Started by Li Lei in a direct message');
+  assert.equal(startedByLine(null, { group: null }), 'Started by a Feishu user in a group', 'Feishu would not say the names');
+
+  const approvals = [{ id: 'a', toolName: 'Bash', input: { command: 'ls' } }];
+  const question = [{ id: 'q', toolName: 'AskUserQuestion', input: { questions: [{ question: 'Which?', header: 'Pick', multiSelect: false, options: [{ label: 'A', description: '' }] }] } }];
+  for (const line of ['Started by Li Lei in Release crew', 'Started by Li Lei in a direct message']) {
+    for (const items of [approvals, question]) {
+      const alert: FeishuAlert = { kind: 'approval', sessionTitle: 'Fix the build', approvals: items, startedBy: line };
+      for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+        const live = renderFeishuCard(alert, ctx(detail));
+        assert.ok(holds(live, line), `${detail}: the live card says who started it`);
+        const settled = renderFeishuTerminalCard(alert, ctx(detail), 'Allowed in Orbit · 10:32 UTC');
+        assert.ok(holds(settled, line), `${detail}: the settled card keeps it`);
+      }
+    }
+  }
+
+  // The owner's own session: no such line, on any card.
+  for (const items of [approvals, question]) {
+    for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+      const card = renderFeishuCard({ kind: 'approval', sessionTitle: 'Fix the build', approvals: items }, ctx(detail));
+      assert.ok(!holds(card, 'Started by'), `${detail}: the owner's own session says nothing of who started it`);
+    }
+  }
 });

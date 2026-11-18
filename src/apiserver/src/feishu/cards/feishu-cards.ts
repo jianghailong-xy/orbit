@@ -7,7 +7,8 @@ import { toolInputPreview } from './tool-input-preview';
  * Pure: an alert and the app's settings in, the card out. Sending, collapsing and updating are the transport's.
  *
  * WHAT A CARD CARRIES IS THE POINT (§6.4). A card is stored on Feishu's servers, so in the default TITLES_ONLY mode
- * it carries the session's or project's title, the kind of event, and a tool's name, and nothing else: no tool
+ * it carries the session's or project's title, the kind of event, a tool's name, and who started a session the owner did
+ * not (`startedByLine`), and nothing else: no tool
  * input, recap, failure reason, `notify` text, owner item body or question. FULL adds the third column of §6.1.
  * What anyone wrote (titles, an agent's words) is forwarded as it was, always as plain text, never as markdown.
  */
@@ -33,8 +34,11 @@ export interface FeishuApprovalItem {
 
 /** What a card is about: one row of §6.1's table. */
 export type FeishuAlert =
-  /** One stretch of a session's pending approvals: one card, each approval with its own buttons (§6.2). */
-  | { kind: 'approval'; sessionTitle: string; approvals: FeishuApprovalItem[] }
+  /**
+   * One stretch of a session's pending approvals: one card, each approval with its own buttons (§6.2). `startedBy` is
+   * `startedByLine`'s words when someone other than the owner started the session, absent for the owner's own.
+   */
+  | { kind: 'approval'; sessionTitle: string; approvals: FeishuApprovalItem[]; startedBy?: string | null }
   /** `settleAlert`'s answer: `body` is the recap or the failure line. */
   | { kind: 'finished' | 'failed'; sessionTitle: string; body: string }
   /** An agent's `notify`: `message` is what it wrote. */
@@ -90,6 +94,18 @@ const ORBIT_CARD_FALLBACK = 'Orbit confirmation';
 
 /** Which of §6.1's three approval rows an approval is. A server-filed card is `orbit_<name>`; an engine's MCP prompt is not. */
 export type FeishuApprovalClass = 'tool' | 'question' | 'orbit';
+/**
+ * Who started a session the owner did not start, and where (§6.1): `Started by <name> in <group>` or `Started by <name>
+ * in a direct message`. Shown in TITLES_ONLY too: a name and a group's name are what a title is, not what anyone asked.
+ */
+export const STARTED_BY_SOMEONE = 'a Feishu user';
+export const STARTED_BY_SOME_GROUP = 'a group';
+export function startedByLine(name: string | null, place: { group: string | null } | 'direct-message'): string {
+  const who = name?.trim() || STARTED_BY_SOMEONE;
+  const where = place === 'direct-message' ? 'a direct message' : place.group?.trim() || STARTED_BY_SOME_GROUP;
+  return `Started by ${who} in ${where}`;
+}
+
 export function approvalClass(toolName: string): FeishuApprovalClass {
   if (toolName === 'AskUserQuestion') return 'question';
   if (/^orbit_[a-z]/.test(toolName)) return 'orbit';
@@ -217,6 +233,7 @@ function build(
       title = sessionTitle(alert.sessionTitle);
       subtitle = alert.approvals.length === 1 ? approvalLine(alert.approvals[0]) : `${alert.approvals.length} approvals need your reply`;
       template = 'orange';
+      if (alert.startedBy) elements.push(note(alert.startedBy));
       alert.approvals.forEach((approval, index) => {
         if (index > 0) elements.push(hr);
         elements.push(...approvalSection(approval, index, ctx, full, live, cut));

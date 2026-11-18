@@ -7,6 +7,7 @@ import {
   approvalClass,
   renderFeishuCard,
   renderFeishuTerminalCard,
+  startedByLine,
   type FeishuAlert,
   type FeishuApprovalItem,
   type FeishuCard,
@@ -75,6 +76,37 @@ export function approvalOutcome(listed: { toolName: string; status: string | nul
 export function ownerItemOutcome(item: { resolution: string | null; resolvedAt: Date | null } | null, now: Date): string {
   if (!item) return `No longer waiting in Orbit · ${clock(now)}`;
   return `${item.resolution === 'ANSWERED' ? 'Answered' : 'Resolved'} in Orbit · ${clock(item.resolvedAt ?? now)}`;
+}
+
+/**
+ * Who started the session, when it was not the owner (§6.1): the outside sender of its first turn (migration 0502), and
+ * where — the connected group its first Feishu chain is in, by the group's name, or else a direct message. Null for the
+ * owner's own session. The line is stored with the card's alert, so the card keeps it once it is closed. A lookup that
+ * fails costs the card this line, not the card.
+ */
+export async function feishuStartedBy(prisma: PrismaService, target: FeishuTarget, sessionId: string): Promise<string | null> {
+  try {
+    const first = await prisma.conversationTurn.findFirst({
+      where: { sessionId, session: { ownerId: target.ownerId } },
+      orderBy: [{ seq: 'asc' }],
+      select: { externalSenderSource: true, externalSenderName: true },
+    });
+    if (first?.externalSenderSource !== 'FEISHU') return null;
+    const thread = await prisma.feishuThread.findFirst({
+      where: { sessionId, ownerId: target.ownerId, appId: target.appId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { chatId: true },
+    });
+    const route = thread
+      ? await prisma.feishuChatRoute.findFirst({
+        where: { appId: target.appId, ownerId: target.ownerId, chatId: thread.chatId },
+        select: { chatName: true },
+      })
+      : null;
+    return startedByLine(first.externalSenderName, route ? { group: route.chatName } : 'direct-message');
+  } catch {
+    return null;
+  }
 }
 
 interface OpenCard {
@@ -231,17 +263,18 @@ export class FeishuTransport {
       approvalId: firstApprovalId,
       openUrl: orbitUrl({ sessionId }),
       render: async () => {
-        const [session, approvals] = await Promise.all([
+        const [session, approvals, startedBy] = await Promise.all([
           this.prisma.session.findFirst({ where: { id: sessionId, ownerId: target.ownerId }, select: { title: true } }),
           this.prisma.approval.findMany({
             where: { sessionId, status: 'PENDING', session: { ownerId: target.ownerId } },
             orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             select: { id: true, toolName: true, input: true, coordinatorFallback: true, translation: true },
           }),
+          feishuStartedBy(this.prisma, target, sessionId),
         ]);
         const visible = await visibleQuestions(this.prisma, approvals);
         if (!session || visible.length === 0) return null;
-        return { kind: 'approval', sessionTitle: `${coordinatorFallback || visible.some(a => a.coordinatorFallback) ? 'Not reviewed by the coordinator · ' : ''}${session.title ?? ''}`, approvals: visible as FeishuApprovalItem[] };
+        return { kind: 'approval', sessionTitle: `${coordinatorFallback || visible.some(a => a.coordinatorFallback) ? 'Not reviewed by the coordinator · ' : ''}${session.title ?? ''}`, approvals: visible as FeishuApprovalItem[], ...(startedBy ? { startedBy } : {}) };
       },
     };
   }
