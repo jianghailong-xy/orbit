@@ -55,7 +55,7 @@ final class TranslationFailureReasonCopyTests: XCTestCase {
     }
 
     func testTheReasonReadOffTheTurnListDrawsItsLine() throws {
-        let rows = try JSONDecoder().decode([QueuedTurnInfo].self, Data("""
+        let rows = try JSONDecoder().decode([QueuedTurnInfo].self, from: Data("""
         [{"turnId":"t1","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"TIMEOUT"}}]
         """.utf8))
         XCTAssertEqual(SessionTranslation.userFoot(rows[0].turnTranslation, flipped: false),
@@ -106,7 +106,7 @@ final class TranslationFailureReasonCopyTests: XCTestCase {
         XCTAssertEqual(TranslationLanguage.ja.tag(to: .de, unavailable: true),
                        "Japanese → German · unavailable, messages will wait")
         // It reads unavailable exactly while the account's `translationUnavailableUntil` is ahead.
-        let me = try JSONDecoder().decode(User.self, Data("""
+        let me = try JSONDecoder().decode(User.self, from: Data("""
         {"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}
         """.utf8))
         let until = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-18T06:01:00Z"))
@@ -120,7 +120,7 @@ final class TranslationFailureReasonCopyTests: XCTestCase {
 
     /// The server announces opens and closes as `translation.status_changed`: the app reads the account again.
     func testTheTranslationStatusEventReadsTheAccount() throws {
-        let ev = try JSONDecoder().decode(ControlEvent.self, Data("""
+        let ev = try JSONDecoder().decode(ControlEvent.self, from: Data("""
         {"type":"translation.status_changed","sessionId":"","agentId":null,"ts":"t","data":{}}
         """.utf8))
         XCTAssertEqual(ev.type, .translationStatusChanged)
