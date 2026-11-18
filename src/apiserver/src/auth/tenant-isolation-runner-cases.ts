@@ -474,6 +474,8 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
   'GET /runner/sessions/:id/merge-receipts': { as: ['runner', 'session'], request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /runner/sessions/:id/end': { as: SESSION, request: (of) => ({ params: { id: of.runner.endSessionId } }) },
   'POST /runner/sessions/:id/complete-session': { as: SESSION, request: (of) => ({ params: { id: of.runner.completedSessionId } }) },
+  // Moved to its own workspace, out of no folder: nothing changes, so no case loses what it asks for.
+  'POST /runner/sessions/:id/move': { as: SESSION, request: (of) => ({ params: { id: of.sessionId }, body: { workspaceId: of.workspaceId } }) },
   'DELETE /runner/sessions/:id': { as: SESSION, request: (of) => ({ params: { id: of.runner.deletedSessionId } }) },
   'POST /runner/sessions/:id/archive': { as: SESSION, request: (of) => ({ params: { id: of.runner.archivedSessionId } }) },
 
@@ -872,6 +874,7 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
   'POST /runner/sessions/:id/merge': (mine) => ({ params: { id: mine.sessionId }, body: {} }),
   'POST /runner/sessions/:id/end': (mine) => ({ params: { id: mine.runner.endSessionId } }),
   'POST /runner/sessions/:id/complete-session': (mine) => ({ params: { id: mine.runner.completedSessionId } }),
+  'POST /runner/sessions/:id/move': (mine) => ({ params: { id: mine.sessionId }, body: { workspaceId: mine.workspaceId } }),
   'DELETE /runner/sessions/:id': (mine) => ({ params: { id: mine.runner.deletedSessionId } }),
   'POST /runner/sessions/:id/archive': (mine) => ({ params: { id: mine.runner.archivedSessionId } }),
   'GET /runner/workspaces': () => ({ params: {} }),
@@ -1150,6 +1153,14 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/sessions/:id/turns body clientTurnId': {
     as: ['runner', 'service', 'session'],
     request: (of, mine) => ({ params: { id: mine.sessionId }, body: { message: 'from the census', clientTurnId: openItemTurnKey(of) } }),
+  },
+  'POST /runner/sessions/:id/move body workspaceId': {
+    as: SESSION,
+    request: (of, mine) => ({ params: { id: mine.sessionId }, body: { workspaceId: of.workspaceId } }),
+  },
+  'POST /runner/sessions/:id/move body folderId': {
+    as: SESSION,
+    request: (of, mine) => ({ params: { id: mine.sessionId }, body: { folderId: of.folderId } }),
   },
   'POST /runner/sessions/:id/interrupt body clientTurnId': {
     as: SESSION,
