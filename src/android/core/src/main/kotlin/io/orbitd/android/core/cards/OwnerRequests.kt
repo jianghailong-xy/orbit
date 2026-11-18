@@ -370,6 +370,11 @@ object OwnerRequests {
         return byId.values.sortedBy { parse(it.createdAt) ?: Instant.MIN }
     }
 
+    /** The request a press on a session's needs-you notice opens: the oldest it asked that is still pending, or null when this
+     * device holds none of them yet (OrbitKit `oldestPending`). */
+    fun oldestPending(sessionId: String, vararg lists: List<OwnerRequest>): OwnerRequest? =
+        forSession(sessionId, *lists).firstOrNull { it.pending }
+
     /**
      * Where each request goes in a conversation (web `decisionReceiptAnchor`): after the last row stamped at or before it was filed,
      * by the row's index, or -1 ahead of every row. Requests with no readable moment are left out.

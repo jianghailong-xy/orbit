@@ -1,6 +1,7 @@
 package io.orbitd.android.directory
 
 import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.OwnerItem
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
@@ -206,10 +207,13 @@ internal object SessionHeader {
 
     /** What a session waiting on you says, in the words of whatever is waiting: the kind the server named, when this build has
      * words for it, else the row's long-standing approval word. */
-    fun waitingWord(s: DirectorySession): String = when (s.waitingKind) {
+    fun waitingWord(s: DirectorySession): String =
+        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
+
+    /** The same words from the wire's own fields, for a reader holding the raw row (the needs-you notice). */
+    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>): String = when (waitingKind) {
         "OWNER_CONFIRMATION" -> OwnerConfirmationCopy.waitingForConfirmation
-        "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
-            ?: SessionLineCopy.unnamedWord
+        "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(ownerItems) ?: SessionLineCopy.unnamedWord
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
