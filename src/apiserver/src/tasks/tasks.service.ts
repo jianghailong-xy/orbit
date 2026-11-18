@@ -727,7 +727,11 @@ function boundRunTask(
  * current pins (`taskRunEngine`), exactly as carrying it out would.
  */
 function staleCreatePlan(
-  target: TaskRunExecuteTarget,
+  // A single run's target, or a bulk Run's item with its plan read off it (the same frozen fields).
+  target: Pick<
+    TaskRunExecuteTarget,
+    'plan' | 'taskId' | 'title' | 'engine' | 'provider' | 'model' | 'effort' | 'route' | 'workspaceId' | 'runnerId' | 'fromVersion'
+  >,
   current: {
     engine: string | null;
     provider: string | null;
@@ -750,6 +754,55 @@ function staleCreatePlan(
   compare('runner', target.runnerId, current.runnerId);
   return changed.length > 0 ? changed.join(', ') : null;
 }
+
+/**
+ * What a bulk Run reads off each task it plans: what it classifies the task by, and everything one
+ * item of its plan is built from (planBatchItem), scoped to the owner as its subtask read is. Shared with the re-plan of a stale item
+ * (replanStaleBatchItems), so a re-planned item is built from exactly what a fresh press would read.
+ */
+const batchRunTaskSelect = (ownerId: string) => ({
+  id: true,
+  title: true,
+  description: true,
+  // What the run is judged against, read here because the prompt now carries it.
+  acceptanceCriteria: true,
+  acceptanceCommand: true,
+  acceptanceExpectedExitCode: true,
+  projectId: true,
+  engine: true,
+  provider: true,
+  model: true,
+  // The suggested tier, which routing reads for a fresh run, as the single Run does.
+  modelHint: true,
+  modelHintReason: true,
+  status: true,
+  runAt: true,
+  startWhenConditionId: true,
+  // Same inputs the single-task Run assembles its prompt from: a task must not get a
+  // different prompt depending on which button started it.
+  isForeman: true,
+  verifiesTaskId: true,
+  // §13.6 SU6, read here so a retired task — or a check of replaced work — is CLASSIFIED
+  // before anything with an effect. See the skip below.
+  supersededByTaskId: true,
+  terminalReason: true,
+  // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
+  // about whether a row is work. Owner-scoped like every other reader of this predicate.
+  completionPolicy: true,
+  completionCriterion: true,
+  children: { where: { ownerId }, select: { id: true }, take: 1 },
+  verifies: { select: { supersededByTaskId: true, terminalReason: true } },
+  // Whether its project was cancelled — the gate `execute` applies third, classified here —
+  // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
+  codeless: true,
+  project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
+  // The standard the prompt states for its evidence (step 3).
+  ...TASK_STANDARD_SELECT,
+  list: { select: { instructions: true } },
+  assignee: { select: { id: true, runnerId: true } },
+}) satisfies Prisma.TaskSelect;
+
+type BatchRunTask = Prisma.TaskGetPayload<{ select: ReturnType<typeof batchRunTaskSelect> }>;
 
 export { buildTaskExecutionPrompt };
 
@@ -14104,8 +14157,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * Given back by a compare-and-set fenced on this lease, BOUND -> OPEN with the target cleared, so
    * the fresh plan is bound by the ordinary `bindRunRequest` and every gate in `executeLeased` is
    * asked again — the moment fence included. The token, and so the Session id a fresh CREATE names,
-   * stays the same. Only single-run CREATE plans: a RESUME or ADOPT names a run that exists, and a
-   * stand-down or a bulk Run's plan is not judged here.
+   * stays the same. Only single-run CREATE plans: a RESUME or ADOPT names a run that exists, a
+   * stand-down is not judged, and a bulk Run's items are judged by replanStaleBatchItems.
    *
    * signedOutGate and quotaGate judge the same rule (boundPlansInForce), so the sweep's holds and
    * this dispatch agree about which plan will run.
@@ -16210,10 +16263,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Already decided. As at the single door, not one mutable check may run again: a bulk Run's
       // answer is a tally over rows that all move, so re-classifying is answering a different
       // question with the same name on it.
+      //
+      // Except an item whose CREATE never produced its Session and no longer describes its task
+      // (replanStaleBatchItems): that item is planned afresh, and the rest of the plan is kept.
       if (lease.status === 'BOUND') {
         const bound = readBatchPlan(lease.target);
         if (!bound) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
-        return await this.applyBatchPlan(lease, bound);
+        return await this.applyBatchPlan(lease, await this.replanStaleBatchItems(lease, bound));
       }
       return await this.batchExecuteLeased(ownerId, taskIds, maxConcurrent, pressToken, lease);
     } catch (e) {
@@ -16223,6 +16279,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       throw e;
     }
+  }
+
+  /**
+   * One task's item in a bulk Run's plan: where its run goes and everything applying it needs,
+   * decided now. What a fresh press does per runnable task, and what a stale item is planned again
+   * with (replanStaleBatchItems).
+   */
+  private async planBatchItem(
+    ownerId: string,
+    routeReads: TaskRouteReads,
+    t: BatchRunTask,
+    pressToken: string,
+  ): Promise<TaskRunBatchItemPlan> {
+    const prompt = this.buildExecutePrompt(t);
+    const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
+    const itemPlan = await this.planWorkspaceRun(
+      ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
+    );
+    // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
+    // the route only when the item's Agent has smart selection on.
+    const route = itemPlan.kind === 'CREATE'
+      ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+      : null;
+    return {
+      taskId: t.id,
+      title: `Task: ${t.title}`,
+      prompt,
+      workspaceId: workspace.id,
+      runnerId: workspace.runnerId,
+      ...taskRunDispatch(t, route),
+      route,
+      runAt: t.runAt ? t.runAt.toISOString() : null,
+      startWhenConditionId: t.startWhenConditionId ?? null,
+      clearFailed: t.status === TaskStatus.FAILED,
+      projectId: t.projectId ?? null,
+      ...itemPlan,
+    };
   }
 
   /** `batchExecute` with the right to answer this press in hand. See `executeLeased`. */
@@ -16235,47 +16328,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): Promise<TaskBatchRunResult> {
     const tasks = await this.prisma.task.findMany({
       where: { id: { in: taskIds }, ownerId },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        // What the run is judged against, read here because the prompt now carries it.
-        acceptanceCriteria: true,
-        acceptanceCommand: true,
-        acceptanceExpectedExitCode: true,
-        projectId: true,
-        engine: true,
-        provider: true,
-        model: true,
-        // The suggested tier, which routing reads for a fresh run, as the single Run does.
-        modelHint: true,
-        modelHintReason: true,
-        status: true,
-        runAt: true,
-        startWhenConditionId: true,
-        // Same inputs the single-task Run assembles its prompt from: a task must not get a
-        // different prompt depending on which button started it.
-        isForeman: true,
-        verifiesTaskId: true,
-        // §13.6 SU6, read here so a retired task — or a check of replaced work — is CLASSIFIED
-        // before anything with an effect. See the skip below.
-        supersededByTaskId: true,
-        terminalReason: true,
-        // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
-        // about whether a row is work. Owner-scoped like every other reader of this predicate.
-        completionPolicy: true,
-        completionCriterion: true,
-        children: { where: { ownerId }, select: { id: true }, take: 1 },
-        verifies: { select: { supersededByTaskId: true, terminalReason: true } },
-        // Whether its project was cancelled — the gate `execute` applies third, classified here —
-        // and how the run's work reaches its line, which the prompt says (§10.5 O-L3).
-        codeless: true,
-        project: { select: { status: true, ...TASK_DELIVERY_SELECT } },
-        // The standard the prompt states for its evidence (step 3).
-        ...TASK_STANDARD_SELECT,
-        list: { select: { instructions: true } },
-        assignee: { select: { id: true, runnerId: true } },
-      },
+      select: batchRunTaskSelect(ownerId),
     });
 
     const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
@@ -16424,37 +16477,110 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
     const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
-    for (const t of runnable) {
-      const prompt = this.buildExecutePrompt(t);
-      const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
-      const itemPlan = await this.planWorkspaceRun(
-        ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
-      );
-      // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
-      // the route only when the item's Agent has smart selection on.
-      const route = itemPlan.kind === 'CREATE'
-        ? await this.routeFreshRun(routeReads, t, workspace, prompt)
-        : null;
-      planned.items.push({
-        taskId: t.id,
-        title: `Task: ${t.title}`,
-        prompt,
-        workspaceId: workspace.id,
-        runnerId: workspace.runnerId,
-        ...taskRunDispatch(t, route),
-        route,
-        runAt: t.runAt ? t.runAt.toISOString() : null,
-        startWhenConditionId: t.startWhenConditionId ?? null,
-        clearFailed: t.status === TaskStatus.FAILED,
-        projectId: t.projectId ?? null,
-        ...itemPlan,
-      });
-    }
+    for (const t of runnable) planned.items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
     const bound = await this.bindRunRequest(lease.claim, planned);
     if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
     const plan = readBatchPlan(bound);
     if (!plan) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
     return this.applyBatchPlan(lease, plan);
+  }
+
+  /**
+   * The bulk Run's half of abandonStaleCreatePlan: re-plan the items of a bound press whose CREATE
+   * never produced its Session and no longer describes the task, and keep every other item as bound.
+   * Returns the plan in force — the bound one when nothing was stale.
+   *
+   * A refused item (Claude Code signed out on the runner, an engine the provider cannot run) leaves
+   * the press unsettled with its plan BOUND, and a repeat of the press used to replay that item's
+   * refused create whatever the task had been re-pinned to since. The rule is the single run's,
+   * item by item: an item is planned again only when BOTH
+   *
+   *  1. a dispatch-relevant pin of its task changed since the press was bound (staleCreatePlan), and
+   *  2. the Session it names provably does not exist. Sound under this press's lease for the same
+   *     reason as the single run's: the item's Session insert proves the press's fence with
+   *     `SELECT … FOR UPDATE` on this request row (SessionsService.assertFenceHeld), so an older
+   *     holder's create either committed before this lease was taken, and is read below, or will
+   *     find its holder replaced and write nothing. An item whose run exists, or whose create is in
+   *     flight, is taken over, never replaced.
+   *
+   * The stale item is planned from what a fresh press reads (planBatchItem) under the same request
+   * name, so a fresh CREATE names the same Session. The press's classification is not re-run: which
+   * tasks it covers is the press's decision. Only an item that can no longer be placed at all — its
+   * task lost its assignee or that Agent its runner — is moved to the skipped, with the reason a
+   * fresh press gives. The new plan replaces the old one by a compare-and-set fenced on this lease,
+   * BOUND -> BOUND; a holder that lost its lease matches nothing and is told the press is in progress.
+   *
+   * The sweep's holds (boundPlansInForce) have nothing to judge here: no sweep delivers a press.
+   */
+  private async replanStaleBatchItems(
+    lease: Extract<TaskRunLease, { held: true }>,
+    plan: TaskRunBatchPlan,
+  ): Promise<TaskRunBatchPlan> {
+    const { ownerId, requestToken: pressToken } = lease.claim;
+    const creates = plan.items.filter((item) => item.kind === 'CREATE');
+    if (creates.length === 0) return plan;
+    const tasks = new Map((await this.prisma.task.findMany({
+      where: { id: { in: creates.map((item) => item.taskId) }, ownerId },
+      select: batchRunTaskSelect(ownerId),
+    })).map((t) => [t.id, t] as const));
+    const stale = new Map<string, string>();
+    for (const item of creates) {
+      const task = tasks.get(item.taskId);
+      // A task that is gone is applied as bound, and its item resolves as gone.
+      if (!task) continue;
+      const why = staleCreatePlan({ ...item, plan: item, fromVersion: plan.fromVersion }, {
+        engine: task.engine, provider: task.provider, model: task.model,
+        workspaceId: task.assignee?.id ?? null, runnerId: task.assignee?.runnerId ?? null,
+      });
+      if (!why) continue;
+      if (await this.readOwnRun(ownerId, { id: item.taskId, title: item.title }, item.sessionId)) continue;
+      stale.set(item.taskId, why);
+    }
+    if (stale.size === 0) return plan;
+
+    const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
+    const items: TaskRunBatchItemPlan[] = [];
+    const skipped = [...plan.skipped];
+    for (const item of plan.items) {
+      const t = stale.has(item.taskId) ? tasks.get(item.taskId)! : null;
+      if (!t) {
+        // Kept as bound. The rewritten plan is v3, so an item read back from an older receipt names
+        // the engine its apply would have read beside the task's pins (withReceiptEngine), now.
+        items.push(plan.fromVersion ? await this.withReceiptEngine(item, plan.fromVersion) : item);
+        continue;
+      }
+      if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
+      else if (!t.assignee.runnerId) skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
+      else items.push(await this.planBatchItem(ownerId, routeReads, t, pressToken));
+    }
+    const { fromVersion: _fromVersion, ...bound } = plan;
+    const replanned: TaskRunBatchPlan = {
+      ...bound,
+      v: 3,
+      items,
+      skipped,
+      runnerIds: [...new Set(items.map((item) => item.runnerId))],
+    };
+    const rebound = await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "target" = ${JSON.stringify(replanned)}::jsonb,
+             "bound_at" = statement_timestamp(),
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${lease.claim.ownerId}::uuid
+         AND "action_kind" = ${lease.claim.actionKind}
+         AND "request_token" = ${lease.claim.requestToken}
+         AND "status" = 'BOUND'
+         AND "lease_holder" = ${lease.claim.leaseHolder}
+         AND "attempt" = ${lease.claim.attempt}`;
+    // Lost the lease in between: the press is somebody else's to carry out, as bound.
+    if (rebound === 0) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
+    for (const [taskId, why] of stale) {
+      this.logger.log(
+        `task ${uuidToBase62(taskId)}: bulk run request ${pressToken} had a bound plan that never ` +
+          `created its session and no longer matches the task (${why}); planning it again`,
+      );
+    }
+    return replanned;
   }
 
   /**
