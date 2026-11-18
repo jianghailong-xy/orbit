@@ -242,6 +242,16 @@ describe("the agent's reply", () => {
     expect(container.querySelector('.chat-translate-chip')?.textContent).toBe('Translates when the reply is done');
   });
 
+  it('already in the owner\'s language: the reply alone, no foot and no "Translates when the reply is done"', async () => {
+    // The translator hands back the reply itself, spaces aside.
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: `${REPLY_EN}\n` }), ended(3)]} />);
+    expect(container.querySelector('.chat-assistant')!.textContent).toContain(REPLY_EN);
+    expect(container.querySelector('.chat-translate-foot')?.classList.contains('is-reply') ?? false).toBe(false);
+    expect(container.querySelector('.chat-translated-reply')).toBeNull();
+    expect(container.querySelector('.chat-translate-chip')).toBeNull();
+    expect(text().split(REPLY_EN).length - 1).toBe(1);
+  });
+
   it('a turn translation was not involved in is drawn as it always was', async () => {
     await draw(<Transcript events={[user(1), reply(2), ended(3)]} />);
     expect(container.querySelector('.chat-translate-foot')).toBeNull();
@@ -353,6 +363,13 @@ describe('Show both languages', () => {
     expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Sent to the agent in English·Show both');
     await act(async () => press().click());
     expect(container.querySelector('.chat-user .chat-bilingual')?.textContent).toContain(ENGLISH);
+  });
+
+  it('a reply already in the owner\'s language is drawn once, with no "Hide original"', async () => {
+    await both(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: REPLY_EN }), ended(3)]} />);
+    expect(container.querySelector('.chat-bilingual-original')).toBeNull();
+    expect(container.querySelector('.chat-translate-foot.is-reply')).toBeNull();
+    expect(text().split(REPLY_EN).length - 1).toBe(1);
   });
 
   it('a short reply: the translation, its English right under it, "Translated" and no flip', async () => {

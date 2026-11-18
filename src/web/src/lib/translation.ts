@@ -117,6 +117,12 @@ export function replyTranslationOf(value: unknown): ReplyTranslation | undefined
   return undefined;
 }
 
+/** Whether a reply's translation came back as the reply itself: the agent already wrote in the
+ *  owner's language. Such a reply is drawn as it is, with no foot and no "Translated". */
+export function translationUnchanged(translation: ReplyTranslation | undefined, original: string): boolean {
+  return translation?.text !== undefined && translation.text.trim() === original.trim();
+}
+
 /** Whether a held message is still waiting on its translation (not delivered to the engine). */
 export function heldForTranslation(translation: TurnTranslation | undefined): boolean {
   return translation?.state === 'TRANSLATING' || translation?.state === 'FAILED';

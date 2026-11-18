@@ -137,7 +137,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current
     val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
-    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
+    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.shownReply(shown.fields["translation"], shown.body()) else null
     val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
     // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
     val bilingual = LocalTranslation.current.bilingual
@@ -148,7 +148,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val showsBoth = bilingual && !originalHidden
     fun shownWords(source: RunEvent): String = when {
         source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
-        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
+        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.shownReply(source.fields["translation"], source.body()), flipped)
         else -> source.body()
     }
     // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
