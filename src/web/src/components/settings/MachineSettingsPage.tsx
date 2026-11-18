@@ -28,6 +28,7 @@ import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath, machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner, useWakeForSignIn } from '../../lib/managedRunner';
+import { RunnerBrowserSection } from './RunnerBrowserSection';
 import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
@@ -954,6 +955,9 @@ export function MachineSettingsPage() {
       </SettingsSection>
       </>
       )}
+
+      {/* Orbit Cloud's browser: Open browser, saved logins, Clear saved logins. Nothing while the server has it off. */}
+      {isManaged && <RunnerBrowserSection runnerId={runner.id} />}
 
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">
