@@ -421,20 +421,37 @@ test('an alert whose caller awaits it is not held by Feishu: the devices are, Fe
 
 // ── F1-5: a card whose matter was settled elsewhere (§6.2) ───────────────────────────────────────────────────────────
 
-test('an approval card says how its approvals were settled, at the time they were (UTC)', () => {
+test('an approval card says how its approvals were settled, where and at the time they were (UTC)', () => {
   const now = new Date('2026-11-08T12:00:00Z');
   const at = new Date('2026-11-08T10:32:10Z');
   const later = new Date('2026-11-08T10:40:00Z');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at }], now), 'Allowed in Orbit · 10:32 UTC');
+  const web = 'LOGIN';
+  // A click on the Feishu card (decidedCredentialKind FEISHU) says Feishu; an answer in the web app or on a phone, Orbit.
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Allowed in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Denied in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web }], now), 'Allowed in Orbit · 10:32 UTC');
   assert.equal(approvalOutcome([
-    { toolName: 'Bash', status: 'DENIED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: later },
+    { toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: web },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: later, decidedCredentialKind: 'PAT' },
   ], now), 'Denied in Orbit · 10:40 UTC', 'the last answer');
   assert.equal(approvalOutcome([
-    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at }, { toolName: 'Edit', status: 'DENIED', decidedAt: at },
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: at, decidedCredentialKind: web },
   ], now), 'Answered in Orbit · 10:32 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at }], now), 'Answered in Orbit · 10:32 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ABANDONED', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC');
-  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'PENDING', decidedAt: null }], now), 'No longer waiting in Orbit · 12:00 UTC',
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+    { toolName: 'Edit', status: 'DENIED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+  ], now), 'Answered in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([
+    { toolName: 'Bash', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' },
+    { toolName: 'Edit', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web },
+  ], now), 'Allowed · 10:32 UTC', 'answered in both: no one place');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'DENIED', decidedAt: at, decidedCredentialKind: null }], now), 'Denied in Orbit · 10:32 UTC',
+    'no credential recorded: not a Feishu click, which always records FEISHU');
+  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: web }], now), 'Answered in Orbit · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'AskUserQuestion', status: 'ALLOWED', decidedAt: at, decidedCredentialKind: 'FEISHU' }], now), 'Answered in Feishu · 10:32 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'ABANDONED', decidedAt: null, decidedCredentialKind: null }], now), 'No longer waiting in Orbit · 12:00 UTC');
+  assert.equal(approvalOutcome([{ toolName: 'Bash', status: 'PENDING', decidedAt: null, decidedCredentialKind: null }], now), 'No longer waiting in Orbit · 12:00 UTC',
     'a session that left needs-you with the approval unanswered');
   assert.equal(ownerItemOutcome({ resolution: 'ANSWERED', resolvedAt: at }, now), 'Answered in Orbit · 10:32 UTC');
   assert.equal(ownerItemOutcome({ resolution: 'LANDED', resolvedAt: at }, now), 'Resolved in Orbit · 10:32 UTC');

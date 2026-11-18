@@ -59,16 +59,24 @@ function clock(at: Date): string {
 
 /**
  * What an approval card says once nothing on it waits any more (§6.2): every approval it lists answered the same way,
- * answered some of each, or no longer waited on (the turn that asked ended, the session stopped).
+ * answered some of each, or no longer waited on (the turn that asked ended, the session stopped). Where it was answered
+ * is the decision's own credential: `in Feishu` when every answer was a click on a Feishu card (`FEISHU`, recorded on
+ * every such click since 0500), `in Orbit` when none was (any other credential, or none recorded); answers from both
+ * name no place.
  */
-export function approvalOutcome(listed: { toolName: string; status: string | null; decidedAt: Date | null }[], now: Date): string {
+export function approvalOutcome(
+  listed: { toolName: string; status: string | null; decidedAt: Date | null; decidedCredentialKind: string | null }[],
+  now: Date,
+): string {
   const decided = listed.filter((a) => a.status === 'ALLOWED' || a.status === 'DENIED');
   const at = decided.reduce<Date | null>((latest, a) => (a.decidedAt && (!latest || a.decidedAt > latest) ? a.decidedAt : latest), null) ?? now;
   if (listed.length === 0 || decided.length < listed.length) return `No longer waiting in Orbit · ${clock(now)}`;
+  const inFeishu = decided.filter((a) => a.decidedCredentialKind === 'FEISHU').length;
+  const place = inFeishu === decided.length ? ' in Feishu' : inFeishu === 0 ? ' in Orbit' : '';
   const questions = listed.some((a) => approvalClass(a.toolName) !== 'tool');
-  if (!questions && decided.every((a) => a.status === 'ALLOWED')) return `Allowed in Orbit · ${clock(at)}`;
-  if (decided.every((a) => a.status === 'DENIED')) return `Denied in Orbit · ${clock(at)}`;
-  return `Answered in Orbit · ${clock(at)}`;
+  if (!questions && decided.every((a) => a.status === 'ALLOWED')) return `Allowed${place} · ${clock(at)}`;
+  if (decided.every((a) => a.status === 'DENIED')) return `Denied${place} · ${clock(at)}`;
+  return `Answered${place} · ${clock(at)}`;
 }
 
 /** What an owner item's card says once the item is no longer open. */
@@ -249,7 +257,7 @@ export class FeishuTransport {
   /**
    * The step the badge reconcile adds (§6.2): the account's cards whose matter was settled elsewhere — an approval
    * answered in the web app or on a phone, a session that no longer waits on its owner, an owner item resolved — drawn
-   * once more in place as their outcome (`Allowed in Orbit · 10:32 UTC`) with no buttons, and marked CLOSED.
+   * once more in place as their outcome (`Allowed in Orbit · 10:32 UTC`, `Denied in Feishu · 10:32 UTC`) with no buttons, and marked CLOSED.
    *
    * Only cards Feishu has (SENT, with a message_id) sent within FEISHU_CARD_UPDATE_DAYS: Feishu refuses to update an
    * older message, so those are left as they are. `needsYou` is the reconcile's own set (PushService.needsYouSessions):
@@ -278,7 +286,7 @@ export class FeishuTransport {
       const [approvals, items] = await Promise.all([
         approvalIds.length === 0 ? [] : this.prisma.approval.findMany({
           where: { id: { in: approvalIds }, session: { ownerId: target.ownerId } },
-          select: { id: true, status: true, decidedAt: true },
+          select: { id: true, status: true, decidedAt: true, decidedCredentialKind: true },
         }),
         itemIds.length === 0 ? [] : this.prisma.projectOpenItem.findMany({
           where: { id: { in: itemIds }, ownerId: target.ownerId },
@@ -297,6 +305,7 @@ export class FeishuTransport {
             toolName: a.toolName,
             status: approvalById.get(a.id)?.status ?? null,
             decidedAt: approvalById.get(a.id)?.decidedAt ?? null,
+            decidedCredentialKind: approvalById.get(a.id)?.decidedCredentialKind ?? null,
           }));
           const pending = rows.filter((a) => a.status === 'PENDING').length;
           if (card.session_id && needsYou.has(card.session_id) && pending > 0) {
@@ -353,11 +362,14 @@ export class FeishuTransport {
         if (!drawn && held.alert) {
           const rows = await this.prisma.approval.findMany({
             where: { id: { in: listed.map((a) => a.id) }, session: { ownerId: target.ownerId } },
-            select: { id: true, status: true, decidedAt: true },
+            select: { id: true, status: true, decidedAt: true, decidedCredentialKind: true },
           });
           const byId = new Map(rows.map((r) => [r.id, r]));
           const outcome = approvalOutcome(
-            listed.map((a) => ({ toolName: a.toolName, status: byId.get(a.id)?.status ?? null, decidedAt: byId.get(a.id)?.decidedAt ?? null })),
+            listed.map((a) => {
+              const row = byId.get(a.id);
+              return { toolName: a.toolName, status: row?.status ?? null, decidedAt: row?.decidedAt ?? null, decidedCredentialKind: row?.decidedCredentialKind ?? null };
+            }),
             new Date(),
           );
           drawn = { card: renderFeishuTerminalCard(held.alert, ctx, outcome), alert: held.alert, closed: true };

@@ -187,9 +187,39 @@ for (const c of CASES) {
       assert.ok(holds(card, URL), 'still links to Orbit');
       assert.equal(card.header.template, 'grey');
       if (detail === 'TITLES_ONLY') for (const d of c.details) assert.ok(!JSON.stringify(card).includes(d), `terminal leaks ${d}`);
+      // A settled card waits on nothing, so it never says it does.
+      assert.ok(!/needs? your reply/i.test(JSON.stringify(card)), `terminal ${detail} still asks for a reply`);
     }
   });
+
+  if (c.alert.kind === 'approval' && c.alert.approvals.length === 1) {
+    test(`${c.name}: the body does not repeat the subtitle, live or settled`, () => {
+      for (const detail of ['TITLES_ONLY', 'FULL'] as const) {
+        for (const card of [renderFeishuCard(c.alert, ctx(detail)), renderFeishuTerminalCard(c.alert, ctx(detail), 'Allowed in Feishu · 10:32 UTC')]) {
+          const subtitle = card.header.subtitle.content;
+          assert.ok(!strings(card.body).includes(subtitle), `${detail}: ${JSON.stringify(subtitle)} is in the body`);
+        }
+      }
+    });
+  }
 }
+
+test('a settled tool approval names the tool alone, one or several', () => {
+  const one = renderFeishuTerminalCard(
+    { kind: 'approval', sessionTitle: 'Fix', approvals: [{ id: 'a', toolName: 'Bash', input: { command: 'ls' } }] },
+    ctx('TITLES_ONLY'), 'Denied in Feishu · 15:19 UTC',
+  );
+  assert.equal(one.header.subtitle.content, 'Bash');
+  assert.equal(one.config.summary.content, 'Fix · Denied in Feishu · 15:19 UTC');
+  const several = renderFeishuTerminalCard({
+    kind: 'approval',
+    sessionTitle: 'Refactor',
+    approvals: [{ id: 'a', toolName: 'Bash', input: {} }, { id: 'b', toolName: 'Edit', input: {} }],
+  }, ctx('TITLES_ONLY'), 'Allowed in Orbit · 10:32 UTC');
+  assert.equal(several.header.subtitle.content, '2 approvals');
+  for (const tool of ['Bash', 'Edit']) assert.ok(strings(several.body).includes(tool), `${tool} keeps its own line`);
+  assert.ok(!/needs? your reply/i.test(JSON.stringify(several)));
+});
 
 test('approvals in Feishu off: no Allow, Deny or answer form, only Open in Orbit', () => {
   for (const c of CASES.slice(0, 2)) {

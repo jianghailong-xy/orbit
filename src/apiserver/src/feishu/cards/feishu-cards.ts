@@ -99,7 +99,7 @@ export function renderFeishuCard(alert: FeishuAlert, ctx: FeishuCardContext): Fe
 }
 
 /**
- * The card once its matter is settled elsewhere (§6.2): the same content, the outcome (`Allowed in Orbit · 10:32`)
+ * The card once its matter is settled elsewhere (§6.2): the same content, the outcome (`Allowed in Feishu · 10:32 UTC`)
  * on top, and no buttons or form at all.
  */
 export function renderFeishuTerminalCard(alert: FeishuAlert, ctx: FeishuCardContext, outcome: string): FeishuCard {
@@ -212,11 +212,15 @@ function build(
   switch (alert.kind) {
     case 'approval': {
       title = sessionTitle(alert.sessionTitle);
-      subtitle = alert.approvals.length === 1 ? approvalLine(alert.approvals[0]) : `${alert.approvals.length} approvals need your reply`;
+      const single = alert.approvals.length === 1;
+      // A settled card asks nothing: it names the tool, not that it needs a reply.
+      subtitle = single ? approvalLine(alert.approvals[0], live)
+        : live ? `${alert.approvals.length} approvals need your reply` : `${alert.approvals.length} approvals`;
       template = 'orange';
       alert.approvals.forEach((approval, index) => {
         if (index > 0) elements.push(hr);
-        elements.push(...approvalSection(approval, index, ctx, full, live, cut));
+        // One approval's line is the subtitle already; several each keep theirs, to tell them apart.
+        elements.push(...approvalSection(approval, index, ctx, full, live, cut, !single));
       });
       break;
     }
@@ -270,11 +274,14 @@ function sessionTitle(title: string): string {
   return title.trim() || UNTITLED_SESSION;
 }
 
-/** An approval in one line: what kind of ask it is, and a tool's name. Never anything the call carries. */
-function approvalLine(approval: FeishuApprovalItem): string {
+/**
+ * An approval in one line: what kind of ask it is, and a tool's name. Never anything the call carries. Once settled
+ * (`live` false) a tool's is its name alone: the card no longer waits on a reply.
+ */
+function approvalLine(approval: FeishuApprovalItem, live: boolean): string {
   switch (approvalClass(approval.toolName)) {
     case 'tool':
-      return `Needs your reply · ${approval.toolName}`;
+      return live ? `Needs your reply · ${approval.toolName}` : approval.toolName;
     case 'question':
       return 'The agent asked you a question';
     case 'orbit':
@@ -338,9 +345,10 @@ function approvalSection(
   full: boolean,
   live: boolean,
   cut: (value: string) => string,
+  withLine: boolean,
 ): Element[] {
   const kind = approvalClass(approval.toolName);
-  const out: Element[] = [text(approvalLine(approval))];
+  const out: Element[] = withLine ? [text(approvalLine(approval, live))] : [];
   if (kind === 'tool') {
     out.push(full ? text(cut(toolInputPreview(approval.toolName, approval.input))) : note(DETAILS_HIDDEN));
     if (live && ctx.approvalsInFeishu) {

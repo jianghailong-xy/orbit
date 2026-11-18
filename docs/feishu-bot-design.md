@@ -244,7 +244,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 
 | kind | 默认（只发标题） | 详情模式多带的内容 | 卡片上的动作 |
 | --- | --- | --- | --- |
-| `approval`：工具权限 | 会话标题、工具名、`Details hidden by your settings` | 输入预览（与 Web 审批卡同一份脱敏） | Allow once · Deny · Open in Orbit |
+| `approval`：工具权限 | 会话标题、`Needs your reply · <工具名>`（同一轮多个时 `<n> approvals need your reply`）、`Details hidden by your settings` | 输入预览（与 Web 审批卡同一份脱敏） | Allow once · Deny · Open in Orbit |
 | `approval`：agent 的提问（AskUserQuestion） | 会话标题、`The agent asked you a question` | 问题与选项 | 详情模式下可在卡上作答；默认只有 Open in Orbit |
 | `approval`：编排确认卡（`orbit_task_create`、`orbit_project_create`、`orbit_agent_create` / `update`、删除 runner、MCP 授权等） | 会话标题、卡的种类 | 摘要 | 只有 Open in Orbit |
 | `finished` / `failed` | 会话标题、`Finished` / `Failed` | recap 或失败原因（`settleAlert`） | 回复这条消息即回复会话 · Open in Orbit |
@@ -279,7 +279,12 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
   行记 `CLOSED`（pump 不再碰它）；飞书没接通或 5xx 时留在 `SENT`，下次对账再试，飞书明确拒绝也记 `CLOSED`。
   终态文案：`Allowed in Orbit · 10:32 UTC`、`Denied in Orbit · …`、`Answered in Orbit · …`（有提问、或允许与拒绝都有）、
   `Resolved in Orbit · …` / `Answered in Orbit · …`（owner item）、`No longer waiting in Orbit · …`（会话离开 needs-you 或审批作废）；
-  Orbit 不知道主人的时区，所以写明 UTC。`finished` / `failed` / `agent-message` 卡没有动作按钮，回复它们仍然进会话，不改。
+  Orbit 不知道主人的时区，所以写明 UTC。
+- 审批卡终态的地点按决定来源写（2026-11-18 走查后）：卡上所列审批都是在飞书卡片上点出的（`decidedCredentialKind = FEISHU`）
+  写 `Allowed in Feishu · …` / `Denied in Feishu · …` / `Answered in Feishu · …`；都不是（Web、iOS、PAT 等，或没记凭证的旧行——
+  飞书点击自 0500 起一律记 FEISHU）写 `… in Orbit · …`；两处都有写不带地点的 `Allowed · …` / `Denied · …` / `Answered · …`。
+  `No longer waiting in Orbit · …` 不变。终态卡上不再出现 `Needs your reply`：单个工具审批的标题副行只写工具名（如 `Bash`），
+  多个写 `<n> approvals`，正文里每条也只写工具名。单个审批的卡片（不论是否了结）正文不再重复标题副行那一句。`finished` / `failed` / `agent-message` 卡没有动作按钮，回复它们仍然进会话，不改。
 
 ### 6.3 限频、失败与文案
 

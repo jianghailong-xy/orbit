@@ -210,7 +210,8 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     assert.equal(c.answer.card?.type, 'raw');
     const drawn = c.answer.card.data;
     assert.deepEqual(callbacks(drawn), [], 'the card is drawn with no button');
-    assert.match(allText(drawn), /Allowed in Orbit · \d\d:\d\d UTC/);
+    assert.match(allText(drawn), /Allowed in Feishu · \d\d:\d\d UTC/, 'clicked in Feishu, so it says Feishu');
+    assert.doesNotMatch(JSON.stringify(drawn), /needs? your reply/i, 'a settled card asks for nothing');
     const decision = await waiting;
     assert.equal(decision.status, 200, decision.text);
     assert.equal(decision.json.behavior, 'allow');
@@ -248,7 +249,8 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const waiting = poll(s, approvalId);
     const c = await click(messageId, callbacks(card)[1]!);
     assert.deepEqual(c.answer.toast, { type: 'success', content: 'Denied.' });
-    assert.match(allText(c.answer.card.data), /Denied in Orbit/);
+    assert.match(allText(c.answer.card.data), /Denied in Feishu · \d\d:\d\d UTC/);
+    assert.doesNotMatch(JSON.stringify(c.answer.card.data), /needs? your reply/i);
     const decision = await waiting;
     assert.equal(decision.json.behavior, 'deny');
     assert.equal(decision.json.status, 'DENIED');
@@ -342,7 +344,7 @@ test('Feishu: the owner answers a tool approval on its card — Allow once and D
     const c = await click(answered.messageId, callbacks(answered.card)[0]!);
     assert.deepEqual(c.answer.toast, { type: 'info', content: STALE });
     assert.deepEqual(callbacks(c.answer.card.data), []);
-    assert.match(allText(c.answer.card.data), /Denied in Orbit/);
+    assert.match(allText(c.answer.card.data), /Denied in Orbit · \d\d:\d\d UTC/, 'answered in the web app, so it says Orbit');
     const row = await approvalRow(answered.approvalId);
     assert.equal(row.status, 'DENIED', 'left as it was');
     assert.equal(row.decidedCredentialKind, null);
