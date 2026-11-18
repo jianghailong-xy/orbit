@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import kotlinx.serialization.json.JsonObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.schedule.ScheduleWaitingCard
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
@@ -49,7 +52,7 @@ internal enum class WaitingTab(val label: String, val filter: String, val empty:
 
 /** A runner by the name the owner knows it by. */
 internal fun runnerNames(runners: List<DirectoryRunner>): (String?) -> String = { id ->
-    runners.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.id, id) }?.let { it.displayName ?: it.name } ?: "this runner"
+    runners.firstOrNull { io.orbitd.android.navigation.ObjectId.same(it.id, id) }?.let { io.orbitd.android.management.RunnerPage.nameOf(it.id, it.name, it.displayName, managed = it.managed) } ?: "this runner"
 }
 
 /** The inbox as the shell opens it: from the drawer, or from a push's action naming the request in [route]'s id. A coordinator's
@@ -63,7 +66,8 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
     // A terminal asked to be approved, or one was decided elsewhere: its cards are read again, and nothing else.
     val terminalsChanged = rememberTerminalsChanged(app, handle)
     LaunchedEffect(store, terminalsChanged) { if (terminalsChanged > 0) store.loadTerminalRequests() }
-    WaitingOnYouScreen(store, data.runners, route.id, revision, links) { question ->
+    val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
+    WaitingOnYouScreen(store, data.runners, route.id, revision, links, scheduled = scheduled) { question ->
         val coordinator = data.sessions["open"].orEmpty().firstOrNull {
             it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, question.projectId)
         }
@@ -82,7 +86,7 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
  */
 @Composable
 fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>, focused: String?, revision: Long, open: (String) -> Unit,
-    answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
+    scheduled: ScheduledStore? = null, answer: (OwnerRequests.CoordinatorQuestionRow) -> Unit = {}) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     var tab by rememberSaveable { mutableStateOf(WaitingTab.OPEN) }
@@ -99,7 +103,11 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
     val rows = if (tab == WaitingTab.OPEN) OwnerRequests.openRows(state.open, state.questions) else ended.map { OwnerRequests.OpenRow.Request(it) }
     // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top of the Open tab.
     val terminals = if (tab == WaitingTab.OPEN) state.terminalRequests else emptyList()
-    val empty = rows.isEmpty() && terminals.isEmpty()
+    // A scheduled task's items, whole (board 01 ⑥): each answers at the schedule's own doors.
+    val scheduleItems = if (tab == WaitingTab.OPEN && scheduled != null) state.scheduleItems else emptyList()
+    // A condition's items, whole (condition-triggers board ⑥ ①): the can't-read card and the 30-day question.
+    val conditionItems = if (tab == WaitingTab.OPEN && scheduled != null) state.conditionItems else emptyList()
+    val empty = rows.isEmpty() && terminals.isEmpty() && scheduleItems.isEmpty() && conditionItems.isEmpty()
     Column(Modifier.fillMaxSize().testTag("waiting-on-you")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -119,6 +127,16 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(terminals, key = { "terminal:${it.id}" }) { request -> TerminalApproveCard(request, store, now) }
+            if (scheduled != null) items(conditionItems, key = { "condition:${it.id}" }) { item ->
+                io.orbitd.android.schedule.ConditionWaitingCard(item, scheduled,
+                    openSchedule = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") },
+                    openTask = { id -> open("orbit-task:${ObjectId.canonical(id) ?: id}") }, answered = { store.load(OwnerRequestStore.OPEN) })
+            }
+            if (scheduled != null) items(scheduleItems, key = { "schedule:${it.id}" }) { item ->
+                val openSchedule: (String) -> Unit = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") }
+                ScheduleWaitingCard(item, scheduled, openSession = { open("orbit-session:$it") }, openSchedule = openSchedule,
+                    openAgentSettings = { openSchedule(item.scheduleId) }, answered = { store.load(OwnerRequestStore.OPEN) })
+            }
             items(rows, key = { row -> when (row) { is OwnerRequests.OpenRow.Request -> row.request.id; is OwnerRequests.OpenRow.Question -> "question:${row.question.itemId}" } }) { row ->
                 when {
                     row is OwnerRequests.OpenRow.Question -> row.question.let { question ->
@@ -129,7 +147,9 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
                         val key = OwnerRequests.key(request.id)
                         val isOpen = expanded[key] == true
                         val until = snoozes[key] ?: 0
-                        InboxRow("waiting-on-you:row:${request.id}", icon(request.kind), request.title, OwnerRequests.rowDetail(request, now),
+                        // Its title as its card draws it: in the owner's language while the card would be drawn translated.
+                        InboxRow("waiting-on-you:row:${request.id}", icon(request.kind), OwnerRequests.rowTitle(request, LocalTranslation.current.cardLanguage),
+                            OwnerRequests.rowDetail(request, now),
                             if (until > now.toEpochMilli()) OwnerRequests.reminder(OwnerReview.receiptTime(Instant.ofEpochMilli(until).toString(), now))
                             else OwnerRequests.ago(request.createdAt, now),
                             if (isOpen) "Close" else OwnerRequests.inboxAction(request.kind)) { expanded[key] = !isOpen }

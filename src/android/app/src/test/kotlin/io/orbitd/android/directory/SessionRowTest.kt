@@ -34,7 +34,7 @@ class SessionRowTest {
         }
     }
     @get:Rule(order = 1) val compose = createComposeRule()
-    private val marks = listOf("needs-you", "review", "running", "watching", "jobs", "failed").map { "session-mark-$it" }
+    private val marks = listOf("needs-you", "review", "queued", "running", "watching", "jobs", "services", "failed").map { "session-mark-$it" }
 
     private fun draw(session: DirectorySession, watching: WatchSessionSummary? = null, deleted: Boolean = false, machine: String? = null,
         mark: SessionProjectMark? = null) {
@@ -65,8 +65,18 @@ class SessionRowTest {
     @Test fun aJobInFlightBreathesAndAProcessMerelyLeftUpDoesNot() {
         draw(parked().copy(runningBgCount = 1, runningBgJobCount = 1)); assertEquals(listOf("session-mark-jobs"), mark())
     }
-    @Test fun aProcessLeftUpDrawsNothing() {
-        draw(parked().copy(runningBgCount = 1, runningBgJobCount = 0)); assertEquals(emptyList<String>(), mark())
+    @Test fun aProcessLeftUpDrawsTheStillTerminal() {
+        draw(parked().copy(runningBgCount = 1, runningBgJobCount = 0)); assertEquals(listOf("session-mark-services"), mark())
+    }
+    @Test fun aProcessLeftUpUnderAWatchDrawsTheEye() {
+        draw(parked().copy(runningBgCount = 1, runningBgJobCount = 0), WatchSessionSummary(listOf(WatchFixture.watch(observer = "s"))))
+        assertEquals(listOf("session-mark-watching"), mark())
+    }
+    @Test fun aSessionQueuedForASlotDrawsTheClock() {
+        draw(parked().copy(runState = "QUEUED", status = "QUEUED")); assertEquals(listOf("session-mark-queued"), mark())
+    }
+    @Test fun aQueuedSessionWaitingOnYouDrawsTheAmberDot() {
+        draw(parked().copy(runState = "QUEUED", status = "QUEUED", pendingApprovals = 1)); assertEquals(listOf("session-mark-needs-you"), mark())
     }
     @Test fun aFailureIsRed() {
         draw(parked().copy(runState = "FAILED", status = "FAILED", error = "It broke")); assertEquals(listOf("session-mark-failed"), mark())

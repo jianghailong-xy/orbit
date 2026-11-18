@@ -214,7 +214,7 @@ struct AgentGroupView: View {
                 Spacer(minLength: 0)
                 ToolStatusGlyph(status: group.running > 0 ? .running : group.failed > 0 ? .error : .ok)
             }
-            let facts = [group.engines, group.machines, group.cost].compactMap { $0 }
+            let facts = [group.engines, group.machines].compactMap { $0 }
             if !facts.isEmpty {
                 Text(facts.joined(separator: " · "))
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -264,7 +264,8 @@ struct AgentGroupView: View {
     }
 }
 
-/// The composer band's line for the session's Agents: how many, how many still run. No cost.
+/// The composer band's line for the session's Agents: what the running one is doing, or the last
+/// one's description with how it ended and its time (`SubagentSessionSummary.band`, `.last`). No cost.
 /// It opens their list (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
@@ -277,9 +278,17 @@ struct AgentsBandRow: View {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle").font(.orbitMeta).foregroundStyle(.purple)
                     Text("Agents").font(.orbitLabel.weight(.semibold))
-                    Text(line(summary)).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+                    Text(summary.band).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
-                    if summary.running > 0 { ProgressView().controlSize(.mini) }
+                    if summary.running > 0 {
+                        ProgressView().controlSize(.mini)
+                    } else if let last = summary.last {
+                        // How the newest run ended, as its row in the sheet marks it.
+                        ToolStatusGlyph(status: last.failed ? .error : .ok)
+                        if let duration = last.duration {
+                            Text(duration).font(.orbitMeta).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
                     Image(systemName: "chevron.right")
                         .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
                 }
@@ -289,7 +298,7 @@ struct AgentsBandRow: View {
             .buttonStyle(.plain)
             .composerBandCard()
             .padding(.bottom, .composerBandGap)
-            .accessibilityLabel("Agents: \(line(summary))")
+            .accessibilityLabel(["Agents: \(summary.band)", summary.last?.spoken].compactMap { $0 }.joined(separator: ", "))
             .sheet(isPresented: $showing) {
                 AgentsSheet(summary: summary, parentEngine: app.session(id: console.sessionID)?.engine) { id in
                     showing = false
@@ -298,15 +307,9 @@ struct AgentsBandRow: View {
             }
         }
     }
-
-    private func line(_ summary: SubagentSessionSummary) -> String {
-        var parts = ["\(summary.count)"]
-        if summary.running > 0 { parts.append("\(summary.running) running") }
-        return parts.joined(separator: " · ")
-    }
 }
 
-/// Every Agent the session started: two figures and the runs — the running ones first. No cost is shown,
+/// Every Agent the session started, the running ones first. No cost is shown,
 /// not even a run's own. A row closes the sheet and scrolls the conversation to its block.
 struct AgentsSheet: View {
     let summary: SubagentSessionSummary
@@ -317,13 +320,6 @@ struct AgentsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    HStack(spacing: 10) {
-                        figure("\(summary.count)", summary.running > 0 ? "runs · \(summary.running) running" : "runs · all done")
-                        figure(summary.spread.components(separatedBy: " · ").first ?? summary.spread,
-                               summary.spread.components(separatedBy: " · ").dropFirst().first ?? " ")
-                    }
-                }
                 let running = summary.rows.filter(\.isRunning)
                 let ended = summary.rows.filter { !$0.isRunning }
                 if !running.isEmpty { Section("Running") { ForEach(running) { row($0) } } }
@@ -340,14 +336,6 @@ struct AgentsSheet: View {
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 420)
         #endif
-    }
-
-    private func figure(_ value: String, _ caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
-            Text(caption).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(2)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ run: SubagentRunView) -> some View {

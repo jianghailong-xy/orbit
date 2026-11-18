@@ -29,6 +29,15 @@ public enum CoordinatorContextCopy {
         let moves = waits > 0 ? " \(CoordinatorHandoffCopy.waitsRowTitle(waits))." : ""
         return "\(lead), then the project continues in a new conversation.\(moves) Nothing is deleted."
     }
+
+    /// The phone's whole Alert message: the body, then — once any wait is more than a watch — each wait
+    /// on its own line with its kind (handoff v2 §1). Waits that are all watches, or come from a server
+    /// without `kind`, stay a count only, as board 03 draws them.
+    public static func phoneConfirmMessage(waits: [CoordinatorPendingWait], running: Bool) -> String {
+        let body = phoneConfirmBody(waits: waits.count, running: running)
+        guard waits.contains(where: { $0.kind != .watch }) else { return body }
+        return body + "\n\n" + waits.map(CoordinatorHandoffCopy.waitLine).joined(separator: "\n")
+    }
 }
 
 /// Board 02's copy, verbatim: `COORDINATOR_HANDOFF_COPY` in src/shared/src/coordinator-handoff.ts.
@@ -47,6 +56,22 @@ public enum CoordinatorHandoffCopy {
     }
     /// A paused wait in the macOS confirm's list (the handoff task's note: phones show only the count).
     public static let pausedSuffix = " (paused)"
+    /// The words after a wait's label naming its kind (`COORDINATOR_PENDING_WAIT_KIND_LABELS`); nil for a
+    /// watch, whose label already says what it waits for.
+    public static func waitKind(_ kind: CoordinatorPendingWaitKind) -> String? {
+        switch kind {
+        case .watch: return nil
+        case .subagent: return "SubAgent"
+        case .job: return "Background job"
+        case .wakeup: return "Scheduled wakeup"
+        case .loop: return "Wakeup loop"
+        }
+    }
+    /// One wait as the confirm and the moved-here list name it (`coordinatorPendingWaitLine`): its label,
+    /// " (paused)" when paused, then " · <kind>" unless it is a watch.
+    public static func waitLine(_ wait: CoordinatorPendingWait) -> String {
+        wait.label + (wait.paused ? pausedSuffix : "") + (waitKind(wait.kind).map { " · \($0)" } ?? "")
+    }
     public static let cancel = "Cancel"
     public static let handOver = "Hand over"
     public static let badgeHandingOver = "Handing over"
@@ -59,6 +84,13 @@ public enum CoordinatorHandoffCopy {
     public static func waitsMovedHere(_ count: Int) -> String {
         count == 1 ? "1 wait moved here" : "\(count) waits moved here"
     }
+    public static func historyBefore(_ decisions: Int, _ merges: Int) -> String? {
+        guard decisions != 0 || merges != 0 else { return nil }
+        let decision = decisions == 1 ? "decision" : "decisions"
+        let merge = merges == 1 ? "merge" : "merges"
+        return "\(decisions) \(decision) and \(merges) \(merge) before this conversation"
+    }
+    public static let openPrevious = "Open previous coordinator"
     public static let handedOver = "Handed over to a new coordinator."
     public static let openIt = "Open it"
     public static let tryAgain = "Try again"
@@ -70,7 +102,7 @@ public enum CoordinatorHandoffCopy {
     public static func refusal(_ reason: String) -> String { "\(refused): \(reason)." }
 
     /// `COORDINATOR_HANDOFF_SECTIONS`: the note's four sections, in order.
-    public static let sections = ["Where things stand", "Agreed with the owner", "Waiting on", "Next"]
+    public static let sections = ["Where things stand", "Rulings not yet recorded", "Waiting on", "Next"]
 
     /// `COORDINATOR_HANDOFF_FAILURE_REASONS`, and the sentence a failure shows when the server sent
     /// none (`coordinatorHandoffFailureSentence`).
@@ -250,5 +282,26 @@ public struct CoordinatorHandoffNote: Equatable, Sendable {
         let bare = text.trimmingCharacters(in: CharacterSet(charactersIn: "*_:"))
             .trimmingCharacters(in: .whitespaces)
         return CoordinatorHandoffCopy.sections.contains(bare) ? bare : nil
+    }
+}
+
+/// Pure counts of readable records strictly before a conversation's creation.
+public enum CoordinatorCleanStart {
+    public struct Counts: Equatable, Sendable {
+        public let decisions: Int
+        public let merges: Int
+    }
+
+    public static func counts(createdAt: String?, decisions: [String], merges: [String]) -> Counts {
+        guard let createdAt, let start = ThinkingSummary.date(createdAt) else {
+            return Counts(decisions: 0, merges: 0)
+        }
+        func before(_ stamps: [String]) -> Int {
+            stamps.filter { stamp in
+                guard let at = ThinkingSummary.date(stamp) else { return false }
+                return at < start
+            }.count
+        }
+        return Counts(decisions: before(decisions), merges: before(merges))
     }
 }

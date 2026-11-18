@@ -28,6 +28,9 @@ import (
 // commands; every other command acts as the machine, and runs as nobody else (userModeUnported).
 var userModeActions = map[string]string{
 	"login": "", "logout": "", "whoami": "", "api": "",
+	// Reads the catalogue this binary carries and asks no server anything, so it is the person's as much
+	// as anybody's.
+	"guide": "",
 
 	"task list":              "",
 	"task labels":            "",
@@ -86,6 +89,7 @@ var userModeActions = map[string]string{
 	"session merge-receipt":  "",
 	"session merge-receipts": "",
 	"session end":            "",
+	"session move":           "",
 	"session complete":       "",
 	"session delete":         "",
 	"session create": "the user route that starts a session answers with the whole session rather than the " +
@@ -149,6 +153,10 @@ func capabilityAvailability(identity cliIdentity, argv []string) (bool, string) 
 	switch command {
 	case "login", "logout", "whoami":
 		// They look after the login itself, whoever the CLI acts as.
+		return true, ""
+	case "guide":
+		// It reads the catalogue this binary carries and asks the server nothing, so no credential is
+		// needed to run it — and it is how a process with a broken one learns what it cannot do.
 		return true, ""
 	case "api":
 		if err := actingUser(identity); err != nil {
@@ -526,6 +534,7 @@ type sessionTransport interface {
 	listMergeReceipts(id string, limit int) (json.RawMessage, error)
 	endSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 	completeSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
+	moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error)
 	deleteSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 }
 
@@ -635,6 +644,10 @@ func (u *userTransport) endSession(_, _ string, id string) (json.RawMessage, err
 
 func (u *userTransport) completeSession(_, _ string, id string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/sessions", id, "/complete", nil)
+}
+
+func (u *userTransport) moveSession(_, _ string, id string, body interface{}) (json.RawMessage, error) {
+	return u.at(http.MethodPost, "/sessions", id, "/move", body)
 }
 
 func (u *userTransport) deleteSession(_, _ string, id string) (json.RawMessage, error) {

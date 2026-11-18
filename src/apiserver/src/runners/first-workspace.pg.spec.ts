@@ -294,7 +294,7 @@ test('a machine with no workspace gets its first one from the conversation', {
     assert.equal((await workspaceRow(toUuid(shell.json.workspaceId))).name, 'scripts');
   });
 
-  await t.test('4. a new folder: under the runner\'s reposRoot, and the claim and the reclaim say createWorkDir', async () => {
+  await t.test('4. a new folder: under the runner\'s reposRoot (in its home on create-workdir/v2), and the claim and the reclaim say createWorkDir', async () => {
     const beat = await heartbeat(builder, 'dir-probe/v1,create-workdir/v1', { reposRoot: '/srv/orbit-repos/' });
     assert.equal(beat.status, 201, beat.text);
     const fresh = await onMachine(builder, { newFolder: 'scratch' });
@@ -331,6 +331,17 @@ test('a machine with no workspace gets its first one from the conversation', {
     assert.equal(claimed.get(freshId)?.workDir, '/srv/orbit-repos/scratch');
     assert.equal('createWorkDir' in (claimed.get(existingId) ?? { createWorkDir: 'missing' }), false,
       'and the claim of a session in a folder that was there says nothing of it');
+
+    // A runner that declares create-workdir/v2 makes a new folder in its home, the directory reposRoot sits in.
+    const homeBeat = await heartbeat(builder, 'dir-probe/v1,create-workdir/v1,create-workdir/v2', { reposRoot: '/srv/orbit-repos/' });
+    assert.equal(homeBeat.status, 201, homeBeat.text);
+    const inHome = await onMachine(builder, { newFolder: 'in-home' });
+    assert.equal(inHome.status, 201, inHome.text);
+    const inHomeRow = await workspaceRow(toUuid(inHome.json.workspaceId));
+    assert.equal(inHomeRow.workDir, '/srv/in-home');
+    assert.equal(inHomeRow.autoCreateWorkDir, true);
+    const restored = await heartbeat(builder, 'dir-probe/v1,create-workdir/v1', { reposRoot: '/srv/orbit-repos/' });
+    assert.equal(restored.status, 201, restored.text);
   });
 
   await t.test('5. a name the account already has gets " 2", " 3"; a deleted one\'s and another account\'s are free', async () => {

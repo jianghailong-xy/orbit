@@ -31,10 +31,22 @@ const OTHER_PROJECT_SESSIONS: QueryKey = ['project-sessions', 'P2', 'open'];
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
+/** Seeds a cached read with the declaration its real counterpart makes: the stream selects on
+ *  `meta.entities`, and a bare `setQueryData` creates an entry that declares nothing. */
+function seed(client: QueryClient, key: QueryKey, entities: string[]): void {
+  client.getQueryCache().build(client, { queryKey: key, meta: { entities } });
+  client.setQueryData(key, []);
+}
+
 async function mount(): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Unobserved cache entries expose invalidation without any network request or polling.
-  for (const key of [PROJECTS, PROJECT_PAGE, SESSIONS, PROJECT_SESSIONS, COMPLETED_PROJECT_SESSIONS, OTHER_PROJECT_SESSIONS]) client.setQueryData(key, []);
+  seed(client, PROJECTS, ['project', 'task', 'session']);
+  seed(client, PROJECT_PAGE, ['project', 'task', 'session']);
+  seed(client, SESSIONS, ['session', 'workspace', 'tag', 'folder', 'project']);
+  seed(client, PROJECT_SESSIONS, ['session', 'workspace', 'tag', 'folder', 'project']);
+  seed(client, COMPLETED_PROJECT_SESSIONS, ['session', 'workspace', 'tag', 'folder', 'project']);
+  seed(client, OTHER_PROJECT_SESSIONS, ['session', 'workspace', 'tag', 'folder', 'project']);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);

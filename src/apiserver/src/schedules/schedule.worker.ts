@@ -38,6 +38,7 @@ export class ScheduleWorker implements OnModuleInit, OnModuleDestroy {
     await this.runs.fireDue();
     await this.runs.startDue();
     await this.runs.reconcile();
+    await this.runs.landReportedRuns();
     await this.runs.completeNoChangeSessions();
   }
 

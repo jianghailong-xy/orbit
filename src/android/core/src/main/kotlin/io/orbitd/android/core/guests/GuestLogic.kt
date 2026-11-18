@@ -105,6 +105,24 @@ fun GuestState.hint(owner: String): String = when {
     else -> GuestCopy.runsOn(owner)
 }
 
+/** What a guest may attach to a message: the owner's composer's inline images and limit, which the guest door enforces too
+ * (`POST /guest-sessions/:id/attachments`), refused here in the door's own words before anything is sent. */
+object GuestImages {
+    const val MAX_BYTES = 5 * 1024 * 1024
+    val TYPES = setOf("image/png", "image/jpeg", "image/webp", "image/gif")
+    const val WRONG_TYPE = "A guest can attach PNG, JPEG, WebP or GIF images only."
+    const val TOO_LARGE = "Image exceeds the 5MB limit"
+    const val EMPTY = "File is empty"
+    const val FAILED_UPLOADS = "Remove the images that failed to upload before sending."
+
+    fun rejection(mime: String, size: Int): String? = when {
+        mime !in TYPES -> WRONG_TYPE
+        size == 0 -> EMPTY
+        size > MAX_BYTES -> TOO_LARGE
+        else -> null
+    }
+}
+
 /** How the guest view follows the conversation — the public page's cadence (web `followDelay`): every 4 s while it works or has just
  * moved, every 30 s while it waits, and not at all once over. */
 object GuestFollow {

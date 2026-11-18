@@ -4,8 +4,8 @@
  *   1. By name: `delegate(workspace="orbit-macos")` opens a run on that workspace, with workspace_id,
  *      target_runner_id and the reason in its decision; the read endpoint's view says `on orbit-macos`.
  *   2. By `needs` with two candidates: the one with more quota headroom is chosen, and its reason says so.
- *   3. By `needs` with none: refused, listing what each candidate lacked.
- *   4. SUBAGENT_WORKSPACE_REPO_MISMATCH: another repository, and an empty repoUrl on either side.
+ *   3. By `needs` with none: refused, listing what each candidate lacked, including other repositories.
+ *   4. By name: another repository and an empty repoUrl on either side are allowed.
  *   5. SUBAGENT_WORKSPACE_NOT_GIT: a workspace whose work dir is not a git repository.
  *   6. A target whose agent has SubAgents off is refused.
  *   7. An event for the run from a runner other than target_runner_id is refused, and writes nothing.
@@ -15,6 +15,15 @@
  *   9. Parent stop sends a stop to the target runner (its heartbeat lists the run), and so does the parent's end;
  *      the target's STOPPED report ends the run. A target that goes offline leaves the run INTERRUPTED, owing the
  *      parent a wake.
+ *  10. A named model runs as named on the target (decision and claim), or is refused SUBAGENT_TARGET_CANNOT_RUN at
+ *      once with what the workspace can run; never another model (§10.3).
+ *  11. A default engine the target runner reports signed out is skipped, the run routed onto a usable candidate there
+ *      and the skip recorded; nothing usable is NO_SUBAGENT_PROVIDER with each provider's reason.
+ *  12. A target runner whose Claude region verdict is blocked: the default Claude sign-in, an Anthropic key and a Claude
+ *      pool are all skipped with "claude can’t use Anthropic on …", and the run goes to a DeepSeek key on Claude Code.
+ *  13. Resume: a finished remote run is continued on the workspace and runner that ran it, whose claim names it in
+ *      `resumeOf`; refused while it runs, with a placement, for a run that did not run elsewhere, for a runner that
+ *      does not declare SUBAGENT_REMOTE_RESUME_V1, and once the workspace has moved to another runner.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-remote.pg.spec.ts
  *
@@ -25,12 +34,13 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { RunEventType, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
+import { CLAUDE_REGION_V1, RunEventType, SUBAGENT_REMOTE_RESUME_V1, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
 import { HttpException } from '@nestjs/common';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { encryptSecret } from '../providers/provider-crypto';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -96,7 +106,13 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
   }
 
   /** A runner of the account: online unless told otherwise, reporting these capabilities and Claude's quota. */
-  async function machine(ownerId: string, name: string, opts: { capabilities?: string[]; claudeUsed?: number; online?: boolean } = {}) {
+  async function machine(ownerId: string, name: string, opts: {
+    capabilities?: string[]; claudeUsed?: number; online?: boolean;
+    /** Runner.engines as the runner reports them; Claude installed and signed in when absent. */
+    engines?: Array<{ engine: string; installed: boolean; auth: string }>;
+    /** Extra rows of the runner's model catalogue, by engine, beside Claude's. */
+    catalog?: Record<string, Array<{ value: string; label: string }>>;
+  } = {}) {
     const id = randomUUID();
     return (await prisma.runner.create({
       data: {
@@ -105,7 +121,7 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
         lastHeartbeatAt: opts.online === false ? new Date(Date.now() - 3_600_000) : new Date(),
         capabilities: opts.capabilities ?? ['os:linux'],
         capabilitiesReportedAt: new Date(),
-        engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
+        engines: opts.engines ?? [{ engine: 'claude', installed: true, auth: 'yes' }],
         runtimeDefaultModels: { claude: 'claude-sonnet-5-5' },
         // The catalogue a real runner reports: what routing picks from for a run on the parent's own machine (§8 P3).
         modelCatalog: {
@@ -113,6 +129,7 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
             { value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 },
             { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 },
           ],
+          ...opts.catalog,
         },
         ...(opts.claudeUsed === undefined ? {} : { planUsage: { claude: { fiveHour: { utilization: opts.claudeUsed, resetsAt: inAnHour } } } }),
       },
@@ -201,7 +218,9 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     const roomy = await machine(ownerId, 'mac-studio', { capabilities: ['os:darwin', 'xcode'], claudeUsed: 25 });
     const develop = await workspace(ownerId, hpc, 'orbit-develop', { position: 0 });
     await workspace(ownerId, busy, 'orbit-macos', { position: 1 });
-    const studio = await workspace(ownerId, roomy, 'orbit-studio', { position: 2 });
+    const studio = await workspace(ownerId, roomy, 'orbit-studio', {
+      position: 2, repoUrl: 'git@github.com:orbit-test/orbit.git',
+    });
     const sessionId = await parentIn(ownerId, develop, hpc);
 
     const opened = await subagents.openSubagentRun(hpc, sessionId, create({
@@ -246,37 +265,48 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'and wrote no row');
   });
 
-  await t.test('SUBAGENT_WORKSPACE_REPO_MISMATCH: another repository, or an empty repoUrl on either side', async () => {
+  await t.test('by name: another repository, or an empty repoUrl on either side, is picked as remote', async () => {
     const ownerId = await account();
     const hpc = await machine(ownerId, 'workstation-gpu');
     const mac = await machine(ownerId, 'mac-mini', { capabilities: ['os:darwin'] });
     const develop = await workspace(ownerId, hpc, 'orbit-develop');
-    await workspace(ownerId, mac, 'site', { repoUrl: 'git@github.com:orbit-test/site.git' });
-    await workspace(ownerId, mac, 'scratch', { repoUrl: null });
-    // The same repository spelled another way is the same repository.
-    await workspace(ownerId, mac, 'orbit-ssh', { repoUrl: 'git@github.com:orbit-test/orbit.git' });
+    const lfs = await workspace(ownerId, mac, 'lfs', { repoUrl: 'git@github.com:orbit-test/lfs-builder.git' });
     const sessionId = await parentIn(ownerId, develop, hpc);
 
-    let message = '';
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Site', workspace: 'site' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH', (said) => { message = said; }),
-    );
-    assert.equal(message, "site works on github.com/orbit-test/site, and this session's workspace on github.com/orbit-test/orbit. "
-      + 'A SubAgent runs only on a workspace of the same repository; use session_create for work in another one.');
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Scratch', workspace: 'scratch' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH'), 'an empty repoUrl on the target');
+    const other = await subagents.openSubagentRun(hpc, sessionId, create({
+      toolUseId: 'toolu_01Lfs', workspace: 'lfs', needs: ['os:darwin'],
+    })) as SubagentRemoteRunCreateResponse;
+    assert.deepEqual(other.remote, { workspaceId: lfs, workspaceName: 'lfs' });
+    assert.equal(other.decision.workspace?.reason, 'Named by the delegate call: lfs, whose runner reports os:darwin');
+    await subagents.endRemoteSubagentRun(mac, other.runId, update({ status: 'DONE' }));
 
-    const bare = await workspace(ownerId, hpc, 'no-remote', { repoUrl: '' });
-    const bareParent = await parentIn(ownerId, bare, hpc);
-    await assert.rejects(
-      subagents.openSubagentRun(hpc, bareParent, create({ toolUseId: 'toolu_01Bare', workspace: 'orbit-ssh' })),
-      refusedWith('SUBAGENT_WORKSPACE_REPO_MISMATCH'), "an empty repoUrl on the parent's side");
-
-    const same = await subagents.openSubagentRun(hpc, sessionId, create({ toolUseId: 'toolu_01Ssh', workspace: 'orbit-ssh' }));
-    assert.equal((same as SubagentRemoteRunCreateResponse).remote.workspaceName, 'orbit-ssh', 'git@ and https:// name one repository');
-    assert.equal(await prisma.subagentRun.count({ where: { sessionId, toolUseId: { in: ['toolu_01Site', 'toolu_01Scratch'] } } }), 0);
+    for (const repoUrl of [null, '']) {
+      await prisma.workspace.update({ where: { id: lfs }, data: { repoUrl } });
+      const emptyTarget = await subagents.openSubagentRun(hpc, sessionId, create({
+        toolUseId: `toolu_01Target-${repoUrl === null ? 'null' : 'blank'}`, workspace: 'lfs',
+      })) as SubagentRemoteRunCreateResponse;
+      assert.deepEqual(emptyTarget.remote, { workspaceId: lfs, workspaceName: 'lfs' }, 'an empty repoUrl on the target');
+      await subagents.endRemoteSubagentRun(mac, emptyTarget.runId, update({ status: 'DONE' }));
+      await assert.rejects(
+        subagents.openSubagentRun(hpc, sessionId, create({
+          toolUseId: `toolu_01NeedsTarget-${repoUrl === null ? 'null' : 'blank'}`, needs: ['os:darwin'],
+        })),
+        refusedWith('SUBAGENT_NO_WORKSPACE_MATCHES'), 'needs still rejects a target without a repository URL');
+    }
+    await prisma.workspace.update({ where: { id: lfs }, data: { repoUrl: 'git@github.com:orbit-test/lfs-builder.git' } });
+    for (const repoUrl of [null, '']) {
+      await prisma.workspace.update({ where: { id: develop }, data: { repoUrl } });
+      const emptyParent = await subagents.openSubagentRun(hpc, sessionId, create({
+        toolUseId: `toolu_01Parent-${repoUrl === null ? 'null' : 'blank'}`, workspace: 'lfs',
+      })) as SubagentRemoteRunCreateResponse;
+      assert.deepEqual(emptyParent.remote, { workspaceId: lfs, workspaceName: 'lfs' }, "an empty repoUrl on the parent's side");
+      await subagents.endRemoteSubagentRun(mac, emptyParent.runId, update({ status: 'DONE' }));
+      await assert.rejects(
+        subagents.openSubagentRun(hpc, sessionId, create({
+          toolUseId: `toolu_01NeedsParent-${repoUrl === null ? 'null' : 'blank'}`, needs: ['os:darwin'],
+        })),
+        refusedWith('SUBAGENT_NO_WORKSPACE_MATCHES'), 'needs still requires the parent repository URL');
+    }
   });
 
   await t.test('SUBAGENT_WORKSPACE_NOT_GIT: a work dir that is not a git repository is refused', async () => {
@@ -446,5 +476,177 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.equal(row.status, 'INTERRUPTED');
     assert.equal(row.wakeOwed, true, 'the parent is owed a wake');
     assert.match(row.resultSummary ?? '', /went offline/);
+  });
+
+  /** The HPC parent, and a Mac workspace whose runner reports these engines and extra catalogue rows. */
+  async function estateWithMac(mac: Parameters<typeof machine>[2]) {
+    const ownerId = await account();
+    const hpc = await machine(ownerId, 'workstation-gpu', { capabilities: ['os:linux'] });
+    const target = await machine(ownerId, 'mac-mini', { capabilities: ['os:darwin'], ...mac });
+    const develop = await workspace(ownerId, hpc, 'orbit-develop', { position: 0 });
+    const macos = await workspace(ownerId, target, 'orbit-macos', { position: 1 });
+    const sessionId = await parentIn(ownerId, develop, hpc);
+    return { ownerId, hpc, mac: target, develop, macos, sessionId };
+  }
+  const CODEX_SIGNED_IN = [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'yes' }];
+  const CODEX_CATALOG = { codex: [{ value: 'gpt-5.5', label: 'GPT-5.5' }] };
+
+  await t.test('a named model runs as named on the target: its provider there, in the decision and in the claim', async () => {
+    const e = await estateWithMac({ engines: CODEX_SIGNED_IN, catalog: CODEX_CATALOG });
+    const opened = await subagents.openSubagentRun(e.hpc, e.sessionId, create({
+      toolUseId: 'toolu_01Named', workspace: 'orbit-macos', model: 'gpt-5.5',
+    })) as SubagentRemoteRunCreateResponse;
+    t.diagnostic(`decision ${JSON.stringify({ ...opened.decision, workspace: undefined })}`);
+    assert.equal(opened.decision.tierSource, 'named-model');
+    assert.deepEqual([opened.decision.engine, opened.decision.provider, opened.decision.model], ['codex', 'codex', 'gpt-5.5'],
+      "the named model, on the target's codex — not its default claude");
+    assert.equal(opened.decision.reasons[0], 'Named by the delegate call: orbit-macos');
+    assert.ok(opened.decision.reasons.includes('Model named by the caller: gpt-5.5'));
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } });
+    assert.deepEqual((row.attempts as Array<{ engine: string; model: string }>).map((a) => [a.engine, a.model]), [['codex', 'gpt-5.5']]);
+    const claim = await subagents.claimRemoteSubagentRun(e.mac, opened.runId);
+    t.diagnostic(`claim exec ${claim.exec.provider}/${claim.exec.model}`);
+    assert.equal(claim.exec.provider, 'codex', 'the target runner runs it on codex');
+    assert.equal(claim.exec.model, 'gpt-5.5', 'on the model the call named');
+  });
+
+  await t.test('a named model the target cannot run is refused at once, listing what the workspace can run', async () => {
+    const e = await estateWithMac({});
+    let message = '';
+    await assert.rejects(
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01NamedNo', workspace: 'orbit-macos', model: 'deepseek-flash' })),
+      refusedWith('SUBAGENT_TARGET_CANNOT_RUN', (m) => { message = m; }),
+    );
+    t.diagnostic(`refused: ${message}`);
+    assert.match(message, /^orbit-macos cannot run deepseek-flash, the model this delegate call named: no usable provider there offers it\./);
+    assert.ok(message.includes('What orbit-macos can run:\n- claude: claude-opus-5-5, claude-sonnet-5-5'), 'the list of what it can run');
+    assert.equal(await prisma.subagentRun.count({ where: { sessionId: e.sessionId } }), 0, 'nothing was written');
+
+    // Offered there, but on an engine the target runner reports signed out: refused with that reason, not run elsewhere.
+    const out = await estateWithMac({
+      engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'no' }], catalog: CODEX_CATALOG,
+    });
+    await assert.rejects(
+      subagents.openSubagentRun(out.hpc, out.sessionId, create({ toolUseId: 'toolu_01NamedOut', workspace: 'orbit-macos', model: 'gpt-5.5' })),
+      refusedWith('SUBAGENT_TARGET_CANNOT_RUN', (m) => { message = m; }),
+    );
+    t.diagnostic(`refused: ${message}`);
+    assert.ok(message.includes("codex: codex is signed out on orbit-macos's runner"), 'why the one offer is out');
+    assert.ok(message.includes('- claude: claude-opus-5-5, claude-sonnet-5-5'));
+  });
+
+  await t.test("a default engine the target runner reports signed out is skipped: the run goes to a usable candidate, the skip in its decision", async () => {
+    const e = await estateWithMac({
+      engines: [{ engine: 'claude', installed: true, auth: 'no' }, { engine: 'codex', installed: true, auth: 'yes' }], catalog: CODEX_CATALOG,
+    });
+    const opened = await subagents.openSubagentRun(e.hpc, e.sessionId, create({
+      toolUseId: 'toolu_01Skip', workspace: 'orbit-macos',
+    })) as SubagentRemoteRunCreateResponse;
+    t.diagnostic(`reasons ${JSON.stringify(opened.decision.reasons)}`);
+    t.diagnostic(`candidates ${JSON.stringify(opened.decision.candidates)}`);
+    assert.deepEqual([opened.decision.engine, opened.decision.model], ['codex', 'gpt-5.5'], 'routed onto codex on the target');
+    assert.notEqual(opened.decision.tierSource, 'not-routed');
+    assert.equal(opened.decision.reasons[0], 'Named by the delegate call: orbit-macos');
+    assert.equal(opened.decision.reasons[1], "Skipped orbit-macos's default claude: claude is signed out on orbit-macos's runner");
+    assert.ok(opened.decision.candidates.some((c) => c.provider === 'claude' && c.engine === 'claude' && c.model === null
+      && c.reason === "claude is signed out on orbit-macos's runner"), 'the skipped default is among the removed candidates');
+    const claim = await subagents.claimRemoteSubagentRun(e.mac, opened.runId);
+    assert.deepEqual([claim.exec.provider, claim.exec.model], ['codex', 'gpt-5.5'], 'the claim runs what the decision names');
+
+    // Still the workspace's own default while that is signed in: the old behaviour, under the new policy version.
+    const fine = await estateWithMac({ engines: CODEX_SIGNED_IN, catalog: CODEX_CATALOG });
+    const plain = await subagents.openSubagentRun(fine.hpc, fine.sessionId, create({ toolUseId: 'toolu_01Default', workspace: 'orbit-macos' }));
+    assert.deepEqual([plain.decision.tierSource, plain.decision.engine, plain.decision.model], ['not-routed', 'claude', 'claude-sonnet-5-5']);
+    assert.equal(plain.decision.policyVersion, 'subagent-remote-v2');
+  });
+
+  await t.test('nothing usable on the target: NO_SUBAGENT_PROVIDER with each provider\'s reason, never the parent\'s model', async () => {
+    const e = await estateWithMac({ engines: [{ engine: 'claude', installed: true, auth: 'no' }] });
+    let message = '';
+    await assert.rejects(
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01Nothing', workspace: 'orbit-macos' })),
+      refusedWith('NO_SUBAGENT_PROVIDER', (m) => { message = m; }),
+    );
+    t.diagnostic(`refused: ${message}`);
+    assert.match(message, /^On orbit-macos: No provider is left to run this SubAgent in tier M\. Each provider's reason:/);
+    assert.ok(message.includes("- claude (claude): claude is signed out on orbit-macos's runner"));
+    assert.ok(message.includes("- codex (codex): codex is not installed on orbit-macos's runner"));
+    assert.ok(message.includes("- orbit-macos's default claude: claude is signed out on orbit-macos's runner"));
+    assert.equal(await prisma.subagentRun.count({ where: { sessionId: e.sessionId } }), 0, 'nothing was written');
+  });
+
+  await t.test('a region-blocked target: no Anthropic sign-in, key or pool is picked; a DeepSeek key on Claude Code runs', async () => {
+    const e = await estateWithMac({ capabilities: ['os:darwin', CLAUDE_REGION_V1] });
+    const now = new Date().toISOString();
+    await prisma.runner.update({
+      where: { id: e.mac.id },
+      data: { region: { verdict: 'blocked', country: 'CN', regionCode: null, name: 'mainland China', viaProxy: false,
+        decidedAt: now, checkedAt: now, blockedChecks: 2 } },
+    });
+    const tag = e.macos.slice(0, 8);
+    const [anthropicKey, anthropicEndpoint, deepseek, member] = await Promise.all([
+      { slug: `anthropic-${tag}`, label: 'Anthropic', presetSlug: 'anthropic', followsPreset: true, baseUrl: 'https://api.anthropic.com' },
+      { slug: `proxy-${tag}`, label: 'Anthropic endpoint', baseUrl: 'https://api.anthropic.com/v1',
+        models: [{ value: 'claude-sonnet-5-5', label: 'Sonnet' }] },
+      { slug: `deepseek-${tag}`, label: 'DeepSeek', presetSlug: 'deepseek', followsPreset: true, baseUrl: 'https://api.deepseek.com/anthropic' },
+      { slug: `member-${tag}`, label: 'Subscription', baseUrl: 'https://api.anthropic.com', models: [],
+        apiKeyEnc: encryptSecret(`sk-ant-oat01-${tag}`) },
+    ].map((row, position) => prisma.modelProvider.create({
+      data: { runtime: 'claude', apiKeyEnc: encryptSecret(`sk-${randomUUID()}`), ownerId: e.ownerId, position, ...row },
+    })));
+    const pool = await prisma.providerPool.create({ data: { slug: `team-${tag}`, label: 'Team', ownerId: e.ownerId, engine: 'claude' } });
+    await prisma.providerPoolMember.create({ data: { poolId: pool.id, providerId: member.id, ownerId: e.ownerId } });
+
+    const opened = await subagents.openSubagentRun(e.hpc, e.sessionId, create({
+      toolUseId: 'toolu_01Region', workspace: 'orbit-macos',
+    })) as SubagentRemoteRunCreateResponse;
+    t.diagnostic(`reasons ${JSON.stringify(opened.decision.reasons)}`);
+    t.diagnostic(`candidates ${JSON.stringify(opened.decision.candidates)}`);
+    const REFUSED = "claude can’t use Anthropic on orbit-macos's runner";
+    assert.equal(opened.decision.reasons[1], `Skipped orbit-macos's default claude: ${REFUSED}`);
+    for (const provider of [anthropicKey.slug, anthropicEndpoint.slug, member.slug, pool.slug]) {
+      assert.ok(opened.decision.candidates.some((c) => c.provider === provider && c.engine === 'claude' && c.model === null && c.reason === REFUSED),
+        `${provider} is removed for the region`);
+    }
+    assert.deepEqual([opened.decision.provider, opened.decision.engine], [deepseek.slug, 'claude'], 'the DeepSeek key on Claude Code runs it');
+  });
+
+  await t.test('resume: back to the workspace and runner that ran it, with the run it continues in the claim', async () => {
+    const e = await estate();
+    const first = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01First', workspace: 'orbit-macos' }));
+    const again = (toolUseId: string, fields: Partial<SubagentRunCreateDto> = {}) =>
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId, resumeOf: first.runId, prompt: 'Now run the tests.', ...fields }));
+
+    await assert.rejects(again('toolu_01Early'), refusedWith('SUBAGENT_RESUME_RUNNING'), 'refused while it runs');
+    await subagents.claimRemoteSubagentRun(e.mac, first.runId);
+    await subagents.endRemoteSubagentRun(e.mac, first.runId, update({ status: 'DONE', resultSummary: 'Built.' }));
+
+    await assert.rejects(again('toolu_01Old'), refusedWith('SUBAGENT_RESUME_UNSUPPORTED'),
+      'a runner that keeps no conversation would start a new one');
+    await prisma.runner.update({ where: { id: e.mac.id }, data: { capabilities: ['os:darwin', SUBAGENT_REMOTE_RESUME_V1] } });
+    await assert.rejects(again('toolu_01Placed', { workspace: 'orbit-macos' }), refusedWith('SUBAGENT_RESUME_PLACED'));
+    const local = await subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01Local' }));
+    await assert.rejects(
+      subagents.openSubagentRun(e.hpc, e.sessionId, create({ toolUseId: 'toolu_01NotRemote', resumeOf: local.runId })),
+      refusedWith('SUBAGENT_RESUME_NOT_FOUND'), "a run on the parent's own machine is resumed there, not through the server");
+
+    const resumed = await again('toolu_01Again') as SubagentRemoteRunCreateResponse;
+    assert.deepEqual(resumed.remote, { workspaceId: e.macos, workspaceName: 'orbit-macos' });
+    assert.notEqual(resumed.runId, first.runId, 'a resume is a run of its own');
+    const row = await prisma.subagentRun.findUniqueOrThrow({ where: { id: resumed.runId } });
+    assert.equal(row.targetRunnerId, e.mac.id, 'on the runner that has the conversation');
+    const firstRow = await prisma.subagentRun.findUniqueOrThrow({ where: { id: first.runId } });
+    const modelOf = (attempts: unknown) => (attempts as Array<{ model: string }>).at(-1)?.model;
+    assert.equal(modelOf(row.attempts), modelOf(firstRow.attempts), 'on the model it last ran on, so on its engine');
+    const claim = await subagents.claimRemoteSubagentRun(e.mac, resumed.runId);
+    assert.equal(claim.resumeOf, first.runId, 'the claim names the run it continues');
+    assert.equal(claim.prompt, 'Now run the tests.');
+    await subagents.endRemoteSubagentRun(e.mac, resumed.runId, update({ status: 'DONE', resultSummary: 'Tests passed.' }));
+
+    const other = await machine(e.ownerId, 'mac-studio', { capabilities: ['os:darwin', SUBAGENT_REMOTE_RESUME_V1] });
+    await prisma.workspace.update({ where: { id: e.macos }, data: { runnerId: other.id } });
+    let message = '';
+    await assert.rejects(again('toolu_01Moved'), refusedWith('SUBAGENT_RESUME_MOVED', (said) => { message = said; }));
+    assert.match(message, /orbit-macos has moved to another machine/);
   });
 });

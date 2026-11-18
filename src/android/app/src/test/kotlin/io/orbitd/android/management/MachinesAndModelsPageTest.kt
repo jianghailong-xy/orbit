@@ -4,6 +4,7 @@ import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -24,9 +25,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * A13-17 (iOS 5e75edbde): Settings' Machines & models group is one row, Machines & models, whose page reads top to bottom Needs you, What
+ * A13-17 (iOS 5e75edbde): the Machines & models page reads top to bottom Needs you, What
  * your agents can run on, Machines, Add Runner, Account pools and API keys — each line of Needs you with its way out in the app — and
- * reads the machines again every 15 s while it is up.
+ * reads the machines again every 15 s while it is up. Settings opens it in two halves, Machines and Providers (iOS 32ba83348).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
@@ -141,30 +142,58 @@ class MachinesAndModelsPageTest {
         compose.waitUntil(60_000) { runnerReads() == paused + 1 }
     }
 
-    /** Settings' Machines & models group: one row, Machines & models, and no header over it to say the name twice (iOS SettingsHome,
-     * docs/mocks/machines-and-models ⑥-2) — "1 needs you" while something does, else the machines online — and the page's line under it.
-     * It comes first, before Preferences, whose first row is Sessions (docs/mocks/ios-settings-order). */
-    @Test fun settingsHasOneMachinesAndModelsRowWithItsValueAndTheLineUnderIt() {
-        // Codex signed out on the one machine is nothing for the row to count, as the web's machine card draws it nothing.
-        codexSignedOut()
+    private fun settings() {
         val api = api()
         compose.setContent {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, { opened += it }, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
+    }
+
+    /** Settings' Machines and Providers rows (iOS SettingsHome, docs/mocks/ios-settings-web-groups 1A 2A): one row each under Personal, no
+     * header over either to say the name twice and no line under them. Machines says "1 needs you" for a machine's line, else the
+     * machines online; Providers says only what needs you about a pool. */
+    @Test fun settingsHasAMachinesRowAndAProvidersRowAfterPersonal() {
+        // Codex signed out on the one machine is nothing for the row to count, as the web's machine card draws it nothing. The pool's
+        // people couldn't be read, so its own account — signed out — is all it has: one line about a pool, and none about a machine.
+        codexSignedOut()
+        fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
+        settings()
         await("1 of 1 online")
-        compose.onNode(hasText(MachinesAndModels.TITLE) and hasText("1 of 1 online") and hasClickAction()).assertExists()
-        compose.onNodeWithText(MachinesAndModels.SUBTITLE).assertExists()
-        listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        compose.onAllNodesWithText(MachinesAndModels.TITLE).assertCountEquals(1)
-        assertTrue("Machines & models comes before Preferences", top(MachinesAndModels.TITLE) < top(MachinesAndModels.SUBTITLE) &&
-            top(MachinesAndModels.SUBTITLE) < top("Preferences") && top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications"))
-        // A machine offline is.
+        compose.onNode(hasText(MachinesAndModels.MACHINES) and hasText("1 of 1 online") and hasClickAction()).assertExists()
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText(SETTINGS_PROVIDERS) and hasText("1 needs you")).fetchSemanticsNodes().isNotEmpty() }
+        listOf("Runners", MachinesAndModels.TITLE, "Preferences", "Account").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+        assertTrue("Personal, its last row Terminals, then Machines, then Providers", top(SETTINGS_PERSONAL) < top(Terminals.TITLE) &&
+            top(Terminals.TITLE) < top(MachinesAndModels.MACHINES) && top(MachinesAndModels.MACHINES) < top(SETTINGS_PROVIDERS))
+        // A machine offline is the Machines row's to count, and not the Providers row's.
         fixture.secondRunner = true; fixture.runnerTwoOnline = false
         revision++
-        await("1 needs you")
-        compose.onNode(hasText(MachinesAndModels.TITLE) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines-and-models")), opened) }
+        compose.waitUntil(60_000) { compose.onAllNodes(hasText(MachinesAndModels.MACHINES) and hasText("1 needs you")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText(SETTINGS_PROVIDERS) and hasText("1 needs you") and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(MachinesAndModels.MACHINES) and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "providers"), OrbitRoute(Destination.SETTINGS, "machines")), opened) }
+        assertEquals(MachinesAndModels.MACHINES, settingsTitle("machines"))
+        assertEquals(SETTINGS_PROVIDERS, settingsTitle("providers"))
+    }
+
+    /** The two halves Settings opens (iOS RunnersListView's part): Machines holds a machine's Needs you lines, the machines and Add
+     * Runner; Providers a pool's lines, the account pools, the API keys and the model tiers. */
+    @Test fun machinesAndProvidersEachShowTheirOwnHalf() {
+        codexSignedOut()
+        fixture.secondRunner = true; fixture.runnerTwoOnline = false
+        fixture.loginState = "SIGNED_OUT"; fixture.accessFails = true
+        val api = api()
+        var route by mutableStateOf(OrbitRoute(Destination.SETTINGS, "machines"))
+        compose.setContent { SettingsScreen(api, route, revision, { opened += it }, {}, logout = {}, changed = {}, workspaceDeleted = {},
+            deviceAlerts = { true }, notifications = {}, about = {}) }
+        await("Spare box is offline")
+        listOf(MachinesAndModels.NEEDS_YOU, MachinesAndModels.MACHINES_DETAIL, RunnerCopy.ADD).forEach { compose.onNodeWithText(it).assertExists() }
+        listOf("Team Codex is unavailable", MachinesAndModels.ACCOUNT_POOLS, MachinesAndModels.API_KEYS)
+            .forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+        route = OrbitRoute(Destination.SETTINGS, "providers")
+        await("Team Codex is unavailable")
+        listOf(MachinesAndModels.NEEDS_YOU, MachinesAndModels.ACCOUNT_POOLS, MachinesAndModels.API_KEYS).forEach { compose.onNodeWithText(it).assertExists() }
+        listOf("Spare box is offline", MachinesAndModels.MACHINES_DETAIL, RunnerCopy.ADD).forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
     }
 
     /** A pool's page and a DeepSeek key's are titled by their name once read, as iOS titles them; Machines & models until then. */

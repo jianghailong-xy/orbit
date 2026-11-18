@@ -402,6 +402,8 @@ export class FilesService implements OnApplicationBootstrap {
       label?: string | null;
       retention?: string | null;
       testReport?: TestReportSummary | null;
+      /** A session guest's image (0880): the guest who uploaded it, on a row of the owner's session. */
+      uploadedByGuestId?: string | null;
     },
   ): Promise<{ id: string }> {
     await this.assertWithinQuota(scope.ownerId, upload);
@@ -421,6 +423,7 @@ export class FilesService implements OnApplicationBootstrap {
         createdAt,
         expiresAt: scope.retention === FILE_UPLOAD_RETENTION ? uploadExpiry(createdAt) : null,
         testReportSummary: (scope.testReport ?? undefined) as Prisma.InputJsonValue | undefined,
+        uploadedByGuestId: scope.uploadedByGuestId ?? null,
       },
       select: { id: true },
     });

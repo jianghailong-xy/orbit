@@ -258,10 +258,41 @@ public struct RecentSessionsSnapshot: Codable, Equatable, Sendable {
         }
     }
 
-    public var sessions: [Row]
+    /// A workspace the picker's New session row can start in.
+    public struct Workspace: Codable, Equatable, Sendable {
+        public var id: String
+        public var name: String
 
-    public init(sessions: [Row]) {
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    public var sessions: [Row]
+    /// The workspaces New session can start in, the app's default first. Empty in a snapshot an
+    /// older build wrote; the picker then offers New session only when a session names a workspace.
+    public var workspaces: [Workspace]
+
+    public init(sessions: [Row], workspaces: [Workspace] = []) {
         self.sessions = sessions
+        self.workspaces = workspaces
+    }
+
+    private enum CodingKeys: String, CodingKey { case sessions, workspaces }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try c.decode([Row].self, forKey: .sessions)
+        workspaces = try c.decodeIfPresent([Workspace].self, forKey: .workspaces) ?? []
+    }
+
+    /// Where New session goes unless the person picks another: the app's default workspace, else
+    /// the newest session's.
+    public var defaultWorkspace: Workspace? {
+        if let first = workspaces.first { return first }
+        guard let newest = sessions.max(by: { $0.updatedAt < $1.updatedAt }) else { return nil }
+        return Workspace(id: newest.workspaceId, name: newest.workspaceName)
     }
 }
 

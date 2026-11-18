@@ -36,6 +36,11 @@ class ComposerApi(private val auth: OrbitApi, private val handle: SessionHandle,
         else -> read(listOf("workspaces", target.workspaceId)).jsonObject
     }
     suspend fun workspaces(): List<JsonObject> = read(listOf("workspaces")).jsonArray.filterIsInstance<JsonObject>()
+    /** `POST /workspaces` (a machine's setup card): the workspace made, which answers its `id`. */
+    suspend fun createWorkspace(body: JsonObject): JsonObject {
+        val response = auth.request(handle, ApiRequest(listOf("workspaces"), HttpMethod.POST, body = body.toString().encodeToByteArray()))
+        return Wire.json.parseToJsonElement(response.body.decodeToString()).jsonObject
+    }
     suspend fun askDirProbe(runnerId: String, path: String) {
         auth.request(handle, ApiRequest(listOf("runners", runnerId, "dir-probe"), HttpMethod.POST,
             body = buildJsonObject { put("path", path) }.toString().encodeToByteArray()))

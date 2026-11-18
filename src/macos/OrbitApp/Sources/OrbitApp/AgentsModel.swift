@@ -98,6 +98,8 @@ final class AgentsModel {
     /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
     /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
     @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
+    /// Told when the server has answered the workspace list: the share picker's snapshot names them.
+    @ObservationIgnored var onWorkspacesLoaded: (@MainActor () -> Void)?
 
     private let api: APIClient
 
@@ -321,6 +323,7 @@ final class AgentsModel {
         do {
             assignIfChanged(\.items, try await api.agents())
             workspacesAnswered = true
+            onWorkspacesLoaded?()
             await refreshRunnerSnapshot()
             // Also when a refresh already on the wire took that call: the workspaces just changed.
             updateMachinesToSetUp()
@@ -379,7 +382,7 @@ final class AgentsModel {
     /// snapshot, so the page and the app's tick do not each read the same list.
     func adoptRunnerSnapshot(_ runners: [Runner]) {
         let order = runners.map(\.id)
-        let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
+        let names = Dictionary(runners.map { ($0.id, RunnerPageFormat.displayName($0)) },
                                uniquingKeysWith: { a, _ in a })
         let online = Dictionary(runners.compactMap { runner in
             WorkspaceRunnerAvailabilityLogic.onlineValue(
@@ -404,11 +407,18 @@ final class AgentsModel {
         updateMachinesToSetUp()
     }
 
+    private var managedStatus: ManagedRunnerStatus?
+
+    func adoptManagedStatus(_ status: ManagedRunnerStatus?) {
+        managedStatus = status
+        updateMachinesToSetUp()
+    }
+
     private func updateMachinesToSetUp() {
         guard workspacesAnswered else { return }
-        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items)
+        let machines = AgentListLogic.machinesToSetUp(runners: runnerRows, agents: items, managedStatus: managedStatus)
         if machines != machinesToSetUp { machinesToSetUp = machines }
-        let first = runnerRows.first(where: AgentListLogic.isOnline)?.id
+        let first = runnerRows.first { AgentListLogic.isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil }?.id
         if first != firstOnlineMachine { firstOnlineMachine = first }
     }
 

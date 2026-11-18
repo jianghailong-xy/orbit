@@ -1,0 +1,13 @@
+inspector: CONDITION shown
+inspector: 6.9% shown
+inspector: checked 1 min ago shown
+inspector: HOW IT CHECKS shown
+inspector: Every 5 min on workstation-gpu, without a model. shown
+inspector: ceph df -f json | jq .stats.total_used_raw_ratio shown
+inspector: Read-only. Approved by you on  shown
+inspector-history: in view after 2 drag(s) at (30.0, 651.0, 342.0, 35.66666666666663)
+inspector-history: HISTORY shown
+inspector-history: Ready again · 82.9% shown
+inspector-history: Fired · 90.4% for 10 min shown
+inspector-history: Run of  shown
+inspector-history: Created shown

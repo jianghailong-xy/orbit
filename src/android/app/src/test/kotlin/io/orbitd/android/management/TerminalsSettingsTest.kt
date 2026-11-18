@@ -74,12 +74,12 @@ class TerminalsSettingsTest {
         settings(null, opened)
         await("2 signed in")
         val row = compose.onNode(hasText("Terminals") and hasClickAction()).performScrollTo()
-        // Read together, after the one scroll: Access tokens, then Terminals, then Change password.
+        // Read together, after the one scroll: Access tokens, then Terminals — Personal's last row — then Machines.
         // Where each row starts, unclipped by the screen's edge.
-        val (tokens, terminals, password) = listOf("Access tokens", "Terminals", "Change password")
+        val (tokens, terminals, machines) = listOf("Access tokens", "Terminals", MachinesAndModels.MACHINES)
             .map { compose.onNode(hasText(it) and hasClickAction()).fetchSemanticsNode().positionInRoot.y }
         assertTrue("Terminals sits under Access tokens ($tokens, $terminals)", terminals > tokens)
-        assertTrue("and over Change password ($terminals, $password)", terminals < password)
+        assertTrue("and over Machines ($terminals, $machines)", terminals < machines)
         row.performClick()
         compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "terminals")), opened) }
         assertEquals("Terminals", settingsTitle("terminals"))

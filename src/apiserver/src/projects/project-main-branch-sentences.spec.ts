@@ -59,6 +59,15 @@ const NEXT_STEPS: Array<[string, Record<string, unknown>, string, string]> = [
     'The project branch cannot reach master until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
   ],
   [
+    'the owner’s check of the merge that timed out',
+    {
+      kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', taskId: null, promotionId: 'promotion',
+      payload: { jobKind: 'CHECK_PROMOTION', failureClass: 'CHECK_TIMED_OUT' }, state: 'OPEN', askable: true,
+    },
+    'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
+    'The project branch cannot reach master until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
+  ],
+  [
     'the merge itself failing',
     {
       kind: 'INTEGRATION_ERROR', assignee: 'OWNER', taskId: null, promotionId: 'promotion',

@@ -79,10 +79,7 @@ import {
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
-import {
-  describeNote,
-  splitRecordedNote,
-} from '../lib/deliveredMessage';
+import { splitRecordedNote } from '../lib/deliveredMessage';
 import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
@@ -97,11 +94,9 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import { OrbitEventLine } from './OrbitEventLine';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
-import { BackgroundJobsNote } from './BackgroundJobsNote';
-import { ReferencedTaskNote } from './ReferencedTaskNote';
-import { WikiContextNote } from './WikiContextNote';
 import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
 import { wikiChatDraftIdOf, wikiChatDraftingCall } from '../lib/wikiChat';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
@@ -128,7 +123,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
+import { parseSessionMessage, parseSessionMessageNarrower } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import {
   parseConfirmationAnswers,
@@ -162,11 +157,8 @@ import {
 } from '../lib/orbitTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
-import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
+import { parseSessionReplies } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
-import { parseBackgroundJobs } from '../lib/backgroundJobs';
-import { parseReferencedTasks } from '../lib/referencedTask';
-import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -190,16 +182,25 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
-import { BILINGUAL_COLLAPSE_LINES, bilingualEnglish, bilingualLineCount, DEFAULT_AGENT_LANGUAGE } from '@orbit/shared';
+import {
+  BILINGUAL_COLLAPSE_LINES,
+  bilingualEnglish,
+  bilingualLineCount,
+  bilingualPairs,
+  DEFAULT_AGENT_LANGUAGE,
+  type BilingualPair,
+} from '@orbit/shared';
 import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
   ReplyTranslationFoot,
   ShownOriginalProvider,
   TranslationCtx,
   UserTranslationFoot,
+  replyOriginalHiddenKey,
   replyTranslationKey,
   useReplyShownOriginal,
   useShownOriginal,
+  userOriginalHiddenKey,
   userTranslationKey,
 } from './TranslationParts';
 
@@ -972,6 +973,8 @@ export interface UnreadSteer {
   /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
   delivery?: string;
   withdrawable?: boolean;
+  /** Settings › Translation: `text` is the English delivered; `original` is what the reader wrote. */
+  translation?: TurnTranslation;
 }
 
 // The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
@@ -1001,7 +1004,16 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note)
-  && !parseSubagentFinished(node.note);
+  && !parseSubagentFinished(node.note)
+  && !orbitOnlyTurn(node);
+
+// A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
+// person attached: Orbit opened it, so it never draws as the person's bubble (OrbitEventLine).
+const orbitOnlyTurn = (node: TextNode): boolean =>
+  node.text.trim() === ''
+  && !!node.note?.trim()
+  && !node.images?.length
+  && !node.attachmentRefs?.length;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -1025,6 +1037,13 @@ function transcriptOf(events: RunEvent[], turnImages?: Record<string, TurnImage[
 /** The reader's steers these events leave unread, in the order they were sent. */
 export function unreadSteersOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): UnreadSteer[] {
   return transcriptOf(events, turnImages).unread;
+}
+
+/** One row for a run of legacy per-file "diff withheld while a removal scan ran" notices. */
+function legacyWithheldMessage(count: number): string {
+  return count === 1
+    ? 'Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.'
+    : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
 function buildTranscript(
@@ -1281,9 +1300,20 @@ function buildTranscript(
   // The `turnHead` the turn now open is drawn from — the message that opened it, until its
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
+  let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    const legacy =
+      ev.type === 'system' &&
+      p.subtype === 'secret_patch_withheld' &&
+      typeof p.path === 'string' &&
+      [
+        "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+        "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.",
+      ].some((template) => p.notice === `${p.path}: ${template}`);
+    if (!legacy || legacyWithheld?.turn !== ev.turnId) legacyWithheld = undefined;
+
     // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
     // continuation. Other transcript events are a hard boundary for the pending log.
     if (ev.type !== 'system' && ev.type !== 'tool_use' && ev.type !== 'tool_result') lastStderr = undefined;
@@ -1623,12 +1653,21 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
+          if (legacyWithheld) {
+            legacyWithheld.count++;
+            legacyWithheld.node.message = legacyWithheldMessage(legacyWithheld.count);
+            break;
+          }
           const notice: NoticeNode = {
             kind: 'notice',
             seq: ev.seq,
             message: String(p.notice),
             ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
           };
+          if (legacy) {
+            notice.message = legacyWithheldMessage(1);
+            legacyWithheld = { node: notice, count: 1, turn: ev.turnId };
+          }
           if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
           into(parent).push(notice);
           break;
@@ -1675,6 +1714,7 @@ function buildTranscript(
     attachmentRefs: node.attachmentRefs,
     delivery: node.delivery,
     withdrawable: node.withdrawable,
+    ...(node.translation ? { translation: node.translation } : {}),
   }));
   return { nodes: roots, unread };
 }
@@ -2350,10 +2390,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
-      // The block delivery appended only tells the agent what the card shows, so it is not folded
-      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
-        const { rest, narrower } = splitSessionMessageNote(node.note);
+        const narrower = parseSessionMessageNarrower(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
@@ -2363,7 +2401,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             narrower={narrower}
-            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
@@ -2371,11 +2408,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
       // carries nobody's words, and a message of the owner's may carry outcomes that were held for
       // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
-      // else delivery appended folds into the cards, as it does everywhere. Still queued, the queue's
+      // else delivery appended stays out of the transcript. Still queued, the queue's
       // line goes under the cards — or under the owner's words, the message it is about, when they
       // are there.
       if (node.sessionReplies) {
-        const rest = withoutReplyBlocks(node.note);
         const words = node.text.trim() !== '';
         return (
           <>
@@ -2402,12 +2438,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
               cards={node.sessionReplies}
               seq={seq}
               ts={node.ts}
-              attached={
-                <>
-                  {rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
-                  {!words && queued}
-                </>
-              }
+              queued={!words && queued}
             />
           </>
         );
@@ -2417,14 +2448,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
       if (isRunnerUpdateResume(node.text)) {
-        // What delivery appended rides under it — but not the background jobs that ended while the runner
-        // was away, which name nothing (describeNote) and so draw no line.
-        return (
-          <>
-            <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
-            {node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
-          </>
-        );
+        return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
       }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
@@ -2474,7 +2498,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2492,14 +2515,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
       }
       // A task run's opening turn is the brief written for the agent — the task, then four steps of
       // protocol — and nobody typed it either. With the task recorded beside it (lib/taskStartCard)
-      // it is drawn as that task; the task's inputs and anything delivery appended ride inside.
+      // it is drawn as that task, with the task's inputs inside.
       if (node.taskStart) {
         return (
           <TaskStartCard
@@ -2509,7 +2531,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2529,18 +2550,15 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         );
       }
       // A confirmation review's two turns (lib/confirmationReviewTurns): the request a reviewer is
-      // handed, and the reviewer's return handed to the run. Both are Orbit's — the block the agent
-      // read rides at the foot as the note it is — and neither is the reader's bubble.
+      // handed, and the reviewer's return handed to the run. Both are Orbit's, so each draws its own card.
       if (node.reviewRequest || node.reviewReturn) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
-        const attached = node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
         return node.reviewRequest ? (
           <ReviewRequestedCard
             card={node.reviewRequest}
             seq={seq}
             ts={node.ts}
             undelivered={undelivered}
-            attached={attached}
             queued={queued}
           />
         ) : (
@@ -2549,14 +2567,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={undelivered}
-            attached={attached}
             queued={queued}
           />
         );
       }
       // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words to the
       // agent, about the reader. Drawn as what the reader did — `You confirmed`, each question and
-      // the answer they gave — with the block the agent read folded at the foot.
+      // the answer they gave.
       if (node.reviewAnswers) {
         return (
           <YouConfirmedCard
@@ -2564,7 +2581,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2572,7 +2588,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // Five more of Orbit's own turns (OrbitTurnCards.tsx): a revision to review, a send-back, a task
       // run's question and its notify, and the opening of a session Orbit opened. Each is drawn as
       // what happened; the block the agent read — the turn's words, or its note when the turn has
-      // none — folds at the card's foot, and any other note rides under it as it always did.
+      // none — folds at the card's foot.
       if (node.evidenceReview || node.evidenceSendBack || node.runQuestion || node.runNotice) {
         const hasWords = node.text.trim() !== '';
         const told = hasWords ? node.text : node.note ?? '';
@@ -2581,9 +2597,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           ts: node.ts,
           undelivered: node.delivery === 'failed' || node.delivery === 'unconfirmed',
           told,
-          attached: hasWords && node.note
-            ? <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />
-            : undefined,
           queued,
         };
         if (node.evidenceReview) return <EvidenceToReviewCard card={node.evidenceReview} {...props} />;
@@ -2597,7 +2610,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             card={node.sessionOpening}
             brief={node.text}
             seq={seq}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }
@@ -2605,11 +2617,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // nobody's message either: the block IS the turn, so it is read off the recorded note rather
       // than the person's words, which are empty. It is drawn as one event line in the agent's
       // stream, not as a card on the reader's side — the agent is carrying on with the answer, not
-      // being asked something new. Only the wake blocks become the line — anything else the same
-      // note carried (the inventory a returning engine is handed, a coordinator's standing role) is
-      // a folded entry in the line's own fold, because it is the control plane's too. It used to be
-      // an entry in a user bubble under the card, which drew an empty bubble: a message with no
-      // words in it, in the reader's own name.
+      // being asked something new. Only the wake blocks become the line.
       //
       // A job that ended while a turn ran is written into that turn as a steer: the same line, in
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
@@ -2623,8 +2631,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
         const jobs = parseBackgroundWake(subagent.rest);
-        const rest = jobs ? jobs.rest : subagent.rest;
-        const attached = rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />;
         return (
           <>
             <SubagentFinishedCard
@@ -2634,7 +2640,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
               undelivered={undelivered && !jobs}
               steer={jobs ? undefined : steer}
               queued={jobs ? undefined : queued}
-              attached={!jobs && attached}
             />
             {jobs && (
               <BackgroundWakeCard
@@ -2644,7 +2649,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
                 undelivered={undelivered}
                 steer={steer}
                 queued={queued}
-                attached={attached}
               />
             )}
             {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
@@ -2663,21 +2667,26 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
               undelivered={undelivered}
               steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
               queued={queued}
-              attached={
-                background.rest !== '' && (
-                  <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
-                )
-              }
             />
             {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
           </>
         );
       }
-      // A turn with no words and no files that still carries a note is one the control plane opened
-      // for a block this client cannot read yet (a background job's stall was one, before it had its
-      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
-      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
-        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      // Nothing typed and only Orbit's blocks in the note: no dedicated line above knew the block, and
+      // it is still nobody's message (owner rule 2026-11-16). One generic line in the agent's stream,
+      // so the next new block cannot land on the reader's side as an empty bubble.
+      if (orbitOnlyTurn(node)) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        return (
+          <OrbitEventLine
+            note={node.note!}
+            seq={seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+            queued={queued}
+          />
+        );
       }
       return <UserBubble node={node} queued={queued} />;
     }
@@ -3375,9 +3384,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 // (an image-only turn has empty text) — prefer the local preview (instant), falling back to the
 // durable refs when there's none. Below the bubble, one right-aligned meta row: the copy button and
 // the relative time, which fade in on hover like Claude's, then the bubble's own state (a steer's
-// progress, a message that did not land) and the line naming what Orbit attached, both always
-// shown. The row lives inside the hover wrap so the pointer can travel down onto it without
-// dismissing it (CSS :hover hits ancestors).
+// progress, a message that did not land), always shown. The row lives inside the hover wrap so the
+// pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
 //
 // Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
 // with that line at its foot — so a message does not change shape when the runner picks it up — and
@@ -3393,27 +3401,33 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
   // whose bubble this is. The apiserver records what it appended: `node.note` holds it, `node.text`
-  // is already just the person's, and the note is one line in the meta row under their bubble,
-  // never in it (useControlPlaneNote). An event with no note is the echo as it came, however much
-  // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
-  // neither should be measured against a block nobody wrote.
+  // is already just the person's. The appended note is not drawn. An event with no note is the echo
+  // as it came, however much of it looks like a block. Copying and the length cap follow the typed
+  // text for the same reason: neither should be measured against a block nobody wrote.
   // Settings › Translation: a delivered message shows what the owner wrote, or — flipped — the English
   // the agent got (`node.text`). A held one has nothing but what they wrote. Copy follows the screen.
   const translation = node.translation;
   const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
   // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  // "Hide original" leaves what they wrote alone, per message and never persisted.
   const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const [originalHidden, toggleHidden] = useShownOriginal(userOriginalHiddenKey(node.seq, node.turnId));
   const flipped = shownOriginal && !bilingual;
   const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
   const translationFoot =
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
-      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+      <UserTranslationFoot
+        translation={translation}
+        turnId={node.turnId}
+        flipped={flipped}
+        onFlip={flip}
+        originalHidden={originalHidden}
+        onHideOriginal={toggleHidden}
+      />
     ) : null;
-  const flipFoot = translation?.state === 'DONE';
-  // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
-  // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
-  const noteKind = node.note ? describeNote(node.note) : '';
-  const note = useControlPlaneNote(node.note && noteKind ? { kind: noteKind, text: node.note } : null);
+  // Only the Show original / Show translation link opens the row; bilingual's always-shown
+  // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
+  const flipFoot = translation?.state === 'DONE' && !bilingual;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -3458,7 +3472,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
-        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
+        {bilingual && !originalHidden && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (
@@ -3468,7 +3482,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note || held || translationFoot) && (
+      {(typed || status || held || translationFoot) && (
         <div className="chat-user-meta">
           {/* A delivered translation's flip opens the row; copy and the time stay together at its
               end (docs/mocks/translation-user-hover). */}
@@ -3486,18 +3500,14 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
+          {typed && node.ts && (status || held || (!flipFoot && translationFoot)) && (
             <span className="chat-meta-sep">·</span>
           )}
           {!flipFoot && translationFoot}
           {status}
           {held}
-          {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
-              to have raised. */}
-          {note?.line}
         </div>
       )}
-      {note?.opened}
     </div>
   );
 }
@@ -4318,19 +4328,58 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
   const translation = node.replyTranslation;
   // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
-  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
-  const flipped = shownOriginal && !bilingual;
+  // "Hide original" leaves the translation alone, per message and never persisted.
+  const bilingualOn = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const [originalHidden, toggleHidden] = useShownOriginal(replyOriginalHiddenKey(node.seq));
+  const bilingual = bilingualOn && !originalHidden;
+  const flipped = shownOriginal && !bilingualOn;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
+  // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
+  const pairs = useMemo(
+    () => (bilingual && translation?.text !== undefined ? bilingualPairs(translation.text, node.text) : null),
+    [bilingual, translation?.text, node.text],
+  );
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
-      {bilingual ? (
+      {bilingual && pairs ? (
+        <>
+          <InterleavedReply pairs={pairs} seq={node.seq} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
+        </>
+      ) : bilingual ? (
         <>
           <AssistantBubble text={translated} seq={node.seq} />
           <div className="chat-bilingual-reply">
             <BilingualEnglish text={node.text} collapsible />
           </div>
-          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
+        </>
+      ) : bilingualOn ? (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot
+            translation={translation}
+            seq={node.seq}
+            flipped={false}
+            onFlip={flip}
+            originalHidden
+            onHideOriginal={toggleHidden}
+          />
         </>
       ) : translation?.text !== undefined && !translation.failed ? (
         // Delivered: the flip rides at the end of the reply's last line.
@@ -4345,6 +4394,57 @@ function TranslatedReply({ node }: { node: TextNode }) {
           <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
         </>
       )}
+    </div>
+  );
+}
+
+// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): each block of
+// the translation with the original's matching block right under it, smaller and grey, and no divider
+// inside a pair. An item's original sits under its own words, indented with them; a heading's under the
+// heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
+function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const original = (pair: BilingualPair) =>
+    pair.original ? (
+      <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
+        <MD breaks>{pair.original}</MD>
+      </div>
+    ) : null;
+  return (
+    <div className="chat-msg chat-assistant chat-interleaved" data-seq={seq}>
+      {pairs.map((pair, i) => {
+        const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
+        let body: ReactNode;
+        if (pair.kind === 'item') {
+          const ordered = /^\d/.test(pair.marker ?? '');
+          const item = (
+            <li>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </li>
+          );
+          body = ordered ? <ol start={parseInt(pair.marker ?? '1', 10)}>{item}</ol> : <ul>{item}</ul>;
+        } else if (pair.kind === 'quote') {
+          body = (
+            <blockquote>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </blockquote>
+          );
+        } else {
+          body = (
+            <>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </>
+          );
+        }
+        return (
+          <div key={i} className={`chat-interleaved-pair is-${pair.kind}`} style={indent}>
+            <div className="md">{body}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4406,74 +4506,6 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
-// What the control plane appended to a message — a reference's summary, a list's condition board,
-// the background work a returning engine is told about, a coordinator's standing role — named on one
-// quiet line as Orbit's rather than the person's. Folded, not dropped: it is why a reply can mention
-// something the message never did, and opening it shows exactly what the model read. Opened by a
-// click rather than carried in a tooltip, which a touch screen cannot reach.
-//
-// The line is in the voice of the time under a message and says what is attached, nothing more:
-// "⊕ Orbit attached: list conditions", ⊖ once it is open. What the person typed is what the eye
-// should land on (owner, 2026-10-27; docs/mocks/attached-context-note). A coordinator's role, the
-// background-jobs inventory and a `#`-reference draw no line of their own (owner, 2026-11-14):
-// describeNote leaves them unnamed, though the fold still opens to them beside a named block.
-//
-// The line and what it opens to come back apart because a person's bubble places them apart: the
-// line ends the meta row under the bubble and the rows go under that row (UserBubble). Everywhere
-// else they stand together (ControlPlaneNote). Null when there is no note.
-function useControlPlaneNote(note: { kind: string; text: string } | null): { line: ReactNode; opened: ReactNode } | null {
-  const exp = useContext(ExportCtx);
-  const [open, setOpen] = useState(!!exp);
-  // Three of the blocks open as something other than their own text: the inventory a returning engine
-  // is handed, whose lines are a list of outcomes; the tasks a person named with `#`, whose table
-  // holds an id nobody could click; and the wiki's notes for this codebase, whose lines are what the
-  // agent read before it began. One note can carry several, so each reading is handed what the one
-  // before it did not take and what is left over is drawn as it always was.
-  const text = note?.text ?? '';
-  const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
-  const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
-  const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
-  // A note that names nothing (describeNote) draws no line.
-  if (!note?.kind) return null;
-  const { kind } = note;
-  const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
-  const label = `⊕ Orbit attached: ${kind}`;
-  return {
-    line: (
-      <button
-        type="button"
-        className="chat-injected-head"
-        aria-expanded={open}
-        aria-label={label}
-        title={`${label.slice(2)}. The agent read it with this message.`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="chat-injected-mark">{open ? '⊖' : '⊕'}</span> Orbit attached: {kind}
-      </button>
-    ),
-    opened: open && (
-      <div className="chat-injected-panel">
-        {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
-        {jobs && <BackgroundJobsNote jobs={jobs} />}
-        {wiki && <WikiContextNote context={wiki} />}
-        {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
-      </div>
-    ),
-  };
-}
-
-/** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
-function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
-  const note = useControlPlaneNote({ kind, text });
-  if (!note) return null;
-  return (
-    <div className="chat-injected">
-      {note.line}
-      {note.opened}
-    </div>
-  );
-}
-
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
@@ -4680,6 +4712,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         data-seq={node.seq}
         // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
         data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
+        // Where the composer band's Agents list finds a run's block (SessionAgentsStrip).
+        data-delegate-call={isDelegate ? node.id : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
           hasDetail && open ? ' is-open' : ''
         }`}

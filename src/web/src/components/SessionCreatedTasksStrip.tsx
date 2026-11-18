@@ -10,7 +10,6 @@ import {
   type SessionCreatedTaskCounts,
   type WatchView,
 } from '@orbit/shared';
-import { encodeId } from '../lib/idCodec';
 import { pageHref } from '../lib/orbitLink';
 import { sessionCreatedTasksQuery, watchesQuery } from '../lib/queries';
 import { isLiveWatch, taskStaleLines, watchedTasks, watchesFollowing } from '../lib/watches';
@@ -120,10 +119,9 @@ export function SessionCreatedTasksStrip({
               </Link>
             ))}
           </div>
-          {/* Only watched tasks, none created here: nothing for the links to open. */}
-          {data && data.total > 0 && (
+          {/* Only the projects its tasks belong to; none, and there is no foot. */}
+          {data && data.projects.length > 0 && (
             <div className="ct-foot">
-              <Link to={`/tasks?createdIn=${encodeId(sessionId)}`}>{COPY.viewAll}</Link>
               {data.projects.map((project) => (
                 <Link
                   key={project.id}

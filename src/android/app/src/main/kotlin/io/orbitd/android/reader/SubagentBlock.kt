@@ -6,7 +6,6 @@ import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.wiki.RelativeTime
 import io.orbitd.android.wiki.WikiRunsLogic
 import java.time.Duration
-import java.util.Locale
 import kotlinx.serialization.json.*
 
 /**
@@ -53,8 +52,8 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
 /**
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as the transcript draws it (board docs/mocks/subagent/03.png, OrbitKit
  * `SubagentBlock`): the folded row's grey second line, the Background mark and the opened block's grey Why line. A phone has no room
- * for web's trailing meta, so the second line carries the type, tier and model and, once the run has ended, how long it took and
- * what it cost. A background run puts `Background` in the type's place.
+ * for web's trailing meta, so the second line carries the type, tier and model and, once the run has ended, how long it took (never
+ * what it cost). A background run puts `Background` in the type's place.
  */
 internal data class SubagentBlock(val type: String, val background: Boolean, val detailLine: String, val why: String?, val running: Boolean,
     /** What the Why line's Details open to (web `subagentWhyDetails` and its list): every reason the router gave — none when the Why
@@ -73,7 +72,6 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
                 run?.level?.ifEmpty { null }?.let(::add)
                 (run?.modelLabel?.ifEmpty { null } ?: run?.model?.ifEmpty { null })?.let(::add)
                 duration(run)?.let(::add)
-                cost(run)?.let(::add)
             }
             return SubagentBlock(type, background, parts.joinToString(" · "), why(run), run?.isRunning ?: callRunning, details(run))
         }
@@ -104,13 +102,6 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
             val end = RelativeTime.parse(run.endedAt) ?: return null
             return WikiRunsLogic.duration(Duration.between(start, end).toMillis() / 1000.0)
         }
-
-        /** What the run cost, once it has ended: `$0.03`, or `<$0.01` when it came to less than a cent. */
-        fun cost(run: SubagentRun?): String? {
-            if (run == null || run.isRunning) return null
-            if (run.costUsd < 0.01) return "<$0.01"
-            return String.format(Locale.ROOT, "$%.2f", run.costUsd)
-        }
     }
 }
 
@@ -121,7 +112,9 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
 internal object SubagentResult {
     fun text(callResult: String?, run: SubagentRun?): String? {
         val text = callResult?.trim()?.ifEmpty { null } ?: return endedSummary(run)
-        val obj = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return text
+        // The call's JSON clipped to a preview (the server trims a long result): the run's own text, never the receipt's opening brace.
+        val obj = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+            ?: return if (text.startsWith("{")) endedSummary(run) else text
         (obj["result"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.ifEmpty { null }?.let { return it }
         endedSummary(run)?.let { return it }
         // A launch receipt (`{ runId, status: "running" }`): the work is drawn, not this.

@@ -9,7 +9,7 @@ import Foundation
 /// engine and an arrow when Orbit moved the work to another one — then the tier and the type
 /// (`Background` in the type's place), `Read-only`, and `on <workspace>` for a run on another machine.
 /// The third says what came of it: how many files it changed, or the first line it handed back, with
-/// how long it took and what it cost; while it runs, the view draws what it is on instead.
+/// how long it took (no cost); while it runs, the view draws what it is on instead.
 public struct SubagentBlock: Equatable, Sendable {
     public static let toolName = "mcp__orbit__delegate"
     /// What the block's row calls it.
@@ -42,7 +42,7 @@ public struct SubagentBlock: Equatable, Sendable {
     public let outcomeIsFiles: Bool
     /// The run did not finish: the outcome is how it ended, drawn in red.
     public let outcomeIsFailure: Bool
-    /// `41s · $0.03`, once the run has ended.
+    /// `41s`, once the run has ended. The run's cost is left out.
     public let numbers: String?
     /// The opened block's Why line: the server's one-line Why, or, from a server or a row from before
     /// it was kept, the router's reasons in order, joined. A run on another workspace leads with how
@@ -97,7 +97,7 @@ public struct SubagentBlock: Equatable, Sendable {
             default: outcome = firstLine(result)
             }
         }
-        let numbers = [duration(run), cost(run)].compactMap { $0 }.joined(separator: " · ")
+        let numbers = duration(run) ?? ""
 
         return SubagentBlock(
             type: type,
@@ -162,9 +162,14 @@ public struct SubagentBlock: Equatable, Sendable {
             while let first = clean.first, "#>*-".contains(first) {
                 clean = String(clean.dropFirst()).trimmingCharacters(in: .whitespaces)
             }
-            if !clean.isEmpty { return clean }
+            // `{`, `]`, a code fence: the shape of what came back, not a word of it.
+            if !clean.isEmpty, !isStructural(clean) { return clean }
         }
         return nil
+    }
+
+    private static func isStructural(_ line: String) -> Bool {
+        line.hasPrefix("```") || line.allSatisfy { "{}[](),:".contains($0) }
     }
 
     private static func why(_ run: SubagentRunView?) -> String? {
@@ -203,13 +208,6 @@ public struct SubagentBlock: Equatable, Sendable {
         }
         return WikiRunsLogic.duration(end.timeIntervalSince(start))
     }
-
-    /// What the run cost, once it has ended: `$0.03` in cents, or `<$0.01` when it came to less.
-    private static func cost(_ run: SubagentRunView?) -> String? {
-        guard let run, !run.isRunning else { return nil }
-        guard run.costUsd >= 0.01 else { return "<$0.01" }
-        return String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), run.costUsd)
-    }
 }
 
 /// What a SubAgent handed back: a foreground call's result is `{ runId, status, result, … }`; a
@@ -224,6 +222,9 @@ public enum SubagentResult {
         }
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // The call's JSON clipped to a preview (the server trims a long result): the run's own
+            // text, never the receipt's opening brace.
+            if text.hasPrefix("{") { return endedSummary(run) }
             return text
         }
         if let handedBack = object["result"] as? String, !handedBack.isEmpty { return handedBack }
@@ -275,8 +276,6 @@ public struct SubagentGroup: Equatable, Sendable {
     public let engines: String?
     /// `2 machines` when some ran on another workspace.
     public let machines: String?
-    /// `$0.03 so far` while any runs, `$0.07` once none does; nil before any has cost a cent's worth.
-    public let cost: String?
     /// How many ended well, how many failed, how many still run: the head's bar.
     public let done: Int
     public let failed: Int
@@ -305,11 +304,8 @@ public struct SubagentGroup: Equatable, Sendable {
             : (parentEngine.map { "\(SubagentBlock.shortName($0)) → " } ?? "") + moved.joined(separator: ", ")
         let places = Set(runs.map { $0?.workspaceName ?? "" })
         let machines = places.count > 1 ? "\(places.count) machines" : nil
-        let spent = runs.reduce(0.0) { $0 + ($1?.costUsd ?? 0) }
-        let cost: String? = spent < 0.01 ? nil
-            : String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), spent) + (running > 0 ? " so far" : "")
         return SubagentGroup(title: "\(blocks.count) Agents", progress: progress, engines: engines,
-                             machines: machines, cost: cost, done: done, failed: failed, running: running)
+                             machines: machines, done: done, failed: failed, running: running)
     }
 }
 
@@ -320,22 +316,56 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     public let running: Int
     /// `4`: the capsule's words after its mark.
     public let capsule: String
-    /// How many engines and machines: the sheet's second figure (`3 engines · 2 machines`).
-    public let spread: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
+
+    /// The composer band's words after "Agents". While one runs it says what that one is doing, by
+    /// its `delegate` description ("Deploy dacad7403 to production"); several running lead with how
+    /// many ("2 running · Deploy …"), naming the newest. A running run with no description keeps the
+    /// counts ("2 · 1 running"). With none running it is the count and the newest run's description
+    /// ("2 · Deploy …"), whose outcome and time `last` puts at the band's right edge; the count alone
+    /// when that run has none. The session list's row says the same thing in its own words
+    /// (`SessionLine.subagentRunningLine`).
+    public var band: String {
+        guard running > 0 else {
+            let newest = Self.described(rows.first)
+            return newest.isEmpty ? "\(count)" : "\(count) · \(newest)"
+        }
+        let newest = Self.described(rows.first(where: \.isRunning))
+        if newest.isEmpty { return "\(count) · \(running) running" }
+        return running > 1 ? "\(running) running · \(newest)" : newest
+    }
+
+    /// How the newest run ended, for the band's right edge while nothing runs (where the spinner is
+    /// while something does): failed or not, as its row in the sheet marks it, and how long it took.
+    /// Nil while a run is still going.
+    public var last: LastRun? {
+        guard running == 0, let run = rows.first else { return nil }
+        let failed = SubagentBlock.describe(input: .object([:]), run: run, status: .ok).outcomeIsFailure
+        return LastRun(failed: failed, duration: SubagentBlock.duration(run))
+    }
+
+    public struct LastRun: Equatable, Sendable {
+        public let failed: Bool
+        /// `50s`, `4m 12s`; nil when the run has no end time.
+        public let duration: String?
+        /// What VoiceOver says after the band's words: "done, 50s" / "failed, 4m 12s".
+        public var spoken: String {
+            [failed ? "failed" : "done", duration].compactMap { $0 }.joined(separator: ", ")
+        }
+    }
+
+    private static func described(_ run: SubagentRunView?) -> String {
+        run?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
 
     /// Nil when the session started no Agent: the capsule then has no place for one.
     public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }
         let running = runs.filter(\.isRunning).count
-        let engines = Set(runs.compactMap(\.engine).filter { !$0.isEmpty }).count
-        let machines = Set(runs.map { $0.workspaceName ?? "" }).count
-        var spread = engines == 1 ? "1 engine" : "\(engines) engines"
-        if machines > 1 { spread += " · \(machines) machines" }
         let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
             + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
         return SubagentSessionSummary(count: runs.count, running: running, capsule: "\(runs.count)",
-                                      spread: spread, rows: rows)
+                                      rows: rows)
     }
 }

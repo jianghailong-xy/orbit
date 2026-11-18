@@ -148,6 +148,9 @@ public enum AppIntent: Equatable, Sendable {
     /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
     /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
     case openSchedule(scheduleID: String, sessionID: String?)
+    /// The Share Extension's "N files ready … tap to finish": claim that inbox entry and stage its
+    /// items in the session it names (docs/share-to-orbit-design.md §3.1).
+    case openShare(entryID: String)
 }
 
 public enum Notifications {
@@ -216,6 +219,8 @@ public enum Notifications {
     /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
+    /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
+    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked"]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
     /// An agent asking to take a task out of its project. A tap opens the conversation that draws
@@ -262,7 +267,13 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
-        if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
+        if let link = userInfo[ShareHandoffLink.userInfoKey].flatMap(URL.init(string:)),
+           let entry = ShareHandoffLink.entryID(in: link) {
+            return .openShare(entryID: entry)
+        }
+        // Project done and a project nobody has (`project-orphan`) both open the project.
+        if userInfo[keyKind] == "project-done" || userInfo[keyKind] == "project-orphan",
+           let project = userInfo[keyProject] {
             return .openProject(projectID: project)
         }
         // A crossing request opens the conversation that draws its card; a source with no
@@ -282,7 +293,8 @@ public enum Notifications {
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
         }
         guard let sid = userInfo[keySession] else {
-            if userInfo[keyKind] == runnerUpdatingKind, let runner = userInfo[keyRunner] {
+            // The machine's alerts (updating, an engine signed out, Claude blocked in its region) open the runner.
+            if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.

@@ -63,7 +63,8 @@ export type NeverStartedCause =
   | 'RUNNER_OFFLINE'
   | 'WORK_DIR'
   | 'ENGINE_DIED'
-  | 'REGION_UNSUPPORTED';
+  | 'REGION_UNSUPPORTED'
+  | 'WORKSPACE_CLONE_FAILED';
 
 /** The presses a card can offer. The host supplies the handler; an id it cannot perform is not drawn. */
 export type NeverStartedActionId =
@@ -75,7 +76,8 @@ export type NeverStartedActionId =
   | 'chat-about'
   | 'other-provider'
   | 'move-session'
-  | 'check-again';
+  | 'check-again'
+  | 'retry-clone';
 
 /** The label each press wears — the repo's existing words, never a second spelling. */
 export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, string>> = {
@@ -92,6 +94,8 @@ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, s
   'other-provider': CLAUDE_REGION_USE_ANOTHER_PROVIDER,
   'move-session': CLAUDE_REGION_MOVE_TO_ANOTHER_MACHINE,
   'check-again': CLAUDE_REGION_CHECK_AGAIN,
+  // The conversation's first line says Retry for the same press (board 01, P5).
+  'retry-clone': 'Retry the clone',
 };
 
 export const NEVER_STARTED_TITLE = 'This run never started';
@@ -126,6 +130,8 @@ export interface NeverStartedSession extends SessionStateSource {
   sourceState?: string | null;
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
+  /** The gate the server found holding it, as the session list names it (QueuedGate.queuedReason). */
+  queuedReason?: string | null;
   sourceRefusalDetail?: {
     /** §10.1's pairing, written by the control plane when it froze the refusal. */
     fixAction?: string;
@@ -166,6 +172,8 @@ export interface NeverStartedInput {
   /** Where that machine's Claude connection last came out (`runner.region`): the place a region
    *  refusal names, read here and never out of the sentence (docs/claude-region-check-contract.md §9). */
   region?: RunnerRegionView | null;
+  /** The GitHub repository its workspace clones, `owner/name`, and why the clone failed, for WORKSPACE_CLONE_FAILED. */
+  clone?: { repository: string | null; error: string | null } | null;
 }
 
 /** The engine's product name, from the one table that keeps them (lib/runnerEngines). */
@@ -303,6 +311,22 @@ function regionUnsupported(input: NeverStartedInput, error: string, machine: str
     actions: ['other-provider', 'move-session', 'check-again'],
     // Held, the message is still queued; a control plane that predates the hold failed the run.
     foot: failed ? MACHINE_COPY.endedFoot : MACHINE_COPY.waitingFoot,
+  };
+}
+
+/** A session whose workspace's clone from GitHub failed: it stays queued, and starts once a Retry's clone is done. */
+function cloneFailed(input: NeverStartedInput): NeverStartedFacts {
+  const machine = input.runnerName || 'this runner';
+  const repository = input.clone?.repository ?? null;
+  return {
+    cause: 'WORKSPACE_CLONE_FAILED',
+    subject: null,
+    detail: input.clone?.error?.trim() || null,
+    why: repository ? `${machine} couldn’t clone ${repository}` : `${machine} couldn’t clone this workspace’s repository`,
+    body: 'This run starts once the clone is done. Retry it, and your message goes as soon as the repository is there.',
+    next: null,
+    actions: ['retry-clone', 'open-runner'],
+    foot: MACHINE_COPY.waitingFoot,
   };
 }
 
@@ -452,6 +476,13 @@ export function runNeverStarted(input: NeverStartedInput): NeverStartedFacts | n
   const refused = sourceRefused(input.session, error);
   if (refused) return refused;
   if (!applies(input.session)) return null;
+  // Held by its workspace's clone (docs/github-workspace-design.md §6). Still cloning is a wait that ends by itself, which
+  // the queued notice says, and no `error` line from an earlier run is this run's cause. A failed clone is this run's
+  // cause, and its way out is the clone's Retry; the conversation's first line says why it failed.
+  if (input.session.queuedReason === 'WORKSPACE_CLONING') return null;
+  // Held by Keep Free: a wait that ends once the runner reports space, which the queued notice says.
+  if (input.session.queuedReason === 'disk_below_floor') return null;
+  if (input.session.queuedReason === 'WORKSPACE_CLONE_FAILED') return cloneFailed(input);
   // Nothing failed and nothing said why: a session merely waiting to be claimed is not a story, and
   // this card would be inventing one. Failed with no words at all IS the story (the engine exited
   // before it said anything), and only that case is read below.
@@ -472,6 +503,8 @@ export interface NeverStartedActions {
   moveSession?: () => void;
   /** Has the machine check its region again (POST /runners/:id/region-check). */
   checkAgain?: () => void;
+  /** Retries the workspace's failed clone (POST /workspaces/:id/clone/retry). */
+  retryClone?: () => void;
   /** A press is already in flight, so none of them is offered twice. */
   busy?: boolean;
 }
@@ -522,6 +555,7 @@ export function RunNeverStartedCard({
     'other-provider': actions.otherProvider,
     'move-session': actions.moveSession,
     'check-again': actions.checkAgain,
+    'retry-clone': actions.retryClone,
   };
   const drawable = never.actions.filter((id) => handlers[id]);
   const primary = drawable[0];

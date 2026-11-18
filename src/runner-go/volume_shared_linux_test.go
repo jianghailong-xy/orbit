@@ -13,12 +13,12 @@ import (
 const dockerMountinfo = `1991 1890 0:178 / / ro,relatime master:476 - overlay overlay rw,lowerdir=/var/lib/docker/overlay2/l/A,upperdir=/var/lib/docker/overlay2/x/diff
 1992 1991 0:181 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
 2004 1991 0:183 / /tmp rw,nosuid,nodev - tmpfs tmpfs rw,size=1048576k,mode=1777
-2005 1991 8:16 /tmp/34ilx9dqVOKBeYZObuIjI/dind/docker/volumes/mr-data-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305/_data /var/lib/orbit rw,noatime master:478 - ext4 /dev/sdb rw
+2005 1991 8:16 /tmp/34ilx9dqVOKBeYZObuIjI/dind/docker/volumes/mr-data-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305/_data /home/orbit rw,noatime master:478 - ext4 /dev/sdb rw
 2006 1991 8:16 /tmp/34ilx9dqVOKBeYZObuIjI/dind/docker/volumes/mr-boot-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305-g2/_data /run/orbit-bootstrap ro,noatime master:478 - ext4 /dev/sdb rw
 `
 
 const kubernetesMountinfo = `3001 2900 0:301 / / rw,relatime - overlay overlay rw,lowerdir=/var/lib/rancher/k3s/agent/containerd/snapshots/1/fs
-3010 3001 252:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=16
+3010 3001 252:0 / /home/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=16
 3011 3001 0:310 / /run/orbit-bootstrap ro,relatime - tmpfs tmpfs rw,size=1024k
 3012 3001 253:1 /var/lib/kubelet/pods/0a/etc-hosts /etc/hosts rw,relatime - ext4 /dev/vda1 rw
 `
@@ -39,10 +39,10 @@ func TestVolumeFilesystemTellsADockerVolumeFromAnRBDVolume(t *testing.T) {
 		name, table, path, filesystem string
 		shared                        bool
 	}{
-		{"a Docker local volume: a directory of the host's ext4", dockerMountinfo, "/var/lib/orbit/home/.orbit", "/dev/sdb (ext4)", true},
-		{"the Docker volume's own mount point", dockerMountinfo, "/var/lib/orbit", "/dev/sdb (ext4)", true},
-		{"a Kubernetes volume on RBD: an ext4 of its own", kubernetesMountinfo, "/var/lib/orbit/home/.orbit", "/dev/rbd0 (ext4)", false},
-		{"not on the volume: the image's root", dockerMountinfo, "/var/lib/orbitx", "overlay (overlay)", false},
+		{"a Docker local volume: a directory of the host's ext4", dockerMountinfo, "/home/orbit/.orbit", "/dev/sdb (ext4)", true},
+		{"the Docker volume's own mount point", dockerMountinfo, "/home/orbit", "/dev/sdb (ext4)", true},
+		{"a Kubernetes volume on RBD: an ext4 of its own", kubernetesMountinfo, "/home/orbit/.orbit", "/dev/rbd0 (ext4)", false},
+		{"not on the volume: the image's root", dockerMountinfo, "/home/orbitx", "overlay (overlay)", false},
 		{"a tmpfs", dockerMountinfo, "/tmp/build", "tmpfs (tmpfs)", false},
 		{"a file a Pod mounts from its node's disk", kubernetesMountinfo, "/etc/hosts", "/dev/vda1 (ext4)", true},
 	} {
@@ -59,11 +59,11 @@ func TestVolumeFilesystemTellsADockerVolumeFromAnRBDVolume(t *testing.T) {
 // The later of two mounts at one point is the one a path reaches; escaped characters are undone.
 func TestVolumeFilesystemTakesTheVisibleMountAndUnescapesIt(t *testing.T) {
 	withMountinfo(t, `1 0 0:1 / / rw - overlay overlay rw
-2 1 8:16 /volumes/old/_data /var/lib/orbit rw - ext4 /dev/sdb rw
-3 1 252:0 / /var/lib/orbit rw - ext4 /dev/rbd1 rw
+2 1 8:16 /volumes/old/_data /home/orbit rw - ext4 /dev/sdb rw
+3 1 252:0 / /home/orbit rw - ext4 /dev/rbd1 rw
 4 1 8:17 /a\040dir /mnt/with\040space rw shared:7 - xfs /dev/sdc\134x rw
 `)
-	if filesystem, shared, err := volumeFilesystemOf("/var/lib/orbit/home"); err != nil || filesystem != "/dev/rbd1 (ext4)" || shared {
+	if filesystem, shared, err := volumeFilesystemOf("/home/orbit"); err != nil || filesystem != "/dev/rbd1 (ext4)" || shared {
 		t.Fatalf("over a hidden mount: %q, shared %t, %v; want the later RBD mount, not shared", filesystem, shared, err)
 	}
 	if filesystem, shared, err := volumeFilesystemOf("/mnt/with space/x"); err != nil || filesystem != `/dev/sdc\x (xfs)` || !shared {
@@ -76,7 +76,7 @@ func TestVolumeFilesystemWithoutMountinfo(t *testing.T) {
 	saved := mountinfoPath
 	mountinfoPath = filepath.Join(t.TempDir(), "missing")
 	t.Cleanup(func() { mountinfoPath = saved })
-	if _, shared, err := volumeFilesystemOf("/var/lib/orbit"); err == nil || shared {
+	if _, shared, err := volumeFilesystemOf("/home/orbit"); err == nil || shared {
 		t.Fatalf("without mountinfo: shared %t, %v; want an error", shared, err)
 	}
 }
@@ -84,7 +84,7 @@ func TestVolumeFilesystemWithoutMountinfo(t *testing.T) {
 // The start says which syncs the runner makes, with the filesystem it read; a self-managed runner
 // says nothing.
 func TestTheStartSaysWhichVolumeSyncsTheRunnerMakes(t *testing.T) {
-	t.Setenv("ORBIT_HOME", "/var/lib/orbit/home/.orbit")
+	t.Setenv("ORBIT_HOME", "/home/orbit/.orbit")
 	withMountinfo(t, dockerMountinfo)
 	withoutManagedInstance(t)
 	if logs := captureLogs(t, logManagedVolumeSyncs); logs != "" {
@@ -107,7 +107,7 @@ func TestTheStartSaysWhichVolumeSyncsTheRunnerMakes(t *testing.T) {
 // volumeSharesItsFilesystem reads the mount that holds ORBIT_HOME: a Docker local volume shares its
 // filesystem, an RBD volume does not, and a table it cannot read keeps T02c's syncs.
 func TestManagedVolumeSharedReadsTheMountOfOrbitHome(t *testing.T) {
-	t.Setenv("ORBIT_HOME", "/var/lib/orbit/home/.orbit")
+	t.Setenv("ORBIT_HOME", "/home/orbit/.orbit")
 	saved := mountinfoPath
 	t.Cleanup(func() { mountinfoPath = saved })
 	for _, tc := range []struct {

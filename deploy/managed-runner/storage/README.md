@@ -5,6 +5,12 @@ It is independent of Compose, release, upgrade, and normal application startup. 
 remain disabled by default. No file here installs Ceph, Rook, CSI, admission infrastructure, or a
 workload, and the renderer never applies a manifest.
 
+> **The .3 deployment (2026-11-16)** does not render the ext4 `runner-data` class below. It runs `runner-data-xfs`:
+> XFS, `mounter: rbd-nbd`, `parameters.reflink: enabled` from the local
+> [Ceph-CSI XFS reflink patch](../csi-xfs-reflink/README.md), `mountOptions: ["noatime","discard"]`, `Retain`,
+> 100 GiB, expansion disabled. See [the deployment record](../../../docs/managed-runner-k3s-xfs-deployment.md). The
+> ext4 templates and `ceph_rbd.py` remain the lab/test baseline and still enforce ext4.
+
 The owner confirmed at **2026-10-04T07:26:13Z** that no non-production test cluster is currently
 available. The actual T01 topology, storage specifications, supported installation, and credentials
 remain pending. The design's preference for external test Ceph does not confirm that production
@@ -84,7 +90,8 @@ the owner's resolution, not permission to update it.
 ## Selected storage profile and credentials
 
 The first profile is `ReadWriteOnce`, `Filesystem`, ext4 on kernel RBD (`krbd`), `layering`, no
-mounter fallback, `Immediate` binding, `Retain`, and expansion disabled. The Ceph-CSI `mounter`
+mounter fallback, `Immediate` binding, `Retain`, and expansion disabled. (The .3 production deployment uses the XFS
+`rbd-nbd` profile instead; see the note above and the deployment record.) The Ceph-CSI `mounter`
 parameter is **`rbd`**, its kernel-mounter identifier; `krbd` describes the kernel implementation
 and is not that parameter's value. All eligible test nodes
 must reach the same approved pool. Capacity, replication and CRUSH choices remain owner inputs;

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import {
   ENGINE_CLI_NAMES,
+  engineUpdateFailedLines,
   isEngine,
   type ReportedEngine,
   type RunnerAgentFix,
@@ -25,15 +26,20 @@ import { runnerIsOnline } from './runner-presence';
  * button from) and POST /runners/:id/attention/:kind/fix (which acts) — so they cannot disagree.
  */
 
-export const ATTENTION_FIX_KINDS: readonly RunnerAttentionFixKind[] = ['engineNotUpdating', 'cannotSelfUpdate', 'installFailed'];
+export const ATTENTION_FIX_KINDS: readonly RunnerAttentionFixKind[] = [
+  'engineNotUpdating',
+  'cannotSelfUpdate',
+  'installFailed',
+  'engineUpdateFailed',
+];
 
 export function isAttentionFixKind(value: unknown): value is RunnerAttentionFixKind {
   return typeof value === 'string' && (ATTENTION_FIX_KINDS as readonly string[]).includes(value);
 }
 
-/** Whether this kind names an engine. */
+/** Whether this kind names an engine. An Update engines run is the machine's, whichever engines failed. */
 export function attentionFixNeedsEngine(kind: RunnerAttentionFixKind): boolean {
-  return kind !== 'cannotSelfUpdate';
+  return kind !== 'cannotSelfUpdate' && kind !== 'engineUpdateFailed';
 }
 
 /** The key one warning's agent is stored under in `runner.attention_fixes`. */
@@ -116,6 +122,7 @@ export const AGENT_FIX_RUNNER_SELECT = {
   installEngine: true,
   installCommand: true,
   installMessage: true,
+  installMode: true,
   attentionFixes: true,
 } as const satisfies Prisma.RunnerSelect;
 
@@ -412,6 +419,30 @@ export function installFailedPrompt(
   };
 }
 
+/** An Update engines run (docs/mocks/engine-update-fix-with-agent): its report while it has failed lines,
+ *  until the next run replaces it or Dismiss clears it. */
+export function engineUpdateFailedPrompt(
+  runner: Pick<AgentFixRunner, 'name' | 'displayName' | 'hostname' | 'capabilities' | 'installStatus' | 'installMode' | 'installCommand' | 'installMessage'>,
+): AttentionFixPrompt | null {
+  if (runner.installMode !== 'update' || (runner.installStatus !== 'done' && runner.installStatus !== 'failed')) return null;
+  const failed = engineUpdateFailedLines(runner.installMessage).slice(0, 12).map((line) => quoted(line)!);
+  if (failed.length === 0) return null;
+  const machine = machineName(runner);
+  const os = runnerOs(runner.capabilities);
+  const where = os ? `${machine}, ${OS_NAMES[os] ?? os}` : machine;
+  const command = runner.installCommand?.trim() || 'orbit engine-update';
+  return {
+    title: `Fix: engine update failed on ${machine}`,
+    prompt:
+      `Orbit ran its engine update on this machine (${where}) with \`${command}\`, and it reported:\n` +
+      failed.map((line) => `- ${line}`).join('\n') +
+      `\n\nThe runner's log has what each update was doing when it stopped. Find out why and get ` +
+      `${failed.length === 1 ? 'it' : 'them'} updated. Ask me before installing system packages or changing system files. ` +
+      `When you're done, re-run Orbit's engine update on this machine (the runner_engine_install tool, mode update) so ` +
+      `the machine page shows the result, and tell me what versions the engines report.`,
+  };
+}
+
 /** The first message for `kind` on this runner, from what it reports now; null when it reports no such warning. */
 export function attentionFixPrompt(
   runner: AgentFixRunner,
@@ -430,5 +461,7 @@ export function attentionFixPrompt(
       return engine ? installFailedPrompt(runner, engine) : null;
     case 'cannotSelfUpdate':
       return cannotSelfUpdatePrompt(runner, selfUpdate, latestFromClient);
+    case 'engineUpdateFailed':
+      return engineUpdateFailedPrompt(runner);
   }
 }

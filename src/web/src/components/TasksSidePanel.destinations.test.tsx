@@ -183,6 +183,28 @@ describe('the sidebar’s rows as destinations', () => {
     expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
   });
 
+  // Owner's report (2026-11-16): from a session shared with you, a project's row did nothing — the guest view
+  // draws no project column, so `?project=` beside it changed nothing on screen.
+  it('opens the project’s page from a session shared with you, which has no column to open beside', async () => {
+    serve();
+    const GUEST = encodeId('0000000b-0000-4000-8000-00000000000b');
+    vi.mocked(getSession).mockImplementation(((id: string) =>
+      id === GUEST ? Promise.reject(new Error('not found')) : new Promise(() => {})) as never);
+    await visit(`/sessions/${GUEST}`);
+    await click(projectRow());
+    expect(location).toBe(`/workspaces/${A}?project=${PROJECT}`);
+  });
+
+  it('opens it too from a shared session whose address already carries the project', async () => {
+    serve();
+    const GUEST = encodeId('0000000b-0000-4000-8000-00000000000b');
+    vi.mocked(getSession).mockImplementation(((id: string) =>
+      id === GUEST ? Promise.reject(new Error('not found')) : new Promise(() => {})) as never);
+    await visit(`/sessions/${GUEST}?project=${PROJECT}`);
+    await click(projectRow());
+    expect(location).toBe(`/workspaces/${A}?project=${PROJECT}`);
+  });
+
   // Wider than a phone `?project=` is a column beside the conversation, and the list beside the
   // sidebar stays the workspace's, so the workspace's row stays lit — on a refresh too (owner 2026-11-14).
   it('keeps the workspace lit, not the project, while a wide screen shows the project’s column', async () => {

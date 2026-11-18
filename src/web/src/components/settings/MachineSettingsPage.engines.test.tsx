@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type { ManagedRunnerStatus, PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import { openRunnerMenu } from '../RunnerEngines.test-helpers';
 import { MachineSettingsPage } from './MachineSettingsPage';
@@ -21,6 +23,16 @@ const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
+
+/** The shared managed-runner states: the server's capabilities with the feature on, and a READY runner. */
+const managedFixture = JSON.parse(
+  readFileSync(resolve(process.cwd(), '../shared/src/managed-runner-states.fixture.json'), 'utf8'),
+) as {
+  capabilities: { name: string; body: unknown }[];
+  states: { name: string; status: ManagedRunnerStatus }[];
+};
+const MANAGED_ON = managedFixture.capabilities.find((c) => c.name === 'switched on')!.body;
+const MANAGED_READY = managedFixture.states.find((s) => s.name === 'available')!.status;
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
   engine: 'claude',
@@ -111,8 +123,9 @@ function Here() {
   return <div data-testid="here">{`${location.pathname}${location.search}`}</div>;
 }
 
-/** The machine's page over one runner. Every request that changes something is collected. */
-async function mount(runner: Runner) {
+/** The machine's page over one runner, the account's hosted runner when `managed` is its status. Every request that
+ *  changes something is collected. */
+async function mount(runner: Runner, managed?: ManagedRunnerStatus) {
   const sent: Array<{ method: string; path: string; body?: unknown }> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
@@ -123,6 +136,8 @@ async function mount(runner: Runner) {
         : {};
     }
     if (path === '/runners') return [runner];
+    if (managed && path === '/auth/capabilities') return MANAGED_ON;
+    if (managed && path === '/managed-runner') return managed;
     if (path.endsWith('/login')) {
       return { status: null, engine: null, url: null, userCode: null, message: null, account: null };
     }
@@ -341,7 +356,7 @@ describe('the machine’s own controls over its engines', () => {
     // OpenCode has its card's row here too, with nothing to press: it signs in per provider, on the machine.
     expect([text($('.re-name', row('opencode'))), text($('.re-meta', row('opencode')))]).toEqual([
       'OpenCode',
-      '1.18.33 · the CLI wouldn\'t say',
+      '1.18.33 · sign-in unknown',
     ]);
     expect(text($('.re-login-note', row('opencode')))).toMatch(/^Run opencode auth login on that machine/);
     expect([text($('.re-name', row('dsh'))), text($('.re-status', row('dsh')))]).toEqual(['DeepSeek Harness', 'Uses API keys']);
@@ -377,6 +392,13 @@ describe('the machine’s own controls over its engines', () => {
     expect($$('.machine-section-engines a[href^="/runners/"]')).toEqual([]);
     expect(text($('.machine-section-engines > .rd-hint'))).toBe(
       'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.',
+    );
+  });
+
+  it('says on a hosted runner that its CLIs move with each Orbit release, not every 30 min', async () => {
+    await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
+    expect(text($('.machine-section-engines > .rd-hint'))).toBe(
+      'Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends that subscription, nothing to paste.',
     );
   });
 

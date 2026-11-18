@@ -59,6 +59,8 @@ const runner = (id: string, name: string, online: boolean) => ({
 let server: { capabilities: { httpStatus: number; body: unknown }; status: ManagedRunnerStatus };
 /** What GET /runners says of the managed runner beyond the basics: e.g. the version it reported. */
 let managedReport: Record<string, unknown> = {};
+/** The same for the account's own machine. */
+let ownReport: Record<string, unknown> = {};
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
@@ -66,13 +68,14 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   server = { capabilities: ON, status: state('sleeping') };
   managedReport = {};
+  ownReport = {};
   apiMock.mockImplementation((async (path: string) => {
     if (path === '/auth/capabilities') {
       if (server.capabilities.httpStatus !== 200) throw new ApiError('Not Found', server.capabilities.httpStatus);
       return server.capabilities.body;
     }
     if (path === '/managed-runner') return server.status;
-    if (path === '/runners') return [runner(OWN, 'workstation', false), { ...runner(MANAGED, 'managed', false), ...managedReport }];
+    if (path === '/runners') return [{ ...runner(OWN, 'workstation', false), ...ownReport }, { ...runner(MANAGED, 'managed', false), ...managedReport }];
     if (path === '/workspaces') return [];
     return [];
   }) as typeof api);
@@ -151,12 +154,93 @@ describe("the managed runner's machine page", () => {
     expect(page.querySelector('.managed-runner-notice')).toBeNull();
   });
 
+  const wakes = () => apiMock.mock.calls.filter(([path]) => path === '/managed-runner/wake');
+
+  it('asleep while it waits for a login: opening its page wakes it, once, so it can be signed in', async () => {
+    server.status = state('sleeping: waiting for a login');
+    const page = await machinePage(MANAGED);
+    expect(page.querySelector('.managed-runner-notice')?.getAttribute('data-kind')).toBe('sleeping');
+    expect(wakes()).toHaveLength(1);
+    expect(wakes()[0][1]).toMatchObject({ method: 'POST', body: { idempotencyKey: expect.any(String) } });
+  });
+
+  it('asleep with a runtime signed in: opening its page leaves it asleep', async () => {
+    server.status = state('sleeping');
+    await machinePage(MANAGED);
+    expect(wakes()).toHaveLength(0);
+  });
+
   it('feature off: the managed runner shows by heartbeat, and its status is never read', async () => {
     server.capabilities = OFF;
     const page = await machinePage(MANAGED);
     expect(page.querySelector('[data-testid="machine-status"]')?.textContent).toMatch(/Offline|Last seen/);
     expect(page.querySelector('.managed-runner-notice')).toBeNull();
     expect(askedStatus()).toBe(false);
+  });
+});
+
+describe('Orbit Cloud: the managed runner\'s name, version line and updates on its machine page', () => {
+  const NO_SELFUPDATE = { state: 'disabledByEnv', reason: 'ORBIT_NO_SELFUPDATE is set' };
+  const now = new Date().toISOString();
+  const title = (page: HTMLElement) => page.querySelector('.machine-title')?.textContent;
+  const metaline = (page: HTMLElement) => page.querySelector('.machine-metaline')?.textContent ?? '';
+  const about = (page: HTMLElement) => page.querySelector('.machine-section-about')?.textContent ?? '';
+
+  it('is headed Orbit Cloud, by being the managed runner — not by its stored name', async () => {
+    server.status = state('available');
+    managedReport = { name: 'something-else', version: '0.1.250', online: true, lastHeartbeatAt: now };
+    const page = await machinePage(MANAGED);
+    expect(title(page)).toBe('Orbit Cloud');
+    // The account's own machine named like the server's managed runner is still its own name.
+    ownReport = { name: 'orbit-managed' };
+    const own = await machinePage(OWN);
+    expect(title(own)).toBe('orbit-managed');
+  });
+
+  it('an owner-given name still wins', async () => {
+    server.status = state('available');
+    managedReport = { displayName: 'Team box', online: true };
+    expect(title(await machinePage(MANAGED))).toBe('Team box');
+  });
+
+  it('a managed-<sha> image: "Kept up to date by Orbit" and the check-in, never the hash; no Updates are turned off', async () => {
+    server.status = state('available');
+    managedReport = {
+      version: 'managed-95884b154feb3d4e2a575fb012c4185b20c282ac',
+      online: true,
+      lastHeartbeatAt: now,
+      selfUpdate: NO_SELFUPDATE,
+    };
+    ownReport = { version: '0.1.260' };
+    const page = await machinePage(MANAGED);
+    expect(metaline(page)).toMatch(/^Kept up to date by Orbit · Last Check-in /);
+    expect(page.textContent).not.toContain('managed-95884');
+    expect(about(page)).toContain('Kept up to date by Orbit');
+    expect(about(page)).not.toContain('Last Update');
+    expect(page.textContent).not.toContain('Updates are turned off');
+    expect(page.textContent).not.toContain('ORBIT_NO_SELFUPDATE');
+  });
+
+  it('a release behind the latest with ORBIT_NO_SELFUPDATE: its version, "Orbit updates this machine for you.", no card', async () => {
+    server.status = state('available');
+    managedReport = { version: '0.1.250', online: true, lastHeartbeatAt: now, selfUpdate: NO_SELFUPDATE };
+    ownReport = { version: '0.1.260' };
+    const page = await machinePage(MANAGED);
+    expect(metaline(page)).toMatch(/^v0\.1\.250 · Last Check-in /);
+    expect(about(page)).toContain('Orbit updates this machine for you.');
+    expect(page.textContent).not.toContain('Updates are turned off');
+    expect(page.textContent).not.toContain('ORBIT_NO_SELFUPDATE');
+  });
+
+  it('a self-hosted runner in the same state still gets the Updates are turned off card, unchanged', async () => {
+    server.status = state('available');
+    managedReport = { version: '0.1.260' };
+    ownReport = { version: '0.1.250', online: true, lastHeartbeatAt: now, selfUpdate: NO_SELFUPDATE };
+    const page = await machinePage(OWN);
+    expect(title(page)).toBe('workstation');
+    expect(metaline(page)).toMatch(/^v0\.1\.250 · Last Check-in /);
+    expect(page.textContent).toContain('Updates are turned off');
+    expect(page.textContent).toContain('remove ORBIT_NO_SELFUPDATE from the runner’s environment');
   });
 });
 

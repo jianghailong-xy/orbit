@@ -23,9 +23,8 @@
  * denied outright, so is every Orbit tool outside a short allow list (`bg_run` would start a shell outside Claude's
  * check, and the runner answers Claude's prompt for an Orbit tool itself, allowing it outside Plan), and any other
  * tool that asks is answered DENY by the server before it becomes a card. Of the workspace's "Always allow" rules only
- * narrow `Bash(…)` ones a scheduled run's card wrote are carried, and such a card may write only its own command's
- * rules (`checkOnlyRuleRefusal`). A run is held to the level it started with (`runAccessLevel`). The runner closes the
- * rest for a claim with `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the
+ * exact commands a scheduled run's card approved are matched by the server (`checkOnlyRuleCoversApproval`).
+ * A run is held to the level it started with (`runAccessLevel`). The runner closes the rest for a claim with `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the
  * CLI denied by its own path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10). Only a runner
  * that advertises CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 is handed Default; any other runs the check in Don't Ask with
  * S2b's lists (`scheduleRunPermissionMode`), where nothing asks.
@@ -33,6 +32,7 @@
 import {
   AgentProvider,
   bashCommandRules,
+  bashSegments,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   PermissionMode,
@@ -47,6 +47,7 @@ export const SCHEDULE_ACCESS_NOT_ENFORCEABLE = 'SCHEDULE_ACCESS_NOT_ENFORCEABLE'
 export const ACCESS_LEVEL_MODES: Readonly<Record<AccessLevel, readonly PermissionMode[]>> = {
   CHECK_ONLY: [PermissionMode.PLAN, PermissionMode.DONT_ASK],
   OPEN_PR: [PermissionMode.ACCEPT_EDITS, PermissionMode.DEFAULT],
+  LAND: [PermissionMode.ACCEPT_EDITS, PermissionMode.DEFAULT],
 };
 
 /**
@@ -82,9 +83,11 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
  * Grep, Glob, `git log`, `ls`, …) without asking. Each Orbit tool here is one a check needs:
  *
  *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
- *     schedule the run serves and to its envelope (§8.3);
+ *     schedule the run serves and to its envelope (§8.3), and read the condition a WHEN rule's run was started by
+ *     (`condition_get`, docs/condition-triggers-design.md §8);
  *   * `notify`, a line in front of the owner;
- *   * reads: tasks, sessions, projects, the wiki and Orbit Files.
+ *   * reads: tasks, sessions, projects, the wiki and Orbit Files;
+ *   * the guide, which reads the operation catalogue and asks the server nothing.
  *
  * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
  * `session_send`, the create doors and every other Orbit write; `file_upload`, since a report carries links, not files.
@@ -93,6 +96,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_report',
   'mcp__orbit__schedule_get',
   'mcp__orbit__schedule_list',
+  'mcp__orbit__condition_get',
   'mcp__orbit__schedule_update',
   'mcp__orbit__schedule_end',
   'mcp__orbit__notify',
@@ -105,6 +109,7 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__wiki_get',
   'mcp__orbit__file_fetch',
   'mcp__orbit__file_list',
+  'mcp__orbit__guide',
   'WebFetch',
   'WebSearch',
 ];
@@ -127,6 +132,7 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
   'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
   'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_ruling_record',
   'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
   'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
   'mcp__orbit__request_owner_action', 'mcp__orbit__runner_delete', 'mcp__orbit__runner_engine_install',
@@ -135,7 +141,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__schedule_run_now', 'mcp__orbit__schedule_run_stop', 'mcp__orbit__schedule_wakeup',
   'mcp__orbit__session_await', 'mcp__orbit__session_complete', 'mcp__orbit__session_create',
   'mcp__orbit__session_delete', 'mcp__orbit__session_end', 'mcp__orbit__session_interrupt',
-  'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_reply', 'mcp__orbit__session_send',
+  'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_move', 'mcp__orbit__session_reply',
+  'mcp__orbit__session_send',
   'mcp__orbit__task_attribution', 'mcp__orbit__task_await', 'mcp__orbit__task_batch_pin', 'mcp__orbit__task_comment',
   'mcp__orbit__task_confirmation_return', 'mcp__orbit__task_confirmation_review', 'mcp__orbit__task_create',
   'mcp__orbit__task_create_batch', 'mcp__orbit__task_delete', 'mcp__orbit__task_dependency_add',
@@ -212,8 +219,15 @@ export function checkOnlyAsksOn(capabilities: readonly string[] | null | undefin
 }
 
 /**
- * The permission mode the claim hands the runner: the session's own, except that a CHECK_ONLY run on Claude Code
- * claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't Ask, as S2b ran it.
+ * The permission mode the claim hands the runner: the session's own, except that
+ *  - a CHECK_ONLY run on Claude Code claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't
+ *    Ask, as S2b ran it;
+ *  - an OPEN_PR or LAND run on Claude Code runs in Auto, so that the routine commands an unattended run needs
+ *    (`git fetch`, `npm view`, its tests, `git commit`) do not each wait on a card: measured 2026-11-17, a LAND run
+ *    waited 278 minutes on them and timed out. The level's denials still hold: Claude's --disallowedTools and the
+ *    server door (scheduleRunDeniesApproval) refuse them in every mode. Claude only, as owner-ruled 2026-11-18: no
+ *    other engine's Auto has a classifier (permissionSemantics.ts). A model with no Auto runs as Default
+ *    (normalizeBuiltinPermissionMode). Interim, until per-schedule grants (docs/scheduled-run-grants-design.md).
  */
 export function scheduleRunPermissionMode(
   mode: PermissionMode,
@@ -221,7 +235,11 @@ export function scheduleRunPermissionMode(
   provider: string | null | undefined,
   runnerCapabilities: readonly string[] | null | undefined,
 ): PermissionMode {
-  return claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities) ? PermissionMode.DONT_ASK : mode;
+  if (claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities)) return PermissionMode.DONT_ASK;
+  if ((accessLevel === 'OPEN_PR' || accessLevel === 'LAND') && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE) {
+    return PermissionMode.AUTO;
+  }
+  return mode;
 }
 
 /**
@@ -240,11 +258,8 @@ export type CarriedRule = { toolName: string; ruleContent: string; fromScheduleR
 
 /**
  * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets
- * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS and, of the workspace's rules, only the narrow `Bash(…)` rules written by answering
- * Always allow on a scheduled run's card (`fromScheduleRun`): a shell command the owner allowed for a scheduled check
- * does not ask again. Not the rules a person's interactive sessions wrote (`Bash(python:*)`, `Bash(git:*)` would run
- * writing commands unasked), not a rule for any other tool, not the `mcp__orbit__*` wildcard, and not a rule for the
- * whole shell (`Bash`, `Bash(*)`). Every other run keeps what the claim computed.
+ * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS. Its exact-command standing grants are matched at the approval door; none are
+ * exported as engine patterns. Every other run keeps what the claim computed.
  */
 export function scheduleRunAllowedTools(
   base: string[],
@@ -254,41 +269,42 @@ export function scheduleRunAllowedTools(
   runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
   if (!claudeCheckOnly(accessLevel, provider)) return base;
-  // Don't Ask (a runner that cannot close the rest): S2b's list exactly, no rule carried.
-  if (!checkOnlyAsksOn(runnerCapabilities)) return [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
-  const carried = rules
-    .filter((rule) => rule.fromScheduleRun === true && rule.toolName === 'Bash' && !/^[\s*:]*$/.test(rule.ruleContent))
-    .map((rule) => `Bash(${rule.ruleContent})`)
-    // Only what the claim already put on the list, so a rule its normalization dropped is not carried here either.
-    .filter((token) => base.includes(token));
-  return [...new Set([...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, ...carried])];
+  // Commands are matched literally by the approval door, never parsed as Claude permission patterns.
+  // This also stops old prefix grants from earlier scheduled cards reaching the engine.
+  return [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
 }
 
-/** Refused when Always allow on a scheduled check's card names a rule that card's command does not give. */
+/** Refused when a client asks to remember anything other than the card's command. */
 export const SCHEDULE_CHECK_ONLY_RULE_REFUSED = 'SCHEDULE_CHECK_ONLY_RULE_REFUSED';
 
-/**
- * The rules Always allow on a CHECK_ONLY run's card may write: the card's own command's prefixes
- * (`bashCommandRules`, what the card says "Always allow covers"). Anything else a client sends is refused with
- * SCHEDULE_CHECK_ONLY_RULE_REFUSED: a rule for another command, another tool, or the whole shell.
- */
+/** The complete command, including quotes, whitespace and shell syntax, is one literal grant. */
+export function checkOnlyCommandRules(card: { toolName: string; input: unknown }): { toolName: string; ruleContent: string }[] {
+  const command = (card.input as { command?: unknown } | null)?.command;
+  return card.toolName === 'Bash' && typeof command === 'string' && command.trim()
+    ? [{ toolName: 'Bash', ruleContent: command }]
+    : [];
+}
+
+/** Older clients send prefixes; accept those only as a request to remember this card's exact command. */
 export function checkOnlyRuleRefusal(
   card: { toolName: string; input: unknown },
   rules: readonly { toolName: string; ruleContent?: string }[],
 ): string | null {
-  const command = typeof (card.input as { command?: unknown } | null)?.command === 'string'
-    ? (card.input as { command: string }).command
-    : '';
-  const given = card.toolName === 'Bash' ? bashCommandRules(command) : [];
+  const exact = checkOnlyCommandRules(card);
+  const given = [...exact, ...bashCommandRules(exact[0]?.ruleContent ?? '')];
   for (const rule of rules) {
-    const ok = rule.toolName === 'Bash' && given.some((g) => g.ruleContent === (rule.ruleContent ?? ''));
-    if (!ok) {
-      return `Always allow on a scheduled check's card covers only this card's command (${
-        given.map((g) => `Bash(${g.ruleContent})`).join(', ') || 'nothing'
-      }); ${rule.toolName}${rule.ruleContent ? `(${rule.ruleContent})` : ''} is not it. Nothing was written.`;
-    }
+    if (exact.length && rule.toolName === 'Bash' && given.some((g) => g.ruleContent === rule.ruleContent)) continue;
+    return `Always allow on a scheduled check's card covers only this exact command (${exact[0]?.ruleContent ?? 'nothing'}). Nothing was written.`;
   }
   return null;
+}
+
+/** Literal comparison avoids wildcard/prefix interpretation, even for commands containing '*' or ':*'. */
+export function checkOnlyRuleCoversApproval(card: { toolName: string; input: unknown }, rules: readonly CarriedRule[]): boolean {
+  const command = checkOnlyCommandRules(card)[0]?.ruleContent;
+  const env = (card.input as { env?: unknown } | null)?.env;
+  if (!command || (env != null && (typeof env !== 'object' || Object.keys(env).length > 0))) return false;
+  return rules.some((r) => r.fromScheduleRun === true && r.toolName === 'Bash' && r.ruleContent === command);
 }
 
 /** What the engine reads when the server refuses such a request (checkOnlyRefusesApproval). */
@@ -319,15 +335,55 @@ export function checkOnlyRefusesApproval(
  */
 export const OPEN_PR_DISALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__session_merge',
+  'mcp__orbit__integration_*',
   'mcp__orbit__integration_request_promotion',
   'mcp__orbit__integration_skip_merge_check',
   'Bash(gh pr merge:*)',
+  'Bash(git push * main)',
+  'Bash(git push * main:*)',
+  'Bash(git push * *:main)',
+  'Bash(git push * *:refs/heads/main)',
   'Bash(gh release:*)',
   'Bash(npm publish:*)',
   'Bash(docker push:*)',
   'Skill(release)',
   'Skill(upgrade)',
 ];
+
+/** Match level denials at the server door, regardless of the engine asking. */
+export function scheduleRunDeniesApproval(
+  accessLevel: AccessLevel | null | undefined,
+  provider: string | null | undefined,
+  toolName: string,
+  input: unknown,
+): boolean {
+  const card = input as { command?: unknown; skill?: unknown } | null;
+  const glob = (pattern: string, value: string) => {
+    const escaped = pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+    return new RegExp(`^${escaped}$`).test(value);
+  };
+  const commands = (command: string): string[] => bashSegments(command).flatMap((segment) => {
+    // Codex sends argv as a shell-quoted command, e.g. /bin/bash -lc 'gh pr merge 12'.
+    const wrapper = segment.trim().match(/^(?:\/[^\s]+\/)?(?:bash|sh)\s+-(?:lc|c)\s+(['"])([\s\S]*)\1$/);
+    if (!wrapper) return [segment.trim()];
+    const inner = wrapper[1] === "'"
+      ? wrapper[2].replace(/'\\''/g, "'")
+      : wrapper[2].replace(/\\(["\\$`])/g, '$1');
+    return commands(inner);
+  });
+  return scheduleRunDisallowedTools([], accessLevel, provider).some((rule) => {
+    const scoped = rule.match(/^([^()]+)\((.*)\)$/);
+    if (!scoped) return glob(rule, toolName);
+    const [, tool, content] = scoped;
+    if (tool === 'Bash' && (toolName === 'Bash' || toolName === 'Terminal')) {
+      if (typeof card?.command !== 'string') return false;
+      return commands(card.command).some((command) => content.endsWith(':*')
+        ? glob(content.slice(0, -2), command) || glob(`${content.slice(0, -2)} *`, command)
+        : glob(content, command));
+    }
+    return tool === toolName && typeof card?.skill === 'string' && glob(content, card.skill);
+  });
+}
 
 /** The workspace's own disallowed tools, plus the run's when the session serves a schedule's run. */
 export function scheduleRunDisallowedTools(
@@ -336,7 +392,7 @@ export function scheduleRunDisallowedTools(
   provider: string | null | undefined,
   runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
-  if (accessLevel === 'OPEN_PR') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
+  if (accessLevel === 'OPEN_PR' || accessLevel === 'LAND') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
   if (claudeCheckOnly(accessLevel, provider)) {
     const own = checkOnlyAsksOn(runnerCapabilities)
       ? CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS

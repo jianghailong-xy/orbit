@@ -23,6 +23,22 @@ var agentPrimerHashes = map[string]string{
 	"1.0.0": "41db1d1fd823c5c1d5f640aafdf153736db36a1913a0ae0687fcea4c6e34dbd8",
 	// 1.0.1 is 1.0.0 with the first line naming Agent Contract 1.6.0 (P1-02); no rule changed.
 	"1.0.1": "a13c679f75188771fbd4f75043844751a25bbcde7fdd2473b497b8f51b1584b9",
+	// Agent Contract 1.7.0 (P1-01): the objects paragraph ends by sending an agent to the guide tool, and the
+	// two parentheticals the guide's topics now carry (a list's settings, what "ready" means) give it the room.
+	"1.1.0": "42df1a6cdb6d4ca75601578a5c8b1dc7cacbda7ae9b44d8226853023aa2e80f5",
+	// Agent Contract 1.8.0 (P1-03): the first line names the new contract; no rule changed.
+	"1.2.0": "fefb962238b42c773beef5a583f091d19c3d24b68ddfdc0286e1f810114fbd2c",
+	// Agent Contract 1.9.0 (P2-01): the first line names the new contract, and without orchestration the agent is
+	// sent to task_start the work task_list shows recorded before recording it (the agent-contract eval measured
+	// claude-sonnet-5-5 filing recorded work again in E7, three runs of three); the start paragraph no longer
+	// repeats the first's autoRunWhenReady default. No rule changed.
+	"1.3.0": "a2f8545151a69611f5b5803badb03624728e0a2a793e5d8db6f2fbacd2d5017e",
+	// Agent Contract 1.10.0 (main merged into the project line): the first line names the new contract; no rule
+	// changed.
+	"1.4.0": "1296cbd8056a8227ac243f1a1c44ad12cff908472db13bedee0debdaee5cbe07",
+	// 1.4.1 is 1.4.0 with the first line naming Agent Contract 1.11.0 (conditions: task_create's startWhen,
+	// schedule_create's WHEN rule, condition_get); no rule changed.
+	"1.4.1": "e85c0988eb692270c70546dbd395df98aab546ff292cd300017105e00adf41f8",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

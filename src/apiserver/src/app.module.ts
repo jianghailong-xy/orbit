@@ -7,6 +7,8 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { EventsModule } from './events/events.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { HealthModule } from './health/health.module';
+import { HelpModule } from './help/help.module';
+import { HelpAskModule } from './help/help-ask.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -44,11 +46,13 @@ import { ManagedRunnerGateModule } from './managed-runners/managed-runner-gate';
 import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
+import { GithubModule } from './github/github.module';
 import { EmailModule } from './email/email.module';
 import { TerminalsModule } from './terminals/terminals.module';
 import { ScheduleRunsModule } from './schedules/schedule-runs.module';
 import { SchedulesModule } from './schedules/schedules.module';
 import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
+import { ConditionsModule } from './conditions/conditions.module';
 
 @Module({
   imports: [
@@ -58,6 +62,9 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     EventsModule,
     MetricsModule,
     HealthModule,
+    // The help article library (docs/help), open to signed-out readers (docs/mocks/help-center board 03).
+    HelpModule,
+    HelpAskModule,
     QueueModule,
     AuthModule,
     UsersModule,
@@ -100,6 +107,8 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     // Each account's own Feishu (Lark) app, and the administrators' switch for them (docs/feishu-bot-design.md).
     FeishuModule,
     FeishuActionsModule,
+    // The deployment's GitHub App and each account's connection to it (docs/github-workspace-design.md).
+    GithubModule,
     // Outgoing email: Admin → Email and the welcome-email outbox worker (docs/welcome-email-design.md).
     EmailModule,
     // `orbit` in a terminal: the TERMINAL credential's sign-in, approval and revoke (docs/terminal-session-design.md).
@@ -109,6 +118,8 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     ScheduleRunsModule,
     // Its REST doors: read, control, and the owner's press on a card (schedules/schedules.controller.ts).
     ScheduleDoorsModule,
+    // Conditions (docs/condition-triggers-design.md): the silence worker and the owner's read.
+    ConditionsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

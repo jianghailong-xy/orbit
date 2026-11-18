@@ -48,6 +48,9 @@ public struct BatchPreviewTask: Equatable, Sendable {
     /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
     /// picture without being one overall, and the row says so.
     public let dependsOnTaskIds: [String]?
+    /// A task that starts when its condition holds: the card's Starts when, Today and If never (condition-triggers
+    /// board frame 2). Nil on a task without one.
+    public var startWhen: StartWhenCardLines? = nil
 }
 
 public struct BatchApprovalPreview: Equatable, Sendable {
@@ -115,6 +118,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
     /// The project's criteria arrive one per item; a task's arrive as one Markdown block.
     public var criteriaText: String {
         isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
+    }
+
+    /// A task that starts when its condition holds: the server's Starts when, Today and If never lines (condition-
+    /// triggers board frame 2). Nil for a project or a task without one.
+    public var startWhen: StartWhenCardLines? {
+        isProject ? nil : preview?.tasks.first?.startWhen
     }
 
     /// The noun the fold's label names, so a project's goal is never called a description.
@@ -340,8 +349,8 @@ public extension Approvals {
             }
         }
         written("workDir", "Working directory")
-        written("systemPrompt", "System prompt")
-        written("appendSystemPrompt", "Appended system prompt")
+        written("systemPrompt", "Base instructions")
+        written("appendSystemPrompt", "Runtime instructions")
         if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
         if let worktree = changes?["enableWorktree"]?.boolValue {
             fields.append(.init(caption: "Worktree", value: worktree
@@ -468,6 +477,13 @@ public extension Approvals {
         return batchPreview(from: input)?.needsManualStart == 1
     }
 
+    /// Whether Create and start is the card's filled answer, with Create it beside it: whenever it is
+    /// offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a hold
+    /// someone asked for, so the prominent press does not start it. Web's `createAndStartLeads`.
+    static func createAndStartLeads(toolName: String, input: JSONValue?) -> Bool {
+        offersCreateAndStart(toolName: toolName, input: input) && input?["autoRunWhenReady"]?.boolValue != false
+    }
+
     /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
     /// remember rules, none of which a create card carries.
     static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
@@ -574,7 +590,8 @@ public extension Approvals {
             }
             return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
                                     dependsOnRefs: strings("dependsOnRefs"),
-                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"),
+                                    startWhen: StartWhenCardLines(json: t["startWhen"]))
         }
     }
 

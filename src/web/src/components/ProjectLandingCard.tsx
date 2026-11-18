@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
@@ -35,9 +35,11 @@ import {
  * are its SIBLINGS: a link inside a button is not a link. The press itself is unchanged — it opens
  * the jobs in flight.
  *
- * Read-only apart from Retry, which is the Jobs list's own door
- * (`POST /projects/:id/integration/jobs/:jobId/retry`) and appears only where the server says a
- * retry takes the job (`retryable`, never `timedOut`). A press opens the jobs in flight.
+ * Read-only apart from two doors, each drawn only where the server says it takes the job: Retry,
+ * the Jobs list's own door (`POST /projects/:id/integration/jobs/:jobId/retry`, `retryable`, never
+ * `timedOut`), and "Land without the check", the owner's skip of a landing still in flight
+ * (`POST /projects/:id/tasks/:taskId/integration/skip-merge-check`, `skippable`), which asks once
+ * before it stops anything. A press opens the jobs in flight.
  */
 export function ProjectLandingCard({
   projectId,
@@ -72,7 +74,11 @@ export function ProjectLandingCard({
       {/* A lone merge job lands no task: the board draws nothing under its head. */}
       {!several && (card.timedOut
         ? (card.detail ? <span className="spl-det">{card.detail}</span> : null)
-        : card.mergeJob ? null : <span className="spl-note">{LANDING_NOTHING_TO_DO}</span>)}
+        : card.mergeJob ? null
+          // A skip under way is said in the note's place: "Nothing to do" would hide that the
+          // owner's press was taken.
+          : card.skipNote ? <span className="spl-skip">{card.skipNote}</span>
+            : <span className="spl-note">{LANDING_NOTHING_TO_DO}</span>)}
     </>
   );
   const press = onPress ? (
@@ -109,7 +115,7 @@ export function ProjectLandingCard({
         : <span className="spl-note">{LANDING_NOTHING_TO_DO}</span>) : null}
       {/* Mounted only where it draws: a card with no Retry, no job to open and no list to open
           holds no mutation and reads no query client. */}
-      {card.retryJobId !== null || dialog || lead !== null ? (
+      {card.retryJobId !== null || card.skipTaskId !== null || dialog || lead !== null ? (
         <LandingFoot projectId={projectId} card={card} dialog={dialog} onAllJobs={onPress} lead={lead} />
       ) : null}
     </div>
@@ -146,6 +152,7 @@ function LandingFoot({
           ? <LandingLink className="spl-open" sessionId={lead.landingSessionId} />
           : <LandingNoPage className="spl-open is-none" />
       ) : null}
+      {card.skipTaskId ? <SkipCheckPress projectId={projectId} taskId={card.skipTaskId} /> : null}
       <span className="spl-spacer" />
       {dialog && onAllJobs ? (
         <button type="button" className="spl-link" onClick={onAllJobs}>
@@ -186,6 +193,56 @@ function RetryPress({ projectId, jobId }: { projectId: string; jobId: string }):
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * "Land without the check": the owner's skip of the landing in flight (§2.4 J-S5). A decision, so
+ * the first press only asks — what it does is said in full before anything stops — and the second
+ * sends it. The server stops the landing and lands it again with the landing check not run, and
+ * records the owner as the one who skipped it. Its refusal is said under it, as Retry's is.
+ */
+function SkipCheckPress({ projectId, taskId }: { projectId: string; taskId: string }): JSX.Element {
+  const qc = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const skip = useMutation({
+    mutationFn: () => skipLandingCheck(projectId, taskId),
+    onSuccess: () => setAsking(false),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['project', projectId] });
+    },
+  });
+  return (
+    <>
+      {asking ? (
+        <span className="spl-confirm" role="group" aria-label={LANDING_WORDS.SKIP_CHECK}>
+          <span className="spl-confirm-text">{LANDING_WORDS.SKIP_CHECK_CONFIRM}</span>
+          <button type="button" className="spl-primary" disabled={skip.isPending} onClick={() => skip.mutate()}>
+            {LANDING_WORDS.SKIP_CHECK_GO}
+          </button>
+          <button type="button" className="spl-link" disabled={skip.isPending} onClick={() => setAsking(false)}>
+            {LANDING_WORDS.SKIP_CHECK_CANCEL}
+          </button>
+        </span>
+      ) : (
+        <button type="button" className="spl-link" onClick={() => setAsking(true)}>
+          {LANDING_WORDS.SKIP_CHECK}
+        </button>
+      )}
+      {skip.isError ? (
+        <div className="spl-error" role="alert">
+          {`${LANDING_WORDS.SKIP_CHECK_FAILED} — ${skip.error.message.replace(/[.\s]+$/, '')}.`}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** The owner's skip of one landing's check, by the door the CLI and the coordinator's card use. */
+export function skipLandingCheck(projectId: string, taskId: string): Promise<unknown> {
+  return api(
+    `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/integration/skip-merge-check`,
+    { method: 'POST', body: { reason: LANDING_WORDS.SKIP_CHECK_REASON } },
   );
 }
 

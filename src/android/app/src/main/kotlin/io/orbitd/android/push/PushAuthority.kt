@@ -71,6 +71,27 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 val rows = array(objectRead(listOf("terminals", "requests"))["requests"])
                 if (rows.any { ObjectId.same(canonical(it.text("id")), payload.terminalLoginId) }) PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A crossing request stands while it is still PENDING on the project it was pushed for (GET /projects/:id/handoffs lists
+            // both directions): approved, declined or withdrawn anywhere, it takes its notification with it.
+            payload.kind == PushPayload.CROSSING_REQUEST -> {
+                val rows = array(get(listOf("projects", payload.projectId!!, "handoffs"), listOf("state" to "PENDING")))
+                if (rows.any { ObjectId.same(canonical(it.text("id")), payload.handoffId) && it.text("state") == "PENDING" }) PushCheck.ACTIVE
+                else PushCheck.STALE
+            }
+            // A coordinator's raise stands while the task's owner confirmation still waits on the run that session holds.
+            payload.kind == PushPayload.CONFIRMATION_RAISED -> {
+                val session = sessionRead(payload.sessionId!!)
+                val row = objectRead(listOf("tasks", payload.taskId!!, "owner-confirmation"))
+                if (session.present("deletedAt") || session.text("lifecycleState") == "TRASH") PushCheck.MISSING
+                else if (ObjectId.same(row.obj("waiting")?.text("sessionId"), payload.sessionId)) PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A can't-read alert stands while its Waiting on you item is still PENDING: a check that reads again closes it.
+            payload.kind == PushPayload.CONDITION && payload.ownerRequestId != null -> {
+                val row = objectRead(listOf("owner-requests", payload.ownerRequestId))
+                if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
+                if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
+            }
+            // A schedule alert that opens a run's session falls through to the session's own check below.
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING
@@ -78,6 +99,11 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                     (row.text("status") != (if (payload.kind == "finished") "SUCCEEDED" else "FAILED") || row.present("retryAt") ||
                         (payload.kind == "failed" && row.present("completedAt")))) PushCheck.STALE
                 else PushCheck.ACTIVE
+            }
+            // A schedule alert with no run's session stands while its schedule exists.
+            payload.kind == PushPayload.SCHEDULE -> {
+                val row = objectRead(listOf("schedules", payload.scheduleId!!)).obj("schedule") ?: throw ProtocolException()
+                if (ObjectId.same(row.text("id"), payload.scheduleId)) PushCheck.ACTIVE else throw ProtocolException()
             }
             payload.runnerId != null -> {
                 val runner = array(get(listOf("runners"))).firstOrNull { ObjectId.same(it.text("id"), payload.runnerId) }

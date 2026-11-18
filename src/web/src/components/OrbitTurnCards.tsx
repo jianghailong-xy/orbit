@@ -155,11 +155,10 @@ function Told({ label, text }: { label: string; text: string }) {
   );
 }
 
-function Foot({ undelivered, attached, queued }: { undelivered?: boolean; attached?: ReactNode; queued?: ReactNode }) {
+function Foot({ undelivered, queued }: { undelivered?: boolean; queued?: ReactNode }) {
   return (
     <>
       {undelivered && <div className="crc-undelivered">{UNDELIVERED}</div>}
-      {attached}
       {queued && <div className="crc-queued">{queued}</div>}
     </>
   );
@@ -190,7 +189,6 @@ interface CardProps {
   undelivered?: boolean;
   /** The block the agent was handed — the turn's own words or its control-plane note. */
   told: string;
-  attached?: ReactNode;
   queued?: ReactNode;
 }
 
@@ -204,7 +202,7 @@ function Head({ icon, label, ts }: { icon: ReactNode; label: string; ts?: string
   );
 }
 
-export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: EvidenceReviewCard }) {
+export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: EvidenceReviewCard }) {
   const open = card.state === 'OPEN';
   return (
     <div className="crc-wrap">
@@ -220,13 +218,13 @@ export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, attache
         <StateLine state={evidenceState(card)} />
         {open ? <OpenTaskSession runSessionId={card.runSessionId} /> : null}
         <Told label={SESSION_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: EvidenceSendBackCard }) {
+export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: EvidenceSendBackCard }) {
   const who = sendBackWho(card);
   const session = who.sessionId ? routeId(who.sessionId) : null;
   return (
@@ -244,13 +242,13 @@ export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attache
         </div>
         {card.note.trim() !== '' ? <div className="crc-quote">{`“${card.note.trim()}”`}</div> : null}
         <Told label={RUN_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunQuestionCard }) {
+export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, queued }: CardProps & { card: RunQuestionCard }) {
   // The card the echo carries was read when the turn was handed out, before anyone answered. Its
   // request carries the card as it stands now (`SessionRequestView.runQuestion`), so that one is
   // drawn over it: answered, by whom, or passed to the owner. Not read on paper, and not once the
@@ -292,13 +290,13 @@ export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, 
         <StateLine state={runQuestionState(card)} />
         {!answered ? <OpenTaskSession runSessionId={card.runSessionId} /> : null}
         <Told label={COORDINATOR_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
 }
 
-export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, attached, queued }: CardProps & { card: RunNoticeCard }) {
+export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, queued }: CardProps & { card: RunNoticeCard }) {
   return (
     <div className="crc-wrap">
       <div
@@ -311,7 +309,7 @@ export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, attached, 
         {card.message.trim() !== '' ? <div className="crc-quote">{`“${card.message.trim()}”`}</div> : null}
         <StateLine state={{ text: NOTICE_STATE }} />
         <Told label={COORDINATOR_WAS_TOLD} text={told} />
-        <Foot undelivered={undelivered} attached={attached} queued={queued} />
+        <Foot undelivered={undelivered} queued={queued} />
       </div>
     </div>
   );
@@ -322,12 +320,10 @@ export function SessionOpeningLine({
   card,
   brief,
   seq,
-  attached,
 }: {
   card: SessionOpeningCard;
   brief: string;
   seq?: number;
-  attached?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const href = card.target ? targetHref(card.target) : null;
@@ -352,7 +348,6 @@ export function SessionOpeningLine({
         ? <div className="session-opening-quote">{`“${card.mention.trim()}”`}</div>
         : null}
       {open && <pre className="session-opening-brief">{brief}</pre>}
-      {attached}
     </div>
   );
 }

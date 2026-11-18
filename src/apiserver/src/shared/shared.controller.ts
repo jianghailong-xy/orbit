@@ -3,24 +3,30 @@ import {
   Controller,
   Get,
   Header,
+  MessageEvent,
   NotFoundException,
   Param,
   Query,
+  Req,
   Res,
+  Sse,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import type { Observable } from 'rxjs';
 import { PublicIdPipe } from '../common/public-id';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { publicOrigin } from '../email/email-settings.service';
 import { streamable } from '../files/files.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { parseMaxPayload } from '../sessions/truncate-payload';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
 import { linkNotFound, withoutToolOutput } from '../share-links/share-link';
 import { type OpenLink, ShareLinksService } from '../share-links/share-links.service';
 import { PublicSurfaceGuard } from './public-surface.guard';
 import { shareCardHead } from './share-card';
+import { SHARED_STREAM_TARGET, SharedStreamGuard, type SharedStreamTarget } from './shared-stream.guard';
 
 const num = (s?: string): number | undefined => {
   const n = Number(s);
@@ -42,6 +48,7 @@ export class SharedController {
     private readonly links: ShareLinksService,
     private readonly sessions: SessionsService,
     private readonly attachments: AttachmentsService,
+    private readonly viewerStreams: ViewerStreamService,
   ) {}
 
   /**
@@ -192,6 +199,34 @@ export class SharedController {
     return event;
   }
 
+  /**
+   * The shared session pushed (docs/session-viewer-stream-design.md §3–§4): the root's transcript on a session link,
+   * shaped like the owner's `/sessions/:id/events` — `sinceSeq`, `maxPayload` — through the viewer projection: what
+   * `:token/events` shows, as the link's Tool output allows, plus the reply as it is written and head frames.
+   * SharedStreamGuard has resolved the link before anything is read. Not a view.
+   */
+  @UseGuards(SharedStreamGuard)
+  @Sse(':token/stream')
+  stream(
+    @Req() req: { [SHARED_STREAM_TARGET]: SharedStreamTarget },
+    @Query('sinceSeq') sinceSeq?: string,
+    @Query('maxPayload') maxPayload?: string,
+  ): Observable<MessageEvent> {
+    return this.streamOf(req[SHARED_STREAM_TARGET], { sinceSeq, maxPayload });
+  }
+
+  /** One of the conversations the link opens besides its root, pushed, as `:token/stream` pushes the root's; the
+   *  guard asks whether the link opens it as `:token/sessions/:sessionId/events` does. */
+  @UseGuards(SharedStreamGuard)
+  @Sse(':token/sessions/:sessionId/stream')
+  conversationStream(
+    @Req() req: { [SHARED_STREAM_TARGET]: SharedStreamTarget },
+    @Query('sinceSeq') sinceSeq?: string,
+    @Query('maxPayload') maxPayload?: string,
+  ): Observable<MessageEvent> {
+    return this.streamOf(req[SHARED_STREAM_TARGET], { sinceSeq, maxPayload });
+  }
+
   /** Bytes of an inline image/file the link shares: one in the shared session's transcript, or — on a
    *  task or project link — one of its tasks' input files or of the conversations it opens, as its
    *  layers allow. Streamed from the file store, or from the row for one stored before it. */
@@ -233,6 +268,23 @@ export class SharedController {
     return after !== undefined
       ? this.sessions.getSharedEventsAfter(sessionId, { ...opts, after })
       : this.sessions.getSharedEventPage(sessionId, { ...opts, before: num(query.before) });
+  }
+
+  private streamOf(target: SharedStreamTarget, query: { sinceSeq?: string; maxPayload?: string }) {
+    return this.viewerStreams.stream(
+      target.sessionId,
+      { kind: 'PUBLIC', toolOutput: target.toolOutput },
+      {
+        // The link turned off or changed, or the session gone from the Trash's side; not one guest's removal.
+        named: (r) => ('linkId' in r ? r.linkId === target.linkId : r.sessionId === target.sessionId && r.guestId === undefined),
+        // A link that no longer includes tool output a stream sends ends that stream, so it reopens redacted (§5).
+        check: async () => {
+          const access = await this.links.streamAccess(target.token, target.sessionId, target.conversation);
+          return access && { until: access.until, narrowed: target.toolOutput && !access.toolOutput };
+        },
+      },
+      { sinceSeq: query.sinceSeq, maxPayload: parseMaxPayload(query.maxPayload) },
+    );
   }
 
   /** The transcript routes serve a session root only; on any other link they are not there. */

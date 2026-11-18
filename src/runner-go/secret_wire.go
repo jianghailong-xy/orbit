@@ -52,23 +52,38 @@ func withoutSecretPatches(patches []FilePatch, sessionID string) []FilePatch {
 	if len(patches) == 0 {
 		return patches
 	}
-	recorded, readable := taintObjectsChecked("")
-	if !readable {
-		// The record of what held a value cannot be read, so nothing here can tell which patch is safe: none is sent.
-		// The files stay in the list with their counts, as for any withheld patch.
-		for _, patch := range patches {
-			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", fmt.Sprintf(
-				"%s: Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports.", patch.Path))
+	// Check in lifecycle order: held -> pending -> recorded. A value moving during this
+	// call is therefore checked in at least one stage, without waiting for its scan.
+	matched := make([]bool, len(patches))
+	check := func(matcher *integrationOutputRedactor) {
+		if matcher == nil {
+			return
 		}
+		for i, patch := range patches {
+			matched[i] = matched[i] || matcher.holds([]byte(patch.Patch)) || matcher.holds([]byte(patch.Preview))
+		}
+	}
+	check(r)
+	for _, pending := range pendingTaintMatchers() {
+		check(pending)
+	}
+	secretTaintMu.Lock()
+	entries, err := readSecretTaint()
+	secretTaintMu.Unlock()
+	if err != nil {
+		secretPatchesWarning(sessionID, len(patches))
 		return nil
 	}
-	if r == nil && len(recorded) == 0 {
-		return patches
+	recorded := map[string]string{}
+	for _, entry := range entries {
+		for _, object := range entry.Objects {
+			recorded[object.ID] = object.Path
+		}
 	}
 	kept := make([]FilePatch, 0, len(patches))
-	for _, patch := range patches {
-		if (r != nil && (r.holds([]byte(patch.Patch)) || r.holds([]byte(patch.Preview)))) || patchNamesRecordedBlob(patch.Patch, recorded) {
-			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", fmt.Sprintf(
+	for i, patch := range patches {
+		if matched[i] || patchNamesRecordedBlob(patch.Patch, recorded) {
+			secretFileWarning(sessionID, patch.Path, "secret_patch_withheld", secretHoldsValueReason, fmt.Sprintf(
 				"%s holds the value of a secret the owner delivered to this runner, so Orbit left its diff out of what it reports. Remove the value from the file and from the branch's history.", patch.Path))
 			continue
 		}
@@ -143,6 +158,12 @@ func listPublishedObjects(repo, tip string, exclude ...string) ([]string, map[st
 	var not []string
 	for _, ref := range exclude {
 		if ref == "" {
+			continue
+		}
+		// The removal scan can exclude objects already public on origin. This is
+		// a rev-list selector, not a revision that rev-parse can verify.
+		if ref == "--remotes=origin" {
+			not = append(not, ref)
 			continue
 		}
 		if _, err := git(repo, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil {
@@ -273,7 +294,28 @@ func secretPushRefusal(repo, tip string, exclude ...string) string {
 			return secretHistoryRefusal(paths)
 		}
 	}
-	if paths := taintedPaths(repo, tip, exclude...); len(paths) > 0 {
+	// A removal still being recorded (its scan running, or failed and retried) keeps its value as a matcher in memory
+	// (secretTaintPending). What the scan would record of this repository is what tip would publish holding that value,
+	// so tip is read for it directly here instead of refusing until the scan ends. Read after the held values and
+	// before the record: a value moves from held to pending to recorded, so each of them is in one of the three.
+	for _, pending := range pendingTaintMatchers() {
+		paths, err := secretHistoryScan(repo, tip, pending, exclude...)
+		if err != nil {
+			return "Refused: Orbit could not check what this would publish for a secret the owner removed from this runner, so it does not merge or push it: " +
+				firstLine(err.Error())
+		}
+		if len(paths) > 0 {
+			return secretHistoryRefusal(paths)
+		}
+	}
+	secretTaintMu.Lock()
+	entries, err := readSecretTaint()
+	secretTaintMu.Unlock()
+	if err != nil {
+		return "Refused: Orbit could not read this runner's record of commits holding a secret's value, so it does not merge or push anything: " +
+			firstLine(err.Error())
+	}
+	if paths := taintedPathsOf(entries, repo, tip, exclude...); len(paths) > 0 {
 		return secretHistoryRefusal(paths)
 	}
 	return ""

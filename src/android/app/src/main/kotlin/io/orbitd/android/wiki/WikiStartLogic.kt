@@ -35,7 +35,7 @@ internal object WikiStartCopy {
     const val createSubmit = "Create"
     const val createNote = "A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s ${WikiPlanCopy.drafterServer}."
     const val workspaceOffline = "offline"
-    /** The way to another wiki (docs/wiki-explicit-creation-design.md §3.4): the drawer's row under Wiki and the head picker's last item. */
+    /** The way to another wiki (docs/wiki-explicit-creation-design.md §3.4): the head picker's last item (board 47: no drawer row). */
     const val newWiki = "New wiki…"
     /** On a repository in the Create wiki form that already has a wiki in use: one repository, one wiki. */
     const val hasAWiki = "Has a wiki"

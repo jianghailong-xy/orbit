@@ -120,11 +120,12 @@ func TestDelegateToolIsOfferedToTopLevelSessionsOnly(t *testing.T) {
 	if names := strings.Join(list(), ","); !strings.Contains(","+names+",", ",delegate,") {
 		t.Fatalf("a top-level session is not offered delegate: %s", names)
 	}
-	// Claude Code loads it up front instead of deferring it behind ToolSearch.
+	// Claude Code loads it up front instead of deferring it behind ToolSearch, and notify beside it
+	// (TestNotifyIsLoadedUpFrontAndNamedInTheInstructions).
 	resp, _ := srv.handle(&rpcRequest{JSONRPC: "2.0", ID: []byte("1"), Method: "tools/list"})
 	for _, tool := range resp.Result.(map[string]interface{})["tools"].([]map[string]interface{}) {
 		meta, _ := tool["_meta"].(map[string]interface{})
-		if always := meta["anthropic/alwaysLoad"] == true; always != (tool["name"] == delegateToolName) {
+		if always := meta["anthropic/alwaysLoad"] == true; always != (tool["name"] == delegateToolName || tool["name"] == "notify") {
 			t.Errorf("%s: anthropic/alwaysLoad = %v", tool["name"], always)
 		}
 	}

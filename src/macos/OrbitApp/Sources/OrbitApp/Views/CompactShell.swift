@@ -784,9 +784,6 @@ struct NavigationDrawer: View {
                 ForEach(DrawerWorkLogic.rows(
                     AppSection.workSections,
                     wiki: model.wiki?.shown == true,
-                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
-                    // that the Wiki's own page is the Set up your first wiki card.
-                    newWiki: model.wiki?.spaces.isEmpty == false,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
                     scheduled: model.scheduled.map { !$0.unsupported } ?? false,
@@ -794,7 +791,6 @@ struct NavigationDrawer: View {
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
-                    case .newWiki:        newWikiRow
                     case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
                     case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
@@ -1169,27 +1165,6 @@ struct NavigationDrawer: View {
         .accessibilityIdentifier("drawer-scheduled")
     }
 
-    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
-    /// the shell and leaves the drawer where it is.
-    private var newWikiRow: some View {
-        Button {
-            model.wiki?.creating = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "plus")
-                        .frame(width: 24)
-                    Text(WikiStartCopy.newWiki)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("drawer-new-wiki")
-    }
-
     /// The rule and the group label that set the Workspaces apart from the work above them.
     private var workspacesHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1330,7 +1305,7 @@ struct NavigationDrawer: View {
                 agentRow(agent, agents: agents)
             }
             ForEach(agents.machinesToSetUp) { machine in
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && agents.machinesToSetUp.count > 1)
             }
         }
     }
@@ -1338,20 +1313,24 @@ struct NavigationDrawer: View {
     /// An online machine with no workspace, after every workspace: its new session page, where its first
     /// one is made (board 03 ①, rule 9). In the tint, since it asks for something the rest of the rail
     /// doesn't.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let selected = model.drawerDestination == .machine(runnerID: machine.id)
         return Button {
             open(.machine(runnerID: machine.id))
         } label: {
-            pill(selected: selected) {
-                HStack(spacing: 12) {
-                    Image(systemName: "folder.badge.plus")
-                        .frame(width: 24)
-                    Text(MachineSetupCopy.setupTitle(machine: machine.name))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                pill(selected: selected) {
+                    HStack(spacing: 12) {
+                        Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                            .frame(width: 24)
+                        Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                            .fontWeight(machine.isManaged ? .semibold : nil)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(Color.accentColor)
                 }
-                .foregroundStyle(Color.accentColor)
+                if separates { Divider().padding(.horizontal, DrawerMetrics.textLeading) }
             }
         }
         .buttonStyle(.plain)
@@ -1438,8 +1417,25 @@ private extension View {
     /// Adds the leading hamburger that opens the nav drawer. Applied to a section's *root* view so it
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
-        toolbar {
-            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+        modifier(DrawerToggle(open: open))
+    }
+}
+
+/// The hamburger's toolbar item. On iOS 26 the count is the item content's badge, which the system
+/// draws outside the item's glass; earlier versions overlay it on the glyph.
+private struct DrawerToggle: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) {
+                    DrawerToggleButton(open: open).badge(model.needsYouSessions.count)
+                }
+            } else {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            }
         }
     }
 }
@@ -1455,8 +1451,8 @@ private struct DrawerToggleButton: View {
         Button(action: open) {
             Image(systemName: "line.3.horizontal")
                 .overlay(alignment: .topTrailing) {
-                    if waiting > 0 {
-                        Text("\(waiting)")
+                    if overlaidCount > 0 {
+                        Text("\(overlaidCount)")
                             .font(.caption2.weight(.bold).monospacedDigit())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
@@ -1469,6 +1465,12 @@ private struct DrawerToggleButton: View {
         }
         .accessibilityLabel("Open navigation")
         .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
+    }
+
+    /// The count drawn on the glyph: on iOS 26 the toolbar item's badge carries it instead.
+    private var overlaidCount: Int {
+        if #available(iOS 26.0, *) { return 0 }
+        return model.needsYouSessions.count
     }
 }
 

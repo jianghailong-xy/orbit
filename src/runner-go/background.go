@@ -108,6 +108,14 @@ var (
 	bgNotifSummary = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 )
 
+// The receipt Claude Code returns the instant a background Agent (Task) starts, and the agentId it
+// names — the id that agent's <task-notification>s later report as <task-id>. Anchored at the start:
+// the receipt is the whole result, and output that merely quotes one is not a launch.
+var (
+	asyncAgentAckPrefix = "Async agent launched successfully"
+	asyncAgentAckID     = regexp.MustCompile(`\bagentId:\s*([A-Za-z0-9_-]+)`)
+)
+
 const (
 	bgPollInterval            = 2 * time.Second
 	bgTailCap                 = 16 * 1024 // emit at most the last 16 KB of a (possibly huge) output file
@@ -153,6 +161,13 @@ type bgTailer struct {
 	live     map[string]liveShell // toolUseId → its running tail
 	seen     map[string]bool      // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
 	terminal map[string]bool      // toolUseId already reported in a terminal state
+	// agentLaunches maps a background Agent's agentId to the tool_use id that launched it, read from
+	// its async ack (noteAgentLaunch). A notification does not always name that call: one Claude
+	// injects after a restart carries no <tool-use-id>, and one for an agent revived by SendMessage
+	// carries the SendMessage call's. The launch id is what the control plane holds in
+	// runningSubagents, so a terminal notification is reported under it (bgTaskFromNotification).
+	// Rebuilt from the transcript's first full pass, so it survives engine and runner restarts.
+	agentLaunches map[string]string
 	// progress is the latest progress relayed for each background agent/workflow, keyed by its
 	// launching tool_use id (claude_task_progress.go) — kept for the durable event that ends it.
 	progress          map[string]map[string]interface{}
@@ -185,7 +200,12 @@ type bgTailer struct {
 	// which a stopped SubAgent's hold leaves to the parent (subagent_tree.go).
 	announceSubagents func()
 	subagentHandoff   func() bool
-	parentEdits       parentEditLog
+	// endKeepsWork reports whether the session is ending because its coordinator handed over, which leaves its
+	// SubAgents and jobs running (session_keep_work.go); nil reads as no. keepSubagents is how that leaves the
+	// SubAgents, installed with stopSubagents.
+	endKeepsWork  func() bool
+	keepSubagents func(shutdown context.Context)
+	parentEdits   parentEditLog
 	// jobs are the background processes this runner spawned and waits on itself
 	// (background_job.go), keyed by the id the runner issued. Retained after they
 	// finish: an agent that comes back to a job asks by that id, and "no such job"
@@ -196,16 +216,6 @@ type bgTailer struct {
 	// shutdown stays nil where no runner is at stake.
 	shutdown          context.Context
 	stopShutdownDrain func() bool
-	// engineResident answers "is there an engine to read this right now". Immutable
-	// after newBgTailer/notifyWhenCold; never called while b.mu is held, because the
-	// pool holds its own lock to answer and already calls back into this tailer.
-	// nil where no pool is at stake (parsing tests), and read as "resident" — the
-	// safe direction, since it only ever suppresses an alert.
-	engineResident func() bool
-	// notify is the existing per-account push channel (`orbit notify` / the notify
-	// MCP tool), reached here for the one thing this project exists to deliver: the
-	// job you left running finished, and nobody was here to see it. nil disables it.
-	notify func(message string) error
 	// wake asks the control plane to wake this session for one of its jobs (sendWake). Installed
 	// once by wakeSessionVia, before any job can start, so it stays immutable for the tailer's
 	// life; nil where no control plane is at stake, and then no job wakes anybody.
@@ -253,20 +263,13 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 
 		backgroundCalls: map[string]bool{},
 		engineSessions:  map[string]bool{},
+		agentLaunches:   map[string]string{},
 	}
 	// Every running job states its freshness on a ticker, for as long as this tailer lives — see
 	// heartbeatJobs for why a job that is producing has to keep saying so. Started here so no caller
 	// has to remember it, and stopped by cancel with every other goroutine this ctx owns.
 	go tailer.heartbeatJobs()
 	return tailer
-}
-
-// notifyWhenCold installs the two halves of "tell the human": how to ask whether
-// an engine is resident, and how to reach their devices. Called once, before any
-// job can be started, so the fields stay immutable for the tailer's life.
-func (b *bgTailer) notifyWhenCold(engineResident func() bool, notify func(message string) error) {
-	b.engineResident = engineResident
-	b.notify = notify
 }
 
 // wakeSessionVia installs how a job that asked to wake its session reaches the control plane.
@@ -331,6 +334,51 @@ func (b *bgTailer) markTerminal(toolUseID string) bool {
 	}
 	b.terminal[toolUseID] = true
 	return true
+}
+
+// noteAgentLaunch records which top-level call launched a background Agent, when content is that
+// call's async ack. content is the tool_result's content as the engine wrote it: a string or an
+// array of text blocks. Callers pass only top-level results; a sub-agent's own launches are its own.
+func (b *bgTailer) noteAgentLaunch(toolUseID string, content interface{}) {
+	text := strings.TrimSpace(toolResultContentText(content))
+	if toolUseID == "" || !strings.HasPrefix(text, asyncAgentAckPrefix) {
+		return
+	}
+	m := asyncAgentAckID.FindStringSubmatch(text)
+	if m == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.agentLaunches[m[1]] = toolUseID
+}
+
+// agentLaunch returns the tool_use id that launched the background Agent agentID, or "".
+func (b *bgTailer) agentLaunch(agentID string) string {
+	if agentID == "" {
+		return ""
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.agentLaunches[agentID]
+}
+
+// toolResultContentText flattens a tool_result's content (a string, or an array of
+// {type: "text", text} blocks) into one string.
+func toolResultContentText(content interface{}) string {
+	switch c := content.(type) {
+	case string:
+		return c
+	case []interface{}:
+		var sb strings.Builder
+		for _, x := range c {
+			if block, ok := x.(map[string]interface{}); ok && block["type"] == "text" {
+				sb.WriteString(asString(block["text"]))
+			}
+		}
+		return sb.String()
+	}
+	return ""
 }
 
 // noteEngineSession records an id the engine says it runs under (system/init). Nothing but the engine writes those frames,
@@ -975,16 +1023,27 @@ func (b *bgTailer) stopAll() {
 	// SubAgents first: they write the checkout as the engine does, and the finalize that follows must not
 	// capture what one is half-way through (docs/subagent-design.md §5.2). A runner that is stopping
 	// interrupts them; anything else is the session ending, which stops them.
+	//
+	// Except when the session ends because its coordinator handed over: its SubAgents and its jobs (not its
+	// services) are left to end by themselves, and the wake their end owes goes to the successor
+	// (session_keep_work.go). The drain below then has only the services left to end.
 	b.mu.Lock()
-	stopSubagents := b.stopSubagents
+	stopSubagents, keepSubagents, shutdown := b.stopSubagents, b.keepSubagents, b.shutdown
 	reason := subagentStopSessionEnded
 	if b.runnerStoppingLocked() {
 		reason = subagentStopRunnerStopped
 	} else if b.subagentHandoff != nil && b.subagentHandoff() {
 		reason = subagentStopHandedOver
 	}
+	keep := reason == subagentStopSessionEnded && b.endKeepsWork != nil && b.endKeepsWork()
 	b.mu.Unlock()
-	if stopSubagents != nil {
+	switch {
+	case keep:
+		if keepSubagents != nil {
+			keepSubagents(shutdown)
+		}
+		b.keepJobsPastEnd()
+	case stopSubagents != nil:
 		stopSubagents(reason)
 	}
 	b.drainJobs(bgDrainWaitCap)
@@ -1076,17 +1135,30 @@ func bgTaskFromNotification(s string, emit emitFn, bg *bgTailer) bool {
 		}
 		return ""
 	}
-	toolUseID := get(bgNotifToolUse)
+	notifiedID := get(bgNotifToolUse)
 	status := get(bgNotifStatus)
 	terminal := isTerminalBgStatus(status)
+	toolUseID := notifiedID
+	// dedupeKey identifies this notification for the seen and terminal sets. It is the reported id,
+	// plus the call the notification itself named when the two differ: a background Agent stops once
+	// per run, and a run revived by SendMessage ends under its own call, so each of those ends is
+	// reported once (a stdout and a transcript copy are byte-identical and share the key) without
+	// the revived run's end being swallowed as a repeat of the earlier one.
+	dedupeKey := toolUseID
+	if bg != nil && terminal {
+		if launch := bg.agentLaunch(get(bgNotifTaskID)); launch != "" && launch != notifiedID {
+			toolUseID = launch
+			dedupeKey = launch + "\x00" + notifiedID
+		}
+	}
 	if bg != nil && toolUseID != "" {
 		// Skip a notification we've already turned into an event (the same <task-notification>
 		// reaches us via both the stdout stream and the transcript tail — see watchJSONL).
-		if !bg.markSeen(toolUseID, status) {
+		if !bg.markSeen(dedupeKey, status) {
 			return true
 		}
 		// A shell already reported as killed with its engine must not terminalize twice.
-		if terminal && !bg.markTerminal(toolUseID) {
+		if terminal && !bg.markTerminal(dedupeKey) {
 			return true
 		}
 	}
@@ -1228,11 +1300,44 @@ func (b *bgTailer) scanTranscript(path string, offset int64) int64 {
 // notificationFromLine emits a background_task if the JSONL entry is a user message carrying a
 // <task-notification> (de-duped via bgTaskFromNotification's shared seen set).
 func (b *bgTailer) notificationFromLine(line string) {
+	// An async Agent's ack precedes its notifications in the transcript, so a first full pass
+	// learns every launch before the notifications that need it.
+	if strings.Contains(line, asyncAgentAckPrefix) {
+		b.agentLaunchFromLine(line)
+	}
 	if !strings.Contains(line, "task-notification") {
 		return // cheap pre-filter before the JSON parse
 	}
 	if txt := userTextFromJSONL(line); strings.Contains(txt, "<task-notification>") {
 		bgTaskFromNotification(txt, b.emit, b)
+	}
+}
+
+// agentLaunchFromLine records the launches a top-level transcript entry's tool_results acknowledge
+// (noteAgentLaunch). A sidechain entry is a sub-agent's own, and its launches are not the parent's.
+func (b *bgTailer) agentLaunchFromLine(line string) {
+	var entry struct {
+		Type        string `json:"type"`
+		IsSidechain bool   `json:"isSidechain"`
+		Message     struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if json.Unmarshal([]byte(line), &entry) != nil || entry.Type != "user" || entry.IsSidechain {
+		return
+	}
+	var blocks []struct {
+		Type      string      `json:"type"`
+		ToolUseID string      `json:"tool_use_id"`
+		Content   interface{} `json:"content"`
+	}
+	if json.Unmarshal(entry.Message.Content, &blocks) != nil {
+		return
+	}
+	for _, bl := range blocks {
+		if bl.Type == "tool_result" {
+			b.noteAgentLaunch(bl.ToolUseID, bl.Content)
+		}
 	}
 }
 

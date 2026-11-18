@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -143,6 +144,33 @@ func TestProbeAuthOpenCodeDoesNotTreatZeroCredentialsAsSignedOut(t *testing.T) {
 	configured := writeFakeBin(t, t.TempDir(), providerOpenCode, `echo '2 credentials'`)
 	if got := probeAuth(providerOpenCode, configured); got != authYes {
 		t.Fatalf("configured credentials should be authYes, got %v", got)
+	}
+}
+
+// What opencode 1.19.6 prints, colour codes and box drawing included.
+const openCodeAuthListNoKey = "\x1b[0m\n┌  Credentials \x1b[90m~/.local/share/opencode/auth.json\n│\n└  0 credentials\n"
+const openCodeAuthListEnvKey = openCodeAuthListNoKey + "\n┌  Environment\n│\n●  Anthropic \x1b[90mANTHROPIC_API_KEY\n│\n└  1 environment variable\n"
+
+func TestProbeOpenCodeAuthReadsBothSections(t *testing.T) {
+	cases := []struct {
+		name   string
+		script string
+		auth   authState
+		noKey  bool
+	}{
+		// The case the old probe got wrong: its store's "0 credentials" hid the key it found.
+		{"key in the environment", "printf '" + openCodeAuthListEnvKey + "'", authYes, false},
+		{"stored key", `printf '└  1 credential\n'`, authYes, false},
+		{"no key anywhere", "printf '" + openCodeAuthListNoKey + "'", authUnknown, true},
+		{"unfamiliar answer", `echo 'something else'`, authUnknown, false},
+		{"command failed", `exit 3`, authUnknown, false},
+	}
+	for _, c := range cases {
+		bin := writeFakeBin(t, t.TempDir(), providerOpenCode, c.script)
+		auth, noKey := probeOpenCodeAuth(context.Background(), bin, nil)
+		if auth != c.auth || noKey != c.noKey {
+			t.Errorf("%s: got (%v, %v), want (%v, %v)", c.name, auth, noKey, c.auth, c.noKey)
+		}
 	}
 }
 

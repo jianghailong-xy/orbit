@@ -13,7 +13,7 @@ import { PromptOptimizerController, PromptOptimizerService } from './prompt-opti
 
 /**
  * Prompt optimizer, the server half (docs/prompt-optimizer-design.md, "Wire contract"), over HTTP with
- * a stubbed DeepSeek: the switch (absent = off) and the key (409), `promptOptimizerAvailable` on
+ * a stubbed DeepSeek: the switch (absent = on, false = off) and the key (409), `promptOptimizerAvailable` on
  * `/users/me`, the owner's own session, workspace and project (404), the draft's size (400), each 422
  * reason, `contextUsed` naming exactly the sources there were, protected code surviving, and
  * Translation on giving the account's agent language (English by default) with a gloss in the owner's.
@@ -179,18 +179,19 @@ async function boot(t: { after: (fn: () => Promise<void>) => void }) {
 const json = (value: unknown): Reply => ({ content: JSON.stringify(value) });
 const plain = (text: string, extra: Row = {}): Reply => json({ segments: [{ text, added: false }], language: 'en', ...extra });
 
-test('me says whether the server can optimize, and the switch persists through the preferences patch; absent is off', async (t) => {
+test('me says whether the server can optimize, and the switch persists through the preferences patch; absent is on', async (t) => {
   const { call } = await boot(t);
   preferences = { theme: 'dark' };
   const me = (await (await call('GET', '/users/me')).json()) as Row;
   assert.equal(me.promptOptimizerAvailable, true);
-  assert.equal((me.preferences as Row).promptOptimizer, undefined, 'absent: off');
+  assert.equal((me.preferences as Row).promptOptimizer, undefined, 'absent: on');
 
-  const on = await call('PATCH', '/users/me/preferences', { promptOptimizer: true });
-  assert.equal(on.status, 200, await on.clone().text());
-  const account = (await on.json()) as Row;
-  assert.equal((account.preferences as Row).promptOptimizer, true);
+  const off = await call('PATCH', '/users/me/preferences', { promptOptimizer: false });
+  assert.equal(off.status, 200, await off.clone().text());
+  const account = (await off.json()) as Row;
+  assert.equal((account.preferences as Row).promptOptimizer, false);
   assert.equal(account.promptOptimizerAvailable, true);
+  assert.equal(preferences.promptOptimizer, false, 'turning it off writes false');
   assert.equal(preferences.theme, 'dark', 'the other preferences stand');
 
   const malformed = await call('PATCH', '/users/me/preferences', { promptOptimizer: 'yes' });
@@ -201,20 +202,28 @@ test('me says whether the server can optimize, and the switch persists through t
   assert.equal(keyless.promptOptimizerAvailable, false);
 });
 
-test('409 PROMPT_OPTIMIZER_OFF: the switch absent or false, or no server key; DeepSeek is not asked', async (t) => {
+test('409 PROMPT_OPTIMIZER_OFF: the switch false, or no server key; DeepSeek is not asked', async (t) => {
   const { optimize } = await boot(t);
-  for (const prefs of [{}, { promptOptimizer: false }]) {
-    preferences = prefs;
-    const off = await optimize({ draft: 'fix the login' });
-    assert.equal(off.status, 409);
-    assert.equal(off.body.code, 'PROMPT_OPTIMIZER_OFF');
-  }
-  preferences = { promptOptimizer: true };
+  preferences = { promptOptimizer: false };
+  const off = await optimize({ draft: 'fix the login' });
+  assert.equal(off.status, 409);
+  assert.equal(off.body.code, 'PROMPT_OPTIMIZER_OFF');
+  preferences = {};
   delete process.env.DEEPSEEK_API_KEY;
   const keyless = await optimize({ draft: 'fix the login' });
   assert.equal(keyless.status, 409);
   assert.equal(keyless.body.code, 'PROMPT_OPTIMIZER_OFF');
   assert.equal(asked.length, 0);
+});
+
+test('on by default: an account whose preferences have no promptOptimizer key is optimized', async (t) => {
+  const { optimize } = await boot(t);
+  preferences = { theme: 'dark' };
+  replies = [plain('Fix the login.')];
+  const answer = await optimize({ draft: 'fix the login' });
+  assert.equal(answer.status, 200, JSON.stringify(answer.body));
+  assert.equal(answer.body.text, 'Fix the login.');
+  assert.equal(asked.length, 1);
 });
 
 test('404 for a session, workspace or project the caller does not own; nothing of theirs is read or sent', async (t) => {

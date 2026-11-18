@@ -31,6 +31,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
+	// (heartbeatMerge); a commit runs beside a live background job.
+	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
 	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
@@ -82,6 +85,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		abandonedCheckoutCapabilityV1,
+		sessionMergeBesideTurnV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
@@ -114,6 +118,9 @@ func init() {
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		cloneWorkDirCapabilityV1,
+		conditionProbeCapabilityV1,
+		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
 		mainCheckoutDiscardCapabilityV1,
@@ -122,6 +129,8 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
+		subagentRemoteResumeCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -464,6 +473,16 @@ func (t *Transport) deregister() error {
 	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
 }
 
+// gitCredential is POST /runner/git-credential: Orbit's GitHub App token for one workspace's repository
+// (github_credential.go). Never logged.
+func (t *Transport) gitCredential(ctx context.Context, request RunnerGitCredentialRequest) (*RunnerGitCredentialAnswer, error) {
+	var answer RunnerGitCredentialAnswer
+	if err := t.do(ctx, "POST", "/runner/git-credential", request, &answer, orbitGitCredentialTimeout); err != nil {
+		return nil, err
+	}
+	return &answer, nil
+}
+
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
 	timeout := 15 * time.Second
 	if t.link != nil {
@@ -631,6 +650,11 @@ func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string
 	}
 	if r.TurnID == "" {
 		return nil, nil
+	}
+	// The end of a coordinator handing over leaves the session's background work running; noted before any loop
+	// acts on the turn, whichever engine's loop that is (session_keep_work.go).
+	if r.Kind == "end" && keepBackgroundWorkRequested(r.Content) {
+		markSessionKeepsWork(sessionID)
 	}
 	r.Content = withExternalSenderBlock(r.Kind, r.Content, r.ExternalSender)
 	return &r, nil
@@ -1431,9 +1455,16 @@ func (t *Transport) labelSummary(listID string) (json.RawMessage, error) {
 // listProviders returns the provider slugs this owner may pass as `provider` — the built-in
 // engines plus their configured ones. Plain runner auth, like the task routes whose `provider`
 // field it answers for, so it works outside an orchestration-enabled session too.
-func (t *Transport) listProviders() (json.RawMessage, error) {
+//
+// With workspace (a workspace of the owner's, by name or id) the server answers instead which provider ×
+// engine that workspace's runner can run, each usable or not with the reason, and the workspace's default.
+func (t *Transport) listProviders(workspace string) (json.RawMessage, error) {
+	path := "/runner/providers"
+	if workspace != "" {
+		path += "?" + url.Values{"workspace": {workspace}}.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -2101,6 +2132,19 @@ func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.R
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
 		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// recordProjectRuling records an owner ruling on the project (`project_ruling_record`, coordinator
+// handoff v2 §2). The session header is the authority: the server checks it against the project's
+// coordinator pointer and the quote against the named turn's owner text.
+func (t *Transport) recordProjectRuling(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/rulings",
+		body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
@@ -2794,6 +2838,17 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// moveSession files a session in a folder of its workspace (or in none), or moves an ended one to
+// another workspace: the Move panel's rules, refusals as a 409 with the reason.
+func (t *Transport) moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/move", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

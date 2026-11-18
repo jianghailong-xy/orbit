@@ -45,6 +45,8 @@ const task = {
   sessions: [], dependsOn: [], dependedOnBy: [], inputs: [], children: [],
   comments: [{ id: id('501'), body: 'Capture the current interface before the first component migration.', createdAt: earlier, author: { name: 'Baseline Reviewer', email: 'reviewer@example.test' }, authorName: 'Baseline Reviewer', source: 'USER', attachments: [], deliveries: [] }],
 };
+/** The task the task page draws, for a capture that adds a field to it. */
+export const FIXTURE_TASK = task;
 const projectTasks = [
   { ...task, id: id('111'), title: 'Inventory existing components', status: 'DONE', outcome: 'DONE', workState: 'DONE', dependencyState: 'TERMINAL', topoLevel: 0, blocksCount: 1 },
   { ...task, id: id('112'), title: 'Capture browser baselines', workState: 'READY', topoLevel: 1, blocksCount: 1 },

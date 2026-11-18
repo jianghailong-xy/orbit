@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
+import io.orbitd.android.core.cards.OrbitEvent
 import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.queuedWake
 import io.orbitd.android.core.cards.transcriptCards
@@ -84,7 +85,11 @@ internal object SteerDelivery {
      * no card Orbit draws it as — a delivery, a brief, a review's turn, another session's message or its replies — and no wake. */
     fun readersOwn(event: RunEvent): Boolean = cardKeys.none { event.fields[it].let { value -> value != null && value != JsonNull } } &&
         transcriptCards(event).isEmpty() && queuedWake(event.fields.string("text").orEmpty()) == null &&
-        SubagentFinished.parse(event.fields.string("text")) == null
+        SubagentFinished.parse(event.fields.string("text")) == null && !orbitOnly(event)
+
+    /** Whether an echo is Orbit's alone — nothing typed, nothing attached, a recorded note — which draws the From Orbit line ([OrbitEvent]). */
+    fun orbitOnly(event: RunEvent): Boolean = event.type == "user" && transcriptCards(event).isEmpty() &&
+        OrbitEvent.draws(event.personWords(), event.fields.string("controlPlaneNote"), (event.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
 
     /** Whether an echo is one of the reader's steers: sent into a running turn, and the reader's own words ([readersOwn]). */
     fun readersSteer(event: RunEvent) = event.type == "user" && event.fields["steer"] == JsonPrimitive(true) && readersOwn(event)

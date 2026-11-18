@@ -42,6 +42,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.directory.TrashingSessions
@@ -99,6 +100,7 @@ internal class NeedsYouNotices {
 @Composable
 internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: (OrbitRoute) -> Unit) {
     val notices = remember(handle) { NeedsYouNotices() }
+    val requests = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
     val look by remember(app, handle) {
         app.realtime.state.map { live ->
             // Nothing is looked at until the Open list has answered: an empty list is not "nothing waits".
@@ -133,7 +135,7 @@ internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: 
                     exit = slideOutVertically { -it / 2 } + fadeOut() + shrinkVertically()) {
                     NeedsYouToastCard(notice, dismiss = { notices.dismiss(notice.id) }) {
                         notices.dismiss(notice.id)
-                        openNeedsYou(notice.target, notice.ownerItem, open)
+                        openNeedsYou(notice.target, notice.ownerItem, requests.state.value, open)
                     }
                 }
             }
@@ -142,10 +144,17 @@ internal fun NeedsYouToasts(app: OrbitApplication, handle: SessionHandle, open: 
     }
 }
 
-/** A press on a notice: one of the five owner items opens the card it names; anything else the session. */
-private fun openNeedsYou(target: JsonObject, item: OwnerItem?, open: (OrbitRoute) -> Unit) {
+/** A press on a notice: one of the five owner items opens the card it names; an owner request its card in the Waiting on you
+ * inbox, as its push does (in the conversation it sits where it was asked, under every turn taken since); anything else the
+ * session. */
+private fun openNeedsYou(target: JsonObject, item: OwnerItem?, requests: OwnerRequestStore.State, open: (OrbitRoute) -> Unit) {
     val id = target.text("id") ?: return
     val workspace = target.obj("agent")?.text("id") ?: target.text("agentId") ?: target.text("workspaceId")
+    if (item == null && target.text("waitingKind") == "OWNER_REQUEST") {
+        // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+        val request = OwnerRequests.oldestPending(id, requests.list(OwnerRequestStore.ALL), requests.open)
+        open(OrbitRoute(Destination.WAITING_ON_YOU, request?.id, origin = Origin.LINK)); return
+    }
     // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
     val project = target.obj("projectMembership")?.text("projectId")
     if (item?.kind == "PROMOTION_APPROVAL" && project != null) {

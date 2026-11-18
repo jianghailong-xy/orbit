@@ -157,8 +157,11 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       codexAccountRemoveAccount: true,
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,
+      codexAccountRemoveSessions: true,
       // Where its Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6).
       region: true,
+      // Whether it is the account's managed runner: `managed` on the row (Orbit Cloud on every client).
+      managedRunner: { select: { id: true } },
     },
   });
 });

@@ -9,7 +9,7 @@ import { delegateResultText, delegateRunsSignature, subagentMeta, subagentWhy } 
 
 /**
  * Orbit's SubAgent (`mcp__orbit__delegate`) drawn as docs/mocks/subagent/02.png: the Agent card's purple
- * row named SubAgent, `<type> · <description>`, grey `tier · model` on the right — then time and cost once
+ * row named SubAgent, `<type> · <description>`, grey `tier · model` on the right — then time (no cost) once
  * done — a Background tag, the child's latest step while it runs, and a grey Why first when opened. Result
  * shapes are the runner's (src/runner-go/subagent.go).
  */
@@ -153,11 +153,11 @@ describe('the SubAgent block', () => {
     expect(container.querySelector('.chat-subagent-why')).toBeNull();
   });
 
-  it('adds duration and cost to the meta once the run is done', () => {
+  it('adds duration, but no cost, to the meta once the run is done', () => {
     render([FG, BG_RUNNING]);
     const fg = card(1);
     expect(text(fg.querySelector('.chat-tool-summary'))).toBe('explore · Find every caller of pollQuota');
-    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('S · Sonnet 5.5 · 41s · $0.21');
+    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('S · Sonnet 5.5 · 41s');
     expect(fg.querySelector('.chat-tool-status.ok')).not.toBeNull();
     expect(fg.querySelector('.chat-tool-tag')).toBeNull();
   });
@@ -177,7 +177,7 @@ describe('the SubAgent block', () => {
     render([FG, ended], false);
     const bg = card(5);
     expect(bg.querySelector('.chat-tool-live')).toBeNull();
-    expect(text(bg.querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium · 3m 12s · $0.50');
+    expect(text(bg.querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium · 3m 12s');
     act(() => (bg.querySelector('.chat-tool-row') as HTMLElement).click());
     // The receipt is not the result: the run's own result is.
     expect(bg.textContent).toContain('Added six cases.');
@@ -271,7 +271,7 @@ describe('the SubAgent block', () => {
     });
     render([remote, BG_RUNNING]);
     const fg = card(1);
-    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('Sonnet 5.5 · on orbit-macos · 41s · $0.21');
+    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('Sonnet 5.5 · on orbit-macos · 41s');
     act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
     const why = fg.querySelector('.chat-subagent-why')!;
     expect(why.textContent!.startsWith(`Why · ${chosen}`)).toBe(true);
@@ -311,5 +311,11 @@ describe('subagentRuns helpers', () => {
     expect(subagentMeta(undefined)).toBeNull();
     expect(delegateResultText('{"runId":"r","status":"running"}', undefined)).toBeNull();
     expect(delegateResultText('plain text', undefined)).toBe('plain text');
+  });
+
+  it("reads the run's text when the call's JSON was clipped to a preview, never the opening brace", () => {
+    const clipped = '{\n  "changedFiles": [],\n  "result": "Route 1 worked: the transcript is';
+    expect(delegateResultText(clipped, run({ resultSummary: 'Route 1 worked.' }))).toBe('Route 1 worked.');
+    expect(delegateResultText(clipped, undefined)).toBeNull();
   });
 });

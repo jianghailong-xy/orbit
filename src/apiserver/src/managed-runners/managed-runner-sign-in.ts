@@ -5,6 +5,9 @@
  * it after the tokens are issued, and nothing else calls it: a refresh, a sign-out, a password change
  * and a capability read are not sign-ins. ManagedRunnerService provides it; a module graph without
  * ManagedRunnerModule has nothing here, which is the feature off.
+ *
+ * A session that began before the switch was turned on is only refreshed, never signed in again: the
+ * signed-in pass (managed-runner-signed-in.ts) gives those accounts theirs.
  */
 export interface ManagedRunnerSignIn {
   /** Records the owner's provisioning intent when the switch is on. Never throws, never waits for the

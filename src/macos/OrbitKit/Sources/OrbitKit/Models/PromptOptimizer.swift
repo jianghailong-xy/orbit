@@ -4,7 +4,7 @@ import Foundation
 // The server owns the feature — it calls DeepSeek with its own key — so this file only reads and
 // writes the fields of @orbit/shared prompt-optimizer.ts, says them in the board's words, and holds
 // the composer's rules: when ✦ Optimize shows, what Use and Undo do to the box, and when a send
-// carries `skipTranslation`. The views (ComposerView, Settings) draw what this decides.
+// carries `skipTranslation` or `optimizedTranslation`. The views (ComposerView, Settings) draw what this decides.
 
 // MARK: - Wire
 
@@ -117,8 +117,11 @@ public struct PromptOptimization: Decodable, Equatable, Sendable {
     public var promptLanguage: TranslationLanguage? { TranslationLanguage(rawValue: language) }
 
     /// Whether the prompt was written in the agent language for a translating account (D2): the
-    /// server writes a gloss exactly then, and it is the only case a send may skip translation.
+    /// server writes a gloss exactly then. The card then opens on the gloss, and Use inserts it.
     public var isInAgentLanguage: Bool { gloss != nil }
+
+    /// What Use puts in the box (D2): the owner-language reading copy when there is one, else the prompt.
+    public var insertText: String { gloss ?? text }
 
     /// The "Used: …" chips, in the server's order.
     public var chips: [String] { contextUsed.compactMap(\.chip) }
@@ -139,6 +142,8 @@ public enum PromptOptimizerCopy {
     public static let optimize = "Optimize"
     public static let optimizing = "Optimizing…"
     public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
+    /// The Mac's ✦ tooltip: optimizeHelp with the keys that press it there. Android, with no Tab, says optimizeHelp.
+    public static let optimizeHelpWithKeys = optimizeHelp + " · Tab · ⌘⇧O"
     public static let cancelHelp = "Stop optimizing"
     public static let buttonIdentifier = "composer.optimize"
 
@@ -148,15 +153,33 @@ public enum PromptOptimizerCopy {
     public static let used = "Used:"
     public static let use = "Use"
     public static let editThenUse = "Edit, then use"
+    /// A phone's shorter "Edit, then use".
+    public static let edit = "Edit"
+    /// A phone's line under the gloss (as under a bilingual message): "Sent to the agent in English",
+    /// and its Show / Hide for the prompt beneath.
+    public static func sentToAgent(_ language: TranslationLanguage?) -> String {
+        TranslationCopy.sentToAgentLabel(language ?? .agentDefault)
+    }
+    public static let show = "Show"
+    public static let hide = "Hide"
+    /// A phone's "Used:" chips as one line: "Used this session's last 106 turns · session recap".
+    public static func usedLine(_ chips: [String]) -> String { "Used " + chips.joined(separator: " · ") }
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
-    public static let escDismisses = "Esc dismisses · your draft is kept"
-    /// Back from the gloss: the prompt's own language ("Show in English"), or "Show original" for a
-    /// code this client does not know.
+    /// The Mac card's keys: Tab in the box is Use (as it takes a reply suggestion), Esc dismisses.
+    public static let keysHint = "Tab uses it · Esc dismisses · your draft is kept"
+    /// The key drawn inside Use on a Mac.
+    public static let useKey = "Tab"
+    /// From the gloss the card opens on to the prompt the agent receives: the prompt's own language
+    /// ("Show in English"), or "Show original" for a code this client does not know.
     public static func showPrompt(_ language: TranslationLanguage?) -> String {
         language.map(showIn) ?? TranslationCopy.showOriginal
     }
     public static func showIn(_ language: TranslationLanguage) -> String { "Show in \(language.bareName)" }
+    /// Under a gloss (D2): which language the agent gets, so the reader knows what they are not reading.
+    public static func agentReceives(_ language: TranslationLanguage?) -> String {
+        "The agent receives the \(language?.bareName ?? "translated") version."
+    }
 
     // After Use (frame 5) and failure (frame 6)
     public static let replaced = "Draft replaced with the optimized prompt"
@@ -174,9 +197,14 @@ extension TranslationLanguage {
 // MARK: - Rules
 
 public enum PromptOptimizer {
+    /// The account's switch: absent means on, and only an explicit `false` turns it off.
+    public static func switchedOn(_ preferences: UserPreferences?) -> Bool {
+        preferences?.promptOptimizer != false
+    }
+
     /// Whether the account offers ✦ Optimize: switched on, and the server able to.
     public static func isOn(_ user: User?) -> Bool {
-        user?.preferences?.promptOptimizer == true && user?.promptOptimizerAvailable == true
+        switchedOn(user?.preferences) && user?.promptOptimizerAvailable == true
     }
 
     /// Whether Settings draws the switch disabled with frame 1b's notice. Only a `me` that says so:
@@ -242,15 +270,29 @@ public struct PromptOptimizerState: Equatable, Sendable {
     }
 
     public private(set) var phase: Phase = .idle
-    /// Frame 4's "Show in <language>": the card shows the gloss instead of the prompt.
-    public var showingGloss = false
+    /// Frame 4's "Show in <language>": flipped, the card shows the agent-language prompt instead of the
+    /// gloss it opens on (D2). Without a gloss there is nothing to flip.
+    public var showingPrompt = false
     /// After Use: the owner's own draft (Undo puts it back) and the text Use put in the box.
     public private(set) var undoDraft: String?
     public private(set) var inserted: String?
-    /// Whether `inserted` is in the agent language, the one case a send may skip translation.
-    private var insertedInAgentLanguage = false
+    /// D2: with a gloss inserted, the optimizer's agent-language prompt an unedited send carries as its
+    /// translation; nil when Use inserted the prompt itself.
+    private var insertedTranslation: String?
+    /// The box's text when its card was last used or dismissed: Tab has had its go at that draft, so
+    /// until it changes Tab moves focus again (Tab, Esc, Tab reaches the toolbar).
+    public private(set) var spent: String?
 
     public init() {}
+
+    /// Whether a bare Tab in the box optimizes: ✦ could take this draft, no card is open, no press is
+    /// out, and Tab has not had its go at this exact text. Otherwise Tab moves focus as it always has.
+    public func tabOptimizes(on: Bool, text: String) -> Bool {
+        switch phase {
+        case .idle, .failed: return text != spent && PromptOptimizer.showsButton(on: on, text: text)
+        case .optimizing, .suggestion: return false
+        }
+    }
 
     public var isOptimizing: Bool { if case .optimizing = phase { return true } else { return false } }
     public var suggestion: PromptOptimization? {
@@ -261,7 +303,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
     /// The press: the draft goes out. Pressing while busy cancels instead (`cancel`).
     public mutating func start(draft: String) {
         phase = .optimizing(draft: draft)
-        showingGloss = false
+        showingPrompt = false
     }
 
     public mutating func cancel() {
@@ -271,7 +313,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func succeeded(_ result: PromptOptimization) {
         guard case .optimizing(let draft) = phase else { return }
         phase = .suggestion(result, draft: draft)
-        showingGloss = false
+        showingPrompt = false
     }
 
     public mutating func failedNow() {
@@ -285,13 +327,16 @@ public struct PromptOptimizerState: Equatable, Sendable {
         return draft != current
     }
 
-    /// × / Esc: the card goes, the draft stays; so does the failure line.
-    public mutating func dismiss() {
+    /// × / Esc: the card goes, the draft stays; so does the failure line. `current`, the box's text,
+    /// is then spent for Tab; Try again dismisses without it.
+    public mutating func dismiss(current: String? = nil) {
         switch phase {
-        case .suggestion, .failed: phase = .idle
+        case .suggestion, .failed:
+            phase = .idle
+            if let current { spent = current }
         default: break
         }
-        showingGloss = false
+        showingPrompt = false
     }
 
     /// Use (and Edit, then use): the text the box now holds, or nil with no suggestion. `current` is
@@ -299,11 +344,12 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func use(current: String) -> String? {
         guard let s = suggestion else { return nil }
         undoDraft = current
-        inserted = s.text
-        insertedInAgentLanguage = s.isInAgentLanguage
+        inserted = s.insertText
+        spent = s.insertText
+        insertedTranslation = s.gloss != nil ? s.text : nil
         phase = .idle
-        showingGloss = false
-        return s.text
+        showingPrompt = false
+        return s.insertText
     }
 
     /// Whether frame 5's Undo is offered: Use happened and the box still holds what it put there.
@@ -316,26 +362,37 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard offersUndo(current: current), let draft = undoDraft else { return nil }
         undoDraft = nil
         inserted = nil
-        insertedInAgentLanguage = false
+        insertedTranslation = nil
         return draft
     }
 
     /// The toast went (timed out, or the box changed): Undo is no longer offered, but a send of the
-    /// unedited text still skips translation.
+    /// unedited text still needs no translator.
     public mutating func forgetUndo() { undoDraft = nil }
 
-    /// D2: a send carries `skipTranslation` only when its text is still exactly the optimized
-    /// agent-language text Use put in the box. Edited by one character, it is translated as usual.
-    public func skipTranslation(sending raw: String) -> Bool {
-        guard let inserted, insertedInAgentLanguage else { return false }
+    /// Whether `raw` is still exactly what Use put in the box. Edited by one character, it is not.
+    private func sendsInserted(_ raw: String) -> Bool {
+        guard let inserted else { return false }
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
             == inserted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// D2: a send carries `skipTranslation` only when its text is still exactly the optimized prompt
+    /// Use put in the box with no gloss beside it. Edited, it is translated as usual.
+    public func skipTranslation(sending raw: String) -> Bool {
+        insertedTranslation == nil && sendsInserted(raw)
+    }
+
+    /// D2: the `optimizedTranslation` a send carries — the optimizer's agent-language prompt — when its
+    /// text is still exactly the gloss Use put in the box; nil otherwise, and once edited.
+    public func optimizedTranslation(sending raw: String) -> String? {
+        sendsInserted(raw) ? insertedTranslation : nil
     }
 
     /// After a send: the optimized text is spent.
     public mutating func sent() {
         undoDraft = nil
         inserted = nil
-        insertedInAgentLanguage = false
+        insertedTranslation = nil
     }
 }

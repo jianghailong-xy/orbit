@@ -37,7 +37,7 @@ public enum SkillsLogic {
             var keys = Set<String>()                       // "" = Shared (host-level)
             for s in skills { keys.insert(s.agentId ?? "") }
             for c in commands { keys.insert(c.agentId ?? "") }
-            let runnerName = (r.displayName?.isEmpty == false ? r.displayName! : r.name)
+            let runnerName = RunnerPageFormat.displayName(r)
             for k in keys {
                 let shared = k.isEmpty
                 groups.append(SkillGroup(

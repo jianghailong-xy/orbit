@@ -46,7 +46,7 @@ public struct ManagedRunnerDisplay: Equatable, Sendable {
     /// demand hook queues work for, and asleep only when the server offers a wake), so a console
     /// does not refuse it as offline.
     public let acceptsWork: Bool
-    /// A first session in the managed default workspace can start: the server names what it starts
+    /// A first session on the managed runner can start: the server names what it starts
     /// on (`firstSessionProvider` — what the runner was found ready with, or before that the owner's
     /// key the session waits for the runner on). With none the server refuses it with MODEL_UNAVAILABLE.
     public let startsNewSession: Bool
@@ -151,12 +151,24 @@ public enum ManagedRunnerCopy {
     /// Asked before Set up on an account that already has a runner or a workspace (D3).
     public enum Confirm {
         public static let title = "Set up a managed runner?"
-        public static let body = "Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are."
+        public static let body = "Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are."
         public static let cancel = "Cancel"
         public static let action = "Set up"
     }
 
     /// Sleep is not a fault: a sending client wakes it, and nothing warns that it is offline.
+    public enum Setup {
+        public static let reposRoot = "/home/orbit/orbit-repos"
+        public enum Notice {
+            public static let preparing = "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready."
+            public static let asleep = "Your managed runner is asleep. Your first message wakes it (about 10 s)."
+        }
+        public enum FolderUnchecked {
+            public static let preparing = "Not checked until your managed runner is up: used if it’s there, created if not."
+            public static let asleep = "Not checked while it’s asleep: used if it’s there, created if not."
+        }
+    }
+
     public enum Asleep {
         /// The machine row's detail line beside Asleep.
         public static let row = "Wakes automatically when you start a session"
@@ -196,6 +208,8 @@ public struct ManagedRunnerRow: Equatable, Sendable {
     public let acceptsWork: Bool
     /// Asleep or going to sleep, and a message would wake it.
     public let asleep: Bool
+    /// The managed runner's id, as the row was matched on: what a page names Orbit Cloud by.
+    public let runnerID: String
 }
 
 /// A managed runner as one console sees it: only the console of the managed runner's own
@@ -203,10 +217,6 @@ public struct ManagedRunnerRow: Equatable, Sendable {
 public struct ManagedRunnerConsole: Equatable, Sendable {
     public let display: ManagedRunnerDisplay
     public let runnerID: String
-    /// A New Session draft in the managed default workspace before its runner was ever ready: the
-    /// server would refuse the session, so there is no engine to start it on and nothing to send.
-    public let blocksNewSession: Bool
-
     /// The state stands above the composer unless the runner is simply ready.
     public var showsBanner: Bool { display.kind != .available }
 }
@@ -215,6 +225,10 @@ public struct ManagedRunnerConsole: Equatable, Sendable {
 /// client interfaces"). Only the capability and the status fields are read — never a runner's name
 /// or its heartbeat. With the capability missing, switched off or of another contract, or a status
 /// that says the switch is off, there is no managed UI and every screen behaves as it did before.
+public enum ManagedSetupState: String, Equatable, Sendable, CaseIterable {
+    case preparing, asleep
+}
+
 public enum ManagedRunnerLogic {
     /// The contract this client knows (@orbit/shared `MANAGED_RUNNER_CONTRACT_VERSION`).
     public static let contractVersion = 1
@@ -299,11 +313,17 @@ public enum ManagedRunnerLogic {
             moving: !frozen && movingKinds.contains(kind))
     }
 
-    /// What a first session in the managed default workspace starts on, as the server says: its
+    /// What a first session on the managed runner starts on, as the server says: its
     /// `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which
     /// the field equals whenever the runner has one).
     public static func firstSessionProvider(_ status: ManagedRunnerStatus) -> String? {
         status.firstSessionProvider ?? status.initialProvider
+    }
+
+    public static func managedSetupState(runnerID: String?, status: ManagedRunnerStatus?) -> ManagedSetupState? {
+        guard let row = row(runnerID: runnerID, status: status), row.acceptsWork,
+              row.kind != .available, row.kind != .unresponsive else { return nil }
+        return status?.initialProvider?.isEmpty == false ? .asleep : .preparing
     }
 
     /// When to read the status again after this display.
@@ -312,8 +332,6 @@ public enum ManagedRunnerLogic {
     }
 
     /// What a console shows for the managed runner: nil unless `runnerID` is the managed runner.
-    /// `agentID` is the console's workspace; a draft in the managed default workspace cannot start a
-    /// session until the runner has been ready with a runtime.
     public static func console(status: ManagedRunnerStatus?,
                                runnerID: String?,
                                agentID: String?,
@@ -321,13 +339,7 @@ public enum ManagedRunnerLogic {
         guard let status, let display = display(status),
               let managedRunner = status.runnerId, let runnerID,
               PublicID.storageKey(managedRunner) == PublicID.storageKey(runnerID) else { return nil }
-        let inDefaultWorkspace = status.workspaceId.map { workspace in
-            agentID.map { PublicID.storageKey($0) == PublicID.storageKey(workspace) } ?? false
-        } ?? false
-        return ManagedRunnerConsole(
-            display: display,
-            runnerID: runnerID,
-            blocksNewSession: isDraft && inDefaultWorkspace && !display.startsNewSession)
+        return ManagedRunnerConsole(display: display, runnerID: runnerID)
     }
 
     /// The session's capabilities as a console acts on them. The server's, except that a managed
@@ -360,7 +372,8 @@ public enum ManagedRunnerLogic {
             tone: tone == .progress && !display.moving ? .idle : tone,
             detail: display.kind == .sleeping && display.acceptsWork ? ManagedRunnerCopy.Asleep.row : nil,
             acceptsWork: display.acceptsWork,
-            asleep: (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork)
+            asleep: (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork,
+            runnerID: runnerID)
     }
 
     /// Set up asks first on an account that already has a runner or a workspace (D3): a workspace

@@ -8,7 +8,7 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/managed-runners/managed-runner-manager.pg.spec.ts
  *
  * What it holds the manager to, each in a case of its own:
- *   (1) concurrent ensures make one mapping, one runner, one default workspace; two managers racing
+ *   (1) concurrent ensures make one mapping and one runner, without a workspace; two managers racing
  *       make one PVC, one Secret and one Pod, and only the credential's hash is stored;
  *   (2) a create that commits and then times out is read back and adopted, for the PVC, the Secret
  *       and the Pod — never created twice — and one that times out without committing is retried;
@@ -69,7 +69,6 @@ import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-ma
 import type { ManagedRunnerProfile } from './managed-runner-profile';
 import {
   MANAGED_RUNNER_NAME,
-  MANAGED_WORKSPACE_DIR,
   bootstrapCredentialOf,
   buildManagedPod,
   buildManagedPvc,
@@ -171,14 +170,14 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     return { ownerId, mapping: await mappingOf(ownerId) };
   }
 
-  await t.test('(1) concurrent ensures: one mapping, runner and workspace; racing managers: one PVC, Secret and Pod', async () => {
+  await t.test('(1) concurrent ensures: one mapping and runner, no workspace; racing managers: one PVC, Secret and Pod', async () => {
     const w = world();
     const ownerId = await makeUser('concurrent');
     const answers = await Promise.all(Array.from({ length: 12 }, (_, i) => w.service.ensure(ownerId, `ensure-${i}`)));
     assert.equal(new Set(answers.map((a) => a.runnerId)).size, 1, 'every caller is answered with the one mapping');
-    assert.equal(new Set(answers.map((a) => a.workspaceId)).size, 1);
+    assert.ok(answers.every((a) => a.workspaceId === null));
     assert.ok(answers.every((a) => a.enabled && a.managementState === 'REQUESTED' && a.desiredState === 'RUNNING'));
-    assert.deepEqual(await countsOf(ownerId), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(ownerId), { mappings: 1, runners: 1, workspaces: 0 });
 
     const mapping = await mappingOf(ownerId);
     assert.equal(mapping.runnerId, answers[0].runnerId);
@@ -188,14 +187,8 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     const runner = await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } });
     assert.equal(runner.name, MANAGED_RUNNER_NAME);
     assert.equal(runner.status, 'OFFLINE');
-    const workspace = await db.workspace.findUniqueOrThrow({ where: { id: mapping.defaultWorkspaceId } });
-    assert.equal(workspace.runnerId, mapping.runnerId);
-    assert.equal(workspace.targetRunnerId, mapping.runnerId);
-    assert.equal(workspace.workDir, MANAGED_WORKSPACE_DIR);
-    assert.equal(workspace.autoInitGit, true);
-    assert.equal(workspace.enableWorktree, true);
-    assert.equal(workspace.canCreateTasks, false);
-    assert.equal(workspace.canDelegate, false);
+    assert.equal(mapping.defaultWorkspaceId, null);
+    assert.equal((await w.service.status(ownerId)).workspaceId, null);
 
     // Two replicas, interleaved by the fake's per-call pause, racing pass for pass.
     const a = w.manager('replica-a', 2);
@@ -244,7 +237,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     assert.equal(status.managementState, 'READY');
     assert.equal(status.usable, true);
     assert.equal(status.runnerId, done.runnerId);
-    assert.equal(status.workspaceId, done.defaultWorkspaceId);
+    assert.equal(status.workspaceId, null);
   });
 
   await t.test('(2) a create that commits and then times out is adopted; one that never committed is retried', async () => {
@@ -515,11 +508,11 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     await assert.rejects(w.service.refuseUnsupported(stranger, 'delete'), (e: any) => e.getStatus() === 404);
     await assert.rejects(new RunnersService(prisma).removeRunner(stranger, mapping.runnerId), (e: any) => e.getStatus() === 404, 'nor its runner');
 
-    // The stranger's own ensure makes the stranger's own mapping, runner, workspace and claim.
+    // The stranger's own ensure makes the stranger's own mapping, runner and claim.
     await w.service.ensure(stranger, 'ensure');
     const theirs = await mappingOf(stranger);
     assert.notEqual(theirs.runnerId, mapping.runnerId);
-    assert.notEqual(theirs.defaultWorkspaceId, mapping.defaultWorkspaceId);
+    assert.equal(theirs.defaultWorkspaceId, null);
     assert.notEqual(theirs.pvcName, mapping.pvcName);
     await drive(w, stranger);
     const mine = await mappingOf(ownerId);
@@ -533,13 +526,14 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
       'the first owner’s objects were made once each, and never touched again',
     );
 
+    const legacy = await db.workspace.create({ data: { ownerId, runnerId: mapping.runnerId, name: 'Legacy', workDir: '/tmp/legacy' } });
     // The database fences the pairing itself: a mapping cannot name another owner's runner or workspace.
     await assert.rejects(
       sql.query(`UPDATE managed_runner SET runner_id = $1 WHERE id = $2`, [mapping.runnerId, theirs.id]),
       (e: { code?: string }) => e.code === '23503' || e.code === '23505' || e.code === '23514',
     );
     await assert.rejects(
-      sql.query(`UPDATE managed_runner SET default_workspace_id = $1 WHERE id = $2`, [mapping.defaultWorkspaceId, theirs.id]),
+      sql.query(`UPDATE managed_runner SET default_workspace_id = $1 WHERE id = $2`, [legacy.id, theirs.id]),
       (e: { code?: string }) => e.code === '23503' || e.code === '23505',
     );
   });
@@ -548,6 +542,8 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     // No restart left (maxAttempts 1): the stop is FAILED, and the owner's retry is what replaces it.
     const w = world({ maxAttempts: 1 });
     const { ownerId, mapping } = await ready(w, 'recycle');
+    const legacy = await db.workspace.create({ data: { ownerId, runnerId: mapping.runnerId, targetRunnerId: mapping.runnerId, name: 'Legacy', workDir: '/tmp/legacy' } });
+    await db.managedRunner.update({ where: { id: mapping.id }, data: { defaultWorkspaceId: legacy.id } });
     const runnerBefore = await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } });
     const credentialBefore = bootstrapCredentialOf(w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!)!;
     assert.equal(mapping.generation, 1);
@@ -588,7 +584,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     assert.ok(runnerAfter, 'the runner row stays');
     assert.equal(runnerAfter!.tokenHash, sha256(credentialAfter), 'the runner row holds generation 2’s credential');
     assert.notEqual(runnerAfter!.tokenHash, runnerBefore.tokenHash, 'generation 1’s credential no longer authenticates');
-    const workspace = await db.workspace.findUniqueOrThrow({ where: { id: mapping.defaultWorkspaceId } });
+    const workspace = await db.workspace.findUniqueOrThrow({ where: { id: legacy.id } });
     assert.equal(workspace.deletedAt, null, 'the default workspace stays');
 
     // And nothing can delete them: the database refuses, and so does every removal door.
@@ -602,7 +598,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     ], 'every reference from the mapping restricts deletion; none cascades');
     await assert.rejects(sql.query('DELETE FROM runner WHERE id = $1', [mapping.runnerId]), (e: { code?: string; constraint?: string }) =>
       e.code === '23503' && /^managed_runner_/.test(e.constraint ?? ''));
-    await assert.rejects(sql.query('DELETE FROM workspace WHERE id = $1', [mapping.defaultWorkspaceId]), (e: { code?: string }) => e.code === '23503');
+    await assert.rejects(sql.query('DELETE FROM workspace WHERE id = $1', [legacy.id]), (e: { code?: string }) => e.code === '23503');
     await assert.rejects(sql.query('DELETE FROM "user" WHERE id = $1', [ownerId]), (e: { code?: string }) => e.code === '23503');
     await assert.rejects(refuseManagedRunnerDeletion(prisma, mapping.runnerId), (e: any) => e.getStatus() === 409 && e.getResponse().code === 'MANAGED_RUNNER_DELETE_REFUSED');
     await assert.rejects(new RunnersService(prisma).removeRunner(ownerId, mapping.runnerId), (e: any) => e.getStatus() === 409);
@@ -719,7 +715,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     await runtime.worker.stop();
     const mine = await mappingOf(alice);
     assert.equal(toUuid(ensured.json.runnerId), mine.runnerId, 'ids leave in the public id codec');
-    assert.equal(toUuid(ensured.json.workspaceId), mine.defaultWorkspaceId);
+    assert.equal(ensured.json.workspaceId, null);
 
     // Bob names Alice's runner, workspace and revision: the body cannot address them.
     const theirs = await call(server, 'GET', '/api/managed-runner', bob);

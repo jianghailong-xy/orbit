@@ -149,6 +149,9 @@ const doorsOver: { providers: unknown; login: unknown; prisma: unknown } = {
     // that omitted it would fail to build the controller.
     { provide: DeepSeekBalanceService, useValue: {} },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
+    // RunnerProvidersController's quota cache (95884b154): only GET /runner/providers?workspace= reads it, which
+    // this spec does not, and a module that omitted it would fail to build the controller.
+    { provide: ProviderPlanUsageService, useValue: new ProviderPlanUsageService({} as never) },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,

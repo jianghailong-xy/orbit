@@ -78,6 +78,7 @@ before(async () => {
   const quiet = new Proxy({}, { get: () => () => undefined });
   const real = new SessionsScheduleRunPort(new SessionsService(db as never, quiet as never, quiet as never));
   const port: ScheduleRunSessionPort = {
+    land: (owner, sessionId) => real.land(owner, sessionId),
     open: (input) => real.open(input),
     interrupt: async () => undefined,
     complete: async (_owner, sessionId) => void (await db.session.update({ where: { id: sessionId }, data: { completedAt: clockNow } })),
@@ -186,6 +187,11 @@ async function runMovesAndEnds(w: World, runId: string, scheduleId: string, rule
 function code(error: unknown): string | undefined {
   const r = (error as { getResponse?: () => unknown }).getResponse?.();
   return (r as { code?: string } | undefined)?.code;
+}
+
+function message(error: unknown): string | undefined {
+  const r = (error as { getResponse?: () => unknown }).getResponse?.();
+  return (r as { message?: string } | undefined)?.message;
 }
 
 async function startedIn(scheduleId: string, from: Date, to: Date): Promise<number> {
@@ -310,6 +316,10 @@ test('3. the owner\'s Run now starts over budget and counts; a session\'s Run no
   const runsBefore = await db.scheduleRun.count({ where: { scheduleId: s.id } });
   await assert.rejects(runs.runNow(w.agent, s.id), (error: unknown) => {
     assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
+    assert.equal(
+      message(error),
+      'This schedule has started 1 run in the past 7 days; its owner allowed 1 a week. Only the owner can run it now.',
+    );
     return true;
   });
   assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), runsBefore, 'a refused Run now writes no run');
@@ -330,7 +340,28 @@ test('3. the owner\'s Run now starts over budget and counts; a session\'s Run no
 
   // The owner's Run now with only owner presses in the window: still starts.
   const again = await runs.runNow(w.owner, s.id);
-  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: again.id } })).state, 'RUNNING');
+  const thrice = await db.scheduleRun.findUniqueOrThrow({ where: { id: again.id } });
+  assert.equal(thrice.state, 'RUNNING');
+  await delivered(thrice.sessionId!);
+  advance(MINUTE);
+  await runs.report(w.ownerId, thrice.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  const last = await runs.runNow(w.owner, s.id);
+  const fourth = await db.scheduleRun.findUniqueOrThrow({ where: { id: last.id } });
+  assert.equal(fourth.state, 'RUNNING');
+  await delivered(fourth.sessionId!);
+  advance(MINUTE);
+  await runs.report(w.ownerId, fourth.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+
+  // Four started of one allowed (the production case): the refusal names the four started, not the one allowed.
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id, startedAt: { not: null } } }), 4);
+  await assert.rejects(runs.runNow(w.agent, s.id), (error: unknown) => {
+    assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
+    assert.equal(
+      message(error),
+      'This schedule has started 4 runs in the past 7 days; its owner allowed 1 a week. Only the owner can run it now.',
+    );
+    return true;
+  });
 });
 
 test('4. a start that never reached its engine, retried three times, is one start', { skip }, async () => {

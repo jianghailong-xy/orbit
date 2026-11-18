@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { getSessionGuests, inviteSessionGuest, removeSessionGuest } from '../api';
+import { useState, type ReactNode } from 'react';
+import { getSessionGuests, getSessionGuestSuggestions, inviteSessionGuest, removeSessionGuest } from '../api';
+import { lastInvitedLabel, matchGuestSuggestions, type GuestSuggestionMatch, type MatchRange } from '../lib/guestSuggestions';
 import { countOf } from '../lib/shareLinks';
 import { useToast } from '../lib/toast';
+import { Autocomplete } from './ui/Autocomplete';
 import { Avatar } from './ui/Avatar';
 import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
-import { Input } from './ui/Input';
 
 /** When an invitation's email went out, as the row says it: the hour and minute, local time. */
 function clockTime(iso: string): string {
@@ -42,6 +43,36 @@ export function guestConsequence(runnerName: string, permissionMode: string): { 
 }
 
 export const guestsQueryKey = (sessionId: string) => ['session-guests', sessionId] as const;
+const suggestionsQueryKey = (sessionId: string) => ['session-guest-suggestions', sessionId] as const;
+
+/** `text` with the part that matched what was typed in bold. */
+function marked(text: string, range: MatchRange | null): ReactNode {
+  if (!range) return text;
+  return (
+    <>
+      {text.slice(0, range[0])}
+      <b>{text.slice(range[0], range[1])}</b>
+      {text.slice(range[1])}
+    </>
+  );
+}
+
+/** One suggestion under the email field: who, their email, and when the owner last invited them. */
+function SuggestionRow({ match }: { match: GuestSuggestionMatch }) {
+  const { person } = match;
+  return (
+    <span className="share-suggestion">
+      <Avatar size={24} className="share-person-avatar">
+        {person.name.trim().charAt(0).toUpperCase() || '?'}
+      </Avatar>
+      <span className="share-suggestion-main">
+        <span className="share-suggestion-name">{marked(person.name, match.name)}</span>
+        <span className="share-suggestion-email">{marked(person.email, match.email)}</span>
+      </span>
+      <span className="share-suggestion-when">{lastInvitedLabel(person.lastInvitedAt)}</span>
+    </span>
+  );
+}
 
 /**
  * People who can reply: the Share dialog's section for a session (docs/session-guests-design.md §3; board
@@ -61,7 +92,16 @@ export function SessionGuestsSection({
   const qc = useQueryClient();
   const message = useToast();
   const key = guestsQueryKey(sessionId);
-  const guestsQ = useQuery({ queryKey: key, queryFn: () => getSessionGuests(sessionId) });
+  const guestsQ = useQuery({
+    queryKey: key,
+    meta: { entities: ['session'] },
+    queryFn: () => getSessionGuests(sessionId),
+  });
+  const suggestionsQ = useQuery({
+    queryKey: suggestionsQueryKey(sessionId),
+    meta: { entities: ['session'] },
+    queryFn: () => getSessionGuestSuggestions(sessionId),
+  });
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -70,6 +110,8 @@ export function SessionGuestsSection({
   const settle = (answer: Awaited<ReturnType<typeof getSessionGuests>>) => {
     qc.setQueryData(key, answer);
     void qc.invalidateQueries({ queryKey: ['sessions'] });
+    // Who can now reply here leaves the suggestions; someone removed comes back to them.
+    void qc.invalidateQueries({ queryKey: suggestionsQueryKey(sessionId) });
   };
   const inviteMut = useMutation({
     mutationFn: (to: string) => inviteSessionGuest(sessionId, to),
@@ -87,6 +129,7 @@ export function SessionGuestsSection({
   });
 
   const guests = guestsQ.data?.guests ?? [];
+  const matches = matchGuestSuggestions(suggestionsQ.data?.people ?? [], email);
   const consequence = guestConsequence(runnerName, permissionMode);
   const needsAcknowledge = consequence.warn && guestsQ.isSuccess && guests.length === 0;
   const canInvite = email.trim() !== '' && !inviteMut.isPending && (!needsAcknowledge || acknowledged);
@@ -105,16 +148,21 @@ export function SessionGuestsSection({
             invite();
           }}
         >
-          <Input
+          <Autocomplete
+            className="share-people-email"
             type="email"
             aria-label="Email of an Orbit account"
             placeholder="Email of an Orbit account"
             value={email}
             invalid={!!error}
-            onChange={(e) => {
-              setEmail(e.target.value);
+            onValueChange={(next) => {
+              setEmail(next);
               setError(null);
             }}
+            items={matches}
+            itemToValue={(match) => match.person.email}
+            renderItem={(match) => <SuggestionRow match={match} />}
+            header={email.trim() === '' ? <div className="share-suggestion-head">People you’ve invited before</div> : undefined}
           />
           <Button type="submit" variant="primary" disabled={!canInvite} loading={inviteMut.isPending}>
             Invite

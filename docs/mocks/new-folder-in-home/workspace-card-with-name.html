@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>新机器的卡片：只用来建 workspace</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="board.css">
+<style>
+  .msc .msc-body { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+  .msc .msc-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .msc .msc-row .msc-input { flex: 1; max-width: none; display: flex; }
+  .msc .msc-line { margin-top: 5px; min-height: 17px; }
+  .msc .msc-foot2 { margin-top: 14px; color: var(--text-3); font-size: 12px; }
+  .app .msc { max-width: 600px; }
+</style>
+<body>
+<div class="board">
+<h1>新机器的卡片：只用来建 workspace（含名字）</h1>
+<div class="lede">
+所有者 2026-11-16：线上这张卡还带着「Sign in Claude Code」这一步，可它现在的用途就是<b>建 workspace</b>。方案：卡片只问一件事，即 workspace 放在哪个文件夹；
+输入框旁边直接是 <b>Create workspace</b>，按一下就建好，然后进入这个 workspace 的新会话页。登录这一步从卡片上拿掉，挪到真正用得着它的地方（见 ③）。界面文案全部是英文。
+</div>
+
+<div class="section"><span class="sec now">① 线上现在</span><span class="sec-sub">两步加一个底部按钮：先「Use this folder」，再登录，最后才是「Create workspace」</span></div>
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">现在（df0fe42fb）</div>
+  <div class="app"><span class="fr-label">today</span>
+  <div class="msc">
+    <div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span>
+      <div><div class="msc-title">Set up jdcloud</div><div class="msc-sub">Pick where it works and sign in a coding CLI, then create the workspace.</div></div></div>
+    <div class="msc-body">
+      <div class="msc-step-title">Folder</div>
+      <div class="msc-step-help">Where on jdcloud should sessions work? They can read and change everything in it.</div>
+      <div class="msc-row"><span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/root/</span></span><input class="orbit-input-field" placeholder="name"></span></div>
+      <div class="msc-line msc-meta">Uses this folder if it exists, otherwise creates it.</div>
+      <button class="orbit-button orbit-button-middle msc-use" disabled>Use this folder</button>
+    </div>
+    <div class="msc-body" style="position:relative"><span class="num m" style="left:-12px;top:10px">1</span>
+      <div class="msc-step-title">2 · Sign in Claude Code on jdcloud</div>
+      <div class="msc-step-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div>
+      <div class="msc-row"><button class="orbit-button orbit-button-primary orbit-button-middle">Sign in to Claude Code</button><button class="orbit-button orbit-button-middle">Use an API key instead</button></div>
+    </div>
+    <div class="msc-foot2">Nothing is created until you create the workspace. You can rename it or change these later.</div>
+    <div style="text-align:right;margin-top:10px;position:relative"><span class="num m" style="right:-12px;top:-6px">2</span><button class="orbit-button orbit-button-middle" disabled>Create workspace</button></div>
+  </div></div>
+</figure>
+<figure class="tile sumtile">
+  <div class="tile-title">问题</div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">登录和建 workspace 是两回事。机器没登录也能建 workspace；登录了的机器还要再看一遍这一步。登录本来就在机器的 Settings 页（Engines）里能做，会话里 CLI 掉线时对话里也会弹登录卡。</span></li>
+    <li><span class="num">2</span><span class="t">一个文件夹要按两次：先「Use this folder」确认，再到底部按「Create workspace」。只剩一个问题，就不需要单独的确认步骤。</span></li>
+  </ul>
+</figure>
+</div>
+
+<div class="section"><span class="sec after">② 方案</span><span class="sec-sub">一个文件夹，一个按钮</span></div>
+<div class="grid2" id="frames"></div>
+<figure class="tile wide">
+  <ul class="notes">
+    <li><span class="num">3</span><span class="t">标题改成 <i>New workspace on jdcloud</i>，副标题说清楚这张卡做什么。没有步骤编号，没有「Use this folder」这一步，也没有底部的 foot 段落。</span></li>
+    <li><span class="num">4</span><span class="t">按钮在最后一个输入框（Name）右边，名字是 <i>Create workspace</i>。机器回答了这个路径，并且可以用（不存在就新建，或者是已有的文件夹）时才能点。按 Enter 等于点按钮。</span></li>
+    <li><span class="num">5</span><span class="t">建的时候按钮显示加载中，输入框锁住。建好以后直接进入这个 workspace 的新会话页，和今天按「Create workspace」以后一样。</span></li>
+    <li><span class="num">6</span><span class="t">失败时留在卡上，输入的名字不清掉，下面一行写原因（沿用今天的 <i>Couldn’t create the workspace: …</i>）。可以改了再按。</span></li>
+    <li><span class="num">8</span><span class="t"><b>Name</b>：默认和文件夹名一样，跟着 Folder 一起变（打 <code>orbit</code>，名字就是 <code>orbit</code>）。没输入文件夹时，占位符写 <i>Same as the folder</i>。</span></li>
+    <li><span class="num">9</span><span class="t">改过名字以后就不再跟着文件夹变，再改文件夹也不会覆盖。名字可以是任何文字（空格、中文都行），首尾空格会去掉。和已有 workspace 重名是允许的，服务端今天也不拦。</span></li>
+    <li><span class="num">10</span><span class="t">把名字删光就不能建，下面一行写 <i>Give the workspace a name.</i>。再清空也不会自动填回文件夹名：清空是用户的明确操作。</span></li>
+    <li><span class="num">7</span><span class="t">机器离线、正在连接、版本太旧：顶部提示和今天一样，输入框和按钮不可用。去掉了登录那一步以后，提示里就不再说「You can sign in meanwhile」。</span></li>
+  </ul>
+</figure>
+
+<div class="section"><span class="sec after">③ 登录去哪了</span><span class="sec-sub">不在建 workspace 的卡上，放在用得着它的地方</span></div>
+<table class="cmp" style="background:#fff;border-radius:14px">
+<tr><th>场景</th><th>今天</th><th>方案</th></tr>
+<tr><td>建 workspace</td><td>卡上第 2 步，没做完就不能建</td><td>不问。没登录也能建。</td></tr>
+<tr><td>在新 workspace 里发第一条消息</td><td>—（卡上已经登录过了）</td><td>和任何 workspace 一样：机器上这个 CLI 没登录，会话开始时对话里出现登录卡（<code>Transcript</code> 里已有的 <code>RunnerSignIn</code>），也可以换引擎或者用 API key。</td></tr>
+<tr><td>主动去登录</td><td>机器的 Settings 页 → Engines</td><td>不变。</td></tr>
+</table>
+<ul class="notes" style="margin-top:12px">
+  <li><span class="num">?</span><span class="t"><b>待你定：</b>新会话页在发送之前要不要先提示「Claude Code isn’t signed in on jdcloud」，并给一个 Sign in 按钮？我的建议是要，在 composer 上方显示一行，不挡发送；如果不加，就要等第一条消息发出去失败以后才会看到登录卡。</span></li>
+</ul>
+</div>
+<script>
+// [title, label, folder, tone, line, button, badge, name, nameState]  nameState: follow | edited | empty
+const F = [
+  ['P1 · 打开时', 'after · empty', '', 'meta', 'Uses this folder if it exists, otherwise creates it.', 'off', 3, '', 'follow'],
+  ['P2 · 新文件夹：名字跟着文件夹名', 'after · new', 'orbit', 'meta', 'New folder · created with the workspace.', 'on', 8, 'orbit', 'follow'],
+  ['P3 · 已有的仓库：直接用', 'after · existing', 'develop', 'ok', 'Found · git repository · main', 'on', 4, 'develop', 'follow'],
+  ['P4 · 改过的名字：不再跟着文件夹', 'after · renamed', 'develop', 'ok', 'Found · git repository · main', 'on', 9, 'Orbit backend', 'edited'],
+  ['P5 · 名字清空：不能建', 'after · no name', 'develop', 'ok', 'Found · git repository · main', 'off', 10, '', 'empty'],
+  ['P6 · 建的时候', 'after · creating', 'orbit', 'meta', 'New folder · created with the workspace.', 'loading', 5, 'orbit', 'follow'],
+  ['P7 · 失败', 'after · failed', 'orbit', 'bad', 'Couldn’t create the workspace: This runner is too old to make a new folder — update it.', 'on', 6, 'orbit', 'follow'],
+  ['P8 · 机器离线', 'after · offline', '', 'meta', 'Uses this folder if it exists, otherwise creates it.', 'off', 7, '', 'follow'],
+];
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+document.getElementById('frames').innerHTML = F.map(([title, label, value, tone, text, btn, n, wsName, nameState]) => `
+<figure class="tile">
+  <div class="tile-title">${title}</div>
+  <div class="app"><span class="fr-label">${label}</span>
+  <div class="msc" style="position:relative">
+    <div class="msc-head"><span class="msc-head-icon"><i data-ic="desktop"></i></span>
+      <div><div class="msc-title">New workspace on jdcloud</div><div class="msc-sub">Pick the folder on jdcloud this workspace works in. Its sessions can read and change everything in it.</div></div></div>
+    ${label === 'after · offline' ? '<div class="msc-notice">jdcloud is offline. It can’t check folders until it’s back.</div>' : ''}
+    <div class="msc-body">
+      <div class="msc-step-title">Folder</div>
+      <div class="msc-row">
+        <span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/root/</span></span><input class="orbit-input-field" placeholder="name" value="${esc(value)}" ${btn === 'loading' || label === 'after · offline' ? 'disabled' : ''}></span>
+      </div>
+      <div class="msc-line ${tone === 'meta' ? 'msc-meta' : 'msc-verdict ' + tone}">${esc(text)}</div>
+      <div class="msc-step-title" style="margin-top:12px">Name</div>
+      <div class="msc-row">
+        <span class="orbit-text-control orbit-input msc-input${nameState === 'empty' ? ' hl' : ''}"><input class="orbit-input-field" placeholder="${esc(value || 'Same as the folder')}" value="${esc(wsName)}" ${btn === 'loading' || label === 'after · offline' ? 'disabled' : ''}></span>
+        <button class="orbit-button ${btn === 'off' ? '' : 'orbit-button-primary'} orbit-button-middle" ${btn === 'on' ? '' : 'disabled'}>${btn === 'loading' ? 'Creating…' : 'Create workspace'}</button>
+      </div>
+      <div class="msc-line ${nameState === 'empty' ? 'msc-verdict bad' : 'msc-meta'}">${nameState === 'empty' ? 'Give the workspace a name.' : nameState === 'edited' ? 'Shown in the sidebar. You can rename it later.' : 'Same as the folder unless you change it. Shown in the sidebar.'}</div>
+    </div>
+    <span class="num m" style="right:-12px;top:${n >= 8 ? 205 : 120}px">${n}</span>
+  </div></div>
+</figure>`).join('');
+</script>
+<script src="icons.js"></script>
+</body>
+</html>

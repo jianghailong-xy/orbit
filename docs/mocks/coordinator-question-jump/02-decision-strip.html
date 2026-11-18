@@ -1,0 +1,148 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: Inter; src: url(/var/tmp/landing-mock-render/fonts/Inter.ttf); }
+@font-face { font-family: NotoSC; src: url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf); }
+/* Tokens copied from src/web/src/index.css (light :root). */
+:root { --bg-base:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --brand:#3370ff; --brand-tint:#eaf1ff;
+  --warning:#c2710c; --warning-solid:#fa8c16; --warning-bg:#fff4e6; --warning-border:#ffd591; --danger:#d83931; }
+* { box-sizing: border-box; }
+body { margin:0; background:#eef0f3; font-family: Inter, NotoSC, sans-serif; color:var(--text-1); }
+.board { width:1460px; padding:36px 40px 40px; }
+h1 { font-size:26px; margin:0 0 6px; }
+.b-lead { color:var(--text-2); font-size:15px; margin:0 0 24px; line-height:1.6; }
+.b-cols { display:flex; gap:28px; }
+.b-col { flex:1; min-width:0; }
+.b-tag { display:inline-block; font-size:14px; font-weight:600; padding:3px 10px; border-radius:6px; margin-bottom:10px; }
+.b-today { background:#fde8e7; color:var(--danger); } .b-new { background:#e6f4ea; color:#1f7a3a; }
+.b-win { background:var(--bg-base); border:1px solid var(--border); border-radius:12px; overflow:hidden; height:640px; position:relative; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+.workspace-header { padding:14px 18px 12px; border-bottom:1px solid var(--border-subtle); }
+.workspace-title-row { display:flex; align-items:center; gap:8px; }
+.workspace-title { font-size:16px; font-weight:600; }
+.coord-badge { font-size:11px; color:var(--brand); background:var(--brand-tint); border-radius:4px; padding:1px 6px; font-weight:600; }
+.workspace-sub { font-size:12.5px; color:var(--text-3); margin-top:4px; display:flex; align-items:center; gap:6px; }
+.b-waitjump { display:inline-flex; align-items:center; gap:4px; color:var(--warning); background:var(--warning-bg);
+  border:1px solid var(--warning-border); border-radius:999px; padding:1px 9px 1px 7px; font-weight:600; font-size:12.5px; cursor:pointer; }
+.b-waitjump svg { width:12px; height:12px; }
+.b-scroll { position:absolute; top:62px; bottom:64px; left:0; right:0; overflow:hidden; padding:14px 22px; background:var(--bg-base); }
+.b-turn { margin-bottom:14px; font-size:13px; line-height:1.6; color:var(--text-1); }
+.b-user { margin-left:auto; max-width:70%; background:var(--bg-sunken); border-radius:10px; padding:8px 12px; }
+.b-tool { font-size:12px; color:var(--text-3); border:1px solid var(--border-subtle); border-radius:8px; padding:6px 10px; margin-bottom:10px; }
+.workspace-composer { position:absolute; bottom:0; left:0; right:0; height:64px; border-top:1px solid var(--border-subtle); padding:12px 18px; background:var(--bg-base); }
+.b-box { border:1px solid var(--border); border-radius:10px; height:40px; color:var(--text-3); font-size:13px; padding:10px 12px; }
+.approval-card.coordinator-question { border:1px solid var(--warning-border); border-radius:10px; background:#fff; overflow:hidden; }
+.coordinator-question.b-flash { box-shadow:0 0 0 3px rgba(250,140,22,.35); }
+.coordinator-question-head { background:var(--warning-bg); padding:8px 12px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; }
+.criteria-provenance { font-size:10.5px; color:var(--brand); background:var(--brand-tint); padding:1px 6px; border-radius:4px; letter-spacing:.3px; }
+.coordinator-question-body { padding:10px 12px; font-size:13px; }
+.coordinator-question-option { display:block; border:1px solid var(--border-subtle); border-radius:8px; padding:6px 10px; margin-top:6px; font-size:12.5px; }
+.coordinator-question-recommended { color:#1f7a3a; font-size:11px; margin-left:6px; font-weight:600; }
+.coordinator-question-actions { padding:8px 12px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; }
+.b-btn { background:var(--brand); color:#fff; border-radius:6px; padding:4px 12px; font-size:12.5px; }
+.b-asked { color:var(--text-3); font-size:12px; }
+.b-fold { position:absolute; left:0; right:0; border-top:2px dashed var(--danger); }
+.b-foldlabel { position:absolute; right:10px; font-size:12px; color:var(--danger); background:#fff; padding:0 6px; transform:translateY(-50%); }
+.b-mark { position:absolute; width:26px; height:26px; border-radius:50%; background:var(--danger); color:#fff; font-weight:700; font-size:14px;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 3px #fff; z-index:5; }
+.b-mark.g { background:#1f7a3a; }
+.b-ring { position:absolute; border:2px solid var(--danger); border-radius:8px; z-index:4; }
+.b-ring.g { border-color:#1f7a3a; }
+.b-notes { margin-top:14px; font-size:14px; line-height:1.7; color:var(--text-1); }
+.b-notes li { margin-bottom:4px; }
+.b-notes b.r { color:var(--danger); } .b-notes b.g { color:#1f7a3a; }
+.b-dec { margin-top:26px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px 22px; }
+.b-dec h2 { font-size:18px; margin:0 0 10px; }
+.b-dec table { border-collapse:collapse; width:100%; font-size:14px; }
+.b-dec td, .b-dec th { border-top:1px solid var(--border-subtle); padding:9px 10px; vertical-align:top; text-align:left; line-height:1.55; }
+.b-dec th { color:var(--text-2); font-weight:600; border-top:none; }
+.b-rec { color:#1f7a3a; font-weight:600; }
+.b-code { font-family: monospace; font-size:12.5px; background:var(--bg-sunken); padding:0 4px; border-radius:3px; }
+
+/* Copied from index.css .decision-strip* (light). */
+.decision-strip { border-bottom:1px solid var(--border-subtle); background:var(--bg-sunken); }
+.decision-strip-line { display:flex; align-items:center; gap:8px; width:100%; padding:7px 12px; font-size:13px; line-height:20px; color:var(--text-1); }
+.decision-strip-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#3b82f6; }
+.decision-strip-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.decision-strip-quiet, .decision-strip-sep { flex:none; white-space:nowrap; color:var(--text-3); }
+.decision-strip-caret { flex:none; margin-left:auto; color:var(--text-3); }
+.b-scroll2 { position:absolute; top:96px; bottom:64px; left:0; right:0; overflow:hidden; padding:14px 22px; }
+.b-small { font-size:12.5px; color:var(--text-2); margin:8px 0 0; }
+.b-mini { margin-top:12px; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; }
+.b-mini .b-cap { font-size:12px; color:var(--text-2); padding:6px 12px; background:#fff; border-bottom:1px solid var(--border-subtle); }
+</style></head>
+<body><div class="board">
+<h1>“Question from coordinator” 点得到问题 — 效果图 02：放进会话里的审批条</h1>
+<p class="b-lead">按你说的，参照会话里已有的审批条（标题下钉住的那一行，<span class="b-code">DecisionStrip</span>）：它本来就是“一行 + 点了跳到卡片”，Escalated to you、Paused、证据、标准变更都在上面。<b>唯独 coordinator 的问题被它主动过滤掉了</b>（<span class="b-code">DecisionRail.tsx:641</span>，理由是“问题有自己的卡”）。所以只要把问题放进这条，不再给标题加 01 板里的胶囊。外壳手绘；审批条、问题卡用控制台真实类名和 index.css 的值。</p>
+
+<div class="b-cols">
+<div class="b-col">
+  <span class="b-tag b-today">今天</span>
+  <div class="b-win">
+    <div class="workspace-header">
+      <div class="workspace-title-row"><span class="workspace-title">order-service migration</span><span class="coord-badge">Coordinator</span></div>
+      <div class="workspace-sub">Question from coordinator · Parked · 13:48</div>
+    </div>
+    <div class="b-scroll"><div class="b-turn">Task <b>Wire order events to RocketMQ</b> reported back: integration tests could not reach the broker.</div>
+      <div class="b-tool">Bash · curl nacos:8848/nacos/v1/ns/instance/list — connection refused</div>
+      <div class="b-turn">Both Nacos and RocketMQ are down on the shared environment. I can't restore them from here, so I've asked you.</div>
+      <div class="b-turn b-user">Keep going with the payment tasks meanwhile.</div>
+      <div class="b-turn">OK — the two payment tasks don't need the broker. Started both; I'll report when they land.</div>
+      <div class="b-tool">task_start · Refund idempotency key · Payment webhook retries</div>
+      <div class="b-turn">Refund idempotency key landed on main. Webhook retries is still running its checks…</div><div class="b-turn">…</div></div>
+    <div class="b-fold" style="top:540px"></div><div class="b-foldlabel" style="top:540px">问题卡在这下面，屏幕外</div>
+    <div class="workspace-composer"><div class="b-box">Message the coordinator…</div></div>
+    <div class="b-ring" style="left:14px; top:34px; width:170px; height:22px"></div>
+    <div class="b-mark" style="left:300px; top:32px">1</div>
+  </div>
+  <ul class="b-notes">
+    <li><b class="r">①</b> 标题说 “Question from coordinator”，但审批条一行都没有 —— 别的等你事项（Escalated to you、Paused…）都会在这里出现，偏偏问题不在。</li>
+    <li>标题文字和图标都点不动；卡在对话末尾，翻上去之后找不回来。</li>
+  </ul>
+</div>
+
+<div class="b-col">
+  <span class="b-tag b-new">提议 · 点之后</span>
+  <div class="b-win">
+    <div class="workspace-header">
+      <div class="workspace-title-row"><span class="workspace-title">order-service migration</span><span class="coord-badge">Coordinator</span></div>
+      <div class="workspace-sub">Question from coordinator · Parked · 13:48</div>
+    </div>
+    <div class="decision-strip"><div class="decision-strip-line"><span class="decision-strip-dot"></span><span class="decision-strip-title">Question from coordinator · Nacos and RocketMQ are unavailable on the shared environment. Can you restore them?</span><span class="decision-strip-quiet">22m</span><span class="decision-strip-caret">↓</span></div></div>
+    <div class="b-scroll2"><div class="b-turn">Refund idempotency key landed on main. Webhook retries is still running its checks…</div><div class="approval-card coordinator-question b-flash">
+        <div class="approval-head coordinator-question-head">The coordinator has a question <span class="criteria-provenance">FROM COORDINATOR</span></div>
+        <div class="approval-body coordinator-question-body">
+          <div class="coordinator-question-text">Nacos and RocketMQ are unavailable on the shared environment. Can you restore them?</div>
+          <span class="coordinator-question-option">I'll restore both now<span class="coordinator-question-recommended">Recommended</span></span>
+          <span class="coordinator-question-option">Skip broker-dependent tasks for now</span>
+          <span class="coordinator-question-option">Other — say it in my own words</span>
+        </div>
+        <div class="approval-actions coordinator-question-actions"><span class="b-asked">asked 22m ago</span><span class="b-btn">Send answer</span></div>
+      </div></div>
+    <div class="workspace-composer"><div class="b-box">Message the coordinator…</div></div>
+    <div class="b-ring g" style="left:3px; right:3px; top:61px; height:34px"></div>
+    <div class="b-mark g" style="right:14px; top:22px">1</div>
+    <div class="b-mark g" style="right:14px; top:146px">2</div>
+  </div>
+  <ul class="b-notes">
+    <li><b class="g">①</b> 审批条多一种行：<b>Question from coordinator · 问题原文</b>，后面是等了多久、↓。前半句就是标题和会话列表里那个词，后半句说是哪一个 —— 与 “Escalated to you · …” 同一写法。</li>
+    <li><b class="g">②</b> 点这一行：滚到问题卡（卡顶停在审批条下方，和点其它行一样），描边闪一下。答完后，问题从这一行消失，因为两者读的是同一份数据。</li>
+  </ul>
+  <div class="b-mini">
+    <div class="b-cap">同时有别的等你事项时：一行只说一件，“1 of 2”，每点一次去下一张卡（审批条现有行为，不改）</div>
+    <div class="decision-strip"><div class="decision-strip-line"><span class="decision-strip-dot"></span><span class="decision-strip-title">Escalated to you · Landing check failed · Payment webhook retries</span><span class="decision-strip-quiet">1h</span><span class="decision-strip-sep">·</span><span class="decision-strip-quiet">1 of 2</span><span class="decision-strip-caret">↓</span></div></div>
+  </div>
+</div>
+</div>
+
+<div class="b-dec">
+  <h2>待你决定</h2>
+  <table>
+    <tr><th style="width:24%">问题</th><th style="width:40%">选项</th><th>建议</th></tr>
+    <tr><td>A. 审批条上这一行怎么写</td><td>A1 <b>Question from coordinator · 问题原文</b>（如上图）<br>A2 只写卡片标题 “The coordinator has a question”</td><td class="b-rec">A1 —— 和标题、会话列表同一个词，后半句一眼认出是哪个问题；有两个问题时也分得开。</td></tr>
+    <tr><td>B. 排在审批条里的哪个位置</td><td>B1 紧跟 Escalated / Paused 之后（都是“只有你能处理的事项”）<br>B2 放在证据、标准变更之后</td><td class="b-rec">B1 —— 问题会挡住 coordinator 往下走，比证据更急；Paused 仍排第一，不变。</td></tr>
+    <tr><td>C. 从项目行打开 coordinator 时</td><td>C1 也直接落到问题卡（11-14 的“打开即定位”扩到 coordinator 自己在等的情况）<br>C2 不改，靠审批条</td><td class="b-rec">C1 —— 从写着“等你”的项目行进来，第一眼就该是卡；一处条件改动。</td></tr>
+    <tr><td>D. 01 板的标题胶囊</td><td>D1 不做，入口统一到审批条<br>D2 也做</td><td class="b-rec">D1 —— 审批条就是“指向卡片的一行”，再加一个就成了同一件事两个入口。</td></tr>
+  </table>
+  <p class="b-small">本次只改 Web。原生会话里有自己的导航胶囊（只显示本会话的等待），是否已包含问题，落地前我会核对，不一致再单独出板。</p>
+</div>
+</div></body></html>

@@ -5,7 +5,7 @@ import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, translationAvailable } from './translation';
-import { translationLanguages } from './turn-translation';
+import { isSlashCommand, translationLanguages } from './turn-translation';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
@@ -44,7 +44,7 @@ function matches(row: Row, where: Row): boolean {
   });
 }
 
-function harness(opts: { status?: RunStatus; preferences?: Row } = {}) {
+function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row } = {}) {
   const session: Row = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -56,6 +56,7 @@ function harness(opts: { status?: RunStatus; preferences?: Row } = {}) {
     assignedRunnerId: null,
     mergeStatus: null,
     commitStatus: null,
+    ...opts.session,
   };
   const preferences = opts.preferences ?? { translationEnabled: true, translationLanguage: 'zh-Hans' };
   const turns: Row[] = [];
@@ -204,12 +205,34 @@ test('translate fails on the 20 s timeout, on an error answer, and without a key
   await assert.rejects(pending, (e: unknown) => e instanceof TranslationFailed && e.reason === 'TIMEOUT');
   mock.timers.reset();
 
-  stubDeepSeek([503]);
+  stubDeepSeek([400]);
   await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
 
   delete process.env.DEEPSEEK_API_KEY;
   assert.equal(translationAvailable(), false);
   await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'NO_KEY');
+});
+
+test('translate tries a 429/5xx or unreachable translator again, three times in all, and not a 4xx', async () => {
+  let bodies = stubDeepSeek([503, 429, ENGLISH]);
+  assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
+  assert.equal(bodies.length, 3);
+
+  bodies = stubDeepSeek([500, 502, 503, ENGLISH]);
+  await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
+  assert.equal(bodies.length, 3, 'gives up after the third');
+
+  bodies = stubDeepSeek([400, ENGLISH]);
+  await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'HTTP');
+  assert.equal(bodies.length, 1, 'a 4xx is final');
+
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    if (calls++ === 0) throw new TypeError('fetch failed');
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: ENGLISH } }] }) } as Response;
+  }) as typeof fetch;
+  assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
+  assert.equal(calls, 2);
 });
 
 test('the owner preference: absent is off, a language defaults to zh-Hans, the agent\'s to English, and no key means none', async () => {
@@ -311,7 +334,7 @@ test('a message sent while a turn runs is released into the queue behind it, and
 });
 
 test('a failed translation holds the message and delivers nothing (1A)', async () => {
-  stubDeepSeek([500]);
+  stubDeepSeek([500, 500, 500]);
   const h = harness();
   await h.send();
   await h.service.translationsSettled();
@@ -339,7 +362,7 @@ test('a translation past 20 s counts as failed, and the message is not delivered
 });
 
 test('Retry translates a failed message again and delivers it', async () => {
-  stubDeepSeek([500, ENGLISH]);
+  stubDeepSeek([500, 500, 500, ENGLISH]);
   const h = harness();
   const { turnId } = await h.send();
   await h.service.translationsSettled();
@@ -357,7 +380,7 @@ test('Retry translates a failed message again and delivers it', async () => {
 });
 
 test('Send as written delivers the original, untranslated', async () => {
-  stubDeepSeek([500]);
+  stubDeepSeek([500, 500, 500]);
   const h = harness();
   const { turnId } = await h.send();
   await h.service.translationsSettled();
@@ -417,6 +440,38 @@ test('a platform delivery is never translated, even with the owner\'s switch on'
   assert.equal(bodies.length, 0);
 });
 
+test('optimizedTranslation (the prompt optimizer under Translation): held as usual, released with the optimizer\'s text, DeepSeek not asked', async () => {
+  const bodies = stubDeepSeek([ENGLISH]);
+  const h = harness();
+  const answer = await h.service.createTurn(
+    OWNER_ID, SESSION_ID,
+    { clientTurnId: 'optimized-2', content: ORIGINAL, intent: 'NEXT_TURN', optimizedTranslation: ENGLISH_RESTORED },
+    { translate: true },
+  );
+  assert.equal(answer.translation?.state, 'TRANSLATING');
+  await h.service.translationsSettled();
+  assert.equal(bodies.length, 0);
+  assert.equal(h.turns[0].status, 'PENDING');
+  assert.equal(h.turns[0].content, ENGLISH_RESTORED);
+  assert.equal(h.turns[0].displayPrompt, ORIGINAL);
+  assert.equal(h.turns[0].translationState, 'DONE');
+  assert.equal(h.turns[0].translationLang, 'zh-Hans');
+  assert.equal(h.session.status, RunStatus.PENDING);
+});
+
+test('optimizedTranslation that is not a string is a 400, and nothing is written', async () => {
+  const h = harness();
+  await assert.rejects(
+    h.service.createTurn(
+      OWNER_ID, SESSION_ID,
+      { clientTurnId: 'optimized-3', content: ORIGINAL, intent: 'NEXT_TURN', optimizedTranslation: 42 as never },
+      { translate: true },
+    ),
+    /optimizedTranslation must be a string/,
+  );
+  assert.equal(h.turns.length, 0);
+});
+
 test('skipTranslation (the prompt optimizer\'s English): the send is not held, carries no translation, and DeepSeek is not asked', async () => {
   const bodies = stubDeepSeek([ENGLISH]);
   const h = harness();
@@ -435,4 +490,87 @@ test('skipTranslation (the prompt optimizer\'s English): the send is not held, c
   assert.equal(h.wakes.queue, 1);
   await h.service.translationsSettled();
   assert.equal(bodies.length, 0);
+});
+
+test('a slash command goes as written: not held, no translation, DeepSeek not asked', async () => {
+  for (const [i, command] of ['/compact', '/review 修一下登录跳转', '/plugin:cmd'].entries()) {
+    const bodies = stubDeepSeek([ENGLISH]);
+    const h = harness();
+    const answer = await h.service.createTurn(
+      OWNER_ID, SESSION_ID, { clientTurnId: `slash-${i}`, content: command, intent: 'NEXT_TURN' }, { translate: true },
+    );
+    assert.equal(answer.translation, undefined, command);
+    assert.equal(h.turns[0].status, 'PENDING', command);
+    assert.equal(h.turns[0].content, command);
+    assert.equal(h.turns[0].translationState, null, command);
+    await h.service.translationsSettled();
+    assert.equal(bodies.length, 0, command);
+  }
+});
+
+test('text that only starts with a slash (a path, a comment) is still translated', () => {
+  assert.equal(isSlashCommand('/compact'), true);
+  assert.equal(isSlashCommand('  /review the fix'), true);
+  assert.equal(isSlashCommand('/tmp/foo 删掉吧'), false);
+  assert.equal(isSlashCommand('// TODO 看一下'), false);
+  assert.equal(isSlashCommand('/'), false);
+  assert.equal(isSlashCommand('请运行 /compact'), false);
+});
+
+// ── "Resolve in session" with translation on ─────────────────────────────────────────────────────
+
+const SETTLED_MERGE = {
+  mergeStatus: 'conflict',
+  mergeOperationId: '33333333-3333-4333-8333-333333333333',
+  mergeOperationOwner: '44444444-4444-4444-8444-444444444444',
+  mergeError: 'CONFLICT (content): Merge conflict in src/a.ts',
+  mergedAt: null,
+  mergedSourceSha: 'abc123',
+  branchMerged: false,
+};
+const SETTLED_COMMIT = {
+  commitStatus: 'error',
+  commitOperationId: '55555555-5555-4555-8555-555555555555',
+  commitOperationOwner: '66666666-6666-4666-8666-666666666666',
+  commitError: 'nothing to commit',
+  commitResultMessage: null,
+};
+
+test('Resolve in session with translation on clears the settled merge and commit results, as it does with it off', async () => {
+  stubDeepSeek(['hang']);
+  const h = harness({ session: { ...SETTLED_MERGE, ...SETTLED_COMMIT } });
+  await h.service.resume(OWNER_ID, SESSION_ID, { clientTurnId: 'client-1', content: ORIGINAL }, { translate: true });
+  // The message is held for its translation, not delivered yet…
+  assert.equal(h.turns.length, 1);
+  assert.equal(h.turns[0].status, 'HELD');
+  // …and the stale failure is gone all the same, so the bar offers Merge again once the rebase is done
+  // instead of drawing the old conflict over a branch that has moved on.
+  for (const field of ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner', 'mergeError', 'mergedAt', 'mergedSourceSha', 'branchMerged',
+    'commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitError', 'commitResultMessage']) {
+    assert.equal(h.session[field], null, `${field} was left on the row`);
+  }
+});
+
+test('Resolve in session with translation on leaves a merge or commit still pending alone', async () => {
+  stubDeepSeek(['hang']);
+  const pending = {
+    ...SETTLED_MERGE, mergeStatus: 'pending', mergeError: null,
+    ...SETTLED_COMMIT, commitStatus: 'pending', commitError: null,
+  };
+  const h = harness({ session: pending });
+  await h.service.resume(OWNER_ID, SESSION_ID, { clientTurnId: 'client-1', content: ORIGINAL }, { translate: true });
+  assert.equal(h.turns[0].status, 'HELD');
+  assert.equal(h.session.mergeStatus, 'pending');
+  assert.equal(h.session.mergeOperationId, pending.mergeOperationId);
+  assert.equal(h.session.commitStatus, 'pending');
+  assert.equal(h.session.commitOperationId, pending.commitOperationId);
+});
+
+test('an ordinary translated send leaves a settled merge result where it is', async () => {
+  stubDeepSeek(['hang']);
+  const h = harness({ session: SETTLED_MERGE });
+  await h.send();
+  assert.equal(h.turns[0].status, 'HELD');
+  assert.equal(h.session.mergeStatus, 'conflict');
+  assert.equal(h.session.mergeError, SETTLED_MERGE.mergeError);
 });

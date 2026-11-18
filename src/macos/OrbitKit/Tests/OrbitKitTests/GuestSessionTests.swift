@@ -172,8 +172,61 @@ final class GuestSessionTests: XCTestCase {
         XCTAssertEqual(recorder.sent.first?.method, "POST")
         XCTAssertEqual(recorder.sent.first?.path, "/api/guest-sessions/34A/turns")
         let body = try JSONSerialization.jsonObject(with: Data(recorder.sent.first!.body.utf8)) as? [String: String]
-        // Nothing but the key and the words: no mode, model, effort or attachment.
+        // Nothing but the key and the words: no mode, model or effort, and no images named.
         XCTAssertEqual(body, ["clientTurnId": "k1", "content": "Please run the tests"])
+    }
+
+    func testAMessageCarriesItsImagesAndMayBeImagesAlone() async throws {
+        let recorder = answer(#"{"turnId":"T9","revived":false}"#, status: 201)
+        try await client().sendGuestTurn("34A", clientTurnId: "k1", content: "", attachmentIds: ["att1", "att2"])
+        XCTAssertEqual(recorder.sent.first?.path, "/api/guest-sessions/34A/turns")
+        let body = try JSONSerialization.jsonObject(with: Data(recorder.sent.first!.body.utf8)) as? [String: Any]
+        XCTAssertEqual(body?["clientTurnId"] as? String, "k1")
+        XCTAssertEqual(body?["content"] as? String, "")
+        XCTAssertEqual(body?["attachmentIds"] as? [String], ["att1", "att2"])
+    }
+
+    func testAnImageUploadsThroughTheGuestDoorNotTheOwnersAttachments() async throws {
+        let recorder = answer(#"{"id":"att7"}"#, status: 201)
+        let id = try await client().uploadGuestAttachment("34A", filename: "shot.png", mimeType: "image/png",
+                                                          data: Data("png".utf8))
+        XCTAssertEqual(id, "att7")
+        let sent = try XCTUnwrap(recorder.sent.first)
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.path, "/api/guest-sessions/34A/attachments")
+        XCTAssertNil(sent.query, "no sessionId query: the session is in the path")
+        XCTAssertTrue(sent.body.contains(#"Content-Disposition: form-data; name="file"; filename="shot.png""#))
+        XCTAssertTrue(sent.body.contains("Content-Type: image/png"))
+    }
+
+    func testTheGuestComposerTakesTheOwnersFourImageTypesUpTo5MB() {
+        for type in ["image/png", "image/jpeg", "image/webp", "image/gif"] {
+            XCTAssertNil(GuestComposer.rejectReason(mimeType: type, byteCount: 1024), type)
+        }
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "application/pdf", byteCount: 1024),
+                       "A guest can attach PNG, JPEG, WebP or GIF images only.")
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "image/heic", byteCount: 1024), GuestComposer.imagesOnly)
+        XCTAssertNil(GuestComposer.rejectReason(mimeType: "image/png", byteCount: 5 * 1024 * 1024))
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "image/png", byteCount: 5 * 1024 * 1024 + 1),
+                       "Image exceeds the 5MB limit")
+    }
+
+    func testAnImageAloneCanBeSentButNothingAtAllCannot() {
+        XCTAssertTrue(GuestComposer.canSend(text: "", imageCount: 1))
+        XCTAssertTrue(GuestComposer.canSend(text: "hi", imageCount: 0))
+        XCTAssertFalse(GuestComposer.canSend(text: "  \n ", imageCount: 0))
+    }
+
+    func testAnImageIsReadThroughTheDoorNotTheOwnersAttachments() async throws {
+        let recorder = GuestDoorRecorder()
+        GuestDoorURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data("png".utf8))
+        }
+        let bytes = try await client().guestAttachment("34A", id: "att1")
+        XCTAssertEqual(bytes, Data("png".utf8))
+        XCTAssertEqual(recorder.sent, [.init(method: "GET", path: "/api/guest-sessions/34A/attachments/att1",
+                                             query: nil, body: "")])
     }
 
     func testNotSharedIsTheDoorsOne404() async {
@@ -195,6 +248,62 @@ final class GuestSessionTests: XCTestCase {
         GuestSessionSummary(id: id, title: "  \nFix it\nsecond", ownerName: "Ana", status: status,
                             sessionState: status, lifecycleState: lifecycle,
                             addedAt: "2026-11-13T09:00:00.000Z", lastTurnAt: lastTurnAt)
+    }
+
+    // A sent message is drawn at once and asked for often until its echo replaces it (production 11-16)
+
+    func testASentMessageIsDrawnAtOnceHeadedAsTheReadersUntilItsEchoReplacesIt() {
+        var sent = GuestSentTurns()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let key = sent.draw("Ship it on Friday", at: start)
+        let drawn = sent.events
+        XCTAssertEqual(drawn.count, 1)
+        XCTAssertEqual(drawn[0].type, .user)
+        XCTAssertEqual(drawn[0].payload["text"]?.stringValue, "Ship it on Friday")
+        XCTAssertEqual(ExternalSender.parse(drawn[0].payload["externalSender"])?.source, ExternalSender.readerSource)
+        // After every real event, and below the sentinel the cursor ignores.
+        XCTAssertGreaterThan(drawn[0].seq, 1_000_000)
+        XCTAssertLessThan(drawn[0].seq, RunEvent.sentinelSeq)
+
+        // Drawn into the transcript after what was read, as the reader's own words.
+        var reducer = TranscriptReducer()
+        reducer.applyTailPage(EventPage(events: [RunEvent(seq: 1, type: .assistant, turnId: "t0", payload: .object(["text": .string("hi")]))],
+                                        hasMore: false))
+        reducer.appendNewer(EventPage(events: drawn, hasMore: false))
+        guard case .user(let bubble)? = reducer.state.items.last else { return XCTFail("no user bubble: \(reducer.state.items)") }
+        XCTAssertEqual(bubble.text, "Ship it on Friday")
+
+        sent.accepted(key, turnId: "T", at: start)
+        // Someone else's message or another turn's events leave it drawn.
+        sent.read([RunEvent(seq: 2, type: .user, turnId: "other", payload: .object(["text": .string("x")])),
+                   RunEvent(seq: 3, type: .assistant, turnId: "T", payload: .object(["text": .string("On it.")]))])
+        XCTAssertEqual(sent.events.count, 1)
+        sent.read([RunEvent(seq: 4, type: .user, turnId: "T", payload: .object(["text": .string("Ship it on Friday")]))])
+        XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testWhileAnEchoIsMissingTheFollowAsksEveryHalfSecondForTenSeconds() {
+        var sent = GuestSentTurns()
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(sent.delay(4, at: start), 4)
+        let key = sent.draw("Ship it on Friday", at: start)
+        // Not accepted yet: nothing to ask for.
+        XCTAssertEqual(sent.delay(4, at: start), 4)
+        sent.accepted(key, turnId: "T", at: start)
+        XCTAssertEqual(sent.delay(4, at: start), 0.5)
+        XCTAssertEqual(sent.delay(nil, at: start), 0.5)
+        XCTAssertEqual(sent.delay(0, at: start), 0)
+        // Behind a running turn it can be minutes: after ten seconds it is the follow's own clock again, still drawn.
+        XCTAssertEqual(sent.delay(4, at: start.addingTimeInterval(10.5)), 4)
+        XCTAssertEqual(sent.events.count, 1)
+    }
+
+    func testASendTheDoorRefusesIsNoLongerDrawn() {
+        var sent = GuestSentTurns()
+        let key = sent.draw("Ship it on Friday")
+        sent.refused(key)
+        XCTAssertTrue(sent.isEmpty)
+        XCTAssertEqual(sent.delay(4), 4)
     }
 
     func testNoGroupWhileThereIsNone() {

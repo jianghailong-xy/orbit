@@ -53,7 +53,11 @@ describe('Antigravity Google login across client surfaces', () => {
   it('offers Google sign-in with a linked terms warning when signed out', () => {
     const rendered = row('signed-out');
     expect(rendered.textContent).toContain('Signed out');
-    expect(rendered.textContent).toContain('Sign in with Google');
+    // Its button reads like every engine's; the panel it opens is the one that names Google.
+    expect([...rendered.querySelectorAll('.re-act button')].map((b) => b.textContent)).toContain('Sign in');
+    expect(rendered.textContent).not.toContain('Sign in with Google');
+    // The terms sit in line with the row's note, at its size (.re-google-terms).
+    expect(rendered.querySelector('.re-login-note.re-google-terms .rsi-hint')).not.toBeNull();
     expect(rendered.textContent).toContain('personal account sign-in through third-party tools; your account may be suspended.');
     expect(rendered.querySelector('a')?.getAttribute('href')).toBe('https://antigravity.google/terms');
   });
@@ -128,12 +132,14 @@ describe('Antigravity Google login across client surfaces', () => {
 
   it('keeps the env-key explanation and never treats unknown as signed in', () => {
     expect(row('env-key').textContent).toContain('env key · runs on your Gemini key');
+    // On the machine's Gemini key, naming Google is what tells this sign-in from the key.
+    expect([...row('env-key').querySelectorAll('.re-act button')].map((b) => b.textContent)).toContain('Sign in with Google');
     const unknown = row('unknown');
     expect(unknown.textContent).toContain('Couldn’t check');
     // No sign-in on the row: the check got no answer, so nothing says the account is out. The action
     // stays in More for the case the login really is gone.
     expect([...unknown.querySelectorAll('button')].map((b) => b.textContent?.trim()))
-      .not.toContain('Sign in with Google');
+      .not.toEqual(expect.arrayContaining([expect.stringMatching(/^Sign in/)]));
     expect(unknown.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(unknown.textContent).not.toContain('remaining');
     const machine = machineRow(fixtures.unknown);
@@ -194,7 +200,7 @@ describe('Antigravity Google login across client surfaces', () => {
       const engineRow = container.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
       if (state === 'google') await clickRunnerMenuItem(engineRow, 'Re-sign in');
       // By its words: a runner that keeps Google accounts puts Add account first.
-      else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in with Google')!.click());
+      else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in')!.click());
       await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());

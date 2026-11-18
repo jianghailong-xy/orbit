@@ -8,7 +8,7 @@ import {
   runnerUpdateNowTitle,
   runnerUpdateNowToast,
 } from '../lib/runnerCopy';
-import { runnerUpdateNowBody, runnerUpdateNowConfirm, runnerUpdateNowTurns, updateRunnerNow } from '../lib/runnerUpdateNow';
+import { awaitRunnerUpdateNowAnswer, runnerUpdateNowBody, runnerUpdateNowConfirm, runnerUpdateNowTurns, updateRunnerNow } from '../lib/runnerUpdateNow';
 import { useToast } from '../lib/toast';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -54,6 +54,8 @@ export function useRunnerUpdateNow(runner: Runner | undefined, machine: string) 
       message.success(runnerUpdateNowToast(version));
       void qc.invalidateQueries({ queryKey: ['runners'] });
       void qc.invalidateQueries({ queryKey: ['sessions'] });
+      // The runner answers on its next heartbeat, after that read: read again until it reports the restart.
+      void awaitRunnerUpdateNowAnswer(qc, runner!.id);
     },
     onError: (e: Error) => message.error(RUNNER_UPDATE_NOW_FAILED, e.message),
   });

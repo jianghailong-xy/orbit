@@ -10,6 +10,7 @@ import type {
   PromptOptimizationRequest,
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
+  SessionGuestSuggestion,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRunView,
@@ -62,6 +63,7 @@ import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
+import type { AgentToolsReport } from './lib/agentTools';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -248,6 +250,17 @@ export function scheduleProactiveRefresh(): void {
 // a browser tab left open for a month is exactly the client nothing else can see.
 declare const __APP_VERSION__: string;
 
+/** The pages a signed-out visitor may stay on: a dead session found under one is not sent to /login. */
+export function readSignedOut(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/s/') ||
+    pathname === '/help' ||
+    pathname.startsWith('/help/')
+  );
+}
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -276,9 +289,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
-    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
+    // The privacy policy, a shared link (/s/…) and the help center (/help…) are read signed out as well: a
+    // stored session found dead under one (the theme's read of the account) is cleared, and the reader stays.
+    if (!readSignedOut(location.pathname)) location.href = '/login';
   }
   return res;
 }
@@ -519,8 +532,9 @@ export const createInteractiveSession = (body: {
   /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
    *  the transaction that creates it (docs/first-workspace-contract.md §3). */
   newWorkspace?: NewWorkspaceRequest;
-  /** Prompt optimizer (D2): the opening message is still exactly the inserted optimized English. */
-  skipTranslation?: boolean;
+  /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
+  skipTranslation?: true;
+  optimizedTranslation?: string;
 }) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
@@ -627,6 +641,13 @@ export const removeImportedSessions = (workspaceId: string) =>
  *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
  *  the next executable, queued behind an earlier one, or steered into the running one. New Web is deployed only after every API replica supports this required receipt;
  *  silently guessing across version skew would reintroduce the race. */
+/**
+ * Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): what a send of the unedited optimized text adds to
+ * its body. With a reading copy (Translation on), the box holds the owner-language text and the send carries the
+ * optimizer's agent-language prompt as its translation; without one, the text goes as written.
+ */
+export type OptimizedSend = { skipTranslation: true } | { optimizedTranslation: string };
+
 export const sendTurn = (
   sessionId: string,
   content: string,
@@ -634,9 +655,9 @@ export const sendTurn = (
   kind?: 'message' | 'shell',
   intent: SessionTurnIntent = 'NEXT_TURN',
   clientTurnId: string = uuid(),
-  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English, so the server
-   *  does not hold it for Translation. Sent only when true. */
-  skipTranslation?: boolean,
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box, so the server sends it
+   *  as written or with the optimizer's own translation. Absent for anything else. */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -654,7 +675,7 @@ export const sendTurn = (
       intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...optimized,
     },
   });
 
@@ -911,8 +932,8 @@ export const resumeSession = (
    *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
    *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
   stopSessionId?: string,
-  /** As sendTurn's: the text is still exactly the inserted optimized English (D2). */
-  skipTranslation?: boolean,
+  /** As sendTurn's: the text is still exactly what the optimizer's Use put in the box (D2). */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -935,7 +956,7 @@ export const resumeSession = (
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
       ...(stopSessionId ? { stopSessionId } : {}),
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...optimized,
     },
   });
 
@@ -1791,6 +1812,13 @@ export const getSharedEventsAfter = (
     `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
   );
 
+/** The shared conversation's stream (docs/session-viewer-stream-design.md §3): what it adds after
+ *  `sinceSeq`, clipped like the rest, then the reply as it is written and its header as it changes. */
+export const sharedStreamUrl = (token: string, opts: { sinceSeq: number; sessionId?: string }): string => {
+  const since = opts.sinceSeq > 0 ? `sinceSeq=${opts.sinceSeq}&` : '';
+  return `/api/shared/${encodeURIComponent(token)}${sharedConversation(opts.sessionId)}/stream?${since}maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
@@ -1804,6 +1832,9 @@ export const getSessionGuests = (sessionId: string) =>
  *  `No Orbit account uses this email.` */
 export const inviteSessionGuest = (sessionId: string, email: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+/** People the owner invited before, to any session, who can't yet reply in this one: newest first, up to 50. */
+export const getSessionGuestSuggestions = (sessionId: string) =>
+  api<{ people: SessionGuestSuggestion[] }>(`/sessions/${sessionId}/guests/suggestions`);
 export const removeSessionGuest = (sessionId: string, userId: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
 
@@ -1828,8 +1859,34 @@ export const getGuestEventPage = (id: string, opts: { before: number; limit: num
 export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
   api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
 export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
-/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
-export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+/** The guest page's stream (docs/session-viewer-stream-design.md §3): the sign-in rides `access_token`, as on the
+ *  owner's stream, since EventSource sends no header; `sinceSeq` replays only what came after it. */
+export const guestStreamUrl = (id: string, sinceSeq?: number): string => {
+  const tok = encodeURIComponent(getToken() ?? '');
+  const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
+  return `/api${guestPath(id)}/stream?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+/** Object URL for an inline image in the guest page's transcript, read through the guest door (the owner's
+ *  `/attachments/:id` is theirs alone). Caller revokes it. */
+export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: string): Promise<string> => {
+  const res = await authedFetch(`/api${guestPath(id)}/attachments/${encodeURIComponent(attachmentId)}`);
+  return userFileUrl(await attachmentBlob(res, attachmentId));
+};
+/** A guest's image for their next message, through the guest door (multipart, as `uploadAttachment`): a PNG, JPEG,
+ *  WebP or GIF of at most 5MB, the owner composer's images. Returns the id `sendGuestTurn` names it by. */
+export const uploadGuestAttachment = async (id: string, file: File): Promise<{ id: string }> => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authedFetch(`/api${guestPath(id)}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new ApiError(msg.message || res.statusText, res.status);
+  }
+  return (await res.json()) as { id: string };
+};
+/** A guest's message: words and the images they uploaded here, a turn of the owner's session (resumed when it has
+ *  ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string; attachmentIds?: string[] }) =>
   api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
 
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */
@@ -1999,6 +2056,9 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
+   *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
+  agentTools?: AgentToolsReport | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
   // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
@@ -2075,6 +2135,13 @@ export interface SessionDetail {
     kimiAccount?: string | null;
     /** The Cursor CLI account this workspace's sessions run on; null is Default. */
     cursorAccount?: string | null;
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+     *  stands. All null for one that is not. */
+    repoUrl?: string | null;
+    githubRepoId?: string | null;
+    cloneRef?: string | null;
+    cloneState?: string | null;
+    cloneError?: string | null;
   } | null;
   /** This session made its workspace (docs/first-workspace-contract.md §3.3): the conversation opens
    *  by saying so. Only the detail carries it. */
@@ -2244,17 +2311,6 @@ export const getWorktreeFile = async (idOrPublicId: string, path: string, signal
   }
   return res.blob();
 };
-
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
- *  it wrote none. */
-export type RecapOutcome =
-  | { written: true; recapText: string; recapEventSeq: number }
-  | { written: false; reason: string };
-
-/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
- *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
-export const refreshSessionRecap = (idOrPublicId: string) =>
-  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
 
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline

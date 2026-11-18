@@ -116,7 +116,6 @@ export function BackgroundWakeCard({
   undelivered,
   queued,
   steer,
-  attached,
 }: {
   wake: BackgroundWake;
   /** Unset while the wake is still queued: it is no event yet, so ⌘F has nothing to land on. */
@@ -128,14 +127,6 @@ export function BackgroundWakeCard({
   queued?: ReactNode;
   /** How far a wake written into the running turn has got (`steerDeliveryState(...).label`). */
   steer?: string;
-  /**
-   * Whatever else the same note carried, as its own folded entry.
-   *
-   * It rides in the fold because nobody typed this turn: delivery appends to a turn whose content
-   * is empty, so putting the leftover block back in a user bubble drew an empty bubble under the
-   * wake — a message with no words in it, signed with the reader's own name.
-   */
-  attached?: ReactNode;
 }) {
   const failed = wake.jobs.some(isFailed);
   // A wakeup, or a job that has only written something: nothing has come out either way yet.
@@ -218,7 +209,6 @@ export function BackgroundWakeCard({
             <summary>What the agent received</summary>
             <pre>{wake.text}</pre>
           </details>
-          {attached}
         </div>
       </details>
       {/* The failure stays visible while its output and job metadata unfold independently. */}

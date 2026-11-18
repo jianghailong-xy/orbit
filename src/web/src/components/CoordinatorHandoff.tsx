@@ -5,6 +5,7 @@ import {
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   COORDINATOR_HANDOFF_SECTIONS,
   coordinatorHandoffFailureSentence,
+  coordinatorPendingWaitLine,
   type CoordinatorHandoffView,
   type CoordinatorPendingWait,
   type SessionCoordinatorHandoff,
@@ -50,8 +51,8 @@ export function isCoordinatorHandoffPrompt(text: string): boolean {
   return text.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD);
 }
 
-/** A wait as the dialog and the moved-waits list name it; a paused one says so. */
-export const pendingWaitLabel = (wait: CoordinatorPendingWait): string => (wait.paused ? `${wait.label} (paused)` : wait.label);
+/** A wait as the dialog and the moved-waits list name it: a paused one says so, and any but a watch names its kind. */
+export const pendingWaitLabel = (wait: CoordinatorPendingWait): string => coordinatorPendingWaitLine(wait);
 
 // ── icons (board 01/02) ───────────────────────────────────────────────────────────────────────────
 const svg = (children: ReactNode, fill = false) => (
@@ -133,6 +134,7 @@ export function CoordinatorHandoffConfirm({
 }) {
   const waitsQ = useQuery({
     queryKey: ['project', projectId, 'coordinator', 'pending-waits'],
+    meta: { entities: ['watch'] },
     queryFn: () => coordinatorPendingWaits(projectId),
     staleTime: 0,
   });
@@ -178,7 +180,8 @@ export function CoordinatorHandoffConfirm({
             <WaitIcon />
             <span>
               <b>{COPY.waitsRowTitle(waits.length)}</b>
-              <span className="sub">{waits.map(pendingWaitLabel).join(' · ')}</span>
+              {/* One line each: a kind follows its label after " · ", so a joined list would blur them. */}
+              {waits.map((w) => <span key={w.id} className="sub">{pendingWaitLabel(w)}</span>)}
             </span>
           </li>
         )}
@@ -323,12 +326,16 @@ const timeOf = (iso: string): string => {
 
 export function CoordinatorHandoffReceivedCard({
   received,
+  history,
   onOpenPrevious,
 }: {
   received: SessionCoordinatorHandoffReceived;
+  /** The decisions and merges stamped before this conversation, which it does not draw (v2 §4). */
+  history?: { decisions: number; merges: number };
   onOpenPrevious?: () => void;
 }) {
   const sections = received.note ? handoffNoteSections(received.note) : null;
+  const before = history ? COPY.historyBefore(history.decisions, history.merges) : null;
   const when = timeOf(received.handedOverAt);
   const waits = Array.isArray(received.movedWaits) ? received.movedWaits : [];
   return (
@@ -351,6 +358,15 @@ export function CoordinatorHandoffReceivedCard({
                 {s.items.length > 0 && <ul>{s.items.map((item, i) => <li key={i}>{item}</li>)}</ul>}
               </section>
             )) : <p className="handoff-card-plain">{received.note}</p>}
+          </div>
+        )}
+        {/* Board 3: what came before this conversation is not drawn in it; this line says how much,
+            and where it is. Omitted when there was nothing. */}
+        {before && (
+          <div className="handoff-card-history">
+            {before} ·{' '}
+            <a role="link" tabIndex={0} onClick={onOpenPrevious}
+              onKeyDown={(e) => { if (e.key === 'Enter') onOpenPrevious?.(); }}>{COPY.openPrevious} ›</a>
           </div>
         )}
       </div>

@@ -31,7 +31,6 @@
   ],
   "copy": {
     "title": "Tasks",
-    "viewAll": "View all in Tasks ›",
     "openProject": "Open project ›",
     "replacesPrefix": "Replaces ",
     "createdInChip": "Created in ",

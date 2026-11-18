@@ -1,0 +1,7 @@
+widen-card: in view after 0 drag(s) at (16.0, 544.3333333333333, 185.0, 64.33333333333337)
+widen-card: Let Ceph capacity guard check with a new command? shown
+widen-card: ceph df -f json | jq .stats.total_used_raw_ratio shown
+widen-card: .stats.total_used_raw_bytes shown
+widen-card: Keep the approved command shown
+widen-card: Allow shown
+widen-card: Read it before you allow it. shown

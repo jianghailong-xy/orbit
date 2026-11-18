@@ -6,6 +6,8 @@ import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
 import { ago, ENGINE_CLI_NAME, engineUpdateDismissedFor, updateNoteOf, webShowsEngine } from './runnerEngines';
 import {
+  MANAGED_RUNNER_KEPT_UP_TO_DATE,
+  MANAGED_RUNNER_LABEL,
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
   ATTENTION_INSTALL_FOLDER_NOT_WRITABLE,
@@ -150,6 +152,8 @@ export interface RunnerAttentionInput {
   nowMs: number;
   /** latestRunnerVersion's answer; null when nothing says what the latest release is. */
   latestVersion: string | null;
+  /** The account's managed runner (Orbit Cloud): Orbit rolls its image, so it is never told to update itself. */
+  managed?: boolean;
 }
 
 /** Most severe first — the order items come out in. */
@@ -668,6 +672,9 @@ function runnerSaid(words: string | undefined, otherwise: string): string {
  * - `enabled`, `waitingForIdle`, `heldByRollout`: it catches up by itself — no item; About says
  *   which. Nor for a state this client doesn't know: there is nothing it could prescribe.
  *
+ * A version that isn't a release number — a managed runner's `managed-<sha>`, a `dev` build — is behind
+ * nothing: its image or its build decides what it runs, so there is no release to catch up with.
+ *
  * A runner too old to report it is judged by runsAsRoot, as before there was a report. Root is what
  * lets the updater replace the binary in a root-owned install directory; a regular user stays on
  * its version until someone runs RUNNER_UPGRADE_COMMAND there. Unknown (null) is not flagged, and a
@@ -679,7 +686,7 @@ function cannotSelfUpdateItem(
   offline: boolean,
 ): AttentionItem | null {
   const version = runner.version?.trim();
-  if (!version || !latestVersion) return null;
+  if (!version || !latestVersion || !isReleaseVersion(version)) return null;
   if (compareRunnerVersions(version, latestVersion) >= 0) return null;
   const report = runner.selfUpdate;
   if (!report) {
@@ -785,7 +792,7 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
     const disk = diskItem(runner, workspaces);
     if (disk) items.push(disk);
   }
-  const cannotUpdate = cannotSelfUpdateItem(runner, latestVersion, offline);
+  const cannotUpdate = input.managed ? null : cannotSelfUpdateItem(runner, latestVersion, offline);
   if (cannotUpdate) items.push(cannotUpdate);
   if (!offline) items.push(...engineUpdateItems(runner, nowMs));
   return items;
@@ -813,12 +820,28 @@ export function listAttentionLine(items: ReadonlyArray<AttentionItem>): string |
   return shorts.length ? shorts.join(RUNNER_LINE_SEPARATOR) : null;
 }
 
+/** Whether a runner's version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
+export function isReleaseVersion(version: string | null | undefined): boolean {
+  return !!version && /^v?\d/i.test(version.trim());
+}
+
+/**
+ * How a version is shown beside a runner's name: `v<version>`. A managed runner (Orbit Cloud) shows its
+ * release when it reports one, and otherwise says Orbit keeps it up to date — never its image hash.
+ */
+export function runnerVersionLine(version: string | null | undefined, managed = false): string | null {
+  const v = version?.trim() || null;
+  if (managed) return isReleaseVersion(v) ? runnerVersionTag(v!) : MANAGED_RUNNER_KEPT_UP_TO_DATE;
+  return v ? runnerVersionTag(v) : null;
+}
+
 /**
  * The list's second line. Online: `<hostname> · v<version>`, leaving out a hostname that is empty
  * or the same as the name shown above it. Offline: `Offline · last seen 14d ago · v<version>`.
+ * A managed runner's version is runnerVersionLine's.
  */
-export function runnerListSubtitle(runner: AttentionRunner, nowMs: number): string {
-  const version = runner.version?.trim() ? runnerVersionTag(runner.version.trim()) : null;
+export function runnerListSubtitle(runner: AttentionRunner, nowMs: number, managed = false): string {
+  const version = runnerVersionLine(runner.version, managed);
   if (runnerIsOffline(runner, nowMs)) {
     const status = runner.lastHeartbeatAt
       ? runnerOfflineLastSeen(ago(runner.lastHeartbeatAt, nowMs))
@@ -826,7 +849,7 @@ export function runnerListSubtitle(runner: AttentionRunner, nowMs: number): stri
     return [status, version].filter(Boolean).join(RUNNER_LINE_SEPARATOR);
   }
   const hostname = runner.hostname?.trim();
-  const shownName = runner.displayName?.trim() || runner.name;
+  const shownName = runner.displayName?.trim() || (managed ? MANAGED_RUNNER_LABEL : runner.name);
   const host = hostname && hostname !== shownName ? hostname : null;
   return [host, version].filter(Boolean).join(RUNNER_LINE_SEPARATOR);
 }

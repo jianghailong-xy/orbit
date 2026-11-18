@@ -297,6 +297,9 @@ Options:
                               task by itself once this instant has come (see below)
   --start-now                 Start the task as soon as it is created: one approval covers the
                               create and the start (see below); not with --run-at
+  --start-when JSON           Start it once, when something outside Orbit becomes true: a
+                              condition with the baseline you read (see below); not with
+                              --run-at or --start-now
   --idempotency-key KEY       Your name for this create: the same key sent again (after a
                               timeout, or in a later turn) answers with the first task instead
                               of writing another; the same key with a different title is refused
@@ -453,6 +456,14 @@ is still created, a line on stderr says the start was deferred, and the server's
 starts it as soon as it can. It cannot be combined with --run-at. It is not
 --auto-run-when-ready, which is about prerequisites finishing.
 
+--start-when starts the task once, when something outside Orbit becomes true, in place of --run-at:
+a JSON object {text, command, compare, holdSeconds?, intervalSeconds?, timeoutSeconds?, unit?,
+baseline}, the same startWhen task_create takes. The command is a read-only probe that prints a
+number on its last line (or exits 0 under compare {"op": "EXIT_ZERO"}); the assignee's runner runs it
+unattended every intervalSeconds, the card shows it to the owner verbatim, and no secret is ever
+written into it. Run it once first and pass what it read as baseline ({"value": N}, or
+{"exitCode": N} under EXIT_ZERO): a condition without one is refused. It needs an assignee.
+
 --auto-run-when-ready, on by default, starts the task without a manual start once it is ready:
 once all its prerequisites are DONE, and — for a task in a project — once the project has started,
 even with no prerequisites at all. A task in no project that has no prerequisites is never started
@@ -468,7 +479,7 @@ JSON is an array of task objects (or {"tasks": [...]}), each taking the same fie
 as 'orbit task create': title (required), description, assigneeId, listId, projectId, fixesOpenItemId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
 completionCriterionOverrideReason, ownerConfirmationReason, ownerConfirmationReasonNote, acceptanceCommand,
-acceptanceExpectedExitCode, dueDate, runAt, engine, provider, model, modelHint, modelHintReason, dependsOnTaskIds, attachmentIds,
+acceptanceExpectedExitCode, dueDate, runAt, startWhen, engine, provider, model, modelHint, modelHintReason, dependsOnTaskIds, attachmentIds,
 autoRunWhenReady, completionPolicy. Nothing is written unless every item is valid.
 
 Each item's "engine" and "provider" pin its runs as --engine and --provider do on
@@ -514,6 +525,9 @@ and the run it starts clears it.
 batch's confirmation card counts it as starting within the minute and the server's scan starts it
 after the create — items are not started one by one. The one approval of the batch covers it.
 An item cannot carry both "startNow" and "runAt".
+
+"startWhen" starts an item once, when something outside Orbit becomes true, as --start-when does on
+'orbit task create'; it carries its baseline and cannot be combined with "runAt" or "startNow".
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -1796,6 +1810,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	dueDate := fs.String("due-date", "", "ISO due date")
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	startNow := fs.Bool("start-now", false, "start the task as soon as it is created: one approval covers the create and the start")
+	startWhen := fs.String("start-when", "", "start the task once, when a condition outside Orbit holds (JSON, with its baseline)")
 	idempotencyKey := fs.String("idempotency-key", "", "your name for this create: the same key sent again answers with the first task instead of writing another")
 	forkFromSession := fs.Bool("fork-from-session", false, "start the task from this session's work, uncommitted edits included")
 	engine := fs.String("engine", "", "run on this engine (the CLI) instead of the assignee's")
@@ -2029,6 +2044,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["runAt"] = dueNow(time.Now())
 	}
+	// task_create's startWhen (condition_tools.go): the condition and the baseline the agent read.
+	if flagWasSet(fs, "start-when") {
+		condition, err := parseStartWhenFlag(*startWhen)
+		if err != nil {
+			return err
+		}
+		if _, set := body["runAt"]; set {
+			return fmt.Errorf("--start-when cannot be combined with --run-at or --start-now: a task starts at a time or when its condition holds, not both")
+		}
+		body["startWhen"] = condition
+	}
 	// Absent unless named: a provider pinned alone takes the engine it runs on by default, which is
 	// what a provider pin meant before engines could be named.
 	if flagWasSet(fs, "engine") {
@@ -2156,9 +2182,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	cliRecord().setEntity(raw)
 	cliRecord().startOutcome(startedBy, started, deferred)
-	if deferred == "" {
-		cliRecord().note(startedAtOnceNote)
-	}
+	cliRecord().note(createStartNote(startedBy, started, deferred))
 	if err := writeCLIRawJSON(out, raw, *jsonOut); err != nil {
 		return err
 	}
@@ -2166,10 +2190,20 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		fmt.Fprintln(cliNoticeOut, "orbit task create: "+deferred)
 		return nil
 	}
+	if refusal := answerRefusal(started); refusal != nil {
+		// A 2xx answer that says it started nothing (a skipped start) is not a start.
+		fmt.Fprintln(cliNoticeOut, "orbit task create: created, but not started: "+refusal.Message)
+		return nil
+	}
 	var compact bytes.Buffer
 	if json.Compact(&compact, started) != nil {
 		compact.Reset()
 		compact.Write(started)
+	}
+	if startedBy == "owner" {
+		fmt.Fprintln(cliNoticeOut, "orbit task create: the owner answered the card with Create and start, so it was "+
+			"started at once; that is their decision, so do not clear its start or run 'orbit task start' for it: "+compact.String())
+		return nil
 	}
 	fmt.Fprintln(cliNoticeOut, "orbit task create: started at once, as 'orbit task start' would have started it: "+compact.String())
 	return nil
@@ -3588,6 +3622,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
+	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
@@ -3735,18 +3771,73 @@ func projectCLICapability(spec cliCapabilitySpec, op *operation, d map[string]in
 	return command
 }
 
+// writeCapabilityView prints one graded view of the catalogue (operation_discovery.go).
+func writeCapabilityView(d *cliDiscovery, summary bool, family, id string, jsonOut bool, out io.Writer) error {
+	var doc interface{}
+	var text string
+	switch {
+	case summary:
+		view := d.summary()
+		doc, text = view, writeCapabilitySummaryText(view)
+	case id != "":
+		view, err := d.id(id)
+		if err != nil {
+			return err
+		}
+		doc, text = view, writeCapabilityViewText(view.Capability)
+	default:
+		if family == "" {
+			return fmt.Errorf("--family needs a family name; the families are %s", strings.Join(d.families(), ", "))
+		}
+		view, err := d.family(family)
+		if err != nil {
+			return err
+		}
+		var b strings.Builder
+		for _, capability := range view.Capabilities {
+			b.WriteString(writeCapabilityViewText(capability))
+		}
+		for _, unavailable := range view.Unavailable {
+			fmt.Fprintf(&b, "\nNot available here (%s): %s\n", unavailable.Reason, strings.Join(unavailable.IDs, ", "))
+		}
+		doc, text = view, b.String()
+	}
+	if jsonOut {
+		enc := json.NewEncoder(out)
+		enc.SetEscapeHTML(false)
+		return enc.Encode(doc)
+	}
+	_, err := io.WriteString(out, text)
+	return err
+}
+
 func cmdCapabilitiesCLI(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit capabilities")
 	jsonOut := fs.Bool("json", false, "emit JSON")
+	summary := fs.Bool("summary", false, "one row per command")
+	family := fs.String("family", "", "the commands of one family")
+	id := fs.String("id", "", "one operation in full")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := rejectTrailing(fs); err != nil {
 		return err
 	}
+	views := 0
+	for _, asked := range []bool{*summary, flagWasSet(fs, "family"), flagWasSet(fs, "id")} {
+		if asked {
+			views++
+		}
+	}
+	if views > 1 {
+		return fmt.Errorf("--summary, --family and --id each ask for one view; pass one of them")
+	}
 	executable := orbitCLIExecutable()
 	if executable == "" {
 		return fmt.Errorf("cannot resolve a safe absolute path to the Orbit executable")
+	}
+	if views == 1 {
+		return writeCapabilityView(newCLIDiscovery(executable), *summary, strings.TrimSpace(*family), strings.TrimSpace(*id), *jsonOut, out)
 	}
 	doc := buildCLICapabilities(executable)
 	if *jsonOut {
