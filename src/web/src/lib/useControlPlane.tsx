@@ -287,6 +287,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // the worktree file are the console's, on a turn end. A queue keyed by a session is the
       // exception when it derives from tasks — the evidence-decision read.
       if (root === 'session' && !derivedFrom(query, ['task'])) return true;
+      // The guest view of a session shared with this reader (GuestSessionPage): it follows that session over the guest
+      // door's own stream and keeps what the stream adds below the page this read returned, so the page read again
+      // would bring those events back a second time. The events here are the reader's own sessions', never that one's.
+      if (root === 'guest-session') return true;
       // The Open lists once the hint drives them (refetchOpenList).
       if (hinted && isOpenList(query.queryKey)) return true;
       return false;
@@ -497,11 +501,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // What a stream that opened after a gap reads again (W6): every cached read that declares a
     // control-plane entity, a few at a time through `pump`. The per-event paths hold the Open lists
     // to the hint and leave the project page to its floor; a reconnect is not an event and reads
-    // once what is on screen, so those cost exclusions do not apply. Three reads stay out — not as a
+    // once what is on screen, so those cost exclusions do not apply. Four reads stay out — not as a
     // cost exclusion but because another owner reads them: a session's diff and worktree file are
     // the console's own, fetched on a turn end and the costliest reads it makes (see
-    // refetchSessionDetail), an answered evidence revision never changes, and the lists index keeps
-    // its longer floor (refetchTaskLists).
+    // refetchSessionDetail), an answered evidence revision never changes, the lists index keeps
+    // its longer floor (refetchTaskLists), and the guest view follows its session over the guest
+    // door's own stream (see hasOwnBudget).
     //
     // A browser back online during the gap has already sent this round for the polls it held while
     // offline (React Query resumes them on `online`), so those are not read a second time.
@@ -515,7 +520,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             !(query.queryKey[0] === 'session' &&
               (query.queryKey[2] === 'diff' || query.queryKey[2] === 'worktree-file')) &&
             query.queryKey[0] !== 'task-evidence' &&
-            query.queryKey[0] !== 'task-lists',
+            query.queryKey[0] !== 'task-lists' &&
+            query.queryKey[0] !== 'guest-session',
         });
         refetchTaskLists();
       } finally {
