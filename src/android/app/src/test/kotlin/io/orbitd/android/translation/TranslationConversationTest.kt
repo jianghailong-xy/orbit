@@ -182,6 +182,48 @@ class TranslationConversationTest : ComposerShellTest() {
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 5), unmerged = true))
     }
 
+    /** Failure policy B (docs/ux/translation-failure-policy.html, frames 4B and 6): a held message says why it was not sent; while the
+     *  server skips a failing translator the composer tag says messages will wait, until the instant passes (no read, no event) or the
+     *  account event `translation.status_changed` brings a new answer. */
+    @Test fun aHeldMessageSaysWhyAndTheTagWarnsWhileTranslationIsUnavailable() {
+        translatedConversation()
+        fun me(until: String?) = ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans"},"translationAvailable":true,
+            "translationUnavailableUntil":${until?.let { "\"$it\"" } ?: "null"}}""".encodeToByteArray())
+        val soon = java.time.Instant.now().plusSeconds(4).toString()
+        ComposerShell.answers["GET users/me"] = { me(soon) }
+        val tag = hasTestTag("composer-translation-tag")
+        signIn(); openSession()
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+
+        // 4B: the reason's sentence, then Retry and Send as written.
+        ComposerShell.answers["GET sessions/$s/turns"] = { ApiResponse(200, """[
+            {"turnId":"t-j","kind":"message","placement":"queued","content":"再跑一遍全部测试","attachments":[],"createdAt":"2026-11-12T01:06:00Z",
+             "translation":{"state":"FAILED","from":"zh-Hans","original":"再跑一遍全部测试","failureReason":"UNAVAILABLE"}}]""".encodeToByteArray()) }
+        ComposerShell.push("""{"type":"queued_turns_changed","seq":0,"payload":{}}""")
+        val held = hasAnyAncestor(hasTestTag("queued:t-j"))
+        await { has(text("Translation is unavailable right now, so it wasn't sent", substring = false) and held, unmerged = true) }
+        assertFalse(has(text(TranslationCopy.SEND_FAILED) and held, unmerged = true))
+        assertTrue(has(hasTestTag("translation-action:${TranslationCopy.RETRY}") and held, unmerged = true))
+        assertTrue(has(hasTestTag("translation-action:${TranslationCopy.SEND_AS_WRITTEN}") and held, unmerged = true))
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("queued:t-j"))
+        shot("10-held-unavailable-and-composer-tag")
+
+        // The instant passes with no event: the ordinary tag again, drawn here without reading the account.
+        val reads = ComposerShell.calls.count { it == "GET users/me" }
+        await { has(tag and hasText("Chinese → English", substring = false), unmerged = true) }
+        assertEquals("the expiry is local", reads, ComposerShell.calls.count { it == "GET users/me" })
+
+        // The breaker opens again: the account event reads `users/me`, and the tag warns.
+        ComposerShell.answers["GET users/me"] = { me(java.time.Instant.now().plusSeconds(60).toString()) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English · unavailable, messages will wait"), unmerged = true) }
+        // And closes: the next event clears it.
+        ComposerShell.answers["GET users/me"] = { me(null) }
+        ComposerShell.pushControl("""{"type":"translation.status_changed","data":{}}""")
+        await { has(tag and hasText("Chinese → English", substring = false), unmerged = true) }
+    }
+
     @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
         translatedConversation()
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
