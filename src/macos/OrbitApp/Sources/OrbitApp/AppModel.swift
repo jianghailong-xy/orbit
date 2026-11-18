@@ -394,6 +394,10 @@ final class AppModel {
     /// the list in hand IS: this one is latched, so a list that later turns out to be a snapshot's
     /// cannot un-answer it.
     private var openListAnswered = false
+    /// Share to Orbit (ShareHandoff.swift): the entry a tap or an app open asked for, held until
+    /// signed in with a loaded list; and the snapshot last written, so an unchanged list writes nothing.
+    @ObservationIgnored var pendingShareClaim: PendingShareClaim?
+    @ObservationIgnored var lastShareSnapshot: RecentSessionsSnapshot?
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -591,6 +595,10 @@ final class AppModel {
         agentsModel.refreshOpen = { [weak self] in
             guard let self, await self.loadSessions() else { return nil }
             return self.sessions
+        }
+        agentsModel.onWorkspacesLoaded = { [weak self] in
+            guard let self, self.openListLoaded else { return }
+            self.writeShareSnapshot()
         }
         agents = agentsModel
         let runnersModel = RunnersModel(baseURL: url, tokenStore: tokenStore)
@@ -922,6 +930,8 @@ final class AppModel {
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
         launchSnapshots?.remove()
+        // …and so does the share picker's: no snapshot is how the extension knows to say sign in.
+        removeShareSnapshot()
         // Cards read from this account are not ones to draw against the next: the store behind them
         // holds its answers, and a new sign-in builds a new one anyway.
         linkCards?.removeAll()
@@ -1878,6 +1888,9 @@ final class AppModel {
         #if os(iOS)
         reconcileDeliveredApprovals(Set(SessionGrouping.group(list).needsYou.map(\.id)))
         #endif
+        // Share to Orbit: the picker's snapshot follows the list, and a share waiting for the list
+        // (to know whether its session is still there) is staged now (ShareHandoff.swift).
+        shareListLoaded()
     }
 
     private func post(_ events: [NotificationEvent]) {
@@ -3040,6 +3053,16 @@ final class AppModel {
         sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
     }
 
+    /// A new session in a workspace whose draft composer `stage` fills once it exists: where a share
+    /// to a new session, or to one that is gone, lands (ShareHandoff.swift).
+    func openNewSession(inWorkspace workspaceID: String, staging stage: @escaping (ConsoleModel) -> Void) {
+        consoleRegistry?.pendingDraftStaging[workspaceID] = stage
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Whether the Open list has been answered by the server this sign-in (not just restored).
+    var openListLoaded: Bool { openListAnswered }
+
     /// A new session in a workspace, its composer holding `text` to read, change and send.
     func openNewSession(inWorkspace workspaceID: String, text: String) {
         consoleRegistry?.pendingDraftText[workspaceID] = text
@@ -4020,6 +4043,8 @@ final class AppModel {
         }
         didResolveDefaultLanding = true
         provisionalLandingAgentID = nil
+        // A share waiting on the launch: it goes over the landing, not under it (ShareHandoff.swift).
+        drainShareClaim()
     }
 
     /// Read what the previous run left (`persistLaunchSnapshot`) and adopt it — off the main thread,
@@ -4116,6 +4141,8 @@ final class AppModel {
             ownerRequests?.tab = .open
             ownerRequests?.inboxPresented = true
             Task { await ownerRequests?.loadTerminalRequests() }
+        case .openShare(let entryID):
+            requestShareClaim(entryID: entryID)
         case let .openSchedule(scheduleID, sessionID):
             // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
             if let sessionID {

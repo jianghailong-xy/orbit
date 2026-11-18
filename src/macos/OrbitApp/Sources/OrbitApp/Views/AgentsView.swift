@@ -1642,6 +1642,10 @@ struct NewSessionView: View {
             if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
                 draft.restoreHeld(held)
             }
+            // Items shared to Orbit for a new session here (ShareHandoff.swift).
+            if let stage = app.consoleRegistry?.takeDraftStaging(agentID: agent.id) {
+                stage(draft)
+            }
             await draft.prepareDraft()
         }
         // Whether this account has never had a session, read as the managed default draft appears.

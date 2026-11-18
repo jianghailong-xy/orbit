@@ -4204,18 +4204,22 @@ final class ConsoleModel {
 
     /// `+` menu → Image / File: read a picked file, enforce the size cap (web
     /// parity), and upload it via the existing attachment path.
-    func attachFile(url: URL) async {
+    /// `name` is the chip's file name when the file on disk is named otherwise — a shared item's
+    /// inbox copy (Share to Orbit).
+    func attachFile(url: URL, name: String? = nil) async {
+        let filename = name ?? url.lastPathComponent
         guard let data = try? Data(contentsOf: url) else {
-            statusMessage = "Couldn't read \(url.lastPathComponent)"
+            statusMessage = "Couldn't read \(filename)"
             return
         }
-        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+        let ext = (filename as NSString).pathExtension.isEmpty ? url.pathExtension : (filename as NSString).pathExtension
+        let mime = UTType(filenameExtension: ext)?.preferredMIMEType
             ?? "application/octet-stream"
         if let reason = Attachments.rejectReason(mimeType: mime, byteCount: data.count) {
             statusMessage = reason
             return
         }
-        attach(filename: url.lastPathComponent, mimeType: mime, data: data)
+        attach(filename: filename, mimeType: mime, data: data)
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this

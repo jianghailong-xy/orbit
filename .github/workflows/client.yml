@@ -151,7 +151,22 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            -derivedDataPath build/dd \
             build
+      # Share to Orbit: the OrbitShare extension is built and embedded, and every target's
+      # entitlements (app Release + Debug, extension) carry the App Group they hand off through.
+      - name: Check the Share Extension is embedded with its App Group
+        working-directory: src/ios
+        run: |
+          set -euo pipefail
+          app=build/dd/Build/Products/Debug-iphonesimulator/Orbit.app
+          test -d "$app/PlugIns/OrbitShare.appex" || { echo "::error::OrbitShare.appex is not embedded in Orbit.app"; exit 1; }
+          plutil -extract NSExtension.NSExtensionPointIdentifier raw "$app/PlugIns/OrbitShare.appex/Info.plist" | grep -qx com.apple.share-services
+          for f in Support/Orbit.entitlements Support/Orbit.Debug.entitlements OrbitShare/OrbitShare.entitlements; do
+            /usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$f" | grep -qx group.io.orbitd.app \
+              || { echo "::error::$f lacks the App Group group.io.orbitd.app"; exit 1; }
+          done
+          echo "OrbitShare.appex embedded; App Group on all three entitlements"
 
   # Whether the iPhone app can sign in to a self-hosted server at an address the operator types in
   # (http://<ip>) is not a question a compile can answer: the exceptions that decide it live in
