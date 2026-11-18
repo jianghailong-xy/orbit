@@ -72,7 +72,9 @@
  *    and the live `approval_request`) gains `translation` (ApprovalTranslation) once the server has
  *    translated what it shows the owner: the questions of an AskUserQuestion — question, header,
  *    each option's label and description, index for index with `input.questions` — and a tool
- *    card's `input.description` and `input.plan`. It is written after the card is first published,
+ *    card's `input.description` and `input.plan`; on Orbit's create, blocker and DAG-change cards
+ *    (TRANSLATED_ORBIT_CARDS) also the title, acceptance criteria, batch tasks, goal, instructions,
+ *    criteria items, reason and note. It is written after the card is first published,
  *    so a SECOND `approval_request` with the same id follows, carrying it: replace the card's
  *    display text, nothing else about it. `input` itself is never changed.
  *  - Answering (3A). `POST /sessions/:id/approvals/:approvalId/decision` takes `answers` keyed by the
@@ -270,10 +272,128 @@ export interface ApprovalTranslation {
   plan?: string;
   /** `input.questions` translated (AskUserQuestion). */
   questions?: TranslatedQuestion[];
+  // Orbit's own cards (board 04-owner-cards.html, part 2). Each field is the input field of the same
+  // name translated, present only when the original has text; arrays go index for index with the
+  // input's, and an entry's field the original lacks is absent there too.
+  /** `input.title` (orbit_task_create, orbit_project_create). */
+  title?: string;
+  /** `input.acceptanceCriteria` (orbit_task_create). */
+  acceptanceCriteria?: string;
+  /** `input.tasks` (orbit_task_batch): index for index, so `tasks[i]` is `input.tasks[i]` and
+   *  `input.preview.tasks[i]`. */
+  tasks?: TranslatedTaskBody[];
+  /** `input.goal` (orbit_project_create). */
+  goal?: string;
+  /** `input.instructions` (orbit_project_create). */
+  instructions?: string;
+  /** `input.acceptanceCriteriaItems` (orbit_project_create), index for index. */
+  acceptanceCriteriaItems?: Array<{ text?: string; verificationMethod?: string }>;
+  /** `input.reason` (orbit_blocker_resolve): the agent's argument that the blocker no longer applies. */
+  reason?: string;
+  /** `input.note` (orbit_dag_change). */
+  note?: string;
 }
+
+/** One task of a batch card as shown in the owner's language (ApprovalTranslation.tasks). */
+export interface TranslatedTaskBody {
+  title?: string;
+  description?: string;
+  acceptanceCriteria?: string;
+}
+
+/**
+ * An owner card that lives outside a session (board 04-owner-cards.html), in the owner's language: a
+ * coordinator's question, start request or done request (`ProjectOpenItemRow.translation`,
+ * `ProjectClosedQuestion.translation`), an owner request (`OwnerRequest.translation`), an owner-confirmation
+ * review (`review.translation`, `problems.translation` on OwnerConfirmationReviewView), a crossing
+ * (`translation` on a `GET /projects/:id/handoffs` row) or a criteria-change proposal (`translation` on a
+ * pending criteria decision). Completion evidence has its own shape, EvidenceTranslation. Stored beside the
+ * card's own fields, which stay exactly what the agent wrote. Absent until it is translated, and on every
+ * card translation is off for.
+ *
+ * Each field is the card's field of the same name translated, present only when the original has text;
+ * arrays go index for index with the card's, and an entry's field the original lacks is absent there too.
+ * A step's `command` and `link` are never translated: the card draws them from the original.
+ */
+export interface OwnerCardTranslation {
+  lang: TranslationLanguage;
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  /** A coordinator question's `question`. */
+  question?: string;
+  /** A question's or a DECISION request's `options`. */
+  options?: Array<{ label?: string; description?: string }>;
+  /** A question's or a request's `ifUnanswered`. */
+  ifUnanswered?: string;
+  /** An open coordinator question's `detailLine` (`ProjectOpenItemRow.detailLine`) built from the translated
+   *  `ifUnanswered`: "Blocks N tasks · If you don’t answer: <translated>". Served by the open-items read only,
+   *  beside a whole translation in the owner's current language; never stored. Absent from an older server. */
+  detailLine?: string;
+  /** An owner request's `title`. On an open coordinator question, the open-items row's `title`
+   *  (`ProjectOpenItemRow.title`) built from the translated `question`: "Coordinator asks: <translated>".
+   *  Served by the open-items read only, beside a whole translation in the owner's current language; never
+   *  stored. Absent from an older server, and on a START_REQUEST or DONE_REQUEST, whose titles are Orbit's. */
+  title?: string;
+  /** An owner request's `why`. */
+  why?: string;
+  /** A MANUAL_STEP request's `steps`, the text of each. */
+  steps?: Array<{ text?: string }>;
+  /** An owner request's `verifyHint`. */
+  verifyHint?: string;
+  /** A START_REQUEST's `why` uses `why` above. A DONE_REQUEST's `judgment`, or an owner-confirmation
+   *  review's `judgment`. */
+  judgment?: string;
+  /** A DONE_REQUEST's `gaps`, index for index; `criterionKey` and `evidenceRefs` are drawn from the original. */
+  gaps?: Array<{ title?: string; whyNotProven?: string; coordinatorChecked?: string }>;
+  /** An owner-confirmation review's `needsYou`, index for index: each line's `text` and `options`. */
+  needsYou?: Array<{ text?: string; options?: Array<{ label?: string; description?: string }> }>;
+  /** An owner-confirmation PROBLEMS record's `reason`, or a crossing's `reason`. */
+  reason?: string;
+  /** An owner-confirmation PROBLEMS record's `problems`, the text of each. */
+  problems?: Array<{ text?: string }>;
+  /** A criteria-change proposal's `proposed`, index for index: each criterion's `text` and
+   *  `verificationMethod`. */
+  proposed?: Array<{ text?: string; verificationMethod?: string }>;
+}
+
+/**
+ * A completion-evidence revision's `claim` and `gaps` in the owner's language (`translation` on a
+ * pending evidence judgment). `gaps` goes index for index with the envelope's. Absent until it is
+ * translated, and on every revision translation is off for.
+ */
+export interface EvidenceTranslation {
+  lang: TranslationLanguage;
+  /** The evidence could not be translated: draw it as the agent wrote it. Nothing else is set. */
+  failed?: true;
+  claim?: string;
+  gaps?: string[];
+}
+
+/** The Orbit cards whose agent-written fields beyond `description` are translated. */
+export const TRANSLATED_ORBIT_CARDS = [
+  'orbit_task_create',
+  'orbit_task_batch',
+  'orbit_project_create',
+  'orbit_blocker_resolve',
+  'orbit_dag_change',
+] as const;
 
 /** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
+
+/**
+ * Words the owner typed on an owner card (an answer to a coordinator's question, an owner request's done text or
+ * decline reason, a done request's "Not yet…" note, an owner-confirmation answer), as they were delivered to the
+ * agent: translated from the owner's language into the agent's (`lang`). Stored beside the owner's own words, which
+ * stay what every card shows; absent when translation was off, or the owner pressed Send as written.
+ *
+ * Every door that takes such words takes `sendAsWritten: true` to deliver them untranslated, and refuses them whole
+ * with a 422 TRANSLATION_FAILED, recording nothing, when they cannot be translated — as an approval answer is.
+ */
+export interface OwnerWordsTranslation {
+  lang: TranslationLanguage;
+  text: string;
+}
 
 /**
  * "Show both languages" (board 02-bilingual.png, frame 3 option B), for a reply whose blocks do not

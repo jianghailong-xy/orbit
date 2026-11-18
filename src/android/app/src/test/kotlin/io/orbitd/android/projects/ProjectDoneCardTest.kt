@@ -63,7 +63,7 @@ class ProjectDoneCardTest {
                 ProjectDoneCard(doc, request, "2026-09-29T10:00:00.000Z", ProjectDone.openItemsCount(buildJsonObject {
                     put("needsYou", JsonArray(emptyList())); put("withCoordinator", JsonArray(emptyList())); request?.let { put("doneRequest", it) } }), running,
                     record, sealRead, now, enabled = true, error = null, tag = "done", doneCheck = doneCheck,
-                    onRecord = { recorded++ }, onNotYet = if (request == null) null else { note -> notes += note; true }, onReopen = { reopened++ })
+                    onRecord = { recorded++ }, onNotYet = if (request == null) null else { note, _ -> notes += note; true }, onReopen = { reopened++ })
             }
             }
         } } }

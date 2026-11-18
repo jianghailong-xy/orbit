@@ -181,8 +181,8 @@ final class OwnerRequestsModel {
         adopt(try await api.createWikiFromOwnerRequest(request.id))
     }
 
-    func decline(_ request: OwnerRequest, reason: String) async throws {
-        adopt(try await api.declineOwnerRequest(request.id, reason: reason))
+    func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
+        adopt(try await api.declineOwnerRequest(request.id, reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// The key goes in the body of one request and nowhere else; the answer never carries it back.
