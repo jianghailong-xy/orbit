@@ -825,6 +825,7 @@ let agentToolsGuideJSON = #"""
         "session_interrupt",
         "session_list",
         "session_merge",
+        "session_move",
         "session_reply",
         "session_search",
         "session_send"
