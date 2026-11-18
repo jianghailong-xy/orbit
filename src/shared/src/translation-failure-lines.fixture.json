@@ -1,5 +1,5 @@
 {
-  "_comment": "The failure line's first sentence per reason (docs/ux/translation-failure-policy.html, frame 7, B column), before ' · Retry · Send as written'. message: a held message (frame 4B); answer: a card answer refused 422 TRANSLATION_FAILED (frame 5). Walked by translationFailureLines.spec.ts here, and by the OrbitKit and Android copies.",
+  "_comment": "The failure line's first sentence per reason (docs/ux/translation-failure-policy.html, frame 7, B column), before ' · Retry · Send as written'. message: a held message (frame 4B); answer: a card answer refused 422 TRANSLATION_FAILED (frame 5). unavailableTag: the composer tag's suffix while the translator is skipped (frame 6). translationFailureLines.spec.ts checks this file against the board's frame 7 and the web's table; OrbitKit TranslationFailureLinesParityTests and Android TranslationFailureLinesParityTest check their own copies against this file.",
   "unavailableTag": "unavailable, messages will wait",
   "cases": [
     {
@@ -48,6 +48,26 @@
       "httpStatus": 400,
       "message": "The translator refused the message, so it wasn't sent",
       "answer": "The translator refused the message, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP 404",
+      "reason": "HTTP",
+      "httpStatus": 404,
+      "message": "The translator refused the message, so it wasn't sent",
+      "answer": "The translator refused the message, so your answer wasn't sent"
+    },
+    {
+      "name": "HTTP with no status",
+      "reason": "HTTP",
+      "message": "Couldn't translate, so it wasn't sent",
+      "answer": "Couldn't translate, so it wasn't sent"
+    },
+    {
+      "name": "HTTP 302 (not a 4xx or 5xx)",
+      "reason": "HTTP",
+      "httpStatus": 302,
+      "message": "Couldn't translate, so it wasn't sent",
+      "answer": "Couldn't translate, so it wasn't sent"
     },
     {
       "name": "TRUNCATED",
