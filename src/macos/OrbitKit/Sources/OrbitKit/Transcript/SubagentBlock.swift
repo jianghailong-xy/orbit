@@ -162,9 +162,14 @@ public struct SubagentBlock: Equatable, Sendable {
             while let first = clean.first, "#>*-".contains(first) {
                 clean = String(clean.dropFirst()).trimmingCharacters(in: .whitespaces)
             }
-            if !clean.isEmpty { return clean }
+            // `{`, `]`, a code fence: the shape of what came back, not a word of it.
+            if !clean.isEmpty, !isStructural(clean) { return clean }
         }
         return nil
+    }
+
+    private static func isStructural(_ line: String) -> Bool {
+        line.hasPrefix("```") || line.allSatisfy { "{}[](),:".contains($0) }
     }
 
     private static func why(_ run: SubagentRunView?) -> String? {
@@ -217,6 +222,9 @@ public enum SubagentResult {
         }
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // The call's JSON clipped to a preview (the server trims a long result): the run's own
+            // text, never the receipt's opening brace.
+            if text.hasPrefix("{") { return endedSummary(run) }
             return text
         }
         if let handedBack = object["result"] as? String, !handedBack.isEmpty { return handedBack }
