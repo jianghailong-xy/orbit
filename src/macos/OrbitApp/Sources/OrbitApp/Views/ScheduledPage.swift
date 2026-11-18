@@ -717,7 +717,7 @@ extension ScheduleDetailPanel {
                             .font(.orbitLabel).foregroundStyle(.secondary)
                     }
                 }
-                historySection(detail, condition: condition, now: now, zone: zone)
+                historySection(scheduled, s, detail, condition: condition, now: now, zone: zone)
             }
             .padding(16)
         }
@@ -781,7 +781,7 @@ extension ScheduleDetailPanel {
         }
     }
 
-    private func historySection(_ detail: ScheduleDetailResponse?,
+    private func historySection(_ scheduled: ScheduledModel, _ s: ScheduleView, _ detail: ScheduleDetailResponse?,
                                 condition: ConditionView?, now: Date, zone: String) -> some View {
         let events: [HistoryEntry] = (condition?.events ?? []).enumerated().compactMap { index, e in
             condition.flatMap { ConditionDisplay.historyLine(e, condition: $0) }.map { HistoryEntry.event(e, $0, index: index) }
@@ -793,7 +793,7 @@ extension ScheduleDetailPanel {
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    historyRow(entry, detail: detail, now: now, zone: zone)
+                    historyRow(entry, scheduled: scheduled, s: s, detail: detail, now: now, zone: zone)
                         .accessibilityIdentifier("schedule-history-row")
                         .padding(.top, index > 0 ? 16 : 0)
                         .overlay(alignment: .top) { Divider().padding(.top, 8).opacity(index > 0 ? 1 : 0) }
@@ -803,7 +803,8 @@ extension ScheduleDetailPanel {
     }
 
     @ViewBuilder
-    private func historyRow(_ entry: HistoryEntry, detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
+    private func historyRow(_ entry: HistoryEntry, scheduled: ScheduledModel, s: ScheduleView,
+                            detail: ScheduleDetailResponse?, now: Date, zone: String) -> some View {
         let when = ScheduleDisplay.parse(entry.at).map { ScheduleDisplay.whenText($0, now: now, timezone: zone) } ?? ""
         switch entry {
         case .event(let event, let line, _):
