@@ -4,6 +4,7 @@
 import {
   DEFAULT_AGENT_LANGUAGE,
   translationFailureSentence,
+  type ApprovalTranslation,
   type ReplyTranslation,
   type TranslationFailureReason,
   type TranslationLanguage,
@@ -35,6 +36,10 @@ export interface TranslationActions {
 }
 
 export const TranslationCtx = createContext<TranslationActions | null>(null);
+
+/** The owner-language text of the session's question cards, by the call's tool_use id
+ *  (ApprovalInfo.translation): an answered question's record shows what its card showed. */
+export const QuestionTranslationsCtx = createContext<ReadonlyMap<string, ApprovalTranslation>>(new Map());
 
 /** Which messages are flipped to their original, by key. Per message and never persisted: a reload
  *  shows every one translated again (board frame 5). Held by the transcript, so the turn's copy

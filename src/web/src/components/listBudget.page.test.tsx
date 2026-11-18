@@ -155,8 +155,12 @@ const reads = (match: (path: string) => boolean, from = 0): number =>
 const isOpenList = (path: string): boolean => {
   if (!path.startsWith('/sessions?')) return false;
   const params = new URLSearchParams(path.split('?')[1]);
-  return params.get('workspaceId') === WORKSPACE_ID && !params.has('projectId') && (params.get('view') ?? 'open') === 'open';
+  return params.get('workspaceId') === WORKSPACE_ID && !params.has('projectId') && !params.has('scheduled')
+    && (params.get('view') ?? 'open') === 'open';
 };
+/** The Scheduled runs folder's own read (owner 2026-11-18): a workspace's runs, which the Open list never holds. */
+const isScheduledRuns = (path: string): boolean =>
+  path.startsWith('/sessions?') && new URLSearchParams(path.split('?')[1]).get('scheduled') === '1';
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -306,13 +310,17 @@ describe('W5: a page load reads the Open list once', () => {
     expect(calls.filter((call) => isOpenList(call.path)).map((call) => call.path)).toEqual([
       `/sessions?runnerId=${RUNNER_ID}&workspaceId=${WORKSPACE_ID}&view=open&limit=40`,
     ]);
+    expect(calls.filter((call) => isScheduledRuns(call.path)).map((call) => call.path), 'the Scheduled runs row reads once')
+      .toEqual([`/sessions?runnerId=${RUNNER_ID}&workspaceId=${WORKSPACE_ID}&view=open&scheduled=1`]);
   }, 30_000);
 
   it('on a reload of a session’s page', async () => {
     rows = [LOOSE, COORDINATOR];
     sidebarProjects = [SIDEBAR_PROJECT];
     await load(`/sessions/${LOOSE.id}`);
-    const lists = calls.filter((call) => call.path.startsWith('/sessions?') && !call.path.includes('projectId='));
+    const lists = calls.filter((call) => call.path.startsWith('/sessions?') && !call.path.includes('projectId=')
+      && !isScheduledRuns(call.path));
+    expect(calls.filter((call) => isScheduledRuns(call.path)), 'the Scheduled runs row reads once').toHaveLength(1);
     expect(lists.map((call) => call.path), 'the session page read a list it does not show, or its own twice').toHaveLength(1);
     expect(isOpenList(lists[0].path)).toBe(true);
   }, 30_000);

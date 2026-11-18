@@ -371,6 +371,7 @@ async function fetchSessions(
   view: SessionListView | null,
   tagId: string | null,
   limit: number | null,
+  scheduled = false,
 ): Promise<SessionListItem[]> {
   const path = (requestedView: string | null, since?: string): string => {
     const qs = new URLSearchParams();
@@ -379,10 +380,13 @@ async function fetchSessions(
     if (requestedView) qs.set('view', requestedView);
     if (tagId) qs.set('tagId', tagId);
     if (limit) qs.set('limit', String(limit));
+    if (scheduled) qs.set('scheduled', '1');
     if (since !== undefined) qs.set('since', since);
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
+  // A workspace's Scheduled runs folder is a plain read: the server answers it with no delta.
+  if (scheduled) return api<SessionListItem[]>(path(view));
   // A whole Open list is read as a delta against the copy this scope last read (lib/openListDelta).
   // A page is not: the delta read answers the whole scope and has no page size.
   if (view === 'open' && !limit) {
@@ -408,6 +412,8 @@ export const sessionsQuery = (
     view?: SessionListView | null;
     tagId?: string | null;
     limit?: number | null;
+    /** A workspace's Scheduled runs folder: the sessions its scheduled runs opened, which every other list leaves out. */
+    scheduled?: boolean;
   } = {},
 ) => {
   const runnerId = opts.runnerId ?? null;
@@ -415,10 +421,14 @@ export const sessionsQuery = (
   const view = opts.view ?? null;
   const tagId = opts.tagId ?? null;
   const limit = opts.limit ?? null;
+  const scheduled = opts.scheduled === true;
   return queryOptions({
-    queryKey: ['sessions', runnerId, workspaceId, view, tagId, limit] as const,
+    // The folder's key carries one more part, so it is never taken for an Open list (useControlPlane isOpenList).
+    queryKey: (scheduled
+      ? ['sessions', runnerId, workspaceId, view, tagId, limit, 'scheduled']
+      : ['sessions', runnerId, workspaceId, view, tagId, limit]) as readonly unknown[],
     meta: { entities: ['session', 'workspace', 'tag', 'folder', 'project'] },
-    queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit),
+    queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit, scheduled),
     // The stream marks a list stale the moment an event touches it, so while it is live what was
     // just read is still good to show: the console mounting on the list the splash read moments ago
     // (BootGate) reads it once, not twice (docs/list-freshness-design.md W5).

@@ -344,6 +344,35 @@ final class TranslationTests: XCTestCase {
         XCTAssertEqual(failed.shownInput, info.input)
     }
 
+    /// After the answer (3A): the transcript's record finds the card's translation by its call and
+    /// shows the questions as the card did, the answer still read off the English result.
+    func testAnAnsweredQuestionKeepsItsCardsLanguage() throws {
+        let info = try decode([ApprovalInfo].self, """
+        [{"id":"a1","toolName":"AskUserQuestion","status":"ALLOWED","toolUseId":"toolu_q",
+          "input":{"questions":[{"question":"Which one?","header":"Pick",
+            "options":[{"label":"Yes","description":"Do it"},{"label":"No"}]}]},
+          "translation":{"lang":"zh-Hans","questions":[{"question":"哪一个？","header":"选择",
+            "options":[{"label":"是","description":"做"},{"label":"否","description":"不该出现"}]}]}},
+         {"id":"a2","toolName":"Bash","status":"ALLOWED","toolUseId":"toolu_b","input":{},
+          "translation":{"lang":"zh-Hans","description":"列出"}}]
+        """)
+        let byCall = ApprovalTranslation.byToolUse(info)
+        XCTAssertEqual(Array(byCall.keys), ["toolu_q"], "only question cards, by their call")
+        let asked = Approvals.parseQuestions(from: try XCTUnwrap(info[0].input))
+        let outcome = QuestionRecords.outcome(questions: asked, result: #"The user answered: "Which one?"="No". Read the answers carefully."#, isError: false)
+        XCTAssertEqual(outcome, .answered([QuestionAnswer(picked: [1], typed: nil)]))
+        let shown = ApprovalTranslation.shownQuestions(asked, byCall["toolu_q"])
+        XCTAssertEqual(shown.first?.question, "哪一个？")
+        XCTAssertEqual(shown.first?.header, "选择")
+        XCTAssertEqual(shown.first?.options.map(\.label), ["是", "否"])
+        XCTAssertEqual(shown.first?.options.map(\.description), ["做", nil], "no description where the original had none")
+        if case .answered(let answers)? = outcome {
+            XCTAssertEqual(QuestionRecords.answerLine(shown[0], answers[0]), "否")
+        }
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, ApprovalTranslation(lang: .zhHans, failed: true)), asked)
+        XCTAssertEqual(ApprovalTranslation.shownQuestions(asked, nil), asked)
+    }
+
     func testAPlanIsShownTranslated() {
         let input: JSONValue = .object(["plan": .string("Do the thing")])
         let shown = ApprovalTranslation.shownInput(input, ApprovalTranslation(lang: .de, plan: "Mach es"))
