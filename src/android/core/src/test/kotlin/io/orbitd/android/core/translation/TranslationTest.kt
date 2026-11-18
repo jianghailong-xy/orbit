@@ -105,6 +105,16 @@ class TranslationTest {
         assertTrue(Translation.available(obj("""{"translationAvailable":true}""")))
     }
 
+    @Test fun translationUnavailableUntilIsReadWhileItLiesAhead() {
+        val until = java.time.Instant.parse("2026-11-18T06:01:00.000Z")
+        val me = obj("""{"translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}""")
+        assertEquals(until, Translation.unavailableUntil(me, until.minusMillis(1)))
+        assertNull("past it, the ordinary tag again", Translation.unavailableUntil(me, until))
+        assertNull(Translation.unavailableUntil(obj("""{"translationUnavailableUntil":null}""")))
+        assertNull("an older server says nothing", Translation.unavailableUntil(obj("""{"translationAvailable":true}""")))
+        assertNull(Translation.unavailableUntil(obj("""{"translationUnavailableUntil":"soon"}""")))
+    }
+
     @Test fun aTurnsTranslationParsesEachStateAndRefusesWhatIsNotOne() {
         val done = Translation.turn(obj("""{"state":"DONE","from":"zh-Hans","original":"修复登录"}"""))!!
         assertEquals(Translation.Turn(Translation.TurnState.DONE, "zh-Hans", "修复登录"), done)

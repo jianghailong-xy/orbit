@@ -66,6 +66,20 @@ final class TranslationTests: XCTestCase {
         XCTAssertFalse(SessionTranslation.unavailable(login))
     }
 
+    func testTranslationUnavailableUntilIsReadWhileItLiesAhead() throws {
+        let me = try decode(User.self, """
+        {"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":"2026-11-18T06:01:00.000Z"}
+        """)
+        XCTAssertEqual(me.translationUnavailableUntil, "2026-11-18T06:01:00.000Z")
+        let until = Date(timeIntervalSince1970: 1_794_981_660)
+        XCTAssertEqual(SessionTranslation.temporarilyUnavailableUntil(me, now: until.addingTimeInterval(-1)), until)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(me, now: until), "past it, the ordinary tag again")
+        let closed = try decode(User.self, #"{"id":"u1","email":"a@b.c","translationAvailable":true,"translationUnavailableUntil":null}"#)
+        XCTAssertNil(closed.translationUnavailableUntil)
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(closed))
+        XCTAssertNil(SessionTranslation.temporarilyUnavailableUntil(try decode(User.self, #"{"id":"u1","email":"a@b.c"}"#)))
+    }
+
     func testAStrayValueReadsAsAbsentAndAnUnknownLanguageAsTheDefault() throws {
         let prefs = try decode(UserPreferences.self,
                                #"{"translationEnabled":"yes","translationLanguage":"xx","translationAgentLanguage":"xx"}"#)

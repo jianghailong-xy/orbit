@@ -4,7 +4,16 @@ import { RunStatus } from '@prisma/client';
 import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
-import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, translationAvailable } from './translation';
+import {
+  onTranslationAvailabilityChange,
+  protectVerbatim,
+  resetTranslationBreaker,
+  restoreVerbatim,
+  translate,
+  TranslationFailed,
+  translationAvailable,
+  translationUnavailableUntil,
+} from './translation';
 import { isSlashCommand, translationLanguages, turnTranslationOf } from './turn-translation';
 import { Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ownerWordsForAgent } from './reply-translation';
@@ -156,6 +165,8 @@ const originalFetch = globalThis.fetch;
 const originalKey = process.env.DEEPSEEK_API_KEY;
 const originalBase = process.env.DEEPSEEK_BASE_URL;
 beforeEach(() => {
+  // The breaker is the process's: every test starts with it closed and nothing counted.
+  resetTranslationBreaker();
   process.env.DEEPSEEK_API_KEY = 'test-key';
   delete process.env.DEEPSEEK_BASE_URL;
 });
@@ -980,4 +991,172 @@ test('a muted session is not pushed', async () => {
   await sendFailed(h);
   await h.after(SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
   assert.equal(h.pushes.length, 0);
+});
+
+// ── the circuit breaker (policy B, criterion 4; board frame 6) ────────────────────────────────────
+
+/** Settle `pending` under mocked setTimeout, stepping the clock 250 ms at a time (the retries pause 0.5 s and 1.5 s). */
+async function drain<T>(pending: Promise<T>): Promise<{ value?: T; error?: unknown }> {
+  let result: { value?: T; error?: unknown } | undefined;
+  pending.then((value) => { result = { value }; }, (error: unknown) => { result = { error }; });
+  for (let i = 0; i < 400 && !result; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
+    if (!result) mock.timers.tick(250);
+  }
+  assert.ok(result, 'settled');
+  return result;
+}
+
+/** A fetch that counts its calls and fails each one as `kind` says, or answers ENGLISH for 'ok'. */
+function countingTranslator(kind: () => 'NETWORK' | 'ok' | { http: number } | 'MANGLED' | 'EMPTY' | 'TRUNCATED') {
+  const calls = { n: 0 };
+  globalThis.fetch = (async () => {
+    calls.n++;
+    const k = kind();
+    if (k === 'NETWORK') throw new TypeError('fetch failed');
+    if (typeof k === 'object') return { ok: false, status: k.http, body: null } as Response;
+    const content = k === 'ok' ? ENGLISH : k === 'EMPTY' ? ' ' : k === 'MANGLED' ? 'check ⟦0⟧ and ⟦7⟧' : 'The Google';
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: k === 'TRUNCATED' ? 'length' : 'stop', message: { content } }] }) } as Response;
+  }) as typeof fetch;
+  return calls;
+}
+
+const isReason = (reason: string) => (e: unknown) => e instanceof TranslationFailed && e.reason === reason;
+
+/** Three transient failures in a row — unreachable, 503 and 429 after their retries — which open the breaker. */
+async function openBreaker(): Promise<void> {
+  for (const kind of ['NETWORK', { http: 503 }, { http: 429 }] as const) {
+    countingTranslator(() => kind);
+    const { error } = await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    assert.ok(error instanceof TranslationFailed && error.reason !== 'UNAVAILABLE', 'each one asked the translator');
+  }
+}
+
+test('three transient failures within a minute open the breaker: the next translate() is UNAVAILABLE at once, fetch untouched', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  let announced = 0;
+  const off = onTranslationAvailabilityChange(() => announced++);
+  try {
+    countingTranslator(() => 'NETWORK');
+    await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    countingTranslator(() => ({ http: 502 }));
+    await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    assert.equal(translationUnavailableUntil(), null, 'two failures are not enough');
+    assert.equal(announced, 0);
+    // The third: a timeout.
+    stubDeepSeek(['hang']);
+    const { error } = await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    assert.ok(isReason('TIMEOUT')(error));
+    assert.equal(announced, 1, 'opening is announced once');
+    const until = translationUnavailableUntil();
+    assert.equal(until?.getTime(), Date.now() + 60_000);
+
+    const calls = countingTranslator(() => 'ok');
+    await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) =>
+      isReason('UNAVAILABLE')(e) && (e as TranslationFailed).durationMs === 0);
+    mock.timers.tick(59_999);
+    await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), isReason('UNAVAILABLE'));
+    assert.equal(calls.n, 0, 'nothing asked the translator while it was open');
+    assert.equal(announced, 1);
+  } finally {
+    off();
+  }
+});
+
+test('after 60 s one call is let through: a translation closes the breaker, and the count starts again', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  let announced = 0;
+  const off = onTranslationAvailabilityChange(() => announced++);
+  try {
+    await openBreaker();
+    assert.equal(announced, 1);
+    mock.timers.tick(60_000);
+    assert.equal(translationUnavailableUntil(), null, 'not reported once the 60 s are up');
+    const calls = countingTranslator(() => 'ok');
+    assert.equal(await translate(ORIGINAL, 'zh-Hans', 'en'), ENGLISH_RESTORED);
+    assert.equal(calls.n, 1);
+    assert.equal(announced, 2, 'closing is announced');
+    assert.equal(translationUnavailableUntil(), null);
+    // Closed with nothing counted: two more transient failures do not open it.
+    countingTranslator(() => 'NETWORK');
+    await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    assert.equal(translationUnavailableUntil(), null);
+    assert.equal(announced, 2);
+  } finally {
+    off();
+  }
+});
+
+test('the trial call failing opens it for another 60 s, and other calls meet UNAVAILABLE while the trial runs', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  let announced = 0;
+  const off = onTranslationAvailabilityChange(() => announced++);
+  try {
+    await openBreaker();
+    mock.timers.tick(60_000);
+    const calls = countingTranslator(() => 'NETWORK');
+    const trial = drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), isReason('UNAVAILABLE'));
+    const { error } = await trial;
+    assert.ok(isReason('NETWORK')(error));
+    assert.equal(calls.n, 3, 'only the trial asked, with its retries');
+    assert.equal(announced, 2, 'opening again is announced');
+    assert.equal(translationUnavailableUntil()?.getTime(), Date.now() + 60_000);
+    await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), isReason('UNAVAILABLE'));
+    assert.equal(calls.n, 3);
+  } finally {
+    off();
+  }
+});
+
+test('4xx, MANGLED, EMPTY and TRUNCATED never open the breaker, and failures more than a minute apart do not either', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  for (const kind of [{ http: 400 }, { http: 401 }, { http: 404 }, 'MANGLED', 'EMPTY', 'TRUNCATED'] as const) {
+    const calls = countingTranslator(() => kind);
+    for (let i = 0; i < 5; i++) {
+      const { error } = await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+      assert.ok(error instanceof TranslationFailed && error.reason !== 'UNAVAILABLE');
+    }
+    assert.equal(calls.n, 5, `${JSON.stringify(kind)} asked every time`);
+    assert.equal(translationUnavailableUntil(), null);
+  }
+  for (let i = 0; i < 4; i++) {
+    countingTranslator(() => ({ http: 500 }));
+    await drain(translate(ORIGINAL, 'zh-Hans', 'en'));
+    mock.timers.tick(31_000);
+  }
+  assert.equal(translationUnavailableUntil(), null, 'never three inside one minute');
+});
+
+test('while open, a held message stores UNAVAILABLE at once and a card answer is refused 422 with it; fetch untouched', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
+  await openBreaker();
+  const calls = countingTranslator(() => 'ok');
+  const h = harness();
+  let turnId = '';
+  const lines = await warnLines(async () => {
+    ({ turnId } = await h.send());
+    await h.service.translationsSettled();
+  });
+  const [turn] = h.turns;
+  assert.equal(turn.status, 'HELD');
+  assert.equal(turn.translationState, 'FAILED');
+  assert.equal(turn.translationFailureReason, 'UNAVAILABLE');
+  assert.equal(turn.translationHttpStatus, null);
+  assert.deepEqual(turnTranslationOf(turn), { state: 'FAILED', from: 'zh-Hans', original: ORIGINAL, failureReason: 'UNAVAILABLE' });
+  assertOneFailureLine(lines, 'UNAVAILABLE', null, SESSION_ID);
+  assert.match(lines[0], /durationMs=0\b/);
+
+  const { body } = await refusal(ORIGINAL, SESSION_ID);
+  assert.deepEqual(body, { code: 'TRANSLATION_FAILED', message: "Couldn't translate, so it wasn't sent.", failureReason: 'UNAVAILABLE' });
+  assert.equal(calls.n, 0, 'neither asked the translator');
+
+  // Once the 60 s are up, Retry is the trial call: it translates, delivers, and closes the breaker.
+  mock.timers.tick(60_000);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  await h.service.translationsSettled();
+  assert.equal(turn.translationState, 'DONE');
+  assert.equal(calls.n, 1);
+  assert.equal(translationUnavailableUntil(), null);
 });

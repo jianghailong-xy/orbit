@@ -11,7 +11,8 @@
  *    absent `translationAgentLanguage` is English. Both languages come from the one list
  *    TRANSLATION_LANGUAGES ("Your language" and "Agents work in" alike). `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
- *    preference says.
+ *    preference says. `translationUnavailableUntil` (MeTranslation) is set while a failing translator
+ *    is being skipped (board docs/ux/translation-failure-policy.html, frame 6).
  *    When the two languages are the same, nothing is translated either: messages, replies and
  *    cards go exactly as with translation off (no `translation` on any of them).
  *  - `preferences.translationBilingual` ("Show both languages", board 02-bilingual.png): absent is
@@ -195,7 +196,31 @@ export interface MeTranslation {
   /** The server holds a DeepSeek key and so can translate. False: Settings shows the switch
    *  disabled with the board frame 2 notice, and no message is translated. */
   translationAvailable: boolean;
+  /**
+   * Translation is temporarily unavailable (policy board docs/ux/translation-failure-policy.html, frame 6): the
+   * translator failed TRANSLATION_BREAKER_THRESHOLD times (network, timeout, or 429/5xx after its retries) within
+   * a minute, so until this ISO-8601 instant every owner → agent translation is skipped and fails at once with
+   * reason UNAVAILABLE: a message is held FAILED, a card answer is refused 422 TRANSLATION_FAILED. Null while
+   * the translator is in use (and absent from an older server: read as null).
+   *
+   * While it is set and in the future, the composer's language tag reads "unavailable, messages will wait" and
+   * Settings › Translation shows the same notice. It is not extended by itself: once the instant passes the
+   * client draws the ordinary tag again without being told; the next send is the trial call, which either
+   * closes the breaker or sets a new instant. Every change of it (opened, opened again, closed) is announced on
+   * the account's control stream as `translation.status_changed` (ControlEventType.TRANSLATION_STATUS_CHANGED):
+   * read `GET /users/me` again on it.
+   *
+   * PER APISERVER PROCESS: each replica keeps its own breaker, so with several replicas the answer depends on
+   * which one served the read, and a replica that has seen no failures still asks the translator.
+   */
+  translationUnavailableUntil: string | null;
 }
+
+/** How many transient translator failures within TRANSLATION_BREAKER_WINDOW_MS open the circuit breaker
+ *  (MeTranslation.translationUnavailableUntil), and how long it then stays open. */
+export const TRANSLATION_BREAKER_THRESHOLD = 3;
+export const TRANSLATION_BREAKER_WINDOW_MS = 60_000;
+export const TRANSLATION_BREAKER_OPEN_MS = 60_000;
 
 /**
  * Where one of the owner's messages is in translation.

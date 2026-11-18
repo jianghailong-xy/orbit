@@ -753,6 +753,17 @@ public enum SessionTranslation {
         user?.translationAvailable == false
     }
 
+    /// Until when the server is skipping a failing translator (`translationUnavailableUntil`, board frame 6), or nil
+    /// when it is not, the instant has passed, or the value does not parse. Non-nil: the composer tag reads
+    /// "unavailable, messages will wait". The server does not say when it passes: draw the ordinary tag again then.
+    public static func temporarilyUnavailableUntil(_ user: User?, now: Date = Date()) -> Date? {
+        guard let raw = user?.translationUnavailableUntil else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let until = fractional.date(from: raw) ?? ISO8601DateFormatter().date(from: raw), until > now else { return nil }
+        return until
+    }
+
     /// Whether a refusal is the 422 TRANSLATION_FAILED a decision whose owner's words could not be
     /// translated is answered with (1A): nothing was recorded, and the card offers Retry and Send as
     /// written instead of reporting a failure.

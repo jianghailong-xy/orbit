@@ -244,6 +244,15 @@ object Translation {
     /** `GET /users/me`'s `translationAvailable`: the server holds a DeepSeek key. Absent (an older server) reads as unable. */
     fun available(user: JsonObject?): Boolean = (user?.get("translationAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+    /** `GET /users/me`'s `translationUnavailableUntil` (MeTranslation, board frame 6): until when the server skips a failing translator,
+     * so a message sent now is held with reason UNAVAILABLE. Null when absent, null, unparsable or already past [now]; non-null, the
+     * composer tag reads "unavailable, messages will wait". The server does not say when it passes: draw the ordinary tag again then. */
+    fun unavailableUntil(user: JsonObject?, now: java.time.Instant = java.time.Instant.now()): java.time.Instant? {
+        val raw = (user?.get("translationUnavailableUntil") as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+        val until = runCatching { java.time.Instant.parse(raw) }.getOrNull() ?: return null
+        return until.takeIf { it.isAfter(now) }
+    }
+
     enum class TurnState { TRANSLATING, FAILED, DONE, SENT_AS_WRITTEN }
 
     /** Why translating the owner's words failed (TranslationFailureReason, TRANSLATION_FAILURE_REASONS in shared's order): on a FAILED
