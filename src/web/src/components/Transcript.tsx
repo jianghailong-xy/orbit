@@ -4672,6 +4672,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         data-seq={node.seq}
         // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
         data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
+        // Where the composer band's Agents list finds a run's block (SessionAgentsStrip).
+        data-delegate-call={isDelegate ? node.id : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
           hasDetail && open ? ' is-open' : ''
         }`}

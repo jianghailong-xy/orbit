@@ -275,6 +275,7 @@ import {
 } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
+import { SessionAgentsStrip } from './SessionAgentsStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { WatchWakeNamesCtx } from './WatchWakeCard';
 import { ExchangeTreeCtx, type ExchangeTree } from './OrbitExchangeFold';
@@ -353,7 +354,7 @@ import { AntigravityRepairCard, antigravityRepair, AttachmentImage, QueuedFootCt
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
-import { approvalAction, delegateCallOfApproval, delegateDescription } from '../lib/subagentRuns';
+import { approvalAction, delegateCallOfApproval, delegateDescription, useSubagentRuns } from '../lib/subagentRuns';
 import {
   SessionDecisionStrip,
   decisionRowKey,
@@ -4542,6 +4543,8 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // The session's SubAgent runs, read once for the transcript's blocks and the composer band's Agents line.
+  const subagentRuns = useSubagentRuns(selectedId ?? '', transcriptEvents);
   // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
   // retry a held message's translation or send it as written (1A), retry a reply's (2A) — and whether
   // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
@@ -10749,6 +10752,7 @@ export function WorkspaceView({
                 answeredQuestions={answeredQuestions}
                 wikiChat={wikiChatCards}
                 subagentWaiting={subagentWaiting}
+                subagentRuns={subagentRuns}
               />
               </QueuedFootCtx.Provider>
               </MainCheckoutCtx.Provider>
@@ -11178,6 +11182,9 @@ export function WorkspaceView({
         {selectedId && !selectedTrashed && (
           <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
         )}
+        {/* Every Agent this session started, beside the branch below as iOS draws it: one line that opens
+            their list. Hidden until it has started one. */}
+        {selectedId && !selectedTrashed && <SessionAgentsStrip key={selectedId} runs={subagentRuns} />}
         {mainCheckout.drawer}
         <MainCheckoutCtx.Provider value={mainCheckout.host}>
         <SessionOutputs

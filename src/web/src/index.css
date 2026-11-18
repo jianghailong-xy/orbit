@@ -29130,3 +29130,35 @@ button.agent-progress-agent:hover {
 .approval-card.coordinator-question {
   border: 1.5px solid var(--warning-solid);
 }
+
+/* The Agents line (SessionAgentsStrip.tsx), in the Background processes tray's shell and rows: the band's
+   words truncate before the title does; opened, Running and Done over the tray's own rows, each a run's name
+   then its facts. */
+.ag-head {
+  flex: none;
+}
+/* The Agent tone's purple, as Apple draws the band's sparkle. */
+.bg-tray-ico.ag-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .bg-tray-ico.ag-mark {
+  color: #a78bfa;
+}
+.ag-band {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ag-section {
+  flex: none;
+  padding: 4px 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ag-row .ag-title {
+  font-family: inherit;
+}
