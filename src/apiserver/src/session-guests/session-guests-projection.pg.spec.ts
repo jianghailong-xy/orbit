@@ -387,10 +387,10 @@ test('session guests: the guest door shows only what the public link may, and th
     await stored('task_progress', { toolUseId: 'toolu_stored', description: OWNER_ONLY.legacyLive });
 
     // ── the doors ─────────────────────────────────────────────────────────────────────────────
-    const doors: Array<{ name: string; toolOutput: boolean; guest: boolean; streamPath: string; readPath: string; bearer?: string }> = [
-      { name: 'guest', toolOutput: true, guest: true, streamPath: `/guest-sessions/${s}/stream?access_token=${guestLogin}`, readPath: `/guest-sessions/${s}/events`, bearer: guestLogin },
-      { name: 'session link (Tool output on)', toolOutput: true, guest: false, streamPath: `/shared/${shareToken}/stream`, readPath: `/shared/${shareToken}/events` },
-      { name: 'task link conversation (Tool output off)', toolOutput: false, guest: false, streamPath: `/shared/${taskToken}/sessions/${s}/stream`, readPath: `/shared/${taskToken}/sessions/${s}/events` },
+    const doors: Array<{ name: string; toolOutput: boolean; streamPath: string; readPath: string; bearer?: string }> = [
+      { name: 'guest', toolOutput: true, streamPath: `/guest-sessions/${s}/stream?access_token=${guestLogin}`, readPath: `/guest-sessions/${s}/events`, bearer: guestLogin },
+      { name: 'session link (Tool output on)', toolOutput: true, streamPath: `/shared/${shareToken}/stream`, readPath: `/shared/${shareToken}/events` },
+      { name: 'task link conversation (Tool output off)', toolOutput: false, streamPath: `/shared/${taskToken}/sessions/${s}/stream`, readPath: `/shared/${taskToken}/sessions/${s}/events` },
     ];
     const streams: HeldStream[] = [];
     st.after(() => streams.forEach((held) => held.close()));
