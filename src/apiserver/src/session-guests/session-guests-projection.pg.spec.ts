@@ -504,7 +504,7 @@ test('session guests: the guest door shows only what the public link may, and th
       }
       // The triggers (a rename, two statuses, a card) came within one 250 ms window: one read, not four.
       assert.ok(heads.length <= 3, `${door.name}: ${heads.length} heads for one burst of triggers`);
-      assert.equal(readHeader.waitingOnOwner, true, \`\${door.name}: the read says the agent waits on the owner\`);
+      assert.equal(readHeader.waitingOnOwner, true, `${door.name}: the read says the agent waits on the owner`);
     }
     // The resumed guest stream replayed only what came after its cursor, then went live.
     const resumedSeqs = resumed.frames.filter((f) => f.seq > 0 && f.type !== 'head').map((f) => f.seq);

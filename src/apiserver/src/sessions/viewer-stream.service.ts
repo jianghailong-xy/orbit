@@ -119,7 +119,7 @@ export class ViewerStreamService {
     );
     const events$ = replayThenLive(history$, live$, () => this.realtime.turnPrefix(sessionId)).pipe(
       mergeMap((e) => {
-        const frame = viewerFrame(projection, cut(e, opts.maxPayload));
+        const frame = viewerFrame(audience, cut(e, opts.maxPayload));
         return frame ? of(toMessage(frame)) : EMPTY;
       }),
     );
