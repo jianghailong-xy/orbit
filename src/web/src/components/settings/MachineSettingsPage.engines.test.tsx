@@ -356,7 +356,7 @@ describe('the machine’s own controls over its engines', () => {
     // OpenCode has its card's row here too, with nothing to press: it signs in per provider, on the machine.
     expect([text($('.re-name', row('opencode'))), text($('.re-meta', row('opencode')))]).toEqual([
       'OpenCode',
-      '1.18.33 · the CLI wouldn\'t say',
+      '1.18.33 · sign-in unknown',
     ]);
     expect(text($('.re-login-note', row('opencode')))).toMatch(/^Run opencode auth login on that machine/);
     expect([text($('.re-name', row('dsh'))), text($('.re-status', row('dsh')))]).toEqual(['DeepSeek Harness', 'Uses API keys']);
