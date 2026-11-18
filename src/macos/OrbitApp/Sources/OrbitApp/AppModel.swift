@@ -4144,9 +4144,9 @@ final class AppModel {
         case .runners: selectedSection = .runners
         }
         didResolveDefaultLanding = true
-        provisionalLandingAgentID = nil
         // A share waiting on the launch: it goes over the landing, not under it (ShareHandoff.swift).
         drainShareClaim()
+        provisionalLandingAgentID = nil
     }
 
     /// Read what the previous run left (`persistLaunchSnapshot`) and adopt it — off the main thread,
