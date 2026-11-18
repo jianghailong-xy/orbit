@@ -231,6 +231,34 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             if (navigation.current != next) LastPageMarks.opened(next)
             navigation = navigation.push(next)
         }
+        fun openScheduledRun(id: String) = open(OrbitRoute(Destination.SESSION, id, folderId = ScheduledRunsFolder.ID))
+        if (route.destination == Destination.SESSION && route.folderId == ScheduledRunsFolder.ID &&
+            navigation.frames.getOrNull(navigation.frames.lastIndex - 1)?.let {
+                it.destination == Destination.FOLDER && it.id == ScheduledRunsFolder.ID
+            } != true) {
+            // Use the session's own workspace and lifecycle when its normal reader gets the detail.
+            // A schedule may have moved since this run, and an unavailable session can still go Back to its source.
+            val target by remember(app, signedIn.handle, route.id) {
+                app.realtime.state.map { state ->
+                    state.session?.takeIf { state.handle === signedIn.handle && ObjectId.same(it.id, route.id) }
+                        ?.snapshot?.detail?.let { detail ->
+                            val workspace = sequenceOf(detail.text("workspaceId"), detail.obj("workspace")?.text("id"),
+                                detail.text("agentId"), detail.obj("agent")?.text("id")).firstOrNull { !it.isNullOrEmpty() }
+                            workspace?.let { it to detail.text("lifecycleState").lowercase() }
+                        }
+                }.distinctUntilChanged()
+            }.collectAsState(null)
+            LaunchedEffect(route, target, data.workspaces) {
+                val (workspace, lifecycle) = target ?: return@LaunchedEffect
+                val id = data.workspaces.firstOrNull { ObjectId.same(it.id, workspace) }?.id ?: return@LaunchedEffect
+                val view = SessionView.entries.firstOrNull { it.query == lifecycle } ?: SessionView.OPEN
+                if (navigation.current == route) {
+                    navigation = navigation.land(id, OrbitRoute(Destination.WORKSPACE, id, id))
+                        .push(OrbitRoute(Destination.FOLDER, ScheduledRunsFolder.ID, id, sessionView = view.query))
+                        .push(route)
+                }
+            }
+        }
         // A drawer row: the destination already showing only closes the drawer, any other opens at its root (A05-8) — a
         // workspace's, on the folder page its list was left on, while the directory still has that folder.
         fun select(key: String, root: OrbitRoute) {
@@ -475,12 +503,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
-                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open)
-                                // The timeline (board 01 ②); a row's detail is the page's own bottom sheet, and a run's session is pushed
-                                // over the page, so Back returns to the schedule it ran for. Change… is a new conversation in its workspace.
+                                Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open, ::openScheduledRun)
+                                // The timeline (board 01 ②) has its own bottom sheet. Change… starts a conversation in the schedule's workspace.
                                 Destination.SCHEDULED -> ScheduledPage(remember(signedIn.handle) { ScheduledStore.of(app.session, signedIn.handle, app.processScope) },
                                     workspaces.map { it.id to it.name }, lastWorkspace.id, route.id,
                                     openSession = { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LIST)) },
+                                    openRun = ::openScheduledRun,
                                     change = { open(OrbitRoute(Destination.DRAFT, workspaceId = it.workspaceId, origin = Origin.LIST)) },
                                     openTask = { open(OrbitRoute(Destination.TASK, it, origin = Origin.LIST)) })
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
