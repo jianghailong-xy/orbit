@@ -91,7 +91,7 @@ object TranslationCopy {
 /**
  * Why the owner's words were not sent (policy board docs/ux/translation-failure-policy.html, frame 7's B column): the sentence before
  * "· Retry · Send as written" on a held message (4B) and, naming "your answer", on a card answer refused 422 TRANSLATION_FAILED (5).
- * No reason, or one the board has no line for (NO_KEY), is null: the drawing says today's generic [TranslationCopy.SEND_FAILED]. Same words as the web's.
+ * No reason, or one the board has no line for (NO_KEY, HTTP without a 4xx/5xx status), is null: the drawing says today's generic [TranslationCopy.SEND_FAILED]. Same words as the web's.
  */
 object TranslationFailureCopy {
     const val TIMEOUT = "The translator didn't answer in time"
@@ -105,11 +105,17 @@ object TranslationFailureCopy {
     /** After the composer tag while the server skips a failing translator (frame 6): "Chinese → English · unavailable, messages will wait". */
     const val COMPOSER_UNAVAILABLE = "unavailable, messages will wait"
 
-    /** The reason's clause, or null for none: HTTP 429 and 5xx were retried and read as unreachable, any other status as refused. */
+    /** The reason's clause, or null for none: HTTP 429 and 5xx were retried and read as unreachable, any other 4xx as refused, and HTTP
+     *  without a status (or with one outside those) is null, like NO_KEY: frame 7 names no other, so the drawing does not guess why. */
     fun clause(reason: Translation.FailureReason?, httpStatus: Int?): String? = when (reason) {
         Translation.FailureReason.TIMEOUT -> TIMEOUT
         Translation.FailureReason.NETWORK -> UNREACHABLE
-        Translation.FailureReason.HTTP -> if (httpStatus != null && (httpStatus == 429 || httpStatus >= 500)) UNREACHABLE else REFUSED
+        Translation.FailureReason.HTTP -> when {
+            httpStatus == null -> null
+            httpStatus == 429 || httpStatus >= 500 -> UNREACHABLE
+            httpStatus in 400..499 -> REFUSED
+            else -> null
+        }
         Translation.FailureReason.TRUNCATED -> TOO_LONG
         Translation.FailureReason.MANGLED, Translation.FailureReason.EMPTY -> DAMAGED
         Translation.FailureReason.UNAVAILABLE -> UNAVAILABLE

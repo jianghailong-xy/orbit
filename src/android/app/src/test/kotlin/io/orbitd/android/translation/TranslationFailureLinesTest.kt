@@ -61,8 +61,8 @@ class TranslationFailureLinesTest {
         }
         // Every reason the wire knows is in the table.
         assertEquals(FailureReason.entries.toSet(), table.mapNotNull { it.first.first }.toSet())
-        // HTTP without its status reads as refused: only a 429 or 5xx was retried as unreachable.
-        assertEquals("The translator refused the message, so it wasn't sent", TranslationFailureCopy.message(FailureReason.HTTP, null))
+        // HTTP without its status says nothing it cannot know: today's generic line, as on the web and OrbitKit.
+        assertNull(TranslationFailureCopy.message(FailureReason.HTTP, null))
     }
 
     @Test fun aHeldMessageDrawsItsReasonThenRetryAndSendAsWritten() {

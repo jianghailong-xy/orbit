@@ -320,7 +320,8 @@ export const TRANSLATION_FAILURE_LINES = {
 export type TranslationFailureLine = keyof typeof TRANSLATION_FAILURE_LINES;
 
 /** Which row of TRANSLATION_FAILURE_LINES a failure draws. HTTP is "unreachable" for 429 and 5xx (the statuses
- *  that were retried) and "refused" for any other status; MANGLED and EMPTY are both "damaged". */
+ *  that were retried), "refused" for any other 4xx, and GENERIC without a status or with one outside those (frame 7
+ *  names no other, so we do not guess why); MANGLED and EMPTY are both "damaged". */
 export function translationFailureLineOf(reason: unknown, httpStatus?: number | null): TranslationFailureLine {
   switch (reason) {
     case 'TIMEOUT':
@@ -328,7 +329,9 @@ export function translationFailureLineOf(reason: unknown, httpStatus?: number | 
     case 'NETWORK':
       return 'UNREACHABLE';
     case 'HTTP':
-      return httpStatus === 429 || (typeof httpStatus === 'number' && httpStatus >= 500) ? 'UNREACHABLE' : 'REFUSED';
+      if (typeof httpStatus !== 'number') return 'GENERIC';
+      if (httpStatus === 429 || httpStatus >= 500) return 'UNREACHABLE';
+      return httpStatus >= 400 && httpStatus < 500 ? 'REFUSED' : 'GENERIC';
     case 'TRUNCATED':
       return 'TRUNCATED';
     case 'MANGLED':
