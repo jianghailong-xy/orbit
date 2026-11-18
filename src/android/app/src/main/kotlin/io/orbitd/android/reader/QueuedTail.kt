@@ -7,11 +7,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.BackgroundWakeLine
+import io.orbitd.android.cards.SubagentFinishedLine
+import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.cards.LocalAnsweredQuestions
 import io.orbitd.android.cards.OwnerAnswerLineView
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.WatchWakeLine
+import io.orbitd.android.composer.CoordinatorHandoff
 import io.orbitd.android.cards.dashedBorder
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.objects
@@ -40,7 +43,9 @@ import kotlinx.serialization.json.*
 internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val event: RunEvent, val cards: List<InteractionCard>,
     val wake: JsonObject?, val watch: JsonObject? = null, val shell: Boolean = false, val createdAt: String? = null,
     val readersOwn: Boolean = false, val delivery: String? = null, val deliveryCode: String? = null, val deliveryReason: String? = null,
-    val translation: Translation.Turn? = null) {
+    val translation: Translation.Turn? = null,
+    /** A SubAgent's end the queue will deliver: its block, read as the line it will be (web `listedWithItsBlock`). */
+    val subagent: SubagentFinished? = null) {
     /** The reader's own words still on their way — queued for the next turn, or a steer no runner has taken yet — which the tray above
      * the composer holds instead of the tail (docs/mocks/steer-tray; web `inPendingTray`, OrbitKit `PendingTray.holds`). */
     val inTray: Boolean get() = readersOwn && delivery == null && translation?.held != true
@@ -57,7 +62,7 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
 internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
     val delivered = events.filter { it.type == "user" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.isReceipt() || row.text("placement") == "accepted") return@mapNotNull null
+        if (row.isReceipt() || row.text("placement") == "accepted" || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId")
         if (turnId != null && delivered.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         listedTurn(row)
@@ -92,12 +97,13 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
     val event = RunEvent("user", 0, echoPayload(row), turnId)
     val cards = transcriptCards(event)
     val wake = io.orbitd.android.core.cards.queuedWake(content)
+    val subagent = SubagentFinished.parse(content)
     val orbits = row["authoredByOrbit"] == JsonPrimitive(true) || SteerDelivery.cardKeys.any { row[it] != null && row[it] != JsonNull }
     return QueuedTurn(turnId, row.text("kind") == "steer", event, cards, wake, cards.firstOrNull { it.key.endsWith(":watch") }?.source,
         shell = row.text("kind") == "shell", createdAt = row.text("createdAt"),
-        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null,
+        readersOwn = turnId != null && !orbits && cards.isEmpty() && wake == null && subagent == null,
         delivery = row.text("delivery"), deliveryCode = row.text("deliveryCode"), deliveryReason = row.text("deliveryReason"),
-        translation = Translation.turn(row["translation"]))
+        translation = Translation.turn(row["translation"]), subagent = subagent)
 }
 
 /**
@@ -110,12 +116,17 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
 internal fun acceptedHeads(rows: List<JsonObject>, events: List<RunEvent>): List<RunEvent> {
     val done = events.filter { it.type == "user" || it.type == "turn_end" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt()) return@mapNotNull null
+        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt() || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId") ?: return@mapNotNull null
         if (done.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         RunEvent("user", 0, echoPayload(row), turnId, row.text("createdAt"))
     }
 }
+
+/** The platform's turn asking a coordinator for its handoff note (board 02 ②): Orbit's, drawn only as the handoff's own row — never
+ * as a queued card or an accepted head (web `queuedTurnsOutsideTranscript`, OrbitKit `PendingTray`). The listing carries no turn key,
+ * so it is told by its first line, as the transcript tells its echo. */
+private fun JsonObject.isHandoffNotePrompt() = CoordinatorHandoff.isNotePrompt(text("content"))
 
 /** A steer's receipt that it never made it (`failed`, `unconfirmed`): over, and no turn of the tail's. */
 private fun JsonObject.isReceipt() = this["delivery"] != null && this["delivery"] != JsonNull
@@ -155,6 +166,13 @@ internal fun QueuedTurnRow(turn: QueuedTurn, open: (String) -> Unit, cancelEnabl
     }
     Column(Modifier.fillMaxWidth().testTag(turn.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when {
+            // A SubAgent's end, before any job's news the same block carries (which then says how the turn goes, once).
+            turn.subagent != null -> {
+                SubagentFinishedLine(turn.subagent, null, steerState = if (turn.steer && turn.wake == null) "Sending…" else null,
+                    queued = turn.cancelable, onCancelQueued = withdraw.takeIf { turn.wake == null })
+                turn.wake?.let { BackgroundWakeLine(it, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
+                    onCancelQueued = withdraw) }
+            }
             turn.wake != null -> BackgroundWakeLine(turn.wake, null, steerState = if (turn.steer) "Sending…" else null, queued = turn.cancelable,
                 onCancelQueued = withdraw)
             // A watch's wake waiting for a runner (A08-14): its line, dashed, and the queue's own line, which asks before it withdraws.

@@ -255,7 +255,7 @@ final class RunnerDefaultRemovedTests: XCTestCase {
         let question = RunnerPageFormat.removalQuestion(try line(runner, Self.personal), health: try codex(runner),
                                                         runner: runner)
         XCTAssertEqual(question.title, "Remove Personal?")
-        XCTAssertEqual(question.message, "Its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.")
+        XCTAssertEqual(question.message, "Its sessions move to another account first, then its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.")
     }
 
     func testItSaysOrbitGoesBackToDefaultWhenItIsTheLastAccountOrbitUsesThere() throws {
@@ -280,11 +280,10 @@ final class RunnerDefaultRemovedTests: XCTestCase {
         }
     }
 
-    func testWithDefaultInUseAnAddedAccountsQuestionIsThePagesOwn() throws {
+    func testWithDefaultInUseAnAddedAccountsWorkspacesSwitchToDefault() throws {
         let runner = try withDefault([Self.workAccount])
         let question = RunnerPageFormat.removalQuestion(try line(runner, Self.work), health: try codex(runner), runner: runner)
-        XCTAssertEqual(question.title, "Remove “Work” from wikova?")
-        XCTAssertEqual(question.message, "~/.orbit/codex-accounts/3fa91c2e goes from this machine, and sessions stop running "
-                           + "on it. Default is untouched.")
+        XCTAssertEqual(question.title, "Remove Work?")
+        XCTAssertEqual(question.message, "Its sessions move to another account first. Workspaces using it switch to Default.")
     }
 }

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Session handoff</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#e3e3e8; --blue:#2f6fde; --blue-bg:#eef3fd; --green:#2e9e5b; --red:#d14343; --sheet:#f2f2f7; --row:#e5e5ea; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#f5f5f7; font-family: Inter, "Noto Sans SC", sans-serif; color:var(--ink); font-size:14px; line-height:1.5; }
+  .b-part { width:1280px; padding:32px 40px 36px; background:#fff; margin:0 0 16px; }
+  .b-part h2 { margin:0 0 4px; font-size:22px; }
+  .b-sub { color:var(--mute); margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:36px; }
+  .b-col h3 { margin:0 0 10px; font-size:15px; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:10px; margin-left:6px; vertical-align:2px; }
+  .b-tag.now { background:#fdecec; color:var(--red); }
+  .b-tag.new { background:#e8f6ee; color:var(--green); }
+  .b-mark { display:inline-flex; width:20px; height:20px; border-radius:50%; background:var(--blue); color:#fff; font-size:12px; align-items:center; justify-content:center; margin-right:6px; flex:none; }
+  .b-notes { margin-top:16px; display:grid; gap:8px; }
+  .b-note { display:flex; gap:4px; }
+  code { font-family:"JetBrains Mono", monospace; font-size:12px; background:#f2f2f5; padding:0 4px; border-radius:4px; }
+  /* phone sheet */
+  .b-phone { width:393px; margin:0 auto; border-radius:40px; background:var(--sheet); border:1px solid #d1d1d6; padding:18px 18px 28px; }
+  .b-grab { width:40px; height:5px; border-radius:3px; background:#c7c7cc; margin:0 auto 12px; }
+  .b-title { text-align:center; font-weight:600; font-size:17px; margin-bottom:18px; }
+  .b-card { background:var(--row); border-radius:18px; padding:14px 16px; margin-bottom:14px; }
+  .b-card .r { display:flex; justify-content:space-between; font-size:15px; }
+  .b-card .r span { color:var(--mute); }
+  .b-bar { height:5px; border-radius:3px; background:#c7c7cc; margin:14px 0 10px; position:relative; }
+  .b-bar i { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:var(--blue); }
+  .b-small { color:var(--mute); font-size:13px; }
+  .b-act { display:flex; gap:12px; }
+  .b-act .ic { color:var(--blue); font-size:18px; width:22px; text-align:center; }
+  .b-act b { color:var(--blue); font-weight:500; font-size:15px; display:block; }
+  .b-act div span { color:var(--mute); font-size:13px; }
+  .b-hint { background:#fff4e0; color:#8a5a00; border-radius:12px; padding:8px 12px; font-size:13px; margin-bottom:14px; }
+  .b-ring { outline:2px dashed var(--green); outline-offset:3px; }
+  table.b-t { border-collapse:collapse; width:100%; font-size:13px; }
+  .b-t th, .b-t td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; }
+  .b-t th { color:var(--mute); font-weight:500; }
+  .ok { color:var(--green); font-weight:600; }
+  .bad { color:var(--red); font-weight:600; }
+  /* conversation frames */
+  .b-frame { border:1px solid var(--line); border-radius:12px; background:#fbfbfd; padding:14px; min-height:420px; }
+  .b-frame .hdr { font-weight:600; font-size:15px; margin-bottom:10px; }
+  .b-c { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:12.5px; }
+  .b-c.note { background:var(--blue-bg); border-color:#bcd0f5; }
+  .b-c .t { font-weight:600; display:flex; justify-content:space-between; }
+  .b-c .t span { color:var(--mute); font-weight:400; }
+  .b-c .sec { margin-top:5px; }
+  .b-c .q { margin-top:5px; border-left:3px solid #bcd0f5; padding-left:8px; color:#333; }
+  .b-c.banner { background:#f2f2f7; color:#333; }
+  .b-c.banner a { color:var(--blue); }
+  .b-dec { border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-bottom:10px; }
+  .b-dec h4 { margin:0 0 6px; font-size:14px; }
+  .b-opt { display:grid; grid-template-columns:24px 1fr; gap:6px; margin:3px 0; font-size:13px; }
+  .b-opt .k { font-weight:700; }
+  .b-rec { color:var(--green); font-weight:600; }
+  ol.b-steps { margin:0; padding-left:20px; } ol.b-steps li { margin:6px 0; }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="b-part" id="part-1">
+  <h2>① 上下文面板：在 Compact 旁边加「Hand over」</h2>
+  <p class="b-sub">今天普通会话只有 Compact（同一个会话里让引擎自己总结）。协调者已经能「Start a new coordinator」。普通会话补上同一套交接。</p>
+  <div class="b-cols">
+    <div class="b-col">
+      <h3>今天 <span class="b-tag now">普通会话</span></h3>
+      <div class="b-phone">
+        <div class="b-grab"></div>
+        <div class="b-title">Context</div>
+        <div class="b-card"><div class="r">Context window <span>29%</span></div><div class="b-bar"><i style="width:29%"></i></div><div class="b-small">291k / 1M tokens</div></div>
+        <div class="b-card b-act"><div class="ic">⇕</div><div><b>Compact</b><span>Summarize earlier turns and keep going here.</span></div></div>
+      </div>
+    </div>
+    <div class="b-col">
+      <h3>建议 <span class="b-tag new">任何会话</span></h3>
+      <div class="b-phone">
+        <div class="b-grab"></div>
+        <div class="b-title">Context</div>
+        <div class="b-hint">Context is getting full: Compact or Hand over.</div>
+        <div class="b-card"><div class="r">Context window <span>63%</span></div><div class="b-bar"><i style="width:63%"></i></div><div class="b-small">630k / 1M tokens</div></div>
+        <div class="b-card b-act"><div class="ic">⇕</div><div><b>Compact</b><span>Summarize earlier turns and keep going here.</span></div></div>
+        <div class="b-card b-act b-ring"><div class="ic">→</div><div><b>Hand over to a new session</b><span>Write a handoff note and continue in a fresh session.</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mark">1</span><span>同一个机制，两种叫法：协调者上仍叫 “Start a new coordinator”，普通会话叫 “Hand over to a new session”。</span></div>
+    <div class="b-note"><span class="b-mark">2</span><span>只有约 60% 起在面板顶部加一行提示（D3 A），不弹横幅、不自动交接。</span></div>
+    <div class="b-note"><span class="b-mark">3</span><span>确认弹窗沿用协调者那套：先写交接便条，再列 “N 项待办会移过去”，每项标种类（WATCH / SUBAGENT / JOB / WAKEUP / LOOP，新增 SERVICE）。</span></div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="b-part" id="part-2">
+  <h2>② 交接时带过去什么：状态由服务端搬，便条只带判断</h2>
+  <p class="b-sub">协调者交接 v2 在生产上踩到的两个坑（SubAgent 被停、网关拒绝 token）都是便条救不了的状态问题。普通会话直接复用那套已验证的机制。</p>
+  <table class="b-t">
+    <tr><th style="width:24%">内容</th><th style="width:22%">Compact（今天）</th><th>Hand over（建议）</th></tr>
+    <tr><td>你的原话</td><td class="bad">✗ 被引擎改写</td><td>第一条提示<b>原文照搬</b>进新会话开场；便条里 “Decisions the user made” 逐条带引文</td></tr>
+    <tr><td>进展与判断</td><td>引擎自己的摘要</td><td>五段便条：Goal · Where things stand · Decisions the user made · Waiting on · Next</td></tr>
+    <tr><td>工作区（D1 A）</td><td class="ok">✓ 同一会话</td><td><b>同一个 worktree 和分支</b>交给新会话：未提交改动、构建缓存原地不动</td></tr>
+    <tr><td>bg_run 任务与服务（D4 A）</td><td class="ok">✓ 继续</td><td>继续跑；dev server 不中断；退出唤醒转给新会话</td></tr>
+    <tr><td>SubAgent 运行</td><td class="ok">✓ 继续</td><td>继续跑；网关 token 在其运行期间仍有效；结果送到新会话（v2 已在生产验证）</td></tr>
+    <tr><td>watch / 定时唤醒 / 循环</td><td class="ok">✓</td><td>在换人事务里搬到新会话</td></tr>
+    <tr><td>排队的消息、审批</td><td class="ok">✓</td><td>排队消息移到新会话；已在等的审批照常回答</td></tr>
+    <tr><td>任务运行（D2 A）</td><td class="ok">✓</td><td>新会话成为该任务的 run：证据提交与评审都跟过去</td></tr>
+    <tr><td>上下文大小</td><td>变小，但旧摘要留着</td><td>约 40k 起步：固定部分 + 状态摘要（≤16k 字符）+ 便条</td></tr>
+  </table>
+</section>
+
+<!-- 3 -->
+<section class="b-part" id="part-3">
+  <h2>③ 新会话怎么开场，旧会话怎么收尾</h2>
+  <p class="b-sub">新会话干净开场（v2 的 createdAt 规则对任何会话都已生效）；旧会话只读、留着，并指向新的。</p>
+  <div class="b-cols">
+    <div class="b-col">
+      <h3>新会话</h3>
+      <div class="b-frame">
+        <div class="hdr">Fix the export timeout</div>
+        <div class="b-c note">
+          <div class="t">Handoff from the previous session <span>8:10 PM</span></div>
+          <div class="q">"Exports over 50 MB time out on the iPad app. Find out why and fix it without changing the API."</div>
+          <div class="sec"><b>Where things stand</b> · Cause found in the chunked writer; fix written, tests running.</div>
+          <div class="sec"><b>Decisions the user made</b> · "Don't change the API." · "Ship behind the existing flag."</div>
+          <div class="sec"><b>Waiting on</b> · The export suite (bg_run job); a SubAgent checking the Android path.</div>
+          <div class="sec"><b>Next</b> · Read the suite result, then open the PR.</div>
+          <div class="sec" style="color:#555">Branch fix/export-timeout · 4 uncommitted files · 2 waits and 1 service moved here</div>
+        </div>
+        <div class="b-c">Picking up from the handoff: the export suite is still running…</div>
+      </div>
+    </div>
+    <div class="b-col">
+      <h3>旧会话</h3>
+      <div class="b-frame">
+        <div class="hdr">Fix the export timeout <span style="color:#6e6e73;font-weight:400">· Completed</span></div>
+        <div class="b-c">…earlier turns stay readable…</div>
+        <div class="b-c">The handoff note (as written above).</div>
+        <div class="b-c banner">Handed over to a new session · <a>Open</a></div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <div class="b-note"><span class="b-mark">4</span><span>开场三部分：第一条提示原文、便条、服务端的状态摘要（分支、HEAD、未提交文件、本会话建的任务、待办；任务 run 再加任务标准与证据版本）。</span></div>
+    <div class="b-note"><span class="b-mark">5</span><span>旧会话被“完成”而非删除；访客、关注者、分享链接跟到新会话；旧链接显示 “Handed over” 横条。</span></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="b-part" id="part-4">
+  <h2>④ 待定 · 要你拍板，以及落地顺序</h2>
+  <div class="b-dec"><h4>D1 工作区</h4>
+    <div class="b-opt"><span class="k">A</span><span>同一个 worktree 交给新会话：不拷贝，未提交改动和在跑的任务不受影响。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>从已提交的提交开新 worktree，未提交改动先提交。</span></div></div>
+  <div class="b-dec"><h4>D2 任务运行</h4>
+    <div class="b-opt"><span class="k">A</span><span>可以交接，新会话成为该任务的 run。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>任务运行上不提供。</span></div></div>
+  <div class="b-dec"><h4>D3 提示方式</h4>
+    <div class="b-opt"><span class="k">A</span><span>只在上下文面板约 60% 起加一行。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>对话里也弹横幅。</span></div></div>
+  <div class="b-dec"><h4>D4 bg_run 服务</h4>
+    <div class="b-opt"><span class="k">A</span><span>同 worktree 交接时服务继续跑（dev server 不断）。<span class="b-rec">推荐</span></span></div>
+    <div class="b-opt"><span class="k">B</span><span>服务停掉，和今天会话结束一样。</span></div></div>
+  <h3 style="margin:18px 0 6px">落地（5 个任务）</h3>
+  <ol class="b-steps">
+    <li>服务端：把交接从 <code>/projects/:id/coordinator/handoff</code> 泛化到 <code>/sessions/:id/handoff</code>，协调者走同一服务；换人事务搬 watch/唤醒/循环/排队消息/任务 run；keep-work 信号和网关规则推广到任何交接过的会话。</li>
+    <li>Runner（需发版）：worktree 交给新引擎；任务、服务、watch、SubAgent 跨交接继续；属主变了的 worktree 不回收。</li>
+    <li>便条与开场：五段提示词、首条提示原文、状态摘要（大会话 ≤16k 字符的 spec）。</li>
+    <li>客户端（web / iOS·macOS / Android）：面板动作与 60% 提示、带种类（含 SERVICE）的确认弹窗、新会话便条卡、旧会话横条。</li>
+    <li>生产验收：先查 runner 引擎；带未提交改动 + bg_run 服务和任务 + Codex SubAgent + 唤醒的普通会话交接，新会话看到同样的 diff、服务仍可访问、所有唤醒送达、量首轮 token；再在一个任务 run 上做一遍。</li>
+  </ol>
+</section>
+
+</body>
+</html>

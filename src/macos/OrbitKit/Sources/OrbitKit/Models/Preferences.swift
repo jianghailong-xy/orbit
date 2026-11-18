@@ -43,8 +43,18 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// "Your language" (a `TranslationLanguage` raw value), kept as a String so an unknown future
     /// language decodes; `SessionTranslation.language` maps it, absent or unknown being the default pick.
     public let translationLanguage: String?
+    /// "Agents work in", kept as a String like the one above; `SessionTranslation.agentLanguage` maps
+    /// it, absent or unknown being English.
+    public let translationAgentLanguage: String?
+    /// "Show both languages": each translated message also shows the words the agent read or
+    /// wrote, in the agent language. Absent means off; drawn only while `translationEnabled` is on. Tolerant like the above.
+    public let translationBilingual: Bool?
     /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
     public let subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers
+    /// ✦ Optimize. Absent means on; only an explicit `false` turns it off (owner's decision of
+    /// 2026-11-16) — read it through `PromptOptimizer.switchedOn`. Tolerant like the switches above.
+    public let promptOptimizer: Bool?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
     public var smartModelSelection: Bool { modelRouting == true }
@@ -56,7 +66,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps, translationEnabled, translationLanguage, subagentBlockedProviders
+        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders, promptOptimizer
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,7 +83,10 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         recaps = (try? c.decodeIfPresent(Bool.self, forKey: .recaps)) ?? nil
         translationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .translationEnabled)) ?? nil
         translationLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationLanguage)) ?? nil
+        translationAgentLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationAgentLanguage)) ?? nil
+        translationBilingual = (try? c.decodeIfPresent(Bool.self, forKey: .translationBilingual)) ?? nil
         subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
+        promptOptimizer = (try? c.decodeIfPresent(Bool.self, forKey: .promptOptimizer)) ?? nil
     }
 }
 
@@ -92,15 +105,22 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var recaps: Bool?
     public var translationEnabled: Bool?
     public var translationLanguage: String?
+    public var translationAgentLanguage: String?
+    public var translationBilingual: Bool?
     /// Replaces the whole blocked list.
     public var subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer's switch.
+    public var promptOptimizer: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
                 modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil,
                 translationEnabled: Bool? = nil, translationLanguage: String? = nil,
-                subagentBlockedProviders: [String]? = nil) {
+                translationAgentLanguage: String? = nil,
+                translationBilingual: Bool? = nil,
+                subagentBlockedProviders: [String]? = nil, promptOptimizer: Bool? = nil) {
+        self.promptOptimizer = promptOptimizer
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultPermissionMode = defaultPermissionMode
@@ -113,6 +133,8 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.recaps = recaps
         self.translationEnabled = translationEnabled
         self.translationLanguage = translationLanguage
+        self.translationAgentLanguage = translationAgentLanguage
+        self.translationBilingual = translationBilingual
         self.subagentBlockedProviders = subagentBlockedProviders
     }
 }

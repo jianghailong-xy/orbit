@@ -110,12 +110,14 @@ export function permissionRuleToken(rule: StoredPermissionRule): string {
 export function dispatchAllowedTools(
   provider: string,
   base: readonly string[],
-  rules: readonly PermissionRule[],
+  rules: readonly (PermissionRule & { fromScheduleRun?: boolean })[],
 ): string[] {
   const out = [...base];
   if (provider !== AgentProvider.CLAUDE && provider !== AgentProvider.ANTIGRAVITY) return out;
   const seen = new Set(out);
-  for (const rule of normalizePermissionRules(rules)) {
+  // Scheduled grants are literal commands, matched only at the scheduled approval door.
+  // Exporting them here would interpret command characters as engine permission syntax.
+  for (const rule of normalizePermissionRules(rules.filter((r) => !r.fromScheduleRun))) {
     const token = permissionRuleToken(rule);
     if (seen.has(token)) continue;
     seen.add(token);
@@ -270,8 +272,8 @@ export function ruleCoversBackgroundJobCard(input: unknown, rules: readonly Perm
   return rulesAnswerCall('Bash', input, rules);
 }
 
-function rulesAnswerCall(toolName: string, input: unknown, rules: readonly PermissionRule[]): boolean {
-  const stored = normalizePermissionRules(rules);
+function rulesAnswerCall(toolName: string, input: unknown, rules: readonly (PermissionRule & { fromScheduleRun?: boolean })[]): boolean {
+  const stored = normalizePermissionRules(rules.filter((r) => !r.fromScheduleRun));
   if (stored.length === 0) return false;
   if (SHELL_TOOLS.has(toolName)) {
     // A shell tool is covered only by a command-prefix rule. A tool-wide `Bash` grant is not

@@ -16,12 +16,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import io.orbitd.android.R
+import io.orbitd.android.composer.CoordinatorHandoffCopy
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.WaitingBelow
@@ -77,12 +76,20 @@ internal object StickySummary {
                 .any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
-        if (event.card(cards, "wake") == null) return true
+        // A turn carrying only Orbit's blocks is a line in the answer too (OrbitEvent), whatever block.
+        if (cards.isEmpty() && SteerDelivery.orbitOnly(event)) return false
+        // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
+        if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) {
+            // A turn that is only a note this reader cannot read draws no row of the reader's, so it heads no round (OrbitKit).
+            return cards.isNotEmpty() || !io.orbitd.android.core.cards.BackgroundWakeCard.drawsNoteAlone(event.personWords(),
+                (event.fields["attachments"] as? kotlinx.serialization.json.JsonArray).orEmpty().isNotEmpty(),
+                event.fields.string("controlPlaneNote"), queued = false)
+        }
         return event.personWords().isNotBlank()
     }
 
     /** The turns that are lines inside an answer rather than Orbit opening a round of its own (`isAnchor`). */
-    private val linesInAnAnswer = setOf("watch", "wake", "ownerAnswer")
+    private val linesInAnAnswer = setOf("watch", "wake", "subagent", "ownerAnswer")
 
     /**
      * Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for the bubble (OrbitKit
@@ -201,23 +208,31 @@ internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) 
     }
 }
 
+/** "Handing over" in the header's capsule while the handoff locks the composer (board 04; iOS `handingOverCapsule`): the web and Mac
+ * headers' word, in the question capsule's shape. Nothing to press: the transcript's row carries the handoff's actions and its clock. */
+@Composable
+internal fun HandingOverCapsule() {
+    Box(Modifier.heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+        .padding(horizontal = 14.dp, vertical = 4.dp).testTag("handing-over-capsule"), contentAlignment = Alignment.Center) {
+        Text(CoordinatorHandoffCopy.BADGE_HANDING_OVER, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /**
  * What waits on the reader in this conversation, in the header's capsule where the question goes (iOS `waitingCapsule`; the owner,
  * 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`): the needs-you mark, the bar's own words ("1 waiting below",
- * "1 open question above") and the way the card lies. A press shows the card.
+ * "1 open question above") and the way the card lies, drawn as the "Changes committed" pill is: a bare glyph, no ring. A press shows the card.
  */
 @Composable
 internal fun WaitingCapsule(here: WaitingBelow, show: () -> Unit) {
     val amber = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
-        .border(BorderStroke(1.dp, amber.copy(alpha = 0.55f)), CircleShape)
         .clickable(onClickLabel = NeedsYouLogic.belowHint, role = Role.Button, onClick = show)
-        .padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp).testTag("waiting-capsule"),
+        .padding(start = 10.dp, end = 16.dp, top = 4.dp, bottom = 4.dp).testTag("waiting-capsule"),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(26.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Icon(painterResource(here.glyph.drawable), null, Modifier.size(14.dp), tint = amber)
-        }
+        Icon(painterResource(here.glyph.drawable), null, Modifier.size(20.dp), tint = amber)
         Text(here.text, Modifier.weight(1f, fill = false).testTag("waiting-capsule-text"), style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Icon(painterResource(R.drawable.ic_chevron_down), null,

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Start a new coordinator, and the handoff card's head (docs/mocks/coordinator-context-actions boards 02 and 03, i-handoff). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M14,4h5a1,1 0,0 1,1 1v14a1,1 0,0 1,-1 1h-5M3,12h11M10,8l4,4 -4,4"
+        android:strokeWidth="2"
+        android:strokeColor="#FF000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

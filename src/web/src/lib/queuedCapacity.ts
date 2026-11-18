@@ -26,6 +26,12 @@ export const RUN_FULL_TITLE = 'Run full';
 export const RUN_FULL_TAG = 'run full';
 export const BATCH_FULL_TITLE = 'Batch full';
 export const BATCH_FULL_TAG = 'batch full';
+/**
+ * The session list's line for any of the three (board session-row-runner-full, owner's pick C): what
+ * the row is doing in plain words. The row's own time already counts the wait (lastTurnAt is when it
+ * went PENDING), so the line adds no clock; which gate is full is the row's tooltip, where there is one.
+ */
+export const CAPACITY_HELD_LINE = 'Waiting for a free slot';
 
 /** Whether a full runner, run or batch holds this queued session. */
 export function isCapacityHeld(gate?: QueuedGate | null): boolean {
@@ -92,6 +98,12 @@ export function capacityHeldMessageText(gate: CapacityGate, machine?: string | n
     return `${who} is using all ${limit} slots: ${running} and ${held} ${held === 1 ? 'holds' : 'hold'} a slot with a background job. This message is sent as soon as one frees up.`;
   }
   return `${who} is running ${active} of ${sessions(limit)}. This message is sent as soon as one finishes.`;
+}
+
+/** The list row's tooltip: the popover's title, sentence and wait, one per line. */
+export function capacityHeldHint(gate: CapacityGate, machine: string | null | undefined, now: number): string {
+  const waited = capacityHeldWaited(gate, now);
+  return [capacityHeldTitle(gate), capacityHeldMessageText(gate, machine), waited].filter(Boolean).join('\n');
 }
 
 /** `Waiting 15 min`, from when the session went PENDING; null with no clock to read. */

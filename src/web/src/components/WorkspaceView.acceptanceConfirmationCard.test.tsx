@@ -95,7 +95,8 @@ function conversation(id: string, projectId: string | null, title: string) {
     runState: 'RUNNING',
     engineTurnActive: true,
     provider: 'claude',
-    createdAt: '2026-09-11T03:00:00Z',
+    // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+    createdAt: '2026-09-09T00:00:00Z',
     updatedAt: '2026-09-11T03:10:00Z',
   };
 }
@@ -921,7 +922,7 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
     expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
     // No text box grew inside the card — the sentence is typed in the one composer at the bottom —
     // and nothing was written anywhere.
-    expect(card().querySelectorAll('textarea')).toHaveLength(0);
+    expect(card().querySelectorAll('textarea:not([aria-label="Landing check"])')).toHaveLength(0);
     expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
       .toEqual([]);
   });

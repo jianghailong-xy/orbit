@@ -108,6 +108,7 @@ export const SHARED_POOLS_KEY = ['providers', 'shared-pools'] as const;
 export const sharedPoolsQuery = () =>
   queryOptions({
     queryKey: SHARED_POOLS_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<SharedPool[]>(SHARED_POOLS_BASE),
   });
 
@@ -116,6 +117,7 @@ export const sharedPoolsQuery = () =>
 export const poolAccessQuery = (poolId: string) =>
   queryOptions({
     queryKey: [...SHARED_POOLS_KEY, poolId] as const,
+    meta: { entities: ['provider'] },
     queryFn: () => api<SharedPool>(`${SHARED_POOLS_BASE}/${encodeId(poolId)}`),
   });
 

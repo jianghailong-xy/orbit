@@ -33,7 +33,12 @@ struct SettingsView: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch (absent = off) and Your language.
     @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means on.
+    @State private var promptOptimizer = true
     @State private var translationLanguage: TranslationLanguage = .default
+    @State private var translationAgentLanguage: TranslationLanguage = .agentDefault
+    /// "Show both languages" (02-bilingual.png, mark A). Absent = off.
+    @State private var bilingual = false
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -47,162 +52,70 @@ struct SettingsView: View {
     @State private var accountMessage: String?
 
     var body: some View {
+        form
+        // The photo is cut to its middle square and scaled down here, then sent at once — a form
+        // takes effect as it is used, as the web Profile page's photo does.
+        .fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image], onCompletion: photoChosen)
+        .task { await model.accessTokens?.load() }
+        .task { await model.runners?.load() }
+        .onAppear(perform: loadPreferences)
+        .onChange(of: name) { accountMessage = nil }
+    }
+
+    /// The chosen photo, sent as the account's avatar. Apart from `body`, as `loadPreferences` is:
+    /// the release build could not type-check `body` with both closures inline.
+    private func photoChosen(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let jpeg = NSImage(contentsOf: url)?.orbitAvatarJPEG() else {
+            accountMessage = SettingsCopy.photoNotSaved("that file isn't an image this Mac can read")
+            return
+        }
+        Task { accountMessage = await model.saveAvatar(jpeg) }
+    }
+
+    /// The form's controls, read once from the account's preferences when Settings first appears.
+    private func loadPreferences() {
+        guard !loaded else { return }
+        loaded = true
+        let p = model.user?.preferences
+        theme = p?.theme ?? "system"
+        // An unset preference is the server's floor (Auto), not Default — showing Default here
+        // would name a mode the account isn't actually running.
+        permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
+            ?? AgentDefaults.defaultPermissionMode
+        orchestration = p?.enableOrchestration ?? true
+        modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
+        recaps = p?.showRecaps ?? true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
+        translationLanguage = SessionTranslation.language(p)
+        translationAgentLanguage = SessionTranslation.agentLanguage(p)
+        bilingual = p?.translationBilingual == true
+        name = model.user?.name ?? ""
+    }
+
+    /// The form, with the account switches it writes the moment they flip. Apart from `body`, and each section a
+    /// property of its own: the release build could not type-check `body` as one expression (v0.1.261-beta.10,
+    /// run 43775274262).
+    private var form: some View {
         Form {
-            // The account as the web Profile page has it: the photo, the name (the two things its
-            // owner changes here), the email and the role.
-            Section("Account") {
-                if let u = model.user {
-                    LabeledContent("Photo") {
-                        HStack(spacing: 8) {
-                            AccountAvatar(name: u.name ?? u.email, diameter: 40)
-                            Button(SettingsCopy.choosePhoto + "…") { choosingPhoto = true }
-                            if u.avatarUpdatedAt != nil {
-                                Button(SettingsCopy.removePhoto) {
-                                    Task { accountMessage = await model.removeAvatar() }
-                                }
-                            }
-                        }
-                    }
-                    LabeledContent(SettingsCopy.nameLabel) {
-                        HStack(spacing: 8) {
-                            TextField(SettingsCopy.nameLabel, text: $name, prompt: Text(SettingsCopy.namePlaceholder))
-                                .labelsHidden()
-                                .frame(maxWidth: 220)
-                                .onSubmit(saveName)
-                            Button("Save", action: saveName)
-                                .disabled(!ProfileEdit.canSave(name, saved: u.name))
-                        }
-                    }
-                    LabeledContent("Email", value: u.email)
-                    if let role = u.role { LabeledContent("Role", value: role) }
-                    Text(accountMessage ?? SettingsCopy.nameCaption)
-                        .font(.orbitLabel)
-                        .foregroundStyle(accountMessage == nil ? Color.secondary : Color.red)
-                }
-            }
-
-            // Where agents run and whose quota they spend (docs/mocks/machines-and-models, 02): the page left
-            // the sidebar for this row, as the phone reaches it from Settings, and the row says what the
-            // phone's says — what needs a person there, or how many machines are online.
-            Section {
-                Button {
-                    model.selectedSection = .runners
-                    if inSettingsWindow { NSApp.keyWindow?.close() }
-                } label: {
-                    LabeledContent {
-                        HStack(spacing: 6) {
-                            if let value = machinesValue {
-                                Text(value.text).foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
-                            }
-                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                        }
-                    } label: {
-                        Label(SettingsHome.title(.machinesAndModels), systemImage: SettingsHome.systemImage(.machinesAndModels))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            } footer: {
-                Text(MachinesAndModels.subtitle)
-            }
-
-            Section("Preferences") {
-                Picker("Theme", selection: $theme) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
-                }
-                Picker("Default permission", selection: $permMode) {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
-                }
-                // Written the moment it flips, like the orchestration switch below; Save is the
-                // pickers' alone.
-                Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
-                Text(SettingsCopy.smartModelSelectionHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
-                Text(SettingsCopy.suggestedRepliesHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
-                Text(SettingsCopy.sessionRecapsHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                Button("Save preferences") {
-                    Task { await model.savePreferences(preferencesPatch) }
-                }
-            }
-
-            // Settings › Translation (board frames 1, 2 and 7): account-wide, written the moment it
-            // changes. A server without a DeepSeek key draws it disabled with frame 2's notice.
-            Section(TranslationCopy.title) {
-                Toggle(TranslationCopy.translateConversations, isOn: $translation)
-                    .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
-                Text(TranslationCopy.translateConversationsHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                if SessionTranslation.unavailable(model.user) {
-                    Text(TranslationCopy.unavailable)
-                        .font(.orbitLabel).foregroundStyle(.orange)
-                }
-                Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
-                    ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
-                }
-                .accessibilityIdentifier(TranslationCopy.languageIdentifier)
-                Text(TranslationCopy.yourLanguageHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
-                Text(TranslationCopy.agentsWorkInHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                Text(TranslationCopy.footnote)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-            }
-            .disabled(SessionTranslation.unavailable(model.user))
-
-            // One switch for the whole account, not one per workspace: the server reads it live on
-            // every claim, spawn and call, so turning it off takes the tools away everywhere at once.
-            Section("Session orchestration") {
-                Toggle(SettingsCopy.letSessionsOrchestrate, isOn: $orchestration)
-                Text(SettingsCopy.letSessionsOrchestrateHint)
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-            }
-
-            Section("Change password") {
-                SecureField("Current password", text: $curPw)
-                SecureField("New password (min 6)", text: $newPw)
-                Button("Change password") {
-                    Task {
-                        let err = await model.changePassword(current: curPw, new: newPw)
-                        pwMessage = err ?? "Password changed."
-                        if err == nil { curPw = ""; newPw = "" }
-                    }
-                }
-                .disabled(curPw.isEmpty || newPw.count < 6)
-                if let m = pwMessage {
-                    Text(m).font(.orbitLabel).foregroundStyle(.secondary)
-                }
-            }
-
+            accountSection
+            machinesSection
+            // Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations page, as groups of this form.
+            GithubSettingsSections()
+            preferencesSection
+            translationSection
+            orchestrationSection
+            passwordSection
             AccessTokensSection()
-
-            Section("Updates") {
-                Toggle("Receive beta updates", isOn: $updater.betaChannel)
-                Text("Beta releases ship earlier and may be less stable.")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-            }
+            updatesSection
         }
         .orbitRevealSurface()   // reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
         .navigationTitle("Settings")
-        // The photo is cut to its middle square and scaled down here, then sent at once — a form
-        // takes effect as it is used, as the web Profile page's photo does.
-        .fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image]) { result in
-            guard case .success(let url) = result else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let jpeg = NSImage(contentsOf: url)?.orbitAvatarJPEG() else {
-                accountMessage = SettingsCopy.photoNotSaved("that file isn't an image this Mac can read")
-                return
-            }
-            Task { accountMessage = await model.saveAvatar(jpeg) }
-        }
         // Persisted the moment it flips: the Save button lives in another section, and a capability
         // switch that looks set but was never written is the one kind of lie this screen cannot
         // afford.
@@ -211,28 +124,193 @@ struct SettingsView: View {
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
+        .onChange(of: promptOptimizer) { savePromptOptimizer() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
-        .task { await model.accessTokens?.load() }
-        .task { await model.runners?.load() }
-        .onAppear {
-            guard !loaded else { return }
-            loaded = true
-            let p = model.user?.preferences
-            theme = p?.theme ?? "system"
-            // An unset preference is the server's floor (Auto), not Default — showing Default here
-            // would name a mode the account isn't actually running.
-            permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
-                ?? AgentDefaults.defaultPermissionMode
-            orchestration = p?.enableOrchestration ?? true
-            modelRouting = p?.smartModelSelection ?? false
-            promptSuggestions = p?.suggestedReplies ?? true
-            recaps = p?.showRecaps ?? true
-            translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
-            translationLanguage = SessionTranslation.language(p)
-            name = model.user?.name ?? ""
-        }
-        .onChange(of: name) { accountMessage = nil }
+        .onChange(of: translationAgentLanguage) { saveTranslationAgentLanguage() }
+        .onChange(of: bilingual) { saveBilingual() }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { bilingual = model.user?.preferences?.translationBilingual == true }
     }
+    @ViewBuilder
+    private var accountSection: some View {
+    // The account as the web Profile page has it: the photo, the name (the two things its
+    // owner changes here), the email and the role.
+    Section("Account") {
+        if let u = model.user {
+            LabeledContent("Photo") {
+                HStack(spacing: 8) {
+                    AccountAvatar(name: u.name ?? u.email, diameter: 40)
+                    Button(SettingsCopy.choosePhoto + "…") { choosingPhoto = true }
+                    if u.avatarUpdatedAt != nil {
+                        Button(SettingsCopy.removePhoto) {
+                            Task { accountMessage = await model.removeAvatar() }
+                        }
+                    }
+                }
+            }
+            LabeledContent(SettingsCopy.nameLabel) {
+                HStack(spacing: 8) {
+                    TextField(SettingsCopy.nameLabel, text: $name, prompt: Text(SettingsCopy.namePlaceholder))
+                        .labelsHidden()
+                        .frame(maxWidth: 220)
+                        .onSubmit(saveName)
+                    Button("Save", action: saveName)
+                        .disabled(!ProfileEdit.canSave(name, saved: u.name))
+                }
+            }
+            LabeledContent("Email", value: u.email)
+            if let role = u.role { LabeledContent("Role", value: role) }
+            Text(accountMessage ?? SettingsCopy.nameCaption)
+                .font(.orbitLabel)
+                .foregroundStyle(accountMessage == nil ? Color.secondary : Color.red)
+        }
+    }
+    }
+
+    @ViewBuilder
+    private var machinesSection: some View {
+    // Where agents run and whose quota they spend (docs/mocks/machines-and-models, 02): the page left
+    // the sidebar for this row, as the phone reaches it from Settings, and the row says what the
+    // phone's says — what needs a person there, or how many machines are online.
+    Section {
+        Button {
+            model.selectedSection = .runners
+            if inSettingsWindow { NSApp.keyWindow?.close() }
+        } label: {
+            LabeledContent {
+                HStack(spacing: 6) {
+                    if let value = machinesValue {
+                        Text(value.text).foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
+                    }
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
+            } label: {
+                Label(AppSection.runners.title, systemImage: AppSection.runners.systemImage)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    } footer: {
+        Text(MachinesAndModels.subtitle)
+    }
+    }
+
+    @ViewBuilder
+    private var preferencesSection: some View {
+    Section("Preferences") {
+        Picker("Theme", selection: $theme) {
+            Text("System").tag("system")
+            Text("Light").tag("light")
+            Text("Dark").tag("dark")
+        }
+        Picker("Default permission", selection: $permMode) {
+            ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
+        }
+        // Written the moment it flips, like the orchestration switch below; Save is the
+        // pickers' alone.
+        Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
+        Text(SettingsCopy.smartModelSelectionHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
+        Text(SettingsCopy.suggestedRepliesHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        // Prompt optimizer (board frame 1): under Suggested replies, off by default; a server
+        // without a DeepSeek key draws it disabled with frame 1b's notice.
+        Group {
+            Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
+            .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            Text(PromptOptimizerCopy.hint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            if PromptOptimizer.unavailable(model.user) {
+                Text(PromptOptimizerCopy.unavailable)
+                    .font(.orbitLabel).foregroundStyle(.orange)
+            }
+        }
+        .disabled(PromptOptimizer.unavailable(model.user))
+        Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
+        Text(SettingsCopy.sessionRecapsHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        Button("Save preferences") {
+            Task { await model.savePreferences(preferencesPatch) }
+        }
+    }
+    }
+
+    @ViewBuilder
+    private var translationSection: some View {
+    // Settings › Translation (board frames 1, 2 and 7): account-wide, written the moment it
+    // changes. A server without a DeepSeek key draws it disabled with frame 2's notice.
+    Section(TranslationCopy.title) {
+        Toggle(TranslationCopy.translateConversations, isOn: $translation)
+            .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+        Text(TranslationCopy.translateConversationsHint(translationAgentLanguage))
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        if SessionTranslation.unavailable(model.user) {
+            Text(TranslationCopy.unavailable)
+                .font(.orbitLabel).foregroundStyle(.orange)
+        }
+        Picker(TranslationCopy.yourLanguage, selection: $translationLanguage) {
+            ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+        }
+        .accessibilityIdentifier(TranslationCopy.languageIdentifier)
+        Text(TranslationCopy.yourLanguageHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage) {
+            ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+        }
+        .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
+        Text(TranslationCopy.agentsWorkInHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+        // Only while translation is on (mark A).
+        if translation {
+            Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+        }
+        Text(TranslationCopy.bilingualFootnote + " " + TranslationCopy.footnote)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+    }
+    .disabled(SessionTranslation.unavailable(model.user))
+    }
+
+    @ViewBuilder
+    private var orchestrationSection: some View {
+    // One switch for the whole account, not one per workspace: the server reads it live on
+    // every claim, spawn and call, so turning it off takes the tools away everywhere at once.
+    Section("Session orchestration") {
+        Toggle(SettingsCopy.letSessionsOrchestrate, isOn: $orchestration)
+        Text(SettingsCopy.letSessionsOrchestrateHint)
+            .font(.orbitLabel).foregroundStyle(.secondary)
+    }
+    }
+
+    @ViewBuilder
+    private var passwordSection: some View {
+    Section("Change password") {
+        SecureField("Current password", text: $curPw)
+        SecureField("New password (min 6)", text: $newPw)
+        Button("Change password") {
+            Task {
+                let err = await model.changePassword(current: curPw, new: newPw)
+                pwMessage = err ?? "Password changed."
+                if err == nil { curPw = ""; newPw = "" }
+            }
+        }
+        .disabled(curPw.isEmpty || newPw.count < 6)
+        if let m = pwMessage {
+            Text(m).font(.orbitLabel).foregroundStyle(.secondary)
+        }
+    }
+    }
+
+    @ViewBuilder
+    private var updatesSection: some View {
+    Section("Updates") {
+        Toggle("Receive beta updates", isOn: $updater.betaChannel)
+        Text("Beta releases ship earlier and may be less stable.")
+            .font(.orbitLabel).foregroundStyle(.secondary)
+    }
+    }
+
 
     /// What the Machines & models row says, as the phone's does (`SettingsSheet`): how many lines the page's
     /// Needs you holds, or with none how many machines are online — only once the server has answered.
@@ -285,15 +363,32 @@ struct SettingsView: View {
         Task { await model.savePreferences(UpdatePreferencesRequest(recaps: recaps)) }
     }
 
-    /// And for Settings › Translation's switch and language, each its own key.
+    /// And for Settings › Translation's switch and two languages, each its own key.
     private func saveTranslation() {
         guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
     }
 
+    private func savePromptOptimizer() {
+        // A server without a key draws it off; that is not the owner turning it off.
+        guard !PromptOptimizer.unavailable(model.user),
+              PromptOptimizer.switchedOn(model.user?.preferences) != promptOptimizer else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: promptOptimizer)) }
+    }
+
+    private func saveBilingual() {
+        guard (model.user?.preferences?.translationBilingual ?? false) != bilingual else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: bilingual)) }
+    }
+
     private func saveTranslationLanguage() {
         guard SessionTranslation.language(model.user?.preferences) != translationLanguage else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: translationLanguage.rawValue)) }
+    }
+
+    private func saveTranslationAgentLanguage() {
+        guard SessionTranslation.agentLanguage(model.user?.preferences) != translationAgentLanguage else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationAgentLanguage: translationAgentLanguage.rawValue)) }
     }
 }
 

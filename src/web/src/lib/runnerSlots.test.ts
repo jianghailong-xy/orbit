@@ -128,6 +128,15 @@ describe('why a queued session has not started', () => {
     );
   });
 
+  it('names a runner below its Keep Free floor, which no slot coming free would change', () => {
+    const gate = { queuedReason: 'disk_below_floor' };
+    expect(pendingSlotDescription(0, 16, gate)).toBe(
+      'This runner has less free disk space than its Keep Free setting. This session starts once space is freed.',
+    );
+    expect(queuedTitle(gate)).toBe('Low disk space');
+    expect(queuedLabel(gate)).toBe('Low disk space');
+  });
+
   // A null and an absent value are different claims and must not collapse into one another:
   // one is "no gate", the other is "nobody asked". Only the first may be reported as a plain
   // queue — reporting the second that way would state, on an old server, something it never said.

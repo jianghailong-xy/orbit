@@ -57,7 +57,7 @@ internal fun SessionRunStartCard(app: OrbitApplication, handle: SessionHandle, d
     chat: () -> Unit, sendAgain: () -> Unit, openRunner: (String) -> Unit, move: (() -> Unit)?) {
     detail ?: return
     val runner = detail.obj("assignedRunner")
-    val card = SessionRunStart.card(detail, runner?.text("displayName")?.takeIf { it.isNotEmpty() } ?: runner?.text("name"), runner?.text("version"),
+    val card = SessionRunStart.card(detail, runner?.let { io.orbitd.android.management.RunnerPage.nameOf(detail.text("assignedRunnerId") ?: it.text("id"), it.text("name"), it.text("displayName")).takeIf { n -> n.isNotEmpty() } }, runner?.text("version"),
         console.region) ?: return
     val api = remember(handle) { TaskApi(app.session, handle) { app.canWrite(handle) } }
     val scope = rememberCoroutineScope()

@@ -1,0 +1,89 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .srow .s .bl { color: #0A84FF; } .srow .s .or { color: #FF9500; }
+  .glass { position: absolute; z-index: 16; border-radius: 24px; backdrop-filter: blur(10px) saturate(1.8); -webkit-backdrop-filter: blur(10px) saturate(1.8);
+           background: linear-gradient(180deg, rgba(255,255,255,.66), rgba(255,255,255,.52));
+           box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .75px rgba(255,255,255,.7), 0 8px 24px rgba(0,0,0,.10); }
+  .card { left: 16px; right: 16px; height: 70px; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 14px; }
+  .card .ico { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,149,0,.18); flex: none; display: flex; align-items: center; justify-content: center; }
+  .card .w { flex: 1; min-width: 0; }
+  .card .h { display: flex; justify-content: space-between; gap: 8px; font: 600 15px/20px "Inter", "Noto Sans SC"; }
+  .card .h span { font-weight: 400; font-size: 13px; color: var(--l2); flex: none; }
+  .card p { margin: 1px 0 0; font: 15px/20px "Inter", "Noto Sans SC"; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .deck { position: absolute; z-index: 15; height: 70px; border-radius: 24px; background: rgba(240,240,244,.8); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.06); }
+  /* 普通 toast：胶囊（确认）与卡片（失败） */
+  .pill { left: 50%; transform: translateX(-50%); height: 44px; border-radius: 22px; display: flex; align-items: center; gap: 8px; padding: 0 16px 0 12px; font: 600 15px "Inter"; white-space: nowrap; color: #000; }
+  .pill .ok { width: 22px; height: 22px; border-radius: 50%; background: #34C759; display: flex; align-items: center; justify-content: center; }
+  .pill s { text-decoration: none; font-weight: 400; font-size: 13px; color: rgba(60,60,67,.6); }
+  .fail { left: 16px; right: 16px; padding: 12px 14px; border-radius: 22px; background: linear-gradient(180deg, rgba(255,235,235,.9), rgba(255,228,228,.86)); display: flex; gap: 10px; color: #000; }
+  .fail b { display: block; font: 600 15px/20px Inter; } .fail s { text-decoration: none; display: block; font: 13px/18px Inter; color: rgba(60,60,67,.6); }
+  .fail .x { width: 22px; height: 22px; border-radius: 50%; background: #FF3B30; color: #fff; font: 700 14px/22px Inter; text-align: center; flex: none; }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+  .ipad { position: relative; width: 908px; height: 420px; border-radius: 26px; background: #fff; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 18px 40px rgba(0,0,0,.14); font-family: Inter, "Noto Sans SC"; }
+  .ipad .side { position: absolute; left: 0; top: 0; bottom: 0; width: 300px; background: #F2F2F7; border-right: .5px solid rgba(60,60,67,.2); }
+</style>
+<body>
+<h1>needs-you · 改由 toast 系统来画（常驻的一项）</h1>
+<p class="lede">owner 11-15：<b>为什么这类通知不用 toast？</b>→ 按「让它成为 toast 系统里常驻的一项」做。needs-you 卡片交给 <code>ToastHost</code> 画：和「Committed」「Merged into main」同一块玻璃、同一个位置（导航栏下）、同一套进出场；它自己的规则（数、展开成一串、上滑收起、新的才回来）不变。各页面自己挂胶囊的那套（列表顶部留白、透明首行、下拉刷新避让）删掉——今天几个 bug（被挤成「…」、展开后叠在一起、玻璃变平）都出在那一层。会话页导航中间那枚（这个会话自己的事）不变。</p>
+
+<h2>和普通 toast 一起时</h2>
+<div class="row4" id="r1"></div>
+<h2>iPad 宽屏</h2>
+<div id="r2"></div>
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const ROWS = [
+  { t: '定时任务 v1 (Scheduled tasks)', s: 'S4 报告实现已完成：分支已合入最新的项目分…', tm: 'now' },
+  { t: 'Compact and coordinator handoff from…', s: '<span class="bl">Resolving a merge conflict · 19m</span>', tm: 'now' },
+  { t: 'Managed runners on other Docker hosts', s: 'Watching any 1 of 2 tasks · 1 running', tm: 'now' },
+  { t: 'Session translation (Settings › Translation)', s: '已请求把项目分支合入 main', tm: '22m' },
+  { t: '审批时自动跳转会话设计', s: '<span class="or">Waiting for approval</span>', tm: '22s' },
+  { t: 'Help center (web)', s: 'Watching all 8 tasks · 1 running', tm: 'now' },
+];
+const rows = (top) => `<div style="position:absolute;left:20px;top:${top}px;font:700 22px Inter;color:var(--l2);z-index:3">Pinned</div>` + ROWS.map((r, i) =>
+  `<div class="srow sep" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const card = (top, title, sub, age, extra = '') => `<div class="glass card" style="top:${top}px;${extra}"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">${title}<span>${age}</span></div><p>${sub}</p></div></div>`;
+const deck = (top) => `<div class="deck" style="left:28px;right:28px;top:${top + 7}px"></div><div class="deck" style="left:42px;right:42px;top:${top + 13}px;z-index:14;opacity:.7"></div>`;
+const pill = (top, t, s) => `<div class="glass pill" style="top:${top}px"><span class="ok">${ic('chevr', 12, '#fff', 3)}</span>${t}${s ? `<s>${s}</s>` : ''}</div>`;
+const fail = (top) => `<div class="glass fail" style="top:${top}px"><span class="x">!</span><div><b>Couldn't merge into main</b><s>orbit…9bab9 → main · 2 files</s></div></div>`;
+const shell = (body, h = 560, nav = listNav) => phone('light', `${statusBar('12:44')}${nav}${body}${edge('light', 70, 112)}<div class="home"></div>`, { h, cls: 'crop' });
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+const N = ['2 sessions need you', 'Android 自动更新报错', '5h'];
+
+const a = shell(`${rows(226)}${deck(116)}${card(116, ...N)}`);
+const b = shell(`${rows(226)}${deck(116)}${card(116, ...N)}${pill(214, 'Committed', 'orbit/session-391865')}${note('普通 toast 排在它下面，3 秒后照常走', 120, 268)}`);
+const c = shell(`${rows(226)}${deck(116)}${card(116, ...N)}${fail(214)}`);
+const wikiNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div><div class="gc r">${ic('search', 20, 'var(--l1)', 2)}</div></div>`;
+const d = shell(`<div style="position:absolute;left:20px;top:178px;font:700 34px Inter;z-index:3">Wiki</div><div style="position:absolute;left:20px;top:226px;font-size:15px;color:var(--l2);z-index:3">9,430 entries · Maintaining now</div>${deck(116)}${card(116, ...N)}`, 560, wikiNav);
+document.getElementById('r1').innerHTML = `
+<div class="col"><span class="tag rec">列表 · 静止</span>${a}<div class="cap"><h3>还是那张卡，换了「谁来画」</h3>位置、大小、玻璃和今天的 commit toast 一样（导航下 52pt 处起）。列表开头仍留出卡片那一截（你 06 选的「静止时不盖第一行」），滚动时行从卡片后面过。</div></div>
+<div class="col"><span class="tag rec">+ 一条确认 toast</span>${b}<div class="cap"><h3>needs-you 在最上，别的排在下面</h3>它是常驻的一项，总在这一列的第一位；「Committed」这类确认从它下面滑出、3 秒后走，不把它挤掉、不盖住它。</div></div>
+<div class="col"><span class="tag rec">+ 一张失败卡</span>${c}<div class="cap"><h3>失败卡同样排在下面</h3>失败/审批这类「等你处理」的卡片也在它下面，各自照旧（6 秒后缩成药丸等）。两者都是要你处理的事，needs-you 在上因为它是汇总。</div></div>
+<div class="col"><span class="tag rec">其他页面</span>${d}<div class="cap"><h3>一处画、到处一样</h3>Wiki、任务、设置……都是同一张，因为本来就是 toast 层画的；这些页面不留位（toast 本来就浮在页面上）。</div></div>`;
+
+document.getElementById('r2').innerHTML = `<div class="ipad">${statusBar('12:44').replace('class="status"', 'class="status" style="left:20px;right:20px"')}<div class="side"><div style="position:absolute;left:20px;top:70px;font:700 22px Inter">orbit-develop</div>${rows(120).replace(/left:20px;right:20px/g, 'left:20px;right:16px')}</div>
+<div style="position:absolute;left:330px;top:70px;font:600 18px Inter">审批时自动跳转会话设计</div>
+<div class="glass card" style="left:auto;right:16px;width:360px;top:62px"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">2 sessions need you<span>5h</span></div><p>Android 自动更新报错</p></div></div>
+<div class="glass pill" style="left:auto;right:16px;transform:none;top:140px"><span class="ok">${ic('chevr', 12, '#fff', 3)}</span>Committed</div></div>
+<div class="cap" style="max-width:908px"><h3>右上角那一列，和 toast 一起</h3>宽屏的 toast 本来就在右上角排成一列；needs-you 也在那里、在最上。今天 iPad 左边会话列里那条就不再单独挂。</div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>谁来画</td><td><code>ToastHost</code> 在 pinned 卡片上面加一个常驻槽：<code>NeedsYouBannerView</code>（同一视图、同一份逻辑）。表面换成 toast 的 <code>toastGlass</code>（iOS 26 系统玻璃；更早是 regularMaterial + 细边 + 阴影）。</td></tr>
+<tr><td>删掉</td><td>列表顶部 <code>topInsetClearOfRefresh(…floating:)</code> 那一层、页面级 <code>needsYouOverPage</code>、iPad 列表列里的那条。下拉刷新的转圈不再需要避让它（它不在列表的安全区里）。</td></tr>
+<tr><td>静止留位</td><td>会话列表首行留出卡片高度（读 toast 层报来的高度），只在会话列表；其他页不留。</td></tr>
+<tr><td>顺序</td><td>needs-you → 等你处理的卡（失败/审批）→ 一闪而过的确认。互不挤掉。</td></tr>
+<tr><td>展开 / 上滑 / 动画</td><td>不变（08、10 板）：从身下抽出、无遮罩、上滑收起、新的才回来、到达时琥珀圈呼吸一次。</td></tr>
+<tr><td>Android</td><td>同样把它挪进 Android 的提示层（今天的 Snackbar 宿主 <code>PushNoticeHost</code> 改成顶部一列），各页面不再各自挂。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① needs-you 在 toast 列的最上（推荐）还是普通 toast 临时盖住它；② 会话列表静止时继续留位（推荐，保留 06 的决定）还是不留；③ iPad 也放进右上角那一列（推荐）还是留在左边会话列。`;
+</script>
+</body></html>

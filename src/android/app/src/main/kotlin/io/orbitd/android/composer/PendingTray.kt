@@ -29,12 +29,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.attachments.decodeAttachmentImage
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.reader.QueuedTurn
 import io.orbitd.android.reader.SteerDelivery
 import io.orbitd.android.reader.UnreadSteer
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.translation.TranslationShown
 import java.io.ByteArrayInputStream
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
@@ -112,7 +114,8 @@ internal object PendingTray {
             // that turn.
             val requeued = steer.delivery == SteerDelivery.REQUEUED
             val taking = asked(state.withdrawing, turnId)
-            row(turnId, intoTurn = !requeued, steer.event.personWords().trim(), shell = false, steer.event.fields.objects("attachments"),
+            row(turnId, intoTurn = !requeued, steer.event.personWords().trim(), Translation.turn(steer.event.fields["translation"]),
+                shell = false, steer.event.fields.objects("attachments"),
                 if (taking) WITHDRAWING else if (requeued) QUEUED else SteerDelivery.label(steer.delivery), busy = taking,
                 offersWithdraw = !taking && !requeued && SteerDelivery.offersWithdraw(steer.delivery, steer.withdrawable),
                 offersSteer = false, steer = true, at = steer.event.ts)
@@ -124,7 +127,8 @@ internal object PendingTray {
             val intoTurn = turn.steer || steering || asked(state.steered, turnId)
             val taking = asked(state.withdrawing, turnId)
             val busy = taking || steering
-            row(turnId, intoTurn, turn.event.fields.text("text").orEmpty().trim(), turn.shell, turn.event.fields.objects("attachments"),
+            row(turnId, intoTurn, turn.event.fields.text("text").orEmpty().trim(), turn.translation, turn.shell,
+                turn.event.fields.objects("attachments"),
                 if (taking) WITHDRAWING else if (intoTurn) SteerDelivery.label(null) else QUEUED, busy = busy,
                 // Not handed to a runner yet, either way: the server takes it back alone.
                 offersWithdraw = !busy, offersSteer = !busy && !intoTurn && !turn.shell && steerOffered, steer = intoTurn, at = turn.createdAt)
@@ -140,12 +144,16 @@ internal object PendingTray {
         if (files > 0) "$files file${if (files == 1) "" else "s"}" else null,
     ).joinToString(", ")
 
-    private fun row(turnId: String, intoTurn: Boolean, words: String, shell: Boolean, attachments: List<JsonObject>, state: String,
-        busy: Boolean, offersWithdraw: Boolean, offersSteer: Boolean, steer: Boolean, at: String?): PendingTrayRow {
+    private fun row(turnId: String, intoTurn: Boolean, words: String, translation: Translation.Turn?, shell: Boolean,
+        attachments: List<JsonObject>, state: String, busy: Boolean, offersWithdraw: Boolean, offersSteer: Boolean, steer: Boolean,
+        at: String?): PendingTrayRow {
         val images = attachments.filter { (it.text("mime") ?: it.text("mimeType"))?.startsWith("image/") == true }
-        val said = words.takeIf { it.isNotEmpty() }?.let { if (shell) "!$it" else it }
-        return PendingTrayRow(turnId, intoTurn, said ?: summary(images.size, attachments.size - images.size), said == null, shell,
-            images.firstOrNull()?.text("id"), state, busy, offersWithdraw, offersSteer, steer, said, at)
+        // Translated (Settings › Translation): the row says, and Withdraw hands back, what the reader wrote, as their bubble shows it,
+        // not the English delivered (web `queuedRow`'s `translation?.original`, OrbitKit `PendingTray.text(of:)`/`withdrawnText`).
+        val shown = TranslationShown.userWords(words, translation, flipped = false).trim().takeIf { it.isNotEmpty() }
+            ?.let { if (shell) "!$it" else it }
+        return PendingTrayRow(turnId, intoTurn, shown ?: summary(images.size, attachments.size - images.size), shown == null, shell,
+            images.firstOrNull()?.text("id"), state, busy, offersWithdraw, offersSteer, steer, shown, at)
     }
 }
 

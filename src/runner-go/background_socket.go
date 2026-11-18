@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -98,6 +99,9 @@ type bgJobService struct {
 	// hosts. A nil job hosts none.
 	job       *ClaimedSession
 	subagents subagentRegistry
+	// keptPastEnd: the session ended because its coordinator handed over, leaving its SubAgents running
+	// (keepSubagentsPastEnd). The end of each then owes a wake, which the server forwards to the successor.
+	keptPastEnd atomic.Bool
 }
 
 // startBgJobService listens on socketPath until ctx is cancelled, and writes the
@@ -466,6 +470,7 @@ func startSessionBgJobService(ctx context.Context, t *Transport, bg *bgTailer, j
 	}
 	bg.mu.Lock()
 	bg.stopSubagents = svc.stopSubagents
+	bg.keepSubagents = svc.keepSubagentsPastEnd
 	bg.announceSubagents = svc.announceSubagents
 	bg.mu.Unlock()
 	key := decodeSessionID(job.SessionID)

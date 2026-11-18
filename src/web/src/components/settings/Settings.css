@@ -35,6 +35,11 @@
 .settings-back .anticon {
   font-size: 11px;
 }
+/* In the nav, Back to Orbit takes the whole row: anywhere across it is a click. */
+.settings-nav > .settings-back {
+  display: flex;
+  width: 100%;
+}
 
 .settings-title {
   margin: 10px 8px 12px;
@@ -782,8 +787,54 @@
 .orbit-button.machine-max-edit {
   padding-inline: 0;
 }
+.machine-max-concurrent-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+/* − field +: one control, the field between two square buttons, their inner corners and borders shared. */
+.machine-max-stepper {
+  display: inline-flex;
+}
+.machine-max-stepper .orbit-button {
+  width: 32px;
+  padding-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+.machine-max-stepper .orbit-button:first-child {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+.machine-max-stepper .orbit-button:last-child {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+.machine-max-stepper .rd-max-concurrent {
+  width: 52px;
+  margin-inline: -1px;
+  border-radius: 0;
+  position: relative;
+  z-index: 1;
+}
+.machine-max-stepper .rd-max-concurrent .orbit-number-input-field {
+  text-align: center;
+}
+/* The − and + beside it step instead: no hover arrows inside the field. */
+.machine-max-stepper .orbit-number-input-actions {
+  display: none;
+}
+.machine-max-concurrent-now {
+  margin-inline-start: auto;
+  color: var(--text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .machine-max-concurrent-hint {
-  margin: 0 0 12px;
+  margin: 12px 0 0;
+}
+.machine-max-concurrent-hint.warn {
+  color: var(--warning);
 }
 .machine-workspace-row {
   display: block;
@@ -1022,4 +1073,18 @@
   margin: 8px 2px 0;
   font-size: 12px;
   color: var(--text-3);
+}
+
+/* Orbit Cloud, pinned above the machines you drag (MachineRows; docs/mocks/orbit-cloud-pinned, A): its cloud in
+   the brand colour and its name in semibold, on the plain background every row has until it is open. */
+.settings-nav-cloud .settings-nav-icon {
+  color: var(--brand);
+}
+.settings-nav-cloud .settings-nav-label {
+  font-weight: 600;
+}
+.settings-nav-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--border-subtle);
 }

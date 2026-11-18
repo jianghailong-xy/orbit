@@ -24,10 +24,10 @@
  *       (2) end to end: a new account signs in — with every Kubernetes call held, so the answer
  *           cannot have waited for one — then provisioning, the runner's heartbeat reporting Codex
  *           installed and signed in and Claude not installed, READY with Codex as the initial
- *           provider, the default workspace bound to that runner, a first session on Codex with no
+ *           provider, an owner-created workspace bound to that runner, a first session on Codex with no
  *           provider named, and the runner claiming it;
- *       (3) concurrent and repeated sign-ins make one mapping, runner, workspace, PVC, Secret and
- *           Pod; a default the owner removed stays removed;
+ *       (3) concurrent and repeated sign-ins make one mapping, runner, PVC, Secret and
+ *           Pod; a workspace the owner removed stays removed;
  *       (4) an account with workspaces keeps its order, its first workspace, its deep links and its
  *           self-managed default; a runner named like the managed one and a workspace named and
  *           placed like the default are never taken for them;
@@ -42,8 +42,9 @@
  *           READY, and the first session with nothing named starts on it and is claimed; another
  *           account's key, a disabled key and a shared key do not.
  *
- * (C) The manager, on the test's clock: MODEL_UNAVAILABLE until the startup deadline, then FAILED
- *     and retryable; a retry once a runtime is signed in is READY with that runtime.
+ * (C) The manager, on the test's clock: MODEL_UNAVAILABLE for as long as no runtime is signed in,
+ *     past the startup deadline too — never FAILED — and READY with the runtime once one is signed in,
+ *     with no retry.
  *
  * Destructive only to its own disposable database: (A) and (B) truncate its accounts to run the
  * first-user bootstrap.
@@ -89,11 +90,10 @@ import { assertTripwireQuiet, bootScrubbedApiserver } from '../test-support/mana
 import { testManagedRunnerProfile } from '../test-support/managed-runner-profile.fixture';
 import type { ManagedKubeClient, Pod, Secret } from './kube-client';
 import { EVERY_ACCOUNT } from './managed-runner-eligibility';
-import { ManagedRunnerManager, type ReconcileOutcome } from './managed-runner-manager';
+import { ManagedRunnerManager } from './managed-runner-manager';
 import {
   GENERATION_ANNOTATION,
   MANAGED_RUNNER_NAME,
-  MANAGED_WORKSPACE_DIR,
   bootstrapCredentialOf,
   managedPodName,
   managedPvcName,
@@ -186,7 +186,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
       )).rows[0].id as string;
     const api = await workspace('api', 0, '/srv/api');
     const web = await workspace('web', 1, '/srv/web');
-    const decoy = await workspace('Default', null, MANAGED_WORKSPACE_DIR);
+    const decoy = await workspace('Default', null, '/home/orbit/orbit-repos/default');
     return { ...user, runnerId, api, web, decoy };
   }
 
@@ -392,7 +392,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     const adminId = toUuid(first.json.user.id);
     const adminMapping = await until('the first user’s intent', () => mappingOf(adminId));
     assert.equal(adminMapping.desiredState, 'RUNNING');
-    assert.deepEqual(await countsOf(adminId), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(adminId), { mappings: 1, runners: 1, workspaces: 0 });
 
     // An administrator opening an account signs nobody in.
     const opened = await call(server, 'POST', '/api/admin/users', first.json.accessToken, { email: `opened-${RUN}@example.invalid`, name: 'Opened', password: PASSWORD });
@@ -418,10 +418,10 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
 
     // The sign-in itself does.
     assertSignedIn(await call(server, 'POST', '/api/auth/login', undefined, { email: quietUser.email, password: `${PASSWORD} again` }), 'login');
-    assert.deepEqual(await countsOf(quietUser.id), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(quietUser.id), { mappings: 1, runners: 1, workspaces: 0 });
   });
 
-  await t.test('(B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → the default workspace → a first session the runner claims', async () => {
+  await t.test('(B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → an owner-created workspace → a first session the runner claims', async () => {
     const user = await account('newcomer');
     // Every Kubernetes call waits until released, from before this account's mapping exists: a
     // sign-in that waited for one, or for the instance, would never answer.
@@ -461,22 +461,17 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(status.usable, true);
     assert.equal(status.initialProvider, 'codex');
     assert.equal(toUuid(status.runnerId), mapping.runnerId);
-    assert.equal(toUuid(status.workspaceId), mapping.defaultWorkspaceId);
+    assert.equal(status.workspaceId, null);
+    assert.equal(mapping.defaultWorkspaceId, null);
     assert.equal(created('persistentvolumeclaims', managedPvcName(mapping.runnerId)), 1);
     assert.equal(created('pods', managedPodName(mapping.runnerId)), 1);
 
-    // The default workspace: bound to the managed runner, and defaulting to the supplied runtime.
-    const workspaces = (await call(server, 'GET', '/api/workspaces', token)).json;
-    assert.equal(workspaces.length, 1);
-    const [workspace] = workspaces;
-    assert.equal(toUuid(workspace.id), mapping.defaultWorkspaceId);
+    assert.deepEqual((await call(server, 'GET', '/api/workspaces', token)).json, []);
+    const made = await call(server, 'POST', '/api/workspaces', token, { name: 'Project', runnerId: mapping.runnerId, workDir: '/tmp/project' });
+    assert.equal(made.status, 201, made.text);
+    const workspace = (await call(server, 'GET', `/api/workspaces/${made.json.id}`, token)).json;
     assert.equal(toUuid(workspace.runnerId), mapping.runnerId);
-    assert.equal(toUuid(workspace.targetRunnerId), mapping.runnerId);
-    assert.equal(workspace.workDir, MANAGED_WORKSPACE_DIR);
     assert.equal(workspace.lastProvider, 'codex');
-    assert.equal(workspace.provider, 'codex', 'the derived alias agrees; nothing is stored on the workspace');
-    assert.equal(workspace.autoInitGit, true);
-    assert.equal(workspace.enableWorktree, true);
 
     // The first session, with no provider named, starts on Codex, and the managed runner claims it.
     const session = await call(server, 'POST', '/api/sessions', token, { workspaceId: workspace.id, prompt: 'hello', title: 'first session' });
@@ -486,32 +481,34 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(claim.status, 200, claim.text);
     assert.equal(toUuid(claim.json.sessionId), toUuid(session.json.id), 'the managed runner claimed the first session');
     assert.equal(claim.json.provider, 'codex');
-    assert.equal(claim.json.workDir, MANAGED_WORKSPACE_DIR);
+    assert.equal(claim.json.workDir, '/tmp/project');
   });
 
-  await t.test('(B3) concurrent and repeated sign-ins add nothing; a default the owner removed stays removed', async () => {
+  await t.test('(B3) concurrent and repeated sign-ins add nothing; a workspace the owner removed stays removed', async () => {
     const user = await account('eager');
     const replies = await Promise.all(Array.from({ length: 8 }, () => login(user.email)));
     for (const reply of replies) assertSignedIn(reply, 'a concurrent sign-in');
-    assert.deepEqual(await countsOf(user.id), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(user.id), { mappings: 1, runners: 1, workspaces: 0 });
     const ready = await bringUp(user.id, [engine('claude')]);
     assert.equal(ready.initialProvider, 'claude', 'Orbit’s own default, when the runner has it ready');
     for (let i = 0; i < 3; i += 1) assertSignedIn(await login(user.email), 'a repeated sign-in');
     await sleep(1_500); // a manager pass, should a sign-in have woken one
-    assert.deepEqual(await countsOf(user.id), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(user.id), { mappings: 1, runners: 1, workspaces: 0 });
     const after = (await mappingOf(user.id))!;
     assert.equal(after.revision, ready.revision, 'a sign-in leaves an existing mapping as it is');
     assert.equal(created('persistentvolumeclaims', ready.pvcName), 1);
     assert.equal(created('secrets', managedSecretName(ready.runnerId)), 1);
     assert.equal(created('pods', managedPodName(ready.runnerId)), 1);
 
-    // The owner removes the default workspace; signing in again does not bring it, or another, back.
+    // The owner creates and removes a workspace; signing in again never recreates it.
     const token = (await login(user.email)).json.accessToken as string;
-    assert.equal((await call(server, 'DELETE', `/api/workspaces/${ready.defaultWorkspaceId}`, token)).status, 200);
+    const made = await call(server, 'POST', '/api/workspaces', token, { name: 'Project', runnerId: ready.runnerId, workDir: '/tmp/project' });
+    assert.equal(made.status, 201, made.text);
+    assert.equal((await call(server, 'DELETE', `/api/workspaces/${made.json.id}`, token)).status, 200);
     assertSignedIn(await login(user.email), 'a sign-in after the removal');
     assert.deepEqual((await call(server, 'GET', '/api/workspaces', token)).json, []);
     assert.deepEqual(await countsOf(user.id), { mappings: 1, runners: 1, workspaces: 1 });
-    assert.notEqual((await db.workspace.findUniqueOrThrow({ where: { id: ready.defaultWorkspaceId } })).deletedAt, null);
+    assert.notEqual((await db.workspace.findUniqueOrThrow({ where: { id: toUuid(made.json.id) } })).deletedAt, null);
   });
 
   await t.test('(B4) an account with workspaces keeps its order, first workspace, deep links and own default; nothing is matched by name', async () => {
@@ -547,17 +544,16 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
 
     const after = await read();
     assert.deepEqual(after.list.slice(0, 3), before.list, 'the same workspaces, in the same order, unchanged');
-    assert.equal(after.list.length, 4);
-    assert.equal(toUuid(after.list[3].id as string), mapping.defaultWorkspaceId, 'the managed default is added after them');
+    assert.equal(after.list.length, 3);
+    assert.equal(mapping.defaultWorkspaceId, null);
     assert.equal(toUuid(after.list.find((w) => w.runnerId)!.id as string), old.api, 'the first workspace a client lands on is the same');
     assert.deepEqual(after.links, before.links, 'every deep link opens what it opened');
     assert.deepEqual(after.session, before.session);
     assert.deepEqual(after.runner, before.runner);
     assert.deepEqual(after.rows.runners.filter((r) => !r.includes(mapping.runnerId)), before.rows.runners);
-    assert.deepEqual(after.rows.workspaces.filter((w) => !w.includes(mapping.defaultWorkspaceId)), before.rows.workspaces);
-    // The floor is untouched for self-managed workspaces; only the managed default starts on its supply.
+    assert.deepEqual(after.rows.workspaces, before.rows.workspaces);
+    // The floor is untouched for self-managed workspaces.
     assert.equal(after.list.find((w) => toUuid(w.id as string) === old.web)!.lastProvider, 'claude');
-    assert.equal(after.list[3].lastProvider, 'codex');
   });
 
   await t.test('(B5) provisioning that fails never breaks a sign-in, and an explicit ensure or retry provisions', async () => {
@@ -610,7 +606,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(ready.runnerId, failed.runnerId);
     assert.equal(ready.defaultWorkspaceId, failed.defaultWorkspaceId);
     assert.equal(cluster.all('persistentvolumeclaims').filter((p) => p.metadata.name === ready.pvcName).length, 1);
-    assert.deepEqual(await countsOf(forbidden.id), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(forbidden.id), { mappings: 1, runners: 1, workspaces: 0 });
   });
 
   await t.test('(B6) nothing installed and signed in: MODEL_UNAVAILABLE, no first session on any engine, READY once one is signed in', async () => {
@@ -625,7 +621,9 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(status.reason.code, 'MODEL_UNAVAILABLE');
     assert.equal(status.initialProvider, null);
 
-    const workspaceId = (await call(server, 'GET', '/api/workspaces', token)).json[0].id as string;
+    const made = await call(server, 'POST', '/api/workspaces', token, { name: 'Project', runnerId: waiting.runnerId, workDir: '/tmp/project' });
+    assert.equal(made.status, 201, made.text);
+    const workspaceId = made.json.id as string;
     for (const provider of [undefined, 'claude', 'codex', 'kimi']) {
       const refusedSession = await call(server, 'POST', '/api/sessions', token, { workspaceId, prompt: 'hello', title: 'first', ...(provider ? { provider } : {}) });
       assert.equal(refusedSession.status, 409, `${provider ?? 'no provider'}: ${refusedSession.text}`);
@@ -676,7 +674,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     }
     // As shipped, every account: the next sign-in records it.
     assertSignedIn(await login(outsider.email), 'the same account under the shipped decision');
-    assert.deepEqual(await countsOf(outsider.id), { mappings: 1, runners: 1, workspaces: 1 });
+    assert.deepEqual(await countsOf(outsider.id), { mappings: 1, runners: 1, workspaces: 0 });
   });
 
   await t.test("(B8) the owner's own model key is supply: READY on it, the first session starts on it; another's, a disabled or a shared key is not", async () => {
@@ -734,9 +732,10 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(status.initialProvider, own.json.slug);
     assert.equal(status.firstSessionProvider, own.json.slug);
 
-    // The default workspace starts on that key, on the engine the key runs on.
-    const [workspace] = (await call(server, 'GET', '/api/workspaces', token)).json;
-    assert.equal(toUuid(workspace.id), ready.defaultWorkspaceId);
+    // An owner-created workspace starts on that key, on the engine the key runs on.
+    const made = await call(server, 'POST', '/api/workspaces', token, { name: 'Project', runnerId: ready.runnerId, workDir: '/tmp/project' });
+    assert.equal(made.status, 201, made.text);
+    const workspace = (await call(server, 'GET', `/api/workspaces/${made.json.id}`, token)).json;
     assert.equal(workspace.lastProvider, own.json.slug);
     assert.equal(workspace.lastEngine, 'claude');
     assert.equal(workspace.providerBuiltin, false);
@@ -762,7 +761,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
   });
 
   // ── (C) the manager on the test's clock ────────────────────────────────────────────────────
-  await t.test('(C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY', async () => {
+  await t.test('(C) no supply past the startup deadline: still waiting, not FAILED; READY by itself once one is signed in', async () => {
     const clockProfile = testManagedRunnerProfile();
     const fake = installManagedRunnerAdmission(new FakeKubeCluster(clockProfile.kubernetes.namespace), db as unknown as PrismaService, clockProfile);
     const clock = { ms: Date.parse('2026-10-07T08:00:00.000Z') };
@@ -774,8 +773,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     await service.signedIn({ id: user.id });
     const mapping = (await mappingOf(user.id))!;
     const pass = () => manager.reconcile(mapping.id);
-    const outcomes: ReconcileOutcome[] = [];
-    for (let i = 0; i < 4 && !(await mappingOf(user.id))!.podUid; i += 1) outcomes.push(await pass());
+    for (let i = 0; i < 4 && !(await mappingOf(user.id))!.podUid; i += 1) await pass();
     const beat = (engines: unknown[]) =>
       db.runner.update({ where: { id: mapping.runnerId }, data: { status: 'ONLINE', lastHeartbeatAt: now(), engines: engines as never } });
 
@@ -788,29 +786,29 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(await pass(), 'WAITING');
     assert.equal((await mappingOf(user.id))!.revision, waiting.revision, 'said once, not rewritten every pass');
 
-    clock.ms += clockProfile.lifecycle.startupDeadlineSeconds * 1000;
+    // Past the startup deadline, heartbeating with nothing signed in: still waiting, never FAILED.
+    clock.ms += clockProfile.lifecycle.startupDeadlineSeconds * 1000 + 1_000;
+    assert.ok(waiting.startupDeadlineAt! < now(), 'the startup deadline has passed');
     await beat([engine('claude', { auth: 'no' })]);
-    assert.equal(await pass(), 'FAILED');
-    const failed = (await mappingOf(user.id))!;
-    assert.deepEqual(
-      { code: (failed.lastError as { code: string }).code, retryable: (failed.lastError as { retryable: boolean }).retryable },
-      { code: 'MODEL_UNAVAILABLE', retryable: true },
-    );
-    assert.equal(failed.initialProvider, null);
-    assert.equal((await service.status(user.id)).actions.canRetry, true);
+    assert.equal(await pass(), 'WAITING');
+    const still = (await mappingOf(user.id))!;
+    assert.equal(still.managementState, 'STARTING');
+    assert.equal((still.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    assert.equal(still.initialProvider, null);
+    const status = await service.status(user.id);
+    assert.equal(status.reason?.code, 'MODEL_UNAVAILABLE');
+    assert.doesNotMatch(status.reason!.message, /retried/);
+    assert.equal(status.actions.canRetry, false, 'nothing to retry');
 
-    await service.retry(user.id, `retry-${RUN}`, failed.revision);
-    for (let i = 0; i < 4; i += 1) {
-      const outcome = await pass();
-      if ((await mappingOf(user.id))!.managementState === 'STARTING') break;
-      outcomes.push(outcome);
-    }
+    // A runtime signed in on it: READY at the next pass, on the same instance, and no retry was called.
     clock.ms += 1_000;
     await beat([engine('claude', { auth: 'no' }), engine('kimi')]);
     assert.equal(await pass(), 'READY');
     const ready = (await mappingOf(user.id))!;
     assert.equal(ready.initialProvider, 'kimi');
-    assert.equal(ready.podUid, failed.podUid, 'the same instance, waited on rather than replaced');
+    assert.equal(ready.lastError, null);
+    assert.equal(ready.podUid, waiting.podUid, 'the same instance, waited on rather than replaced');
+    assert.equal(ready.lastRequestKey, waiting.lastRequestKey, 'no retry request was made');
     assert.equal(fake.count('delete'), 0);
   });
 });

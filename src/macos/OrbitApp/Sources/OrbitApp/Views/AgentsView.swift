@@ -24,13 +24,31 @@ import UIKit
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
+    /// heartbeat's "Runner offline" slash.
+    var managed: ManagedRunnerRow? = nil
 
     var body: some View {
         Image(systemName: "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
-                if offline {
+                if let managed, managed.kind != .available {
+                    if managed.tone == .progress {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    } else {
+                        Image(systemName: managed.asleep ? "moon.zzz.fill" : "exclamationmark.circle.fill")
+                            .font(.orbitMeta.weight(.bold))
+                            .foregroundStyle(managed.ink)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    }
+                } else if offline {
                     Image(systemName: "wifi.slash")
                         .font(.orbitMeta.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -40,8 +58,8 @@ struct WorkspaceFolderIcon: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Runner offline")
-            .accessibilityHidden(!offline)
+            .accessibilityLabel(managed?.label ?? "Runner offline")
+            .accessibilityHidden(managed == nil && !offline)
     }
 }
 
@@ -64,13 +82,23 @@ struct WorkspaceNavigationRow: View {
     let waiting: Int
     var shortcut: Int? = nil
     var runnerOnHover: Bool = false
+    @Environment(AppModel.self) private var app
     @State private var hovering = false
 
+    /// This workspace's managed runner, when it runs on it: the shared short state (Asleep, Waking
+    /// up…, Ready…) in place of the heartbeat's Offline (D4).
+    private var managed: ManagedRunnerRow? {
+        ManagedRunnerLogic.row(runnerID: agent.runnerId, status: app.managedRunner?.status)
+    }
+
     var body: some View {
+        let managedRow = managed
+        // The heartbeat's offline reading is not said of a managed runner: its shared state is.
+        let offlineNow = offline && managedRow == nil
         let status = WorkspaceNavigationStatusLogic.resolve(
-            waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
+            waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offline)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
@@ -95,6 +123,12 @@ struct WorkspaceNavigationRow: View {
                 // be read as the spinner above it.
                 BreathingGlyph(systemImage: "terminal")
                     .accessibilityLabel("Background job running")
+            } else if let managedRow, managedRow.kind != .available {
+                Text(managedRow.label)
+                    .font(.orbitMeta)
+                    .foregroundStyle(managedRow.ink)
+                    .lineLimit(1)
+                    .accessibilityLabel(managedRow.detail.map { "\(managedRow.label) — \($0)" } ?? managedRow.label)
             } else if let shortcut {
                 Text("⌘\(shortcut + 1)")
                     .font(.orbitMeta).monospacedDigit()
@@ -262,7 +296,8 @@ struct AgentContentColumn: View {
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
                                isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
-                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
+                           isEnabled: rowNavigation != .selection ||
+                               (app.projectSessionsColumn == nil && app.folderColumn?.isScheduledRuns != true))
         // The query outlives `AgentPanes`' rebuild on a workspace switch (`.id(a.id)`), and a switch
         // keeps it: search mode ends only at the field's close button, and the hits span every
         // workspace anyway.
@@ -347,11 +382,6 @@ struct AgentPanes: View {
     let rowNavigation: SessionRowNavigation
     @State private var view: SessionView = .open
     @State private var showSettings = false
-    #if os(iOS)
-    /// The needs-you capsule's height over this list: the room the list's first row keeps for it,
-    /// so it covers nothing at rest (see `topInsetClearOfRefresh(_:floating:)`).
-    @State private var needsYouClearance: CGFloat = 0
-    #endif
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
     /// the row's context menu) so the sheet presents reliably.
     @State private var taggingSession: Session?
@@ -397,6 +427,12 @@ struct AgentPanes: View {
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
 
+    private var scheduledRunsAddress: SessionFolderAddress? {
+        let byTag = tagFilter != nil || groupByTag
+        guard !isSearching, SessionFolderGrouping.listShowsFolders(view: view, byTag: byTag) else { return nil }
+        return .scheduledRuns(agentID: agent.id, view: view)
+    }
+
     var body: some View {
         // The column is the session list with its Open / Completed / Trash scope over it (macOS: a
         // top inset; regular iPad: the same picker in its refresh-safe top inset). The scope used to
@@ -415,20 +451,11 @@ struct AgentPanes: View {
         let timeSections = grouping.timeSections
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
+        let scheduledAddress = scheduledRunsAddress
+        let scheduledRuns = scheduledAddress.flatMap {
+            ScheduledRunsFolder.summary(agents.scheduledRuns(in: $0) ?? [], view: view, byTag: false)
+        }
         List(selection: listSelection) {
-            #if os(iOS)
-            // The needs-you capsule floats over the list (the owner, 2026-11-15,
-            // docs/mocks/needs-you-capsule/06-list-floats): this row keeps its height clear at the top,
-            // and scrolls away with the rows, which then pass behind it.
-            if needsYouClearance > 0 {
-                Color.clear
-                    .frame(height: needsYouClearance)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .accessibilityHidden(true)
-            }
-            #endif
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
@@ -443,11 +470,13 @@ struct AgentPanes: View {
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
-                                projectRows: projectRows, projectMarks: projectMarks)
+                                projectRows: projectRows, projectMarks: projectMarks,
+                                scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             }
             #else
             groupedSections(folderListing: folderListing, timeSections: timeSections,
-                            projectRows: projectRows, projectMarks: projectMarks)
+                            projectRows: projectRows, projectMarks: projectMarks,
+                            scheduledAddress: scheduledAddress, scheduledRuns: scheduledRuns)
             #endif
         }
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -475,7 +504,7 @@ struct AgentPanes: View {
                                            description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
                 }
                 #endif
-            } else if agents.agentSessions.isEmpty {
+            } else if agents.agentSessions.isEmpty && scheduledRuns == nil {
                 #if os(iOS)
                 // No list saved yet (a fresh install, a new account): grey rows where the sessions
                 // will be, while the title's line says "Loading sessions…" (board 02 ④).
@@ -493,7 +522,10 @@ struct AgentPanes: View {
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
-        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        .refreshable {
+            await agents.loadSessions(agentID: agent.id, view: view)
+            if let scheduledAddress { await agents.loadScheduledRuns(scheduledAddress) }
+        }
         // Typing in the column's search field (declared on `AgentContentColumn`) searches the server —
         // every workspace, scope and message text — and the hits show here in place of the sections;
         // clearing the field restores them.
@@ -501,9 +533,7 @@ struct AgentPanes: View {
         // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
         // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
-        // "Another session needs you" floats over the list under it (`floating:`). This remains the only
-        // instance at regular width (the console beside it stays quiet), so it excludes that visible
-        // console.
+        // What waits on you is noticed by the toast host, once (docs/mocks/needs-you-capsule/12-once).
         //
         // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
         // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
@@ -524,13 +554,6 @@ struct AgentPanes: View {
                 }
                 .background(.bar)
             }
-        } floating: {
-            // Over the list, not inset above it, as it floats over a conversation: the sticky
-            // section headers pin under the nav bar and pass behind it (06-list-floats).
-            NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                               projectInColumn: rowNavigation == .selection,
-                               overList: true)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { needsYouClearance = $0 }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
@@ -556,6 +579,9 @@ struct AgentPanes: View {
             await ViewPoll.run(app, every: 4, hints: { app.lifecycleHints }) {
                 await agents.loadSessions(agentID: agent.id, view: view)
             }
+        }
+        .task(id: scheduledAddress) {
+            if let scheduledAddress { await app.pollScheduledRuns(scheduledAddress) }
         }
         #if os(macOS)
         // The scope over the list it filters, centred and content-width; the pane's own surface
@@ -699,13 +725,24 @@ struct AgentPanes: View {
     /// neither searching nor grouped by tag, on every platform (web's list draws the same).
     @ViewBuilder private func groupedSections(folderListing: SessionFolderListing, timeSections: [SessionTimeSection],
                                               projectRows: [String: SessionProjectRow],
-                                              projectMarks: [String: SessionProjectMark]) -> some View {
+                                              projectMarks: [String: SessionProjectMark],
+                                              scheduledAddress: SessionFolderAddress?,
+                                              scheduledRuns: ScheduledRunsFolder.Summary?) -> some View {
+        if let scheduledAddress, let scheduledRuns {
+            Button {
+                app.openFolder(scheduledAddress)
+            } label: {
+                SessionFolderRowView(scheduledRuns: scheduledRuns)
+            }
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden, edges: .top)
+        }
         // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
         // §3.3): the sessions filed in one are drawn behind its row and not in the time
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            folderListRow(row, first: index == 0)
+            folderListRow(row, first: index == 0 && scheduledRuns == nil)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -716,7 +753,7 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty && scheduledRuns == nil,
                         projectRows: projectRows, projectMarks: projectMarks)
         }
     }
@@ -757,18 +794,18 @@ struct AgentPanes: View {
             // list, the header stays to bring them back. The rows are dropped here
             // rather than through `Section(isExpanded:)`, whose disclosure only draws in
             // the sidebar list style.
-            Section {
+            TitledListSection {
                 if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
-            } header: {
-                sectionHeaderBand { pinnedSectionHeader(section.title) }
+            } title: {
+                pinnedSectionHeader(section.title)
             }
         } else {
-            Section {
+            TitledListSection {
                 ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-            } header: {
-                sectionHeaderBand { Text(section.title).textCase(nil) }
+            } title: {
+                Text(section.title).textCase(nil)
             }
         }
     }
@@ -1044,23 +1081,21 @@ struct AgentPanes: View {
     /// pose as a row of *this* agent's list. Tapping one opens it, switching agent if it belongs to
     /// another.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            sectionHeaderBand {
-                Text(contentSearched
-                     ? "All sessions"
-                     : "Matching names only — type more to search message text.")
-                    .textCase(nil)
-            }
+            Text(contentSearched
+                 ? "All sessions"
+                 : "Matching names only — type more to search message text.")
+                .textCase(nil)
         }
     }
 
@@ -1148,10 +1183,10 @@ struct AgentPanes: View {
     /// One tag's sessions under the tag's header band. The section is the row the list's ForEach
     /// draws, so the ForEach closure holds no branch of its own.
     @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
-        Section {
+        TitledListSection {
             ForEach(section.sessions) { sessionRow($0) }
-        } header: {
-            sectionHeaderBand { tagSectionHeader(section.tag) }
+        } title: {
+            tagSectionHeader(section.tag)
         }
     }
 
@@ -1186,63 +1221,45 @@ struct AgentPanes: View {
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
     }
+}
 
-    /// A section header's band: its title drawn over the list's own surface, so that the header
-    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
-    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
-    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
-    /// for glyph (every appearance, light and dark).
-    ///
-    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
-    /// title would cover its line and leave the strips above and below it see-through. The surface
-    /// is therefore grown past the title's own frame by the insets that surround it — measured off
-    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
-    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
-    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
-    /// header that added its own padding instead measured 2pt short per section), and the Pinned
-    /// header's tap target — the button, not this — is exactly the size it was.
-    ///
-    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
-    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
-    /// disappears behind it instead of reading through it.
-    ///
-    /// On iOS 26 the list meets its top on the soft edge (the needs-you bar's `SoftEdgeLayer`), and
-    /// an opaque band pinned under it read as a solid strip cutting that edge off (the owner,
-    /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
-    /// under a wash of the page's colour — solid under the title, so a row still can't read through
-    /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
-    /// Glass shows its own edges, so it is grown by the 20pt side insets as well and runs edge to edge
-    /// (measured on the iOS 26 simulator, probe run 43601744335: without them, a slab with hard sides).
-    ///
-    /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
-    @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+/// A titled section of a session list — the workspace list's and a folder page's. On iOS the title
+/// is the section's first row rather than its header: a plain list pins its section headers, so
+/// "Today" / "Yesterday" / Pinned stuck under the title bar as the rows scrolled, on a glass band of
+/// their own. The owner (2026-11-16): the titles need not stick — they scroll away with their rows,
+/// and the only glass at the top is the title area's own soft edge (`softTopEdgeEffect`), which the
+/// rows pass under. The title row is styled as the system header it replaces, carries no separator
+/// and cannot be selected.
+///
+/// The Mac's list draws its section headers in the sidebar's own way, so there it stays a header.
+struct TitledListSection<Rows: View, Title: View>: View {
+    let rows: Rows
+    let title: Title
+
+    init(@ViewBuilder _ rows: () -> Rows, @ViewBuilder title: () -> Title) {
+        self.rows = rows()
+        self.title = title()
+    }
+
+    var body: some View {
         #if os(iOS)
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                if #available(iOS 26.0, *) {
-                    ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
-                        Color(uiColor: .systemBackground).opacity(0.85)
-                    }
-                    .mask {
-                        VStack(spacing: 0) {
-                            Color.black
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 9)
-                        }
-                    }
-                    .padding(.top, -33)
-                    .padding(.bottom, -9)
-                    .padding(.horizontal, -20)
-                } else {
-                    Color(uiColor: .systemBackground)
-                        .padding(.top, -33)
-                        .padding(.bottom, -9)
-                }
-            }
+        Section {
+            title
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowInsets(EdgeInsets(top: 20, leading: 20, bottom: 6, trailing: 20))
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+                .accessibilityAddTraits(.isHeader)
+            rows
+        }
         #else
-        content()
+        Section {
+            rows
+        } header: {
+            title
+        }
         #endif
     }
 }
@@ -1296,6 +1313,7 @@ struct AgentConsoleDetail: View {
     /// placeholder.
     private var showsDraft: Bool {
         #if os(iOS)
+        if app.folderColumn?.isScheduledRuns == true { return app.composingAgentSession }
         return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil
         #else
         return app.composingAgentSession
@@ -1362,7 +1380,7 @@ struct AgentConsoleDetail: View {
                 } description: {
                     Text("The session transcript appears here.")
                 } actions: {
-                    if app.selectedAgentID != nil {
+                    if app.selectedAgentID != nil, app.folderColumn?.isScheduledRuns != true {
                         Button {
                             app.startComposingSession()
                         } label: {
@@ -1464,33 +1482,7 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if managedWelcome, let managed = draft.managed {
-                // A new account's first draft here (docs/mocks/new-user-onboarding, board 02 P1/P2): the
-                // welcome card stands where the runner's state and the engine hero stand for everybody else.
-                ScrollView {
-                    ManagedWelcomeCard(draft: draft, managed: managed, runner: managedRunnerRow,
-                                       engine: welcomeEngine, credential: welcomeCredential,
-                                       keyToUse: MachineSetup.firstKey(in: engines, preferring: welcomeEngine.rawValue),
-                                       machine: managedRunnerRow.map(RunnerPageFormat.displayName) ?? "")
-                        .frame(maxWidth: 620)
-                        .frame(maxWidth: .infinity)
-                        .padding([.horizontal, .top], 14)
-                    Color.clear.frame(height: .composerBandFade)
-                }
-                .fadesIntoComposerBand()
-                #if os(iOS)
-                .scrollDismissesKeyboard(.interactively)
-                #endif
-            } else if let managed = draft.managed, managed.blocksNewSession {
-                // The managed runner's default workspace before its runner was ever ready: there is
-                // no engine for a first session yet (the server would refuse it), so the runner's
-                // state stands where the engine would, and the composer below sends nothing.
-                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // The same room above the band as the hero it stands in for.
-                    .padding(.bottom, .composerBandFade)
-            } else if draft.localStatusCards.isEmpty {
+            if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
@@ -1589,12 +1581,20 @@ struct NewSessionView: View {
             ComposerBand {
                 // The managed runner's state, as the live console shows it, unless it already stands
                 // in the hero's place above, or in the welcome card's first step.
-                if !managedWelcome {
-                    if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
-                        ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                            .padding(.bottom, .composerBandGap)
+                    if let managed = draft.managed, managed.showsBanner {
+                        if managed.display.kind == .sleeping {
+                            // Asleep is not a fault: the shared calm line, and sending wakes it.
+                            Text(ManagedRunnerCopy.Asleep.composer)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.bottom, .composerBandGap)
+                                .accessibilityIdentifier("managed-asleep-composer")
+                        } else {
+                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                                .padding(.bottom, .composerBandGap)
+                        }
                     }
-                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
@@ -1621,17 +1621,8 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
-            // What waited on this machine before it got this workspace.
-            if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
-                draft.restoreHeld(held)
-            }
             await draft.prepareDraft()
         }
-        // Whether this account has never had a session, read as the managed default draft appears.
-        .task(id: managedDraft) {
-            if managedDraft { await app.readNewAccount() }
-        }
-        .onChange(of: managedWelcome, initial: true) { _, now in draft.welcomes = now }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.
@@ -1712,35 +1703,6 @@ struct NewSessionView: View {
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
     }
 
-    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
-
-    /// This draft is in the managed runner's default workspace (web `managedDraft`).
-    private var managedDraft: Bool {
-        Welcome.isManagedDefaultDraft(status: app.managedRunner?.status, workspaceID: agent.id)
-    }
-
-    /// The welcome card stands here: the managed default draft of an account that never had a session.
-    private var managedWelcome: Bool {
-        managedDraft && draft.managed != nil && app.newAccount == true
-    }
-
-    private var managedRunnerRow: Runner? {
-        (draft.managed?.runnerID ?? agent.runnerId).flatMap { app.agents?.runnerRow($0) }
-    }
-
-    /// Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-    private var welcomeEngine: LoginEngine {
-        Welcome.engine(draftEngine: draft.engine, startsNow: draft.managed?.blocksNewSession != true,
-                       runner: managedRunnerRow)
-    }
-
-    /// The model step's answer: the draft's provider once a first session can start, else none.
-    private var welcomeCredential: SetupCredential {
-        guard let runner = managedRunnerRow else { return .signIn }
-        let provider: ProviderChoice? = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
-        return MachineSetup.credential(runner: runner, engine: welcomeEngine.rawValue, provider: provider)
-    }
-
     /// The full model name (the composer footer only carries a truncated one). No funding label:
     /// for a configured provider it's a constant the user already set and isn't actionable here, so
     /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
@@ -1801,6 +1763,8 @@ struct AgentSessionRow: View {
                         SessionCoordinatorBadge(session: session)
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                            // A full runner, run or batch: which one, and how its slots are taken.
+                            .help(QueuedCapacity.rowHint(session, machine: machine, now: Date()) ?? "")
                     }
                 }
                 Spacer()
@@ -1947,12 +1911,13 @@ struct StatusGlyphView: View {
 
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
-/// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
-/// the product shows — a breathing terminal for background work, and the strip's eye for a session
-/// a watch will resume. The calm states (dormant / done / queued, and processes merely left running)
-/// show nothing: the surrounding row states them in words + colour and in its VoiceOver value, so
-/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
-/// both show the exact same cue.
+/// when it needs you (approval), a red dot on failure, the strip's eye for a session a watch will
+/// resume, and the two states where something is still under way without the agent generating —
+/// the clock of a session queued for a slot, and the terminal of a background process (breathing
+/// for a job in flight, still for a process merely left up), each the glyph the web row draws.
+/// The settled states (waiting for a reply, ended, succeeded) show nothing: the surrounding row
+/// states them in words + colour and in its VoiceOver value, so the jump-back lists (the grouped
+/// session list and the drawer's Recents) stay light. Shared so both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
     /// The live watches that will resume this session (`AgentSessionRow.watching`); nil where a list
@@ -1973,9 +1938,10 @@ struct SessionLiveIndicator: View {
         // not a process). The glyph has already let a question for you or work of its own outrank it.
         case (.symbol("eye"), _):
             Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
-        // Under review (contract §5 N3): the clock the macOS row and the web glyph draw, in the
-        // quiet tone — the report is somebody else's to look at first, and nothing here is amber.
-        case (.symbol("clock"), .neutral) where session.confirmationUnderReview != nil:
+        // Under review (contract §5 N3), or queued for a slot (a full runner, the Claude region): the
+        // clock the macOS row and the web glyph draw, in the quiet tone — the session is waiting on
+        // somebody else, not on you, and nothing here is amber.
+        case (.symbol("clock"), .neutral):
             Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
@@ -1985,6 +1951,11 @@ struct SessionLiveIndicator: View {
         // value (`SessionHeader.statusWord`), which is why this carries no label of its own.
         case (.symbol, .neutral) where glyph.pulse:
             BreathingGlyph(systemImage: "terminal")
+        // A process merely left up (a dev server, a watcher): the same terminal, still. The row's line
+        // already says "Background process running", and the glyph now says it too — without motion,
+        // so a service that never exits cannot make the row look busy.
+        case (.symbol("terminal"), _):
+            Image(systemName: "terminal").font(.orbitGlyph).foregroundStyle(.secondary)
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
         case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
         default:            EmptyView()
@@ -2112,6 +2083,13 @@ struct AgentFormContent: View {
     @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
     @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
+    #if os(macOS)
+    /// Agent Tools for this workspace (docs/mocks/agent-tools board ⑤), and whether its Edit asked for the
+    /// Instructions editor, which takes the focus once the sheet has gone.
+    @State private var showingAgentTools = false
+    @State private var editInstructionsAfterAgentTools = false
+    @FocusState private var instructionsFocused: Bool
+    #endif
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
     /// on, and it is here only because the effort vocabulary below genuinely differs by engine. The
@@ -2160,9 +2138,23 @@ struct AgentFormContent: View {
                 TextEditor(text: $instructions)
                     .frame(minHeight: 90)
                     .font(.body)
-                Text("Added to this agent's system prompt on every run (optional).")
+                    #if os(macOS)
+                    .focused($instructionsFocused)
+                    #endif
+                Text("Added to every run's runtime instructions (optional).")
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
+
+            #if os(macOS)
+            // Agent Tools (docs/mocks/agent-tools board ⑤): what a session here is given — Orbit's tools, the
+            // instructions it reads and in what order, the playbooks — in the read-only sheet a session's toolbar
+            // opens, without the session's own connection. The Mac only this round; iOS changed only the copy.
+            Section {
+                Button(AgentToolsCopy.settingsButton) { showingAgentTools = true }
+            } footer: {
+                Text(AgentToolsCopy.workspaceRow)
+            }
+            #endif
 
             Section("Working directory") {
                 TextField("Path", text: $workDir,
@@ -2219,6 +2211,25 @@ struct AgentFormContent: View {
             }
         }
         .formStyle(.grouped)
+        #if os(macOS)
+        // The instructions it lays out are the ones in the editor above, so what is typed shows before Done.
+        .sheet(isPresented: $showingAgentTools, onDismiss: {
+            if editInstructionsAfterAgentTools { instructionsFocused = true }
+            editInstructionsAfterAgentTools = false
+        }) {
+            AgentToolsSheet(
+                mode: .workspace(
+                    name: agent.name, instructions: instructions,
+                    baseInstructions: !(agent.systemPrompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    // Settings' reading of the switch: absent is on.
+                    orchestrationOn: app.user?.preferences?.enableOrchestration ?? true),
+                onDone: { showingAgentTools = false },
+                onEditInstructions: {
+                    editInstructionsAfterAgentTools = true
+                    showingAgentTools = false
+                })
+        }
+        #endif
         .onAppear(perform: prefill)
         // Cancel/Done pair (the iOS editing-sheet idiom, e.g. Contacts): "Done" commits the working
         // copy and closes, "Cancel" discards and closes — a discoverable exit that also works on

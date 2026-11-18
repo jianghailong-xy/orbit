@@ -49,6 +49,6 @@ class SessionListCopyParityTest {
         assertEquals("No completed sessions", SessionListCopy.noSessions(SessionView.COMPLETED))
         assertTrue(agents.contains("\"No \\(view.title.lowercased()) sessions\""))
         assertEquals("3 sessions", SessionListCopy.folderSessions(3))
-        assertTrue(folder.contains("\"\\(row.sessionCount) sessions\""))
+        assertTrue(folder.replace("\\(row.sessionCount)", "\\(sessionCount)").contains("\"\\(sessionCount) sessions\""))
     }
 }

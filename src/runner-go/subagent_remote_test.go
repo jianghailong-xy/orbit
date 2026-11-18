@@ -168,7 +168,7 @@ func (r *remoteRig) marked(name string) bool {
 }
 
 // The whole run: a worktree outside workDir at its HEAD, the child in it, its events relayed in order, its changes
-// named and discarded, the worktree and its record gone, and the workspace's checkout as it was.
+// named and discarded, the worktree gone, its record kept ended for a resume, and the workspace's checkout as it was.
 func TestRemoteSubagentRunsInATemporaryWorktreeAndRemovesIt(t *testing.T) {
 	r := newRemoteRig(t)
 	t.Setenv("REMOTE_WAIT", "1")
@@ -243,9 +243,15 @@ func TestRemoteSubagentRunsInATemporaryWorktreeAndRemovesIt(t *testing.T) {
 		t.Fatalf("the Write call was not relayed: %v", events)
 	}
 
-	// Afterwards: no worktree but the workspace's own, no record, a clean checkout.
-	waitUntil(t, func() bool { _, err := os.Stat(remoteSubagentDir("run-1")); return os.IsNotExist(err) },
-		"the run's directory was left behind")
+	// Afterwards: no worktree but the workspace's own, the conversation's record kept, a clean checkout.
+	waitUntil(t, func() bool { rec, _ := readRemoteSubagentRecord("run-1"); return rec.Ended },
+		"the run's record was not kept as ended")
+	if rec, _ := readRemoteSubagentRecord("run-1"); rec.Engine != providerClaude || rec.EngineSession == "" {
+		t.Fatalf("the kept record names no conversation: %+v", rec)
+	}
+	if _, err := os.Stat(filepath.Join(remoteSubagentDir("run-1"), "tree")); !os.IsNotExist(err) {
+		t.Fatalf("the run's worktree was left behind: %v", err)
+	}
 	if list := gitLines(t, r.workDir, "worktree", "list"); len(list) != 1 {
 		t.Fatalf("worktrees left behind: %v", list)
 	}
@@ -451,6 +457,20 @@ func TestRemoteSubagentParentFollowsTheRelayedEvents(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(r.marks, "started")); err == nil {
 		t.Fatal("a child engine ran on the parent's machine")
 	}
+
+	// Resuming it opens a run the server sends back to where it ran, with the new prompt and no placement.
+	resumed := r.call("subagent_start", map[string]interface{}{
+		"toolUseId": "toolu_delegate_2", "description": "test OrbitKit", "prompt": "now run swift test", "resume": report.RunID,
+	})
+	if resumed.Status != subagentStatusRunning || resumed.Workspace != "orbit-macos" {
+		t.Fatalf("the resume started as %+v", resumed)
+	}
+	s.mu.Lock()
+	reopened := s.remoteOpens[1]
+	s.mu.Unlock()
+	if reopened["resumeOf"] != report.RunID || reopened["prompt"] != "now run swift test" || reopened["workspace"] != nil {
+		t.Fatalf("the resume was opened with %v", reopened)
+	}
 }
 
 // A session's stop asks the server to stop a remote SubAgent, whose target stops the child.
@@ -489,5 +509,96 @@ func TestRemoteSubagentParentStopAsksTheServer(t *testing.T) {
 	})
 	if len(r.reports()) != 0 {
 		t.Fatalf("the parent's runner reported a remote run's end: %v", r.reports())
+	}
+}
+
+// A resume: the claim names the ended run, and the child continues its conversation in a new worktree at the same
+// path, told that the old one was discarded. The record it leaves points at the same conversation, so a resume of it
+// continues it too; a run this runner keeps nothing of fails with why.
+func TestRemoteSubagentResumeContinuesTheConversationInTheSameTree(t *testing.T) {
+	r := newRemoteRig(t)
+	remoteSubagents.onHeartbeat(r.t, []string{"run-1"}, nil, false)
+	r.stub.awaitEnd(t)
+	waitUntil(t, func() bool { rec, _ := readRemoteSubagentRecord("run-1"); return rec.Ended }, "run-1 was not kept")
+	first, _ := readRemoteSubagentRecord("run-1")
+
+	r.stub.mu.Lock()
+	r.stub.claim["runId"], r.stub.claim["resumeOf"], r.stub.claim["prompt"] = "run-2", "run-1", "now run the tests"
+	r.stub.mu.Unlock()
+	remoteSubagents.onHeartbeat(r.t, []string{"run-2"}, nil, false)
+	end := r.stub.awaitEnd(t)
+	if end["path"] != "/runner/subagent-runs/run-2" || end["status"] != subagentStatusDone {
+		t.Fatalf("the resume ended as %v", end)
+	}
+	argv, _ := os.ReadFile(filepath.Join(r.marks, "argv"))
+	if !strings.Contains(string(argv), "--resume\n"+first.EngineSession+"\n") {
+		t.Fatalf("the child did not continue conversation %s:\n%s", first.EngineSession, argv)
+	}
+	cwdRaw, _ := os.ReadFile(filepath.Join(r.marks, "cwd"))
+	if strings.TrimSpace(string(cwdRaw)) != first.Tree {
+		t.Fatalf("the resume ran in %s, want the conversation's tree %s", strings.TrimSpace(string(cwdRaw)), first.Tree)
+	}
+	frame, _ := os.ReadFile(filepath.Join(r.marks, "frame"))
+	if !strings.Contains(string(frame), "The worktree you worked in before was discarded") || !strings.Contains(string(frame), "now run the tests") {
+		t.Fatalf("the resume's prompt is %s", frame)
+	}
+	waitUntil(t, func() bool { rec, _ := readRemoteSubagentRecord("run-2"); return rec.Ended }, "run-2 was not kept")
+	second, _ := readRemoteSubagentRecord("run-2")
+	if second.Tree != first.Tree || second.EngineSession != first.EngineSession || second.StateDir != first.StateDir {
+		t.Fatalf("run-2's record %+v does not continue run-1's %+v", second, first)
+	}
+	if list := gitLines(t, r.workDir, "worktree", "list"); len(list) != 1 {
+		t.Fatalf("worktrees left behind: %v", list)
+	}
+
+	r.stub.mu.Lock()
+	r.stub.claim["runId"], r.stub.claim["resumeOf"] = "run-3", "run-unknown"
+	r.stub.mu.Unlock()
+	remoteSubagents.onHeartbeat(r.t, []string{"run-3"}, nil, false)
+	end = r.stub.awaitEnd(t)
+	if result, _ := end["resultSummary"].(string); end["status"] != subagentStatusFailed || !strings.Contains(result, "no longer has the conversation") {
+		t.Fatalf("a resume of a run kept nowhere ended as %v", end)
+	}
+}
+
+// An ended run's conversation goes once remoteSubagentKeep has passed since its last run, and not while a later
+// run of the same conversation is still kept; a run still going is never touched.
+func TestGCRemoteSubagentConversationsKeepsWhatAResumeUses(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	write := func(rec remoteSubagentRecord, age time.Duration) {
+		dir := remoteSubagentDir(rec.RunID)
+		if err := os.MkdirAll(filepath.Join(dir, "scratch"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "run.json")
+		if err := writeJSONFile(path, rec); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-age)
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := func(id string) string { return filepath.Join(remoteSubagentDir(id), "scratch") }
+	exists := func(id string) bool { _, err := os.Stat(remoteSubagentDir(id)); return err == nil }
+	const old = remoteSubagentKeep + time.Hour
+	write(remoteSubagentRecord{RunID: "a", EngineSession: "c1", StateDir: state("a"), Ended: true}, old)
+	write(remoteSubagentRecord{RunID: "b", EngineSession: "c1", StateDir: state("a"), Ended: true}, time.Hour)
+	write(remoteSubagentRecord{RunID: "c", EngineSession: "c2", StateDir: state("c"), Ended: true}, old)
+	write(remoteSubagentRecord{RunID: "d", EngineSession: "c3", StateDir: state("d")}, old)
+
+	gcRemoteSubagentConversations(time.Now())
+	if !exists("a") || !exists("b") {
+		t.Fatal("a conversation a kept run continues was removed")
+	}
+	if exists("c") {
+		t.Fatal("an expired conversation was kept")
+	}
+	if !exists("d") {
+		t.Fatal("a run that has not ended was removed")
+	}
+	gcRemoteSubagentConversations(time.Now().Add(remoteSubagentKeep))
+	if exists("a") || exists("b") {
+		t.Fatal("a conversation past its keep was not removed")
 	}
 }

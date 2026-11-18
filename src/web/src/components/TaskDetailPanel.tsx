@@ -16,6 +16,7 @@ import {
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
+import { GaugeIcon } from './ScheduleCards';
 import { WaitingOnYouTaskBadge } from './OwnerRequestCard';
 import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
@@ -101,6 +102,7 @@ import {
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
 import { UNDER_REVIEW } from './OwnerConfirmationReview';
+import { useMachineName } from '../lib/managedRunner';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -783,6 +785,15 @@ export function TaskDetailPanel({
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
   const q = useQuery({
     queryKey: ['task', taskId],
+    // The document carries the task's sessions, which is what the header's Run/Queued state, the
+    // busy-session poll below and the panel's session rows are read from. A run starting or ending
+    // need not write the task row at all — the control plane's `task.changed` fires only when it is
+    // created or updated — so `task` alone would leave the panel showing a run that is over.
+    //
+    // One cache entry with ProjectTaskPanel's and TaskRoute's reads of the same key; all three
+    // declare the same entities so whichever observer sets the entry's options last says the same
+    // thing.
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
@@ -814,6 +825,7 @@ export function TaskDetailPanel({
   // task refreshes this too.
   const evidenceQ = useQuery({
     queryKey: ['task', taskId, 'evidence'],
+    meta: { entities: ['task'] },
     queryFn: () => api<TaskEvidenceRevision[]>(`/tasks/${taskId}/evidence`),
     enabled: !!q.data,
   });
@@ -832,6 +844,9 @@ export function TaskDetailPanel({
   // wide single-depth fan-in fits whole.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
+    // The graph's nodes carry live run state (`running` / `queued`) from their sessions; a run
+    // starting or ending writes no task row.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
@@ -873,6 +888,8 @@ export function TaskDetailPanel({
   );
   const dependencyGraphNodesQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
+    // Same nodes, same live run state, read again for the expanded branches.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
         method: 'POST',
@@ -923,12 +940,17 @@ export function TaskDetailPanel({
   useEffect(() => setDependencyViewOverride(null), [taskId]);
 
   // Owner's workspaces, for @-mention autocomplete and to label/trigger mentions.
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<WorkspaceRow[]>('/workspaces'),
+  });
   const workspaceList = useMemo(() => workspacesQ.data ?? [], [workspacesQ.data]);
 
   // Owner's task lists, to move this task into a list (or detach it to 未分组).
   const taskListsQ = useQuery({
     queryKey: ['task-lists'],
+    meta: { entities: ['task'] },
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
@@ -950,6 +972,7 @@ export function TaskDetailPanel({
   );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
+  const machineNameOf = useMachineName();
   const navigate = useNavigate();
   // What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its
   // project's coordinator session, else the workspace's newest person-opened session). Under a pin it
@@ -994,7 +1017,7 @@ export function TaskDetailPanel({
     pinnedProvider && !pinCredentials.some((c) => c.slug === pinnedProvider)
       ? currentProviderChoice(runEngine, pinnedProvider, pinCredentials, choiceSources)
       : null;
-  const assigneeRunnerName = assigneeRunner?.displayName || assigneeRunner?.name;
+  const assigneeRunnerName = assigneeRunner ? machineNameOf(assigneeRunner) || undefined : undefined;
   /** What "Engine default" runs a task on (§3.2, only an engine named): the runner's own sign-in, OpenCode's own configuration, the first DeepSeek key. */
   const engineDefaultLabel =
     runEngine === AgentProvider.DSH
@@ -1175,6 +1198,7 @@ export function TaskDetailPanel({
   const [dependencyQuery, setDependencyQuery] = useState('');
   const dependencyTasksQ = useQuery({
     queryKey: ['tasks', 'dependency-search', dependencyQuery],
+    meta: { entities: ['task'] },
     // Only the options list is read, and this refires on every keystroke — skip the counts.
     queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery, counts: 'none' })),
   });
@@ -1776,6 +1800,14 @@ export function TaskDetailPanel({
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
           {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
+              "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
+          {q.data?.startWhen?.waitingLine && (
+            <div className="tdp-start-when" data-start-when="">
+              <GaugeIcon />
+              <span>{q.data.startWhen.waitingLine}</span>
+            </div>
+          )}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}

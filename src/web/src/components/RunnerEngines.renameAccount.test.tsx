@@ -284,14 +284,12 @@ describe('renaming an account on a runner', () => {
     );
   });
 
-  it('says where a removed account’s workspaces go by the name Default goes by', async () => {
+  it('says a removed account’s workspaces switch to Default, whatever name Default goes by', async () => {
     const page = mount([runner([{ ...DEFAULT, name: 'jianghailong.main' }, RD, ORBIT])]);
     const [, rdRow] = accountsOf(page);
 
     await clickRunnerMenuItem(rdRow, 'Remove account');
-    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toContain(
-      'Workspaces set to this account run on jianghailong.main.',
-    );
+    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toBe('Its sessions move to another account first. Workspaces using it switch to Default.');
   });
 });
 

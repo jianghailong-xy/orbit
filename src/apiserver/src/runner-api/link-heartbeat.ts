@@ -73,6 +73,11 @@ export type HeartbeatFactRole =
  *   expiredCommitErrors                          rare, and it clears session rows the worktree snapshots write too:
  *                                                one statement cannot write a row twice.
  *   managedWorkload                              a managed runner's beat always reconciles in full.
+ *   cloneReports                                 a clone's report moves its workspace's state, which decides the
+ *                                                cloneRequests the answer lists and whether its sessions dispatch.
+ *   conditionSamples                             every sample is stored and moves a condition's state, which may fire
+ *                                                it (conditions.service.ts intake): a beat that carries any reconciles
+ *                                                in full, so none is dropped by a quiet answer.
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
  *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
  *                                                (runners/runner-background-holders.ts).
@@ -95,6 +100,8 @@ export const HEARTBEAT_FACTS = {
   runtimeDefaultModels: 'REPORT',
   sessions: 'REPORT',
   agentDirProbes: 'REPORT',
+  cloneReports: 'DELIVERY',
+  conditionSamples: 'DELIVERY',
   repos: 'REPORT',
   runsAsRoot: 'REPORT',
   reposRoot: 'REPORT',
@@ -137,6 +144,12 @@ export const HEARTBEAT_DELIVERIES = {
       'realtime/reaper.service.ts#endParked', 'runner-api/runner-api.controller.ts#turnComplete',
     ],
     pending: 'drained for an hour, or until five minutes after its session finished: every full answer carries it',
+  },
+  // A subset of cancelSessionIds, read with it: delivered exactly when that is.
+  keepWorkSessionIds: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#publishEndIntent'],
+    pending: 'carried beside cancelSessionIds, for as long as it carries the session',
   },
   leaseLostSessionIds: { how: 'EVERY_BEAT', reads: 'the lease of every supervised session, by the leaseLostSessionIds rule' },
   maxConcurrent: { how: 'EVERY_BEAT', reads: 'runner.max_concurrent, which the quiet answer carries' },
@@ -185,6 +198,11 @@ export const HEARTBEAT_DELIVERIES = {
     ],
   },
   repoCleanupRequest: { how: 'MARKED', writers: ['workspaces/workspaces.service.ts#requestRepoCleanup'], pending: 'a clean-up pending' },
+  cloneRequests: {
+    how: 'MARKED',
+    writers: ['sessions/sessions.service.ts#createInNewWorkspace', 'github/github-workspace.service.ts#retryClone'],
+    pending: 'a GitHub workspace of the runner PENDING or CLONING: every full answer lists it until a report ends its clone',
+  },
   mainCheckoutRequests: {
     how: 'MARKED',
     writers: ['workspaces/main-checkout.service.ts#read', 'workspaces/main-checkout.service.ts#act'],
@@ -254,6 +272,10 @@ export const HEARTBEAT_DELIVERIES = {
       'owner-requests/owner-secrets.service.ts#sweep',
     ],
     pending: 'a grant of the runner being removed (readLinkReconcilePending)',
+  },
+  conditionProbes: {
+    how: 'FULL_ONLY',
+    reads: 'the live conditions of the runner\'s workspaces, on every full reconcile (at least every five minutes); a quiet answer leaves it out, which the runner reads as "keep the probes you have"',
   },
   forkSnapshotsOpen: {
     how: 'FULL_ONLY',
@@ -845,7 +867,8 @@ function diskBytes(value: unknown): string | null {
 /**
  * What a full reconcile left in flight that a beat renews, settles, redelivers or claims — one statement, read after the
  * reconcile: a merge or commit pending on a session of the runner (whichever process holds it), a Codex reset of the
- * runner still active, an integration job or a repository operation of its workspaces queued or running, a remote
+ * runner still active, an integration job or a repository operation of its workspaces queued or running, a GitHub
+ * workspace's clone PENDING or CLONING, a remote
  * SubAgent run it is the target of still RUNNING, a relay slot of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
  */
 export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string): Promise<boolean> {
@@ -877,6 +900,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
       OR EXISTS (
         SELECT 1 FROM "main_checkout_request" m
          WHERE m."runner_id" = ${runnerId}::uuid AND m."state" = 'pending'
+      )
+      OR EXISTS (
+        SELECT 1 FROM "workspace" w
+         WHERE w."runner_id" = ${runnerId}::uuid AND w."deleted_at" IS NULL AND w."clone_state" IN ('PENDING', 'CLONING')
       )
       OR EXISTS (
         SELECT 1 FROM "wiki_repo_op" o
@@ -917,6 +944,7 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0
+    || (answer.cloneRequests?.length ?? 0) > 0
     || answer.loginRequest !== undefined
     || answer.accountRemoveRequest !== undefined
     || answer.codexAccountRemoveRequest !== undefined

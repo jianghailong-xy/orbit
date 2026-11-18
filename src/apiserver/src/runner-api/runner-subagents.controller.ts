@@ -18,6 +18,7 @@ import {
 } from '@nestjs/common';
 import {
   type AgentExecConfig,
+  AgentProvider,
   PermissionMode,
   type RemoteSubagentClaim,
   type RemoteSubagentEventBatch,
@@ -29,6 +30,7 @@ import {
   type SubagentRunCreateResponse,
   type SubagentRunStatus,
   type SubagentRunUpdateResponse,
+  SUBAGENT_REMOTE_RESUME_V1,
 } from '@orbit/shared';
 import { Prisma, RunStatus, type Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
@@ -48,6 +50,7 @@ import { QueueService } from '../queue/queue.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { reapApprovalsOfEndedSubagents } from '../sessions/abandoned-approvals';
+import { runAccessLevel, scheduleRunDisallowedTools, scheduleRunPermissionMode } from '../schedules/schedule-access';
 import { assertEngineSession } from '../sessions/engine-session';
 import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -57,7 +60,7 @@ import {
   attemptsOf,
   fallbackCandidates,
   firstAttempt,
-  limitFailure,
+  movableFailure,
   noProviderMessage,
   appliedDecision,
   SUBAGENT_ATTEMPT_ERROR_MAX,
@@ -71,6 +74,7 @@ import { planSubagentRoute } from './subagent-route';
 import {
   chooseSubagentWorkspace,
   neededCapabilities,
+  planRemoteSubagent,
   readRelayBatch,
   remoteFactsOf,
   remoteRunEndRefusal,
@@ -81,7 +85,6 @@ import {
   SUBAGENT_RELAY_BATCH_MAX,
   type SubagentRemoteFacts,
   type SubagentWorkspacePick,
-  workspaceChoice,
 } from './subagent-remote';
 import { fileSubagentWake } from './subagent-wake';
 
@@ -112,6 +115,7 @@ const SUBAGENT_PARENT_SELECT = {
   provider: true,
   effort: true,
   permissionMode: true,
+  scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
   workspace: {
     select: {
       subagentsEnabled: true, subagentsMaxRunning: true, effort: true, permissionRules: true,
@@ -192,7 +196,7 @@ export class RunnerSubagentsController {
    * it opened, whose decision is frozen, on the candidate its last attempt runs on.
    *
    * A call that names a `workspace` or `needs` capabilities is placed first (docs/subagent-design.md §10.1,
-   * chooseSubagentWorkspace): on another workspace of the parent's repository it is opened there
+   * chooseSubagentWorkspace): on another workspace of the owner's account it is opened there
    * (openRemoteSubagentRun), and answered without `exec`; on the parent's own it is opened here, the choice's
    * reason heading the Why. The refusals of §10.1 are thrown before anything is written.
    */
@@ -209,6 +213,7 @@ export class RunnerSubagentsController {
     });
     // A retry answers with the run it opened, wherever it was placed.
     if (opened?.targetRunnerId) return this.remoteAnswer(opened);
+    if (!opened && dto.resumeOf) return this.openRemoteResume(sessionId, dto, dto.resumeOf);
     if (!opened && (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0)) {
       const parent = await this.prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { ownerId: true, workspaceId: true } });
       const pick = await chooseSubagentWorkspace(this.prisma, {
@@ -302,6 +307,7 @@ export class RunnerSubagentsController {
         });
       }
       const decision = appliedDecision(route, chosen.target, passedOver);
+      if (dto.readonly) decision.readonly = true;
       // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
       if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
       const { note: _note, ...target } = chosen.target;
@@ -334,6 +340,58 @@ export class RunnerSubagentsController {
     }, loggedRetry(this.logger, 'runnerSubagents.createSubagentRun'));
   }
 
+  /**
+   * Continue a finished remote run of this session (docs/subagent-design.md §10.2): a new remote run on the workspace
+   * and runner that ran it, whose claim names it in `resumeOf`, so that runner continues its conversation. Refused
+   * while it runs, once its workspace is gone or on another runner (which does not have the conversation), and for a
+   * runner that keeps no conversation (SUBAGENT_REMOTE_RESUME_V1), which would start a new one instead.
+   */
+  private async openRemoteResume(sessionId: string, dto: SubagentRunCreateDto, resumeOf: string): Promise<SubagentRemoteRunCreateResponse> {
+    if (dto.workspace?.trim() || neededCapabilities(dto.needs).length > 0) {
+      throw new BadRequestException({
+        code: 'SUBAGENT_RESUME_PLACED',
+        message: 'A resumed SubAgent runs where it ran before: leave out workspace and needs.',
+      });
+    }
+    const original = await this.prisma.subagentRun.findFirst({
+      where: { id: resumeOf, sessionId },
+      select: { status: true, workspaceId: true, targetRunnerId: true, attempts: true },
+    });
+    if (!original?.targetRunnerId || !original.workspaceId) {
+      throw new NotFoundException({
+        code: 'SUBAGENT_RESUME_NOT_FOUND',
+        message: 'This session has no SubAgent run by that id that ran on another workspace.',
+      });
+    }
+    const refuse = (code: string, why: string) => new ConflictException({
+      code, message: `${why} Start a new SubAgent with the full brief instead.`,
+    });
+    if (original.status === 'RUNNING') {
+      throw new ConflictException({ code: 'SUBAGENT_RESUME_RUNNING', message: 'That SubAgent is still running; resume it once it has ended.' });
+    }
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: original.workspaceId },
+      select: { id: true, name: true, workDir: true, runnerId: true, runner: { select: { capabilities: true } } },
+    });
+    if (!workspace) throw refuse('SUBAGENT_RESUME_GONE', 'The workspace that SubAgent ran on is gone, and its conversation with it.');
+    if (workspace.runnerId !== original.targetRunnerId || !workspace.runner) {
+      throw refuse('SUBAGENT_RESUME_MOVED',
+        `${workspace.name} has moved to another machine since that SubAgent ran there, and its conversation stayed on the old one.`);
+    }
+    if (!workspace.runner.capabilities.includes(SUBAGENT_REMOTE_RESUME_V1)) {
+      throw refuse('SUBAGENT_RESUME_UNSUPPORTED', `${workspace.name}'s runner is too old to continue a SubAgent's conversation.`);
+    }
+    // The model it last ran on, unless the call names one: the conversation is that engine's, and a model named is
+    // run as named on the target (planRemoteSubagent), so the resume is not routed onto another engine.
+    const lastModel = attemptsOf(original.attempts).at(-1)?.model;
+    const pinned = dto.model?.trim() || !lastModel ? dto : Object.assign(new SubagentRunCreateDto(), dto, { model: lastModel });
+    return this.openRemoteSubagentRun(sessionId, pinned, {
+      kind: 'remote',
+      workspace: { id: workspace.id, name: workspace.name, runnerId: original.targetRunnerId, workDir: workspace.workDir },
+      reason: `Continues the SubAgent that ran on ${workspace.name}, with its conversation`,
+    });
+  }
+
   /** A remote run as openSubagentRun answers it. */
   private remoteAnswer(row: { id: string; status: string; decision: unknown; workspaceId: string | null }): SubagentRemoteRunCreateResponse {
     const decision = row.decision as unknown as SubagentDecision;
@@ -348,10 +406,12 @@ export class RunnerSubagentsController {
   /**
    * Open a SubAgent run on another workspace (docs/subagent-design.md §10): written RUNNING with that workspace and
    * its runner as the target, the brief and the definition's flags kept for the target's claim, and a decision that
-   * names the workspace and why it was chosen. In this phase routing does not apply to it: it runs on the target
-   * workspace's own default engine and model, which is checked here so a workspace that cannot run it refuses now
-   * (409 SUBAGENT_TARGET_CANNOT_RUN). The parent's limits count it like any other of its SubAgents. The target
-   * runner is hinted once this commits; its heartbeat lists the run until it claims it.
+   * names the workspace and why it was chosen. What it runs on is judged on the target runner (planRemoteSubagent,
+   * §10.3): a named model as named, or refused now with what the workspace can run (409 SUBAGENT_TARGET_CANNOT_RUN);
+   * otherwise the workspace's own default engine and model while that engine is installed, signed in and under its
+   * quota there, else the routed candidate the target runner can run, the default skipped with its reason (none:
+   * 409 NO_SUBAGENT_PROVIDER). The parent's limits count it like any other of its SubAgents. The target runner is
+   * hinted once this commits; its heartbeat lists the run until it claims it.
    */
   private async openRemoteSubagentRun(
     sessionId: string,
@@ -390,34 +450,21 @@ export class RunnerSubagentsController {
         ...(dto.readonly ? { readonly: true } : {}),
         ...(dto.permissionMode ? { permissionMode: dto.permissionMode } : {}),
         ...(dto.needs?.length ? { needs: neededCapabilities(dto.needs) } : {}),
+        ...(dto.resumeOf ? { resumeOf: dto.resumeOf } : {}),
       };
-      const built = await remoteSubagentExec(tx, { workspaceId: pick.workspace.id, parentSessionId: sessionId, facts });
-      if (!built.exec) {
-        throw new ConflictException({
-          code: 'SUBAGENT_TARGET_CANNOT_RUN',
-          message: `${pick.workspace.name} cannot run this SubAgent: ${built.refusal}.`,
-        });
-      }
+      // What it runs on, judged on the target runner (§10.3); the refusals are thrown before anything is written.
+      const { decision, target: chosen, built } = await planRemoteSubagent(tx, {
+        ownerId: session.ownerId, sessionId, dto, facts, pick, planUsage: this.planUsage,
+      });
       const parentMode = resolvePermissionMode(session.permissionMode, session.owner);
-      const childEngine = String(built.exec.provider);
+      const childEngine = String(built.exec!.provider);
       const parentEngine = session.provider ?? childEngine;
       if (!dto.readonly && dto.permissionMode
         && isWiderThanParent({ mode: parentMode, engine: parentEngine }, dto.permissionMode, childEngine)) {
         throw widerModeRefusal(parentMode, dto.permissionMode, childEngine,
           "Remove permissionMode from the SubAgent's definition to run it in this session's mode.");
       }
-      const target = { engine: built.engine!, provider: built.provider!, model: built.model!, effort: built.effort ?? null };
-      const decision: SubagentDecision = {
-        level: null,
-        tierSource: 'not-routed',
-        optimizeFor: null,
-        ...target,
-        reasons: [pick.reason, `Runs on ${pick.workspace.name}'s own default engine and model, ${target.model}`],
-        candidates: [],
-        policyVersion: 'subagent-remote-v1',
-        applied: true,
-        workspace: workspaceChoice(pick.workspace, pick.reason),
-      };
+      const { note: _note, ...target } = chosen;
       const row = await tx.subagentRun.create({
         data: {
           ownerId: session.ownerId,
@@ -430,7 +477,7 @@ export class RunnerSubagentsController {
           ...(dto.description ? { description: stripNul(dto.description) } : {}),
           status: 'RUNNING',
           decision: decision as unknown as Prisma.InputJsonValue,
-          attempts: [firstAttempt(target)] as unknown as Prisma.InputJsonValue,
+          attempts: [firstAttempt({ ...target, effort: built.effort ?? target.effort })] as unknown as Prisma.InputJsonValue,
           workspaceId: pick.workspace.id,
           targetRunnerId: pick.workspace.runnerId,
           remote: facts as unknown as Prisma.InputJsonValue,
@@ -444,8 +491,9 @@ export class RunnerSubagentsController {
 
   /**
    * The target runner claims a remote SubAgent run its heartbeat listed (docs/subagent-design.md §10.2): what to run,
-   * in which workspace, and how — the target workspace's own default engine and model, as remoteSubagentExec builds
-   * it now, in a session claim's shape. Only the run's target runner may (403 SUBAGENT_RUN_NOT_TARGET). A claim sent
+   * in which workspace, and how — the candidate the run was opened on (the target workspace's own default engine and
+   * model, or the one planRemoteSubagent chose there), as remoteSubagentExec builds it now, in a session claim's
+   * shape. Only the run's target runner may (403 SUBAGENT_RUN_NOT_TARGET). A claim sent
    * again answers the same; one for a run that ended or whose parent stopped it is 409. When the workspace can no
    * longer run it, the run ends FAILED with the reason, which reaches the parent as its result.
    */
@@ -462,8 +510,14 @@ export class RunnerSubagentsController {
       if (run.status !== 'RUNNING') throw new ConflictException({ code: 'SUBAGENT_RUN_ENDED', message: `SubAgent run ${runId} has already ended` });
       if (run.stopRequestedAt) throw new ConflictException({ code: 'SUBAGENT_RUN_STOPPED', message: `SubAgent run ${runId} was stopped by its parent` });
       const facts = remoteFactsOf(run.remote);
+      // The candidate it was opened on (§10.3); a run on the workspace's own default is built from that default now.
+      const decision = run.decision as unknown as SubagentDecision;
+      const last = attemptsOf(run.attempts).at(-1);
+      const target = decision.tierSource !== 'not-routed' && last
+        ? { engine: last.engine, provider: last.provider, model: last.model, effort: last.effort }
+        : undefined;
       const built = run.workspaceId
-        ? await remoteSubagentExec(tx, { workspaceId: run.workspaceId, parentSessionId: run.sessionId, facts })
+        ? await remoteSubagentExec(tx, { workspaceId: run.workspaceId, parentSessionId: run.sessionId, facts, ...(target ? { target } : {}) })
         : { refusal: 'its workspace is gone' };
       if (!built.exec) {
         await tx.subagentRun.update({
@@ -487,6 +541,7 @@ export class RunnerSubagentsController {
         background: run.background,
         prompt: facts.prompt,
         exec: built.exec,
+        resumeOf: facts.resumeOf ?? null,
       };
       return { claim };
     }, loggedRetry(this.logger, 'runnerSubagents.claimRemoteSubagentRun'));
@@ -659,16 +714,23 @@ export class RunnerSubagentsController {
           `run in (${modesASubagentMayRunIn({ mode: parentMode, engine: provider }, provider).join(', ')}).`,
       );
     }
-    const childMode = (dto.readonly ? PermissionMode.PLAN : dto.permissionMode ?? parentMode) as PermissionMode;
+    // A read-only Claude child keeps the parent's mode: the runner withholds its edit tools, and Plan would ask
+    // about every Bash call. Every other engine keeps Plan, its read-only (Codex and DSH read their own sandboxes).
+    const childMode = (dto.readonly
+      ? (provider === AgentProvider.CLAUDE ? parentMode : PermissionMode.PLAN)
+      : dto.permissionMode ?? parentMode) as PermissionMode;
+    // A scheduled run's SubAgent is held to the run's level, as the run is: Auto on Claude Code, the level's denials
+    // on every engine (schedule-access.ts). It never waits on a card nobody is there to answer.
+    const level = runAccessLevel(session.scheduleRun);
     const exec: AgentExecConfig = {
       provider,
       model: runnerModel,
       allowedTools: dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
-      disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+      disallowedTools: scheduleRunDisallowedTools((workspace?.disallowedTools as string[] | null) ?? [], level, provider),
       permissionMode: normalizeBuiltinPermissionMode(
         provider,
         runnerModel,
-        childMode,
+        scheduleRunPermissionMode(childMode, level, provider),
         customRow?.enabled === true,
         runner.runsAsRoot,
         session.assignedRunner?.modelCatalog,
@@ -680,12 +742,13 @@ export class RunnerSubagentsController {
   }
 
   /**
-   * The runner's ask for where a SubAgent goes after its child failed on a usage limit or capacity
+   * The runner's ask for where a SubAgent goes after its child failed on a usage limit, capacity or a failed login
    * (docs/subagent-design.md §4.3): the next candidate of the tier, from the decision the run opened with — so a
-   * shadow decision serves too — skipping every provider an attempt already hit a limit on. The failed attempt is
+   * shadow decision serves too — skipping every provider an attempt already failed on. The failed attempt is
    * closed with its error, the new one appended to `attempts`, and the Why gains a line naming both models.
    * At most SUBAGENT_MAX_MOVES moves per run (409 SUBAGENT_FALLBACK_SPENT); any other failure is not moved
-   * (409 SUBAGENT_NOT_A_LIMIT_FAILURE); no candidate left is 409 NO_SUBAGENT_PROVIDER, listing why each provider
+   * (409 SUBAGENT_NOT_A_LIMIT_FAILURE), nor is a failed login on a model the caller named (409
+   * SUBAGENT_NAMED_MODEL_NOT_MOVED); no candidate left is 409 NO_SUBAGENT_PROVIDER, listing why each provider
    * is out. Each refusal still closes the failed attempt.
    */
   @Post('sessions/:id/subagents/:runId/fallback')
@@ -697,7 +760,7 @@ export class RunnerSubagentsController {
     @Body() dto: SubagentFallbackDto,
   ): Promise<SubagentFallbackResponse> {
     await this.assertParentOfRunner(sessionId, runner);
-    const failure = limitFailure(dto.error);
+    const failure = movableFailure(dto.error);
     // Refusals still close the failed attempt, so they are thrown after the transaction commits.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM "session" WHERE "id" = ${sessionId}::uuid FOR UPDATE`;
@@ -707,7 +770,8 @@ export class RunnerSubagentsController {
       if (!failure) {
         return { refusal: new ConflictException({
           code: 'SUBAGENT_NOT_A_LIMIT_FAILURE',
-          message: 'The SubAgent failed on something other than a usage limit or capacity, so it is not moved: its failure is its result.',
+          message: 'The SubAgent failed on something other than a usage limit, capacity or a failed login, so it is not ' +
+            'moved: its failure is its result.',
         }) };
       }
       const now = new Date().toISOString();
@@ -717,12 +781,21 @@ export class RunnerSubagentsController {
       const decision = row.decision as unknown as SubagentDecision;
       const save = (data: Prisma.SubagentRunUpdateInput = {}) =>
         tx.subagentRun.update({ where: { id: row.id }, data: { attempts: attempts as unknown as Prisma.InputJsonValue, ...data } });
+      // A model the caller named runs as named (§4.1 row 1): its failed login is the parent's to see, not to route around.
+      if (failure === 'AUTH_FAILED' && decision.tierSource === 'named-model') {
+        await save();
+        return { refusal: new ConflictException({
+          code: 'SUBAGENT_NAMED_MODEL_NOT_MOVED',
+          message: `The SubAgent's login failed on ${failed?.model ?? decision.model ?? 'the model'}, which the delegate call ` +
+            'named, so it is not moved to another model: its failure is its result.',
+        }) };
+      }
       const moves = Math.max(attempts.length - 1, 0);
       if (moves >= SUBAGENT_MAX_MOVES) {
         await save();
         return { refusal: new ConflictException({
           code: 'SUBAGENT_FALLBACK_SPENT',
-          message: `The SubAgent hit a usage limit or capacity on ${attempts.length} candidates in a row; ` +
+          message: `The SubAgent hit a usage limit, capacity or a failed login on ${attempts.length} candidates in a row; ` +
             `it was moved ${SUBAGENT_MAX_MOVES} times, the most one delegate call is.`,
         }) };
       }
@@ -740,9 +813,12 @@ export class RunnerSubagentsController {
           spent.add(next.provider);
           continue;
         }
+        const from = failed?.model ?? 'the first model';
         const reason = failure === 'AT_CAPACITY'
-          ? `Moved to ${next.model} on ${next.provider} after ${failed?.model ?? 'the first model'} was at capacity`
-          : `Moved to ${next.model} on ${next.provider} after ${failed?.model ?? 'the first model'}'s account hit its limit`;
+          ? `Moved to ${next.model} on ${next.provider} after ${from} was at capacity`
+          : failure === 'AUTH_FAILED'
+            ? `Moved to ${next.model} on ${next.provider} after ${from}'s login failed`
+            : `Moved to ${next.model} on ${next.provider} after ${from}'s account hit its limit`;
         const attempt = attempts.length + 1;
         const { note: _note, ...target } = next;
         attempts.push({

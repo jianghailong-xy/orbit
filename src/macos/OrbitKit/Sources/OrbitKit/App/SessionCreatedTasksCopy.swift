@@ -7,7 +7,6 @@ import Foundation
 /// `src/shared/src/session-created-tasks.fixture.json` — see `SessionCreatedTasksCopyParityTests`.
 public enum SessionCreatedTasksCopy {
     public static let title = "Tasks"
-    public static let viewAll = "View all in Tasks ›"
     public static let openProject = "Open project ›"
     /// Followed directly by the replaced task's title.
     public static let replacesPrefix = "Replaces "

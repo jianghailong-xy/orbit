@@ -517,3 +517,33 @@ func markKimiSessionDirty(home, id string) error {
 	}
 	return f.Close()
 }
+
+// moveIdleKimiConversation is moveIdleClaudeConversation for a Kimi session: the switch's reload
+// leaves it cold, so the carry its next spawn would make (runKimiSessionProcess) is made here, and
+// the record moves to the account it is on now only once that account holds its conversation. One
+// that has not talked has nothing to carry, and moves at once.
+func moveIdleKimiConversation(job *ClaimedSession, execDir, scratch string) {
+	home, err := effectiveKimiHome(envWithAgent(job.Agent.Env), execDir)
+	if err != nil {
+		return
+	}
+	if job.RuntimeSessionID == "" {
+		writeKimiSessionMeta(scratch, job, execDir)
+		return
+	}
+	if err := ensureKimiHomeStores(home); err != nil {
+		logln("kimi session", job.SessionID, "stays on its account: preparing the one it moved to failed:", err)
+		return
+	}
+	var recorded string
+	if meta := readSessionMeta(filepath.Join(scratch, "meta.json")); meta != nil {
+		recorded = meta.KimiCodeHome
+	}
+	if _, err := carryKimiConversation(home, job.RuntimeSessionID, recorded); err != nil {
+		logln("kimi session", job.SessionID, "stays on its account: carrying its conversation failed:", err)
+		return
+	}
+	if kimiSessionDirIn(home, job.RuntimeSessionID) != "" {
+		writeKimiSessionMeta(scratch, job, execDir)
+	}
+}

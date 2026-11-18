@@ -19,7 +19,9 @@ import { SessionsService } from './sessions.service';
  *  - an approval card's questions, options and description are translated as extra display fields, and an
  *    answer picked or typed in translation is stored — what the runner hands the engine — in English;
  *  - prompt suggestions are translated;
- *  - with translation off, nothing changes.
+ *  - everything runs between the account's two languages: from the agent language (`translationAgentLanguage`,
+ *    absent = English) into the owner's, and an answer the other way;
+ *  - with translation off, or the two languages the same, nothing changes.
  *
  * The ingest is the real RunnerApiController.events and the stream the real RealtimeService; only Prisma is a
  * double, an in-memory run_event and approval table.
@@ -34,21 +36,25 @@ const TS = '2026-11-12T08:00:00.000Z';
 type Row = { sessionId: string; seq: number; type: string; payload: Record<string, unknown>; turnId: string | null; createdAt: Date };
 type ApprovalRow = Record<string, unknown> & { id: string; sessionId: string; status: string; input: unknown };
 
-/** DeepSeek, stubbed: answers `ZH[<what it was sent>]`, or fails with 500 while `failing`. */
-const deepSeek = { calls: [] as string[], failing: false };
+/** DeepSeek, stubbed: answers `<TAG>[<what it was sent>]`, TAG naming the language it was asked to translate
+ *  into, and records each call's direction in `pairs`; fails with 500 while `failing`. */
+const deepSeek = { calls: [] as string[], pairs: [] as string[], failing: false };
 const ZH = (text: string) => `ZH[${text}]`;
 const EN = (text: string) => `EN[${text}]`;
+const JA = (text: string) => `JA[${text}]`;
+const TAGS: Record<string, string> = { English: 'EN', 'Chinese (Simplified)': 'ZH', Japanese: 'JA' };
 function stubDeepSeek() {
   globalThis.fetch = (async (_url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
     const system = body.messages.find((m) => m.role === 'system')!.content;
     const text = body.messages.find((m) => m.role === 'user')!.content;
     deepSeek.calls.push(text);
+    const [, from, into] = /from (.+?) into (.+?)\. The message/.exec(system)!;
+    deepSeek.pairs.push(`${from} -> ${into}`);
     if (deepSeek.failing) return { ok: false, status: 500, body: null } as Response;
-    const intoEnglish = /into English\./.test(system);
     return {
       ok: true,
-      json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: intoEnglish ? EN(text) : ZH(text) } }] }),
+      json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: `${TAGS[into]}[${text}]` } }] }),
     } as Response;
   }) as typeof fetch;
 }
@@ -58,6 +64,7 @@ const originalKey = process.env.DEEPSEEK_API_KEY;
 beforeEach(() => {
   process.env.DEEPSEEK_API_KEY = 'test-key';
   deepSeek.calls = [];
+  deepSeek.pairs = [];
   deepSeek.failing = false;
   stubDeepSeek();
 });
@@ -68,10 +75,10 @@ afterEach(async () => {
   else process.env.DEEPSEEK_API_KEY = originalKey;
 });
 
-function world(opts: { translation?: boolean } = {}) {
-  const preferences: Record<string, unknown> = opts.translation === false
+function world(opts: { translation?: boolean; preferences?: Record<string, unknown> } = {}) {
+  const preferences: Record<string, unknown> = opts.preferences ?? (opts.translation === false
     ? {}
-    : { translationEnabled: true, translationLanguage: 'zh-Hans' };
+    : { translationEnabled: true, translationLanguage: 'zh-Hans' });
   const runEvents: Row[] = [];
   const approvals: ApprovalRow[] = [];
   const at = (sessionId: string, seq: number) => runEvents.find((r) => r.sessionId === sessionId && r.seq === seq);
@@ -340,6 +347,123 @@ test('an approval\'s description is translated', async () => {
   assert.deepEqual(deepSeek.calls, ['Delete the build folder'], 'the command itself is never sent');
 });
 
+// ── Orbit's own cards (board 04-owner-cards.html, part 2) ─────────────────────────────────────────
+
+/** Files an Orbit card through the real createApproval and answers the translation it was published again with. */
+async function orbitCard(w: ReturnType<typeof world>, toolName: string, input: Record<string, unknown>) {
+  await w.controller.createApproval({ id: RUNNER_ID }, SESSION, { toolName, input, toolUseId: `${toolName}-1` });
+  await replyTranslationsSettled();
+  const [first, second] = w.cards();
+  assert.equal(first.translation, undefined, 'the card is not held back for its translation');
+  assert.equal(w.approvals.length, 1);
+  assert.deepEqual(w.approvals[0].translation, second?.translation, 'what is published is what is stored');
+  const [listed] = await w.sessions.listApprovals(OWNER, SESSION);
+  assert.deepEqual(listed?.translation, second?.translation, 'GET /approvals serves it');
+  return second?.translation;
+}
+
+test('a task create card carries its title, description and acceptance criteria translated', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_task_create', {
+    title: 'Fix the Safari login',
+    description: 'The login button does nothing in Safari.',
+    acceptanceCriteria: 'Logging in works in Safari 18.',
+    completionCriterion: 'EVIDENCE_JUDGMENT',
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    description: ZH('The login button does nothing in Safari.'),
+    title: ZH('Fix the Safari login'),
+    acceptanceCriteria: ZH('Logging in works in Safari 18.'),
+  });
+  assert.equal(deepSeek.calls.includes('EVIDENCE_JUDGMENT'), false, 'the criterion keyword is Orbit\'s, not the agent\'s words');
+});
+
+test('a batch card carries each task\'s title, description and criteria translated, index for index', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_task_batch', {
+    tasks: [
+      { title: 'Write the migration', description: 'Add the column.', acceptanceCriteria: 'The spec passes.', ref: 'a' },
+      { title: 'Backfill', dependsOnRefs: ['a'] },
+    ],
+    preview: { taskCount: 2, tasks: [{ title: 'Write the migration' }, { title: 'Backfill' }] },
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    tasks: [
+      { title: ZH('Write the migration'), description: ZH('Add the column.'), acceptanceCriteria: ZH('The spec passes.') },
+      { title: ZH('Backfill') },
+    ],
+  });
+  assert.deepEqual(w.approvals[0].input, {
+    tasks: [
+      { title: 'Write the migration', description: 'Add the column.', acceptanceCriteria: 'The spec passes.', ref: 'a' },
+      { title: 'Backfill', dependsOnRefs: ['a'] },
+    ],
+    preview: { taskCount: 2, tasks: [{ title: 'Write the migration' }, { title: 'Backfill' }] },
+  }, 'input stays the agent\'s words');
+});
+
+test('a project create card carries its title, goal, instructions and criteria items translated', async () => {
+  const w = world();
+  const translation = await orbitCard(w, 'orbit_project_create', {
+    title: 'CSV export',
+    goal: 'Ship the new CSV export.',
+    instructions: 'Keep the old columns for one release.',
+    acceptanceCriteriaItems: [
+      { text: 'The export keeps cost_center.', verificationMethod: 'A spec reads the header.' },
+      { text: 'The finance sheet still loads.' },
+    ],
+  });
+  assert.deepEqual(translation, {
+    lang: 'zh-Hans',
+    title: ZH('CSV export'),
+    goal: ZH('Ship the new CSV export.'),
+    instructions: ZH('Keep the old columns for one release.'),
+    acceptanceCriteriaItems: [
+      { text: ZH('The export keeps cost_center.'), verificationMethod: ZH('A spec reads the header.') },
+      { text: ZH('The finance sheet still loads.') },
+    ],
+  });
+});
+
+test('a blocker card carries its reason translated, and a DAG change card its note', async () => {
+  const blocker = world();
+  assert.deepEqual(await orbitCard(blocker, 'orbit_blocker_resolve', {
+    projectId: 'p1', projectTitle: 'CSV export', blockerId: 'b1',
+    reason: 'The provider is back online.',
+    blocker: { kind: 'PROVIDER', requiredAction: 'Sign the provider in again.' },
+  }), { lang: 'zh-Hans', reason: ZH('The provider is back online.') });
+  assert.deepEqual(deepSeek.calls, ['The provider is back online.'], 'the blocker\'s own facts are the server\'s, not the agent\'s');
+
+  deepSeek.calls = [];
+  const dag = world();
+  assert.deepEqual(await orbitCard(dag, 'orbit_dag_change', {
+    listId: 'l1', note: 'Backfill no longer waits on the migration.',
+    preview: { listTitle: 'Data', ops: [{ op: 'remove', taskTitle: 'Backfill', dependsOnTitle: 'Migration' }] },
+  }), { lang: 'zh-Hans', note: ZH('Backfill no longer waits on the migration.') });
+  assert.deepEqual(deepSeek.calls, ['Backfill no longer waits on the migration.']);
+});
+
+test('an Orbit card whose translation fails is recorded as failed, whole', async () => {
+  const w = world();
+  deepSeek.failing = true;
+  const translation = await orbitCard(w, 'orbit_project_create', {
+    title: 'CSV export', goal: 'Ship the new CSV export.', acceptanceCriteriaItems: [{ text: 'It ships.' }],
+  });
+  assert.deepEqual(translation, { lang: 'zh-Hans', failed: true });
+});
+
+test('a tool card is not translated for fields only Orbit\'s cards show', async () => {
+  const w = world();
+  await w.controller.createApproval({ id: RUNNER_ID }, SESSION, {
+    toolName: 'mcp__other__write', input: { title: 'Notes', note: 'x', reason: 'y' }, toolUseId: 'other-1',
+  });
+  await replyTranslationsSettled();
+  assert.equal(w.cards().length, 1, 'published once, never again with a translation');
+  assert.deepEqual(deepSeek.calls, []);
+});
+
 test('a translated option the owner picks is stored as the original label', async () => {
   const w = world();
   const row = await askQuestion(w);
@@ -350,7 +474,7 @@ test('a translated option the owner picks is stored as the original label', asyn
   assert.deepEqual(w.approvals[0].answers, { 'Which database should I use?': ['SQLite'] });
 });
 
-test('an answer the owner types is translated into English; a failure records nothing until Send as written', async () => {
+test('an answer the owner types is translated into the agent language; a failure records nothing until Send as written', async () => {
   const w = world();
   const row = await askQuestion(w);
   const typed = { behavior: 'allow' as const, answers: { 'Which database should I use?': ['用 MySQL'] }, message: '谢谢' };
@@ -367,6 +491,7 @@ test('an answer the owner types is translated into English; a failure records no
   await w.sessions.decideApproval(OWNER, SESSION, row.id, typed);
   assert.deepEqual(w.approvals[0].answers, { 'Which database should I use?': [EN('用 MySQL')] });
   assert.equal(w.approvals[0].message, EN('谢谢'));
+  assert.deepEqual(deepSeek.pairs.slice(-2).sort(), ['Chinese (Simplified) -> English', 'Chinese (Simplified) -> English']);
 });
 
 test('Send as written stores the owner\'s own words untranslated', async () => {
@@ -414,6 +539,94 @@ test('without a server key nothing is translated whatever the preference says', 
   await replyTranslationsSettled();
   assert.deepEqual(deepSeek.calls, []);
   assert.deepEqual(w.at(SESSION, 1)!.payload, { text: REPLY });
+});
+
+// ── the account's agent language ───────────────────────────────────────────────────────────────────
+
+const ZH_JA = { translationEnabled: true, translationLanguage: 'zh-Hans', translationAgentLanguage: 'ja' };
+
+test('an account without an agent language works in English, as before', async () => {
+  const w = world();
+  await w.ingest([{ seq: 1, type: RunEventType.ASSISTANT, payload: { text: REPLY } }]);
+  const row = await askQuestion(w);
+  assert.ok(deepSeek.pairs.length > 1);
+  assert.deepEqual([...new Set(deepSeek.pairs)], ['English -> Chinese (Simplified)'], 'replies and cards from English');
+  deepSeek.pairs = [];
+  await w.sessions.decideApproval(OWNER, SESSION, row.id, { behavior: 'allow', answers: {}, message: '谢谢' });
+  assert.deepEqual(deepSeek.pairs, ['Chinese (Simplified) -> English'], 'answers into English');
+  assert.equal(w.approvals[0].message, EN('谢谢'));
+});
+
+test('with a Japanese agent language, replies and suggestions are translated from Japanese into the owner\'s language', async () => {
+  const w = world({ preferences: ZH_JA });
+  await w.ingest([
+    { seq: 1, type: RunEventType.ASSISTANT, payload: { text: 'テストはすべて通りました。' } },
+    { seq: 2, type: RunEventType.PROMPT_SUGGESTION, payload: { text: 'PR を開く', source: 'orbit' } },
+  ]);
+  await replyTranslationsSettled();
+  assert.deepEqual(deepSeek.pairs, ['Japanese -> Chinese (Simplified)', 'Japanese -> Chinese (Simplified)']);
+  // The wire is unchanged: `lang` is still the owner's language.
+  assert.deepEqual(w.at(SESSION, 1)!.payload.translation, { lang: 'zh-Hans', text: ZH('テストはすべて通りました。') });
+  assert.deepEqual(w.at(SESSION, 2)!.payload.translation, { lang: 'zh-Hans', text: ZH('PR を開く') });
+
+  // Retry translates the same way, and answers with the owner's language.
+  assert.deepEqual(await w.sessions.retryReplyTranslation(OWNER, SESSION, 1), { of: 1, lang: 'zh-Hans' });
+  await replyTranslationsSettled();
+  assert.equal(deepSeek.pairs.at(-1), 'Japanese -> Chinese (Simplified)');
+});
+
+test('with a Japanese agent language, a card is translated from Japanese, and the owner\'s answer into Japanese', async () => {
+  const w = world({ preferences: ZH_JA });
+  await w.controller.createApproval({ id: RUNNER_ID }, SESSION, {
+    toolName: 'ExitPlanMode', input: { plan: '1. テストを書く' }, toolUseId: 'plan-1',
+  });
+  await replyTranslationsSettled();
+  assert.deepEqual(w.cards()[1]?.translation, { lang: 'zh-Hans', plan: ZH('1. テストを書く') });
+
+  await askQuestion(w);
+  const row = w.approvals[1];
+  assert.deepEqual([...new Set(deepSeek.pairs)], ['Japanese -> Chinese (Simplified)']);
+  deepSeek.pairs = [];
+  await w.sessions.decideApproval(OWNER, SESSION, row.id, {
+    behavior: 'allow',
+    // A translated option maps back to the card's original words; the owner's own words go into Japanese.
+    answers: { [ZH('Which database should I use?')]: [ZH('SQLite'), '用 MySQL'] },
+    message: '谢谢',
+  });
+  assert.deepEqual(w.approvals[1].answers, { 'Which database should I use?': ['SQLite', JA('用 MySQL')] });
+  assert.equal(w.approvals[1].message, JA('谢谢'));
+  assert.deepEqual(deepSeek.pairs, ['Chinese (Simplified) -> Japanese', 'Chinese (Simplified) -> Japanese']);
+});
+
+test('with the owner\'s language the agent\'s, nothing is translated — as with translation off', async () => {
+  for (const preferences of [
+    { translationEnabled: true, translationLanguage: 'ja', translationAgentLanguage: 'ja' },
+    // An owner who reads English, on an account that never chose an agent language.
+    { translationEnabled: true, translationLanguage: 'en' },
+  ]) {
+    deepSeek.calls = [];
+    const w = world({ preferences });
+    await w.ingest([
+      { seq: 1, type: RunEventType.ASSISTANT, payload: { text: REPLY } },
+      { seq: 2, type: RunEventType.PROMPT_SUGGESTION, payload: { text: 'Run the tests', source: 'orbit' } },
+    ]);
+    const row = await askQuestion(w);
+    await w.sessions.decideApproval(OWNER, SESSION, row.id, {
+      behavior: 'allow', answers: { 'Which database should I use?': ['Something else'] }, message: 'thanks',
+    });
+    await replyTranslationsSettled();
+
+    assert.deepEqual(deepSeek.calls, [], JSON.stringify(preferences));
+    assert.deepEqual(w.translations(), []);
+    assert.deepEqual(w.at(SESSION, 1)!.payload, { text: REPLY });
+    assert.deepEqual(w.at(SESSION, 2)!.payload, { text: 'Run the tests', source: 'orbit' });
+    assert.equal(w.cards().length, 1, 'the card is published once');
+    assert.equal('translation' in w.cards()[0], false);
+    assert.equal(w.approvals[0].translation, null);
+    assert.deepEqual(w.approvals[0].answers, { 'Which database should I use?': ['Something else'] });
+    assert.equal(w.approvals[0].message, 'thanks');
+    await assert.rejects(w.sessions.retryReplyTranslation(OWNER, SESSION, 1), ConflictException);
+  }
 });
 
 // ── across replicas ────────────────────────────────────────────────────────────────────────────────

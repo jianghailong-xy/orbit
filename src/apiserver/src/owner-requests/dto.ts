@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmpty,
   IsIn,
   IsISO8601,
@@ -77,11 +78,15 @@ export class FileOwnerRequestDto {
 export class CompleteOwnerRequestDto {
   @IsOptional() @IsInt() @Min(0) @Max(MAX_OWNER_REQUEST_OPTIONS - 1) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /** The owner declining a request: the reason is required, because the asking session acts on it. */
 export class DeclineOwnerRequestDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_NOTE) reason!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /** The asking session withdrawing its own request. */

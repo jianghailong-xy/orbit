@@ -11,7 +11,7 @@ import java.time.Instant
 /**
  * The single-task create card's second yes (task 34o9etf0IZ0t5oPbYGDz9; web `CREATE_AND_START`, `offersCreateAndStart`): Create
  * and start is offered only while the server's forecast says nothing would start the task by itself (`needsManualStart` is 1) and
- * the server marked the card `acceptsStartAfterCreate`, right after Create task and before Chat about this. It posts the card's own
+ * the server marked the card `acceptsStartAfterCreate`, ahead of Create task (after it on a task filed held) and before Chat about this. It posts the card's own
  * decision with `startAfterCreate`, and Create task still posts the body it always has.
  */
 class CreateAndStartCardTest {
@@ -31,19 +31,20 @@ class CreateAndStartCardTest {
 
     /** The body the runner will send and the server's forecast beside it; [accepts] is the server's mark that the card's runner
      * acts on the choice (`acceptsStartAfterCreate`), absent when null. */
-    private fun input(preview: JsonObject?, accepts: Boolean? = true) = buildJsonObject {
+    private fun input(preview: JsonObject?, accepts: Boolean? = true, held: Boolean = false) = buildJsonObject {
         put("title", "Rotate the signing key"); put("description", "Replace the key the release job signs with.")
         put("completionCriterion", "EVIDENCE_JUDGMENT")
+        if (held) put("autoRunWhenReady", false)
         preview?.let { put("preview", it) }
         accepts?.let { put("acceptsStartAfterCreate", it) }
     }
     /** The shared corpus's snapshot with this one approval in place of its own. */
     private fun card(tool: String = "orbit_task_create", preview: JsonObject? = manual, status: String = "PENDING",
-        expiresAt: String? = null, accepts: Boolean? = true): InteractionCard {
+        expiresAt: String? = null, accepts: Boolean? = true, held: Boolean = false): InteractionCard {
         val source = fixture().obj("snapshot")!!
         val approval = buildJsonObject {
             put("id", "ct1"); put("sessionId", fixture().text("sessionId")); put("toolName", tool)
-            put("input", input(preview, accepts)); put("status", status); expiresAt?.let { put("expiresAt", it) }
+            put("input", input(preview, accepts, held)); put("status", status); expiresAt?.let { put("expiresAt", it) }
         }
         return cardList(JsonObject(source + ("approvals" to JsonArray(listOf(approval))))).single { it.key == "approval:ct1" }
     }
@@ -71,10 +72,18 @@ class CreateAndStartCardTest {
         assertEquals("""{"behavior":"allow"}""", body(card(accepts = null), CardVerb.CREATE_TASK))
     }
 
-    @Test fun itFollowsCreateTaskAndComesBeforeChat() {
+    @Test fun itLeadsCreateTaskAndComesBeforeChat() {
         val card = card()
-        assertEquals(listOf(CardVerb.CREATE_TASK, CardVerb.CREATE_AND_START, CardVerb.CHAT), card.actions)
+        assertTrue(ApprovalRules.createAndStartLeads("orbit_task_create", input(manual)))
+        assertEquals(listOf(CardVerb.CREATE_AND_START, CardVerb.CREATE_TASK, CardVerb.CHAT), card.actions)
         assertEquals("Create this task?", card.title)
+    }
+
+    /** A hold the agent was asked for: still offered, but Create task stays first. */
+    @Test fun onATaskFiledHeldItFollowsCreateTask() {
+        assertTrue(ApprovalRules.offersCreateAndStart("orbit_task_create", input(manual, held = true)))
+        assertFalse(ApprovalRules.createAndStartLeads("orbit_task_create", input(manual, held = true)))
+        assertEquals(listOf(CardVerb.CREATE_TASK, CardVerb.CREATE_AND_START, CardVerb.CHAT), card(held = true).actions)
     }
 
     @Test fun everyOtherForecastAndEveryOtherCardKeepsTheirActions() {

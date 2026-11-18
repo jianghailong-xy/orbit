@@ -24,13 +24,18 @@ import (
 // machine's ~/.orbit), runs the child engine there exactly as a same-machine SubAgent runs (child mode, preamble,
 // definition, permission rules: the subagentChildRunners), relays its events to the server, and removes the worktree
 // at the end. The result is text only: when the child changed anything, the runner says what it discarded
-// (discardedChangesLine). A run the heartbeat says to stop (stopSubagentRunIds) is stopped with the same grace a
+// (discardedChangesLine). The run's conversation is kept after it ends (remoteSubagentKeep), so a claim that names it
+// in resumeOf continues it, in a new worktree at the same path, which is where the engine looks for it. A run the heartbeat says to stop (stopSubagentRunIds) is stopped with the same grace a
 // same-machine SubAgent gets; a run this process was hosting when it stopped is reported INTERRUPTED, by the stop
 // itself or, after a crash, by the next process from the record it left (recoverRemoteSubagents).
 //
 // The parent: a delegate call the server placed on another workspace is answered without an exec. The parent's
 // runner starts no child; it reads the relayed events and writes them into the session's stream, which only it
 // numbers, until the run ends (followRemoteSubagent).
+
+// subagentRemoteResumeCapabilityV1 declares that this runner keeps a remote run's conversation and continues it on a
+// claim's resumeOf: @orbit/shared's SUBAGENT_REMOTE_RESUME_V1. The server refuses a resume for a runner without it.
+const subagentRemoteResumeCapabilityV1 = "subagent-remote-resume/v1"
 
 // subagentStopParent is why the target stops a remote run: its parent session stopped it or ended.
 const subagentStopParent = "parent_stopped"
@@ -41,6 +46,69 @@ type remoteSubagentRecord struct {
 	RunID   string `json:"runId"`
 	WorkDir string `json:"workDir"`
 	Tree    string `json:"tree"`
+	// The conversation a resume continues: its engine, the engine's id for it, and the directory holding the engine's
+	// state for it. A resume runs in Tree again, which may be another run's directory's, and so may StateDir be.
+	Engine        string `json:"engine,omitempty"`
+	EngineSession string `json:"engineSession,omitempty"`
+	StateDir      string `json:"stateDir,omitempty"`
+	// Ended is set once the run is over: the record stays only for a resume, until remoteSubagentKeep has passed.
+	Ended bool `json:"ended,omitempty"`
+}
+
+// remoteSubagentKeep is how long an ended remote run's conversation is kept after its last run for a resume.
+const remoteSubagentKeep = 7 * 24 * time.Hour
+
+// readRemoteSubagentRecord reads the record a remote run left in its directory.
+func readRemoteSubagentRecord(runID string) (remoteSubagentRecord, bool) {
+	var rec remoteSubagentRecord
+	raw, err := os.ReadFile(filepath.Join(remoteSubagentDir(runID), "run.json"))
+	if err != nil || json.Unmarshal(raw, &rec) != nil {
+		return remoteSubagentRecord{}, false
+	}
+	return rec, true
+}
+
+// endRemoteSubagentRecord keeps an ended run's directory for a resume when it holds a conversation, else removes it.
+func endRemoteSubagentRecord(dir string, rec remoteSubagentRecord) {
+	if rec.EngineSession == "" {
+		_ = os.RemoveAll(dir)
+		return
+	}
+	rec.Ended = true
+	_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
+}
+
+// gcRemoteSubagentConversations removes the ended remote runs' directories nothing will resume: ended, last written
+// longer than remoteSubagentKeep ago, and holding no state a kept or running run's conversation uses.
+func gcRemoteSubagentConversations(now time.Time) {
+	entries, err := os.ReadDir(remoteSubagentsDir())
+	if err != nil {
+		return
+	}
+	keep := map[string]bool{}
+	var ended []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dir := filepath.Join(remoteSubagentsDir(), entry.Name())
+		info, err := os.Stat(filepath.Join(dir, "run.json"))
+		rec, ok := readRemoteSubagentRecord(entry.Name())
+		if err != nil || !ok || !rec.Ended || now.Sub(info.ModTime()) < remoteSubagentKeep {
+			keep[dir] = true
+			if ok && rec.StateDir != "" {
+				keep[filepath.Dir(rec.StateDir)] = true
+			}
+			continue
+		}
+		ended = append(ended, dir)
+	}
+	for _, dir := range ended {
+		if !keep[dir] {
+			_ = os.RemoveAll(dir)
+			logln("gc: removed the conversation of remote SubAgent", filepath.Base(dir))
+		}
+	}
 }
 
 func remoteSubagentsDir() string { return filepath.Join(machineHome(), "remote-subagents") }
@@ -49,6 +117,8 @@ func remoteSubagentDir(runID string) string { return filepath.Join(remoteSubagen
 
 // remoteSubagentClaim is the server's answer to a claim (RemoteSubagentClaim).
 type remoteSubagentClaim struct {
+	// ResumeOf is the earlier run of this runner whose conversation this one continues; "" for a new one.
+	ResumeOf         string          `json:"resumeOf"`
 	RunID            string          `json:"runId"`
 	SessionID        string          `json:"sessionId"`
 	ToolUseID        string          `json:"toolUseId"`
@@ -80,9 +150,28 @@ type remoteSubagentHost struct {
 	// ending are the runs this process reports STOPPED without having hosted them (an unclaimed run whose parent
 	// ended), so a heartbeat that lists one again before the report lands does not send it twice.
 	ending map[string]bool
+	// trees are the worktree paths a hosted run works in: two resumes of one conversation would share one.
+	trees map[string]bool
 }
 
-var remoteSubagents = &remoteSubagentHost{runs: map[string]*remoteSubagentTask{}, ending: map[string]bool{}}
+var remoteSubagents = &remoteSubagentHost{runs: map[string]*remoteSubagentTask{}, ending: map[string]bool{}, trees: map[string]bool{}}
+
+// takeTree reserves a worktree path for a hosted run; false while another run works in it.
+func (h *remoteSubagentHost) takeTree(tree string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.trees[tree] {
+		return false
+	}
+	h.trees[tree] = true
+	return true
+}
+
+func (h *remoteSubagentHost) releaseTree(tree string) {
+	h.mu.Lock()
+	delete(h.trees, tree)
+	h.mu.Unlock()
+}
 
 // onHeartbeat acts on what one heartbeat said of the remote runs this runner is the target of: claims the new
 // ones (not while draining) and stops the ones whose parent stopped them or ended.
@@ -197,7 +286,8 @@ func (h *remoteSubagentHost) reportUnhosted(t *Transport, runID string) {
 
 // recoverRemoteSubagents cleans up after remote runs a previous process of this runner was hosting when it ended
 // without reporting them: removes their worktrees and reports them INTERRUPTED (a run that was reported is not
-// changed by a second report). Run once as the runner starts.
+// changed by a second report), keeping a conversation for a resume as an ended run's is. Ended runs' records are
+// left as they are, and the ones past remoteSubagentKeep removed. Run once as the runner starts.
 func recoverRemoteSubagents(t *Transport) {
 	entries, err := os.ReadDir(remoteSubagentsDir())
 	if err != nil {
@@ -208,9 +298,9 @@ func recoverRemoteSubagents(t *Transport) {
 			continue
 		}
 		dir := filepath.Join(remoteSubagentsDir(), entry.Name())
-		var rec remoteSubagentRecord
-		if raw, err := os.ReadFile(filepath.Join(dir, "run.json")); err == nil {
-			_ = json.Unmarshal(raw, &rec)
+		rec, _ := readRemoteSubagentRecord(entry.Name())
+		if rec.Ended {
+			continue
 		}
 		if rec.RunID == "" {
 			rec.RunID = entry.Name()
@@ -222,9 +312,10 @@ func recoverRemoteSubagents(t *Transport) {
 		if reportRemoteSubagentEnd(t, rec.RunID, subagentStatusInterrupted,
 			"The SubAgent was interrupted: the runner of the workspace it ran on stopped (a restart or an update) before "+
 				"it ended. Nothing it changed there comes back.", nil, 0) {
-			_ = os.RemoveAll(dir)
+			endRemoteSubagentRecord(dir, rec)
 		}
 	}
+	gcRemoteSubagentConversations(time.Now())
 }
 
 // runRemoteSubagent claims one remote run and runs it to its reported end.
@@ -241,7 +332,8 @@ func runRemoteSubagent(ctx context.Context, t *Transport, task *remoteSubagentTa
 	}
 	status, result, cost, usage := runClaimedRemoteSubagent(ctx, t, task, claim)
 	reportRemoteSubagentEnd(t, claim.RunID, status, result, usage, cost)
-	_ = os.RemoveAll(remoteSubagentDir(claim.RunID))
+	rec, _ := readRemoteSubagentRecord(claim.RunID)
+	endRemoteSubagentRecord(remoteSubagentDir(claim.RunID), rec)
 }
 
 // runClaimedRemoteSubagent runs a claimed run in a temporary worktree and removes it, answering the run's end.
@@ -257,9 +349,32 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fail("could not make its scratch directory: " + err.Error())
 	}
-	tree := filepath.Join(dir, "tree")
+	scratch := filepath.Join(dir, "scratch")
+	_ = os.MkdirAll(scratch, 0o700)
+	// A new conversation runs in this run's own tree. A resume runs in the tree of the run that opened the
+	// conversation, at the same path, which is where the engine finds it, and on that run's engine state.
+	rec := remoteSubagentRecord{RunID: claim.RunID, WorkDir: workDir, Tree: filepath.Join(dir, "tree"), StateDir: scratch}
+	if claim.ResumeOf != "" {
+		prev, ok := readRemoteSubagentRecord(claim.ResumeOf)
+		if !ok || !prev.Ended || prev.EngineSession == "" {
+			return fail("this runner no longer has the conversation of the SubAgent it was to continue (an ended one's is" +
+				" kept for 7 days after its last run). Start a new SubAgent with the full brief instead.")
+		}
+		rec.Tree, rec.StateDir, rec.Engine, rec.EngineSession = prev.Tree, prev.StateDir, prev.Engine, prev.EngineSession
+	}
+	tree := rec.Tree
+	if !remoteSubagents.takeTree(tree) {
+		return fail("another run is already continuing that SubAgent's conversation; resume it once that run has ended.")
+	}
+	defer remoteSubagents.releaseTree(tree)
+	if claim.ResumeOf != "" {
+		// A worktree an earlier run of the conversation left behind, of the work dir it had then.
+		if prev, ok := readRemoteSubagentRecord(claim.ResumeOf); ok {
+			removeRemoteSubagentTree(firstNonEmpty(prev.WorkDir, workDir), tree)
+		}
+	}
 	// Recorded before the worktree exists, so a crash while it is made still leaves the next start a record to clean.
-	_ = writeJSONFile(filepath.Join(dir, "run.json"), remoteSubagentRecord{RunID: claim.RunID, WorkDir: workDir, Tree: tree})
+	_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
 	if err := addRemoteSubagentTree(claim.RunID, workDir, tree); err != nil {
 		return fail(err.Error())
 	}
@@ -281,14 +396,27 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	if !ok {
 		return fail(fmt.Sprintf("SubAgents cannot run on the %s engine on this runner.", engine))
 	}
-	engineSession := ""
-	if engine == providerClaude {
-		if engineSession, err = randomUUID(); err != nil {
+	prompt := claim.Prompt
+	if claim.ResumeOf != "" {
+		if rec.Engine != engine {
+			return fail(fmt.Sprintf("its conversation is on %s, and this workspace now runs SubAgents on %s. Start a new"+
+				" SubAgent with the full brief instead.", rec.Engine, engine))
+		}
+		if err := subagentResumeRefusal(&subagentRecord{RunID: claim.ResumeOf, Engine: rec.Engine, EngineSession: rec.EngineSession}); err != nil {
 			return fail(err.Error())
 		}
+		head, _ := git(tree, "rev-parse", "--short", "HEAD")
+		prompt = fmt.Sprintf("(From Orbit: you continue in a new worktree of this workspace at %s. The worktree you"+
+			" worked in before was discarded when you ended, so anything you changed there is gone.)\n\n%s", head, prompt)
+	} else {
+		rec.Engine = engine
+		if engine == providerClaude {
+			if rec.EngineSession, err = randomUUID(); err != nil {
+				return fail(err.Error())
+			}
+		}
+		_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
 	}
-	scratch := filepath.Join(dir, "scratch")
-	_ = os.MkdirAll(scratch, 0o700)
 	relay := newRemoteSubagentRelay(t, claim.RunID)
 	go relay.run()
 	spawned := func(cmd *exec.Cmd) {
@@ -306,10 +434,17 @@ func runClaimedRemoteSubagent(ctx context.Context, t *Transport, task *remoteSub
 	var res ExecResult
 	if !stopped && ctx.Err() == nil {
 		logln(fmt.Sprintf("remote SubAgent %s — running %s in a worktree of %s", claim.RunID, engine, workDir))
-		res, _, err = runChild(withSubagentApprovals(ctx, claim.RunID), subagentChild{
-			t: t, parent: parent, exec: claim.Exec, def: def, runID: claim.RunID, engineSession: engineSession,
-			cwd: tree, scratch: scratch, stateDir: scratch, prompt: claim.Prompt, emit: relay.add, spawned: spawned,
+		var conversation string
+		res, conversation, err = runChild(withSubagentApprovals(ctx, claim.RunID), subagentChild{
+			t: t, parent: parent, exec: claim.Exec, def: def, runID: claim.RunID, engineSession: rec.EngineSession,
+			resume: claim.ResumeOf != "", cwd: tree, scratch: scratch, stateDir: rec.StateDir, prompt: prompt,
+			emit: relay.add, spawned: spawned,
 		})
+		if conversation != "" && conversation != rec.EngineSession {
+			// The conversation the engine opened, which a resume continues.
+			rec.EngineSession = conversation
+			_ = writeJSONFile(filepath.Join(dir, "run.json"), rec)
+		}
 	}
 	changed := remoteSubagentTreeChanges(tree)
 	relay.close(15 * time.Second)

@@ -1,6 +1,6 @@
 import type { ReportedEngine, RunnerAgentFix, RunnerAttentionFixKind, RunnerAttentionFixRequest } from '@orbit/shared';
 import type { AttentionItem } from './runnerAttention';
-import { agentFixSignInAbove, agentFixStartsIn } from './runnerCopy';
+import { agentFixSignInAbove, agentFixSignInBelow, agentFixStartsIn } from './runnerCopy';
 
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): which warnings offer it, and what to draw.
@@ -19,7 +19,7 @@ export interface AgentFixTarget {
 export function attentionFixTarget(item: AttentionItem): AgentFixTarget | null {
   if (item.kind === 'engineNotUpdating') {
     const engine = typeof item.params.engine === 'string' ? (item.params.engine as ReportedEngine) : null;
-    return engine ? { kind: 'engineNotUpdating', engine, body: { engine } } : null;
+    return engine ? engineNotUpdatingFixTarget(engine) : null;
   }
   if (item.kind === 'cannotSelfUpdate') {
     const latest = typeof item.params.latest === 'string' ? item.params.latest : undefined;
@@ -28,10 +28,18 @@ export function attentionFixTarget(item: AttentionItem): AgentFixTarget | null {
   return null;
 }
 
+/** An engine that won't update: its Needs Attention card, and the warning panel on its engine row. */
+export function engineNotUpdatingFixTarget(engine: ReportedEngine): AgentFixTarget {
+  return { kind: 'engineNotUpdating', engine, body: { engine } };
+}
+
 /** An engine's Install failed panel. */
 export function installFixTarget(engine: ReportedEngine): AgentFixTarget {
   return { kind: 'installFailed', engine, body: { engine } };
 }
+
+/** The Update engines report with failed lines: the machine's, whichever engines failed. */
+export const ENGINE_UPDATE_FIX_TARGET: AgentFixTarget = { kind: 'engineUpdateFailed', engine: null, body: {} };
 
 export type AgentFixView =
   | { state: 'fixing'; workspaceName: string; sessionId: string }
@@ -41,25 +49,26 @@ export type AgentFixView =
 /**
  * What one warning draws: the fixing line while its agent is open, else the button — disabled with the
  * reason when none can start. `card` is a Needs Attention card, which draws nothing for an offline
- * machine (the offline card says so); `panel` is an Install failed panel, which also says where it runs.
+ * machine (the offline card says so); `panel` is an Install failed panel, which also says where it runs;
+ * `report` is the Update engines report, which says it the same way but sits above the engine rows.
  */
 export function agentFixView(
   fix: RunnerAgentFix | null | undefined,
   target: AgentFixTarget,
-  place: 'card' | 'panel',
+  place: 'card' | 'panel' | 'report',
 ): AgentFixView | null {
   if (!fix) return null;
   const fixing = fix.fixing.find((f) => f.kind === target.kind && (f.engine ?? null) === target.engine);
   if (fixing) return { state: 'fixing', workspaceName: fixing.workspaceName, sessionId: fixing.sessionId };
   if (fix.blocked) {
     if (place === 'card' && fix.blocked.code === 'offline') return null;
-    const signIn = place === 'panel' && fix.blocked.code === 'engineSignedOut' && fix.engineName
-      ? agentFixSignInAbove(fix.engineName)
+    const signIn = place !== 'card' && fix.blocked.code === 'engineSignedOut' && fix.engineName
+      ? (place === 'panel' ? agentFixSignInAbove : agentFixSignInBelow)(fix.engineName)
       : '';
     return { state: 'blocked', line: fix.blocked.message + signIn };
   }
   return {
     state: 'ready',
-    line: place === 'panel' && fix.workspaceName && fix.engineName ? agentFixStartsIn(fix.workspaceName, fix.engineName) : null,
+    line: place !== 'card' && fix.workspaceName && fix.engineName ? agentFixStartsIn(fix.workspaceName, fix.engineName) : null,
   };
 }

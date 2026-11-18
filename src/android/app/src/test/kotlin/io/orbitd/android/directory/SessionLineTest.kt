@@ -14,12 +14,13 @@ class SessionLineTest {
     private fun session(status: String, lastAssistantText: String? = null, lastToolUse: String? = null, lastUserText: String? = null,
         runningBgCount: Int? = null, engineTurnActive: Boolean? = null, pendingApprovals: Int = 0, endReason: String? = null,
         runningSubagentCount: Int? = null, waitingKind: String? = null, ownerItems: String? = null, review: String? = null,
-        retryAt: String? = null, error: String? = null, recapText: String? = null, recapAt: String? = null) =
+        retryAt: String? = null, error: String? = null, recapText: String? = null, recapAt: String? = null,
+        runningSubagentTitle: String? = null) =
         DirectorySession("s", "t", status = status, lastAssistantText = lastAssistantText, lastToolUse = lastToolUse, lastUserText = lastUserText,
             runningBgCount = runningBgCount, engineTurnActive = engineTurnActive, pendingApprovals = pendingApprovals, endReason = endReason,
             runningSubagentCount = runningSubagentCount, waitingKind = waitingKind, ownerItems = ownerItems?.let { Json.parseToJsonElement(it).jsonArray },
             confirmationUnderReview = review?.let { Json.parseToJsonElement(it).jsonObject }, retryAt = retryAt, error = error,
-            recapText = recapText, recapAt = recapAt)
+            recapText = recapText, recapAt = recapAt, runningSubagentTitle = runningSubagentTitle)
     private fun line(s: DirectorySession, live: Boolean = true) = SessionLine.make(s, live, now = now)
 
     // The recap (0418). When it was written is the Recap card's to say (RecapCardTest); the line is the sentence alone.
@@ -81,7 +82,8 @@ class SessionLineTest {
         assertEquals(SessionLine("Running Bash…", Tone.RUNNING), line(session("RUNNING", lastToolUse = "Bash", recapText = recap, recapAt = recapAt)))
         assertEquals(SessionLine("You: and now the footer?", Tone.PREVIEW),
             line(session("AWAITING_INPUT", lastUserText = "and now the footer?", recapText = recap, recapAt = recapAt)))
-        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND),
+        // A background process it left up does not: the recap keeps the line (the owner, 2026-11-16).
+        assertEquals(SessionLine(recap, Tone.PREVIEW),
             line(session("AWAITING_INPUT", runningBgCount = 1, recapText = recap, recapAt = recapAt)))
     }
 
@@ -94,7 +96,8 @@ class SessionLineTest {
     @Test fun interruptedTurnShowsTheUnansweredMessage() {
         assertEquals(SessionLine("You: 设置按钮的底色很奇怪，请帮我 review", Tone.PREVIEW),
             line(session("INTERRUPTED", "previous reply", lastUserText = "设置按钮的底色很奇怪，请帮我 review")))
-        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", lastUserText = "run the tests", runningBgCount = 1)))
+        assertEquals(SessionLine("You: run the tests", Tone.PREVIEW), line(session("AWAITING_INPUT", lastUserText = "run the tests", runningBgCount = 1)))
+        assertEquals(SessionLine("Background process running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", runningBgCount = 1)))
     }
 
     @Test fun fallsBackToStateWordWithoutReply() {
@@ -139,6 +142,20 @@ class SessionLineTest {
         assertEquals(SessionLine("Under review · Reviewer", Tone.REVIEW), line(session("AWAITING_INPUT", review = """{"reviewerTitle":null}""")))
         assertEquals(SessionLine("Running Agent…", Tone.RUNNING), line(session("RUNNING", runningSubagentCount = 1)))
         assertEquals(SessionLine("Running 3 agents…", Tone.RUNNING), line(session("AWAITING_INPUT", "reply", runningSubagentCount = 3, runningBgCount = 1)))
+    }
+
+    /** A running sub-agent the server knows the title of names what it is doing (web `subagentRunningLine`). */
+    @Test fun subagentLineNamesItsTitle() {
+        val title = "Deploy dacad7403 to production"
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING), line(session("RUNNING", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running 2 agents · $title…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 2, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running Agent…", Tone.RUNNING), line(session("AWAITING_INPUT", runningSubagentCount = 1, runningSubagentTitle = " ")))
+        // A foreground delegate is still the tool in flight: the row names its work, not the tool.
+        assertEquals(SessionLine("Agent: $title…", Tone.RUNNING),
+            line(session("RUNNING", lastToolUse = "mcp__orbit__delegate", runningSubagentCount = 1, runningSubagentTitle = title)))
+        assertEquals(SessionLine("Running Bash…", Tone.RUNNING),
+            line(session("RUNNING", lastToolUse = "Bash", runningSubagentCount = 1, runningSubagentTitle = title)))
     }
 
     /** The list payload's fields decode, null for a server that sends none. */

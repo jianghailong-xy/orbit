@@ -115,12 +115,16 @@ public struct RunnerAttentionInput: Decodable, Equatable, Sendable {
     public let nowMs: Int64
     /// `RunnerAttention.latestRunnerVersion`'s answer; nil when nothing says what the latest is.
     public let latestVersion: String?
+    /// The account's managed runner (Orbit Cloud): Orbit rolls its image, so it is never told to update
+    /// itself. Optional in the case file, where a case without it is any other runner.
+    public let managed: Bool?
 
-    public init(runner: Runner, workspaces: [Agent], nowMs: Int64, latestVersion: String?) {
+    public init(runner: Runner, workspaces: [Agent], nowMs: Int64, latestVersion: String?, managed: Bool = false) {
         self.runner = RunnerAttentionRunner(runner)
         self.workspaces = workspaces.map(RunnerAttentionWorkspace.init)
         self.nowMs = nowMs
         self.latestVersion = latestVersion
+        self.managed = managed
     }
 }
 
@@ -748,7 +752,9 @@ public enum RunnerAttention {
     /// that is behind installs the release itself when no turn is running.
     private static func cannotSelfUpdateItem(_ runner: RunnerAttentionRunner, _ latestVersion: String?,
                                              offline: Bool) -> RunnerAttentionItem? {
-        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+              version.range(of: "^[vV]?[0-9]", options: .regularExpression) != nil,
               let latestVersion, !latestVersion.isEmpty,
               compareRunnerVersions(version, latestVersion) < 0 else { return nil }
         let command = RunnerPageCopy.RUNNER_UPGRADE_COMMAND
@@ -851,17 +857,20 @@ public enum RunnerAttention {
             items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }
         }
-        if let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion, offline: offline) {
+        if input.managed != true,
+           let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion, offline: offline) {
             items.append(cannotUpdate)
         }
         if !offline { items += engineUpdateItems(runner, nowMs: input.nowMs) }
         return items
     }
 
+    /// `managed` nil reads it from the account's managed runner (`RunnerPageFormat.isManaged`).
     public static func runnerAttention(runner: Runner, workspaces: [Agent], nowMs: Int64,
-                                       latestVersion: String?) -> [RunnerAttentionItem] {
+                                       latestVersion: String?, managed: Bool? = nil) -> [RunnerAttentionItem] {
         runnerAttention(RunnerAttentionInput(runner: runner, workspaces: workspaces, nowMs: nowMs,
-                                             latestVersion: latestVersion))
+                                             latestVersion: latestVersion,
+                                             managed: managed ?? RunnerPageFormat.isManaged(runner)))
     }
 
     /// Whether Update Runner Now can do anything here. Only a runner that reports its updates takes
@@ -887,11 +896,28 @@ public enum RunnerAttention {
         return shorts.isEmpty ? nil : shorts.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
+    /// Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build.
+    public static func isReleaseVersion(_ version: String?) -> Bool {
+        guard let version = version?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return version.range(of: "^[vV]?[0-9]", options: .regularExpression) != nil
+    }
+
+    /// How a version is shown beside a runner's name: `v<version>`. A managed runner (Orbit Cloud) shows
+    /// its release when it reports one, and otherwise says Orbit keeps it up to date — never its image hash.
+    public static func runnerVersionLine(_ version: String?, managed: Bool = false) -> String? {
+        let trimmed = version?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if managed {
+            return isReleaseVersion(trimmed)
+                ? RunnerPageCopy.runnerVersionTag(version: trimmed) : RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE
+        }
+        return trimmed.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: trimmed)
+    }
+
     /// The list's second line. Online: `<hostname> · v<version>`, leaving out a hostname that is
     /// empty or the same as the name shown above it. Offline: `Offline · last seen 14d ago · v<version>`.
-    public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64) -> String {
-        let version = (runner.version?.trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap { $0.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: $0) }
+    /// A managed runner's version is `runnerVersionLine`'s.
+    public static func runnerListSubtitle(_ runner: RunnerAttentionRunner, nowMs: Int64, managed: Bool = false) -> String {
+        let version = runnerVersionLine(runner.version, managed: managed)
         if runnerIsOffline(runner, nowMs: nowMs) {
             let lastSeen = runner.lastHeartbeatAt.flatMap { $0.isEmpty ? nil : $0 }
             let status = lastSeen.map { RunnerPageCopy.runnerOfflineLastSeen(when: ago($0, nowMs: nowMs)) }
@@ -900,12 +926,14 @@ public enum RunnerAttention {
         }
         let hostname = runner.hostname?.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let shownName = displayName.flatMap { $0.isEmpty ? nil : $0 } ?? runner.name
+        let shownName = displayName.flatMap { $0.isEmpty ? nil : $0 }
+            ?? (managed ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name)
         let host = hostname.flatMap { $0.isEmpty || $0 == shownName ? nil : $0 }
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
-    public static func runnerListSubtitle(_ runner: Runner, nowMs: Int64) -> String {
-        runnerListSubtitle(RunnerAttentionRunner(runner), nowMs: nowMs)
+    /// `managed` nil reads it from the account's managed runner (`RunnerPageFormat.isManaged`).
+    public static func runnerListSubtitle(_ runner: Runner, nowMs: Int64, managed: Bool? = nil) -> String {
+        runnerListSubtitle(RunnerAttentionRunner(runner), nowMs: nowMs, managed: managed ?? RunnerPageFormat.isManaged(runner))
     }
 }

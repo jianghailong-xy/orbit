@@ -183,6 +183,8 @@ type cliIdentity struct {
 	verified bool
 	// Whether the runner started this process, which passed the person over (envRunnerChild).
 	runnerChild bool
+	// Problem as a stable code (capability_contract.go), for the capabilities document.
+	problemCode string
 }
 
 // runnerChildReason ends the reason of an identity chosen in a process the runner started.
@@ -225,6 +227,7 @@ func resolveCLIIdentity() cliIdentity {
 		login, err := loadUserLogin()
 		if err != nil {
 			identity.Problem = fmt.Sprintf("%v: run `orbit login` to save it again, or `orbit logout --keep-token` to remove it", err)
+			identity.problemCode = capabilityTokenInvalid
 			return identity
 		}
 		identity.ServerURL = login.ServerURL
@@ -242,11 +245,13 @@ func resolveCLIIdentity() cliIdentity {
 		}
 		if err := configStoragePrivate(); err != nil {
 			identity.Problem = fmt.Sprintf("runner credential storage is not private (%v); restart the Orbit runner once to migrate it", err)
+			identity.problemCode = capabilityRunnerCredentialUnusable
 			return identity
 		}
 		cfg := loadConfig()
 		if cfg == nil || cfg.RunnerToken == "" {
 			identity.Problem = path + " holds no runner credential: run `orbit register`"
+			identity.problemCode = capabilityRunnerNotRegistered
 			return identity
 		}
 		identity.ServerURL = cfg.ServerURL
@@ -262,12 +267,14 @@ func resolveCLIIdentity() cliIdentity {
 			Problem:          "no runner credential at " + configPath() + ": a process the Orbit runner started acts with nothing else",
 			UserTokenIgnored: userTokenOnHand(),
 			runnerChild:      true,
+			problemCode:      capabilityRunnerNotRegistered,
 		}
 	}
 	return cliIdentity{
-		Kind:    identityNone,
-		Reason:  "no ORBIT_SESSION_ID, ORBIT_SERVICE_TOKEN or ORBIT_USER_TOKEN, no saved login and no runner credential",
-		Problem: "not logged in: run `orbit login` to act as yourself, or `orbit register` to make this machine a runner",
+		Kind:        identityNone,
+		Reason:      "no ORBIT_SESSION_ID, ORBIT_SERVICE_TOKEN or ORBIT_USER_TOKEN, no saved login and no runner credential",
+		Problem:     "not logged in: run `orbit login` to act as yourself, or `orbit register` to make this machine a runner",
+		problemCode: capabilityRunnerNotRegistered,
 	}
 }
 

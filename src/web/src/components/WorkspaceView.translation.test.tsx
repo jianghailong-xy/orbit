@@ -8,7 +8,7 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * Settings › Translation in the session page (docs/mocks/session-translation/01-board.png, frames 3–6):
- * the composer's "<Language> → English" tag that opens the setting, a message held for its translation
+ * the composer's "<Language> → <Agent language>" tag that opens the setting, a message held for its translation
  * drawn in the conversation with its chip or its failure — whose Retry and Send as written call the
  * A1 doors — and a reply swapped for its translation when the live `translation` event comes.
  */
@@ -266,6 +266,12 @@ describe('the composer tag (6A)', () => {
     await waitForUi(() => expect(tag()?.textContent).toBe('Japanese → English'));
   });
 
+  it('names the agent language the account picked, both without their parenthesis', async () => {
+    preferences = { translationEnabled: true, translationLanguage: 'en', translationAgentLanguage: 'zh-Hant' };
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('English → Chinese'));
+  });
+
   it('is not there with translation off, or on a server that cannot translate', async () => {
     preferences = {};
     await mount();
@@ -278,6 +284,28 @@ describe('the composer tag (6A)', () => {
     await mount();
     await waitForUi(() => expect(box()).toBeTruthy());
     expect(tag()).toBeNull();
+  });
+});
+
+describe('the tray, for a translated message', () => {
+  it('says what the reader wrote, not the English delivered', async () => {
+    session = { ...PARKED, status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING', engineTurnActive: true };
+    const steer = {
+      seq: 13, type: 'user', turnId: 'turn-steer', ts: '2026-10-08T03:05:10Z',
+      payload: {
+        text: 'lfs belongs to another repository', steer: true, delivery: 'written', withdrawable: true,
+        translation: { state: 'DONE', from: 'zh-Hans', original: 'lfs 属于另一个仓库' },
+      },
+    };
+    seedMock.mockImplementation(async () => ({ events: [...SEED, steer], hasMore: false }));
+    queue = [{
+      turnId: 'turn-next', kind: 'message', placement: 'queued', content: 'and update the changelog',
+      createdAt: '2026-10-08T03:06:00Z', attachments: [],
+      translation: { state: 'DONE', from: 'zh-Hans', original: '顺便更新变更日志' },
+    }];
+    await mount();
+    const rows = () => [...mounted().querySelectorAll('.pending-tray-text')].map((n) => n.textContent);
+    await waitForUi(() => expect(rows()).toEqual(['lfs 属于另一个仓库', '顺便更新变更日志']));
   });
 });
 

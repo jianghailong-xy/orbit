@@ -82,6 +82,18 @@ private struct ToastHost: ViewModifier {
                 // transitions animated while leaving the shell below on its own transaction.
                 ZStack(alignment: wide ? .topTrailing : .top) {
                     VStack(alignment: wide ? .trailing : .center, spacing: 8) {
+                        #if os(iOS)
+                        // A conversation that has just started waiting on you: noticed once, first in
+                        // the column (docs/mocks/needs-you-capsule/12-once).
+                        ForEach(model.needsYouToasts) { notice in
+                            NeedsYouToastCard(notice: notice, projectInColumn: wide)
+                                .transition(entrance)
+                        }
+                        if model.needsYouToastsMore > 0 {
+                            NeedsYouToastMore(count: model.needsYouToastsMore)
+                                .transition(entrance)
+                        }
+                        #endif
                         pinned
                         if let toast = model.toasts.transient {
                             transient(toast)
@@ -94,6 +106,9 @@ private struct ToastHost: ViewModifier {
                     .padding(.top, Self.topInset)
                 }
                 .animation(reduceMotion ? Animation.easeInOut(duration: 0.2) : Animation.snappy, value: model.toasts)
+                #if os(iOS)
+                .animation(reduceMotion ? Animation.easeInOut(duration: 0.2) : Animation.snappy, value: model.needsYouToasts)
+                #endif
             }
             #if os(iOS)
             // A failure or an approval arriving is worth feeling; a confirmation of a tap isn't — the
@@ -103,6 +118,8 @@ private struct ToastHost: ViewModifier {
                 guard new > old, let toast = model.toasts.front else { return nil }
                 return toast.tone == .error ? SensoryFeedback.error : SensoryFeedback.warning
             }
+            // Something has just started waiting on you: felt once, as it is shown.
+            .sensoryFeedback(.warning, trigger: model.needsYouToasts.count) { old, new in new > old }
             #endif
     }
 
@@ -520,7 +537,7 @@ private enum ToastStyle {
     }
 }
 
-private extension View {
+extension View {
     /// iOS 26's Liquid Glass — the toolbar's own material — so a toast reads as chrome over the page
     /// rather than as a grey slab of it, tinted for a ③. Earlier systems get the regular material with
     /// a tint wash, a hairline edge (`.primary`, so it inverts with the appearance) and a soft shadow.

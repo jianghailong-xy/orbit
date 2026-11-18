@@ -8,6 +8,7 @@ import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
+import { useMachineName } from '../lib/managedRunner';
 
 /**
  * Rotating a runner's token: the confirmation that says what it breaks, then the new token, shown
@@ -17,6 +18,7 @@ import { Dialog } from './ui/Dialog';
  */
 export function useRunnerTokenRotation() {
   const message = useToast();
+  const machineNameOf = useMachineName();
   const [confirm, confirmation] = useConfirm();
   // The freshly minted token from a rotation, shown exactly once.
   const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null);
@@ -38,12 +40,12 @@ export function useRunnerTokenRotation() {
   const confirmRotate = (r: Runner, from?: RefObject<HTMLElement | null>) => {
     setReturnFocus(from);
     void confirm({
-      title: `Rotate token for “${r.displayName || r.name}”?`,
+      title: `Rotate token for “${machineNameOf(r)}”?`,
       description:
         'This immediately invalidates the runner’s current credential. The runner will go offline until you set the new token as runnerToken in its ~/.orbit/config.json and restart it.',
       confirmText: 'Rotate token',
       cancelText: 'Cancel',
-      onConfirm: () => rotateMut.mutateAsync({ id: r.id, name: r.displayName || r.name }),
+      onConfirm: () => rotateMut.mutateAsync({ id: r.id, name: machineNameOf(r) }),
       returnFocus: from,
     });
   };

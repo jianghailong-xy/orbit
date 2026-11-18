@@ -42,6 +42,13 @@ class StickySummaryTest {
         assertEquals("event:1", questions.last?.key)
     }
 
+    /** A turn that is only a note this reader cannot read draws no row of the reader's, so the bar never names it (OrbitKit). */
+    @Test fun aTurnThatIsOnlyANoteIsNoAnchor() {
+        val note = "<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>"
+        assertFalse(StickySummary.isAnchor(user(8, buildJsonObject { put("text", note); put("controlPlaneNote", note) })))
+        assertTrue(StickySummary.isAnchor(user(9, buildJsonObject { put("text", "A question\n\n$note"); put("controlPlaneNote", note) })))
+    }
+
     @Test fun aBackgroundWakeIsALineInsideAnAnswerUnlessSomebodyTypedOnIt() {
         assertFalse(StickySummary.isAnchor(user(6, buildJsonObject { put("text", wake); put("controlPlaneNote", wake) })))
         val typed = user(7, buildJsonObject { put("text", "And also this$wake"); put("controlPlaneNote", wake) })

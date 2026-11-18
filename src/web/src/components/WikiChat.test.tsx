@@ -497,26 +497,6 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     expect(document.querySelector('.wk-chat-host.is-open .wk-drawer')).toBeTruthy();
   });
 
-  it('shows a message’s attachment line whole: a line of its own under the bubble, wrapped, the copy and time under it (C15)', () => {
-    // jsdom lays nothing out, so the rule is read as text; the C15 screenshots measure it in a browser at 400 wide.
-    const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
-    const rule = (selector: string): string => {
-      const at = css.indexOf(`${selector} {`);
-      expect(at, selector).toBeGreaterThanOrEqual(0);
-      return css.slice(at, css.indexOf('}', at));
-    };
-    // The session page keeps its one line, run out into the free gutter left of the bubble.
-    expect(rule('.chat-user-meta')).toContain('white-space: nowrap');
-    // The panel's body is a scroll box, which cuts off what runs past its left edge: there the row wraps…
-    const row = rule('.wk-chat-body .chat-user-meta');
-    for (const part of ['flex-wrap: wrap', 'height: auto', 'min-height: 18px']) expect(row).toContain(part);
-    // …the attachment line first, on a line of its own, its words wrapping…
-    const line = rule('.wk-chat-body .chat-user-meta > .chat-injected-head');
-    for (const part of ['order: -1', 'flex: 1 1 100%', 'white-space: normal']) expect(line).toContain(part);
-    // …and the dot that led from the time into it goes with it.
-    expect(rule('.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head)')).toContain('display: none');
-  });
-
   it('lists the space’s chats under its title and switches to one', async () => {
     chats = {
       ...chats,

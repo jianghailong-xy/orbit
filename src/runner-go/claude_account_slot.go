@@ -75,14 +75,15 @@ func claudeSessionAccountDir(agentEnv map[string]string, execDir string) (string
 // claudeSessionAccountDirs is every CLAUDE_CONFIG_DIR a session this runner is currently running is
 // stuck to — read from each session's own record, written when its process first started. A session
 // on the machine's own login contributes nothing: Default is not a slot, and no removal touches it.
-func claudeSessionAccountDirs(sessionIDs []string) map[string]bool {
-	out := map[string]bool{}
+func claudeSessionAccountDirs(sessionIDs []string) accountDirSessions {
+	out := accountDirSessions{}
 	for _, id := range sessionIDs {
 		meta := readSessionMeta(filepath.Join(runDir(id), "meta.json"))
 		if meta == nil || meta.ClaudeConfigDir == "" {
 			continue
 		}
-		out[filepath.Clean(meta.ClaudeConfigDir)] = true
+		dir := filepath.Clean(meta.ClaudeConfigDir)
+		out[dir] = append(out[dir], id)
 	}
 	return out
 }

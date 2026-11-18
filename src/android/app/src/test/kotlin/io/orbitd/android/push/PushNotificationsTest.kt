@@ -73,6 +73,27 @@ class PushNotificationsTest {
         assertNull(restored.bindAccount("account-A").bindAccount(null).pending)
     }
 
+    /** A condition's two pushes (the shared fixture's `condition-unknown` and `schedule-finding`, docs/condition-triggers-design.md
+     * §5.3, §6.1) are shown, not dropped: the can't-read one rings on the needs-you channel and opens the conversation that draws its
+     * card; a firing's run rings with its report and opens the run. */
+    @Test fun aConditionThatCannotBeReadAndAFiredConditionsRunAreShown() {
+        val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/shared/src/android-push.fixture.json").isFile }
+        val fixture = Wire.json.parseToJsonElement(java.io.File(root, "src/shared/src/android-push.fixture.json").readText()).jsonObject
+        fun data(name: String) = fixture["samples"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == name }["data"]!!
+            .jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val cantRead = data("condition-unknown")
+        assertTrue(notifications.show(PushMessage.parse(cantRead)!!, cantRead))
+        val first = manager.activeNotifications.single().notification
+        assertEquals(PushNotifications.NEEDS_YOU, first.channelId)
+        assertEquals("Can't read: Root disk below 5%", first.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(Destination.SESSION, OrbitLinks.parse(shadowOf(first.contentIntent).savedIntent.dataString!!)!!.destination)
+        val fired = data("schedule-finding")
+        assertTrue(notifications.show(PushMessage.parse(fired)!!, fired))
+        assertEquals(2, manager.activeNotifications.size)
+        assertTrue(manager.activeNotifications.any { it.notification.extras.getString(Notification.EXTRA_TITLE) == "Ceph capacity guard" })
+    }
+
     /** The server's terminal-login send (the shared fixture's sample): it rings on the needs-you channel, and its tap opens the Waiting
      * on you inbox whose Open tab heads with the approve card. */
     @Test fun aTerminalAskingToBeApprovedRingsAsNeedsYouAndOpensTheInbox() {
@@ -87,6 +108,36 @@ class PushNotificationsTest {
         assertEquals(PushNotifications.NEEDS_YOU, notification.channelId)
         val route = OrbitLinks.parse(shadowOf(notification.contentIntent).savedIntent.dataString!!)!!
         assertEquals(Destination.WAITING_ON_YOU, route.destination)
+    }
+
+    /** The two decisions only the owner makes that are no owner item (a crossing request, a coordinator's confirmation raise) ring on
+     * the needs-you channel; a schedule alert follows the session rule: the sessions channel with its run, updates without one,
+     * unless it names the Waiting on you item it filed, which rings on the needs-you channel. */
+    @Test fun ownerDecisionsRingAsNeedsYouAndScheduleAlertsFollowTheSessionRule() {
+        val session = "019a0000-0000-7000-8000-000000000002"
+        val project = "019a0000-0000-7000-8000-000000000003"
+        val ids = "\"taskID\":\"019a0000-0000-7000-8000-000000000005\",\"recordID\":\"019a0000-0000-7000-8000-000000000006\""
+        val schedule = "\"scheduleID\":\"019a0000-0000-7000-8000-00000000000d\",\"scheduleKind\":\"failure\""
+        listOf(
+            """"kind":"crossing-request","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"crossing-request","sessionID":"$session","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"confirmation-raised","sessionID":"$session",$ids""" to PushNotifications.NEEDS_YOU,
+            """"kind":"schedule","sessionID":"$session",$schedule""" to PushNotifications.SESSIONS,
+            """"kind":"schedule",$schedule""" to PushNotifications.UPDATES,
+            // A failure or a hold that filed a Waiting on you item names it, and rings on the needs-you channel, with its run or without.
+            """"kind":"schedule","sessionID":"$session",$schedule,"ownerRequestID":"019a0000-0000-7000-8000-000000000013"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"schedule",$schedule,"ownerRequestID":"019a0000-0000-7000-8000-000000000015"""" to PushNotifications.NEEDS_YOU,
+        ).forEachIndexed { index, (fields, channel) ->
+            notifications.clear()
+            val data = data() + ("notificationKey" to "decision-$index") +
+                ("payload" to """{"title":"Fixture","body":"Read current state",$fields}""")
+            val message = PushMessage.parse(data) ?: throw AssertionError("dropped: $fields")
+            assertEquals(fields, channel, notifications.channel(message))
+            assertTrue(fields, notifications.show(message, data))
+            val notification = manager.activeNotifications.single().notification
+            assertEquals(fields, channel, notification.channelId)
+            if (channel == PushNotifications.NEEDS_YOU && message.payload.isOwnerDecision) assertEquals(fields, Notification.CATEGORY_REMINDER, notification.category)
+        }
     }
 
     @Test fun replacementDedupSurvivesProcessRecreationButNewApprovalEdgeCanAlertAfterClear() {

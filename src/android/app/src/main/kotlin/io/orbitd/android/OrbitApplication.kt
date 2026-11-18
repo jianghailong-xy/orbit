@@ -17,12 +17,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.mutableStateMapOf
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.DraftTarget
-import io.orbitd.android.composer.MachineSetupState
 import io.orbitd.android.attachments.clearAttachmentHandoffs
 import io.orbitd.android.attachments.clearAttachmentImports
 import io.orbitd.android.directory.TrashingSessions
@@ -47,28 +45,18 @@ open class OrbitApplication : Application() {
     /** Each landing job as the last integration read described it: a landing opened while the server cannot be read draws it as a
      *  card in its project's Landings window, frozen (A11-20 e, iOS `landingInFlightCache`). */
     internal val landingJobs = LandingJobSnapshots()
+    /** What the realtime stream said about GitHub workspaces' clones (docs/github-workspace-design.md §5.4): git's percentage is
+     *  heard here and stored nowhere else. */
+    val clones = io.orbitd.android.composer.CloneLedger()
     val push: io.orbitd.android.push.PushController by lazy { createPush() }
     val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }
     private var composerHandle: SessionHandle? = null
     private val composers = mutableMapOf<String, ComposerModel>()
-    private val machineSetups = mutableStateMapOf<String, MachineSetupState>()
     fun composer(handle: SessionHandle, sessionId: String, target: DraftTarget? = null): ComposerModel {
         check((session.state.value as? AuthState.SignedIn)?.handle === handle)
-        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = handle }
+        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); composerHandle = handle }
         val key = ObjectId.canonical(sessionId) ?: sessionId
         return composers.getOrPut(key) { ComposerModel(session, handle, key, processScope, target) { realtime.refreshSession(); realtime.refreshDirectory() } }
-    }
-    fun machineSetup(handle: SessionHandle, runnerId: String): MachineSetupState {
-        if (composerHandle != null && composerHandle !== handle) return MachineSetupState()
-        val key = ObjectId.canonical(runnerId) ?: runnerId
-        return machineSetups[key] ?: MachineSetupState()
-    }
-    fun updateMachineSetup(handle: SessionHandle, runnerId: String, transform: (MachineSetupState) -> MachineSetupState) {
-        check((session.state.value as? AuthState.SignedIn)?.handle === handle)
-        if (composerHandle !== handle) { composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = handle }
-        val key = ObjectId.canonical(runnerId) ?: runnerId
-        val next = transform(machineSetups[key] ?: MachineSetupState())
-        if (next == MachineSetupState()) machineSetups.remove(key) else machineSetups[key] = next
     }
     override fun onCreate() {
         super.onCreate()
@@ -80,16 +68,22 @@ open class OrbitApplication : Application() {
         updates.start()
         clearAttachmentHandoffs(this)
         OrbitToasts.clear()
+        // A clone frame: its percentage is drawn from what is heard here; a state that moved is what the server stored, so the open
+        // conversation that made that workspace reads its detail again.
+        processScope.launch { realtime.controlEvents.collect { event ->
+            val open = io.orbitd.android.composer.WorkspaceClone.workspaceOf(realtime.state.value.session?.snapshot?.detail)
+            if (clones.hearFrame(event.type, event.data, event.agentId, open)) realtime.refreshSession()
+        } }
         var toastsFor: SessionHandle? = null
         processScope.launch { session.state.collect { state ->
             // Another account's outcomes never show under this one (A05-4).
             val signedIn = (state as? AuthState.SignedIn)?.handle
-            if (state is AuthState.SignedOut || signedIn != null && signedIn !== toastsFor) { OrbitToasts.clear(); toastsFor = signedIn }
+            if (state is AuthState.SignedOut || signedIn != null && signedIn !== toastsFor) { OrbitToasts.clear(); clones.clear(); toastsFor = signedIn }
             if (state is AuthState.SignedOut || composerHandle != null && state is AuthState.SignedIn && state.handle !== composerHandle) {
                 clearAttachmentImports(this@OrbitApplication)
             }
             if ((state as? AuthState.SignedIn)?.handle !== composerHandle) {
-                composers.values.forEach { it.close() }; composers.clear(); machineSetups.clear(); composerHandle = null
+                composers.values.forEach { it.close() }; composers.clear(); composerHandle = null
                 clearAttachmentHandoffs(this@OrbitApplication)
             }
         } }

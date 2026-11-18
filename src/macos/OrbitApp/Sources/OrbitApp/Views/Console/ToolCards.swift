@@ -159,6 +159,18 @@ struct ToolFailureCardView: View {
 /// abbreviated path/summary · line-range badge · status) that expands to a semantic body (a `$`
 /// command, a red/green edit diff, a plan/prompt as prose, otherwise monospace output). The
 /// name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.
+private struct QuestionTranslationsKey: EnvironmentKey {
+    static let defaultValue: [String: ApprovalTranslation] = [:]
+}
+
+extension EnvironmentValues {
+    /// The owner-language text of the session's question cards, by tool_use id (ConsoleModel).
+    var questionTranslations: [String: ApprovalTranslation] {
+        get { self[QuestionTranslationsKey.self] }
+        set { self[QuestionTranslationsKey.self] = newValue }
+    }
+}
+
 struct ToolCardView: View {
     let card: ToolCard
     /// Workflow rows provide their own labeled disclosure and reuse this card's full detail.
@@ -194,6 +206,9 @@ struct ToolCardView: View {
     /// The console's background agents and workflows — read only by an Agent or Workflow card, so a
     /// progress frame re-renders those and no other row.
     @Environment(\.taskActivity) private var taskActivity
+    /// Settings › Translation: the question cards' owner-language text, by call (ConsoleModel).
+    @Environment(\.questionTranslations) private var questionTranslations
+    @Environment(\.translationActions) private var translationActions
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil, showsHeader: Bool = true) {
         self.card = card
@@ -234,7 +249,9 @@ struct ToolCardView: View {
     private var subagentRun: SubagentRunView? { isDelegate ? taskActivity?.subagentRun(card.id) : nil }
     private var subagent: SubagentBlock? {
         guard isDelegate else { return nil }
-        return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status)
+        return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status,
+                                      parentEngine: taskActivity?.parentEngine,
+                                      result: SubagentResult.text(callResult: result, run: subagentRun))
     }
     private var taskProgress: TaskProgress? { isBackgroundTask ? taskActivity?.progress(card.id) : nil }
     /// The call returned the moment its work started, so its own ✓ would sit on work just begun.
@@ -301,6 +318,11 @@ struct ToolCardView: View {
     }
     /// A workflow is named by its receipt once that lands (a resumed run carries no script).
     private var summaryText: String? {
+        if !questions.isEmpty {
+            // A question's row names its headers, as its card showed them.
+            let headers = shownQuestions.compactMap(\.header).filter { !$0.isEmpty }
+            return headers.isEmpty ? d.summary : headers.joined(separator: "  ·  ")
+        }
         guard card.name == "Workflow" else { return d.summary }
         return TaskProgressCopy.workflowTitle(input: card.input, result: result, progress: taskProgress) ?? d.summary
     }
@@ -313,6 +335,12 @@ struct ToolCardView: View {
     private var questions: [AskQuestion] {
         if case .question(let asked) = d.body { return asked }
         return []
+    }
+    /// The questions as their card showed them — in the owner's language where the server translated
+    /// them, while translation is on. The answer is still read off `questions`, the engine's English.
+    private var shownQuestions: [AskQuestion] {
+        guard translationActions?.on == true else { return questions }
+        return ApprovalTranslation.shownQuestions(questions, questionTranslations[card.id])
     }
     /// How they ended, read off the result: the folded card's record, the replay's ticks.
     private var questionOutcome: QuestionOutcome? {
@@ -421,14 +449,13 @@ struct ToolCardView: View {
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
             row
-            if let line = subagent?.detailLine {
-                // The narrow-screen line from board 03: type (or Background), tier, model, duration.
-                Text(line)
-                    .font(.orbitListSubtitle).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
+            if let subagent {
+                // An Agent's second and third lines (board docs/mocks/subagent-ios-highlight ①): who did
+                // the work and where, then what came of it — or, while it runs, what it is on.
+                AgentBlockLines(block: subagent, live: liveActivity,
+                                steps: SubagentBlock.steps(taskActivity?.subagentItems(card.id) ?? []))
                     .padding(.leading, 42)
-            }
-            if let liveActivity {
+            } else if let liveActivity {
                 // Indented to the row's label; folded BackgroundTaskViews draw this same line.
                 Text(liveActivity)
                     .font(.orbitMonoFine).italic().foregroundStyle(.secondary)
@@ -440,7 +467,7 @@ struct ToolCardView: View {
             } else if !questions.isEmpty {
                 // Folded, a question is still its record: what was asked and how it was answered.
                 // The lines open the card like its row does.
-                QuestionFoldedLines(questions: questions, outcome: questionOutcome)
+                QuestionFoldedLines(questions: shownQuestions, outcome: questionOutcome)
                     .contentShape(Rectangle())
                     .onTapGesture { manualOpen = !expanded }
             }
@@ -581,11 +608,12 @@ struct ToolCardView: View {
                 // The SubAgent opens to its steps and result; the delegate call's own input is the
                 // prompt, which web does not draw in this block either.
             } else if !questions.isEmpty {
-                QuestionReplayView(questions: questions, outcome: questionOutcome)
+                QuestionReplayView(questions: shownQuestions, outcome: questionOutcome)
             } else {
                 ToolBodyView(kind: d.body)
             }
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
+            if let files = subagent?.changedFiles, !files.isEmpty { AgentChangedFiles(paths: files) }
             if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.

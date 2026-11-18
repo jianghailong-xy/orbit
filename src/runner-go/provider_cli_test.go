@@ -380,3 +380,88 @@ func TestProviderCLIHelpSpeaksOfProtocolsAndEngines(t *testing.T) {
 		}
 	}
 }
+
+// provider_list with a workspace: the CLI's --workspace and the tool's `workspace` ask the server for that
+// workspace's view (GET /runner/providers?workspace=) and hand its answer on as it came; without one, no query
+// is sent, and an empty --workspace is refused before any request.
+func TestProviderListWorkspaceAsksForThatWorkspacesView(t *testing.T) {
+	const view = `{"workspace":{"id":"ws-3","name":"orbit-ws03"},"runner":{"name":"workstation","online":true},` +
+		`"default":{"provider":"claude","engine":"claude","model":null,"usable":false,"reason":"claude is signed out on workstation"},` +
+		`"pairs":[{"provider":"claude","engine":"claude","builtin":true,"usable":false,"reason":"claude is signed out on workstation","models":[],"default":true},` +
+		`{"provider":"codex","engine":"codex","builtin":true,"usable":true,"models":["gpt-5.6-sol"]}]}`
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/runner/providers" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		queries = append(queries, r.URL.RawQuery)
+		if r.URL.Query().Get("workspace") != "" {
+			_, _ = w.Write([]byte(view))
+			return
+		}
+		_, _ = w.Write([]byte(usableProvidersWithEngines))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "")
+
+	var served map[string]interface{}
+	if err := json.Unmarshal([]byte(view), &served); err != nil {
+		t.Fatal(err)
+	}
+	same := func(t *testing.T, output string) {
+		t.Helper()
+		var got map[string]interface{}
+		if err := json.Unmarshal([]byte(output), &got); err != nil {
+			t.Fatalf("output is not the server's view: %v\n%s", err, output)
+		}
+		if !reflect.DeepEqual(got, served) {
+			t.Fatalf("view = %#v\nwant it as it came: %#v", got, served)
+		}
+	}
+
+	var out bytes.Buffer
+	if err := cmdProviderCLI([]string{"list", "--workspace", "orbit-ws03", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("orbit provider list --workspace: %v", err)
+	}
+	same(t, out.String())
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "runner-token")}
+	res := mcp.callTool("provider_list", map[string]interface{}{"workspace": " orbit-ws03 "})
+	if res["isError"] == true {
+		t.Fatalf("provider_list(workspace) returned an error: %#v", res["content"])
+	}
+	same(t, resultText(res))
+
+	if res := mcp.callTool("provider_list", map[string]interface{}{}); res["isError"] == true {
+		t.Fatalf("provider_list returned an error: %#v", res["content"])
+	}
+	if want := []string{"workspace=orbit-ws03", "workspace=orbit-ws03", ""}; !reflect.DeepEqual(queries, want) {
+		t.Fatalf("queries = %q, want %q", queries, want)
+	}
+
+	out.Reset()
+	if err := cmdProviderCLI([]string{"list", "--workspace", " "}, strings.NewReader(""), &out); err == nil || !strings.Contains(err.Error(), "--workspace cannot be empty") {
+		t.Fatalf("an empty --workspace = %v, want it refused", err)
+	}
+	if len(queries) != 3 {
+		t.Fatalf("an empty --workspace reached the server: %q", queries)
+	}
+
+	var list string
+	for _, tool := range toolDescriptors(false, true) {
+		if tool["name"] == "provider_list" {
+			list, _ = tool["description"].(string)
+			if _, ok := mcpToolProps([]map[string]interface{}{tool}, "provider_list")["workspace"]; !ok {
+				t.Fatalf("provider_list takes no workspace: %#v", tool["inputSchema"])
+			}
+		}
+	}
+	delegate, _ := delegateToolDescriptor(schemaObject, nil)["description"].(string)
+	if !strings.Contains(list, "before delegate(workspace)") {
+		t.Fatalf("provider_list does not say to check a workspace with it before delegating: %q", list)
+	}
+	if !strings.Contains(delegate, "provider_list with that workspace") {
+		t.Fatalf("delegate does not point at provider_list(workspace): %q", delegate)
+	}
+}

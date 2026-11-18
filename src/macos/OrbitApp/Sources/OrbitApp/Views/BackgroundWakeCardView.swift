@@ -26,12 +26,6 @@ struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else the same note carried, as its own folded entry.
-    ///
-    /// It rides in the fold because nobody typed this turn: delivery appends to a turn whose content
-    /// is empty, so handing the leftover block back to a user bubble drew an empty bubble under the
-    /// wake — a message with no words in it, signed with the reader's own name.
-    var attached: (kind: String, text: String)?
     /// Cancels a wake that is still queued. Nil once a runner has taken it, on every settled line,
     /// and on a steer, which is not the queue's to cancel. Unlike a watch's wake this is an ordinary
     /// cancel — nothing ever re-sends it — so it asks nothing first and uses the words a queued
@@ -63,7 +57,7 @@ struct BackgroundWakeCardView: View {
                         Text(BackgroundWakeCard.name(job))
                             .font(.orbitMeta).foregroundStyle(Color.secondary)
                     }
-                    BackgroundWakeFailedOutput(text: job.outputTail)
+                    BackgroundWakeOutputTail(text: job.outputTail)
                 }
                 .padding(.leading, 20)
             }
@@ -179,7 +173,6 @@ struct BackgroundWakeCardView: View {
             Text(BackgroundWakeCard.meta(wake))
                 .font(.orbitMeta).foregroundStyle(Color.secondary)
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
         }
         .padding(.leading, 10)
         .overlay(alignment: .leading) {
@@ -218,6 +211,15 @@ struct BackgroundWakeCardView: View {
             Text(BackgroundWakeCard.jobMeta(job))
                 .font(.orbitMonoFine).foregroundStyle(Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let stall = job.stall {
+                Text(BackgroundWakeCard.stallLine(stall))
+                    .font(.orbitMonoFine).foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // A quiet job is no bad news: what it last wrote stays in the fold, not under the line.
+                if !job.outputTail.isEmpty {
+                    BackgroundWakeOutputTail(text: job.outputTail).padding(.top, 4)
+                }
+            }
         }
     }
 
@@ -282,9 +284,10 @@ struct BackgroundWakeCardView: View {
     }
 }
 
-/// A failed job's received output tail, bounded by rendered lines so compact JSON cannot fill the
-/// transcript. Its disclosure is independent of the job details above it.
-private struct BackgroundWakeFailedOutput: View {
+/// A job's received output tail — a failure's under the line, a quiet job's in its row in the fold —
+/// bounded by rendered lines so compact JSON cannot fill the transcript. Its disclosure is
+/// independent of the job details above it.
+private struct BackgroundWakeOutputTail: View {
     let text: String
     @State private var open = false
 

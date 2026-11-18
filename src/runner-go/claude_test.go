@@ -58,24 +58,27 @@ func TestIsResumeCarrierResult(t *testing.T) {
 		}
 	}
 	cases := []struct {
-		name    string
-		msg     map[string]interface{}
-		ctx     context.Context
-		text    string
-		carrier bool
+		name      string
+		msg       map[string]interface{}
+		ctx       context.Context
+		text      string
+		compacted bool
+		carrier   bool
 	}{
-		{"resume carrier", msg("success", 0, "", false), live, "", true},
-		{"real turn", msg("success", 1, "OK", false), live, "OK", false},
+		{"resume carrier", msg("success", 0, "", false), live, "", false, true},
+		// `/compact` (Claude Code 2.1.325): the same empty result, after a compact_boundary.
+		{"compact", msg("success", 0, "", false), live, "", true, false},
+		{"real turn", msg("success", 1, "OK", false), live, "OK", false, false},
 		// A client-side slash answer costs no API turn, but it IS the answer to a fed message.
 		{"local slash answer", msg("success", 0, "/help isn't available in this environment.", false),
-			live, "/help isn't available in this environment.", false},
+			live, "/help isn't available in this environment.", false, false},
 		// A turn interrupted before its first token reports no work either — still a real turn.
-		{"interrupted", msg("error_during_execution", 0, "", false), live, "", false},
-		{"failed", msg("success", 0, "", true), live, "", false},
-		{"cancelled", msg("success", 0, "", false), cancelled, "", false},
+		{"interrupted", msg("error_during_execution", 0, "", false), live, "", false, false},
+		{"failed", msg("success", 0, "", true), live, "", false, false},
+		{"cancelled", msg("success", 0, "", false), cancelled, "", false, false},
 	}
 	for _, c := range cases {
-		if got := isResumeCarrierResult(resultFrom(c.msg, c.ctx), c.text); got != c.carrier {
+		if got := isResumeCarrierResult(resultFrom(c.msg, c.ctx), c.text, c.compacted); got != c.carrier {
 			t.Errorf("%s: isResumeCarrierResult = %v, want %v", c.name, got, c.carrier)
 		}
 	}

@@ -402,7 +402,7 @@ describe('removing an added account while Default is removed', () => {
     const dialog = ok.closest('[role="dialog"]')!;
     expect(dialogName(dialog)).toBe('Remove Personal?');
     expect(dialogDescription(dialog)).toBe(
-      'Its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.',
+      'Its sessions move to another account first, then its sign-in is deleted from wikova. Workspaces set to this account run on Automatic.',
     );
     await click(ok);
     expect(requests('DELETE')).toEqual([`/runners/${RUNNER_ID}/accounts/codex/${PERSONAL.id}`]);
@@ -426,7 +426,7 @@ describe('removing an added account while Default is removed', () => {
 
     await clickRunnerMenuItem(workRow, 'Remove account');
     const dialog = (await confirmation()).closest('[role="dialog"]')!;
-    expect(dialogDescription(dialog)).toBe('Its sign-in is deleted from wikova. Workspaces set to this account run on Default.');
+    expect(dialogDescription(dialog)).toBe('Its sessions move to another account first. Workspaces using it switch to Default.');
   });
 });
 

@@ -110,7 +110,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                   from: "struct SettingsView: View {", to: "Section(\"Preferences\")"))
         assertOrder(form, ["Section(\"Account\")", "model.selectedSection = .runners",
                            "if inSettingsWindow { NSApp.keyWindow?.close() }",
-                           "SettingsHome.title(.machinesAndModels)", "Text(MachinesAndModels.subtitle)"])
+                           "Label(AppSection.runners.title, systemImage: AppSection.runners.systemImage)",
+                           "Text(MachinesAndModels.subtitle)"])
         XCTAssertTrue(code(try appSource("OrbitApp.swift")).contains("SettingsView(inSettingsWindow: true)"),
                       "the Settings window says it is one")
         let main = code(try appSource("Views/MainView.swift"))
@@ -155,10 +156,9 @@ final class SettingsStackWiringTests: XCTestCase {
         for frame in ["case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
                       "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
                       "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
-                      "case .settingsPage(let page):     SettingsPageView(page: page)",
+                      "case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)",
                       "case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)",
-                      "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)",
-                      "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
+                      "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
         }
         XCTAssertFalse(sheet.contains("settingsRunners"), "the runners list's own frame went with the Providers page")
@@ -172,11 +172,11 @@ final class SettingsStackWiringTests: XCTestCase {
         for page in SettingsPage.allCases {
             XCTAssertTrue(pages.contains("case .\(page.rawValue):"), "no view for .\(page.rawValue)")
         }
-        XCTAssertTrue(pages.contains("AdminUsersView(rowNavigation: .push)"),
-                      "Admin is the same list its section shows, pushing onto the stack on screen")
-        XCTAssertTrue(pages.contains("case .machinesAndModels: RunnersListView(rowNavigation: .push)"),
-                      "and Machines & models is the page its section shows, the same way")
-        XCTAssertFalse(pages.contains("ProvidersSettingsPage"), "no Providers page of its own any more")
+        // Machines and Providers are the two halves of the page the Machines & models section shows,
+        // pushing onto the stack on screen, as the web's Settings nav has them as two groups.
+        XCTAssertTrue(pages.contains("case .machines:       RunnersListView(rowNavigation: .push, part: .machines)"))
+        XCTAssertTrue(pages.contains("case .providers:      RunnersListView(rowNavigation: .push, part: .providers)"))
+        XCTAssertFalse(pages.contains("AdminUsersView"), "Admin is the drawer's, as the web's Settings has none")
     }
 
     /// The list draws `SettingsHome` — its groups, in order, and each group's rows — and has a
@@ -185,35 +185,37 @@ final class SettingsStackWiringTests: XCTestCase {
         let list = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                   from: "struct SettingsHomeView: View {", to: "private struct SettingsRowLabel: View {"))
         XCTAssertTrue(list.contains("ForEach(SettingsHome.Group.allCases, id: \\.self)"))
-        XCTAssertTrue(list.contains("SettingsHome.rows(group, isAdmin: isAdmin)"))
+        XCTAssertTrue(list.contains("SettingsHome.rows(group)"))
         XCTAssertTrue(list.contains("if let header = SettingsHome.header(group) { SettingsHeader(header) }"),
                       "a group without a header draws none")
-        XCTAssertTrue(list.contains("if let footer = SettingsHome.footer(group) {"),
-                      "Machines & models says what its one row is for")
+        XCTAssertFalse(list.contains("versionLine"), "the web's Settings has no build line")
         let rows = try slice(list, from: "@ViewBuilder private func row(_ row: SettingsHome.Row) -> some View {",
-                             to: "private var machinesAndModelsValue:")
+                             to: "private var machinesValue:")
         for row in SettingsHome.Row.allCases {
             XCTAssertTrue(rows.contains(".\(row.rawValue)"), "the list has no drawing for .\(row.rawValue)")
         }
         // A form row that opens a page is a link, and draws the platform's arrow — the settings
         // shape, where every row that goes somewhere says so.
-        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(.machinesAndModels))"))
+        XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(row == .machines ? .machines : .providers))"))
         XCTAssertTrue(rows.contains("NavigationLink(value: NavNode.settingsPage(page))"))
-        // Machines & models' value is its page's Needs you, counted the page's own way, in amber while it
-        // holds anything — over lists the list reads for it, pools and their people included.
+        // Machines' and Providers' values are their pages' Needs you, counted the page's own way and split
+        // between them, in amber while they hold anything — over lists the list reads for them, pools
+        // and their people included.
         XCTAssertTrue(rows.contains(".foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)"))
-        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).attention.count"))
+        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).attention.filter(\\.isMachine).count"))
         XCTAssertTrue(list.contains("SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners)"))
+        XCTAssertTrue(list.contains("SettingsHome.needsYouValue(lists.attention.filter { !$0.isMachine }.count)"))
         for read in [".task { await model.runners?.load() }", ".task { await model.agents?.reloadPools() }",
+                     ".task { await model.agents?.loadOwnKeys() }",
                      ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {
             XCTAssertTrue(list.contains(read), "the list reads \(read)")
         }
-        // The five session settings are the Sessions page's (`testTheSessionsPageDrawsSessionSettings`):
-        // the list has none of their controls, and its Sessions row is a link like Notifications'.
+        // The five session settings are the General page's (`testTheSessionsPageDrawsSessionSettings`):
+        // the list has none of their controls, and its General row is a link like Notifications'.
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
         }
-        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:"))
+        XCTAssertTrue(rows.contains("case .general, .notifications, .profile, .sharedLinks, .accessTokens, .terminals, .github:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.
@@ -232,7 +234,7 @@ final class SettingsStackWiringTests: XCTestCase {
     func testTheSessionsPageDrawsSessionSettings() throws {
         let sheet = try appSource("Views/SettingsSheet.swift")
         let pages = code(try slice(sheet, from: "private struct SettingsPageView: View {", to: "// MARK: - The list"))
-        XCTAssertTrue(pages.contains("case .sessions:       SessionSettingsPage()"))
+        XCTAssertTrue(pages.contains("case .general:        SessionSettingsPage()"))
         let page = code(try slice(sheet, from: "private struct SessionSettingsPage: View {", to: "// MARK: - Notifications"))
         XCTAssertTrue(page.contains("ForEach(SessionSettings.groups, id: \\.self)"),
                       "the page draws its groups in SessionSettings.groups' order")
@@ -240,7 +242,7 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertEqual(page.components(separatedBy: "translationSection").count - 1, 2,
                        "Translation is drawn once, from the groups, and defined once")
         XCTAssertTrue(page.contains("Text(SessionSettings.footer(row))"), "each row's hint is its footer")
-        XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.sessions.title)"))
+        XCTAssertTrue(page.contains(".navigationTitle(SettingsPage.general.title)"))
         let controls = try slice(page, from: "@ViewBuilder private func control(_ row: SessionSettings.Row) -> some View {",
                                  to: "private func seed()")
         for row in SessionSettings.Row.allCases {
@@ -263,13 +265,22 @@ final class SettingsStackWiringTests: XCTestCase {
             ("Toggle(TranslationCopy.translateConversations, isOn: $translation)",
              "UpdatePreferencesRequest(translationEnabled: value)",
              "translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true"),
+            // Settings › Prompt optimizer: absent is on, and a server without a key draws it off.
+            ("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
+             "promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)"),
+            // Show both languages (02-bilingual.png, mark A): absent is off.
+            ("Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)",
+             "UpdatePreferencesRequest(translationBilingual: value)",
+             "bilingual = p?.translationBilingual == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 5,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 6,
                        "every switch's write is guarded against the account's own value")
+        XCTAssertTrue(page.contains("PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }"),
+                      "the prompt optimizer's write is guarded against the account's own value (absent = on)")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile
@@ -357,7 +368,7 @@ final class SettingsStackWiringTests: XCTestCase {
         let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                   from: "#if os(macOS)\n/// macOS Settings", to: "// MARK: - Admin"))
         XCTAssertTrue(form.contains("AccountAvatar(name: u.name ?? u.email, diameter: 40)"))
-        XCTAssertTrue(form.contains(".fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image])"))
+        XCTAssertTrue(form.contains(".fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image], onCompletion: photoChosen)"))
         XCTAssertTrue(form.contains("NSImage(contentsOf: url)?.orbitAvatarJPEG()"))
         XCTAssertTrue(form.contains("accountMessage = await model.saveAvatar(jpeg)"))
         XCTAssertTrue(form.contains("accountMessage = await model.removeAvatar()"))

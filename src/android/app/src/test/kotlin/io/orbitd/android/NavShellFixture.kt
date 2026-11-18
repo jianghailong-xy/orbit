@@ -25,6 +25,7 @@ internal object NavShell {
     const val SESSION = "34A05cSessionReview001"
     /** An open session of Alpha in no task and no project. */
     const val PLAIN = "34A05cSessionPlain0002"
+    const val RUN = "34A05cScheduledRun0001"
 
     /** Every request after the login, as `METHOD path?query`. */
     val calls = CopyOnWriteArrayList<String>()
@@ -48,6 +49,7 @@ internal object NavShell {
     @Volatile var scopeStatus: Int? = null
     /** More rows than the two sessions, by view, as [row] spells them; the account's folders and tags; a read of the workspaces that fails. */
     @Volatile var extra: Map<String, List<String>> = emptyMap()
+    @Volatile var scheduled: Map<String, List<String>> = emptyMap()
     @Volatile var folders = "[]"
     @Volatile var tags = "[]"
     @Volatile var failWorkspaces: Int? = null
@@ -58,7 +60,8 @@ internal object NavShell {
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state
         // and post its toast here.
         holdDelete = null; holdOpen = null; holdDeletes.clear()
-        holdScope = null; scopeStatus = null; extra = emptyMap(); folders = "[]"; tags = "[]"; failWorkspaces = null
+        holdScope = null; scopeStatus = null; extra = emptyMap(); scheduled = emptyMap()
+        folders = "[]"; tags = "[]"; failWorkspaces = null
     }
 
     /** A row of Alpha's. [fields] are more of its JSON, starting with a comma. */
@@ -73,10 +76,14 @@ internal object NavShell {
         {"id":"$BETA","name":"Beta","runnerId":"r1","enabled":true,"position":2,"createdAt":"2026-10-01T03:00:00.000Z"}]"""
 
     private fun session(id: String): String {
-        val title = if (id == SESSION) "Review navigation" else "Plain notes"
+        val title = when (id) {
+            SESSION -> "Review navigation"
+            RUN -> "Completed run"
+            else -> "Plain notes"
+        }
         val state = lifecycle[id] ?: "OPEN"
         val run = when (id) { in running -> "RUNNING"; in ended -> "ENDED"; else -> "AWAITING_INPUT" }
-        val linked = if (id == SESSION) ""","taskId":"$TASK","projectId":"$PROJECT"""" else
+        val linked = if (id == SESSION) ""","taskId":"$TASK","projectId":"$PROJECT"""" else if (id == RUN) ""","runSource":"SCHEDULE"""" else
             // Plain notes works in a worktree with one committed change: its bar offers Merge to main.
             ""","isolationStatus":"worktree","branch":"orbit/plain-notes-a05c","worktreeDirty":false,"mergeTargets":["main"],
             "changedFiles":[{"path":"notes.md","additions":3,"deletions":1,"status":"M"}],"mergeTarget":"main"""" +
@@ -105,12 +112,12 @@ internal object NavShell {
 
     val transport = HttpTransport { request ->
         val api = request.api
-        val path = api.path.joinToString("/") { part -> listOf(ALPHA, SPARE, BETA, TASK, PROJECT, SESSION, PLAIN).firstOrNull { ObjectId.same(it, part) } ?: part }
+        val path = api.path.joinToString("/") { part -> listOf(ALPHA, SPARE, BETA, TASK, PROJECT, SESSION, PLAIN, RUN).firstOrNull { ObjectId.same(it, part) } ?: part }
         val method = api.method.name
         if (path == "auth/login") return@HttpTransport ok("""{"accessToken":"a05c-access","refreshToken":"a05c-refresh","user":{"id":"u1","email":"owner@a05c.test","name":"Owner"}}""")
         val query = api.query.joinToString("&") { (k, v) -> "$k=$v" }
         calls += "$method $path" + if (query.isEmpty()) "" else "?$query"
-        val id = api.path.getOrNull(1)?.let { part -> listOf(SESSION, PLAIN).firstOrNull { ObjectId.same(it, part) } }
+        val id = api.path.getOrNull(1)?.let { part -> listOf(SESSION, PLAIN, RUN).firstOrNull { ObjectId.same(it, part) } }
         if (method == "DELETE") (id?.let { holdDeletes[it] } ?: holdDelete)?.await()
         if (method != "GET") refuse?.let { (status, message) -> return@HttpTransport ApiResponse(status, """{"message":"$message"}""".encodeToByteArray()) }
         when {
@@ -122,6 +129,11 @@ internal object NavShell {
             path == "session-tags" -> ok(tags)
             path == "runners" -> ok("""[{"id":"r1","name":"Fixture runner","online":true}]""")
             path == "sessions/search" -> ok("""{"q":"Review","contentSearched":true,"total":1,"hits":[{"id":"$SESSION","title":"Found by search","status":"RUNNING"}]}""")
+            path == "sessions" && ("scheduled" to "1") in api.query -> {
+                val query = api.query.toMap()
+                val rows = scheduled[query["view"]].orEmpty().takeIf { ObjectId.same(query["workspaceId"], ALPHA) }.orEmpty()
+                ok(rows.joinToString(",", "[", "]"))
+            }
             path == "sessions" -> {
                 val name = api.query.firstOrNull { it.first == "view" }?.second ?: "open"
                 val answer = view(name)

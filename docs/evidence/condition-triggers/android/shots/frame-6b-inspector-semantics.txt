@@ -1,0 +1,340 @@
+Printing with useUnmergedTree = 'true'
+Node #196 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #248 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #249 at (l=0.0, t=0.0, r=411.0, b=891.0)px, Tag: 'scheduled-page'
+      CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@65203ca8'
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+       |-Node #253 at (l=16.0, t=17.0, r=329.0, b=55.0)px
+       | Text = '[Scheduled]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #254 at (l=329.0, t=17.0, r=347.0, b=55.0)px, Tag: 'scheduled-count'
+       | Text = '[6]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #256 at (l=351.0, t=16.0, r=391.0, b=56.0)px, Tag: 'scheduled-more'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #257 at (l=359.0, t=24.0, r=383.0, b=48.0)px
+       |    ContentDescription = '[More]'
+       |    Role = 'Image'
+       |-Node #259 at (l=16.0, t=68.0, r=139.0, b=93.0)px, Tag: 'scheduled-filter'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #260 at (l=26.0, t=73.0, r=113.0, b=88.0)px
+       |    Text = '[All workspaces]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #279 at (l=16.0, t=115.0, r=395.0, b=146.0)px, Tag: 'scheduled-group:NEEDS_YOU'
+       |  |-Node #281 at (l=16.0, t=115.0, r=110.0, b=139.0)px
+       |  | Text = '[Needs you]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #282 at (l=118.0, t=122.0, r=125.0, b=137.0)px
+       |    Text = '[1]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #285 at (l=16.0, t=148.0, r=395.0, b=204.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #288 at (l=16.0, t=157.0, r=38.0, b=179.0)px, Tag: 'schedule-gauge'
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #291 at (l=50.0, t=156.0, r=337.0, b=176.0)px
+       |  | Text = '[Mon disk guard]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #292 at (l=345.0, t=160.0, r=395.0, b=173.0)px
+       |  | Text = '[Can't read]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #293 at (l=50.0, t=178.0, r=242.0, b=196.0)px
+       |    Text = '[↻ When root disk below 5% · HPC]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #295 at (l=16.0, t=218.0, r=395.0, b=249.0)px, Tag: 'scheduled-group:CONDITION'
+       |  |-Node #297 at (l=16.0, t=218.0, r=217.0, b=242.0)px
+       |  | Text = '[Waiting for a condition]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #298 at (l=225.0, t=225.0, r=232.0, b=240.0)px
+       |    Text = '[2]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #301 at (l=16.0, t=251.0, r=395.0, b=307.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #304 at (l=16.0, t=260.0, r=38.0, b=282.0)px, Tag: 'schedule-gauge'
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #307 at (l=50.0, t=259.0, r=295.0, b=279.0)px
+       |  | Text = '[Ceph capacity guard]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #308 at (l=303.0, t=262.0, r=395.0, b=277.0)px, Tag: 'schedule-row-reading'
+       |  | Text = '[6.9% · 1 min ago]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #309 at (l=50.0, t=281.0, r=252.0, b=299.0)px
+       |    Text = '[↻ When raw used above 90% · HPC]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #311 at (l=16.0, t=307.0, r=395.0, b=360.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #314 at (l=16.0, t=316.0, r=38.0, b=338.0)px, Tag: 'schedule-gauge'
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #317 at (l=50.0, t=315.0, r=303.0, b=335.0)px
+       |  | Text = '[Set kubernetes pool to 3 copies]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #318 at (l=311.0, t=318.0, r=395.0, b=333.0)px, Tag: 'schedule-row-reading'
+       |  | Text = '[2 in · 3 min ago]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #319 at (l=50.0, t=337.0, r=313.0, b=352.0)px
+       |    Text = '[Task · once, when 3 or more OSDs are in · HPC]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #321 at (l=16.0, t=374.0, r=395.0, b=405.0)px, Tag: 'scheduled-group:TODAY'
+       |  |-Node #323 at (l=16.0, t=374.0, r=69.0, b=398.0)px
+       |  | Text = '[Today]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #324 at (l=77.0, t=381.0, r=148.0, b=396.0)px
+       |    Text = '[Wed, Nov 18]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #327 at (l=16.0, t=407.0, r=395.0, b=463.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #330 at (l=16.0, t=416.0, r=38.0, b=438.0)px
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #334 at (l=50.0, t=415.0, r=356.0, b=435.0)px
+       |  | Text = '[Release notes draft]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #335 at (l=364.0, t=418.0, r=395.0, b=433.0)px
+       |  | Text = '[17:00]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #336 at (l=50.0, t=437.0, r=190.0, b=455.0)px
+       |    Text = '[↻ Daily 17:00 · apiserver]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #338 at (l=16.0, t=477.0, r=395.0, b=508.0)px, Tag: 'scheduled-group:TOMORROW'
+       |  |-Node #340 at (l=16.0, t=477.0, r=105.0, b=501.0)px
+       |  | Text = '[Tomorrow]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #341 at (l=113.0, t=484.0, r=180.0, b=499.0)px
+       |    Text = '[Thu, Nov 19]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #344 at (l=16.0, t=510.0, r=395.0, b=566.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #347 at (l=16.0, t=519.0, r=38.0, b=541.0)px
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #351 at (l=50.0, t=518.0, r=356.0, b=538.0)px
+       |  | Text = '[Nightly pg spec sweep]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #352 at (l=364.0, t=521.0, r=395.0, b=536.0)px
+       |  | Text = '[02:00]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #353 at (l=50.0, t=540.0, r=190.0, b=558.0)px
+       |    Text = '[↻ Daily 02:00 · apiserver]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #355 at (l=16.0, t=566.0, r=395.0, b=622.0)px, Tag: 'schedule-row'
+       | Focused = 'false'
+       | Actions = [OnClick, RequestFocus]
+       | MergeDescendants = 'true'
+       |  |-Node #358 at (l=16.0, t=575.0, r=38.0, b=597.0)px
+       |  | ClearAndSetSemantics = 'true'
+       |  |-Node #362 at (l=50.0, t=574.0, r=356.0, b=594.0)px
+       |  | Text = '[Codex stable check]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #363 at (l=364.0, t=577.0, r=395.0, b=592.0)px
+       |  | Text = '[10:00]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #364 at (l=50.0, t=596.0, r=190.0, b=614.0)px
+       |    Text = '[↻ Daily 10:00 · apiserver]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #265 at (l=50.0, t=632.0, r=344.0, b=688.0)px, Tag: 'schedule-quick-add'
+       | ContentDataType = 'AndroidContentDataType(androidAutofillType=1)'
+       | EditableText = ''
+       | Focused = 'false'
+       | ImeAction = 'Send'
+       | InputText = ''
+       | IsEditable = 'true'
+       | TextSelectionRange = 'TextRange(0, 0)'
+       | Actions = [GetTextLayoutResult, InsertTextAtCursor, OnAutofillText, OnClick, OnLongClick, PasteText, PerformImeAction, RequestFocus, SetSelection, SetText]
+       | MergeDescendants = 'true'
+       |  |-Node #273 at (l=66.0, t=648.0, r=328.0, b=672.0)px
+       |  |-Node #270 at (l=66.0, t=648.0, r=276.0, b=672.0)px
+       |     |-Node #271 at (l=66.0, t=648.0, r=276.0, b=672.0)px
+       |       Text = '[Describe a scheduled task…]'
+       |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #276 at (l=354.0, t=650.0, r=395.0, b=671.0)px, Tag: 'schedule-quick-add-workspace'
+         Focused = 'false'
+         Text = '[HPC]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'
+Printing with useUnmergedTree = 'true'
+Node #277 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #365 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   [IsDialog]
+    |-Node #366 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+      IsTraversalGroup = 'true'
+       |-Node #367 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+       | ContentDescription = '[Close sheet]'
+       | TraversalIndex = '1.0'
+       | Actions = [OnClick]
+       | MergeDescendants = 'true'
+       |-Node #368 at (l=0.0, t=0.0, r=411.0, b=891.0)px, Tag: 'schedule-detail-panel'
+         IsContainer = 'true'
+         PaneTitle = 'Bottom Sheet'
+         TraversalIndex = '0.0'
+          |-Node #369 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+             |-Node #372 at (l=190.0, t=0.0, r=222.0, b=48.0)px
+             | Actions = [OnLongClick]
+             | MergeDescendants = 'true'
+             |  |-Node #374 at (l=190.0, t=0.0, r=222.0, b=48.0)px
+             |    Focused = 'false'
+             |    Actions = [Dismiss, OnClick, RequestFocus]
+             |    MergeDescendants = 'true'
+             |     |-Node #375 at (l=190.0, t=22.0, r=222.0, b=26.0)px
+             |       ContentDescription = '[Drag handle]'
+             |       IsContainer = 'true'
+             |-Node #377 at (l=0.0, t=48.0, r=411.0, b=891.0)px
+               IsTraversalGroup = 'true'
+               VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=63.0, reverseScrolling=false)'
+               Actions = [ScrollBy, ScrollByOffset]
+                |-Node #379 at (l=16.0, t=52.0, r=74.0, b=92.0)px
+                | Focused = 'false'
+                | Role = 'Button'
+                | Actions = [OnClick, RequestFocus]
+                | MergeDescendants = 'true'
+                |  |-Node #381 at (l=24.0, t=60.0, r=67.0, b=84.0)px
+                |    Text = '[Close]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #384 at (l=351.0, t=52.0, r=391.0, b=92.0)px, Tag: 'schedule-detail-more'
+                | Focused = 'false'
+                | Role = 'Button'
+                | Actions = [OnClick, RequestFocus]
+                | MergeDescendants = 'true'
+                |  |-Node #385 at (l=359.0, t=60.0, r=383.0, b=84.0)px
+                |    ContentDescription = '[More]'
+                |    Role = 'Image'
+                |-Node #387 at (l=16.0, t=110.0, r=215.0, b=135.0)px
+                | Text = '[Ceph capacity guard]'
+                | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #388 at (l=16.0, t=139.0, r=257.0, b=157.0)px
+                | Text = '[↻ Raw used above 90% · HPC · Check only]'
+                | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #425 at (l=16.0, t=171.0, r=395.0, b=308.0)px, Tag: 'condition-block'
+                |  |-Node #427 at (l=20.0, t=171.0, r=89.0, b=186.0)px
+                |  | Text = '[CONDITION]'
+                |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |  |-Node #428 at (l=30.0, t=206.0, r=381.0, b=294.0)px
+                |     |-Node #430 at (l=30.0, t=206.0, r=78.0, b=231.0)px
+                |     | Text = '[6.9%]'
+                |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |-Node #431 at (l=86.0, t=209.0, r=212.0, b=227.0)px
+                |     | Text = '[checked 1 min ago]'
+                |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |-Node #432 at (l=30.0, t=237.0, r=381.0, b=273.0)px
+                |     | ClearAndSetSemantics = 'true'
+                |     |  |-Node #464 at (l=294.0, t=257.0, r=314.0, b=270.0)px
+                |     |  | Text = '[85%]'
+                |     |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |  |-Node #465 at (l=344.0, t=257.0, r=364.0, b=270.0)px
+                |     |    Text = '[90%]'
+                |     |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |-Node #435 at (l=30.0, t=279.0, r=324.0, b=294.0)px
+                |       Text = '[Fires above 90% for 10 min. Ready again below 85%.]'
+                |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #436 at (l=16.0, t=322.0, r=395.0, b=475.0)px, Tag: 'condition-how-it-checks'
+                |  |-Node #438 at (l=20.0, t=322.0, r=116.0, b=337.0)px
+                |  | Text = '[HOW IT CHECKS]'
+                |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |  |-Node #439 at (l=30.0, t=357.0, r=381.0, b=461.0)px
+                |     |-Node #440 at (l=30.0, t=357.0, r=359.0, b=375.0)px
+                |     | Text = '[Every 5 min on workstation-gpu, without a model.]'
+                |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |-Node #442 at (l=30.0, t=387.0, r=381.0, b=434.0)px
+                |     | Focused = 'false'
+                |     | Actions = [RequestFocus]
+                |     |  |-Node #444 at (l=40.0, t=394.0, r=371.0, b=427.0)px, Tag: 'condition-command'
+                |     |    Text = '[ceph df -f json | jq .stats.total_used_raw_ratio]'
+                |     |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |     |-Node #446 at (l=30.0, t=446.0, r=245.0, b=461.0)px
+                |       Text = '[Read-only. Approved by you on Nov 14.]'
+                |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #391 at (l=16.0, t=492.0, r=135.0, b=534.0)px, Tag: 'schedule-door-Run now'
+                | Focused = 'false'
+                | Role = 'Button'
+                | Actions = [OnClick, RequestFocus]
+                | MergeDescendants = 'true'
+                |  |-Node #393 at (l=43.0, t=501.0, r=108.0, b=525.0)px
+                |    Text = '[Run now]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #394 at (l=145.0, t=492.0, r=265.0, b=534.0)px, Tag: 'schedule-door-Pause'
+                | Focused = 'false'
+                | Role = 'Button'
+                | Actions = [OnClick, RequestFocus]
+                | MergeDescendants = 'true'
+                |  |-Node #396 at (l=182.0, t=501.0, r=229.0, b=525.0)px
+                |    Text = '[Pause]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #397 at (l=275.0, t=492.0, r=395.0, b=534.0)px, Tag: 'schedule-door-Change…'
+                | Focused = 'false'
+                | Role = 'Button'
+                | Actions = [OnClick, RequestFocus]
+                | MergeDescendants = 'true'
+                |  |-Node #399 at (l=301.0, t=501.0, r=370.0, b=525.0)px
+                |    Text = '[Change…]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #401 at (l=20.0, t=551.0, r=131.0, b=566.0)px
+                | Text = '[WHAT WAS ASKED]'
+                | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #402 at (l=30.0, t=586.0, r=381.0, b=604.0)px
+                |  |-Node #403 at (l=30.0, t=586.0, r=165.0, b=604.0)px
+                |    Text = '[Ceph capacity guard]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #405 at (l=20.0, t=632.0, r=98.0, b=647.0)px
+                | Text = '[THIS MONTH]'
+                | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #406 at (l=30.0, t=667.0, r=381.0, b=704.0)px
+                |  |-Node #407 at (l=30.0, t=667.0, r=120.0, b=685.0)px
+                |  | Text = '[1 run · 12 min]'
+                |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |  |-Node #408 at (l=30.0, t=689.0, r=266.0, b=704.0)px
+                |    Text = '[Allowed: up to 3 runs a week, 30 min each]'
+                |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #410 at (l=20.0, t=732.0, r=74.0, b=747.0)px
+                | Text = '[HISTORY]'
+                | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                |-Node #411 at (l=30.0, t=767.0, r=381.0, b=916.0)px
+                   |-Node #447 at (l=30.0, t=767.0, r=381.0, b=800.0)px, Tag: 'schedule-history-event'
+                   | [Disabled]
+                   | Actions = [OnClick]
+                   | MergeDescendants = 'true'
+                   |  |-Node #449 at (l=30.0, t=767.0, r=161.0, b=785.0)px
+                   |  | Text = '[Ready again · 82.9%]'
+                   |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |  |-Node #450 at (l=30.0, t=785.0, r=103.0, b=800.0)px
+                   |  | Text = '[Nov 15 09:40]'
+                   |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |  |-Node #451 at (l=327.0, t=777.0, r=374.0, b=790.0)px
+                   |    Text = '[Condition]'
+                   |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |-Node #452 at (l=30.0, t=825.0, r=381.0, b=858.0)px, Tag: 'schedule-history-record'
+                   |  |-Node #454 at (l=30.0, t=825.0, r=310.0, b=843.0)px
+                   |  | Text = '[Created · Check only · up to 3 runs a week]'
+                   |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |  |-Node #455 at (l=30.0, t=843.0, r=103.0, b=858.0)px
+                   |  | Text = '[Nov 14 08:11]'
+                   |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |  |-Node #456 at (l=355.0, t=835.0, r=374.0, b=848.0)px
+                   |    Text = '[You]'
+                   |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                   |-Node #458 at (l=30.0, t=883.0, r=381.0, b=916.0)px, Tag: 'schedule-history-event'
+                     Focused = 'false'
+                     Actions = [OnClick, RequestFocus]
+                     MergeDescendants = 'true'
+                      |-Node #460 at (l=30.0, t=883.0, r=186.0, b=901.0)px
+                      | Text = '[Fired · 90.4% for 10 min]'
+                      | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                      |-Node #461 at (l=30.0, t=901.0, r=191.0, b=916.0)px
+                      | Text = '[Nov 14 03:12 · Run of Nov 14]'
+                      | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+                      |-Node #462 at (l=355.0, t=893.0, r=374.0, b=906.0)px
+                        Text = '[Run]'
+                        Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

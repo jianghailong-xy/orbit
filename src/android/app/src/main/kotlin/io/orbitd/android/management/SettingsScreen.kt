@@ -25,7 +25,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -33,28 +32,34 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.TerminalsApi
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.composer.ManagementGithub
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** Settings' own pages; "workspace" is the workspace list's gear and "machines-and-models" the Machines & models row, with its pool and key
- * pages one push further. */
+/** Settings' own pages; "workspace" is the workspace list's gear, "profile" the header's edit card and "account" the Profile row's page;
+ * "machines" and "providers" are the two halves of the Machines & models page, whose pool and key pages ("machines-and-models" with a
+ * record) are one push further. */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
     notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long = 0L) {
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
+        "account" -> ProfileSettingsPage(api, revision, open)
         "password" -> ChangePassword(api)
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
+        "machines" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.MACHINES)
+        "providers" -> MachinesAndModelsPage(api, revision, open, MachinesAndModelsPart.PROVIDERS)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision, open)
+        "github" -> GithubSettingsPage(remember(api) { ManagementGithub(api) }, revision)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "terminals" -> TerminalsSettings(api, revision, terminalsChanged)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
@@ -65,14 +70,18 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
             NotificationsPreferences(api, revision)
         }
         // Android only: the installed version and its updates from GitHub (iOS updates through TestFlight).
-        "about" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { about() }
+        // Build information sits here since the list lost its version line (iOS's Settings has none).
+        "about" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            about()
+            TextButton(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
+        }
         else -> SettingsHome(api, revision, open, logout, deviceAlerts, terminalsChanged)
     }
 }
 
 fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
-    "profile" -> "Edit profile"; "password" -> "Change password"
+    "profile" -> "Edit profile"; "account" -> SETTINGS_PROFILE; "password" -> "Change password"
     // A pool's page and a DeepSeek key's are titled by its name once read, as iOS titles them.
     "machines-and-models" -> when {
         record?.startsWith("key:") == true -> providerKeyTitle(record.removePrefix("key:"))
@@ -80,8 +89,9 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
     } ?: MachinesAndModels.TITLE
-    "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "terminals" -> Terminals.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "machines" -> MachinesAndModels.MACHINES; "providers" -> SETTINGS_PROVIDERS
+    "sessions" -> GENERAL; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
+    "terminals" -> Terminals.TITLE; "github" -> GithubCopy.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -93,8 +103,19 @@ internal fun settingsSharedLinksValue(active: Int): String = if (active > 0) "$a
 /** SettingsHome.accessTokensValue: "3 active" — the tokens that still work. */
 internal fun settingsAccessTokensValue(active: Int): String = if (active > 0) "$active active" else "None"
 
-/** SettingsHome.title(.sessions): Preferences' first row, which opens the account's five session settings, and that page's title. */
-internal const val SESSIONS = "Sessions"
+/** SettingsHome.title(.general): Personal's first row, which opens the account's five session settings, and that page's title (the
+ * web nav's label). The route keeps its old id, "sessions". */
+internal const val GENERAL = "General"
+
+/** SettingsHome.header(.personal): the one group with a header; Machines and Providers each hold the one row that says the name. */
+internal const val SETTINGS_PERSONAL = "Personal"
+/** SettingsHome.title(.profile): the row opening the email and Change password, and that page's title. */
+internal const val SETTINGS_PROFILE = "Profile"
+/** SettingsHome.title(.providers): the row opening the pools' half of the Machines & models page, and that page's title. */
+internal const val SETTINGS_PROVIDERS = "Providers"
+
+/** SettingsHome.needsYouValue: "1 needs you", "3 need you" — null with none. */
+internal fun settingsNeedsYouValue(count: Int): String? = when { count <= 0 -> null; count == 1 -> "1 needs you"; else -> "$count need you" }
 
 /** SettingsCopy's hints for the Sessions page's other rows, each its row's footer there, in the web Settings page's words. */
 internal const val DEFAULT_PERMISSION_HINT = "The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
@@ -120,11 +141,6 @@ internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summar
 internal fun sessionRecapsEnabled(preferences: JsonObject?): Boolean =
     (preferences?.get("recaps") as? JsonPrimitive)?.booleanOrNull != false
 
-/** The server as the sign-in screen asked for it: the host, and the port when it is not the scheme's own. */
-internal fun settingsInstanceName(server: String): String? = server.toHttpUrlOrNull()?.let {
-    if (it.port == HttpUrl.defaultPort(it.scheme)) it.host else "${it.host}:${it.port}"
-}
-
 /** SettingsHome.signOutTitle: no server name — the instance is the app's business, and the account is on the screen behind it. */
 internal const val SETTINGS_SIGN_OUT_TITLE = "Sign out?"
 
@@ -136,6 +152,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
     val smartSelectionChanged = LocalSmartSelectionChanged.current
     val recapsChanged = LocalSessionRecapsChanged.current
     val translationChanged = LocalTranslationChanged.current
+    val promptOptimizerChanged = LocalPromptOptimizerChanged.current
     val scope = rememberCoroutineScope()
     return { key, value ->
         scope.launch {
@@ -145,13 +162,15 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
-                "translationEnabled", "translationLanguage" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "promptOptimizer" -> promptOptimizerChanged(PromptOptimizer.isOn(record.value as? JsonObject))
             }
         }
     }
 }
 
-/** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
+/** The account, then SettingsHome's groups — Personal, then Machines, then Providers, the web Settings nav's — then About (Android
+ * only: its updates) and Sign out: iOS's Settings list (docs/mocks/ios-settings-web-groups, 1A 2A 3A). */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
     deviceAlerts: () -> Boolean?, terminalsChanged: Long) {
@@ -161,9 +180,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val user = record.value as? JsonObject
     val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     val photo = rememberAccountPhoto(api, user)
-    val instance = remember(api) { settingsInstanceName(api.handle.account.server) }
-    // The Machines & models row's value is what its page's Needs you holds: the machines, and the pools — a Codex one of the account's
-    // own with its people and keys, which say whether it can run. Shown once the machines are read, as on iOS.
+    // The Machines and Providers rows' values are what their pages' Needs you holds: the machines, and the pools — a Codex one of the
+    // account's own with its people and keys, which say whether it can run. Machines' is shown once the machines are read, as on iOS.
     var runners by remember(api) { mutableStateOf<List<JsonObject>?>(null) }
     // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
     var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
@@ -234,29 +252,33 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
                 Button(onClick = { page("notifications") }) { Text("Turn on") }
             }
         }
-        // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
-        // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
-        SettingsGroup(null, footer = MachinesAndModels.SUBTITLE) {
-            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
-            // What needs a person is said in amber, as the mock's row says it.
-            SettingsLink(MachinesAndModels.TITLE, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
-                valueColor = if (needsYou > 0) Ink.amber else null) { page("machines-and-models") }
-        }
-        SettingsGroup("Preferences") {
+        SettingsGroup(SETTINGS_PERSONAL) {
             // The account's five session settings are a page of their own, as on iOS (SessionSettings).
-            SettingsLink(SESSIONS, R.drawable.ic_sessions) { page("sessions") }
+            SettingsLink(GENERAL, R.drawable.ic_settings) { page("sessions") }
             SettingsLink("Notifications", R.drawable.ic_bell, when (alerts) { true -> "On"; false -> "Off"; null -> "Unavailable" }) { page("notifications") }
             SettingsPicker("Appearance", R.drawable.ic_appearance, preferences.text("theme").ifBlank { "system" },
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark"), record.ready) { preference("theme", JsonPrimitive(it)) }
-        }
-        SettingsGroup("Account") {
-            SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty())
-            SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
+            SettingsLink(SETTINGS_PROFILE, R.drawable.ic_person) { page("account") }
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
             SettingsLink(Terminals.TITLE, R.drawable.ic_terminal, terminals) { page("terminals") }
-            SettingsLink("Change password", R.drawable.ic_password) { page("password") }
-            if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
+        }
+        // Integrations → GitHub, between Personal and Machines as the web's settings nav groups it (docs/github-workspace-design.md §8).
+        SettingsGroup(GithubCopy.INTEGRATIONS, footer = GithubCopy.GITHUB_ROW_HINT) {
+            SettingsLink(GithubCopy.TITLE, R.drawable.ic_github) { page("github") }
+        }
+        // No header over either: each group's one row says its name (SettingsHome.header). What needs a person is said in amber.
+        val now = System.currentTimeMillis()
+        SettingsGroup(null) {
+            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, now).count { item -> item.isMachine } } ?: 0
+            SettingsLink(MachinesAndModels.MACHINES, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
+                valueColor = if (needsYou > 0) Ink.amber else null) { page("machines") }
+        }
+        SettingsGroup(null) {
+            // Only once both pool lists have answered, and only what needs you: the pools have no count of their own to show.
+            val needsYou = if (machinesAndModels.poolsSettled)
+                settingsNeedsYouValue(machinesAndModels.attention(runners.orEmpty(), workspaces, now).count { !it.isMachine }) else null
+            SettingsLink(SETTINGS_PROVIDERS, R.drawable.ic_cloud, needsYou, valueColor = Ink.amber) { page("providers") }
         }
         Spacer(Modifier.height(20.dp))
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
@@ -267,16 +289,27 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             ListItem(headlineContent = { Text("Sign out", color = MaterialTheme.colorScheme.error) }, colors = settingsRowColors(),
                 modifier = Modifier.clickable(role = Role.Button) { signingOut = true })
         }
-        Text("Orbit ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", Modifier.fillMaxWidth().padding(top = 12.dp),
-            textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { open(OrbitRoute(Destination.BUILD)) }, Modifier.align(Alignment.CenterHorizontally)) { Text("Build information") }
     }
     if (signingOut) AlertDialog(onDismissRequest = { signingOut = false }, title = { Text(SETTINGS_SIGN_OUT_TITLE) },
         confirmButton = { TextButton(onClick = { signingOut = false; logout() }) { Text("Sign out", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { signingOut = false }) { Text("Cancel") } })
 }
 
-/** iOS's Sessions page (SessionSettings): the account's five session settings, in iOS's order, each in a group of its own with the
+/** iOS's Profile page (ProfileSettingsPage): the email the account signs in with, read-only, and Change password, which opens its page.
+ * The name and photo are the header's edit card. */
+@Composable
+private fun ProfileSettingsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
+    val record = remember(api) { PersonalRecord { api.get("users/me") } }
+    PersonalRecordLifecycle(record, revision)
+    val user = record.value as? JsonObject
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (record.busy || record.stale || record.error != null) PersonalRecordStatus(record)
+        SettingsGroup(null) { SettingsValue("Email", R.drawable.ic_mail, user?.text("email").orEmpty()) }
+        SettingsGroup(null) { SettingsLink("Change password", R.drawable.ic_password) { open(OrbitRoute(Destination.SETTINGS, "password")) } }
+    }
+}
+
+/** iOS's General page (SessionSettings): the account's five session settings, in iOS's order, each in a group of its own with the
  * web's hint as its footer (docs/mocks/ios-settings-order, 2A). Each is written alone the moment it moves; absent on the server means
  * on, except smart model selection, which is off unless turned on. */
 @Composable
@@ -293,7 +326,7 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
                 record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
         }
         // Settings › Translation (docs/mocks/session-translation, frame 9): one account-wide switch, absent = off, and the language
-        // the owner writes and reads in; agents always work in English, shown and not offered.
+        // the owner writes and reads in, and the one agents work in, both picked from the one list.
         TranslationGroup(record.value as? JsonObject, record.ready) { key, value -> preference(key, value) }
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
             SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
@@ -306,6 +339,9 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
             SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
         }
+        // Prompt optimizer (docs/mocks/prompt-optimizer, frame 1): under Suggested replies, off by default; a server without a DeepSeek
+        // key draws it disabled with frame 1b's notice (iOS SessionSettings' promptOptimizerSection).
+        PromptOptimizerGroup(record.value as? JsonObject, record.ready) { preference("promptOptimizer", JsonPrimitive(it)) }
         // The server's rolling recap on a session's list row (0418). One switch for the whole account, so turning it off holds on
         // the phone and on the web at once — the moment the server has taken the change, the lists behind Settings redraw without it.
         SettingsGroup(null, footer = SESSION_RECAPS_HINT) {
@@ -379,8 +415,8 @@ private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, ch
 
 /**
  * The Sessions page's Translation group (board frame 9; web SettingsPage's Translation card, iOS SessionSettings' Translation
- * section): the switch with what it does under it, Your language — a bottom sheet of the seven — and Agents work in, English and
- * read-only. A server without a DeepSeek key cannot translate ([user]'s `translationAvailable`): every row is drawn disabled under
+ * section): the switch with what it does under it — naming the agent language — then Your language and Agents work in, each a
+ * bottom sheet over the one shared list (Translation.LANGUAGES). A server without a DeepSeek key cannot translate ([user]'s `translationAvailable`): every row is drawn disabled under
  * frame 2's notice, whatever the preference says. Each row is written alone the moment it moves.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -390,11 +426,13 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
     val unavailable = user != null && !Translation.available(user)
     val enabled = ready && !unavailable
     val language = Translation.language(preferences)
-    var picking by remember { mutableStateOf(false) }
-    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.FOOTER) {
+    val agentLanguage = Translation.agentLanguage(preferences)
+    // Which picker's sheet is open: the preference key it writes, or null.
+    var picking by remember { mutableStateOf<String?>(null) }
+    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER) {
         val on = !unavailable && Translation.enabled(preferences)
         ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
-            supportingContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT) },
+            supportingContent = { Text(TranslationCopy.translateConversationsHint(agentLanguage)) },
             trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
             modifier = Modifier.toggleable(value = on, enabled = enabled, role = Role.Switch) { write("translationEnabled", JsonPrimitive(it)) })
         if (unavailable) Text(TranslationCopy.UNAVAILABLE, Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
@@ -402,23 +440,53 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
             color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
         ListItem(headlineContent = { Text(TranslationCopy.YOUR_LANGUAGE) }, colors = settingsRowColors(),
             supportingContent = { Text(Translation.name(language)) },
-            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = true }.alpha(if (unavailable) 0.5f else 1f))
+            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationLanguage" }.alpha(if (unavailable) 0.5f else 1f))
         ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
-            supportingContent = { Text(TranslationCopy.ENGLISH) }, modifier = Modifier.alpha(if (unavailable) 0.5f else 1f))
+            supportingContent = { Text(Translation.name(agentLanguage)) },
+            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationAgentLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+        // "Show both languages" (02-bilingual.png, mark A): only while translation is on.
+        if (on) {
+            val both = Translation.bilingual(preferences)
+            ListItem(headlineContent = { Text(TranslationCopy.SHOW_BOTH_LANGUAGES) }, colors = settingsRowColors(),
+                trailingContent = { Switch(checked = both, onCheckedChange = null, enabled = enabled) },
+                modifier = Modifier.testTag("translation-bilingual")
+                    .toggleable(value = both, enabled = enabled, role = Role.Switch) { write("translationBilingual", JsonPrimitive(it)) })
+        }
     }
-    if (picking) ModalBottomSheet(onDismissRequest = { picking = false }) {
-        Text(TranslationCopy.YOUR_LANGUAGE, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
+    val key = picking ?: return
+    val (title, current) = if (key == "translationAgentLanguage") TranslationCopy.AGENTS_WORK_IN to agentLanguage else TranslationCopy.YOUR_LANGUAGE to language
+    ModalBottomSheet(onDismissRequest = { picking = null }) {
+        Text(title, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
             style = MaterialTheme.typography.titleMedium)
-        Column(Modifier.selectableGroup().padding(bottom = 24.dp)) {
+        Column(Modifier.selectableGroup().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Translation.LANGUAGES.forEach { (value, name) ->
-                Row(Modifier.fillMaxWidth().selectable(value == language, role = Role.RadioButton) {
-                    picking = false
-                    if (value != language) write("translationLanguage", JsonPrimitive(value))
+                Row(Modifier.fillMaxWidth().selectable(value == current, role = Role.RadioButton) {
+                    picking = null
+                    if (value != current) write(key, JsonPrimitive(value))
                 }.padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = value == language, onClick = null)
+                    RadioButton(selected = value == current, onClick = null)
                     Text(name, Modifier.padding(start = 16.dp))
                 }
             }
         }
+    }
+}
+
+/**
+ * The Sessions page's Prompt optimizer group (board frames 1 and 1b; iOS SessionSettings' promptOptimizerSection): one account-wide
+ * switch, absent = on (only false turns it off), with what it does as the group's footer. A server without a DeepSeek key ([user]'s `promptOptimizerAvailable`
+ * false) draws it off and disabled with the notice under it, whatever the preference says. No NEW badge.
+ */
+@Composable
+internal fun PromptOptimizerGroup(user: JsonObject?, ready: Boolean, write: (Boolean) -> Unit) {
+    val unavailable = PromptOptimizer.unavailable(user)
+    val enabled = ready && !unavailable
+    val on = !unavailable && PromptOptimizer.enabled(user?.get("preferences") as? JsonObject)
+    SettingsGroup(null, footer = PromptOptimizerCopy.HINT) {
+        ListItem(headlineContent = { Text(PromptOptimizerCopy.TITLE) }, colors = settingsRowColors(),
+            trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
+            modifier = Modifier.testTag("settings-prompt-optimizer").toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = write))
+        if (unavailable) Text(PromptOptimizerCopy.UNAVAILABLE, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .testTag("prompt-optimizer-unavailable"), color = Ink.amber, style = MaterialTheme.typography.bodySmall)
     }
 }

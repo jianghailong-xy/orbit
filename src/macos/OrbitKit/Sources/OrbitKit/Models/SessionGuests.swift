@@ -30,6 +30,29 @@ struct SessionGuestList: Decodable {
     let guests: [SessionGuestPerson]
 }
 
+/// Someone the owner has invited before, to any of their sessions, as
+/// `GET /sessions/:id/guests/suggestions` offers them to the email field of People who can reply
+/// (board docs/mocks/share-links/14-guest-suggestions). Mirrors `@orbit/shared`'s `SessionGuestSuggestion`.
+public struct SessionGuestSuggestion: Codable, Equatable, Sendable, Identifiable {
+    public let name: String
+    public let email: String
+    /// The owner's latest invitation of this person, to any session.
+    public let lastInvitedAt: String
+
+    public var id: String { email }
+
+    public init(name: String, email: String, lastInvitedAt: String) {
+        self.name = name
+        self.email = email
+        self.lastInvitedAt = lastInvitedAt
+    }
+}
+
+/// What the suggestions route answers: newest invitation first, people already in the session left out.
+struct SessionGuestSuggestionList: Decodable {
+    let people: [SessionGuestSuggestion]
+}
+
 struct InviteSessionGuestRequest: Encodable {
     let email: String
 }
@@ -161,6 +184,25 @@ public struct GuestSessionNow: Decodable, Equatable, Sendable {
     }
 }
 
+/// A `head` frame of the guest stream (docs/session-viewer-stream-design.md §4): the head fields the
+/// `events?after=` answer carries — title, how the session stands and whether it waits on its owner —
+/// sent when the stream opens and whenever they change.
+public struct GuestSessionHead: Decodable, Equatable, Sendable {
+    public let title: String?
+    public let state: GuestSessionState
+
+    public init(title: String?, state: GuestSessionState) {
+        self.title = title
+        self.state = state
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: GuestHeadKeys.self)
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+        state = c.guestState()
+    }
+}
+
 /// An older page of the guest's transcript (`events?before=`).
 public struct GuestEventPage: Decodable, Equatable, Sendable {
     public let events: [RunEvent]
@@ -181,8 +223,10 @@ public struct GuestTurnAccepted: Decodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey { case turnId, revived }
 }
 
-/// A guest's message: text only — no mode, model, effort or attachment can ride it (§5).
+/// A guest's message: text and images — no mode, model or effort can ride it (§5). `attachmentIds`
+/// names images uploaded through the guest door; nil omits the field (a text-only message).
 struct GuestTurnRequest: Encodable {
     let clientTurnId: String
     let content: String
+    let attachmentIds: [String]?
 }

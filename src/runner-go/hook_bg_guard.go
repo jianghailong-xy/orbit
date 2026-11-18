@@ -69,6 +69,15 @@ const bgGuardCronCreateReason = "Orbit holds this session's loops on its server.
 	" and pass delaySeconds and reason. To wait for Orbit tasks or sessions, use" +
 	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
 
+// PushNotification is Claude Code's own alert, sent through the engine's own claude.ai sign-in: on a runner
+// that is the runner's login, not the person this session works for, and in a headless session it may reach
+// nobody at all. Orbit cannot tell which, and neither can the agent, so every call goes to notify, which
+// reaches that person and says in its result whether it did.
+const bgGuardPushNotificationReason = "Orbit tells the person this session works for. Claude's PushNotification is" +
+	" unavailable here: it goes through this coding engine's own sign-in, not through Orbit, so it is not how that" +
+	" person hears from you. Use mcp__orbit__notify instead, with the same one-line message: it arrives on their" +
+	" phone and Mac, they can reply from it into this session, and its result says whether it was delivered."
+
 // A poll of Orbit's own work is refused wherever it is started from — a Bash call in the turn, a background
 // shell, a Monitor, a runner-hosted job — because the wait it keeps is one the control plane holds for nothing:
 // task_await and session_await ask it to. Only while Watch is on for the session (watch_rollout.go): with
@@ -196,6 +205,9 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 	// Every call too: see bgGuardCronCreateReason.
 	case "CronCreate":
 		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardCronCreateReason, watches)
+	// Every call: see bgGuardPushNotificationReason.
+	case "PushNotification":
+		decision, reason = "deny", bgGuardPushNotificationReason
 	// The readers for the engine's own background tasks (old names and new). A
 	// runner-hosted job is not one, and the id says so — the runner issued that
 	// prefix itself, so this is not a guess about who owns what.
