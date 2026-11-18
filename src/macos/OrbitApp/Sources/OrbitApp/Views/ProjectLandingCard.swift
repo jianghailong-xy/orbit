@@ -125,8 +125,7 @@ struct ProjectLandingCardView: View {
             }
         }
         .padding(.vertical, 4)
-        .confirmationDialog(ProjectPage.landingSkipCheck, isPresented: $askingSkip,
-                            titleVisibility: .visible) {
+        .orbitConfirmation(ProjectPage.landingSkipCheck, isPresented: $askingSkip) {
             Button(ProjectPage.landingSkipCheckGo) {
                 if let taskID = card.skipTaskId { skip(taskID) }
             }
