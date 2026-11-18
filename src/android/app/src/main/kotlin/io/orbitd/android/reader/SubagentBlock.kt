@@ -112,7 +112,9 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
 internal object SubagentResult {
     fun text(callResult: String?, run: SubagentRun?): String? {
         val text = callResult?.trim()?.ifEmpty { null } ?: return endedSummary(run)
-        val obj = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return text
+        // The call's JSON clipped to a preview (the server trims a long result): the run's own text, never the receipt's opening brace.
+        val obj = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull()
+            ?: return if (text.startsWith("{")) endedSummary(run) else text
         (obj["result"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.ifEmpty { null }?.let { return it }
         endedSummary(run)?.let { return it }
         // A launch receipt (`{ runId, status: "running" }`): the work is drawn, not this.

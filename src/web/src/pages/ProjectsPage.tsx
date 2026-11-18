@@ -5,6 +5,7 @@ import {
   type ProjectListIntegration,
   type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
+  type TaskSignInHold,
   type TaskStatus,
 } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,7 @@ import {
 import { ProjectBlockersCard, type ProjectBlockers } from '../components/ProjectBlockers';
 import { CoordinatorQuestions } from '../components/CoordinatorQuestionCard';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
+import { TaskSignInHoldNote } from '../components/TaskSignInHold';
 import { LazyBoundary } from '../components/ErrorBoundary';
 import { ProjectPromotion } from '../components/ProjectPromotionCard';
 import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
@@ -1818,6 +1820,8 @@ interface ProjectTaskPage {
 export interface ProjectTask {
   id: string;
   title: string;
+  /** Why the auto-run sweep holds this task although it reads Ready (server-computed); null or absent otherwise. */
+  hold?: TaskSignInHold | null;
   // Keep this tied to the server's enum. A hand-written subset once omitted FAILED, so a failed
   // task reached the status-mark lookup at runtime even though TypeScript claimed it could not.
   status: TaskStatus;
@@ -2471,7 +2475,11 @@ function ProjectTaskRow({
                   </ProjectTaskLink>{' '}
                   <Badge tone={tagTone(TASK_STATUS_COLOR[task.status] ?? 'default')}>{task.status}</Badge>
                   <WaitingOnYouTaskBadge taskId={task.id} />
-                  {workLabel ? (
+                  {/* Held for a sign-in replaces "Ready · automatic dispatch": that would say it starts
+                      by itself, and it will not until somebody signs in (the server's `hold`). */}
+                  {task.hold ? (
+                    <TaskSignInHoldNote hold={task.hold} />
+                  ) : workLabel ? (
                     <Badge data-testid="project-task-work-state" tone={tagTone(workLabel.color)}>
                       {workLabel.text}
                     </Badge>

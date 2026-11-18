@@ -262,17 +262,19 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                 }
             }
         } }
-        // A11c: the project's closing card, whole, in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
-        // session's `projectId` is set on coordinators alone).
+        // A11c: the project's closing card in the conversation that coordinates the project (iOS `ProjectDoneCardView`: a
+        // session's `projectId` is set on coordinators alone) — a preview while it asks, whose review sheet is open while [doneReview].
         session.snapshot?.detail?.let { detail -> detail.text("projectId")?.let { coordinated ->
-            // The needs-you bar points at this card while it asks; brought into view as the rail's cards are.
+            // The needs-you bar points at this card while it asks: brought into view, and its review opened, as a press on it does.
             val requester = remember { BringIntoViewRequester() }
             val key = NeedsYouLogic.doneKey(coordinated)
+            var doneReview by rememberSaveable(session.id, coordinated) { mutableStateOf(false) }
             if (focus != null && CardFocus.matches(focus, key)) LaunchedEffect(focus, key) {
-                requester.bringIntoView(); CardFocus.spend(session.id)
+                requester.bringIntoView(); doneReview = true; CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
-                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open)
+                CoordinatorDoneCard(app, cards.handle, session.id, coordinated, detail, session.snapshot?.standing.orEmpty(), session.fresh, open,
+                    reviewing = doneReview, review = { doneReview = it })
             }
         } }
         // A11-9: each merge the project made is one line, opening its receipt (iOS `PromotionReceiptLine`).
@@ -313,11 +315,15 @@ internal fun PreviewTone.color(): Color = when (this) {
  * preview that asks nothing any more is dimmed and says "View details".
  */
 @Composable
-internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen: () -> Unit) {
+internal fun CardPreviewView(card: InteractionCard, preview: CardPreview, onOpen: () -> Unit) = CardPreviewView(card.key, preview, onOpen)
+
+/** The same preview for a card that is not one of the session's interaction cards — the project's closing card (`CoordinatorDoneCard`). */
+@Composable
+internal fun CardPreviewView(key: String, preview: CardPreview, onOpen: () -> Unit) {
     val tone = preview.tone.color()
-    Box(Modifier.testTag(card.key)) { Column(Modifier.fillMaxWidth().alpha(if (preview.dimmed) 0.72f else 1f)
+    Box(Modifier.testTag(key)) { Column(Modifier.fillMaxWidth().alpha(if (preview.dimmed) 0.72f else 1f)
         .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
-        .clickable(role = Role.Button, onClick = onOpen).testTag("${card.key}:preview").padding(14.dp),
+        .clickable(role = Role.Button, onClick = onOpen).testTag("$key:preview").padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.size(22.dp).background(tone.copy(alpha = 0.16f), RoundedCornerShape(6.dp)))

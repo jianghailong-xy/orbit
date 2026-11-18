@@ -173,6 +173,13 @@ class SubagentBlockTest {
         assertEquals("Spec written.", SubagentResult.text(receipt, run(background = true, resultSummary = "Spec written.")))
     }
 
+    // The server clips a long result to a 2 KB preview: the runner's pretty JSON no longer parses; the run's own text stands in.
+    @Test fun aClippedResultReadsTheRunNotTheBrace() {
+        val clipped = "{\n  \"changedFiles\": [],\n  \"result\": \"Route 1 worked: the transcript is"
+        assertEquals("Route 1 worked.", SubagentResult.text(clipped, run(resultSummary = "Route 1 worked.")))
+        assertNull(SubagentResult.text(clipped, null))
+    }
+
     @Test fun plainTextIsShownAsItCame() {
         assertEquals("not json", SubagentResult.text("not json", null))
         assertNull(SubagentResult.text("  ", null))

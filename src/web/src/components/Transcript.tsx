@@ -190,15 +190,18 @@ import {
   DEFAULT_AGENT_LANGUAGE,
   type BilingualPair,
 } from '@orbit/shared';
-import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import { replyTranslationOf, shownQuestions, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
+  QuestionTranslationsCtx,
   ReplyTranslationFoot,
   ShownOriginalProvider,
   TranslationCtx,
   UserTranslationFoot,
+  replyOriginalHiddenKey,
   replyTranslationKey,
   useReplyShownOriginal,
   useShownOriginal,
+  userOriginalHiddenKey,
   userTranslationKey,
 } from './TranslationParts';
 
@@ -3407,12 +3410,21 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const translation = node.translation;
   const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
   // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  // "Hide original" leaves what they wrote alone, per message and never persisted.
   const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const [originalHidden, toggleHidden] = useShownOriginal(userOriginalHiddenKey(node.seq, node.turnId));
   const flipped = shownOriginal && !bilingual;
   const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
   const translationFoot =
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
-      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+      <UserTranslationFoot
+        translation={translation}
+        turnId={node.turnId}
+        flipped={flipped}
+        onFlip={flip}
+        originalHidden={originalHidden}
+        onHideOriginal={toggleHidden}
+      />
     ) : null;
   // Only the Show original / Show translation link opens the row; bilingual's always-shown
   // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
@@ -3461,7 +3473,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
-        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
+        {bilingual && !originalHidden && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (
@@ -4318,8 +4330,11 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
   const translation = node.replyTranslation;
   // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
-  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
-  const flipped = shownOriginal && !bilingual;
+  // "Hide original" leaves the translation alone, per message and never persisted.
+  const bilingualOn = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const [originalHidden, toggleHidden] = useShownOriginal(replyOriginalHiddenKey(node.seq));
+  const bilingual = bilingualOn && !originalHidden;
+  const flipped = shownOriginal && !bilingualOn;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
   // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
@@ -4332,7 +4347,14 @@ function TranslatedReply({ node }: { node: TextNode }) {
       {bilingual && pairs ? (
         <>
           <InterleavedReply pairs={pairs} seq={node.seq} />
-          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
         </>
       ) : bilingual ? (
         <>
@@ -4340,7 +4362,26 @@ function TranslatedReply({ node }: { node: TextNode }) {
           <div className="chat-bilingual-reply">
             <BilingualEnglish text={node.text} collapsible />
           </div>
-          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
+        </>
+      ) : bilingualOn ? (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot
+            translation={translation}
+            seq={node.seq}
+            flipped={false}
+            onFlip={flip}
+            originalHidden
+            onHideOriginal={toggleHidden}
+          />
         </>
       ) : translation?.text !== undefined && !translation.failed ? (
         // Delivered: the flip rides at the end of the reply's last line.
@@ -4612,6 +4653,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
     [questions, answer, node.result?.isError],
   );
+  // The answer is read off the engine's words; the record then shows the questions as the card did,
+  // in the owner's language where the server translated them (options keep their index).
+  const questionTranslation = useContext(QuestionTranslationsCtx).get(node.id);
+  const shown = useMemo(() => shownQuestions(questions, questionTranslation), [questions, questionTranslation]);
   // A result this client cannot read, once it is whole: its own words are then the only answer
   // there is, so the card opens on them, as it always did.
   const questionUnread =
@@ -4628,8 +4673,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
   const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
-    () => describeTool(node.name, input, isShell, outcome),
-    [node.name, input, isShell, outcome],
+    () => describeTool(node.name, input, isShell, outcome, shown),
+    [node.name, input, isShell, outcome, shown],
   );
   // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
   const isDelegate = node.name === DELEGATE_TOOL;
@@ -4714,7 +4759,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
-            questions={questions}
+            questions={shown}
             outcome={outcome}
             onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
           />
@@ -5107,7 +5152,13 @@ function shellCommandSummary(command: string): string {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean, outcome?: QuestionOutcome | null): ToolDesc {
+function describeTool(
+  name: string,
+  input: any,
+  isShell?: boolean,
+  outcome?: QuestionOutcome | null,
+  questions?: AskedQuestion[],
+): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -5263,7 +5314,7 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
       // A multiple-choice prompt to the user, drawn with how it ended: open, each question as a
       // card (header · question · options, the pick ticked) instead of the nested questions array
       // as a raw JSON blob; folded, ToolView draws the record under the row (`QuestionFolded`).
-      const qs = askedQuestions(i);
+      const qs = questions ?? askedQuestions(i);
       return {
         label: 'Question',
         icon: <QuestionCircleOutlined />,

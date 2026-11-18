@@ -129,6 +129,12 @@ function store(
         return { id: HOME };
       },
     },
+    // What a successor's opening digest reads (coordinator-digest.ts): a project with nothing in it.
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    projectRuling: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    projectTaskStatusCount: { findMany: async () => [] },
     $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(prisma),
     // Rendered through the shared helper rather than read off `.strings`/`.values` here: a double
     // that parses Prisma's two calling conventions itself is how a spec comes to disagree with the

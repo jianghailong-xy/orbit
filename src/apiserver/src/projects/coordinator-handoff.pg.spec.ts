@@ -439,6 +439,46 @@ test('hand over without a note after a failure, and with no handoff under way at
   assert.deepEqual(t.turns, [], 'no note turn was asked for');
 });
 
+test('a successor opened without a handoff — the owner\'s replace, a workspace switch — opens with the digest and the owner\'s answers in force', { skip, timeout: 120_000 }, async () => {
+  const f = await fixture();
+  const s = services(f);
+  // An answer the outgoing coordinator asked for, read long ago, whose task is still open: in force.
+  const resolvedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  await f.db.projectOpenItem.create({
+    data: {
+      projectId: f.projectId, ownerId: f.ownerId, kind: 'COORDINATOR_QUESTION', state: 'RESOLVED',
+      resolution: 'ANSWERED', resolvedAt, assignee: 'OWNER', assigneeReason: 'DEFAULT',
+      dedupeKey: `question:${randomUUID()}`, title: 'Split the redirect fix?', waitingSince: resolvedAt, assignedAt: resolvedAt,
+      askedBySessionId: f.outgoing,
+      payload: {
+        question: 'Split the redirect fix into two tasks?', options: [{ label: 'Keep it one task' }, { label: 'Split it' }],
+        recommendedOption: 0, blocksTaskIds: [f.taskId], ifUnanswered: null,
+      },
+      answer: { option: 0, answeredByUserId: f.ownerId },
+    },
+  });
+
+  const replaced = await s.projects.coordinator(f.ownerId, f.projectId, undefined, 'replace');
+
+  assert.notEqual(replaced.sessionId, f.outgoing);
+  const opening = s.openings.find((o) => o.id === replaced.sessionId)!.prompt;
+  assert.ok(opening.includes('<state_digest as_of="'), 'the digest is in the opening, as on a handoff');
+  assert.ok(!opening.includes('<handoff_note>'), 'no handoff, so no note');
+  assert.ok(!opening.includes('Read first'), 'it reports from the digest');
+  assert.match(opening, /\nOwner answers in force \(to questions coordinators asked; newest first\):\n- \d{4}-\d{2}-\d{2} · Split the redirect fix into two tasks\? → Keep it one task · /,
+    'the answer the outgoing coordinator read is in the opening, where it costs no turn');
+  assert.deepEqual(s.turns, [], 'and it is not replayed as a turn of its own');
+
+  // A project's first coordinator is told the standing instructions alone, as before.
+  const g = await fixture();
+  await g.db.project.update({ where: { id: g.projectId }, data: { coordinatorSessionId: null } });
+  const t = services(g);
+  const first = await t.projects.coordinator(g.ownerId, g.projectId);
+  const firstOpening = t.openings.find((o) => o.id === first.sessionId)!.prompt;
+  assert.ok(!firstOpening.includes('<state_digest'), 'nothing came before it to digest');
+  assert.ok(firstOpening.includes('Read first'));
+});
+
 // ── Cancel ───────────────────────────────────────────────────────────────────────────────────────
 
 test('cancel handover: nothing changes, the queued note turn is withdrawn, and the session shows no handoff', { skip, timeout: 120_000 }, async () => {

@@ -22,6 +22,9 @@ import type { Me } from './queries';
 export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
+  hideOriginal: 'Hide original',
+  // Not "Show original": that one swaps the translation for the original.
+  showBoth: 'Show both',
   showTranslation: 'Show translation',
   original: 'Original',
   translating: 'Translating…',
@@ -189,8 +192,8 @@ export function foldTranslationEvent<T extends EventLike>(events: readonly T[], 
 
 interface QuestionLike {
   question?: string;
-  header?: string;
-  options?: Array<{ label?: string; description?: string }>;
+  header?: string | null;
+  options?: Array<{ label?: string; description?: string | null }>;
 }
 
 /**
@@ -207,7 +210,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
     return {
       ...q,
       question: t.question || q.question,
-      ...(q.header !== undefined ? { header: t.header || q.header } : {}),
+      ...(q.header != null ? { header: t.header || q.header } : {}),
       ...(q.options
         ? {
             options: q.options.map((o, j) => {
@@ -216,7 +219,7 @@ export function shownQuestions<Q extends QuestionLike>(questions: readonly Q[], 
               return {
                 ...o,
                 label: to.label || o.label,
-                ...(o.description !== undefined ? { description: to.description || o.description } : {}),
+                ...(o.description != null ? { description: to.description || o.description } : {}),
               };
             }),
           }

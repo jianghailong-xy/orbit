@@ -1074,3 +1074,17 @@
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* Orbit Cloud, pinned above the machines you drag (MachineRows; docs/mocks/orbit-cloud-pinned, A): its cloud in
+   the brand colour and its name in semibold, on the plain background every row has until it is open. */
+.settings-nav-cloud .settings-nav-icon {
+  color: var(--brand);
+}
+.settings-nav-cloud .settings-nav-label {
+  font-weight: 600;
+}
+.settings-nav-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--border-subtle);
+}

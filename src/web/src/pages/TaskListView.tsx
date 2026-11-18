@@ -26,6 +26,7 @@ import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { WaitingOnYouTaskBadge } from '../components/OwnerRequestCard';
+import { TaskSignInHoldNote } from '../components/TaskSignInHold';
 import { reportTaskRunConflict } from '../components/TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import { TaskStatusPill } from '../components/TaskStatusPill';
@@ -1206,6 +1207,8 @@ export function TaskListView() {
             {r.title ?? ''}
           </span>
           <WaitingOnYouTaskBadge taskId={r.id} />
+          {/* The sweep holds it for a sign-in (the server's `hold`): Held, why, and Sign in. */}
+          {r.hold && !r.running && !r.queued ? <TaskSignInHoldNote hold={r.hold} /> : null}
           {r.blocked ? (
             <Tooltip
               content={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}

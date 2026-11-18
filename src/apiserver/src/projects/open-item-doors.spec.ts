@@ -53,6 +53,9 @@ const CONTROLLER_FILES = [
   // The landing session's two doors (OPEN_LANDING, §2.9 LS1): the coordinator's `session_get`
   // answers on the runner route, and the owner's own route is their session page.
   'sessions/sessions.controller.ts',
+  // The owner's evidence decision (`POST /tasks/:taskId/evidence/decision`): the Review door of an
+  // `EVIDENCE_UNDECIDED` item (migration 1110) leads to it.
+  'tasks/task-completion-evidence.controller.ts',
   'runner-api/runner-sessions.controller.ts',
 ].map((file) => path.join(SRC, file));
 

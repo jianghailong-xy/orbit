@@ -3139,7 +3139,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 1100 adds nullable conversation_turn.translation_failure_reason and translation_http_status with a CHECK
       // every stored row passes (both NULL); conversation_turn is none of the preserved relations, no row is written,
       // and no trigger, function or DONE fence changes.
-      '1100_conversation_turn_translation_failure'],
+      '1100_conversation_turn_translation_failure',
+      // 1110 restates three CHECKs on project_open_item (kind, resolution, owner-only) to admit EVIDENCE_UNDECIDED,
+      // DECIDED and REVISED; catalog-only, no row is written, and no preserved relation, trigger, function or DONE
+      // fence changes.
+      '1110_evidence_undecided_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

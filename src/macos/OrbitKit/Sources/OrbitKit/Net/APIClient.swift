@@ -761,6 +761,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Every AskUserQuestion card of the session, decided or not: an answered question's record
+    /// shows the questions as its card did, in the owner's language (web: `listQuestionApprovals`).
+    public func questionApprovals(sessionID: String) async throws -> [ApprovalInfo] {
+        try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "toolName", value: "AskUserQuestion")])
+    }
+
     /// Prompt optimizer: DeepSeek improves a composer draft (docs/prompt-optimizer-design.md). One call
     /// per press; 409 PROMPT_OPTIMIZER_OFF, 404, 400 and 422 PROMPT_OPTIMIZATION_FAILED throw.
     public func optimizePrompt(_ req: PromptOptimizationRequest) async throws -> PromptOptimization {
@@ -2010,8 +2016,8 @@ public final class APIClient: @unchecked Sendable {
         try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
     }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
-    /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
-    /// server now orders it (omitted runners appended, foreign ids dropped).
+    /// Persist the list's drag order. The server answers with the full order, with omitted runners
+    /// appended and foreign ids dropped.
     @discardableResult
     public func reorderRunners(_ ids: [String]) async throws -> [Runner] {
         try await post("runners/reorder", body: ReorderRunnersRequest(ids: ids))

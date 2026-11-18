@@ -350,6 +350,23 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(card.notice, "You'll hear about new versions and failures only.")
     }
 
+    /// A failed press says what went wrong: only a dropped connection reads "Couldn't reach Orbit".
+    func testAFailedPressSaysWhatWentWrong() throws {
+        XCTAssertEqual(ScheduleDisplay.pressFailure(URLError(.notConnectedToInternet)), "Couldn't reach Orbit. Try again.")
+        let unreadable: Error
+        do { _ = try JSONDecoder().decode(ScheduleRule.self, from: Data(#"{"kind":"DAILY"}"#.utf8)); return XCTFail() }
+        catch { unreadable = error }
+        XCTAssertEqual(ScheduleDisplay.pressFailure(unreadable),
+                       "Orbit answered, but this version of the app couldn't read the reply. "
+                        + "Update the app; the card shows what Orbit did.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.invalidResponse), ScheduleDisplay.PressFailure.unreadable)
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.http(status: 409, body: #"{"message":"Already decided."}"#)),
+                       "Already decided.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.http(status: 502, body: "<html>")),
+                       "Orbit couldn't do this (error 502). Try again.")
+        XCTAssertEqual(ScheduleDisplay.pressFailure(APIError.unauthorized), "You're signed out. Sign in and try again.")
+    }
+
     /// The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own.
     func testTheRunHeadNamesTheSchedulesEngineFirst() throws {
         XCTAssertEqual(ScheduleDisplay.runAgentName(scheduleEngine: "codex", sessionEngine: "claude"), "Codex")

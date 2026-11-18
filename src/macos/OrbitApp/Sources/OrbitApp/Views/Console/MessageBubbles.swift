@@ -30,6 +30,8 @@ struct UserBubbleView: View {
     /// Settings › Translation: this message flipped to the English the agent got. Per message and
     /// never persisted (board frame 5).
     @State private var flipped = false
+    /// "Show both languages": this message's English hidden ("Hide original"). Per message, not kept.
+    @State private var originalHidden = false
     @Environment(\.translationActions) private var translationActions
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
@@ -79,7 +81,9 @@ struct UserBubbleView: View {
     /// "Agents work in": the language the agent got the message in.
     private var agentLanguage: TranslationLanguage { translationActions?.agentLanguage ?? .agentDefault }
     /// The English under the owner's words, when both languages are shown (mark C).
-    private var english: String? { SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual) }
+    private var english: String? {
+        SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual && !originalHidden)
+    }
 
     var body: some View {
         let words = self.words
@@ -400,11 +404,13 @@ struct UserBubbleView: View {
     /// written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
-        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)
+        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,
+                                                originalHidden: originalHidden)
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
                 case .flip: flipped.toggle()
+                case .hideOriginal: originalHidden.toggle()
                 case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }
                 case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }
                 case .retryReply: break
@@ -427,6 +433,8 @@ struct AssistantBubbleView: View {
     let bubble: AssistantBubble
     /// Settings › Translation: this reply flipped to the English the agent wrote (board frame 5).
     @State private var flipped = false
+    /// "Show both languages": this reply's original hidden ("Hide original"). Per message, not kept.
+    @State private var originalHidden = false
     @State private var hovering = false
     @Environment(\.translationActions) private var translationActions
     /// "Show both languages" is on: a translated reply also shows the words the agent wrote.
@@ -454,7 +462,7 @@ struct AssistantBubbleView: View {
     /// "Show both languages" with a reply whose blocks pair: drawn block by block, each original under
     /// its translation (03-interleaved.png). Nil draws it as before, whole (frame 4).
     private var pairs: [BilingualPairs.Pair]? {
-        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)
+        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual && !originalHidden)
     }
 
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
@@ -491,14 +499,16 @@ struct AssistantBubbleView: View {
             .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
             if bubble.isFinalized,
-               let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual) {
+               let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation,
+                                                             bilingual: bilingual && !originalHidden) {
                 BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)
             }
             if tail == nil {
                 TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,
-                                                                        bilingual: bilingual)) { action in
+                                                                        bilingual: bilingual, originalHidden: originalHidden)) { action in
                     switch action {
                     case .flip: flipped.toggle()
+                    case .hideOriginal: originalHidden.toggle()
                     case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
                     case .retryTurn, .sendAsWritten: break
                     }

@@ -59,12 +59,17 @@ final class QuestionCardWiringTests: XCTestCase {
         let cards = try source(Self.cards)
         let folded = code(try slice(cards, from: "private var defaultBody: some View {",
                                     to: ".animation(nil, value: isOpen)"))
-        XCTAssertTrue(folded.contains("} else if !questions.isEmpty { QuestionFoldedLines(questions: questions, outcome: questionOutcome)"),
+        XCTAssertTrue(folded.contains("} else if !questions.isEmpty { QuestionFoldedLines(questions: shownQuestions, outcome: questionOutcome)"),
                       "folded, a question card draws its record under the row")
         let detail = code(try slice(cards, from: "private var detail: some View {",
                                     to: ".imagePreview($previewTarget"))
-        XCTAssertTrue(detail.contains("} else if !questions.isEmpty { QuestionReplayView(questions: questions, outcome: questionOutcome)"),
+        XCTAssertTrue(detail.contains("} else if !questions.isEmpty { QuestionReplayView(questions: shownQuestions, outcome: questionOutcome)"),
                       "open, a question card replays its questions with how they ended")
+        // Drawn in the language the card was shown in; the answer is read off the engine's English.
+        XCTAssertTrue(code(cards).contains("ApprovalTranslation.shownQuestions(questions, questionTranslations[card.id])"),
+                      "an answered question keeps its card's translation")
+        XCTAssertTrue(code(cards).contains("QuestionRecords.outcome(questions: questions, result: result,"),
+                      "the answer is read off the questions as the engine asked them")
         XCTAssertTrue(detail.contains("questionOutcome == nil {"),
                       "the result is shown only while it cannot be read: once read, the replay is what it says")
     }

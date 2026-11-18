@@ -6,6 +6,7 @@ public enum RunnerPageCopy {
     public static let RUNNER_ONLINE = "Online"
     public static let RUNNER_OFFLINE = "Offline"
     public static let RUNNER_LINE_SEPARATOR = " · "
+    public static let RUNNER_ENGINE_NO_PROVIDER_KEY = "no provider key found"
 
     public static func runnerOfflineLastSeen(when: String) -> String { "Offline · last seen \(when)" }
     public static func runnerVersionTag(version: String) -> String { "v\(version)" }
