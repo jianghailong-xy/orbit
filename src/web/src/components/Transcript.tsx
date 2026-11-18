@@ -200,6 +200,7 @@ import {
   replyTranslationKey,
   useReplyShownOriginal,
   useShownOriginal,
+  userOriginalHiddenKey,
   userTranslationKey,
 } from './TranslationParts';
 
@@ -3408,12 +3409,21 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const translation = node.translation;
   const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
   // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  // "Hide original" leaves what they wrote alone, per message and never persisted.
   const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const [originalHidden, toggleHidden] = useShownOriginal(userOriginalHiddenKey(node.seq, node.turnId));
   const flipped = shownOriginal && !bilingual;
   const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
   const translationFoot =
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
-      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+      <UserTranslationFoot
+        translation={translation}
+        turnId={node.turnId}
+        flipped={flipped}
+        onFlip={flip}
+        originalHidden={originalHidden}
+        onHideOriginal={toggleHidden}
+      />
     ) : null;
   // Only the Show original / Show translation link opens the row; bilingual's always-shown
   // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
@@ -3462,7 +3472,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
-        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
+        {bilingual && !originalHidden && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (

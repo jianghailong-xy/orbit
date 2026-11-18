@@ -60,6 +60,8 @@ export const userTranslationKey = (seq: number, turnId?: string) => `user:${turn
 export const replyTranslationKey = (seq: number) => `reply:${seq}`;
 /** "Show both languages": a reply whose original the owner hid, leaving the translation alone. */
 export const replyOriginalHiddenKey = (seq: number) => `reply-hidden:${seq}`;
+/** "Show both languages": the owner's message whose English they hid, leaving what they wrote. */
+export const userOriginalHiddenKey = (seq: number, turnId?: string) => `user-hidden:${turnId ?? seq}`;
 
 /** Whether the turn's copy button reads a reply's original, for TurnFoot. */
 export function useReplyShownOriginal(seq: number | undefined): boolean {
@@ -90,7 +92,8 @@ function FootAction({ label, onPress }: { label: string; onPress?: () => Promise
 const Sep = () => <span className="chat-translate-sep">·</span>;
 
 /**
- * The owner's message: "Show original" ↔ "Show translation" once delivered, the press alone after
+ * The owner's message: "Show original" ↔ "Show translation" once delivered (with both languages on,
+ * "Sent to the agent in English · Hide original" ↔ "· Show both"), the press alone after
  * the copy button and time (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation
  * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written".
  */
@@ -99,11 +102,16 @@ export function UserTranslationFoot({
   turnId,
   flipped,
   onFlip,
+  originalHidden = false,
+  onHideOriginal,
 }: {
   translation: TurnTranslation;
   turnId?: string;
   flipped: boolean;
   onFlip: () => void;
+  /** "Show both languages": whether the English under their words is hidden, and its toggle. */
+  originalHidden?: boolean;
+  onHideOriginal?: () => void;
 }) {
   const actions = useContext(TranslationCtx);
   switch (translation.state) {
@@ -129,7 +137,19 @@ export function UserTranslationFoot({
     case 'DONE':
       // Both languages on: the English is in the bubble, so there is nothing to flip to.
       if (actions?.bilingual) {
-        return <span className="chat-translate-foot is-hover">{sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}</span>;
+        return (
+          <span className="chat-translate-foot is-hover">
+            {sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}
+            {onHideOriginal && (
+              <>
+                <Sep />
+                <button type="button" className="chat-translate-action" onClick={onHideOriginal}>
+                  {originalHidden ? COPY.showBoth : COPY.hideOriginal}
+                </button>
+              </>
+            )}
+          </span>
+        );
       }
       return (
         <span className="chat-translate-foot is-hover">

@@ -126,6 +126,30 @@ class TranslationBilingualTest : ComposerShellTest() {
         shot("9-bilingual-on-unpaired-expanded")
     }
 
+    /** "Hide original" (docs/mocks/translation-hide-original): one message's original goes, its own language stays, "Show both" brings it back. */
+    @Test fun hideOriginalLeavesOneMessageInYourLanguage() {
+        conversation(bilingual = true)
+        signIn(); openSession()
+        scrollTo(1)
+        await { has(text(askedZh) and row(1), unmerged = true) }
+        val hide1 = hasTestTag("translation-action:${TranslationCopy.HIDE_ORIGINAL}") and row(1)
+        compose.onNode(hide1, useUnmergedTree = true).performClick()
+        await { !has(english(1), unmerged = true) }
+        assertTrue(has(text(askedZh) and row(1), unmerged = true))
+        val both1 = hasTestTag("translation-action:${TranslationCopy.SHOW_BOTH}") and row(1)
+        assertTrue(has(both1, unmerged = true))
+        compose.onNode(both1, useUnmergedTree = true).performClick()
+        await { has(text("does nothing in Safari") and english(1), unmerged = true) }
+        // A reply drawn block by block: hidden, it is its translation alone; the others keep both.
+        scrollTo(2)
+        compose.onNode(hasTestTag("translation-action:${TranslationCopy.HIDE_ORIGINAL}") and row(2), useUnmergedTree = true).performClick()
+        await { !has(original(2), unmerged = true) }
+        assertTrue(has(text("我先看一下") and row(2), unmerged = true))
+        assertTrue(has(hasTestTag("translation-action:${TranslationCopy.SHOW_BOTH}") and row(2), unmerged = true))
+        scrollTo(3)
+        assertTrue(has(original(3), unmerged = true))
+    }
+
     @Test fun theBlockNamesTheLanguageAgentsWorkIn() {
         conversation(bilingual = true, agentLanguage = "ja")
         signIn(); openSession()

@@ -334,13 +334,25 @@ describe('Show both languages', () => {
     expect(bubble.firstElementChild?.textContent ?? bubble.textContent).toContain(ORIGINAL);
     expect(bubble.querySelector('.chat-bilingual')?.textContent).toContain(ENGLISH);
     expect(bubble.textContent!.indexOf(ORIGINAL)).toBeLessThan(bubble.textContent!.indexOf(ENGLISH));
-    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Sent to the agent in English');
-    expect(container.querySelector('.chat-translate-action')).toBeNull();
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Sent to the agent in English·Hide original');
     // Shown on hover with copy and time, it ends the row, flush with the bubble.
     expect(container.querySelector('.chat-user-meta')!.lastElementChild?.className).toBe('chat-translate-foot is-hover');
     // Copy still copies their language.
     await act(async () => container.querySelector<HTMLButtonElement>('.chat-user-meta .chat-copy')!.click());
     expect(copied.at(-1)).toBe(ORIGINAL);
+  });
+
+  it('your message\'s "Hide original" leaves what you wrote alone, and "Show both" brings the English back', async () => {
+    await both(<Transcript events={[user(1, done)]} />);
+    const press = () => container.querySelector<HTMLButtonElement>('.chat-user-meta .chat-translate-action')!;
+    expect(press().textContent).toBe('Hide original');
+    await act(async () => press().click());
+    const bubble = container.querySelector('.chat-user')!;
+    expect(bubble.textContent).toContain(ORIGINAL);
+    expect(bubble.querySelector('.chat-bilingual')).toBeNull();
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Sent to the agent in English·Show both');
+    await act(async () => press().click());
+    expect(container.querySelector('.chat-user .chat-bilingual')?.textContent).toContain(ENGLISH);
   });
 
   it('a short reply: the translation, its English right under it, "Translated" and no flip', async () => {
@@ -445,7 +457,7 @@ describe('Show both languages', () => {
         </TranslationCtx.Provider>,
       );
     });
-    expect(container.querySelector('.chat-user .chat-translate-foot, .chat-user-meta .chat-translate-foot')?.textContent).toBe('Sent to the agent in Japanese');
+    expect(container.querySelector('.chat-user .chat-translate-foot, .chat-user-meta .chat-translate-foot')?.textContent).toBe('Sent to the agent in Japanese·Hide original');
     expect(container.querySelector('.chat-bilingual-reply .chat-bilingual')!.getAttribute('lang')).toBe('ja');
     button('Show Japanese · 10 lines');
     expect(text()).not.toContain('Show English');
