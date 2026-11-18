@@ -11,8 +11,11 @@ import {
 import type {
   ClaudeRegionCheckRequest,
   DirProbeAnswer,
+  RunnerResourcesAnswer,
   InstallEngine,
   LoginEngine,
+  ReportedEngine,
+  RunnerAccountRemoveSession,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
@@ -29,7 +32,8 @@ import type {
 } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
+import { agentFixesOf } from './attention-fix';
+import { namedRunnerEngines, sanitizeEngineUpdateDismissals, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -39,7 +43,6 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { drainWaitingOf } from '../common/runner-drain-waiting';
 import { postponeUntil } from './self-update-postpone';
-import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -62,6 +65,8 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runningSessionCounts } from './runner-background-holders';
+import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
 import { blockedRunnerRegion, claudeRegionSignInRefusal, regionMachineName, runnerRegionView } from './runner-region';
@@ -112,8 +117,9 @@ export class RunnersService {
     this.deviceLookups.set(userId, recent);
   }
 
-  async listRunners(ownerId: string) {
-    return this.runnerViews({ ownerId });
+  /** `onlyRunner`: that one runner, the list a TERMINAL credential reads (`terminalRunnerOf`). */
+  async listRunners(ownerId: string, onlyRunner?: string) {
+    return this.runnerViews(onlyRunner ? { ownerId, id: onlyRunner } : { ownerId });
   }
 
   /** One of this owner's runners, in exactly the shape the list gives each of them. */
@@ -140,8 +146,10 @@ export class RunnersService {
         status: true,
         maxConcurrent: true,
         version: true,
-        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`.
+        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
+        // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
         ...RUNNER_BEATS,
+        presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -182,6 +190,10 @@ export class RunnersService {
         accountNames: true,
         accountPauses: true,
         defaultRemoved: true,
+        // The engine update warnings dismissed here, each until the next release (migration 0705).
+        engineUpdateDismissals: true,
+        // The sessions Fix with an agent started here, one per warning (migration 0760).
+        attentionFixes: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -193,24 +205,19 @@ export class RunnersService {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
+        codexAccountRemoveSessions: true,
         // Where this machine's Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6), read
         // with the capabilities above: only a runner that declares claude-region/v1 has a region to show.
         region: true,
+        // Whether this is the account's managed runner, which every client labels Orbit Cloud: said on
+        // the row, so a client never has to wait for GET /managed-runner to name it.
+        managedRunner: { select: { id: true } },
       },
     });
     // How many slots each runner is currently using, so the list can show
-    // utilization (e.g. "3 / 16 running") rather than capacity alone.
-    const liveCounts = await this.prisma.session.groupBy({
-      by: ['assignedRunnerId'],
-      where: {
-        assignedRunnerId: { in: runners.map((r) => r.id) },
-        status: { in: ACTIVE_TURN_STATUSES },
-      },
-      _count: { _all: true },
-    });
-    const activeByRunner = new Map(
-      liveCounts.map((c) => [c.assignedRunnerId, c._count._all]),
-    );
+    // utilization (e.g. "3 / 16 running") rather than capacity alone: its sessions in a turn, and
+    // the ones its background jobs hold slots for (runner-background-holders.ts).
+    const activeByRunner = await runningSessionCounts(this.prisma, runners, Date.now());
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();
@@ -222,6 +229,11 @@ export class RunnersService {
     const used = runners.map((runner) => engineHealthWithActiveSessions(usedRunnerEngines(runner), atWork.get(runner.id)));
     const updateTurns = await this.updateTurnsOf(where.ownerId, runners);
     const drainWaiting = await drainWaitingOf(this.prisma, where.ownerId, runners);
+    // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
+    // agents already at work there (attention-fix.ts, the same answer the fix endpoint acts on).
+    const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
+    // The sessions a refused account removal named, by title, for the row that asked.
+    const removalSessions = await accountRemoveSessionsOf(this.prisma, where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -230,6 +242,8 @@ export class RunnersService {
       accountNames,
       accountPauses,
       defaultRemoved,
+      engineUpdateDismissals,
+      attentionFixes,
       installStatus,
       installEngine,
       installCommand,
@@ -239,12 +253,15 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
+      codexAccountRemoveSessions: removalSessionIds,
       selfUpdate,
       presence,
       region,
+      managedRunner,
       ...r
     }, index) => ({
       ...r,
+      managed: !!managedRunner,
       // Its last beat, from either record of it: what every client reads "last seen" from.
       lastHeartbeatAt: runnerLastBeatAt({ lastHeartbeatAt: r.lastHeartbeatAt, presence }),
       // Without the part of a removed Default, as the engines are.
@@ -255,6 +272,9 @@ export class RunnersService {
       // The effective verdict, never the stored one; null without the capability or a decided check.
       region: runnerRegionView({ region, capabilities: r.capabilities }, new Date(now)),
       engines: used[index],
+      // { engine: latest } — each engine's update warning stays hidden while this equals its update.latest.
+      engineUpdateDismissals: sanitizeEngineUpdateDismissals(engineUpdateDismissals),
+      agentFix: agentFixes.get(r.id) ?? null,
       antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
@@ -268,6 +288,8 @@ export class RunnersService {
         codexAccountRemoveAccount,
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
+        codexAccountRemoveSessions: removalSessionIds,
+        sessions: removalSessions.get(r.id),
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
@@ -826,6 +848,7 @@ export class RunnersService {
         codexAccountRemoveAccount: account,
         codexAccountRemoveStatus: 'pending',
         codexAccountRemoveMessage: null,
+        codexAccountRemoveSessions: [],
         codexAccountRemoveAt: new Date(),
       },
     });
@@ -881,6 +904,32 @@ export class RunnersService {
        WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
     if (written === 0) throw new NotFoundException('runner not found');
     return { ok: true };
+  }
+
+  /**
+   * Dismiss this runner's update warning for `engine` until its next release: the engine's current
+   * `update.latest`, as the runner last reported it, goes into its key of
+   * `runner.engine_update_dismissals` in one statement. Clients hide the warning while that equals
+   * the engine's `update.latest`, so a newer release brings it back by itself. Orbit's own record:
+   * the runner need not be online and is not woken, and Orbit keeps retrying the update on it.
+   * Refused when no release is known to dismiss against.
+   */
+  async dismissEngineUpdateWarning(
+    ownerId: string,
+    id: string,
+    engine: ReportedEngine,
+  ): Promise<{ engine: ReportedEngine; latest: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const latest = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.update?.latest;
+    if (!latest) throw new BadRequestException('This engine reports no newer release to dismiss its warning until');
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "engine_update_dismissals" =
+               COALESCE("engine_update_dismissals", '{}'::jsonb) || jsonb_build_object(${engine}::text, ${latest}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, latest };
   }
 
   /**
@@ -1347,6 +1396,16 @@ export class RunnersService {
     return dirProbeAnswerOf(runner, path);
   }
 
+  /** The machine's resources as its presence row keeps them (runner-resources.ts). */
+  async getResources(ownerId: string, id: string): Promise<RunnerResourcesAnswer> {
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId },
+      select: { presence: { select: { resources: true } } },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runnerResourcesAnswerOf(runner.presence?.resources);
+  }
+
   /** Current install-relay state, for the row to poll. */
   async getInstallState(ownerId: string, id: string): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
@@ -1442,14 +1501,53 @@ export function accountRemoveStateOf(r: {
   codexAccountRemoveAccount?: string | null;
   codexAccountRemoveStatus?: string | null;
   codexAccountRemoveMessage?: string | null;
+  codexAccountRemoveSessions?: string[] | null;
+  sessions?: RunnerAccountRemoveSession[];
 }): RunnerAccountRemoveState {
+  // Only a refusal over sessions in the account lists any; every other state leaves the field out.
+  const sessions = r.codexAccountRemoveStatus === 'failed' ? (r.sessions ?? []) : [];
+  // A pending removal that names sessions is waiting on them to move off the account
+  // (RunnerApiController.applyAccountRemoveResult).
+  const moving = r.codexAccountRemoveStatus === 'pending' ? (r.codexAccountRemoveSessions?.length ?? 0) : 0;
   return {
     // A row written before accounts-per-engine meant Codex.
     engine: (r.accountRemoveEngine as LoginEngine) ?? 'codex',
     account: r.codexAccountRemoveStatus ? (r.codexAccountRemoveAccount ?? null) : null,
     status: (r.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
     message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
+    ...(sessions.length > 0 ? { sessions } : {}),
+    ...(moving > 0 ? { moving } : {}),
   };
+}
+
+/**
+ * The sessions each runner's refused account removal named, by runner: only the viewer's own and only
+ * those assigned to that runner, so a report cannot name anyone else's. Read live, so a title renamed
+ * since the refusal reads as it is now; a session deleted since is left out.
+ */
+export async function accountRemoveSessionsOf(
+  db: Pick<PrismaService, 'session'>,
+  ownerId: string,
+  runners: Array<{ id: string; codexAccountRemoveStatus?: string | null; codexAccountRemoveSessions?: string[] | null }>,
+): Promise<Map<string, RunnerAccountRemoveSession[]>> {
+  const out = new Map<string, RunnerAccountRemoveSession[]>();
+  const named = runners.filter((r) => r.codexAccountRemoveStatus === 'failed' && (r.codexAccountRemoveSessions?.length ?? 0) > 0);
+  if (named.length === 0) return out;
+  const rows = await db.session.findMany({
+    where: {
+      ownerId,
+      OR: named.map((r) => ({ assignedRunnerId: r.id, id: { in: r.codexAccountRemoveSessions ?? [] } })),
+    },
+    select: { id: true, title: true, status: true, assignedRunnerId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  for (const row of rows) {
+    if (!row.assignedRunnerId) continue;
+    const list = out.get(row.assignedRunnerId) ?? [];
+    list.push({ id: row.id, title: row.title, status: row.status as RunnerAccountRemoveSession['status'] });
+    out.set(row.assignedRunnerId, list);
+  }
+  return out;
 }
 
 /** Project a runner row onto the browser-facing relay view (no code, ever). */

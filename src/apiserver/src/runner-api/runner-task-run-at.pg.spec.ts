@@ -138,14 +138,32 @@ test('the runner task door stores, clears and moves a scheduled start', { skip, 
   }
 
   /** A runner row for the owner, and the token the real guard finds it by: that row's owner scopes every request. */
-  async function insertRunner(owner: string): Promise<string> {
+  async function insertRunner(owner: string): Promise<{ id: string; token: string }> {
+    const id = randomUUID();
     const token = `runner-token-${randomUUID()}`;
     await sql.query(
       `INSERT INTO "runner"("id","name","owner_id","token_hash","status","last_heartbeat_at","capabilities")
        VALUES ($1,'runner task run_at door',$2,$3,'ONLINE',clock_timestamp(),'{}'::text[])`,
-      [randomUUID(), owner, sha256(token)],
+      [id, owner, sha256(token)],
     );
-    return token;
+    return { id, token };
+  }
+
+  /**
+   * The acting conversation. The runner door is carded by caller now (`task-write-approval.ts`), so
+   * every create here names a session this runner hosts and carries its answered card; what this
+   * file is about — where runAt is stored — is the same write it always was.
+   */
+  async function insertSession(owner: string, runnerId: string): Promise<string> {
+    const id = randomUUID();
+    await prisma.session.create({
+      data: {
+        id, title: 'scheduling through the runner door', prompt: 'scheduling through the runner door',
+        ownerId: owner, creatorId: owner, assignedRunnerId: runnerId, status: 'AWAITING_INPUT',
+        startedAt: new Date(), runtimeSessionId: `runtime-${id}`, provider: 'claude',
+      },
+    });
+    return id;
   }
 
   /** The one task this owner holds under that title. Titles carry a fresh uuid, so one is all there can be. */
@@ -174,10 +192,13 @@ test('the runner task door stores, clears and moves a scheduled start', { skip, 
 
   // ── the door, addressed the way the runner addresses it ────────────────────────────────────────
 
-  async function send(token: string, method: 'POST' | 'PATCH', route: string, body: Record<string, unknown>): Promise<Reply> {
+  async function send(token: string, method: 'POST' | 'PATCH', route: string, body: Record<string, unknown>, session = ''): Promise<Reply> {
     const response = await fetch(`${base}/api/runner/${route}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      headers: {
+        authorization: `Bearer ${token}`, 'content-type': 'application/json',
+        ...(session ? { 'x-orbit-session-id': session } : {}),
+      },
       body: JSON.stringify(body),
     });
     const text = await response.text();
@@ -190,15 +211,27 @@ test('the runner task door stores, clears and moves a scheduled start', { skip, 
     return { status: response.status, body: parsed, text };
   }
 
+  /** The answered card the runner files before a write on that session. */
+  async function cardFor(toolName: 'orbit_task_create' | 'orbit_task_batch', input: Record<string, unknown>): Promise<void> {
+    await prisma.approval.create({
+      data: { sessionId, toolName, input: input as never, status: 'ALLOWED', decidedById: owner, decidedAt: new Date() },
+    });
+  }
+
   const owner = await insertOwner();
-  const token = await insertRunner(owner);
+  const runner = await insertRunner(owner);
+  const token = runner.token;
+  const sessionId = await insertSession(owner, runner.id);
+  const actingSession = uuidToBase62(sessionId);
   let scheduled = '';
 
   // ═══ (1) create ═══════════════════════════════════════════════════════════════════════════════
 
   await t.test('(1) POST tasks with runAt stores that instant', async () => {
     const title = `scheduled through the runner door ${randomUUID()}`;
-    const created = await send(token, 'POST', 'tasks', { title, runAt: FIRST, ...EXECUTABLE });
+    const body = { title, runAt: FIRST, ...EXECUTABLE };
+    await cardFor('orbit_task_create', body);
+    const created = await send(token, 'POST', 'tasks', body, actingSession);
     assert.equal(created.status, 201, created.text);
     scheduled = await taskIdByTitle(owner, title);
     assert.equal(await runAtOf(scheduled), FIRST);
@@ -228,12 +261,14 @@ test('the runner task door stores, clears and moves a scheduled start', { skip, 
   await t.test("(4) POST tasks/batch-create stores each item's own runAt", async () => {
     const withSchedule = `batch item with a schedule ${randomUUID()}`;
     const withoutSchedule = `batch item without one ${randomUUID()}`;
-    const created = await send(token, 'POST', 'tasks/batch-create', {
+    const body = {
       tasks: [
         { title: withSchedule, runAt: FIRST, ...EXECUTABLE },
         { title: withoutSchedule, ...EXECUTABLE },
       ],
-    });
+    };
+    await cardFor('orbit_task_batch', body);
+    const created = await send(token, 'POST', 'tasks/batch-create', body, actingSession);
     assert.equal(created.status, 201, created.text);
     assert.equal(await runAtOf(await taskIdByTitle(owner, withSchedule)), FIRST);
     assert.equal(await runAtOf(await taskIdByTitle(owner, withoutSchedule)), null);

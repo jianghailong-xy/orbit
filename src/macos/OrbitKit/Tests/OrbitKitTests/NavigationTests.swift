@@ -97,9 +97,10 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.taskDetail(taskID: "t1")], "and so does Tasks")
     }
 
-    /// The drawer row a screen belongs to. The Agents stack is the workspace's until a project's
-    /// sessions page is on it — then it is the project's, with whatever was pushed over that page —
-    /// and every other section's stack is the section's own, at any depth.
+    /// The drawer row a screen belongs to. The Agents stack is the workspace's until the drawer's
+    /// project row puts a project's sessions page on it — then it is the project's, with whatever was
+    /// pushed over that page — and every other section's stack is the section's own, at any depth.
+    /// A sessions page a session list's coordinator row opened leaves the workspace's row selected.
     func testTheDrawerDestinationIsReadOffTheStack() {
         let address = SessionProjectAddress(projectID: "p1", agentID: "a1", view: .open)
         let folder = SessionFolderAddress(folderID: "f1", agentID: "a1", view: .open)
@@ -114,6 +115,10 @@ final class NavigationTests: XCTestCase {
 
         nav.popToRoot()
         nav.enterProjectSessions(address)
+        XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
+                       "a session list's coordinator row leaves the workspace's row selected")
+
+        nav.enterProjectSessions(address, asDestination: true)
         XCTAssertEqual(nav.drawerDestination(agentID: "a1"), .project(projectID: "p1"))
         XCTAssertNotEqual(nav.drawerDestination(agentID: "a1"), .workspace(agentID: "a1"),
                           "the workspace row is not the selected one on a project's page")
@@ -300,8 +305,8 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [], "the form is the bottom of the stack")
         XCTAssertTrue(nav.sectionAtRoot, "so the drawer's edge gesture is free on it")
 
-        nav.push(.settingsPage(.machinesAndModels))
-        XCTAssertEqual(nav.path, [.settingsPage(.machinesAndModels)], "the Machines & models page is the second layer")
+        nav.push(.settingsPage(.machines))
+        XCTAssertEqual(nav.path, [.settingsPage(.machines)], "the Machines page is the second layer")
         XCTAssertFalse(nav.sectionAtRoot, "a pushed page owns that edge for the back-swipe")
 
         nav.push(.runnerDetail(runnerID: "r1"))
@@ -312,7 +317,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertNil(nav.stacks[.runners], "Settings' frames are Settings'")
 
         nav.pop()
-        XCTAssertEqual(nav.path, [.settingsPage(.machinesAndModels)], "the first pop lands on the Machines & models page")
+        XCTAssertEqual(nav.path, [.settingsPage(.machines)], "the first pop lands on the Machines page")
         XCTAssertFalse(nav.sectionAtRoot, "which is one deep, not the root")
 
         nav.pop()
@@ -330,9 +335,9 @@ final class NavigationTests: XCTestCase {
         nav.push(.console(sessionID: "s1", origin: .list))
         nav.openSettings()
 
-        nav.push(.settingsPage(.machinesAndModels))
+        nav.push(.settingsPage(.machines))
         nav.push(.runnerDetail(runnerID: "r1"))
-        XCTAssertEqual(nav.settingsPath, [.settingsPage(.machinesAndModels), .runnerDetail(runnerID: "r1")],
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.machines), .runnerDetail(runnerID: "r1")],
                        "the Machines & models page and a machine's record ride Settings' stack")
         XCTAssertEqual(nav.section, .agents, "Settings is over the section, not instead of it")
         XCTAssertEqual(nav.path, [.console(sessionID: "s1", origin: .list)],
@@ -658,10 +663,10 @@ final class NavigationTests: XCTestCase {
     func testARunnersOwnPagesRideSettingsStackWhileItIsUp() {
         var nav = NavState(section: .agents)
         nav.openSettings()
-        nav.push(.settingsPage(.machinesAndModels))
+        nav.push(.settingsPage(.machines))
         nav.push(.runnerDetail(runnerID: "r1"))
         nav.push(.runnerEngine(runnerID: "r1", engine: "claude"))
-        XCTAssertEqual(nav.settingsPath, [.settingsPage(.machinesAndModels), .runnerDetail(runnerID: "r1"),
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.machines), .runnerDetail(runnerID: "r1"),
                                           .runnerEngine(runnerID: "r1", engine: "claude")])
         XCTAssertNil(nav.stacks[.runners], "the Machines & models section's stack is not Settings'")
         XCTAssertNil(nav.stacks[.agents], "nor is the section under the sheet")
@@ -673,13 +678,14 @@ final class NavigationTests: XCTestCase {
     func testMachinesAndModelsOpensAnEnginesPageOverItsMachine() {
         var phone = NavState(section: .agents)
         phone.openSettings()
-        phone.push(.settingsPage(.machinesAndModels))
+        phone.push(.settingsPage(.machines))
         phone.push(.runnerEngine(runnerID: "r1", engine: "codex"))
-        XCTAssertEqual(phone.settingsPath, [.settingsPage(.machinesAndModels), .runnerEngine(runnerID: "r1", engine: "codex")])
+        XCTAssertEqual(phone.settingsPath, [.settingsPage(.machines), .runnerEngine(runnerID: "r1", engine: "codex")])
         // Back, as the sheet's `NavigationStack` writes it: onto Settings' own stack.
         phone.settingsPath.removeLast()
+        phone.settingsPath = [.settingsPage(.providers)]
         phone.push(.accountPool(poolID: "p1"))
-        XCTAssertEqual(phone.settingsPath, [.settingsPage(.machinesAndModels), .accountPool(poolID: "p1")])
+        XCTAssertEqual(phone.settingsPath, [.settingsPage(.providers), .accountPool(poolID: "p1")])
 
         // What `RunnersListView` does in the three-column shell, and `AppModel.openRunnerEngine` after
         // its route: the record replaces the pane's page, and the engine's page goes over it.

@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { ManagedRunnerStatus } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, type ManagedRunnerStatus } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -54,7 +54,7 @@ const state = (name: string) => fixture.states.find((c) => c.name === name)!.sta
 const capability = (name: string) => fixture.capabilities.find((c) => c.name === name)!.body;
 
 const MANAGED_RUNNER = state('sleeping').runnerId!;
-const MANAGED_WORKSPACE = state('sleeping').workspaceId!;
+const MANAGED_WORKSPACE = '33zx0JhRhJo8rd25d3qAT';
 const OWN_RUNNER = encodeId('0195c0de-0000-7000-8000-0000000000b1');
 const OWN_WORKSPACE = encodeId('0195c0de-0000-7000-8000-0000000000b2');
 const NEW_SESSION = encodeId('0195c0de-0000-7000-8000-0000000000b3');
@@ -243,6 +243,8 @@ const composer = () => mounted().querySelector<HTMLTextAreaElement>('.workspace-
 const sendButton = () => mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]')!;
 const notice = () => mounted().querySelector<HTMLElement>('.workspace-composer .managed-runner-notice');
 const noticeTitle = () => notice()?.querySelector('.managed-runner-notice-title')?.textContent ?? null;
+/** Asleep is one calm line above the composer, the shared words, instead of the notice (owner, 2026-11-14). */
+const asleepLine = () => mounted().querySelector('.managed-runner-composer-line')?.textContent ?? null;
 
 /** Open the New Session draft of a workspace in the console, the way its route does (or `entry`). */
 async function open(workspaceId: string, entry = `/workspaces/${workspaceId}/new`): Promise<void> {
@@ -283,7 +285,8 @@ describe('a managed workspace in the console', () => {
       lastProvider: 'claude',
     };
     await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     // Not "Runner offline", no registration anywhere, and the engine it was ready with is offered.
     expect(composer().placeholder).toBe('Send this workspace a task…');
     expect(mounted().textContent?.toLowerCase()).not.toContain('register');
@@ -310,7 +313,8 @@ describe('a managed workspace in the console', () => {
       managedOnline: true,
     };
     await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     const reads = statusReads;
     await type('Wake up');
     await waitForUi(() => expect(sendButton().disabled).toBe(false));
@@ -320,16 +324,15 @@ describe('a managed workspace in the console', () => {
     await waitForUi(() => expect(noticeTitle()).toBe('Waking your managed runner'));
   });
 
-  it('before it was ever ready: no default engine for a first session, and nothing to send', async () => {
+  it('before it was ever ready: an existing workspace offers its engine and lets the server queue the session', async () => {
     server = { capabilities: capability('switched on'), statuses: [state('preparing: starting')], lastProvider: 'claude' };
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Preparing your managed runner'));
-    // Neither the engine hero nor the composer's model control: no default that would be refused.
-    expect(mounted().querySelector('.np-hero')).toBeNull();
-    expect(mounted().querySelector('.composer-model-chip')).toBeNull();
-    expect(composer().placeholder).toBe('Preparing your managed runner');
+    expect(mounted().querySelector('.np-hero')).toBeTruthy();
+    expect(mounted().querySelector('.composer-model-chip')).toBeTruthy();
+    expect(composer().placeholder).toBe('Send this workspace a task…');
     await type('Hello');
-    expect(sendButton().disabled).toBe(true);
+    expect(sendButton().disabled).toBe(false);
   });
 
   it('waiting for capacity with the owner\'s key named: the first session is offered on it and sent with nothing named', async () => {
@@ -358,7 +361,7 @@ describe('a managed workspace in the console', () => {
     expect(posted[0].body.model).toBe('deepseek-v4-flash');
   });
 
-  it('the owner adds a key while it waits: the draft opens and follows the workspace list read again', async () => {
+  it('the owner adds a key while it waits: the ordinary workspace follows the server provider seed', async () => {
     server = {
       capabilities: capability('switched on'),
       statuses: [state('waiting for capacity before the first start')],
@@ -367,7 +370,7 @@ describe('a managed workspace in the console', () => {
     };
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Waiting for capacity'));
-    expect(mounted().querySelector('.np-hero')).toBeNull();
+    expect(mounted().querySelector('.np-hero')).toBeTruthy();
     const readsBefore = workspaceReads;
 
     // The key is added: the server now names it for a first session, and derives it as the workspace's default.
@@ -389,7 +392,7 @@ describe('a managed workspace in the console', () => {
     expect(posted[0].body.model).toBe('deepseek-v4-flash');
   });
 
-  it('started without a signed-in runtime: says so, points at its machine’s page, and still offers no engine', async () => {
+  it('started without a signed-in runtime: keeps its notice and existing workspace engine', async () => {
     server = {
       capabilities: capability('switched on'),
       statuses: [state('model unavailable: started without a signed-in runtime')],
@@ -399,10 +402,10 @@ describe('a managed workspace in the console', () => {
     await waitForUi(() => expect(noticeTitle()).toBe('Your managed runner needs a model'));
     const link = [...notice()!.querySelectorAll('a')].find((a) => a.textContent === 'Open Machines & models');
     expect(link?.getAttribute('href')).toBe(`/settings/machines/${encodeId(MANAGED_RUNNER)}`);
-    expect(mounted().querySelector('.np-hero')).toBeNull();
-    expect(mounted().querySelector('.composer-model-chip')).toBeNull();
+    expect(mounted().querySelector('.np-hero')).toBeTruthy();
+    expect(mounted().querySelector('.composer-model-chip')).toBeTruthy();
     await type('Hello');
-    expect(sendButton().disabled).toBe(true);
+    expect(sendButton().disabled).toBe(false);
   });
 
   it('failed: Retry calls the server’s retry with the revision it read, and the console follows the answer', async () => {
@@ -425,7 +428,8 @@ describe('a managed workspace in the console', () => {
       lastProvider: 'claude',
     };
     await open(MANAGED_WORKSPACE, `/sessions/${ENDED_SESSION}`);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     await waitForUi(() => expect(mounted().textContent).toContain('Send a message to resume this session.'));
     expect(mounted().textContent).not.toContain('cannot accept messages');
 
@@ -482,69 +486,12 @@ describe('what stays as it was', () => {
  * A new account's first draft in its managed default workspace wears the welcome card
  * (docs/mocks/new-user-onboarding, P1 and P2) in place of the runner's notice and the engine hero.
  */
-describe('a new account’s managed workspace', () => {
-  const card = () => mounted().querySelector<HTMLElement>('.welcome-card');
-  const step = (name: string) => card()?.querySelector<HTMLElement>(`[data-step="${name}"]`) ?? null;
-  const text = (element: Element | null | undefined) => element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-
-  it('preparing: greets, shows the runner coming up in step 1, and keeps step 2 for once it is up', async () => {
-    server = {
-      capabilities: capability('switched on'),
-      statuses: [state('preparing: starting')],
-      lastProvider: 'claude',
-      managedAuth: 'no',
-      history: [],
-    };
-    await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(text(card()?.querySelector('.msc-title'))).toBe('Welcome to Orbit, Reader'));
-    expect(text(step('computer')?.querySelector('.managed-runner-notice-title'))).toBe('Preparing your managed runner');
-    expect(step('computer')?.querySelector('a')?.getAttribute('href')).toBe('/runners/register');
-    expect(text(step('model'))).toContain('Opens once the computer is up');
-    expect(card()!.querySelectorAll('.welcome-example')).toHaveLength(3);
-    expect(text(card()!.querySelector('.msc-foot'))).toBe('Your first message can go once steps 1 and 2 are done.');
-    // The card stands for the notice and the hero: neither is drawn twice.
-    expect(notice()).toBeNull();
-    expect(mounted().querySelector('.np-hero')).toBeNull();
-    expect(composer().placeholder).toBe('Describe a task for the agent…');
-  });
-
-  it('up without a model: step 1 is done and step 2 signs Claude Code in on it; an example fills the composer', async () => {
-    server = {
-      capabilities: capability('switched on'),
-      statuses: [state('model unavailable: started without a signed-in runtime')],
-      lastProvider: 'claude',
-      managedOnline: true,
-      managedAuth: 'no',
-      history: [],
-    };
-    await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(step('computer')?.querySelector('.msc-num.done')).toBeTruthy());
-    expect(text(step('computer'))).toContain('Managed runner is ready');
-    expect(step('model')?.querySelector('.rsi')).toBeTruthy();
-    const example = card()!.querySelectorAll<HTMLButtonElement>('.welcome-example')[0];
-    await act(async () => example.click());
-    await waitForUi(() => expect(composer().value).toBe('Build a one-page site that shows today’s weather for a city'));
-  });
-
-  it('ready and signed in: both steps are done lines, and the foot says a message starts at once', async () => {
-    server = {
-      capabilities: capability('switched on'),
-      statuses: [state('available')],
-      lastProvider: 'claude',
-      managedOnline: true,
-      history: [],
-    };
-    await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(card()).toBeTruthy());
-    expect(step('computer')?.querySelector('.msc-num.done')).toBeTruthy();
-    expect(step('model')?.querySelector('.msc-num.done')).toBeTruthy();
-    expect(text(card()!.querySelector('.msc-foot'))).toBe('All set. Send it and the agent starts right away.');
-  });
-
-  it('an account that has had a session keeps the notice and the hero', async () => {
-    server = { capabilities: capability('switched on'), statuses: [state('preparing: starting')], lastProvider: 'claude' };
+describe('an ordinary workspace on the managed runner', () => {
+  it('keeps the session hero for a new account, without the removed welcome draft', async () => {
+    server = { capabilities: capability('switched on'), statuses: [state('preparing: starting')], lastProvider: 'claude', history: [] };
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Preparing your managed runner'));
-    expect(card()).toBeNull();
+    expect(mounted().querySelector('.welcome-card')).toBeNull();
+    expect(mounted().querySelector('.np-hero')).toBeTruthy();
   });
 });

@@ -43,7 +43,9 @@ import { readWikiFromWorkspace } from '../lib/wikiSpace';
 import {
   WIKI_CREATE,
   WIKI_CREATE_NOTE,
+  WIKI_HAS_A_WIKI,
   WIKI_WORKSPACE_OFFLINE,
+  wikiCreateOffered,
   wikiCreateRepositoryNote,
   wikiRepositoryGroups,
   wikiRepositoryName,
@@ -59,9 +61,10 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { NumberInput } from './ui/NumberInput';
 import { Select, type SelectOptions } from './ui/Select';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /** Ids are compared in their public spelling: a space's settings keep a workspace's id as it was stored. */
-const sameId = (a: string | null, b: string | null): boolean => a !== null && b !== null && encodeId(a) === encodeId(b);
+export const sameId = (a: string | null, b: string | null): boolean => a !== null && b !== null && encodeId(a) === encodeId(b);
 
 /**
  * Every workspace as the two forms offer it: its name and runner, its repository, and whether that runner is
@@ -70,6 +73,7 @@ const sameId = (a: string | null, b: string | null): boolean => a !== null && b 
 export function useWikiWorkspaceChoices(): { choices: WikiWorkspaceChoice[]; loading: boolean; read: boolean } {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
+  const managedRunnerId = useManagedRunnerId();
   const choices = useMemo(() => {
     const rows = (workspaces.data ?? []) as Array<{
       id: string;
@@ -82,13 +86,13 @@ export function useWikiWorkspaceChoices(): { choices: WikiWorkspaceChoice[]; loa
       const runner = row.runner?.id ? machines.find((machine) => sameId(machine.id, row.runner!.id!)) : undefined;
       return {
         id: row.id,
-        label: wikiWorkspaceLabel(row),
+        label: wikiWorkspaceLabel(row, managedRunnerId),
         repository: wikiRepositoryName(row.repoUrl),
         repoUrl: row.repoUrl ?? null,
         online: runner ? runner.online === true : true,
       };
     });
-  }, [workspaces.data, runners.data]);
+  }, [workspaces.data, runners.data, managedRunnerId]);
   return { choices, loading: workspaces.isLoading, read: workspaces.isSuccess };
 }
 
@@ -154,17 +158,24 @@ export function WikiSetUpDialog({ space, onClose }: { space: WikiSpaceRow; onClo
  * workspace chooses the repository, so there is no second field; a workspace on no repository has nothing to
  * describe and is not offered. The server makes the space, turns maintenance on and asks for the plan's first
  * draft in the one request (`POST /wiki/spaces`), which is what the home then shows.
+ *
+ * A REPOSITORY HAS ONE WIKI (docs/wiki-explicit-creation-design.md §3.4): one with a wiki in use stays in the list,
+ * greyed as a group and tagged Has a wiki, and cannot be picked; a wiki made meanwhile elsewhere is the server's 409
+ * WIKI_SPACE_EXISTS, whose message the form shows. `workspaceId` opens it on that workspace (a WIKI_CREATE card's
+ * Change settings…) when it can be picked.
  */
-export function WikiCreateDialog({ onClose }: { onClose: () => void }) {
+export function WikiCreateDialog({ onClose, workspaceId = null }: { onClose: () => void; workspaceId?: string | null }) {
   const navigate = useNavigate();
   const client = useQueryClient();
   const { choices, loading } = useWikiWorkspaceChoices();
+  const spaces = useQuery(wikiSpacesQuery());
   const write = useWikiWrite(createWikiSpace);
   const [picked, setPicked] = useState<string | null>(null);
 
-  const groups = wikiRepositoryGroups(choices);
-  const offered = groups.flatMap((group) => group.choices);
-  const chosen = picked ?? wikiWorkspaceDefault(offered, { current: null, from: fromWorkspace(offered) });
+  const groups = wikiRepositoryGroups(choices, (spaces.data ?? []).map((space) => space.repoUrlNorm));
+  const offered = wikiCreateOffered(groups);
+  const asked = offered.find((row) => sameId(row.id, workspaceId))?.id ?? null;
+  const chosen = picked ?? wikiWorkspaceDefault(offered, { current: asked, from: fromWorkspace(offered) });
   const choice = offered.find((row) => row.id === chosen) ?? null;
 
   return (
@@ -173,12 +184,16 @@ export function WikiCreateDialog({ onClose }: { onClose: () => void }) {
       note={WIKI_CREATE_NOTE}
       submit={WIKI_CREATE}
       maintenance={wikiMaintenanceSettings(undefined)}
-      options={groups.map((group) => ({ label: group.repository, options: group.choices.map(optionOf) }))}
-      offline={offered}
+      options={groups.map((group) => ({
+        label: group.repository,
+        ...(group.hasWiki ? { note: WIKI_HAS_A_WIKI } : {}),
+        options: group.choices.map((row) => ({ ...optionOf(row), disabled: group.hasWiki })),
+      }))}
+      offline={groups.flatMap((group) => group.choices)}
       workspaceId={chosen}
       onWorkspace={setPicked}
       workspaceNote={choice?.repository ? wikiCreateRepositoryNote(choice.repository) : WIKI_REPO_FROM_NOTE}
-      loading={loading}
+      loading={loading || spaces.isLoading}
       onClose={onClose}
       onSubmit={async (maintenance) => {
         const space = await write.mutateAsync({

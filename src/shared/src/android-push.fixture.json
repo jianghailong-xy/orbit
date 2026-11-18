@@ -195,6 +195,90 @@
         "sentAt": "2026-11-12T13:00:00.000Z",
         "payload": "{\"kind\":\"project-orphan\",\"projectID\":\"019a0000-0000-7000-8000-000000000004\",\"title\":\"Session translation: nobody has this\",\"body\":\"Task “task D” has a running session. Nobody can move it now.\",\"threadId\":\"019a0000-0000-7000-8000-000000000004\"}"
       }
+    },
+    {
+      "name": "terminal-login",
+      "pushType": "alert",
+      "collapseId": "terminal-login-019a0000-0000-7000-8000-00000000000b",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Approve a terminal?",
+            "body": "Terminal on dev-laptop · code 7KQ-4MZ"
+          },
+          "sound": "default",
+          "thread-id": "terminal-login-019a0000-0000-7000-8000-00000000000b"
+        },
+        "kind": "terminal-login",
+        "runnerID": "019a0000-0000-7000-8000-00000000000c",
+        "terminalLoginID": "019a0000-0000-7000-8000-00000000000b"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000009",
+        "notificationKey": "terminal-login-019a0000-0000-7000-8000-00000000000b",
+        "sentAt": "2026-11-12T10:00:00.000Z",
+        "payload": "{\"kind\":\"terminal-login\",\"runnerID\":\"019a0000-0000-7000-8000-00000000000c\",\"terminalLoginID\":\"019a0000-0000-7000-8000-00000000000b\",\"title\":\"Approve a terminal?\",\"body\":\"Terminal on dev-laptop · code 7KQ-4MZ\",\"threadId\":\"terminal-login-019a0000-0000-7000-8000-00000000000b\"}"
+      }
+    },
+    {
+      "name": "schedule-failed",
+      "pushType": "alert",
+      "collapseId": "schedule-failed-019a0000-0000-7000-8000-000000000011",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Nightly pg spec sweep failed 3 runs in a row",
+            "body": "The last run ended without a report. It keeps running until you pause it."
+          },
+          "sound": "default",
+          "thread-id": "schedule-019a0000-0000-7000-8000-000000000010"
+        },
+        "kind": "schedule",
+        "scheduleKind": "FAILED",
+        "scheduleID": "019a0000-0000-7000-8000-000000000010",
+        "sessionID": "019a0000-0000-7000-8000-000000000012",
+        "ownerRequestID": "019a0000-0000-7000-8000-000000000013"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-00000000000a",
+        "notificationKey": "schedule-failed-019a0000-0000-7000-8000-000000000011",
+        "sentAt": "2026-11-14T02:41:00.000Z",
+        "payload": "{\"kind\":\"schedule\",\"scheduleKind\":\"FAILED\",\"scheduleID\":\"019a0000-0000-7000-8000-000000000010\",\"sessionID\":\"019a0000-0000-7000-8000-000000000012\",\"ownerRequestID\":\"019a0000-0000-7000-8000-000000000013\",\"title\":\"Nightly pg spec sweep failed 3 runs in a row\",\"body\":\"The last run ended without a report. It keeps running until you pause it.\",\"threadId\":\"schedule-019a0000-0000-7000-8000-000000000010\"}"
+      }
+    },
+    {
+      "name": "schedule-held",
+      "pushType": "alert",
+      "collapseId": "schedule-held-019a0000-0000-7000-8000-000000000014",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Weekly dependency audit is held",
+            "body": "It could not start on Monday 09:00: the agent \"auditor\" in workspace web is disabled. Nothing runs until it is enabled and you resume."
+          },
+          "sound": "default",
+          "thread-id": "schedule-019a0000-0000-7000-8000-000000000010"
+        },
+        "kind": "schedule",
+        "scheduleKind": "HELD",
+        "scheduleID": "019a0000-0000-7000-8000-000000000010",
+        "ownerRequestID": "019a0000-0000-7000-8000-000000000015"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-00000000000b",
+        "notificationKey": "schedule-held-019a0000-0000-7000-8000-000000000014",
+        "sentAt": "2026-11-14T02:41:00.000Z",
+        "payload": "{\"kind\":\"schedule\",\"scheduleKind\":\"HELD\",\"scheduleID\":\"019a0000-0000-7000-8000-000000000010\",\"ownerRequestID\":\"019a0000-0000-7000-8000-000000000015\",\"title\":\"Weekly dependency audit is held\",\"body\":\"It could not start on Monday 09:00: the agent \\\"auditor\\\" in workspace web is disabled. Nothing runs until it is enabled and you resume.\",\"threadId\":\"schedule-019a0000-0000-7000-8000-000000000010\"}"
+      }
     }
   ]
 }

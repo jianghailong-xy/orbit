@@ -295,10 +295,16 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 		}
 	}
 	if orbitExe != "" {
+		env := map[string]string{}
+		if runID := strings.TrimSpace(agent.Env[envSubagentRunID]); runID != "" {
+			// A SubAgent's `orbit mcp` offers no delegate. agy hands its own environment on too; named here so
+			// the server gets it whatever agy passes.
+			env[envSubagentRunID] = runID
+		}
 		servers["orbit"] = map[string]interface{}{
 			"command": orbitExe,
 			"args":    []string{"mcp"},
-			"env":     map[string]string{},
+			"env":     env,
 		}
 	}
 	return servers
@@ -311,7 +317,7 @@ func antigravityMCPServers(agent AgentExecConfig, orbitExe string) map[string]in
 func antigravityInstructions(job *ClaimedSession, orbitExe string) string {
 	text := strings.Join(nonEmptyStrings(
 		job.Agent.SystemPrompt,
-		withOrbitCLIInstructions(job.appendSystemPrompt(), orbitExe, job.insideRecordedWork(), job.watchesOn()),
+		withOrbitCLIInstructions(job.appendSystemPrompt(), orbitExe, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)),
 	), "\n\n")
 	// agy reaches an MCP tool through its generic call_mcp_tool rather than by the tool's own name.
 	return strings.Replace(text, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server (call_mcp_tool with ServerName \"orbit\")", 1)

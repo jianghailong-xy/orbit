@@ -9,6 +9,8 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { workspaceCloneReason } from '../common/workspace-clone-gate';
+import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -51,6 +53,7 @@ import {
   withTransactionRetry,
   type TransactionRetryOptions,
 } from '../common/transaction-retry';
+import { codedRefusal } from '../common/refusal-recovery';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabledSql } from '../common/model-routing-switch';
 import type { AuthCredential } from '../common/current-user.decorator';
@@ -81,7 +84,8 @@ import {
   recordTaskFailure,
   sessionHasEnded,
 } from '../projects/project-open-item';
-import { branchName } from '../projects/project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, branchName } from '../projects/project-criterion-landing';
+import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
   cancelledProjectOf,
@@ -105,10 +109,30 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FilesService } from '../files/files.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ConditionsService, type ConditionFiring } from '../conditions/conditions.service';
+import {
+  START_WHEN_VIEW_SELECT,
+  TASK_START_WHEN_AND_RUN_AT,
+  assertStartWhenShape,
+  conditionStartedBlock,
+  endStartWhen,
+  startWhenCardLines,
+  startWhenFiredSql,
+  startWhenPermits,
+  startWhenPermitsSql,
+  startWhenView,
+  writeStartWhen,
+} from './task-start-when';
 import { ControlPlaneLeader } from '../realtime/control-plane-leader';
 import { assertMayEndWorkingRuns } from '../sessions/session-reach';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { isClaudeRegionRefused, isEngineSignedOut } from '../sessions/engine-signin-preflight';
+import {
+  ENGINE_LABELS,
+  isClaudeRegionRefused,
+  isEngineSignedOut,
+  signedOutEngineRefusal,
+} from '../sessions/engine-signin-preflight';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { withSessionState } from '../sessions/session-state';
 import {
   readTaskWorkCarriers,
@@ -232,7 +256,11 @@ export {
   QUOTA_BLIND_RETRY_BACKOFF_MS,
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
-import { clearDispatchRefusal } from './task-dispatch-refusal';
+import {
+  clearDispatchRefusal,
+  FORK_REFUSAL_STANDS_SQL,
+  recordForkDispatchRefusal,
+} from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
@@ -359,12 +387,19 @@ import {
   verifierWriteFromRunRefusalBody,
   verifiersNamedBy,
 } from './verifier-write-authority';
+import { assertSessionTaskWriteHasCard, type SessionTaskWrite } from './task-write-approval';
 import {
   normaliseCodelessReason,
   readTaskCommitEvidence,
   taskCodelessHasCommitsBody,
   taskCodelessReasonRequiredBody,
 } from './task-codeless';
+import {
+  assertForkCallerOnRunner,
+  assertForkPlacement,
+  resolveTaskFork,
+  type TaskForkColumns,
+} from './task-fork';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -500,7 +535,8 @@ type DependencyCrossings = {
  */
 type IdempotentTaskWrite = {
   operation: IdempotentTaskOperation;
-  sessionId: string;
+  /** Null only for a caller-keyed create made with no session: a person's own, keyed to the account. */
+  sessionId: string | null;
   turnId: string;
   title: string;
   description?: string | null;
@@ -512,9 +548,40 @@ type IdempotentTaskWrite = {
   completionCriterionOverrideReason?: string | null;
   /** Optional concrete fix link; omitted keeps pre-link idempotency rows replayable. */
   fixesOpenItemId?: string | null;
+  /**
+   * The key is the caller's (`callerKeyTurnSlot`), not the turn's. Its preimage is then the session
+   * and the key alone, and the title and description are COMPARED on a replay rather than hashed: the
+   * same key with a changed title must be refused as a different write, not filed as a new task under
+   * a key that happens to hash differently.
+   */
+  callerKeyed?: boolean;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
+
+/**
+ * The turn slot of a caller-keyed create (docs/orbit-agent-contract.md §5.2, gap G5).
+ *
+ * A caller's `idempotencyKey` takes the place of the turn in the key preimage, which is what makes a
+ * retry in a LATER turn — after a timeout, a dropped answer, a restart — answer from the first send
+ * instead of writing again. The account is in the slot so two tenants' keys can never meet on the
+ * table-wide unique index; the session is already in the preimage beside it, so a key is the calling
+ * session's (the account's, for a person's create with no session). A batch item is keyed by the
+ * batch's key and its position. The prefix cannot collide with a turn id, which is a uuid.
+ */
+export function callerKeyTurnSlot(ownerId: string, key: string, index?: number): string {
+  return index === undefined ? `caller:${ownerId}:${key}` : `caller:${ownerId}:${key}#${index}`;
+}
+
+/** A caller's idempotency key as it is matched: trimmed and NFC-normalised; blank is refused. */
+export function normaliseCallerIdempotencyKey(raw: string | undefined | null): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const key = String(raw).trim().normalize('NFC');
+  if (!key || key.length > 200) {
+    throw new BadRequestException('idempotencyKey must contain 1 to 200 characters');
+  }
+  return key;
+}
 
 /**
  * The operation's byte in the key preimage — FROZEN, and not the same string as the descriptor.
@@ -1110,6 +1177,10 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   -- ...and so is a task filed under a cancelled project: its owner stopped pursuing the goal the
   -- task is for. Read off the project row, which outlives every task filed under it (see
   -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
@@ -1138,6 +1209,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
   -- task that predates the column is.
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- ...and so is a startWhen that has not fired (docs/condition-triggers-design.md §5.2): a peer of run_at, the
+  -- same veto. No startWhen permits, which is every task without one.
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   -- The auto-run sweep is for tasks that have prerequisites AT ALL: it is the "a dependency just
   -- completed, start what it released" pass, not a general starter. So it anchors on the task
   -- HAVING an edge, and the satisfaction of those edges is the clause below.
@@ -1226,9 +1300,15 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND (t.run_at IS NULL OR t.run_at <= now())
+  -- A startWhen that has not fired is the same veto as a run_at still to come (task-start-when.ts).
+  AND ${Prisma.raw(startWhenPermitsSql('t'))}
   AND NOT EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
   AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
@@ -1365,10 +1445,19 @@ type AutoRunRetryDecision =
  * reach execute() would log one rejection per task per minute for as long as the condition lasts.
  */
 const SCHEDULED_DUE_SQL = Prisma.sql`
-  t.run_at IS NOT NULL
-  AND t.run_at <= now()
+  -- Due: its time has come, or its startWhen condition has fired (docs/condition-triggers-design.md §5.2). A task
+  -- has at most one of the two (task_run_at_or_start_when_chk). Both are retained, not consumed, by everything
+  -- below: the start that keeps one clears it.
+  (
+    (t.run_at IS NOT NULL AND t.run_at <= now())
+    OR (t.start_when_condition_id IS NOT NULL AND ${Prisma.raw(startWhenFiredSql('t'))})
+  )
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
+  -- ...and so is a forked task whose start was refused on facts that still hold: a code binding on
+  -- its project, or its workspace on another machine (recordForkDispatchRefusal). Offering it again
+  -- before one of them changes is the same 409 every sweep, which is how it went unseen.
+  AND NOT ${FORK_REFUSAL_STANDS_SQL}
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
   -- A schedule is an automatic start like the others: a project its owner has not started, or has
   -- paused, keeps its appointment (not consumed, so it fires once the project moves) and starts
@@ -2138,12 +2227,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * `@Optional()` and last for the places that build this service directly: they run no sweep.
      */
     @Optional() private readonly orphanSweep?: ProjectOrphanSweepService,
+    /**
+     * Conditions (docs/condition-triggers-design.md): a task's startWhen is written through it, and its fire hook makes
+     * the task due (`onModuleInit`). `@Optional()` and last for the places that build this service directly: they get
+     * one over THIS prisma, so a startWhen is written exactly as the injected one writes it.
+     */
+    @Optional() conditions?: ConditionsService,
   ) {
+    this.conditions = conditions ?? new ConditionsService(prisma);
+    // A task's startWhen fired (docs/condition-triggers-design.md §5.2): in the firing's own transaction, the task
+    // gets a new dispatch moment, so the scheduled sweep that starts it names a request no earlier pass could have
+    // (TASK_RUN_TRIGGER.scheduled). Being due is SCHEDULED_DUE_SQL's to read off the condition; nothing else is written.
+    this.conditions.registerFireHook({ onFired: (tx, firing) => this.onStartWhenFired(tx, firing) });
     this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
     this.files = files ?? new FilesService(prisma);
     // The account owner's yes to a MOVE_TASK is applied here (`applyMoveApproval`), so the one
     // instance that answers it has to be able to reach this one.
     this.handoffs.bindMoveApplier(this);
+    // A question filed for the account owner: one push, and the conversation that draws its card
+    // redraws its row ("Waiting on you"); an answer redraws it again. After the commit, and never
+    // in the way of the write.
+    this.handoffs.bindChangeListener(({ id, ownerId, filed }) => {
+      if (filed) void this.push?.notifyCrossingRequest(id);
+      void this.handoffs.cardSessionOf(ownerId, id)
+        .then((sessionId) => { if (sessionId) this.realtime.publishSessionUpdated(sessionId); })
+        .catch(() => undefined);
+    });
     this.completionInputs = completionInputs;
     this.pauseProjector = pauseProjector;
     this.openItems = openItems;
@@ -2154,6 +2263,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   private readonly handoffs: ProjectHandoffService;
+  private readonly conditions: ConditionsService;
   private readonly completionInputs?: CompletionInputRouter;
   private readonly pauseProjector?: TaskListPauseProjectorService;
   private readonly openItems?: ProjectOpenItemService;
@@ -3253,7 +3363,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             take: 1,
             select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
           },
-          mergeReceipts: { select: { result: true, targetBranch: true } },
+          mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
         },
       });
       for (const row of rows) {
@@ -3440,6 +3550,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     if (!workspace) throw new ForbiddenException('workspace not found');
     return { type: CreatorType.AGENT, id: workspace.id };
+  }
+
+  /**
+   * The card gate the runner doors call before a task write (`task-write-approval.ts`): the runner's
+   * machine credential is an agent's credential, so the write must name a usable acting session and
+   * one of that session's answered cards must cover exactly it. There is no card-free machine-
+   * credential write; a headless process acts as the account owner with a personal access token
+   * instead. Public because the caller identity arrives at the runner controller, while this
+   * service owns the Prisma read.
+   */
+  async assertSessionTaskWriteApproved(
+    ownerId: string,
+    runnerId: string,
+    sessionId: string | undefined,
+    write: SessionTaskWrite,
+  ): Promise<void> {
+    await assertSessionTaskWriteHasCard(this.prisma, { ownerId, runnerId, sessionId, write });
   }
 
   /**
@@ -3828,6 +3955,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the task is still the user's (`creator` stays unset), and the credential is recorded beside it
    * in `activity` — see `recordTasksCreated`.
    */
+  /**
+   * The runner door's half of SR55's "the calling session": a request carrying a fork must come from a
+   * session this runner credential is running (`task-fork.ts`). The create below checks the rest.
+   */
+  async assertForkCallerOnRunner(ownerId: string, runnerId: string, sessionId: string | undefined): Promise<void> {
+    await assertForkCallerOnRunner(this.prisma, ownerId, runnerId, sessionId);
+  }
+
   async create(
     ownerId: string,
     dto: CreateTaskDto,
@@ -3836,11 +3971,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    // One of runAt and startWhen, a line, a baseline and an assignee to probe on (task-start-when.ts): before anything.
+    assertStartWhenShape(dto);
     await this.assertVerifierCreateHasCard(ownerId, TASK_CREATE_CARD_TOOL, [dto], creatorSessionId);
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
     // Task has — see `createWithVerifier`.
     const verification = dto.verification;
+    if (verification && dto.fork) {
+      // The paired writer below is a second row builder; a fork it silently dropped would be a task that
+      // starts somewhere nobody chose. Two calls do the same job: the subject forked, its check after.
+      throw new BadRequestException(
+        'fork and verification cannot be used together yet: create the forked task, then its verification task',
+      );
+    }
     if (verification) {
       // One task, one role in the relation: it either IS the check (verifiesTaskId) or is the
       // subject something else checks (verification). Naming both would make it its own subject.
@@ -3874,13 +4018,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Best-effort idempotency: a redelivered turn re-runs and re-creates the same tasks. A key is
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
-    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // A caller's key stands in for the turn (`callerKeyTurnSlot`): it is deduplicated in any turn,
+    // and without a session as the account's own.
+    const callerKey = normaliseCallerIdempotencyKey(dto.idempotencyKey);
+    const turnId = callerKey
+      ? callerKeyTurnSlot(ownerId, callerKey)
+      : sessionId ? await this.currentTurnId(sessionId) : undefined;
     const idempotentWrite: IdempotentTaskWrite | undefined =
-      sessionId && turnId
+      turnId && (sessionId || callerKey)
         ? {
             operation: 'CREATE_TASK',
-            sessionId,
+            sessionId: sessionId ?? null,
             turnId,
+            callerKeyed: callerKey !== undefined,
             title: dto.title,
             description: dto.description,
             acceptanceCommand: dto.acceptanceCommand,
@@ -3962,6 +4112,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await this.assertFixesOpenItem(
       this.prisma, ownerId, scopedProjectId, dto.fixesOpenItemId, creatorSessionId,
     );
+    // SR55: a fork is from the calling session, runs on its machine, and is not filed into a project
+    // with a code binding — judged against the project the scope admitted, before any transaction.
+    const forkColumns = await resolveTaskFork(
+      this.prisma, ownerId, creatorSessionId, { ...dto, projectId: scopedProjectId }, null,
+    );
     // Against the project this write was ADMITTED into, for the reason stated above: a coordinator
     // that names no project still files its work under the one it coordinates, and refusing that
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
@@ -4034,6 +4189,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
       criterionDeclaration,
+      forkColumns,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -4154,6 +4310,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          // Its startWhen, in this transaction: the condition, the approved command's hash and the baseline
+          // (docs/condition-triggers-design.md §6.2). A refusal (the account's 20) takes the task with it.
+          if (dto.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: created.id, workspaceId: created.assigneeId!, startWhen: dto.startWhen,
+              createdFromSessionId: sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, created.projectId, dto.fixesOpenItemId, creatorSessionId, true,
           );
@@ -4263,6 +4427,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.openItems?.resolveByFact([dto.supersedesTaskId]);
       await this.fuse?.afterSupersession(task.projectId, dto.supersedesTaskId);
     }
+    // A startWhen is demand for its workspace's Orbit Cloud runner (docs/condition-triggers-design.md §4.2): one asleep
+    // is woken now, so its probe runs. Nothing for a self-managed runner or with the switch off.
+    if (dto.startWhen) await this.conditions.wakeWorkspaceRunner(task.assigneeId);
     return task;
   }
 
@@ -4282,9 +4449,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creatorSessionId?: string,
     credential?: AuthCredential,
   ) {
-    const { verification, ...subject } = dto;
-    // The batch's writer rather than `createMany`: this door has already asked for its own card.
+    const { verification, idempotencyKey, ...subject } = dto;
+    // The batch's writer rather than `createMany`: this door has already asked for its own card. A
+    // caller's key keys the pair, subject and check, as it would a batch of the two.
     const [created, verifier] = await this.writeBatch(ownerId, {
+      idempotencyKey,
       tasks: [
         { ...subject, ref: VERIFICATION_PAIR_SUBJECT_REF },
         {
@@ -4441,6 +4610,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     heldListIds: ReadonlySet<string>,
     /** Migration 0232: what `dto.criterionKey` resolved to, or null when nothing was declared. */
     criterionDeclaration: { criterionDefinitionId: string; criterionRevision: number } | null,
+    /** Migration 0615: the fork `resolveTaskFork` checked, or null/absent for a task not forked. */
+    fork?: TaskForkColumns | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -4489,6 +4660,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // SR5's declaration, made with the task: no reason is asked for a task's first statement of
       // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
       codeless: dto.codeless,
+      // SR55's five facts, in this INSERT and never again (0615's `task_fork_guard`). Absent on a task
+      // that was not forked, so the columns stay out of the statement, as on every task before them.
+      ...(fork ?? {}),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -4537,6 +4711,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
+    items.forEach((item, index) => assertStartWhenShape(item, `tasks[${index}]: `));
     items.forEach((item, index) => {
       const completionCriterion = this.assertCompletionDeclaration({
         ...item,
@@ -4779,6 +4954,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pausedLists = new Set(lists.filter((l) => l.paused).map((l) => l.id));
     const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
     const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
+    // The workspaces on Orbit Cloud a startWhen keeps awake while it waits (docs/condition-triggers-design.md §6.2).
+    const awake = items.some((i) => i.startWhen)
+      ? await this.conditions.keepsAwake(items.filter((i) => i.startWhen && i.assigneeId).map((i) => i.assigneeId!))
+      : new Set<string>();
     const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
 
     let startingNow = 0;
@@ -4786,6 +4965,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let needsManualStart = 0;
     let notDispatchable = 0;
     let scheduled = 0;
+    let waitingForCondition = 0;
     let awaitingProjectStart = 0;
     let internalEdges = 0;
     let externalEdges = 0;
@@ -4817,6 +4997,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       //
       // `autoRunWhenReady` is deliberately not consulted here, and a prerequisite is not required
       // to exist: both are answers to the dependency question, and this trigger is the clock.
+      // A startWhen is the same kind of trigger as a runAt (task-start-when.ts), counted by what stands between it
+      // and a run in the same order, its condition last.
+      if (item.startWhen) {
+        if (waitsOnBatch || waitsOnExisting) blocked += 1;
+        else if (!runnable) notDispatchable += 1;
+        else if (awaitsStart) awaitingProjectStart += 1;
+        else waitingForCondition += 1;
+        continue;
+      }
       if (runAt) {
         if (waitsOnBatch || waitsOnExisting) blocked += 1;
         else if (!runnable) notDispatchable += 1;
@@ -4882,6 +5071,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // of which would misdescribe it; a client that predates the field ignores it and simply
       // does not count these as starting now, which is the true statement.
       scheduled,
+      // Ready in every respect except their startWhen condition: they start once it holds (each item's lines below).
+      waitingForCondition,
       // Would start by themselves, now or at their runAt, but in a project its owner has not
       // started: they start with the project. Named for the reason `scheduled` is — "needs a manual
       // start" would say the start releases nothing — and ignored the same way by older clients.
@@ -4898,6 +5089,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependsOnRefs: item.dependsOnRefs ?? [],
         dependsOnTaskIds: item.dependsOnTaskIds ?? [],
         ref: item.ref ?? null,
+        // The card's Starts when, Today and If never (docs/mocks/condition-triggers frame 2), on an item with one.
+        ...(item.startWhen
+          ? {
+              startWhen: startWhenCardLines(
+                item.startWhen,
+                item.assigneeId ? nameOf.get(item.assigneeId) ?? null : null,
+                !!item.assigneeId && awake.has(item.assigneeId),
+              ),
+            }
+          : {}),
       })),
       // The card shows a window, not the whole batch: fifty rows is not something a person reads
       // before clicking, and the counts above are the decision.
@@ -4973,8 +5174,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
-    // create collapses a re-run of a batch, item by item, without merging distinct items.
-    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // create collapses a re-run of a batch, item by item, without merging distinct items. A caller's
+    // key for the batch stands in for the turn, each item keyed by its position (`callerKeyTurnSlot`);
+    // a key on an item would be a second answer to "is this the same write", so it is refused.
+    const callerKey = normaliseCallerIdempotencyKey(dto.idempotencyKey);
+    const keyedItem = validated.findIndex((item) => item.idempotencyKey !== undefined && item.idempotencyKey !== null);
+    if (keyedItem >= 0) {
+      throw new BadRequestException(
+        `tasks[${keyedItem}].idempotencyKey: a batch is keyed as a whole — send idempotencyKey beside tasks, not on an item`,
+      );
+    }
+    const turnId = !callerKey && sessionId ? await this.currentTurnId(sessionId) : undefined;
     // WINNER FIRST, exactly as `create` is and for the same reason (§3 SC4): an item this turn
     // already committed is looked up, never re-decided. A batch re-run after a rotation would
     // otherwise be refused on the items it already wrote, leaving a caller that cannot find rows it
@@ -4987,12 +5197,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // was allowed to do has been lost.
     // One descriptor per item, built once and used by every question asked about it: the pre-read
     // below, the find-or-create inside the transaction, and the P2002 reconstruction after it.
-    const batchWriteOf = (item: CreateTaskBatchItemDto): IdempotentTaskWrite | undefined =>
-      sessionId && turnId
+    const batchWriteOf = (item: CreateTaskBatchItemDto, index: number): IdempotentTaskWrite | undefined =>
+      callerKey || (sessionId && turnId)
         ? {
             operation: 'CREATE_TASK',
-            sessionId,
-            turnId,
+            sessionId: sessionId ?? null,
+            turnId: callerKey ? callerKeyTurnSlot(ownerId, callerKey, index) : turnId!,
+            callerKeyed: callerKey !== undefined,
             title: item.title,
             description: item.description,
             acceptanceCommand: item.acceptanceCommand,
@@ -5002,8 +5213,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             fixesOpenItemId: item.fixesOpenItemId,
           }
         : undefined;
-    const replayed = await Promise.all(validated.map(async (item) => {
-      const write = batchWriteOf(item);
+    const replayed = await Promise.all(validated.map(async (item, index) => {
+      const write = batchWriteOf(item, index);
       return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
     await this.assertOwnedAttachments(
@@ -5073,6 +5284,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertFixesOpenItem(
         this.prisma, ownerId, item.projectId, item.fixesOpenItemId, creatorSessionId,
       );
+    }
+    // SR55, per item and over the project each was admitted into, like the link check above. A
+    // replayed item's row already carries whatever fork it was written with.
+    const forkColumns = new Map<number, TaskForkColumns>();
+    for (const [index, item] of items.entries()) {
+      if (frozen.has(index)) continue;
+      const fork = await resolveTaskFork(this.prisma, ownerId, creatorSessionId, item, index);
+      if (fork) forkColumns.set(index, fork);
     }
     // Item by item, over the project each one was ADMITTED into, and above the dry run for the
     // same reason the bound below is. A frozen item is a replay whose row already exists:
@@ -5259,7 +5478,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
         // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
-        const itemWrite = batchWriteOf(item);
+        const itemWrite = batchWriteOf(item, index);
         const idempotencyKey = itemWrite ? this.taskIdempotencyKey(itemWrite) : undefined;
         const existing = itemWrite
           ? await this.idempotencyWinner(tx, ownerId, itemWrite)
@@ -5296,10 +5515,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               idempotencyKey,
               heldListIds,
               criterionDeclarations.get(index) ?? null,
+              forkColumns.get(index) ?? null,
             ),
           }));
         if (!existing) {
           insertedIds.push(task.id);
+          // Its startWhen, in this transaction, as the single door writes one (task-start-when.ts).
+          if (item.startWhen) {
+            await writeStartWhen(tx, this.conditions, {
+              ownerId, taskId: task.id, workspaceId: task.assigneeId!, startWhen: item.startWhen,
+              createdFromSessionId: origin?.sessionId ?? null, approvedAt: new Date(),
+            });
+          }
           await this.assertFixesOpenItem(
             tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
           );
@@ -5394,12 +5621,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // is all-or-nothing on the way in, and reporting it item by item on the way out would let a
         // half-identified batch answer half-successfully.
         const winners: Array<Task | null> = [];
-        for (const item of items) {
+        for (const [index, item] of items.entries()) {
           // Same validator as everywhere else. This is the batch's own concurrent path, and it read
           // rows back on the index alone — so a forged or foreign row under one item's key was
           // returned to the caller as that item's result. A mismatch throws from in here, which is
           // the typed 409 this whole branch owes the caller.
-          const write = batchWriteOf(item);
+          const write = batchWriteOf(item, index);
           winners.push(write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null);
         }
         // Nothing of this batch is under any of its keys, so the index that fired was not ours —
@@ -5471,6 +5698,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // remaining set is closed is the producer's question to answer from the rows, not this
     // caller's to guess from the shape of its own write.
     await this.deliverSettledProjects(created.map((task) => task.projectId));
+    // Each startWhen's Orbit Cloud runner, woken now, as the single create does.
+    const waking = new Set(items.flatMap((item) => (item.startWhen && item.assigneeId ? [item.assigneeId] : [])));
+    for (const workspaceId of waking) await this.conditions.wakeWorkspaceRunner(workspaceId);
     return created;
   }
 
@@ -5630,6 +5860,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * about the write, and only of a create that names a verifier: every other create pays nothing. Any ALLOWED card counts,
    * a workspace's standing grant included, since that is what the tools act on; the card is not spent, because a retried
    * create is the same create.
+   *
+   * Since the runner doors card EVERY session create by caller (`task-write-approval.ts`), that universal gate answers
+   * first at the HTTP door and this one is the backstop for any other caller that passes a session. Its refusal names
+   * the narrower verifier reason, which is why it stays rather than being folded into the universal one.
    */
   private async assertVerifierCreateHasCard(
     ownerId: string,
@@ -6534,6 +6768,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const from = asked.fromProjectId;
     const to = asked.toProjectId;
+    // SR55, as on the edit door: a forked task is never moved into a project with a code binding.
+    // Refused before the approval is spent, so the request stays answerable once the fork is resolved.
+    const fork = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { forkRunnerId: true, forkSessionId: true },
+    });
+    if (fork?.forkRunnerId && fork.forkSessionId && to) {
+      await assertForkPlacement(this.prisma, ownerId,
+        { forkRunnerId: fork.forkRunnerId, forkSessionId: fork.forkSessionId }, { projectId: to });
+    }
     const moved = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       const projectIds = orderedIds([from, to]);
@@ -7361,7 +7605,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     };
     if (existing.ownerId !== ownerId) mismatch('different account');
-    if ((existing.creatorSessionId ?? null) !== write.sessionId) mismatch('different session');
+    if ((existing.creatorSessionId ?? null) !== (write.sessionId ?? null)) mismatch('different session');
     if ((existing.acceptanceCommand ?? null) !== (write.acceptanceCommand ?? null)) {
       mismatch('different acceptance command');
     }
@@ -7386,6 +7630,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       write.fixesOpenItemId !== undefined
       && (existing.fixesOpenItemId ?? null) !== (write.fixesOpenItemId ?? null)
     ) mismatch('different fixes open item');
+    // A caller's key does not hash the payload, so the payload is compared: the same key with
+    // another title or description is a different write, refused like any other mismatch.
+    if (write.callerKeyed) {
+      if (existing.title.trim() !== write.title.trim()) mismatch('different title');
+      if ((existing.description ?? '').trim() !== (write.description ?? '').trim()) {
+        mismatch('different description');
+      }
+    }
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({
@@ -7394,6 +7646,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       turnId: write.turnId,
       title: existing.title,
       description: existing.description,
+      callerKeyed: write.callerKeyed,
     });
     if (rebuilt !== existing.idempotencyKey) mismatch('different operation or payload');
     return existing;
@@ -7586,15 +7839,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * descriptor is for readers, the byte is for the rows already on disk.
    */
   private taskIdempotencyKey(write: IdempotentTaskWrite): string {
-    return createHash('sha256')
-      .update(JSON.stringify([
+    // A caller-keyed preimage is (operation, session, key slot): the key names the write, and
+    // `idempotencyWinner` compares the payload instead of hashing it.
+    const preimage = write.callerKeyed
+      ? [IDEMPOTENCY_OPERATION_TAG[write.operation], write.sessionId, write.turnId]
+      : [
         IDEMPOTENCY_OPERATION_TAG[write.operation],
         write.sessionId,
         write.turnId,
         write.title.trim(),
         (write.description ?? '').trim(),
-      ]))
-      .digest('hex');
+      ];
+    return createHash('sha256').update(JSON.stringify(preimage)).digest('hex');
   }
 
   /** True for a unique-constraint violation — the idempotency index firing on a concurrent re-run
@@ -9115,6 +9371,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { id, ownerId },
       include: {
         assignee: { select: { id: true, name: true, model: true } },
+        // Its startWhen (docs/condition-triggers-design.md §6.2): what it waits for and the newest reading.
+        startWhenCondition: { select: START_WHEN_VIEW_SELECT },
         // The project it is filed under, named: a project's task is not listed on the Tasks page,
         // so a task opened from a link says which project it belongs to and whether that project
         // is still going.
@@ -9215,6 +9473,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
+      forkSource, runsWith,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9231,6 +9490,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
+        forkSourceLine(this.prisma, task),
+        this.runsWith(ownerId, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9244,6 +9505,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       autoRunSkipped,
+      // While it waits for its condition: "Waiting for: <text>", with the condition's lastValue and lastSampleAt.
+      // Not a dependency state, and not read by the dependency gate: a peer of runAt (task-start-when.ts).
+      startWhen: startWhenView(task.startWhenCondition),
+      // Read once, as `startWhen` above.
+      startWhenCondition: undefined,
       // The last change to this task's completion criterion, read back out of the audit column the
       // change door writes: which criterion it moved away from, which it landed on, and why.
       // Derived rather than stored a second time — the reason column already carries all three, and
@@ -9265,6 +9531,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       progress,
       // What each suggested tier runs as for this task, so no client keeps a tier table of its own.
       modelHintOptions,
+      // What the next fresh run starts on, by the resolution dispatch makes (SessionsService.taskRunsWith):
+      // "Runs with" on every client reads this rather than the assignee's lastEngine/lastProvider.
+      runsWith,
       // Where the work stands between DONE and main, with its newest LAND_TASK (§2.7a): the read
       // the project's task rows make, so the task's page and the project's cannot disagree.
       integration: integrations.get(id) ?? {
@@ -9278,8 +9547,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // A task in no project lands on no project's main branch.
         mainBranch: null,
       },
+      // SR18's sentence when this task was forked from a session (design §2.3), null otherwise: the
+      // line every client shows where it shows the task's source.
+      forkSource,
       ...supersession,
     };
+  }
+
+  /** The task's TaskRunsWith, or null when it could not be read: a decoration, never a reason to fail the read. */
+  private async runsWith(
+    ownerId: string,
+    task: { id: string; engine: string | null; provider: string | null; assigneeId: string | null },
+  ) {
+    try {
+      return await this.sessions.taskRunsWith(ownerId, {
+        id: task.id, engine: task.engine, provider: task.provider, workspaceId: task.assigneeId,
+      });
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: runsWith not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
   }
 
   /**
@@ -9478,6 +9765,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new ForbiddenException(verifierWriteFromRunRefusalBody());
       }
     }
+    // A task has at most one of runAt and startWhen (task_run_at_or_start_when_chk): refused here as a sentence
+    // rather than at the CHECK as a 500.
+    if (dto.runAt != null && before.startWhenConditionId) {
+      throw new BadRequestException({
+        code: TASK_START_WHEN_AND_RUN_AT,
+        message: 'this task starts when its condition holds; a task has at most one of runAt and startWhen',
+      });
+    }
     // A schedule, or auto-run switched on, starts the task in the account's default mode with no
     // session in the way, so a session that may not start that with `task_start` may not arrange it.
     if (actingSessionId && (dto.runAt != null || (dto.autoRunWhenReady === true && !before.autoRunWhenReady))) {
@@ -9489,6 +9784,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           provider: dto.provider ?? before.provider,
           model: dto.model ?? before.model,
           workspaceId: dto.assigneeId ?? before.assigneeId,
+          anchor: () => taskRunAnchor(this.prisma, id),
         },
         'A schedule or auto-run would start this task in the account default, so nothing was written. ' +
           'A person can press Start on the task page, or switch this session to Auto.',
@@ -9753,6 +10049,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
+    // SR55: an edit may not move a forked task where its next run could only be refused — into a
+    // project with a code binding, or onto a workspace on another machine than its snapshot's. Asked of
+    // what the edit changes only, before the transaction, like every refusal on this path.
+    // `before` is the full row (loadDetail reads every column), so an ordinary task pays no query here.
+    if ((dto.assigneeId || dto.projectId) && (dto.assigneeId !== before.assigneeId || dto.projectId !== before.projectId)) {
+      if (before.forkRunnerId && before.forkSessionId) {
+        await assertForkPlacement(this.prisma, ownerId,
+          { forkRunnerId: before.forkRunnerId, forkSessionId: before.forkSessionId },
+          {
+            assigneeId: dto.assigneeId && dto.assigneeId !== before.assigneeId ? dto.assigneeId : null,
+            projectId: dto.projectId && dto.projectId !== before.projectId ? dto.projectId : null,
+          });
+      }
+    }
     // The engine, provider and model pins as this write leaves them — each three-state; a provider
     // alone carries the engine it runs on by default, and an engine alone is checked against the
     // provider pin the task keeps (docs/provider-engine-contract.md §3.5).
@@ -10507,7 +10817,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 select: { taskId: true, dependsOnTaskId: true },
               });
               if (wouldReplacementCreateCycle(edges, id, dependsOnTaskIds)) {
-                throw new BadRequestException('These dependencies would create a cycle');
+                throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_CYCLE', 'These dependencies would create a cycle', {
+                  taskId: id,
+                }));
               }
             }
             // A verdict settles its verifier, and a task reaching DONE ends the run working it, so a session
@@ -10966,6 +11278,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: true,
         autoRunWhenReady: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): one that has not fired is the same veto as a run_at to come.
+        startWhenCondition: { select: { firedAt: true, state: true } },
         // The list this candidate belongs to, because that is the batch whose budget the dispatch
         // below spends — read in the same statement as the rest of what decides the candidate.
         listId: true,
@@ -11036,6 +11350,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // this same READY state is one of the things it re-checks. Two independent triggers, and
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
+      // Waiting for its condition: the same, and the scheduled sweep starts it once the condition fires.
+      if (!startWhenPermits(dep.startWhenCondition)) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
       // Its list holds ready work that outranks it: the slot this edge would fill is that work's,
       // and the sweep is what deals the list's slots by priority. Left OPEN and READY, like a
@@ -11393,6 +11709,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnerId: string | null;
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
+        cloneState: string | null;
         listId: string | null;
         dispatchEpoch: bigint | null;
         priority: number;
@@ -11403,7 +11720,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
              t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
@@ -11464,7 +11781,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
       WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
              c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
@@ -11515,6 +11832,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         workspaceId: row.workspaceId,
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
+      // A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): no run starts on it.
+      cloneHeld: workspaceCloneReason(row.cloneState) !== null,
       listId: row.listId,
       projectId: row.projectId,
       // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
@@ -11526,6 +11845,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
+    // A third, beside the disk floor: the engine the run would start on is signed out on its runner,
+    // so sessions.create would refuse it (signedOutEngineRefusal) on every pass until somebody signs in.
+    const signedOut = await this.signedOutGate(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
     // whose run would spend a quota nothing reports are named so the backoff can damp a usage
     // limit the gate above had no reset time to hold on.
@@ -11554,6 +11876,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const projectRoom = await this.projectBudget(ready.map((t) => t.projectId));
     let quotaHeld = 0;
     let diskHeld = 0;
+    let cloneHeld = 0;
+    // Per runner and engine, for the one line below: "on which machine, and which sign-in".
+    const signedOutHeld = new Map<string, number>();
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11592,6 +11917,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         diskHeld += 1;
         const e = holdFor(t.listId);
         if (e) e.disk += 1;
+        continue;
+      }
+      // The clone gate, beside the disk gate and for the same reason: the run would start in a work dir that is not
+      // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
+      if (t.cloneHeld) {
+        cloneHeld += 1;
+        continue;
+      }
+      // The sign-in gate, for the same reason again: the run would be refused before it was created,
+      // with the warning the sweep used to log for every such task every minute. It lifts on the sweep
+      // after the runner's next heartbeat reports the engine signed in; nothing here can sign it in.
+      const where = signedOut.get(t.id);
+      if (where) {
+        signedOutHeld.set(where, (signedOutHeld.get(where) ?? 0) + 1);
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11639,9 +11978,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${quotaHeld} ready task(s) held — provider quota exhausted, earliest reset ${resumesAt?.toISOString()}`,
       );
     }
+    if (cloneHeld > 0) {
+      this.logger.log(`auto-run: ${cloneHeld} ready task(s) held — their GitHub workspace has not finished cloning`);
+    }
     if (diskHeld > 0) {
       this.logger.log(
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
+      );
+    }
+    if (signedOutHeld.size > 0) {
+      const total = [...signedOutHeld.values()].reduce((sum, n) => sum + n, 0);
+      this.logger.log(
+        `auto-run: ${total} ready task(s) held — engine signed out on their runner: ` +
+          [...signedOutHeld].map(([where, n]) => `${where} (${n})`).join(', '),
       );
     }
     if (atCapacity > 0) {
@@ -12123,6 +12472,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (candidates.length === 0) return engines;
     // One batched lookup for the whole sweep rather than one per row.
     const seeds = await lastProviderByWorkspace(this.prisma, candidates.map((c) => c.workspaceId));
+    // A project's task runs on its coordinator's pair before the workspace's (start-anchor.ts).
+    const anchors = await taskRunAnchors(this.prisma, candidates.map((c) => c.id));
     const taskIds = [...new Set(
       candidates.filter((c) => c.modelRouting === true && c.runnerId).map((c) => c.id),
     )];
@@ -12143,7 +12494,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const task = tasks.get(c.id);
       let credential = dispatchCredentialOf(
         { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
-        seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
+        anchors.get(c.id) ?? seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
       );
       if (task && c.runnerId) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
@@ -12293,6 +12644,71 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (until) blocked.set(t.id, until);
     }
     return { blocked, blind };
+  }
+
+  /**
+   * Of these tasks, the ones whose run would start on an engine's own sign-in that their runner reports
+   * signed out — mapped, by task id, to how the hold names it (`Claude Code on runner "mac"`). The run
+   * would never be created: sessions.create refuses it with EngineSignedOutConflict, which the sweep
+   * logged as a warning per task per pass for as long as nobody signed in (2026-11-17: 308 in 2.5 hours
+   * for two tasks).
+   *
+   * Judged by the preflight itself (signedOutEngineRefusal), on the facts it reads — the runner's
+   * heartbeat `engines`, its accounts, its liveness — and for the account the run would use, picked the
+   * way quotaGate and sessions.create pick it (automaticAccount). Everything the preflight lets through
+   * is let through here: an offline runner, an `unknown` probe, an engine not installed, a credential the
+   * workspace's env brings. A run on a key or a pool (`login` false) brings its own credential and is
+   * never held.
+   */
+  private async signedOutGate(
+    tasks: Array<{
+      id: string;
+      assignee: { provider: string; login?: boolean; runnerId: string | null; workspaceId: string } | null;
+    }>,
+  ): Promise<Map<string, string>> {
+    const held = new Map<string, string>();
+    const judged = tasks.filter((t) => t.assignee?.login === true && t.assignee.runnerId);
+    if (judged.length === 0) return held;
+    const runners = await this.prisma.runner.findMany({
+      where: { id: { in: [...new Set(judged.map((t) => t.assignee!.runnerId!))] } },
+      select: {
+        id: true, name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true,
+      },
+    });
+    const runnerById = new Map(runners.map((r) => [r.id, r]));
+    const workspaceById = new Map(
+      (
+        await this.prisma.workspace.findMany({
+          where: { id: { in: [...new Set(judged.map((t) => t.assignee!.workspaceId))] } },
+          select: {
+            id: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
+            cursorAccount: true,
+          },
+        })
+      ).map((w) => [w.id, w]),
+    );
+    const now = this.now();
+    for (const t of judged) {
+      const { provider, runnerId, workspaceId } = t.assignee!;
+      const runner = runnerById.get(runnerId!);
+      const workspace = workspaceById.get(workspaceId);
+      if (!runner || !workspace || !isAccountEngine(provider)) continue;
+      const automatic = automaticAccount(provider, workspace, runner, now);
+      const refusal = signedOutEngineRefusal({
+        runtime: provider,
+        bringsOwnCredentials: false,
+        workspaceEnv: workspace.env,
+        accounts: automatic ? { ...workspace, [ACCOUNT_CHOICE[provider]]: automatic } : workspace,
+        runner,
+        nowMs: now.getTime(),
+      });
+      if (refusal) {
+        const label = ENGINE_LABELS[provider];
+        held.set(t.id, `${label} on runner "${runner.displayName || runner.name}"`);
+      }
+    }
+    return held;
   }
 
   /**
@@ -12760,7 +13176,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */
   async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string, actingSessionId?: string) {
-    if (taskId === dependsOnTaskId) throw new BadRequestException('A task cannot depend on itself');
+    if (taskId === dependsOnTaskId) {
+      throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_SELF', 'A task cannot depend on itself', { taskId }));
+    }
     await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
     await this.assertEdgeSparesVerifier(ownerId, taskId, actingSessionId);
     try {
@@ -12781,13 +13199,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { taskId: true, dependsOnTaskId: true },
         });
         if (wouldCreateCycle(edges, taskId, dependsOnTaskId)) {
-          throw new BadRequestException('This dependency would create a cycle');
+          throw new BadRequestException(codedRefusal(400, 'DEPENDENCY_CYCLE', 'This dependency would create a cycle', {
+            taskId, dependsOnTaskId,
+          }));
         }
         await tx.taskDependency.create({ data: { taskId, dependsOnTaskId } });
       }, this.transientWriteRetry('tasks.addDependency'));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('This dependency already exists');
+        throw new ConflictException(codedRefusal(409, 'DEPENDENCY_DUPLICATE', 'This dependency already exists', {
+          taskId, dependsOnTaskId,
+        }));
       }
       throw e;
     }
@@ -14348,6 +14770,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: sessionId,
         // The opening is the mention as the platform hands it on, not the owner's words (0493, design §3.5).
         promptByOrbit: true,
+        openedBy: 'MENTION_REPLY',
         // A conversation about a task needs no branch and no worktree. Creating one would leave an
         // unmerged branch behind for a reply to a comment, which reads as work nobody finished.
         noWorktree: true,
@@ -14717,6 +15140,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and asserting it here rather than per-caller is what keeps a future fifth caller from
         // quietly inheriting the salvage exemption.
         startsTaskWork: true,
+        // Unpinned and unrouted, a project's task runs on its coordinator's pair, not the
+        // workspace's newest conversation (docs/workspace-default-model-design.md §2.1).
+        anchor: () => taskRunAnchor(this.prisma, task.id),
       },
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
@@ -14832,8 +15258,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (e instanceof TaskRunFenceLost) {
         throw taskRunInProgress(TASK_RUN_ACTION.execute, runRequestToken);
       }
+      // An automatic start of a forked task refused by the session create door: recorded on the
+      // task, so the candidate scans stop offering it until something it was decided on changes.
+      if (auto) await this.recordForkRefusalOf(id, e);
       throw e;
     }
+  }
+
+  /** `recordForkDispatchRefusal` for an error that is a fork refusal; anything else is left alone. */
+  private async recordForkRefusalOf(taskId: string, e: unknown): Promise<void> {
+    if (!(e instanceof ConflictException)) return;
+    const body = e.getResponse() as { code?: unknown; message?: unknown };
+    if (body?.code !== 'FORK_SOURCE_NOT_REACHABLE' && body?.code !== 'FORK_IN_BOUND_PROJECT') return;
+    await recordForkDispatchRefusal(
+      this.prisma, taskId, { code: body.code, message: String(body.message ?? '') }, new Date(),
+    ).catch((err) =>
+      this.logger.warn(`fork refusal of task ${taskId} not recorded: ${err?.message ?? err}`));
   }
 
   /**
@@ -14955,6 +15395,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         verifiesTaskId: true,
         dispatchHold: true,
         runAt: true,
+        // Its startWhen (task-start-when.ts): the run that starts ends it, and a run its firing started is told so.
+        startWhenConditionId: true,
+        startWhenCondition: {
+          select: {
+            text: true, unit: true, probeCommand: true, compareOp: true, firedAt: true, lastValue: true, state: true,
+            events: { where: { kind: 'FIRED' }, orderBy: { at: 'desc' }, take: 1, select: { value: true } },
+          },
+        },
         supersededByTaskId: true,
         terminalReason: true,
         // WHICH MOMENT this row is at (0137). An automatic delivery names one, and this is what it
@@ -15034,7 +15482,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (auto) {
         return this.standDownReleasing(lease, { ok: false as const, skipped: 'superseded' as const });
       }
-      throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
+      throw new ConflictException(codedRefusal(409, 'TASK_RETIRED', `task ${uuidToBase62(id)}: ${refusal}`, {
+        taskId: id,
+        supersededByTaskId: task.supersededByTaskId ?? task.verifies?.supersededByTaskId,
+      }));
     }
     // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
     // authorization commit point: after the two answers about whether this row is still the work,
@@ -15065,10 +15516,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         && task.verifiesTaskId == null
         ? 'its independent verifier'
         : `aggregating its subtasks (${task.completionPolicy})`;
-      throw new ConflictException(
+      throw new ConflictException(codedRefusal(
+        409,
+        'TASK_AGGREGATE_ONLY',
         `task ${uuidToBase62(id)}: this task is completed by ${completionOwner}, `
         + 'so it has no work of its own to run',
-      );
+        { taskId: id },
+      ));
     }
     // A cancelled project's tasks do not start, by any door (projectNotCancelledSql, which every
     // automatic scan applies before it gets here). Ahead of the prerequisites for the same reason as
@@ -15083,7 +15537,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             lease, { ok: false as const, skipped: 'project-cancelled' as const },
           );
         }
-        throw new ConflictException(projectCancelledRefusal(id, cancelled));
+        throw new ConflictException({ ...projectCancelledRefusal(id, cancelled), taskId: id, projectId: task.projectId });
       }
     }
     // Nothing automatic starts a task in a project that does not move by itself: one its owner has
@@ -15100,9 +15554,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // task in the project and outlasts them all.
     if (runnerDoor && task.projectId) {
       const awaiting = await projectAwaitingStart(this.prisma, ownerId, task.projectId);
-      if (awaiting) throw new ConflictException(projectNotStartedRefusal(id, awaiting));
+      if (awaiting) {
+        throw new ConflictException({ ...projectNotStartedRefusal(id, awaiting), taskId: id, projectId: task.projectId });
+      }
       const paused = await pausedProjectOf(this.prisma, ownerId, task.projectId);
-      if (paused) throw new ConflictException(projectPausedRefusal(id, paused));
+      if (paused) throw new ConflictException({ ...projectPausedRefusal(id, paused), taskId: id, projectId: task.projectId });
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
@@ -15111,28 +15567,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // yet" reads as a wait, and a verdict of FAIL is not one — it is a refusal with something to
       // go and do, and a person told to wait will simply click again.
       const gate = depFacts.find((fact) => fact.verificationGate != null)?.verificationGate;
-      throw new BadRequestException(
-        gate
-          ? `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`
-          : depState === 'BLOCKED_FAILED'
-            ? 'A prerequisite was cancelled — resolve it before running'
-            // §2.5 J9, said as what it is. "Prerequisites are not all complete yet" is false here —
-            // they are complete — and a person told that about a task whose prerequisite finished
-            // an hour ago goes looking for work that nobody owes.
-            : depFacts.some((fact) => fact.landed === false)
-              ? await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)
-              : 'Prerequisites are not all complete yet, cannot run',
-      );
+      // §2.5 J9, said as what it is. "Prerequisites are not all complete yet" is false when they are
+      // complete and one has not landed — and a person told that about a task whose prerequisite
+      // finished an hour ago goes looking for work that nobody owes. The code says which of the three
+      // it is: a refusal to act on (FAILED), or a wait for the system (NOT_LANDED, INCOMPLETE).
+      const [code, message] = gate
+        ? ['TASK_PREREQUISITE_FAILED', `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`]
+        : depState === 'BLOCKED_FAILED'
+          ? ['TASK_PREREQUISITE_FAILED', 'A prerequisite was cancelled — resolve it before running']
+          : depFacts.some((fact) => fact.landed === false)
+            ? ['TASK_PREREQUISITE_NOT_LANDED', await this.prerequisiteNotLandedRefusal(ownerId, id, depFacts)]
+            : ['TASK_PREREQUISITES_INCOMPLETE', 'Prerequisites are not all complete yet, cannot run'];
+      throw new BadRequestException(codedRefusal(400, code, message, { taskId: id }));
     }
     // The sweep already filters held tasks out in SQL; this is the manual button's half of the
     // same rule, so a pause cannot be quietly bypassed by clicking Run on a task inside one.
     // Reads the task's own hold, not its list's flag: the two must not be able to disagree, and
     // only one of them survives the list being deleted.
     if (task.dispatchHold) {
-      throw new BadRequestException('This task list is paused — resume it before running');
+      throw new BadRequestException(codedRefusal(400, 'TASK_LIST_PAUSED', 'This task list is paused — resume it before running', {
+        taskId: id, listId: task.listId,
+      }));
     }
-    if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
-    if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
+    if (!task.assignee) {
+      throw new BadRequestException(codedRefusal(400, 'TASK_NO_ASSIGNEE', 'Assign a responsible workspace to the task first', { taskId: id }));
+    }
+    if (!task.assignee.runnerId) {
+      throw new BadRequestException(codedRefusal(
+        400, 'TASK_ASSIGNEE_NO_RUNNER', 'The responsible workspace is not bound to a runner, cannot run',
+        { taskId: id, assigneeId: task.assignee.id },
+      ));
+    }
     // The click is itself a durable semantic request to the Project coordinator. Record it only
     // after the run exists, NOT before it.
     //
@@ -15146,7 +15611,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Moved below the dispatch, the two failure directions are both honest: a refused dispatch
     // records nothing, and an event that fails to write leaves a session that is already running
     // and already announces itself through its own creation.
-    const prompt = this.buildExecutePrompt(task);
+    // A run its condition started begins by saying so (docs/condition-triggers-design.md §6.2): the firing, and that
+    // it checks the condition again itself before acting. Only an automatic start of a fired condition: a person's
+    // task_start ignores the condition, and so does this brief.
+    const fired = auto && startWhenPermits(task.startWhenCondition) && task.startWhenCondition
+      ? task.startWhenCondition
+      : null;
+    const prompt = fired
+      ? `${conditionStartedBlock({ ...fired, firedValue: fired.events[0]?.value ?? null })}\n\n${this.buildExecutePrompt(task)}`
+      : this.buildExecutePrompt(task);
     // The commit-point half of the pre-check above. A supersession — or a lock this transaction
     // cannot have — landing between them is refused by the database, and arrives here as a typed
     // marker rather than as a session. Translated so the caller sees the same 409 either way,
@@ -15184,7 +15657,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.sessions.assertMayStartAtAccountDefault(
         ownerId,
         actingSessionId,
-        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id },
+        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id, anchor: () => taskRunAnchor(this.prisma, task.id) },
         'This task would start in the account default. A person can press Start on the task page, or ' +
           'switch this session to Auto.',
       );
@@ -15211,6 +15684,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dispatchOrigin: auto ? SessionDispatchOrigin.LEGACY_SWEEP : SessionDispatchOrigin.USER,
       runSource: auto ? SessionRunSource.TASK_LIST_AUTO : SessionRunSource.MANUAL,
       runAt: task.runAt ? task.runAt.toISOString() : null,
+      startWhenConditionId: task.startWhenConditionId ?? null,
       clearFailed: task.status === TaskStatus.FAILED,
       auto: auto != null,
     };
@@ -15322,6 +15796,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId, target.taskId, target.runAt ? new Date(target.runAt) : null,
     ).catch((e) =>
       this.logger.warn(`consumeRunAt for task ${target.taskId} failed: ${e?.message ?? e}`));
+    // And a startWhen ends with the start that keeps it, whichever door this is: task_start ignores the condition
+    // and ends it too (docs/condition-triggers-design.md §5.2).
+    await this.consumeStartWhen(ownerId, target.taskId, target.startWhenConditionId).catch((e) =>
+      this.logger.warn(`consumeStartWhen for task ${target.taskId} failed: ${e?.message ?? e}`));
     // Frozen last, and after the post-commit steps rather than before them: those are idempotent
     // recomputations of facts that follow from the Session, so a repeat that lands before this
     // write re-derives them harmlessly, while a repeat that lands after gets the same bytes without
@@ -15368,6 +15846,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     await recordTaskRouteDecision(this.prisma, {
       ownerId, taskId, requestToken, sessionId: plan.sessionId, route,
     }).catch((e) => this.logger.warn(`task ${taskId}: route decision not recorded: ${e?.message ?? e}`));
+  }
+
+  /** The fire hook: a task's condition fired, so the task gets a new dispatch moment, inside the firing's transaction. */
+  private async onStartWhenFired(tx: Prisma.TransactionClient, firing: ConditionFiring): Promise<void> {
+    if (!firing.condition.taskId) return;
+    await tx.$executeRaw`SELECT "task_dispatch_epoch_advance"(ARRAY[${firing.condition.taskId}::uuid])`;
+  }
+
+  /** Spend a startWhen: its condition ends and the task's pointer clears, as consumeRunAt spends a runAt. */
+  private async consumeStartWhen(ownerId: string, taskId: string, conditionId: string | null | undefined): Promise<void> {
+    if (!conditionId) return;
+    const cleared = await withTransactionRetry(
+      this.prisma,
+      (tx) => endStartWhen(tx, ownerId, taskId, conditionId, new Date()),
+      this.transientWriteRetry('tasks.consumeStartWhen'),
+    );
+    if (cleared) this.publishKnownTaskRows(ownerId, [taskId]);
   }
 
   /**
@@ -15575,6 +16070,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         modelHintReason: true,
         status: true,
         runAt: true,
+        startWhenConditionId: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
@@ -15766,6 +16262,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ...taskRunDispatch(t, route),
         route,
         runAt: t.runAt ? t.runAt.toISOString() : null,
+        startWhenConditionId: t.startWhenConditionId ?? null,
         clearFailed: t.status === TaskStatus.FAILED,
         projectId: t.projectId ?? null,
         ...itemPlan,
@@ -15833,6 +16330,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId, item.taskId, item.runAt ? new Date(item.runAt) : null,
         ).catch((e) =>
           this.logger.warn(`batchExecute: consumeRunAt for ${item.taskId} failed: ${e}`));
+        // And a startWhen, as the single Run ends one.
+        await this.consumeStartWhen(ownerId, item.taskId, item.startWhenConditionId).catch((e) =>
+          this.logger.warn(`batchExecute: consumeStartWhen for ${item.taskId} failed: ${e}`));
         return { id: item.taskId, ok: true as const, sessionId };
       } catch (e) {
         // Losing the fence is not an item outcome at all — it says this DELIVERY is no longer the

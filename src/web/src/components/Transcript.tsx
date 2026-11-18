@@ -51,18 +51,23 @@ import {
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
+  delegateLaunchReceipt,
   progressBadge,
+  COORDINATOR_HANDOFF_PROMPT_HEAD,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
   questionLead,
   questionOutcome,
   questionReplyLine,
+  ownerChatWords,
   workflowLaunchReceipt,
   workflowTitle,
   type AskedQuestion,
   type QuestionOutcome,
+  type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
+import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -74,10 +79,7 @@ import {
 import { saveUserFile } from '../lib/userFile';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
-import {
-  describeNote,
-  splitRecordedNote,
-} from '../lib/deliveredMessage';
+import { splitRecordedNote } from '../lib/deliveredMessage';
 import { offersSteerWithdraw, steerDeliveryState, WITHDRAWN_DELIVERY } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, type BatchTaskInput } from '../lib/batchGraph';
@@ -85,14 +87,16 @@ import { RunnerSignIn } from './RunnerSignIn';
 import { AppLink } from './AppLink';
 import { SameOriginLink } from './SameOriginLink';
 import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
+import { MainCheckoutCard, MainCheckoutResultRow } from './MainCheckout';
+import { MainCheckoutResultsCtx, isMainCheckoutChanged, isMainCheckoutResult } from '../lib/mainCheckout';
+import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit/shared';
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import { OrbitEventLine } from './OrbitEventLine';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
-import { BackgroundJobsNote } from './BackgroundJobsNote';
-import { ReferencedTaskNote } from './ReferencedTaskNote';
-import { WikiContextNote } from './WikiContextNote';
 import { WikiDraftCard, WikiDraftCardCtx } from './WikiDraftCard';
 import { wikiChatDraftIdOf, wikiChatDraftingCall } from '../lib/wikiChat';
 import { EMPTY_LIVE_TOOL_OUTPUTS, type LiveToolOutputs } from '../lib/liveToolOutputs';
@@ -103,6 +107,7 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -118,7 +123,7 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseSessionMessage, splitSessionMessageNote } from '../lib/sessionMessage';
+import { parseSessionMessage, parseSessionMessageNarrower } from '../lib/sessionMessage';
 import { externalSenderLabel, parseExternalSender } from '../lib/externalSender';
 import {
   parseConfirmationAnswers,
@@ -152,11 +157,8 @@ import {
 } from '../lib/orbitTurnCards';
 import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
-import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
+import { parseSessionReplies } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
-import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
-import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
-import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -179,10 +181,31 @@ import { claudeRegionErrorLine } from '../lib/claudeRegion';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
+import {
+  BILINGUAL_COLLAPSE_LINES,
+  bilingualEnglish,
+  bilingualLineCount,
+  bilingualPairs,
+  DEFAULT_AGENT_LANGUAGE,
+  type BilingualPair,
+} from '@orbit/shared';
+import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import {
+  ReplyTranslationFoot,
+  ShownOriginalProvider,
+  TranslationCtx,
+  UserTranslationFoot,
+  replyTranslationKey,
+  useReplyShownOriginal,
+  useShownOriginal,
+  userTranslationKey,
+} from './TranslationParts';
 
 /** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
  *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
 type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
+type MarkdownComponents = NonNullable<ComponentProps<typeof Markdown>['components']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -545,6 +568,13 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  // Settings › Translation (@orbit/shared translation.ts). A user message: what the owner typed and
+  // how far its translation got, `text` being the English the engine got. An agent reply: its
+  // translation into the owner's language, and — none yet in a turn whose message was translated —
+  // that one is coming (`awaitsTranslation`).
+  translation?: TurnTranslation;
+  replyTranslation?: ReplyTranslation;
+  awaitsTranslation?: boolean;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
   // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
   // block an older runner stored has none, and its row states its size alone.
@@ -648,7 +678,16 @@ type MarkerNode = {
 };
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
-type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
+// `replySeq` / `replyTranslation`: the reply's own event and its translation (Settings › Translation),
+// so the foot copies the version of it on screen.
+type DividerNode = {
+  kind: 'divider';
+  seq: number;
+  ts?: string;
+  reply?: string;
+  replySeq?: number;
+  replyTranslation?: ReplyTranslation;
+};
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -667,11 +706,23 @@ type DiagnosticNode = {
   code?: string;
   repeats?: number;
 };
-type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+// `settled`: the session moved past this failure, so the card is history rather than a remedy —
+// 'resolved' once the agent did work after it, 'superseded' once a later message or failure came
+// first. Only an unsettled card offers sign-in and Retry: its Retry re-sends the session's latest
+// message, which above a later bubble is no longer the message this failure ate.
+type AuthErrorNode = { kind: 'authError'; seq: number; message: string; settled?: 'resolved' | 'superseded' };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
  *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
-type NoticeNode = { kind: 'notice'; seq: number; message: string };
+type NoticeNode = {
+  kind: 'notice';
+  seq: number;
+  message: string;
+  /** The main checkout's card (board 01) or an action's result line (board 03), drawn instead of the text. */
+  mainCheckout?: MainCheckoutChangedNotice | MainCheckoutResultNotice;
+  /** An account switch the session has since moved past (see `settleAccountSwitches`). */
+  settled?: boolean;
+};
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
 // card but the most recent one — the armed retry is a single value on the session, so an older
@@ -920,6 +971,8 @@ export interface UnreadSteer {
   /** The latest delivery state (lib/steerDelivery): absent, `enqueued`, `written` or `requeued`. */
   delivery?: string;
   withdrawable?: boolean;
+  /** Settings › Translation: `text` is the English delivered; `original` is what the reader wrote. */
+  translation?: TurnTranslation;
 }
 
 // The deliveries a steer waits for: it was read into the turn, or it provably or possibly never was.
@@ -948,7 +1001,17 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
-  && !parseBackgroundWake(node.note);
+  && !parseBackgroundWake(node.note)
+  && !parseSubagentFinished(node.note)
+  && !orbitOnlyTurn(node);
+
+// A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
+// person attached: Orbit opened it, so it never draws as the person's bubble (OrbitEventLine).
+const orbitOnlyTurn = (node: TextNode): boolean =>
+  node.text.trim() === ''
+  && !!node.note?.trim()
+  && !node.images?.length
+  && !node.attachmentRefs?.length;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -972,6 +1035,13 @@ function transcriptOf(events: RunEvent[], turnImages?: Record<string, TurnImage[
 /** The reader's steers these events leave unread, in the order they were sent. */
 export function unreadSteersOf(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): UnreadSteer[] {
   return transcriptOf(events, turnImages).unread;
+}
+
+/** One row for a run of legacy per-file "diff withheld while a removal scan ran" notices. */
+function legacyWithheldMessage(count: number): string {
+  return count === 1
+    ? 'Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.'
+    : `Orbit held back the diffs of ${count} files while it checked this runner for a removed secret. No secret was found in them.`;
 }
 
 function buildTranscript(
@@ -1026,7 +1096,25 @@ function buildTranscript(
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
-    list.push({ kind: 'authError', seq, message });
+    if (openAuth) openAuth.settled ??= 'superseded';
+    openAuth = { kind: 'authError', seq, message };
+    list.push(openAuth);
+  };
+  // The latest sign-in card whose outcome is still open. A next message supersedes it (its Retry
+  // would re-send that message, not the one the failure ate); the agent doing work afterwards
+  // resolves it — even past a later message, since that work is what the sign-in was for.
+  let openAuth: AuthErrorNode | undefined;
+  // "Switched to … — … is signed out" lines not yet followed by anything. Once the conversation
+  // moves on, the switch is history and drops to the muted tone with the card it came with.
+  let openSwitches: NoticeNode[] = [];
+  const settleAccountSwitches = () => {
+    for (const n of openSwitches) n.settled = true;
+    openSwitches = [];
+  };
+  const agentWorked = () => {
+    if (openAuth) openAuth.settled = 'resolved';
+    openAuth = undefined;
+    settleAccountSwitches();
   };
   // Only the latest auto-retry card is live; the ones above it describe outages that are over.
   // "Over" is decided by the next user message, whoever sent it: the retry firing, the user
@@ -1202,18 +1290,36 @@ function buildTranscript(
   // Narration between tool calls is overwritten by whatever follows it, so what is left when the
   // turn ends is the answer the turn ended on.
   let turnReply: string | undefined;
+  let turnReplySeq: number | undefined;
+  let turnReplyTranslation: ReplyTranslation | undefined;
+  // Whether the turn now open was opened by a message the owner wrote with translation on: its
+  // replies are translated by the server, so one without a translation yet is waiting for it.
+  let turnTranslated = false;
   // The `turnHead` the turn now open is drawn from — the message that opened it, until its
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
+  let legacyWithheld: { node: NoticeNode; count: number; turn: string | null | undefined } | undefined;
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    const legacy =
+      ev.type === 'system' &&
+      p.subtype === 'secret_patch_withheld' &&
+      typeof p.path === 'string' &&
+      [
+        "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.",
+        "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.",
+      ].some((template) => p.notice === `${p.path}: ${template}`);
+    if (!legacy || legacyWithheld?.turn !== ev.turnId) legacyWithheld = undefined;
+
     // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
     // continuation. Other transcript events are a hard boundary for the pending log.
     if (ev.type !== 'system' && ev.type !== 'tool_use' && ev.type !== 'tool_result') lastStderr = undefined;
     switch (ev.type) {
       case 'user': {
         outageOver();
+        if (openAuth) openAuth.settled ??= 'superseded';
+        settleAccountSwitches();
         // The composer's just-sent previews join in by turnId (instant, local object URLs);
         // the runner also echoes durable image refs in the event payload, used when there's
         // no local preview (after a reload, or the server-seeded first turn). An image-only
@@ -1254,6 +1360,9 @@ function buildTranscript(
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        // The platform's ask for a coordinator's handoff note is not a message anyone sent: the
+        // conversation shows the handoff's own row instead (docs/coordinator-handoff.md).
+        if (text.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) break;
         const taskStartFromPayload = parseTaskStartCard(p);
         const retriedTaskStart = taskStartForRetry(parent, text);
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
@@ -1291,11 +1400,16 @@ function buildTranscript(
           }
           break;
         }
+        const translation = turnTranslationOf(p.translation);
+        if (!parent && !p.steer && translation) {
+          turnTranslated = translation.state === 'DONE' || translation.state === 'SENT_AS_WRITTEN';
+        }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
             text,
+            ...(translation ? { translation } : {}),
             note: recorded?.note,
             itemCard,
             ownerAnswer,
@@ -1382,8 +1496,21 @@ function buildTranscript(
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else {
             const siblings = into(parent);
-            siblings.push({ kind: 'assistant', seq: ev.seq, text });
-            if (siblings === roots) turnReply = text;
+            agentWorked();
+            // A sub-agent's report to its caller is never translated (parentToolUseId).
+            const replyTranslation = parent ? undefined : replyTranslationOf(p.translation);
+            siblings.push({
+              kind: 'assistant',
+              seq: ev.seq,
+              text,
+              ...(replyTranslation ? { replyTranslation } : {}),
+              ...(!parent && !replyTranslation && turnTranslated ? { awaitsTranslation: true } : {}),
+            });
+            if (siblings === roots) {
+              turnReply = text;
+              turnReplySeq = ev.seq;
+              turnReplyTranslation = replyTranslation;
+            }
           }
         }
         break;
@@ -1420,6 +1547,7 @@ function buildTranscript(
         };
         if (node.id) byId.set(node.id, node);
         openTools.push({ node, parent });
+        agentWorked();
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -1466,10 +1594,19 @@ function buildTranscript(
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
+            : {
+                kind: 'divider',
+                seq: ev.seq,
+                ts: ev.ts,
+                reply: turnReply,
+                ...(turnReplyTranslation ? { replySeq: turnReplySeq, replyTranslation: turnReplyTranslation } : {}),
+              },
         );
         turnAccountedFor = false;
         turnReply = undefined;
+        turnReplySeq = undefined;
+        turnReplyTranslation = undefined;
+        turnTranslated = false;
         break;
       }
       case 'interrupt':
@@ -1514,7 +1651,23 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
-          into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
+          if (legacyWithheld) {
+            legacyWithheld.count++;
+            legacyWithheld.node.message = legacyWithheldMessage(legacyWithheld.count);
+            break;
+          }
+          const notice: NoticeNode = {
+            kind: 'notice',
+            seq: ev.seq,
+            message: String(p.notice),
+            ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
+          };
+          if (legacy) {
+            notice.message = legacyWithheldMessage(1);
+            legacyWithheld = { node: notice, count: 1, turn: ev.turnId };
+          }
+          if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
+          into(parent).push(notice);
           break;
         }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
@@ -1559,6 +1712,7 @@ function buildTranscript(
     attachmentRefs: node.attachmentRefs,
     delivery: node.delivery,
     withdrawable: node.withdrawable,
+    ...(node.translation ? { translation: node.translation } : {}),
   }));
   return { nodes: roots, unread };
 }
@@ -1599,8 +1753,17 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
+/** The session's SubAgent runs by `delegate` call (lib/subagentRuns.ts). Empty where nothing reads them: a
+ *  share page, an export. */
+export const SubagentRunsCtx = createContext<ReadonlyMap<string, SubagentRunView>>(new Map());
+
+/** What each SubAgent is waiting for a person to approve, by its `delegate` call: the action of the card it asked
+ *  in the parent's approval area (docs/subagent-design.md §5.3). Empty where no card can be answered. */
+export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new Map());
+
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
+  const translating = useContext(TranslationCtx)?.on === true;
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
   // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
@@ -1621,7 +1784,15 @@ function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
           onToggle={() => setThinkOpen((o) => !o)}
         />
       )}
-      {drafts.text && <StreamingMessage text={drafts.text} />}
+      {drafts.text && (translating ? (
+        // Settings › Translation (2A): the English is all there is until the block completes.
+        <div className="chat-translated-reply is-pending">
+          <StreamingMessage text={drafts.text} />
+          <ReplyTranslationFoot pending flipped={false} onFlip={() => {}} />
+        </div>
+      ) : (
+        <StreamingMessage text={drafts.text} />
+      ))}
     </>
   );
 }
@@ -1748,12 +1919,14 @@ export const Transcript = memo(function Transcript({
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
   const ended = useMemo(() => endedTaskProgress(events), [events]);
+  // A SubAgent runs for as long as its run says so: a background one's call answered at once.
+  const subagentRuns = useContext(SubagentRunsCtx);
   const taskLookup = useMemo<TaskLookup>(
     () => ({
       progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
-      running: (id) => activity.running.has(id),
+      running: (id) => activity.running.has(id) || subagentRuns.get(id)?.status === 'RUNNING',
     }),
-    [activity, ended],
+    [activity, ended, subagentRuns],
   );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
@@ -1801,17 +1974,32 @@ export const Transcript = memo(function Transcript({
     for (let i = events.length - 1; i >= 0; i--) if (events[i].type === 'turn_end') return events[i].seq;
     return 0;
   }, [events]);
+  // The main-checkout cards read the result lines written after them (MainCheckoutCard's handled state).
+  const mainCheckoutResults = useMemo(() => {
+    const results: Array<{ seq: number; result: MainCheckoutResultNotice['result'] }> = [];
+    const writtenAt = new Map<number, string>();
+    for (const ev of events) {
+      if (ev.type !== 'system') continue;
+      if (isMainCheckoutResult(ev.payload)) results.push({ seq: ev.seq, result: ev.payload.result });
+      else if (isMainCheckoutChanged(ev.payload) && ev.ts) writtenAt.set(ev.seq, ev.ts);
+    }
+    return { results, writtenAt };
+  }, [events]);
   const body = (
-    <TaskLookupCtx.Provider value={taskLookup}>
-      <ImagePreviewProvider>
-        {head.map((insert) => (
-          <Fragment key={insert.key}>{insert.element}</Fragment>
-        ))}
-        <NodeList nodes={before} live={live} placed={placed} />
-        <StreamingDrafts lastTurnEnd={lastTurnEnd} />
-        {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
-      </ImagePreviewProvider>
-    </TaskLookupCtx.Provider>
+    <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
+      <TaskLookupCtx.Provider value={taskLookup}>
+        <ShownOriginalProvider>
+        <ImagePreviewProvider>
+          {head.map((insert) => (
+            <Fragment key={insert.key}>{insert.element}</Fragment>
+          ))}
+          <NodeList nodes={before} live={live} placed={placed} />
+          <StreamingDrafts lastTurnEnd={lastTurnEnd} />
+          {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
+        </ImagePreviewProvider>
+        </ShownOriginalProvider>
+      </TaskLookupCtx.Provider>
+    </MainCheckoutResultsCtx.Provider>
   );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
@@ -1987,6 +2175,17 @@ function orbitTurnOf(
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
   }
+  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
+  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const subagent = parseSubagentFinished(node.note);
+  if (subagent) {
+    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
+    const jobs = parseBackgroundWake(subagent.rest);
+    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = subagentFinishedTitle(subagent);
+    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
   const background = parseBackgroundWake(node.note);
   if (background) {
     if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
@@ -2106,7 +2305,26 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    !isBackgroundTaskCall(node.name)
+    !isBackgroundTaskCall(node.name) &&
+    !ownerChatReplyOf(node)
+  );
+}
+
+// The owner's words when they answered one of Orbit's own asks with "Chat about this": the runner
+// hands them to the agent as the call's result (`ownerChatWords`), and the conversation draws them as
+// the message they are, under the call (OwnerChatBubble), rather than inside its folded result.
+function ownerChatReplyOf(node: ToolNode): string | null {
+  if (!node.name.startsWith('mcp__orbit__') || !node.result || node.result.isError) return null;
+  return ownerChatWords(resultText(node.result.content));
+}
+
+function OwnerChatBubble({ words }: { words: string }) {
+  return (
+    <div className="chat-user-wrap">
+      <div className="chat-msg chat-user">
+        <MD breaks>{words}</MD>
+      </div>
+    </div>
   );
 }
 
@@ -2170,19 +2388,17 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
       // the words themselves, which are the sending agent's to choose. No payload, the old reading.
-      // The block delivery appended only tells the agent what the card shows, so it is not folded
-      // under it a second time; what else rode along is (lib/sessionMessage).
       if (node.sessionMessage) {
-        const { rest, narrower } = splitSessionMessageNote(node.note);
+        const narrower = parseSessionMessageNarrower(node.note);
         return (
           <SessionMessageCard
             card={node.sessionMessage}
-            text={node.text}
+            // Settings › Translation: the words in the owner's language when the turn was translated.
+            text={node.translation?.state === 'DONE' ? node.translation.original : node.text}
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             narrower={narrower}
-            attached={rest && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
             queued={queued}
           />
         );
@@ -2190,11 +2406,10 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
       // carries nobody's words, and a message of the owner's may carry outcomes that were held for
       // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
-      // else delivery appended folds into the cards, as it does everywhere. Still queued, the queue's
+      // else delivery appended stays out of the transcript. Still queued, the queue's
       // line goes under the cards — or under the owner's words, the message it is about, when they
       // are there.
       if (node.sessionReplies) {
-        const rest = withoutReplyBlocks(node.note);
         const words = node.text.trim() !== '';
         return (
           <>
@@ -2221,12 +2436,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
               cards={node.sessionReplies}
               seq={seq}
               ts={node.ts}
-              attached={
-                <>
-                  {rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
-                  {!words && queued}
-                </>
-              }
+              queued={!words && queued}
             />
           </>
         );
@@ -2236,13 +2446,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
       if (isRunnerUpdateResume(node.text)) {
-        // What delivery appended — the background jobs that ended while the runner was away — rides under it.
-        return (
-          <>
-            <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
-            {node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
-          </>
-        );
+        return <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>;
       }
       const ownerRequestEnding = resolutionTurnLabel(node.text);
       if (ownerRequestEnding) {
@@ -2292,7 +2496,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2310,14 +2513,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
       }
       // A task run's opening turn is the brief written for the agent — the task, then four steps of
       // protocol — and nobody typed it either. With the task recorded beside it (lib/taskStartCard)
-      // it is drawn as that task; the task's inputs and anything delivery appended ride inside.
+      // it is drawn as that task, with the task's inputs inside.
       if (node.taskStart) {
         return (
           <TaskStartCard
@@ -2327,7 +2529,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2347,18 +2548,15 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         );
       }
       // A confirmation review's two turns (lib/confirmationReviewTurns): the request a reviewer is
-      // handed, and the reviewer's return handed to the run. Both are Orbit's — the block the agent
-      // read rides at the foot as the note it is — and neither is the reader's bubble.
+      // handed, and the reviewer's return handed to the run. Both are Orbit's, so each draws its own card.
       if (node.reviewRequest || node.reviewReturn) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
-        const attached = node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
         return node.reviewRequest ? (
           <ReviewRequestedCard
             card={node.reviewRequest}
             seq={seq}
             ts={node.ts}
             undelivered={undelivered}
-            attached={attached}
             queued={queued}
           />
         ) : (
@@ -2367,14 +2565,13 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             seq={seq}
             ts={node.ts}
             undelivered={undelivered}
-            attached={attached}
             queued={queued}
           />
         );
       }
       // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words to the
       // agent, about the reader. Drawn as what the reader did — `You confirmed`, each question and
-      // the answer they gave — with the block the agent read folded at the foot.
+      // the answer they gave.
       if (node.reviewAnswers) {
         return (
           <YouConfirmedCard
@@ -2382,7 +2579,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             text={node.text}
             seq={seq}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
             queued={queued}
           />
         );
@@ -2390,7 +2586,7 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // Five more of Orbit's own turns (OrbitTurnCards.tsx): a revision to review, a send-back, a task
       // run's question and its notify, and the opening of a session Orbit opened. Each is drawn as
       // what happened; the block the agent read — the turn's words, or its note when the turn has
-      // none — folds at the card's foot, and any other note rides under it as it always did.
+      // none — folds at the card's foot.
       if (node.evidenceReview || node.evidenceSendBack || node.runQuestion || node.runNotice) {
         const hasWords = node.text.trim() !== '';
         const told = hasWords ? node.text : node.note ?? '';
@@ -2399,9 +2595,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           ts: node.ts,
           undelivered: node.delivery === 'failed' || node.delivery === 'unconfirmed',
           told,
-          attached: hasWords && node.note
-            ? <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />
-            : undefined,
           queued,
         };
         if (node.evidenceReview) return <EvidenceToReviewCard card={node.evidenceReview} {...props} />;
@@ -2415,7 +2608,6 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
             card={node.sessionOpening}
             brief={node.text}
             seq={seq}
-            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
         );
       }
@@ -2423,15 +2615,44 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // nobody's message either: the block IS the turn, so it is read off the recorded note rather
       // than the person's words, which are empty. It is drawn as one event line in the agent's
       // stream, not as a card on the reader's side — the agent is carrying on with the answer, not
-      // being asked something new. Only the wake blocks become the line — anything else the same
-      // note carried (the inventory a returning engine is handed, a coordinator's standing role) is
-      // a folded entry in the line's own fold, because it is the control plane's too. It used to be
-      // an entry in a user bubble under the card, which drew an empty bubble: a message with no
-      // words in it, in the reader's own name.
+      // being asked something new. Only the wake blocks become the line.
       //
       // A job that ended while a turn ran is written into that turn as a steer: the same line, in
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
+      //
+      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
+      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
+      // the control plane wrote them; the job's line then says how the turn went, once.
+      const subagent = parseSubagentFinished(node.note);
+      if (subagent) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
+        const jobs = parseBackgroundWake(subagent.rest);
+        return (
+          <>
+            <SubagentFinishedCard
+              wake={subagent}
+              seq={seq}
+              ts={node.ts}
+              undelivered={undelivered && !jobs}
+              steer={jobs ? undefined : steer}
+              queued={jobs ? undefined : queued}
+            />
+            {jobs && (
+              <BackgroundWakeCard
+                wake={jobs}
+                seq={seq}
+                ts={node.ts}
+                undelivered={undelivered}
+                steer={steer}
+                queued={queued}
+              />
+            )}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
       const background = parseBackgroundWake(node.note);
       if (background) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
@@ -2444,20 +2665,35 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
               undelivered={undelivered}
               steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
               queued={queued}
-              attached={
-                background.rest !== '' && (
-                  <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
-                )
-              }
             />
             {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
           </>
         );
       }
+      // Nothing typed and only Orbit's blocks in the note: no dedicated line above knew the block, and
+      // it is still nobody's message (owner rule 2026-11-16). One generic line in the agent's stream,
+      // so the next new block cannot land on the reader's side as an empty bubble.
+      if (orbitOnlyTurn(node)) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        return (
+          <OrbitEventLine
+            note={node.note!}
+            seq={seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+            queued={queued}
+          />
+        );
+      }
       return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
-      return <AssistantBubble text={node.text} seq={node.seq} />;
+      return node.replyTranslation || node.awaitsTranslation ? (
+        <TranslatedReply node={node} />
+      ) : (
+        <AssistantBubble text={node.text} seq={node.seq} />
+      );
     case 'thinking':
       return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
@@ -2530,13 +2766,19 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       );
     }
     case 'notice':
+      if (node.mainCheckout && isMainCheckoutChanged(node.mainCheckout)) {
+        return <MainCheckoutCard notice={node.mainCheckout} seq={node.seq} />;
+      }
+      if (node.mainCheckout && isMainCheckoutResult(node.mainCheckout)) {
+        return <MainCheckoutResultRow notice={node.mainCheckout} seq={node.seq} />;
+      }
       return (
-        <div className="chat-notice" data-seq={node.seq}>
+        <div className={node.settled ? 'chat-notice chat-notice-settled' : 'chat-notice'} data-seq={node.seq}>
           ⚠ {node.message}
         </div>
       );
     case 'authError':
-      return <AuthErrorCard message={node.message} seq={node.seq} />;
+      return <AuthErrorCard message={node.message} seq={node.seq} settled={node.settled} />;
     case 'autoRetry':
       return (
         <AutoRetryCard
@@ -2636,13 +2878,13 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  * needs nothing on that box, and the cases it can't cover (a CLI too old to relay, no `script`)
  * report themselves with the command to run — as does the runtime's own message above.
  */
-function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
+function AuthErrorCard({ message, seq, settled }: { message: string; seq?: number; settled?: 'resolved' | 'superseded' }) {
   const help = useContext(AuthErrorCtx);
   // A press that would be the server's own re-send is a promise only the server makes, and the
   // window's last bubble can be somebody else's — so this card asks for the answer rather than
   // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
   // below, which return early.
-  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const retryIsTheServers = !settled && !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
   const onNeedRetryText = help?.onNeedRetryText;
   useEffect(() => {
     if (retryIsTheServers) onNeedRetryText?.();
@@ -2650,6 +2892,24 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  const title = !help
+    ? 'Authentication failed'
+    : local
+        ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+        : 'Provider authentication failed';
+  // The session moved past it: one muted line, the runtime's words a click away, and no actions —
+  // signing in or re-sending from here would act on a failure that is over.
+  if (settled) {
+    return (
+      <details className="chat-authfix-settled" data-seq={seq} data-settled={settled}>
+        <summary>
+          {settled === 'resolved' ? <span className="chat-authfix-settled-ok">✓</span> : <span>⚠</span>}
+          <span>{settled === 'resolved' ? `${title} — resolved` : title}</span>
+        </summary>
+        <div className="chat-authfix-msg">{message}</div>
+      </details>
+    );
+  }
   if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
     return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
   }
@@ -2657,13 +2917,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
-        <div className="chat-authfix-title">
-          {!help
-            ? 'Authentication failed'
-            : local
-                ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-                : 'Provider authentication failed'}
-        </div>
+        <div className="chat-authfix-title">{title}</div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
@@ -3128,9 +3382,8 @@ function SteerState({ node, typed }: { node: TextNode; typed: string }) {
 // (an image-only turn has empty text) — prefer the local preview (instant), falling back to the
 // durable refs when there's none. Below the bubble, one right-aligned meta row: the copy button and
 // the relative time, which fade in on hover like Claude's, then the bubble's own state (a steer's
-// progress, a message that did not land) and the line naming what Orbit attached, both always
-// shown. The row lives inside the hover wrap so the pointer can travel down onto it without
-// dismissing it (CSS :hover hits ancestors).
+// progress, a message that did not land), always shown. The row lives inside the hover wrap so the
+// pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
 //
 // Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
 // with that line at its foot — so a message does not change shape when the runner picks it up — and
@@ -3146,15 +3399,24 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // — a reference expansion, a list's condition board, the background work a returning engine is
   // told about, or a promoted coordinator's standing role. Those belong to Orbit, not to the person
   // whose bubble this is. The apiserver records what it appended: `node.note` holds it, `node.text`
-  // is already just the person's, and the note is one line in the meta row under their bubble,
-  // never in it (useControlPlaneNote). An event with no note is the echo as it came, however much
-  // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
-  // neither should be measured against a block nobody wrote.
-  const typed = node.text;
-  // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
-  // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
-  const noteKind = node.note ? describeNote(node.note) : '';
-  const note = useControlPlaneNote(node.note && noteKind ? { kind: noteKind, text: node.note } : null);
+  // is already just the person's. The appended note is not drawn. An event with no note is the echo
+  // as it came, however much of it looks like a block. Copying and the length cap follow the typed
+  // text for the same reason: neither should be measured against a block nobody wrote.
+  // Settings › Translation: a delivered message shows what the owner wrote, or — flipped — the English
+  // the agent got (`node.text`). A held one has nothing but what they wrote. Copy follows the screen.
+  const translation = node.translation;
+  const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
+  // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const flipped = shownOriginal && !bilingual;
+  const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
+  const translationFoot =
+    translation && translation.state !== 'SENT_AS_WRITTEN' ? (
+      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+    ) : null;
+  // Only the Show original / Show translation link opens the row; bilingual's always-shown
+  // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
+  const flipFoot = translation?.state === 'DONE' && !bilingual;
   const longText = typed.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
@@ -3199,6 +3461,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
+        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (
@@ -3208,8 +3471,12 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note || held) && (
+      {(typed || status || held || translationFoot) && (
         <div className="chat-user-meta">
+          {/* A delivered translation's flip opens the row; copy and the time stay together at its
+              end (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
             <button
               type="button"
@@ -3222,15 +3489,14 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || held || (!flipFoot && translationFoot)) && (
+            <span className="chat-meta-sep">·</span>
+          )}
+          {!flipFoot && translationFoot}
           {status}
           {held}
-          {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
-              to have raised. */}
-          {note?.line}
         </div>
       )}
-      {note?.opened}
     </div>
   );
 }
@@ -3278,10 +3544,14 @@ function TurnAttachments({ node }: { node: TextNode }) {
 function TurnFoot({ node }: { node: DividerNode }) {
   const [copied, setCopied] = useState(false);
   const { seq, ts, reply } = node;
+  // Settings › Translation: copy the version of the reply on screen, translated unless flipped.
+  const shownOriginal = useReplyShownOriginal(node.replySeq);
   if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const shownReply =
+    node.replyTranslation?.text !== undefined && !shownOriginal ? node.replyTranslation.text : reply;
   const copy = () => {
-    if (!reply) return;
-    void copyText(reply).then((ok) => {
+    if (!shownReply) return;
+    void copyText(shownReply).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
@@ -3935,14 +4205,48 @@ function remarkHtmlBlocks() {
   };
 }
 
+/** The tag `remarkTail` puts the tail on; `block` when it had no line to end. */
+const MD_TAIL_TAG = 'md-tail';
+const MdTailCtx = createContext<ReactNode>(null);
+
+// Stable, so a press inside the tail keeps its focus when the reply re-renders.
+function MdTail({ block }: { block?: string }) {
+  const tail = useContext(MdTailCtx);
+  return block ? <div className="md-tail-block">{tail}</div> : <>{tail}</>;
+}
+
+/** Appends the tail to the end of the last line: the last paragraph or heading, inside the last
+ *  item of a closing list. When the text ends in anything else (code, a table, a quote), on a line
+ *  of its own below. */
+function remarkTail() {
+  return (tree: any) => {
+    const place = (parent: any): boolean => {
+      const last = parent.children?.at(-1);
+      if (!last) return false;
+      if (last.type === 'paragraph' || last.type === 'heading') {
+        last.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG } });
+        return true;
+      }
+      if (last.type === 'list' || last.type === 'listItem') return place(last);
+      return false;
+    };
+    if (!place(tree)) {
+      tree.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG, hProperties: { block: 'true' } } });
+    }
+  };
+}
+
 export const MD = memo(function MD({
   children,
   highlight = true,
   breaks = false,
+  tail,
 }: {
   children: string;
   highlight?: boolean;
   breaks?: boolean;
+  /** Drawn at the end of the text's last line, e.g. a translated reply's flip. */
+  tail?: ReactNode;
 }) {
   // Links that name an object of this deployment become cards — but only where a conversation view
   // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
@@ -3957,16 +4261,25 @@ export const MD = memo(function MD({
   // plugin handed over already called would be installed as one and asked to read a tree it was
   // never given.
   if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
+  if (tail) plugins.push(remarkTail);
   return (
     <div className="md">
-      <Markdown
-        remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
-        urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
-      >
-        {children}
-      </Markdown>
+      <MdTailCtx.Provider value={tail}>
+        <Markdown
+          remarkPlugins={plugins}
+          rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
+          urlTransform={transcriptUrlTransform}
+          components={{
+            pre: CodeBlock,
+            img: MarkdownImage,
+            a: MarkdownLink,
+            ...orbitLinkCardComponents,
+            ...({ [MD_TAIL_TAG]: MdTail } as unknown as MarkdownComponents),
+          }}
+        >
+          {children}
+        </Markdown>
+      </MdTailCtx.Provider>
     </div>
   );
 });
@@ -3979,18 +4292,144 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  tail,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  tail?: ReactNode;
 }) {
   return (
     <div
       className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
       data-seq={seq}
     >
-      <MD highlight={!streaming}>{text}</MD>
+      <MD highlight={!streaming} tail={tail}>{text}</MD>
+    </div>
+  );
+}
+
+// An agent reply under Settings › Translation (board frames 4–6): shown in the owner's language with
+// a per-message flip to the English the agent wrote; greyed, with its chip, until the translation
+// arrives; and with a Retry when it failed — in English, which is all there is.
+function TranslatedReply({ node }: { node: TextNode }) {
+  const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
+  const translation = node.replyTranslation;
+  // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const flipped = shownOriginal && !bilingual;
+  const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
+  const pending = !translation && node.awaitsTranslation;
+  // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
+  const pairs = useMemo(
+    () => (bilingual && translation?.text !== undefined ? bilingualPairs(translation.text, node.text) : null),
+    [bilingual, translation?.text, node.text],
+  );
+  return (
+    <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
+      {bilingual && pairs ? (
+        <>
+          <InterleavedReply pairs={pairs} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      ) : bilingual ? (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <div className="chat-bilingual-reply">
+            <BilingualEnglish text={node.text} collapsible />
+          </div>
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      ) : translation?.text !== undefined && !translation.failed ? (
+        // Delivered: the flip rides at the end of the reply's last line.
+        <AssistantBubble
+          text={translated}
+          seq={node.seq}
+          tail={<ReplyTranslationFoot translation={translation} seq={node.seq} flipped={flipped} onFlip={flip} />}
+        />
+      ) : (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): each block of
+// the translation with the original's matching block right under it, smaller and grey, and no divider
+// inside a pair. An item's original sits under its own words, indented with them; a heading's under the
+// heading, in a lighter weight. Code, tables and images are drawn once, from the translation.
+function InterleavedReply({ pairs, seq }: { pairs: BilingualPair[]; seq?: number }) {
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const original = (pair: BilingualPair) =>
+    pair.original ? (
+      <div className={pair.kind === 'heading' ? 'chat-bilingual-original is-heading' : 'chat-bilingual-original'} lang={agentLanguage}>
+        <MD breaks>{pair.original}</MD>
+      </div>
+    ) : null;
+  return (
+    <div className="chat-msg chat-assistant chat-interleaved" data-seq={seq}>
+      {pairs.map((pair, i) => {
+        const indent = pair.depth > 0 ? { paddingLeft: `${pair.depth * 22}px` } : undefined;
+        let body: ReactNode;
+        if (pair.kind === 'item') {
+          const ordered = /^\d/.test(pair.marker ?? '');
+          const item = (
+            <li>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </li>
+          );
+          body = ordered ? <ol start={parseInt(pair.marker ?? '1', 10)}>{item}</ol> : <ul>{item}</ul>;
+        } else if (pair.kind === 'quote') {
+          body = (
+            <blockquote>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </blockquote>
+          );
+        } else {
+          body = (
+            <>
+              <MD>{pair.text}</MD>
+              {original(pair)}
+            </>
+          );
+        }
+        return (
+          <div key={i} className={`chat-interleaved-pair is-${pair.kind}`} style={indent}>
+            <div className="md">{body}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English the agent read
+// or wrote, under a dashed divider in smaller grey text — its prose only, a code block being drawn once
+// above. A reply's English that runs over BILINGUAL_COLLAPSE_LINES lines starts as a two-line faded
+// preview with "Show English · N lines", which opens it in place (frame 3); per message, not kept.
+function BilingualEnglish({ text, collapsible = false }: { text: string; collapsible?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const english = bilingualEnglish(text);
+  if (!english) return null;
+  const lines = bilingualLineCount(english);
+  const collapsed = collapsible && !open && lines > BILINGUAL_COLLAPSE_LINES;
+  return (
+    <div className={collapsed ? 'chat-bilingual is-collapsed' : 'chat-bilingual'} lang={agentLanguage}>
+      <div className="chat-bilingual-text">
+        <MD breaks>{english}</MD>
+      </div>
+      {collapsed && (
+        <button type="button" className="chat-translate-action chat-bilingual-more" onClick={() => setOpen(true)}>
+          {showEnglishLabel(lines, agentLanguage)}
+        </button>
+      )}
     </div>
   );
 }
@@ -4027,73 +4466,6 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
-// What the control plane appended to a message — a reference's summary, a list's condition board,
-// the background work a returning engine is told about, a coordinator's standing role — named on one
-// quiet line as Orbit's rather than the person's. Folded, not dropped: it is why a reply can mention
-// something the message never did, and opening it shows exactly what the model read. Opened by a
-// click rather than carried in a tooltip, which a touch screen cannot reach.
-//
-// The line is in the voice of the time under a message and says what is attached, nothing more:
-// "⊕ Orbit attached: background jobs", ⊖ once it is open. What the person typed is what the eye
-// should land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands —
-// "1 running, 1 failed" — is the line's tooltip and accessible name, and the opened rows say it
-// job by job.
-//
-// The line and what it opens to come back apart because a person's bubble places them apart: the
-// line ends the meta row under the bubble and the rows go under that row (UserBubble). Everywhere
-// else they stand together (ControlPlaneNote). Null when there is no note.
-function useControlPlaneNote(note: { kind: string; text: string } | null): { line: ReactNode; opened: ReactNode } | null {
-  const exp = useContext(ExportCtx);
-  const [open, setOpen] = useState(!!exp);
-  // Three of the blocks open as something other than their own text: the inventory a returning engine
-  // is handed, whose lines are a list of outcomes; the tasks a person named with `#`, whose table
-  // holds an id nobody could click; and the wiki's notes for this codebase, whose lines are what the
-  // agent read before it began. One note can carry several, so each reading is handed what the one
-  // before it did not take and what is left over is drawn as it always was.
-  const text = note?.text ?? '';
-  const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
-  const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
-  const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
-  if (!note) return null;
-  const { kind } = note;
-  const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
-  const baseLabel = `⊕ Orbit attached: ${kind}`;
-  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
-  return {
-    line: (
-      <button
-        type="button"
-        className="chat-injected-head"
-        aria-expanded={open}
-        aria-label={label}
-        title={`${label.slice(2)}. The agent read it with this message.`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="chat-injected-mark">{open ? '⊖' : '⊕'}</span> Orbit attached: {kind}
-      </button>
-    ),
-    opened: open && (
-      <div className="chat-injected-panel">
-        {tasks && <ReferencedTaskNote tasks={tasks.tasks} />}
-        {jobs && <BackgroundJobsNote jobs={jobs} />}
-        {wiki && <WikiContextNote context={wiki} />}
-        {rest !== '' && <pre className="chat-injected-body">{rest}</pre>}
-      </div>
-    ),
-  };
-}
-
-/** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
-function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
-  const note = useControlPlaneNote({ kind, text });
-  return (
-    <div className="chat-injected">
-      {note?.line}
-      {note?.opened}
-    </div>
-  );
-}
-
 /**
  * A settled stretch of reasoning, folded. What the row says while shut is the whole question: a
  * bare "Thinking" told a reader nothing about whether opening it was worth it, and a turn stacks
@@ -4158,9 +4530,10 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
-/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
+ *  Orbit's own SubAgent (`delegate`). */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
 }
 
 /**
@@ -4173,6 +4546,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   const content = node.result?.content;
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4217,7 +4591,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
+  // So does the owner's chat reply to a card, whose words are the end of the result.
+  const chatReply = ownerChatReplyOf(node) !== null;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall || chatReply;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -4229,6 +4605,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // How a question ended lives only in the result text ("The user answered: …"), so the card reads
   // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const ownerWords = chatReply ? ownerChatWords(answer) : null;
   const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
   const outcome = useMemo(
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
@@ -4249,11 +4626,20 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
-  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
+  const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
     () => describeTool(node.name, input, isShell, outcome),
     [node.name, input, isShell, outcome],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
+  const isDelegate = node.name === DELEGATE_TOOL;
+  const run = useContext(SubagentRunsCtx).get(node.id);
+  const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
+  const why = isDelegate ? subagentWhy(run) : null;
+  const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
+  const waitingLine = isDelegate && waitingFor ? (
+    <div className="chat-subagent-waiting">Waiting for approval · {waitingFor}</div>
+  ) : null;
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent' || isDelegate;
   const isBackgroundTask = isBackgroundTaskCall(node.name);
   const launchReceipt = isLaunchReceipt(node);
   // A workflow is named by its launch receipt once that lands — see describeTool.
@@ -4281,94 +4667,106 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     if (node.result.truncated && !fullResult) return null;
   }
   return (
-    <div
-      data-seq={node.seq}
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
-        hasDetail && open ? ' is-open' : ''
-      }`}
-    >
+    <>
       <div
-        className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
-        onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        data-seq={node.seq}
+        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
+        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
+        className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
+          hasDetail && open ? ' is-open' : ''
+        }`}
       >
-        {/* Keep the disclosure column stable even before a result gives a no-input tool something
-            to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
-        <span className="chat-tool-caret">
-          {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
-        </span>
-        <span className="chat-tool-icon">{icon}</span>
-        <span className="chat-tool-name">{label}</span>
-        {p ? (
-          <span className="chat-tool-summary mono chat-path" title={path}>
-            <b className="chat-path-file">{p.base}</b>
-            {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+        <div
+          className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
+          onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        >
+          {/* Keep the disclosure column stable even before a result gives a no-input tool something
+              to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
+          <span className="chat-tool-caret">
+            {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
           </span>
-        ) : (
-          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          <span className="chat-tool-icon">{icon}</span>
+          <span className="chat-tool-name">{label}</span>
+          {p ? (
+            <span className="chat-tool-summary mono chat-path" title={path}>
+              <b className="chat-path-file">{p.base}</b>
+              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+            </span>
+          ) : (
+            title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          )}
+          {tag && <span className="chat-tool-tag">{tag}</span>}
+          {isBackgroundTask ? (
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+          ) : outcome?.kind === 'replied' ? (
+            // The engine files "Chat about this" as the call's error; it is the person's reply.
+            <MessageFilled className="chat-tool-status replied" />
+          ) : (
+            <>
+              {meta && <span className="chat-tool-meta">{meta}</span>}
+              <ToolStatus node={node} live={live} />
+            </>
+          )}
+        </div>
+        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
+        {questions.length > 0 && !(hasDetail && open) && (
+          <QuestionFolded
+            questions={questions}
+            outcome={outcome}
+            onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+          />
         )}
-        {isBackgroundTask ? (
-          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
-        ) : outcome?.kind === 'replied' ? (
-          // The engine files "Chat about this" as the call's error; it is the person's reply.
-          <MessageFilled className="chat-tool-status replied" />
-        ) : (
-          <>
-            {meta && <span className="chat-tool-meta">{meta}</span>}
-            <ToolStatus node={node} live={live} />
-          </>
+        {hasDetail && open && (
+          <div className="chat-tool-detail">
+            {why && <SubagentWhy why={why} run={run} />}
+            {/* A failed call is opened to find out why, and the input is rarely the answer — a
+                heredoc alone clamps to sixteen lines, which is enough to push the reason off the
+                bottom of the card. Put the error first when there is one; everywhere else the
+                call still reads input-then-output. */}
+            {node.result?.isError && !outcome && (
+              <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
+            )}
+            {node.name === 'Workflow' && (
+              <WorkflowProgressDetail
+                node={node}
+                live={live}
+                // Before a runner that reports progress, a workflow's receipt is still all there is.
+                // An agent's ack is internal metadata; its own transcript below says what it did.
+                fallback={
+                  launchReceipt && node.name === 'Workflow' ? (
+                    <ToolResult seq={node.seq} content={resultContent} compact />
+                  ) : null
+                }
+              />
+            )}
+            {body && (node.name === 'Workflow' ? (
+              <details className="chat-workflow-source" open={exp ? true : undefined}>
+                <summary>Workflow source</summary>
+                <div className="chat-tool-body">{body}</div>
+              </details>
+            ) : <div className="chat-tool-body">{body}</div>)}
+            {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
+              <div className="chat-subagent">
+                <NodeList nodes={node.children} live={live} />
+                {waitingLine}
+              </div>
+            )}
+            {/* A sub-agent's totals close its transcript rather than open it. */}
+            {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
+            {/* A question's result, once read, is only the replay above said again. */}
+            {isDelegate
+              ? node.result && !node.result.isError && (
+                  <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+                )
+              : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+                  <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+                )}
+            {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+          </div>
         )}
       </div>
-      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
-      {questions.length > 0 && !(hasDetail && open) && (
-        <QuestionFolded
-          questions={questions}
-          outcome={outcome}
-          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
-        />
-      )}
-      {hasDetail && open && (
-        <div className="chat-tool-detail">
-          {/* A failed call is opened to find out why, and the input is rarely the answer — a
-              heredoc alone clamps to sixteen lines, which is enough to push the reason off the
-              bottom of the card. Put the error first when there is one; everywhere else the
-              call still reads input-then-output. */}
-          {node.result?.isError && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
-          )}
-          {node.name === 'Workflow' && (
-            <WorkflowProgressDetail
-              node={node}
-              live={live}
-              // Before a runner that reports progress, a workflow's receipt is still all there is.
-              // An agent's ack is internal metadata; its own transcript below says what it did.
-              fallback={
-                launchReceipt && node.name === 'Workflow' ? (
-                  <ToolResult seq={node.seq} content={resultContent} compact />
-                ) : null
-              }
-            />
-          )}
-          {body && (node.name === 'Workflow' ? (
-            <details className="chat-workflow-source" open={exp ? true : undefined}>
-              <summary>Workflow source</summary>
-              <div className="chat-tool-body">{body}</div>
-            </details>
-          ) : <div className="chat-tool-body">{body}</div>)}
-          {node.name !== 'Workflow' && node.children.length > 0 && (
-            <div className="chat-subagent">
-              <NodeList nodes={node.children} live={live} />
-            </div>
-          )}
-          {/* A sub-agent's totals close its transcript rather than open it. */}
-          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {/* A question's result, once read, is only the replay above said again. */}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-          )}
-          {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
-        </div>
-      )}
-    </div>
+      {ownerWords && <OwnerChatBubble words={ownerWords} />}
+    </>
   );
 }
 
@@ -4545,6 +4943,51 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 
 /** A running background task's folded card: what its sub-agent is on right now — the last thing
     its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+/**
+ * A SubAgent's grey Why: one line of clauses, at most two at a 900 px transcript. The router's full reasons and
+ * every candidate it removed are behind it — in its tooltip, and in the list `Details` opens.
+ */
+function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefined }) {
+  const [open, setOpen] = useState(false);
+  const { reasons, removed } = subagentWhyDetails(run);
+  const more = reasons.length > 0 || removed.length > 0;
+  const tooltip = more
+    ? [...reasons, ...(removed.length ? ['Removed:', ...removed.map((line) => `- ${line}`)] : [])].join('\n')
+    : undefined;
+  return (
+    <>
+      <div className="chat-subagent-why" title={tooltip}>
+        <b>Why</b> · {why}
+        {more && (
+          <button
+            type="button"
+            className="chat-subagent-why-more"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            {open ? 'Hide' : 'Details'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="chat-subagent-why-list">
+          {reasons.map((line, i) => (
+            <li key={`r${i}`}>{line}</li>
+          ))}
+          {removed.map((line, i) => (
+            <li key={`x${i}`} className="chat-subagent-why-removed">
+              Removed · {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   const lookup = useContext(TaskLookupCtx);
   if (!lookup.running(node.id) && !(live && !node.result)) return null;
@@ -4562,6 +5005,15 @@ function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
     if (text) return <div className="chat-tool-live">{text}</div>;
   }
   return null;
+}
+
+/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended — unless
+ *  the child's own last message, drawn just above it, already says it word for word. */
+function DelegateResult({ content, run, seq, steps }: { content: unknown; run?: SubagentRunView; seq: number; steps: Node[] }) {
+  const text = delegateResultText(content, run);
+  const last = steps[steps.length - 1];
+  if (!text || (last?.kind === 'assistant' && last.text.trim() === text.trim())) return null;
+  return <ToolResult seq={seq} content={text} compact markdown />;
 }
 
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
@@ -4631,6 +5083,7 @@ type ToolDesc = {
   tone?: Tone; // colour family for the icon chip + card left rail
   path?: string; // a file path → rendered as bold filename + dimmed parent dir
   meta?: string; // small trailing badge (line range, edit count)
+  tag?: string; // a word set apart after the summary (a SubAgent's `Background`)
 };
 
 // Codex's shell calls carry no `description`, and it wraps every one of them as
@@ -4767,6 +5220,16 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    // Orbit's SubAgent (docs/subagent-design.md §6.4), named Agent on screen as on iOS and macOS: the same purple card as Agent. Its tier, model, time
+    // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
+    case DELEGATE_TOOL:
+      return {
+        label: 'Agent',
+        icon: <span className="chat-subagent-icon">✦</span>,
+        tone: 'agent',
+        summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),
+        tag: i.background === true ? 'Background' : undefined,
       };
     case 'Workflow':
       // A team of agents the runtime runs in the background. Named by the script's own meta

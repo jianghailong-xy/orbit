@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { RightOutlined } from '@ant-design/icons';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { storageUsageQuery, type StorageUsage } from '../../lib/queries';
 import { formatFileSize } from '../../lib/worktreeFile';
+import { encodeId } from '../../lib/idCodec';
 import { PERSONAL_SETTINGS as S } from './settingsIndex';
 
 /** A week as its Monday reads, in the zone the server counted it in. */
-function weekLabel(weekStart: string): string {
+export function weekLabel(weekStart: string): string {
   return new Date(`${weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
@@ -16,13 +19,19 @@ function storedValue({ totalBytes, fileCount, quotaBytes }: StorageUsage): strin
 }
 
 /** A section of rows, each a name and a size. Nothing at all when there are no rows. */
-function UsageSection({ title, rows }: { title: string; rows: { key: string; name: string; size: string }[] }) {
+function UsageSection({ title, rows }: { title: string; rows: { key: string; name: string; size: string; to: string }[] }) {
+  const navigate = useNavigate();
   if (rows.length === 0) return null;
   return (
     <SettingsSection title={title}>
       <SettingsCard>
-        {rows.map(({ key, name, size }) => (
-          <SettingsRow key={key} title={name} control={<span className="settings-storage-size">{size}</span>} />
+        {rows.map(({ key, name, size, to }) => (
+          <button key={key} type="button" className="workspace-machine-choice storage-usage-choice" onClick={() => navigate(to)}>
+            <SettingsRow
+              title={name}
+              control={<><span className="settings-storage-size">{size}</span><RightOutlined className="storage-usage-chevron" /></>}
+            />
+          </button>
         ))}
       </SettingsCard>
     </SettingsSection>
@@ -61,11 +70,11 @@ export function StorageSettingsPage() {
         <>
           <UsageSection
             title="Largest projects"
-            rows={usage.projects.map(({ projectId, title, bytes }) => ({ key: projectId, name: title, size: formatFileSize(bytes) }))}
+            rows={usage.projects.map(({ projectId, title, bytes }) => ({ key: projectId, name: title, size: formatFileSize(bytes), to: `/settings/storage/projects/${encodeId(projectId)}` }))}
           />
           <UsageSection
             title="Largest tasks"
-            rows={usage.tasks.map(({ taskId, title, bytes }) => ({ key: taskId, name: title, size: formatFileSize(bytes) }))}
+            rows={usage.tasks.map(({ taskId, title, bytes }) => ({ key: taskId, name: title, size: formatFileSize(bytes), to: `/settings/storage/tasks/${encodeId(taskId)}` }))}
           />
           <UsageSection
             title="Added each week"
@@ -73,6 +82,7 @@ export function StorageSettingsPage() {
               key: weekStart,
               name: `Week of ${weekLabel(weekStart)}`,
               size: formatFileSize(bytes),
+              to: `/settings/storage/weeks/${weekStart}`,
             }))}
           />
         </>

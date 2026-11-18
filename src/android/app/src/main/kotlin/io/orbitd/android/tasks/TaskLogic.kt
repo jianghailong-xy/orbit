@@ -677,6 +677,12 @@ data class AcceptanceDraft(val criteria: String = "", val command: String = "", 
 }
 
 object TaskDetailLogic {
+    /** What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its project's coordinator session,
+     * else the workspace's newest person-opened session; web `unpinnedRuns`). Null under a pin, which the pins already say, and from
+     * an older server, which sends none. */
+    fun unpinnedRuns(task: JsonObject): JsonObject? =
+        task.obj("runsWith")?.takeIf { it.text("source").let { source -> source != null && source != "TASK_PIN" } }
+
     /** A stopped task — done or cancelled — draws no run here: Reopen task and Run again are in ⋯ (board 05), as on iOS. */
     fun actionRow(owner: OwnerPanelAction?, status: String?, gate: Boolean, entry: TaskRunHandoff.Entry): TaskActionRow {
         val leading = when (owner) {
@@ -694,6 +700,10 @@ object TaskDetailLogic {
         }
         return TaskActionRow(leading, trailing)
     }
+
+    /** The server's finished SOURCE sentence of a task forked from a session (task-fork-from-session §2.3, SR18), shown verbatim;
+     * a session's detail carries the same field. Null when absent, null or empty: older servers do not send it. */
+    fun forkSource(row: JsonObject): String? = row.text("forkSource")?.takeUnless { it.isBlank() }
 
     /** Asked first like the browser's: a gate row is not waiting on a prerequisite or a workspace. */
     fun runDisabledHint(task: JsonObject, assigneeHasRunner: Boolean): String? = when {

@@ -419,7 +419,7 @@ func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
 // agent's own prompt, its appended prompt, then Orbit's CLI guidance.
 func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
 	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.appendSystemPrompt()}, "\n\n"))
-	return &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn())}
+	return &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent))}
 }
 
 func dshConfigurationHash(fileMode string, patch []byte) string {

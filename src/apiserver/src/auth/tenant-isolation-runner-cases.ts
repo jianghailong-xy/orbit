@@ -97,6 +97,8 @@ export interface RunnerObjects {
   runningTaskId: string;
   runningTaskSessionId: string;
   allowedApprovalId: string;
+  /** Of `machineSessionId`: an ended SubAgent run, which a delegate call's `resumeOf` names. */
+  subagentRunId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
@@ -145,6 +147,8 @@ export interface RunnerObjects {
   reviewerSessionId: string;
   /** Wiki: a session in a workspace bound to the space. */
   wikiSessionId: string;
+  /** The help center's Ask (migration 0850): a session of this machine's in no workspace, with `help_ask` set. */
+  helpAskSessionId: string;
   /** A SECRET grant to this machine, awaiting delivery, for the machine session's PENDING request (migration 0506). */
   secretGrantId: string;
   /** A grant of this machine being removed: what `removed` confirms. */
@@ -397,6 +401,13 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       },
     }),
   },
+  'POST /runner/sessions/:id/subagents': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { id: of.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_delegate', type: 'general', definitionSource: 'builtin' },
+    }),
+  },
   // The machine's own alert about a job of the session's (its agents' is POST /runner/notify, below): another account's
   // runner is refused it as for an id that names nothing, while the owner's is answered by the push channel.
   'POST /runner/sessions/:id/notify': {
@@ -564,6 +575,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { question: 'Which first?' } }),
   },
+  // A three-character quote: the door refuses it 400 only after it has found the project under the
+  // runner's owner and the header as its coordinator, so the caller's own request is answered by the route.
+  'POST /runner/projects/:id/rulings': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { ruling: 'Recorded by the census.', quote: 'abc', sourceTurnId: mine.projectId },
+    }),
+  },
   'POST /runner/projects/:id/start-requests': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -717,6 +738,31 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /runner/help-ask/:read':
+    ':read names one of four account reads, never an object; the reads answer only an Ask session found by (the session header, the runner\'s owner, this runner) and read only that owner\'s rows (help/help-ask-reads.ts:224); help-ask.pg.spec.ts 6 sends them from another machine and another account',
+  // ── scheduled tasks: a session's schedule_* tools (runner-api/runner-schedules.controller.ts) ─────────
+  'GET /runner/schedules/:id':
+    "read by (id, the runner's owner) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'PATCH /runner/schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/pause':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/resume':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/end':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'DELETE /runner/schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/run':
+    "the schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)",
+  'GET /runner/conditions/:id':
+    "read by (id, the runner's owner) and nothing else, 404 CONDITION_NOT_FOUND for another account's id (conditions/conditions.service.ts:445)",
+  'POST /runner/schedule-runs/:id/stop':
+    "the run's schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
+  'POST /runner/main-checkout/:id/snapshot':
+    'the read is found by (id, the calling runner) only, so another machine\'s id answers 404 and nothing is stored (workspaces/main-checkout.service.ts:330); main-checkout.pg.spec.ts "the read goes through the runner" sends it from another runner',
+  'POST /runner/main-checkout/:id/result':
+    'the action is found by (id, the calling runner) only, 404 for another machine\'s, and every write after is keyed by that row (workspaces/main-checkout.service.ts:347)',
   // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
   'POST /runner/projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the runner\'s owner as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the acting session must be that project\'s coordinator (403 otherwise)',
   'POST /runner/projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the runner\'s owner as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the acting session must be that project\'s coordinator (403 otherwise)',
@@ -725,6 +771,31 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'read by (id, the runner\'s owner) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /runner/owner-requests/:id/withdraw':
     'the calling session must be one this runner hosts for its owner (runner-api/runner-owner-requests.controller.ts:66), the request is read by (id, that owner) (owner-requests/owner-requests.service.ts:193), and only the session that filed it may withdraw it (owner-requests/owner-requests.service.ts:233)',
+  'PATCH /runner/sessions/:id/subagents/:runId':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only, on an end '
+    + '(runner-api/runner-subagents.controller.ts:398) and on a RUNNING report owing a wake (recordWakeOwed, '
+    + 'runner-api/runner-subagents.controller.ts:114); subagent-run.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/sessions/:id/subagents/:runId/fallback':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 as for an id that names nothing '
+    + '(runner-api/runner-subagents.controller.ts:137), and the run is matched by (id, that session) only '
+    + '(runner-api/runner-subagents.controller.ts:303); subagent-fallback.pg.spec.ts sends another account\'s session and run',
+  'POST /runner/subagent-runs/:runId/claim':
+    'the run is read by id and refused 404 unless it is a remote run of the runner\'s own account, 403 '
+    + 'SUBAGENT_RUN_NOT_TARGET unless this runner is its target_runner_id (runner-api/subagent-remote.ts:403); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'POST /runner/subagent-runs/:runId/events':
+    'the same check as the claim (runner-api/subagent-remote.ts:403) before anything is written; subagent-remote.pg.spec.ts '
+    + 'sends the parent\'s runner, another runner of the account and another account\'s runner, and finds no event stored',
+  'PATCH /runner/subagent-runs/:runId':
+    'the same check as the claim (runner-api/subagent-remote.ts:403), then the end is written by (id, the run\'s own session); '
+    + 'subagent-remote.pg.spec.ts sends another runner of the account',
+  'GET /runner/sessions/:id/subagents/:runId/events':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts readRelayedSubagentEvents)',
+  'POST /runner/sessions/:id/subagents/:runId/stop':
+    'the session must be one of the runner\'s owner that this runner hosts, else 404 (runner-api/runner-subagents.controller.ts:153), and the '
+    + 'run is matched by (id, that session) only (runner-api/runner-subagents.controller.ts stopRemoteSubagentRun)',
   'POST /runner/tasks/:taskId/owner-confirmation':
     'refused 403 to every caller — the owner\'s own machine included — before the task or anything else is read: only '
     + 'the account owner confirms, through the app (task-owner-confirmation.service.ts:205 → '
@@ -764,6 +835,18 @@ const taskCreateFieldCases = (route: string, wrap: (task: object) => object, whe
     heldRow: (of: RunnerTenant) => ['task', of.spare.taskId] as const,
   },
   [`${route} body ${where}dependsOnTaskIds[]`]: { as: RUNNER, request: (of: RunnerTenant) => ({ params: {}, body: wrap(taskBody({ dependsOnTaskIds: [of.dependencyTaskId] })) }) },
+  // SR55: a fork of A's session, asked from B's own calling session on B's own runner. A fork is only ever of the
+  // session making the call (tasks/task-fork.ts), so A's session is answered as an id that names nothing is.
+  [`${route} body ${where}fork.sessionId`]: {
+    as: RUNNER,
+    request: (of: RunnerTenant, mine: RunnerTenant) => ({
+      params: {},
+      headers: calling(mine.runner.callingSessionId),
+      body: wrap(taskBody({
+        fork: { sessionId: of.runner.callingSessionId, sha: '5'.repeat(40), baseHead: '4'.repeat(40), includesUncommitted: true },
+      })),
+    }),
+  },
 }) satisfies Record<string, RunnerFieldCase>;
 
 /** The task filters by id, as the runner's list doors take them. */
@@ -809,6 +892,10 @@ const ownSessionRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenant
 /** The coordinator's doors of a project, as a field case of the coordinator's header. */
 const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => TenantRequest>> = {
   'POST /runner/projects/:id/owner-questions': (mine) => ({ params: { id: mine.projectId }, body: { question: 'Which first?' } }),
+  'POST /runner/projects/:id/rulings': (mine) => ({
+    params: { id: mine.projectId },
+    body: { ruling: 'Recorded by the census.', quote: 'abc', sourceTurnId: mine.projectId },
+  }),
   'POST /runner/projects/:id/start-requests': (mine) => ({
     params: { id: mine.projectId },
     body: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, why: 'the census' },
@@ -892,10 +979,47 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // A clone report about A's workspace from B's runner moves nothing (github/github-workspace.service.ts applyCloneReports).
+  'POST /runner/heartbeat body cloneReports[].workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ cloneReports: [{ workspaceId: of.workspaceId, state: 'FAILED', error: 'census' }] }) }),
+  },
+  // A GitHub workspace's token (docs/github-workspace-design.md §5.4): only for a workspace on the calling runner. The
+  // owner's own workspace is not from GitHub, which is 409; B naming A's is the 404 of an id that names nothing.
+  'POST /runner/git-credential body workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, host: 'github.com', path: 'census/none' } }),
+  },
+  // A delegate call resuming A's ended SubAgent run, from B's own session: looked up only among that session's runs.
+  'POST /runner/sessions/:id/subagents body resumeOf': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_resume', type: 'general', definitionSource: 'builtin', resumeOf: of.runner.subagentRunId },
+    }),
+  },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
   'POST /runner/link/welcome body sessionIds[]': {
     as: RUNNER,
     request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
+  },
+  // A refused account removal of B's own runner, naming A's session as one using the account. Only sessions assigned to
+  // the reporting runner are kept on its row (runner-api.controller.ts applyAccountRemoveResult), and the page reads
+  // back only the viewer's on that runner (runners.service.ts accountRemoveSessionsOf): A's is answered and stored as
+  // an id that names nothing.
+  'POST /runner/account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
+  },
+  'POST /runner/codex-account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
   },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
@@ -908,6 +1032,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
       },
     }),
     heldRow: (of) => ['codex_rate_limit_reset_operation', of.runner.codexOperationId] as const,
+  },
+  // The batch takeover: B's own process, taking A's session over among its own.
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessions: [{ sessionId: of.runner.takeoverSessionId }] } }),
   },
   'POST /runner/sessions/:id/artifacts/result body requestId': {
     as: RUNNER,
@@ -1047,6 +1176,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/tasks/batch-pin header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: {}, body: { taskIds: [mine.taskId], model: 'census' } })),
   'PATCH /runner/tasks/:id body assigneeId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { assigneeId: of.workspaceId } }) },
   'PATCH /runner/tasks/:id body listId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { listId: of.listId } }) },
+  // Asked BEFORE the move below files the task into a project. A request carrying a session edits
+  // work under that session's project scope (tasks/tasks-service.ts update), and a session on this
+  // machine holds none: once the task belongs to a project, this same rename is refused
+  // PROJECT_SCOPE_MISMATCH instead of answered by the route, which says nothing about tenancy —
+  // the property this census is about. The move is the one case here that changes which scope a
+  // later case is written under, so it runs last among the task's own edits.
+  'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'PATCH /runner/tasks/:id body projectId': { as: RUNNER, request: (of, mine) => ({ params: { id: mine.taskId }, body: { projectId: of.projectId } }) },
   'PATCH /runner/tasks/:id body fixesOpenItemId': {
     as: RUNNER,
@@ -1067,7 +1203,6 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: { id: mine.taskId }, body: { supersededByTaskId: of.taskId } }),
   },
-  'PATCH /runner/tasks/:id header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: { title: 'renamed by the census' } })),
   'POST /runner/tasks/:id/execute header x-orbit-session-id': fromTheirSession(RUNNER, (mine) => ({ params: { id: mine.taskId }, body: {} })),
   'POST /runner/tasks/:id/dependencies body dependsOnTaskId': {
     as: RUNNER,
@@ -1270,6 +1405,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/notify header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, body: { message: 'from the census' } })),
 
   // ── the wiki ────────────────────────────────────────────────────────────────────────────────────
+  // The four help reads answer an Ask session of the runner's own (help/help-ask-reads.ts): another account's Ask in the
+  // header is the 404 of an Ask that is not there.
+  'GET /runner/help-ask/:read header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    (mine) => ({ params: { read: 'machines' }, headers: calling(mine.runner.helpAskSessionId) }),
+    (of) => of.runner.helpAskSessionId,
+  ),
   'GET /runner/wiki/search header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.runner.wikiSessionId),
   'POST /runner/wiki/changesets body spaceId': {
     as: RUNNER,
@@ -1344,6 +1486,37 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── conditions (docs/condition-triggers-design.md §4.2) ──────────────────────────────────────────
+  'POST /runner/heartbeat body conditionSamples[].conditionId':
+    "taken only for a condition of the runner's owner whose workspace the calling runner serves, read in one statement "
+    + 'before anything is written (conditions/conditions.service.ts:264) and again under the row lock; any other is '
+    + 'refused and stored nowhere. conditions.pg.spec.ts heartbeat-refuses-foreign sends it from a machine of the same '
+    + "owner and from another account's",
+  // ── scheduled tasks ──────────────────────────────────────────────────────────────────────────────
+  'POST /runner/schedules header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'PATCH /runner/schedules/:id header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/pause header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/resume header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/run header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/end header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'DELETE /runner/schedules/:id header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedule-runs/:id/stop header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedule-runs/report header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'PATCH /runner/schedules/:id body workspaceId':
+    "read by (id, the runner's owner, not deleted) before anything is written; another account's workspace answers 404 WORKSPACE_NOT_FOUND (schedules/schedules.service.ts:899)",
+  'POST /runner/main-checkout/:id/result body requestId':
+    'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
+  'POST /runner/main-checkout/:id/result body targetSessionId':
+    'never looked up nor written anywhere it names: kept on the result as the runner reported it, and read only to title the line, by id, in the row\'s own initiating session\'s transaction (workspaces/main-checkout.service.ts:483)',
   // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
   'POST /runner/projects/:id/criteria/:criterionId/confirmations header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
   'POST /runner/projects/:id/criteria/:criterionId/confirmations/withdraw header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
@@ -1356,6 +1529,11 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the session is read by (id, the runner\'s owner), and the attempt it settles by (its task, that owner); another account\'s session finds nothing and answers 404 (projects/project-criterion-confirmation.service.ts:197)',
   'POST /runner/criterion-checks/report body attachmentIds[]':
     'counted among the runner owner\'s own uploads before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
+  // ── terminal sign-in (0660) ───────────────────────────────────────────────────────────────────────
+  'POST /runner/terminal-login/start header x-orbit-session-id':
+    'never looked up: any non-blank value refuses the request 403 before anything is read or written (terminals/runner-terminal-login.controller.ts:41), since a terminal signs in as a person, not on behalf of a session; terminal-credential.pg.spec.ts (a) sends one',
+  'POST /runner/terminal-login/poll header x-orbit-session-id':
+    'never looked up: any non-blank value refuses the request 403 before anything is read (terminals/runner-terminal-login.controller.ts:41)',
   // ── owner requests (0503) ─────────────────────────────────────────────────────────────────────────
   'POST /runner/owner-requests body blocksTaskIds[]':
     'counted among the runner owner\'s own tasks before anything is written; one that is not answers 404 (owner-requests/owner-requests.service.ts:128); owner-requests.pg.spec.ts (f) sends another account\'s',
@@ -1388,6 +1566,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
     + 'found, and nothing of it is read or written (integration-job-relay.ts:1646)',
+  'POST /runner/heartbeat body backgroundJobSessionIds[]':
+    'only the ids of sessions assigned to the calling runner are kept on its own presence row, over HTTPS (runners/runner-background-holders.ts:35) and over the link (runner-api/link-heartbeat.ts:447); another account\'s session is dropped like an id that names nothing, and nothing of it is read back or answered; link-heartbeat.pg.spec.ts 14 sends another account\'s',
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
     + 'scoped to that session on this runner (runner-api.controller.ts:1255)',
@@ -1422,6 +1602,13 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/approvals body backgroundJobId':
     'the id the machine gave one of its own processes, stored on the approval of the session the path names '
     + '(runner-api.controller.ts:3900)',
+  'POST /runner/sessions/:id/approvals body subagentRunId':
+    'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
+    + 'first; any other id, another account\'s run included, is 404 (runner-api.controller.ts:5509); '
+    + 'sessions/subagent-approvals.pg.spec.ts sends another session\'s run and another account\'s',
+  'POST /runner/sessions/:id/subagents body toolUseId':
+    'the engine\'s id for the delegate call, a key only within the session the path names '
+    + '(runner-api/runner-subagents.controller.ts:110)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',
@@ -1489,6 +1676,13 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'owner first (project-acceptance.service.ts:868)',
   'POST /runner/projects/:id/owner-questions body forRunQuestion':
     'matches ownerId, toSessionId against the project coordinator, kind RUN_QUESTION and state OPEN before linking the request in the item transaction (project-open-item.service.ts:897)',
+  'POST /runner/projects/:id/rulings body sourceTurnId':
+    'read by (id, a session of the runner\'s owner) and then held to a conversation that coordinated the project the '
+    + 'path names; another account\'s turn answers 404 PROJECT_RULING_TURN_NOT_FOUND before anything is written '
+    + '(projects/project-ruling.ts:177; project-ruling.pg.spec.ts, another owner)',
+  'POST /runner/projects/:id/rulings body supersedes':
+    'matched by (id, the runner\'s owner, the project the path names, live) inside the write; another account\'s ruling '
+    + 'answers 409 PROJECT_RULING_SUPERSEDES_NOT_LIVE and writes nothing (projects/project-ruling.ts:216; project-ruling.pg.spec.ts)',
   'POST /runner/projects/:id/owner-questions body clientQuestionId':
     'the coordinator\'s own key for one question, a dedupe key within the project the path names '
     + '(project-open-item.service.ts:686)',
@@ -1507,6 +1701,12 @@ export const RUNNER_OPAQUE_BODIES: Readonly<Record<string, { reads: readonly str
     reading: 'the whole request, for how it arrived: X-Orbit-Request-Host, X-Orbit-Request-Proto, X-Forwarded-For and '
       + 'X-Real-IP, none of them an id. They choose only the link address the answer names, for this runner\'s own token '
       + '(runner-api/runner-link-token.controller.ts:61, sameOriginLinkUrl in runner-link-token.ts)',
+  },
+  'POST /runner/subagent-runs/:runId/events body events[].payload.*': {
+    reads: [],
+    reading: 'a remote SubAgent child\'s own engine event, stored rewritten for its parent\'s stream: its tool ids '
+      + '(id, toolUseId, parentToolUseId) are the engine\'s keys, prefixed with the run id and nested under the run\'s own '
+      + 'delegate call, never looked up (runner-api/subagent-remote.ts:364)',
   },
   'POST /runner/wiki/repo-ops/:id/result body result.*': {
     reads: [],
@@ -1660,6 +1860,16 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
   'GET /shared/:token/events':
     'a page of the link\'s own session — `before` and `limit` are numbers, and any link that is not a session\'s is '
     + 'the one 404 (shared.controller.ts:196)',
+  'GET /shared/:token/stream':
+    'the link\'s own session pushed — `sinceSeq` and `maxPayload` are numbers, and any link that is not a session\'s is '
+    + 'the one 404 before anything is read (shared/shared-stream.guard.ts:29, :39)',
+  // By hand rather than a case: an answered request is a stream that never ends, which (2) of the runner census
+  // would wait on forever. The guard asks what `:token/sessions/:sessionId/events` asks (openConversation) before
+  // anything is read; viewer-stream.pg.spec.ts sends another link's token with this conversation in it.
+  'GET /shared/:token/sessions/:sessionId/stream':
+    'a conversation the link opens, pushed: SharedStreamGuard resolves the token, then asks whether the link opens '
+    + '`sessionId` exactly as `GET /shared/:token/sessions/:sessionId/events` does (shared/shared-stream.guard.ts:37, '
+    + 'share-links.service.ts:428), the one 404 otherwise, before the stream reads or subscribes to anything',
   'GET /shared/:token/events/:seq':
     'a position in the link\'s own session\'s transcript, not an object: read WHERE session_id = the link\'s '
     + '(sessions.service.ts:3719)',
@@ -1667,6 +1877,9 @@ export const SHARED_BY_HAND: Readonly<Record<string, string>> = {
     'a document slug of the link\'s own wiki space, not an object a caller can name: the space is the link\'s '
     + '(share-links.service.ts:378), and the slug is looked up among that space\'s own written documents — any '
     + 'other is the one 404 (public-wiki.ts:155)',
+  'GET /shared/:token/card':
+    'names nothing but its link: the token is resolved as `GET /shared/:token` resolves it, and the answer is that '
+    + 'link\'s own kind and root title (share-links.service.ts:359)',
 };
 
 /**
@@ -1720,6 +1933,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /auth/google/callback':
     'Google\'s return: the state is found by its hash and must match the browser cookie the start set — '
     + 'google-login.service.ts:390',
+  'GET /integrations/github/callback':
+    'GitHub\'s return: the flow is taken by its state\'s hash with one DELETE … RETURNING and must match the browser '
+    + 'cookie /integrations/github/start set; it writes only the connection of the account that started that flow. '
+    + 'Without a state it only redirects — github-connection.service.ts:151',
   'POST /auth/google/exchange':
     'the ticket is found by its hash and must come with the code verifier of the flow that made it — '
     + 'google-login.service.ts:455',
@@ -1760,4 +1977,13 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /runner/wake':
     'the long poll this path was is gone. It answers every caller 426 UPGRADE_REQUIRED before it reads anything, for the '
     + 'runners of 0.1.246 that still ask once as they start — runner-api.controller.ts:3571',
+  'GET /help':
+    'the help article library\'s index, read from docs/help at boot and the same for every reader; the caller, when a '
+    + 'credential comes with the request (JwtAuthGuard, help.controller.ts:26), decides only whether the admin '
+    + 'category shows, by the caller\'s own role — help.controller.ts:50, :59',
+  'GET /help/articles/:slug':
+    'one article of the bundled library by its slug, a file name and no account\'s id; an admin-only article is the '
+    + '404 of a missing one to anyone but an administrator — help.controller.ts:62, help-library.ts:181',
+  'GET /help/search':
+    'full-text search over the bundled library alone, under the index\'s visibility rule — help.controller.ts:71',
 };

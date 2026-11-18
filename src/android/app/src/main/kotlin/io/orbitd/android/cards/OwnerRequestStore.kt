@@ -8,11 +8,14 @@ import io.orbitd.android.core.cards.AccountSecret
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerRequestsApi
+import io.orbitd.android.core.cards.TerminalRequest
+import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.NetworkException
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.schedule.ScheduleWaitingItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +32,7 @@ import kotlinx.serialization.json.JsonObject
  * per signed-in handle; another account's requests are never drawn.
  */
 class OwnerRequestStore internal constructor(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
-    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle)) {
+    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle), private val terminals: TerminalsApi = TerminalsApi(auth, handle)) {
 
     data class State(
         val lists: Map<String, List<OwnerRequest>> = emptyMap(),
@@ -42,9 +45,18 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         val projects: List<JsonObject> = emptyList(),
         /** The coordinators' open questions, off the open items of each project that has one (web `WaitingOnYouPage`). */
         val questions: List<OwnerRequests.CoordinatorQuestionRow> = emptyList(),
+        /** Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and count with the
+         * rest. Each waits ten minutes at most. */
+        val terminalRequests: List<TerminalRequest> = emptyList(),
+        /** The scheduled tasks' four kinds, pending (docs/scheduled-tasks-design.md §6.4): their cards head the Open tab, whole, and
+         * count with the rest. They are answered at the schedule's own doors. */
+        val scheduleItems: List<ScheduleWaitingItem> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
+        /** The inbox's one count: [OwnerRequests.waitingCount] and the terminals waiting for a decision. */
+        fun waitingCount(projects: List<JsonObject>, snoozes: Map<String, Long>, now: java.time.Instant) =
+            OwnerRequests.waitingCount(open, projects, snoozes, now) + terminalRequests.size + scheduleItems.size
         /** A request by either spelling of its id, from any list. */
         fun find(id: String): OwnerRequest? = lists.values.flatten().firstOrNull { OwnerRequests.key(it.id) == OwnerRequests.key(id) }
     }
@@ -59,9 +71,10 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         filters.forEach { filter ->
             scope.launch {
                 try {
-                    val requests = api.list(filter)
+                    val (requests, scheduled) = api.listWithSchedules(filter)
                     if (!live()) return@launch
-                    mutable.update { it.copy(lists = it.lists + (filter to requests), failed = it.failed - filter) }
+                    mutable.update { state -> state.copy(lists = state.lists + (filter to requests), failed = state.failed - filter,
+                        scheduleItems = if (filter == OPEN) scheduled.filter { it.state == OwnerRequests.PENDING } else state.scheduleItems) }
                     titles(requests.flatMap { it.blocksTaskIds })
                 } catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { mutable.update { it.copy(failed = it.failed + filter) } }
@@ -100,6 +113,23 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         }
     }
 
+    /** The terminals waiting for a decision. A server that predates terminals answers none; a failed read keeps what was drawn. */
+    fun loadTerminalRequests() {
+        scope.launch {
+            try { terminals.requests().let { requests -> if (live()) mutable.update { it.copy(terminalRequests = requests) } } }
+            catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The next read tries again. */ }
+        }
+    }
+
+    /** Approve or Deny a terminal: null when it was recorded — its card leaves at once — else what to say. The list is read again
+     * either way. */
+    suspend fun decideTerminal(request: TerminalRequest, approve: Boolean): String? = try {
+        if (approve) terminals.approve(request.id) else terminals.deny(request.id)
+        mutable.update { state -> state.copy(terminalRequests = state.terminalRequests.filterNot { it.id == request.id }) }
+        null
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    finally { loadTerminalRequests() }
+
     private suspend fun titles(ids: List<String>) {
         ids.distinct().filterNot { it in mutable.value.taskTitles }.forEach { id ->
             try {
@@ -121,9 +151,12 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
     }
 
     /** One press through a door: null when it was recorded, else what to say. */
-    suspend fun act(door: suspend OwnerRequestsApi.() -> OwnerRequest): String? = try {
+    suspend fun act(door: suspend OwnerRequestsApi.() -> OwnerRequest): String? = attempt(door)?.let(::message)
+
+    /** One press through a door: null when it was recorded, else why not. */
+    suspend fun attempt(door: suspend OwnerRequestsApi.() -> OwnerRequest): Exception? = try {
         adopt(api.door()); null
-    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { error }
 
     companion object {
         const val OPEN = "open"

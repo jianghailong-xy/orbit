@@ -186,7 +186,8 @@ def manifest(args):
     apk_name = f'orbit-android-{name}.apk'
     shutil.copyfile(args.apk, out / apk_name)
     (out / f'{apk_name}.sha256').write_text(f'{actual}  {apk_name}\n')
-    # The annotated tag's message (release.sh writes "Release vX"); a lightweight tag has none.
+    # The release's human-written notes (release.yml passes release-notes/<version>.md), trimmed to what
+    # installed apps read; a short default sentence if the file is empty.
     notes = pathlib.Path(args.notes_file).read_text(encoding='utf-8').strip()[:4000] or f'Orbit {name} for Android.'
     published = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
     update = {

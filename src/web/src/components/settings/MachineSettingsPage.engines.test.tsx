@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import type { ManagedRunnerStatus, PlanUsage, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import type { Runner } from '../TasksSidePanel';
 import { openRunnerMenu } from '../RunnerEngines.test-helpers';
 import { MachineSettingsPage } from './MachineSettingsPage';
@@ -21,6 +23,16 @@ const { api } = await import('../../api');
 const apiMock = vi.mocked(api);
 
 const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
+
+/** The shared managed-runner states: the server's capabilities with the feature on, and a READY runner. */
+const managedFixture = JSON.parse(
+  readFileSync(resolve(process.cwd(), '../shared/src/managed-runner-states.fixture.json'), 'utf8'),
+) as {
+  capabilities: { name: string; body: unknown }[];
+  states: { name: string; status: ManagedRunnerStatus }[];
+};
+const MANAGED_ON = managedFixture.capabilities.find((c) => c.name === 'switched on')!.body;
+const MANAGED_READY = managedFixture.states.find((s) => s.name === 'available')!.status;
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
   engine: 'claude',
@@ -111,8 +123,9 @@ function Here() {
   return <div data-testid="here">{`${location.pathname}${location.search}`}</div>;
 }
 
-/** The machine's page over one runner. Every request that changes something is collected. */
-async function mount(runner: Runner) {
+/** The machine's page over one runner, the account's hosted runner when `managed` is its status. Every request that
+ *  changes something is collected. */
+async function mount(runner: Runner, managed?: ManagedRunnerStatus) {
   const sent: Array<{ method: string; path: string; body?: unknown }> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
@@ -123,6 +136,8 @@ async function mount(runner: Runner) {
         : {};
     }
     if (path === '/runners') return [runner];
+    if (managed && path === '/auth/capabilities') return MANAGED_ON;
+    if (managed && path === '/managed-runner') return managed;
     if (path.endsWith('/login')) {
       return { status: null, engine: null, url: null, userCode: null, message: null, account: null };
     }
@@ -260,24 +275,64 @@ describe('the machine’s own controls over its engines', () => {
     ]);
   });
 
-  it('reports what an update did, including what it left alone, until it is dismissed', async () => {
+  it('says only that nothing needs attention when no engine does, until it is dismissed', async () => {
     const { sent } = await mount(
       machine({
         install: relay({
           status: 'done',
           mode: 'update',
           command: 'orbit engine-update',
-          message: 'Claude Code updated 2.1.290 → 2.1.291\nOpenCode — already up to date (1.18.33)',
+          message: [
+            'Claude Code updated 2.1.290 → 2.1.291',
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            'OpenCode — already up to date (1.18.33)',
+            'Antigravity — not reached, the update pass ran out of time',
+            'DeepSeek Harness — fixed supported version 0.2.0-rc.2',
+            'Cursor CLI — pinned version 2026.10.14-941492e',
+          ].join('\n'),
         }),
       }),
     );
     const report = $('.machine-section-engines .rd-engine-relay');
-    expect(text($('.rd-engine-relay-row', report))).toBe(
-      'Claude Code updated 2.1.290 → 2.1.291\nOpenCode — already up to date (1.18.33)',
-    );
+    expect($$('.rd-engine-relay-row', report).map(text)).toEqual(['Nothing here needs your attention.']);
     expect(text($('code', report))).toBe('orbit engine-update');
     await click(button('Dismiss', report));
     expect(sent).toEqual([{ method: 'DELETE', path: `/runners/${RUNNER_ID}/install` }]);
+  });
+
+  it('lists only the engines that need someone, and marks the failed ones', async () => {
+    await mount(
+      machine({
+        install: relay({
+          status: 'failed',
+          mode: 'update',
+          command: 'orbit engine-update',
+          message: [
+            'Claude Code — installed but does not run: signal: killed',
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            'OpenCode — update timed out after 5m0s',
+            'Antigravity — already up to date (1.5.7)',
+            'Gemini — owned by another user, left alone',
+            'Cursor CLI — update failed: npm error code EACCES',
+          ].join('\n'),
+        }),
+      }),
+    );
+    const report = $('.machine-section-engines .rd-engine-relay');
+    expect(report.classList.contains('bad')).toBe(false);
+    expect($$('.rd-engine-relay-row', report).map(text)).toEqual([
+      'Claude Code — installed but does not run: signal: killed',
+      'OpenCode — update timed out after 5m0s',
+      'Gemini — owned by another user, left alone',
+      'Cursor CLI — update failed: npm error code EACCES',
+    ]);
+    expect($$('.rd-engine-relay-row.bad', report).map(text)).toEqual([
+      'Claude Code — installed but does not run: signal: killed',
+      'OpenCode — update timed out after 5m0s',
+      'Cursor CLI — update failed: npm error code EACCES',
+    ]);
   });
 
   it('leaves an engine’s own install to its row', async () => {
@@ -333,11 +388,77 @@ describe('the machine’s own controls over its engines', () => {
     expect(text($('.re-panel.warn .re-panel-row', claude))).toBe(
       '2.1.226 → 2.1.228: `claude update` was still running after 5m1s and was stopped.',
     );
-    expect(text($('.re-panel.warn .re-panel-hint', claude))).toBe('Orbit tries every 30 min.');
+    expect(text($('.re-panel.warn .re-panel-hint', claude))).toBe('Orbit tries every 30 min. Dismiss');
     expect($$('.machine-section-engines a[href^="/runners/"]')).toEqual([]);
     expect(text($('.machine-section-engines > .rd-hint'))).toBe(
       'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.',
     );
+  });
+
+  it('says on a hosted runner that its CLIs move with each Orbit release, not every 30 min', async () => {
+    await mount(machine(), { ...MANAGED_READY, runnerId: RUNNER_ID });
+    expect(text($('.machine-section-engines > .rd-hint'))).toBe(
+      'Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends that subscription, nothing to paste.',
+    );
+  });
+
+  describe('dismissing an engine’s update warning until its next release', () => {
+    const days = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
+    /** orbit@austin's Codex: 0.159.2, 13 days behind `latest`, its update failing. */
+    const codexBehind = (latest: string) =>
+      health({
+        engine: 'codex',
+        version: 'codex-cli 0.159.2',
+        update: {
+          status: 'failed',
+          at: days(1 / 24),
+          okAt: days(14),
+          latest,
+          behindSince: days(13.2),
+          message: `0.159.2 → ${latest}: Codex updates itself with npm, and npm isn't on this runner's PATH.`,
+        },
+      });
+    const cards = () => $$('.machine-attention .rd-attention-card').map((card) => text($('.rd-attention-title', card)));
+    const attentionLinks = () => $$('.machine-attention .rd-attention-action .re-link').map((b) => text(b));
+
+    for (const where of ['card', 'row'] as const) {
+      it(`hides the card and the row's panel together, dismissed from the ${where}`, async () => {
+        const runner = machine({ engines: [codexBehind('0.169.0')] });
+        const { sent } = await mount(runner);
+        expect(cards()).toEqual(['Codex update failed']);
+        expect(attentionLinks()).toEqual(['Dismiss until next Codex release']);
+        expect(text($('.re-panel.warn .re-panel-hint', row('codex')))).toBe('Orbit tries every 30 min. Dismiss');
+        expect(text($('.re-upd.warn', row('codex')))).toBe('· 13d behind 0.169.0');
+
+        // The server records the engine's current latest; the next read of the runner carries it.
+        const served = apiMock.getMockImplementation()!;
+        apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) =>
+          path === '/runners' && !options?.method
+            ? [{ ...runner, engineUpdateDismissals: { codex: '0.169.0' } }]
+            : served(path, options),
+        );
+        await click(
+          where === 'card'
+            ? button('Dismiss until next Codex release', $('.machine-attention'))
+            : button('Dismiss', $('.re-panel.warn', row('codex'))),
+        );
+        expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/engines/codex/update-warning/dismiss` }]);
+
+        // Card and orange panel gone, the machine out of Needs Attention, the drift kept in grey.
+        expect(document.querySelector('.machine-attention')).toBeNull();
+        expect(row('codex').querySelector('.re-panel.warn')).toBeNull();
+        expect(row('codex').querySelector('.re-upd.warn')).toBeNull();
+        expect(text($('.re-upd', row('codex')))).toBe('· 13d behind 0.169.0 · warning dismissed');
+      });
+    }
+
+    it('comes back, card and panel, once a release newer than the one dismissed is out', async () => {
+      await mount(machine({ engines: [codexBehind('0.170.0')], engineUpdateDismissals: { codex: '0.169.0' } }));
+      expect(cards()).toEqual(['Codex update failed']);
+      expect(attentionLinks()).toEqual(['Dismiss until next Codex release']);
+      expect(text($('.re-upd.warn', row('codex')))).toBe('· 13d behind 0.170.0');
+      expect(row('codex').querySelector('.re-panel.warn')).not.toBeNull();
+    });
   });
 
   it('never reads a runner that has not reported its engines as an empty machine', async () => {

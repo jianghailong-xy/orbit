@@ -134,6 +134,12 @@ test('what a shared session added after a seq sits behind the same fence, read a
       },
     },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      // The header's own second read, what the session is still doing (readSessionActivities, 29fc026c1), comes as one
+      // Prisma.sql object rather than a template: it is part of the header, not an events read.
+      if (!Array.isArray(strings)) {
+        reads.push('activity');
+        return [];
+      }
       reads.push('events');
       captured = { strings, values };
       return [];
@@ -147,7 +153,7 @@ test('what a shared session added after a seq sits behind the same fence, read a
   assert.equal(now.after, null);
   assert.equal(now.runState, 'RUNNING');
   // The header first: an answer that says the run is over holds every event written before it.
-  assert.deepEqual(reads, ['header', 'events']);
+  assert.deepEqual(reads, ['header', 'activity', 'events']);
   assert.ok(captured);
   assert.match(renderedQuery(captured), /seq > \?/);
   assert.ok(captured.values.includes(7));

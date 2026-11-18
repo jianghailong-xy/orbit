@@ -3,6 +3,7 @@ import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-q
 import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
+import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -72,7 +73,7 @@ const isOpenList = (queryKey: readonly unknown[]): boolean =>
 
 /** Every entity a control-plane event can move, as the query declarations name them. Used by the
  *  reconnect's sweep, which has to reach all of them at once. */
-const ENTITIES = ['task', 'session', 'project', 'workspace', 'tag', 'folder', 'provider', 'watch', 'wiki'] as const;
+const ENTITIES = ['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal'] as const;
 
 /**
  * Whether a cached query says, in `meta.entities`, that it derives from one of `entities`. Every
@@ -399,9 +400,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // both. An event this does not name reads nothing (R5): `notification`, `runner.*`,
     // `sessions.list_changed` (the Open list's hint is read through its own path), or whatever a
     // newer server sends that this client predates.
-    const entitiesFor = (type: string): string[] => {
+    const entitiesFor = (type: string, data: { repoHealth?: unknown } | null | undefined): string[] => {
       if (type === 'task.changed') return ['task'];
       if (type.startsWith('task.')) return ['task']; // incl. task.list.changed
+      // A runner's heartbeat saw a workspace's checkout change (counts, branch, state): only the workspace list draws
+      // that — the Main checkout bar — so only it and the Main checkout drawer declare `checkout`, and the session
+      // lists, which declare `workspace` for the workspace's name, are not read again for it.
+      if (type === 'agent.changed' && data?.repoHealth === true) return ['checkout'];
       // A workspace made or edited (an agent's workspace_create/workspace_update) arrives as
       // `agent.changed`, the server's older name for one (W7); `workspace.*` for a server that says so.
       if (type === 'agent.changed' || type.startsWith('workspace.')) return ['workspace'];
@@ -424,6 +429,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // decided ops in Review, or the space's own settings or bindings moved (contract
       // `realtime.publishedWhen`).
       if (type.startsWith('wiki.')) return ['wiki'];
+      // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
+      // (`terminals.changed`). The approve card and Settings → Terminals both declare `terminal`.
+      if (type === 'terminals.changed') return ['terminal'];
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
@@ -459,13 +467,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const scheduleRefresh = (
       type: string,
       sessionId: string,
-      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown } | null | undefined,
+      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown; repoHealth?: unknown } | null | undefined,
     ): void => {
       // The Open list's hint is the one event whose path is not an entity: it says the list may read
       // differently, and is read through its own delta read rather than through the session events
       // that would read every session list for it (sessions.list_changed names no session).
       if (type === 'sessions.list_changed') pendingFlags.add('openList');
-      for (const entity of entitiesFor(type)) pending.add(entity);
+      for (const entity of entitiesFor(type, data)) pending.add(entity);
       if (watchFollows(type, sessionId, data)) pendingFlags.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -564,6 +572,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             taskId?: unknown;
             taskIds?: unknown;
             resync?: unknown;
+            repoHealth?: unknown;
+            agentId?: unknown;
+            clone?: unknown;
           } | null;
         };
         try {
@@ -619,6 +630,19 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // The session an event is about: the envelope's, or a session event's own id from a peer
         // that leaves the envelope's empty. An approval's id is the approval's.
         const subject = ev.sessionId || (ev.type.startsWith('session.') && typeof id === 'string' ? id : '');
+        // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is
+        // heard here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what
+        // the server stored: the lists (a session's queued reason) and the open details of that workspace's sessions.
+        const cloned = cloneEventOf(ev.type, ev.data);
+        if (cloned) {
+          if (!hearClone(cloned.workspaceId, cloned.clone)) return;
+          void qc.invalidateQueries({
+            predicate: ({ queryKey, state }) =>
+              queryKey[0] === 'session' &&
+              queryKey.length === 2 &&
+              sameWorkspace((state.data as { workspace?: { id?: string } | null } | undefined)?.workspace?.id, cloned.workspaceId),
+          });
+        }
         scheduleRefresh(ev.type, subject, ev.data);
       };
       es.onerror = () => drop();

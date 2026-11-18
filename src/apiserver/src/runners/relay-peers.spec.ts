@@ -14,6 +14,11 @@ import { HELD_SUBJECT, RelayPeers, peerSubject } from './relay-peers';
  * NATS for more than a second, and what a slow holder hands over after that is not lost; a process that starts later
  * still hears of it; and nothing crosses NATS while nothing is held. Each process here is a relay of each kind on its
  * own peers, over its own connection to one in-memory NATS (test-support/memory-nats.ts).
+ *
+ * Nothing here races a clock it does not mean to. A process waits as long as it takes for an answer that is coming
+ * (askTimeoutMs, replyTimeoutMs and until() are generous), so a starved event loop only makes a run slower; the
+ * heartbeat's bounded wait is set short only where it is the subject (ASK_BOUND_MS), against a holder held back far
+ * longer (SLOW_HOLDER_MS), and is shown by what had not happened yet when the heartbeat went on, not by a stopwatch.
  */
 
 const RUNNER = '0190a0b0-0000-7000-8000-00000000000a';
@@ -22,6 +27,12 @@ const ATTEMPT = '2026-10-28T04:00:00.000Z';
 const CODE = '4/0-relay-peers-placeholder-code';
 const KEY = 'key_relay-peers-unit-7d1e0c2b9a4f';
 const fingerprint = (key: string) => createHash('sha256').update(key.trim()).digest('hex').slice(0, 16);
+/** How long a waiting heartbeat may wait for an answer that is coming: never what decides a run. */
+const PATIENT_MS = 30_000;
+/** The heartbeat's wait where its bound is what a test is about, and how long the slow holder is held back past it.
+ *  A delivery timer due at SLOW_HOLDER_MS fires after the ask's timer due at ASK_BOUND_MS however late both run. */
+const ASK_BOUND_MS = 60;
+const SLOW_HOLDER_MS = 200;
 
 interface Process {
   name: string;
@@ -37,8 +48,8 @@ interface Process {
 function processOn(nats: MemoryNats, name: string, connect = true): Process {
   const conn = nats.connect(name);
   const peers = new RelayPeers();
-  peers.askTimeoutMs = 60;
-  peers.replyTimeoutMs = 2_000;
+  peers.askTimeoutMs = PATIENT_MS;
+  peers.replyTimeoutMs = PATIENT_MS;
   peers.reannounceMs = 40;
   const p: Process = { name, conn, peers, login: new LoginCodeRelay(peers), cursor: new CursorKeyCheckRelay(peers), nudged: [] };
   if (connect) join(p);
@@ -49,7 +60,7 @@ function join(p: Process): void {
   p.peers.connect(p.conn, `instance-${p.name}`, (runnerId) => void p.nudged.push(runnerId));
 }
 
-async function until(what: string, holds: () => boolean, ms = 2_000): Promise<void> {
+async function until(what: string, holds: () => boolean, ms = PATIENT_MS): Promise<void> {
   const deadline = Date.now() + ms;
   while (!holds()) {
     if (Date.now() > deadline) assert.fail(`${what} did not happen within ${ms} ms`);
@@ -122,11 +133,12 @@ test('a heartbeat waits a bounded time for a slow holder, and what it hands over
   try {
     a.login.hold(RUNNER, ATTEMPT, CODE, Date.now() + 60_000);
     await heard(a, 'login-code', b, c);
-    // The holder answers 200 ms after it is asked: past the heartbeat's wait.
-    a.conn.delayMs = 200;
-    const started = Date.now();
+    // The holder answers SLOW_HOLDER_MS after it is asked: past the heartbeat's wait.
+    a.conn.delayMs = SLOW_HOLDER_MS;
+    b.peers.askTimeoutMs = ASK_BOUND_MS;
     assert.equal(await b.login.takeAnywhere(RUNNER, ATTEMPT), undefined, 'the heartbeat goes on without it');
-    assert.ok(Date.now() - started < 200, `the heartbeat waited ${Date.now() - started} ms`);
+    assert.equal(a.login.holds(RUNNER), true, 'before the holder had even read the request');
+    b.peers.askTimeoutMs = PATIENT_MS;
 
     await until('the late answer held by the process that asked', () => b.login.holds(RUNNER));
     assert.equal(a.login.holds(RUNNER), false);
@@ -188,9 +200,10 @@ test('a heartbeat never fails for NATS: down, a holder gone, a request that thro
     // The holder went away: nobody answers its subject, which NATS says at once.
     a.peers.disconnect();
     assert.equal(nats.listeners(peerSubject('instance-a')), 0);
-    const started = Date.now();
-    assert.equal(await b.login.takeAnywhere(RUNNER, ATTEMPT), undefined);
-    assert.ok(Date.now() - started < 60, 'no responders is answered at once');
+    // At once: before any timer or I/O turn, which a heartbeat that waited would need.
+    const next = new Promise<'a later turn'>((resolve) => setImmediate(() => resolve('a later turn')));
+    const taken = b.login.takeAnywhere(RUNNER, ATTEMPT).then((code) => ({ code }));
+    assert.deepEqual(await Promise.race([taken, next]), { code: undefined }, 'no responders is answered at once');
   } finally {
     stop(a, b);
   }
@@ -245,8 +258,11 @@ test('a Cursor key handed over after the heartbeat stopped waiting is handed on 
     const answer = a.cursor.ask(RUNNER, KEY);
     await heard(a, 'cursor-key-check', b, c);
     const [checkId] = b.peers.holders('cursor-key-check', RUNNER)[0].items;
-    a.conn.delayMs = 200;
+    a.conn.delayMs = SLOW_HOLDER_MS;
+    b.peers.askTimeoutMs = ASK_BOUND_MS;
     assert.deepEqual(await b.cursor.takeAnywhere(RUNNER), []);
+    assert.deepEqual(b.nudged, [], 'gone on before the holder answered');
+    b.peers.askTimeoutMs = PATIENT_MS;
     await until('the late key held by the process that asked', () => b.nudged.length > 0);
     assert.deepEqual(b.nudged, [RUNNER]);
     a.conn.delayMs = 0;

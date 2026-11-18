@@ -155,9 +155,14 @@ final class RunnerUpdateCardTests: XCTestCase {
     func testTheRunnerPageDrawsTheCard() throws {
         let view = try String(contentsOf: try repoFile("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift"),
                               encoding: .utf8)
-        XCTAssertTrue(view.contains("if let card = RunnerPageFormat.updateCard(runner, now: now) {\n                updateSection(card)\n            }"),
+        XCTAssertTrue(view.contains("if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {\n                updateSection(card)\n            }"),
                       "the runner page does not draw the Update card")
-        XCTAssertTrue(view.contains("ForEach(card.turns, id: \\.id) { turn in\n                Button { openSession(turn.id) } label: {"),
-                      "the Update card does not list the turns, each opening its session")
+        // The turns are one row array drawn by one ForEach; each row is `updateTurnRow`'s.
+        XCTAssertTrue(view.contains("ForEach(card.turns, id: \\.id) { turn in\n                updateTurnRow(turn)\n            }"),
+                      "the Update card does not list the turns through one ForEach")
+        XCTAssertTrue(view.contains("private func updateTurnRow(_ turn: RunnerPageFormat.UpdateCard.Turn) -> some View {"),
+                      "one turn's row is updateTurnRow's")
+        XCTAssertTrue(view.contains("Button { openSession(turn.id) } label: {"),
+                      "each turn opens its session")
     }
 }

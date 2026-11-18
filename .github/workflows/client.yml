@@ -16,6 +16,9 @@
 # shared); a PR touching only one client's own dir still runs both, which is a small, safe overpay.
 name: Client CI (macOS + iOS)
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: ["**"]        # branches only — tags are handled by release.yml
@@ -36,11 +39,16 @@ on:
   # `gh workflow run client.yml --ref <branch>`.
   #
   # `source_refused_probe` is the evidence probe's own switch (see the job below): off by default,
-  # so an ordinary dispatch compiles a branch and takes no pictures.
+  # so an ordinary dispatch compiles a branch and takes no pictures. `macos_runtime_probe` is the
+  # macOS runtime crash gate's switch, off for the same reason.
   workflow_dispatch:
     inputs:
       source_refused_probe:
         description: "Also run the source-refused evidence probe (Mac window + iPhone shots)"
+        type: boolean
+        default: false
+      macos_runtime_probe:
+        description: "Also run the macOS runtime crash gate (200 sidebar clicks against changing data)"
         type: boolean
         default: false
       ios_http_ip_probe:
@@ -60,7 +68,7 @@ jobs:
     name: Font tokens (bare system(size:) audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Audit bare system(size:) outside Typography.swift
         run: |
           hits=$(grep -rn "system(size" src/macos/OrbitApp/Sources src/ios/Sources --include='*.swift' \
@@ -84,7 +92,7 @@ jobs:
     name: Navigation (one push mechanism per stack)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Gate a second push mechanism
         run: bash scripts/ci/nav-push-gate.sh
 
@@ -94,11 +102,11 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
       # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Toolchain
@@ -120,9 +128,9 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Install XcodeGen
@@ -159,9 +167,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Install XcodeGen
@@ -174,7 +182,7 @@ jobs:
         run: |
           bash docs/evidence/ios-http-ip/probe-harness/run.sh 2>&1 | tee probe-output.log
           exit "${PIPESTATUS[0]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: ios-http-ip-probe
@@ -199,9 +207,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select latest Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
       - name: Install XcodeGen
@@ -240,7 +248,7 @@ jobs:
           { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
             osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
           } >> .sr-probe/shots/outcomes.txt || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: source-refused-shots
@@ -263,7 +271,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: out
       - name: Push to probe/source-refused-mac-shots-results
@@ -285,3 +293,106 @@ jobs:
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/source-refused-mac-shots-results
+
+  # The beta.242 sidebar crash (EXC_BREAKPOINT from -[NSLayoutConstraint setActive:] under SwiftUI's
+  # OutlineListCoordinator -> NSOutlineView reloadItem:, inside withSelectionUpdateGuard) exists only
+  # under a running app: a click has to land while the server's answer is still changing the list.
+  # No compile can see it — the macOS compile gate above builds the same views every PR and stays
+  # green. This job builds the real app, points it at the changing-data fake server the sidebar
+  # fix's harness already serves (docs/evidence/macos-sidebar-crash/), clicks through every row 200
+  # times and fails if the process died, if the OS wrote a new Orbit*.ips for it, or if fewer than
+  # 200 clicks landed. Dispatch-only and off by default like the probes beside it: it costs a Mac
+  # runner, and only a change to the rail's shape can change its answer.
+  macos-runtime-probe:
+    name: macOS runtime crash gate (200 sidebar clicks, changing data)
+    if: github.event_name == 'workflow_dispatch' && inputs.macos_runtime_probe
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # The harness runs in place: its project.yml's `../../../../src` paths are relative to this
+      # repository, and its own run.sh serves the stub, builds the app, signs it and clicks.
+      - name: Build, click and check
+        id: probe
+        continue-on-error: true
+        env:
+          # The in-app driver: it selects the source list's rows the way a click does (the same
+          # selection change SwiftUI's outline coordinator reads), which is what the sidebar fix's
+          # own evidence ran. The XCUITest driver (`MODE=ui`) cannot be used here: on this Mac the
+          # app's accessibility session goes empty once the Wiki page opens (every query answers
+          # nothing while the app keeps serving the page), so a UI run presses three rows and then
+          # has nothing left to press.
+          MODE: probe
+          CLICKS: "200"
+          CHURN: "0.1"
+          WIKI_FLICKER: "1"
+          AGENT_DELAY_MIN: "0.2"
+          AGENT_DELAY_MAX: "0.8"
+        run: |
+          bash docs/evidence/macos-sidebar-crash/probe-harness/run.sh ci 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the run's log beside its summary
+        if: always()
+        run: |
+          RUN=docs/evidence/macos-sidebar-crash/probe-harness/runs/ci
+          mkdir -p "$RUN"
+          cp run-output.log "$RUN/run-output.log" 2>/dev/null || true
+          echo "probe=${{ steps.probe.outcome }}" > "$RUN/outcomes.txt"
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$RUN/outcomes.txt"
+          echo "sha=${{ github.sha }}" >> "$RUN/outcomes.txt"
+          # The whole xcodebuild log is tens of megabytes, and the result bundle is thousands of
+          # files; the summary and the driver's own lines are what a reader needs, and the branch
+          # that carries them is rewritten each run.
+          rm -rf "$RUN"/*.xcresult
+          find "$RUN" -name '*.log' -size +1M -exec gzip -9 {} \;
+          ls -la "$RUN"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: macos-runtime-probe
+          path: docs/evidence/macos-sidebar-crash/probe-harness/runs/ci
+          include-hidden-files: true
+      - name: Fail as the gate did
+        if: steps.probe.outcome != 'success'
+        run: exit 1
+
+  # Artifacts need a token to download and this repository's readers do not have one: the same
+  # convention the source-refused probe uses puts the gate's result on a branch a clone can read.
+  macos-runtime-publish:
+    name: Push the runtime gate's result where a clone can read it
+    needs: [macos-runtime-probe]
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.macos_runtime_probe
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: out
+      - name: Push to probe/macos-runtime-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "gate: ${{ needs.macos-runtime-probe.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "macOS runtime crash gate for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/macos-runtime-results

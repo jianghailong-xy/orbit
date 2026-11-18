@@ -2916,8 +2916,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0519_wiki_repo_attention',
       // 0521 adds a defaulted wiki_repo_snapshot column and its CHECK only; no preserved rows, triggers or DONE fence change.
       '0521_wiki_repo_snapshot_source',
+      // 0524 adds two workspace columns and the subagent_run table only; no preserved row, trigger or DONE fence change.
+      '0524_subagent_run',
+      // 0526 adds model_provider.model_tiers only; no preserved row, trigger or DONE fence change.
+      '0526_model_provider_model_tiers',
+      // 0527 adds three subagent_run columns and a partial index only; no preserved row, trigger or DONE fence change.
+      '0527_subagent_run_wake',
+      // 0528 adds the nullable approval.subagent_run_id only; no preserved row, trigger or DONE fence change.
+      '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
+      // 0531 adds two nullable owner_request columns (repo_url_norm, workspace_id), swaps owner_request's kind CHECK
+      // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
+      // preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0531_owner_request_wiki_create',
+      // 0532 adds three nullable conversation_turn columns and their CHECK only; no preserved rows, triggers or DONE
+      // fence change.
+      '0532_conversation_turn_translation',
+      // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
+      '0534_main_checkout_request',
       // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
       // fence change, and no row is written.
       '0535_project_non_code_mark',
@@ -2926,6 +2943,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
       // DONE fence, preserved trigger or function is changed, and no row is written.
       '0545_criterion_confirmation',
+      // 0550 adds one nullable approval column only; no preserved rows, triggers or DONE fence change.
+      '0550_approval_translation',
       // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
@@ -2957,7 +2976,166 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
       '0612_model_provider_spent_until',
       // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
-      '0613_key_gateway_usage'],
+      '0613_key_gateway_usage',
+      // 0615 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
+      // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
+      '0615_task_session_fork',
+      // 0616 only validates 0615's five CHECKs.
+      '0616_task_session_fork_checks',
+      // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
+      // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0617_task_fork_changed_files',
+      // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0618_email_outbox_session_invite',
+      // 0641 adds statement triggers on session_scheduled_wakeup and watch that bump the Open list's epoch, and the
+      // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
+      // is written.
+      '0641_open_list_epoch_session_waits',
+      // 0642 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
+      '0642_subagent_run_remote',
+      // 0645: the project_create / session_create receipts (runner-api/create-request-receipts.ts).
+      '0645_create_request_receipt',
+      // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0660_terminal_credential',
+      // 0661 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0661_approval_decided_by_terminal',
+      // 0662 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0662_turn_sender_client',
+      // 0663 adds the nullable approval.decided_terminal_machine_name, ties it to a TERMINAL decision in
+      // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0663_approval_decided_terminal_machine',
+      // 0670 adds session.opened_by (who opened a conversation), its CHECK and a partial index, and backfills it on
+      // conversations with no task and no parent; no preserved table, trigger or DONE fence changes.
+      '0670_session_opened_by',
+      // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
+      '0700_session_settings',
+      // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0705_runner_engine_update_dismissals',
+      // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
+      // and no row is written.
+      '0720_runner_presence_resources',
+      // 0730 adds one nullable column to session, work_subdir (the folder below its workspace's directory a no-worktree
+      // session runs in, sessions/work-subdir.ts); no preserved rows, triggers or DONE fence change, and no row is
+      // written.
+      '0730_session_work_subdir',
+      // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0740_session_merge_after_turn',
+      // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
+      // relations, no trigger or DONE fence changes, and no row is written.
+      '0760_runner_attention_fixes',
+      // 0770 widens main_checkout_request_action_chk to allow 'discard' (docs/main-checkout-git-contract.md), added NOT
+      // VALID and then validated; `main_checkout_request` is none of the preserved relations, no trigger, function or
+      // DONE fence changes, and no row is written.
+      '0770_main_checkout_discard',
+      // 0780 adds runner_presence.background_job_session_ids (UUID[], NOT NULL with a constant default) only,
+      // catalog-only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0780_runner_presence_background_job_sessions',
+      // 0790 adds the schedule tables, a SCHEDULE session_run_source value and a nullable session.schedule_run_id
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0790_schedules',
+      // 0800 adds two nullable pool_login_token columns (account_id, key_id: a SubAgent's token's own credential),
+      // catalog-only; `pool_login_token` is none of the preserved relations, no trigger, function or DONE fence
+      // changes, and no row is written.
+      '0800_pool_login_token_subagent_credential',
+      // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
+      '0810_coordinator_handoff',
+      // 0820 adds github_app_config, github_connection and github_oauth_flow, and seven nullable workspace columns with
+      // one CHECK; no preserved rows, triggers or DONE fence change, and no row is written. Main stepped around this
+      // number (its 0830 says so), so it lands below main's 0830-0860.
+      '0820_github_app_connection',
+      // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
+      // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
+      // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0830_schedule_run_start',
+      // 0840 adds four nullable owner_request columns (schedule_id, schedule_run_id, approval_id,
+      // schedule_change_request_id) and a partial index, and widens owner_request_kind_chk by the four SCHEDULE_* kinds;
+      // catalog-only but for the check's validating scan, `owner_request` is none of the preserved relations, no
+      // trigger, function or DONE fence changes, and no row is written.
+      '0840_schedule_attention',
+      // 0850 adds a nullable `session.help_ask` JSONB (catalog-only) and a BEFORE UPDATE OF help_ask trigger that
+      // refuses changing it; no preserved rows, no DONE fence change, and no row is written.
+      '0850_help_ask_session',
+      // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
+      // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
+      // one of the preserved relations, and no trigger, function or DONE fence changes.
+      '0860_schedule_check_only_asks',
+      // 0870 adds managed_runner.image_roll_to (nullable, no default); 0880 adds attachment.uploaded_by_guest_id
+      // (nullable, no default). Neither table is one of the preserved relations, and no trigger, function or DONE fence
+      // changes.
+      '0870_managed_runner_image_roll',
+      '0880_attachment_guest_uploader',
+      // 0890 creates `help_ask_admin_request` only; no existing table, trigger or DONE fence is touched.
+      '0890_help_ask_admin_request',
+      // 0900 creates `help_feedback` only; no existing table, trigger or DONE fence is touched.
+      '0900_help_feedback',
+      // 0910_account_remove_sessions adds runner.codex_account_remove_sessions (UUID[], NOT NULL with a constant
+      // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
+      // changes.
+      '0910_account_remove_sessions',
+      // 0920 adds a nullable workspace.clone_credential with one CHECK (GitHub workspaces P2: which credential a clone
+      // used); catalog-only, no trigger, function or DONE fence changes, and no row is written. Numbered 0880 on the
+      // project line until main's 0880_attachment_guest_uploader took that number.
+      '0920_workspace_clone_credential',
+      // 0930 makes managed_runner.default_workspace_id nullable, clears it on mappings whose workspace nobody used, and
+      // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
+      // DONE fence changes.
+      '0930_managed_runner_no_default_workspace',
+      // 0940 adds one nullable `session.agent_tools` JSONB (the session's Agent Tools report, kept by the event
+      // ingest), taking the lock in short tries inside one DO block as 0478 does; catalog-only, no preserved rows,
+      // triggers or DONE fence change, and no row is written. Written as 0770 on the project line, it was renumbered
+      // after main took 0770 and 0910 to 0930; it lands below main's 0950, so no number is used twice.
+      '0940_session_agent_tools',
+      // 0950 adds a nullable schedule.read_back and fills it from each schedule's own create card; schedule is not one
+      // of the preserved relations, and no trigger, function or DONE fence changes.
+      '0950_schedule_read_back',
+      // 0970_project_ruling adds the project_ruling table (owner rulings kept on their project); no preserved relation,
+      // trigger, function or DONE fence changes.
+      '0970_project_ruling',
+      // 0980 moves workspace.work_dir from /var/lib/orbit/home to /home/orbit for workspaces on managed runners (one
+      // UPDATE, safe to run twice); workspace is not one of the preserved relations, and no trigger, function or DONE
+      // fence changes.
+      '0980_managed_runner_home_orbit',
+      // 0990 sets runner.min_free_disk_mb's default to 10240 (new rows only); runner is not one of the preserved
+      // relations, and no trigger, function or DONE fence changes.
+      '0990_runner_keep_free_default',
+      // 0990 adds LAND and nullable schedule_run landing status/SHA; no preserved relations or fences change.
+      '0990_schedule_land',
+      // 1030 adds the condition, condition_sample and condition_event tables with their enum types, a nullable
+      // owner_request.condition_id with a partial index, and widens owner_request_kind_chk by CONDITION_UNKNOWN;
+      // `owner_request` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1030_conditions',
+      // 1040 widens schedule_run_trigger by CONDITION and adds a nullable schedule.envelope_command_hash and
+      // condition.resumed_at; none is a preserved relation, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '1040_schedule_when_rule',
+      // 1050 adds a nullable condition.repeat_seconds with condition_repeat_chk, a nullable condition.repeat_from and
+      // condition_event.repeat with a constant default; none is a preserved relation, no trigger, function or DONE
+      // fence changes, and no row is written.
+      '1050_condition_repeat',
+      // 1060 adds a nullable task.start_when_condition_id (FK to condition, SET NULL) with a unique index and a CHECK
+      // every stored row passes, a nullable condition.keep_waiting_since, widens owner_request_kind_chk by
+      // CONDITION_STILL_WAITING, and adds two triggers that write only `condition` and pg_notify; no task row is
+      // rewritten, and no judgment relation, function or DONE fence changes.
+      '1060_task_start_when',
+      // 1070 adds nullable translation JSONB columns to project_open_item and owner_request (ADD COLUMN IF NOT
+      // EXISTS, no default); neither is one of the preserved relations, and no trigger, function or DONE fence changes.
+      '1070_owner_card_translation',
+      // 1080 adds nullable translation JSONB columns (ADD COLUMN IF NOT EXISTS, no default) to
+      // task_completion_evidence — a preserved relation, ALTERed only by this one addition, so no existing row,
+      // `evidence` value or digest is read or rewritten — and to task_owner_confirmation_review_record and
+      // project_handoff_approval, and creates project_criteria_change_translation. No INSERT/UPDATE/DELETE, and
+      // no trigger, function or DONE fence changes.
+      '1080_owner_card_translation_more'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
@@ -3009,10 +3187,19 @@ test('after 0246, no migration number is used twice: a duplicate reorders the le
   // Everything at or below this number predates the rule and is exempt; the failure message says
   // why that floor cannot be lowered.
   const EXEMPT_THROUGH = '0246';
+  // One shared number above the floor, for the same reason as the ones below it: both halves were applied on
+  // production (0990_schedule_land at 2026-11-17 08:24Z, 0990_runner_keep_free_default with the 15:39Z release)
+  // before the collision was seen, so renaming either would run it again there, and 0990_schedule_land's
+  // `ALTER TYPE … ADD VALUE 'LAND'` would then fail the deploy. The two touch unrelated tables, so their order does
+  // not matter. Exactly this pair: any other number shared after 0246 still fails below.
+  const APPLIED_SHARED: Readonly<Record<string, readonly string[]>> = {
+    '0990': ['0990_runner_keep_free_default', '0990_schedule_land'],
+  };
   const byNumber = new Map<string, string[]>();
   for (const dir of dirs) {
     const number = dir.slice(0, 4);
     if (number <= EXEMPT_THROUGH) continue;
+    if (APPLIED_SHARED[number]?.includes(dir)) continue;
     byNumber.set(number, [...(byNumber.get(number) ?? []), dir]);
   }
   const shared = [...byNumber].filter(([, group]) => group.length > 1);

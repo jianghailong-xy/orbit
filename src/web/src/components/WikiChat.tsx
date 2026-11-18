@@ -18,7 +18,9 @@ import { CommentOutlined } from '@ant-design/icons';
 import { WIKI_DOC_SECTION_EVENT } from './WikiDirectory';
 import { WikiChatFab } from './WikiChatFab';
 import { WikiChatPanel } from './WikiChatPanel';
+import { useHelpDrawer } from '../lib/helpDrawer';
 import { routeId } from '../lib/idCodec';
+import { setSidebarFolded } from '../lib/sidebarFold';
 import { wikiChatDraftsQuery, wikiChatsQuery, wikiDocQuery, wikiDocsQuery, wikiEntryQuery, wikiPlanQuery } from '../lib/queries';
 import {
   WIKI_CHAT_ASK,
@@ -35,6 +37,7 @@ import {
   wikiChatFab,
   wikiChatFabShown,
   wikiChatFoldsDirectory,
+  wikiChatFoldsSidebar,
   wikiChatLayout,
   wikiChatPageSection,
   wikiChatPanelWidth,
@@ -124,8 +127,13 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
   // own would render once more with the old address first, which the effect below would then put back.
   const closed = readWikiChatClosed(space.slug);
   const setClosed = useCallback((next: boolean) => writeWikiChatClosed(space.slug, next), [space.slug]);
+  // The help drawer docks in the panel's slot (board help-center 01 ①): one at a time. While help is open the panel is
+  // not shown by default, opening help closes a panel that is open, and opening the panel closes help.
+  const help = useHelpDrawer();
+  const { closeHelp } = help;
   // Shown by default (board 45): only where it docks, on a page that has the panel, and not once hidden with ✕.
-  const byDefault = asked === null && kept === null && wikiChatFabShown(route, true) && wikiChatDocks(layout) && !closed;
+  const byDefault =
+    asked === null && kept === null && wikiChatFabShown(route, true) && wikiChatDocks(layout) && !closed && !help.open;
   const defaultChat = byDefault && list.data ? wikiChatToOpen(list.data.chats) : null;
   const chat = asked ?? kept ?? defaultChat;
   const open = chat !== null;
@@ -155,12 +163,22 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
     }
   }, [asked, kept, space.slug, navigate, location.pathname, location.search, location.hash, location.state]);
 
+  // Help opened (by its button, ? or a link) while a chat is open: the chat gives up the slot.
+  const helpWasOpen = useRef(help.open);
+  useLayoutEffect(() => {
+    const opened = help.open && !helpWasOpen.current;
+    helpWasOpen.current = help.open;
+    if (opened && (asked || kept)) go(null);
+  }, [help.open, asked, kept, go]);
+
   const [dragged, setDragged] = useState<number | null>(() => readWikiChatWidth());
   const width = wikiChatPanelWidth(layout, dragged, windowWidth);
 
-  // The panel's top: under the Wiki's head while the head is on screen, then the top of the page's scroll.
+  // The panel's top: under the Wiki's head while the head is on screen, then the top of the page's scroll. A desktop
+  // draws the head in the directory's column; folding the column away brings the head row back, so it measures again.
   const hostRef = useRef<HTMLDivElement>(null);
-  const top = usePanelTop(hostRef, open, location.pathname);
+  const folds = (open || reserving) && wikiChatFoldsDirectory(layout);
+  const top = usePanelTop(hostRef, open, location.pathname, folds);
 
   const [attachments, dispatch] = useReducer(wikiChatAttach, WIKI_CHAT_NO_ATTACHMENTS);
   const page = useWikiChatPage(space, route);
@@ -192,26 +210,34 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
     () => ({
       ask: (quote) => {
         dispatch({ type: 'quote', quote });
+        closeHelp();
         if (!open) go(wikiChatToOpen(chats));
       },
       quoted: new Set(attachments.quote?.sentenceIds ?? []),
       wouldRewrite,
       open: (next, card = null) => {
         setFocused(card ? { chat: next, card } : null);
+        closeHelp();
         go(next);
       },
     }),
-    [attachments.quote, open, go, chats, wouldRewrite],
+    [attachments.quote, open, go, chats, wouldRewrite, closeHelp],
   );
 
   const fab = wikiChatFab(list.data?.fab);
   const docks = (open || reserving) && wikiChatDocks(layout);
+  // A column narrower than 1440 takes the app sidebar's width rather than the directory's (board wiki-rail 03 C2).
+  const foldsSidebar = (open || reserving) && wikiChatFoldsSidebar(layout);
+  useEffect(() => {
+    setSidebarFolded(foldsSidebar);
+    return () => setSidebarFolded(false);
+  }, [foldsSidebar]);
   const className = [
     'wk-chat-host',
     fabShown ? 'has-fab' : '',
     open ? `is-open is-${layout}` : '',
     docks ? 'is-docked' : '',
-    (open || reserving) && wikiChatFoldsDirectory(layout) ? 'is-fold' : '',
+    folds ? 'is-fold' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -219,8 +245,36 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
 
   return (
     <WikiChatCtx.Provider value={api}>
-      <div ref={hostRef} className={className} style={style}>
-        {children}
+      {/* Where it docks the panel is a column of the page beside it, not a layer over it (board wiki-rail 03 Ⓑ). */}
+      <div className={`wk-chat-frame${docks ? ' is-columned' : ''}`}>
+        <div ref={hostRef} className={className} style={style}>
+          {children}
+        </div>
+        {docks && !open && <div className="wk-chat-slot" style={{ width: width ?? undefined }} aria-hidden="true" />}
+        {open && (
+          <WikiChatPanel
+            space={space}
+            chat={chat}
+            list={list.data}
+            layout={layout}
+            width={width}
+            top={top}
+            attachments={attachments}
+            dispatch={dispatch}
+            cards={shownChat ? (cards.data ?? null) : null}
+            focus={focus}
+            onChat={go}
+            onClose={() => {
+              // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
+              setClosed(true);
+              go(null);
+            }}
+            onResize={(next, done) => {
+              setDragged(next);
+              if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth) ?? next);
+            }}
+          />
+        )}
       </div>
       {fabShown && !open && (
         <WikiChatFab
@@ -233,31 +287,8 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
             setFocused(fab.state === 'needs_you' ? { chat: next, card: WIKI_CHAT_FOCUS_NEEDS_YOU } : null);
             // The button undoes ✕: pages open with the panel shown again (board 45, Q1 A).
             setClosed(false);
+            closeHelp();
             go(next);
-          }}
-        />
-      )}
-      {open && (
-        <WikiChatPanel
-          space={space}
-          chat={chat}
-          list={list.data}
-          layout={layout}
-          width={width}
-          top={top}
-          attachments={attachments}
-          dispatch={dispatch}
-          cards={shownChat ? (cards.data ?? null) : null}
-          focus={focus}
-          onChat={go}
-          onClose={() => {
-            // ✕ is the owner saying no: kept on the device until the button opens the panel again (board 45, Q1 A).
-            setClosed(true);
-            go(null);
-          }}
-          onResize={(next, done) => {
-            setDragged(next);
-            if (done) writeWikiChatWidth(wikiChatPanelWidth('wide', next, windowWidth) ?? next);
           }}
         />
       )}
@@ -266,7 +297,7 @@ export function WikiChatHost({ space, route, children }: { space: WikiSpaceRow; 
 }
 
 /** Where the panel's top is: below the Wiki's head while it shows, else the top of the page's own scroll. */
-function usePanelTop(hostRef: RefObject<HTMLDivElement | null>, open: boolean, pathname: string): number {
+function usePanelTop(hostRef: RefObject<HTMLDivElement | null>, open: boolean, pathname: string, folds: boolean): number {
   const [top, setTop] = useState(0);
   useLayoutEffect(() => {
     if (!open) return;
@@ -286,7 +317,7 @@ function usePanelTop(hostRef: RefObject<HTMLDivElement | null>, open: boolean, p
       window.removeEventListener('scroll', measure, { capture: true });
       window.removeEventListener('resize', measure);
     };
-  }, [hostRef, open, pathname]);
+  }, [hostRef, open, pathname, folds]);
   return top;
 }
 

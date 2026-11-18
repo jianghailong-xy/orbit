@@ -6,7 +6,6 @@ import { uuidToBase62 } from '@orbit/shared';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { RunStatus } from '@prisma/client';
-import { drainWaitingSentence } from '../common/runner-drain-waiting';
 import { PushService } from './push.service';
 
 function enabledConfig(): ConfigService {
@@ -316,7 +315,9 @@ test('a recap too long for a notification is cut', async () => {
   assert.ok(body.endsWith('…'));
 });
 
-test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
+// RUNNING, or with a SubAgent in flight: a running SubAgent asks after its parent's turn ended (docs/subagent-design.md
+// §5.3), and needsYouSessions then decides whether the card is one.
+test('approval push initially requires a canonical Open, non-ending RUNNING session, or one with a SubAgent running', async () => {
   const calls: any[] = [];
   const prisma = {
     session: {
@@ -332,7 +333,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    status: RunStatus.RUNNING,
+    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
@@ -909,52 +910,8 @@ test('the shared Android fixture carries what notifyClaudeRegionBlocked sends, k
   assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
 });
 
-/** The drain's one push (docs/runner-update-drain-design.md D3), as the heartbeat's claim hands it over. */
-async function drainPush(runnerId: string) {
-  const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
-  const service = new PushService(prisma as any, enabledConfig());
-  (service as any).authToken = () => 'auth-token';
-  const sent: { body: string; type: unknown; collapseId?: string }[] = [];
-  (service as any).deliver = async (_tokens: unknown, body: string, type: unknown, _priority: unknown, collapseId?: string) => {
-    sent.push({ body, type, collapseId });
-  };
-  await service.notifyRunnerDrainWaiting({
-    runnerId, ownerId: 'owner-1', machine: 'studio-mac', targetVersion: '0.1.254', turns: 2, waiting: { sessions: 1, messages: 1 },
-  });
-  return sent;
-}
-
-test('a drain with the owner’s work waiting is announced about the machine, in the banner’s words', async () => {
-  const sent = await drainPush('runner-1');
-  assert.equal(sent.length, 1);
-  const payload = JSON.parse(sent[0].body);
-  assert.equal(payload.aps.alert.title, 'studio-mac');
-  assert.equal(payload.aps.alert.body, 'studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.');
-  assert.equal(payload.aps.badge, undefined);
-  assert.equal(payload.sessionID, undefined);
-  assert.deepEqual([payload.kind, payload.runnerID], ['runner-updating', 'runner-1']);
-  assert.equal(sent[0].collapseId, 'runner-updating-runner-1');
-});
-
-test('the shared Android fixture carries what notifyRunnerDrainWaiting sends, key for key', async () => {
-  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
-  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'runner-updating');
-  assert.ok(sample, 'the shared Android fixture has no runner-updating sample');
-  const sent = await drainPush(sample.source.runnerID);
-  assert.equal(sent[0].body, JSON.stringify(sample.source));
-  assert.deepEqual([sample.pushType, sample.collapseId], [sent[0].type, sent[0].collapseId]);
-});
-
-test('the drain sentence counts sessions, messages and turns in English', () => {
-  const say = (sessions: number, messages: number, turns: number, targetVersion: string | null = '0.1.254') =>
-    drainWaitingSentence({ machine: 'studio-mac', targetVersion, turns, waiting: { sessions, messages } });
-  assert.equal(say(1, 0, 1), 'studio-mac is updating to 0.1.254 — 1 session is waiting for 1 turn to finish.');
-  assert.equal(say(2, 0, 3), 'studio-mac is updating to 0.1.254 — 2 sessions are waiting for 3 turns to finish.');
-  assert.equal(say(0, 1, 2), 'studio-mac is updating to 0.1.254 — 1 message is waiting for 2 turns to finish.');
-  assert.equal(say(0, 3, 0, null), 'studio-mac is updating — 3 messages are waiting for it to restart.');
-});
-
-function wakeupMissedHarness(deliver?: () => Promise<void>) {
+/** The owner's devices, as the alerts below reach them: one registered token, each send recorded. */
+function deviceAlertHarness(deliver?: () => Promise<void>) {
   const prisma = { deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] } };
   const service = new PushService(prisma as any, enabledConfig());
   (service as any).authToken = () => 'auth-token';
@@ -966,8 +923,19 @@ function wakeupMissedHarness(deliver?: () => Promise<void>) {
   return { service, sent };
 }
 
-test('a silent wakeup loop is announced under its session, collapsing on that one silence', async () => {
-  const { service, sent } = wakeupMissedHarness();
+/** A wakeup that failed is Orbit's own housekeeping: it goes to Feishu when one is bound, never to a device. */
+function wakeupMissedHarness() {
+  const service = new PushService({} as any, enabledConfig());
+  const devices: unknown[] = [];
+  const cards: any[] = [];
+  (service as any).channels = async () => ({ tokens: [{ token: 'device-1' }], feishu: { appId: 'app-1' } });
+  (service as any).deliver = async (...args: unknown[]) => { devices.push(args); };
+  (service as any).feishuOther = async (_feishu: unknown, input: unknown) => { cards.push(input); return true; };
+  return { service, devices, cards };
+}
+
+test('a silent wakeup loop reaches Feishu under its session, collapsing on that one silence, and no device', async () => {
+  const { service, devices, cards } = wakeupMissedHarness();
   const alertedAt = new Date('2026-11-01T10:20:00.000Z');
 
   await service.notifyLoopMissed({
@@ -977,76 +945,84 @@ test('a silent wakeup loop is announced under its session, collapsing on that on
     missed: { loopId: 'loop-1', ticks: 3, alertedAt },
     reason: 'RUNNER_OFFLINE',
   });
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(sent.length, 1);
-  const { payload, collapseId } = sent[0];
-  assert.equal(payload.aps.alert.title, 'Migrate the archive');
-  assert.equal(payload.aps.alert.body, 'Wakeup loop missed 3 ticks: the runner is offline.');
-  assert.deepEqual([payload.kind, payload.sessionID, payload.aps['thread-id']], ['loop-missed', 's-1', 's-1']);
-  // Nobody's reply is waiting on it, so it must not move the "needs you" count.
-  assert.equal(payload.aps.badge, undefined);
-  assert.equal(collapseId, `loop-loop-1-${alertedAt.getTime()}`);
+  assert.equal(devices.length, 0);
+  assert.deepEqual(cards, [{
+    kind: 'loop-missed', title: 'Migrate the archive', body: 'Wakeup loop missed 3 ticks: the runner is offline.',
+    collapseId: `loop-loop-1-${alertedAt.getTime()}`, sessionId: 's-1',
+  }]);
 });
 
 test('each reason a loop is silent reads as English, and one tick is not "1 ticks"', async () => {
-  const { service, sent } = wakeupMissedHarness();
+  const { service, cards } = wakeupMissedHarness();
   for (const reason of ['SESSION_FAILED', 'TURN_QUEUED'] as const) {
     await service.notifyLoopMissed({
       ownerId: 'owner-1', sessionId: 's-1', title: null, missed: { loopId: 'loop-1', ticks: 1, alertedAt: new Date() }, reason,
     });
   }
-  assert.deepEqual(sent.map((s) => [s.payload.aps.alert.title, s.payload.aps.alert.body]), [
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(cards.map((c) => [c.title, c.body]), [
     ['Orbit', 'Wakeup loop missed 1 tick: the session failed.'],
     ['Orbit', 'Wakeup loop missed 1 tick: its turn is queued and has not started.'],
   ]);
 });
 
-test('a one-shot wakeup dropped with its FAILED session is announced once, under the wakeup', async () => {
-  const { service, sent } = wakeupMissedHarness();
+test('a one-shot wakeup dropped with its FAILED session reaches Feishu once, under the wakeup, and no device', async () => {
+  const { service, devices, cards } = wakeupMissedHarness();
 
   await service.notifyLoopMissed({
     ownerId: 'owner-1', sessionId: 's-1', title: 'Watch the deploy', missed: { wakeupId: 'wakeup-1' }, reason: 'SESSION_FAILED',
   });
+  await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(sent.length, 1);
-  const { payload, collapseId } = sent[0];
-  assert.deepEqual(
-    [payload.aps.alert.title, payload.aps.alert.body, payload.kind, payload.sessionID],
-    ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1'],
-  );
-  assert.equal(collapseId, 'wakeup-wakeup-1');
+  assert.equal(devices.length, 0);
+  assert.deepEqual(cards.map((c) => [c.title, c.body, c.kind, c.sessionId, c.collapseId]), [
+    ['Watch the deploy', 'Scheduled wakeup dropped: the session failed.', 'wakeup-dropped', 's-1', 'wakeup-wakeup-1'],
+  ]);
 });
 
-// The shared Android fixture's two samples are these sends: fcm-transport.spec converts each to the FCM data it
-// holds, and Android's PushAuthorityTest parses that data, so the wire shape is pinned on both sides.
-test('the shared Android fixture carries what notifyLoopMissed sends, key for key', async () => {
+// A terminal asking to be approved (docs/terminal-session-design.md): the owner's devices ring with the machine and the
+// code, collapsed per request. The shared Android fixture's `terminal-login` sample is this send, so Android's
+// PushMessage parses exactly what is sent (PushAuthorityTest) and fcm-transport.spec converts it to the data it holds.
+function terminalLoginHarness(status = 'PENDING') {
+  const { service, sent } = deviceAlertHarness();
+  (service as any).prisma.terminalLogin = {
+    findUnique: async () => ({
+      ownerId: 'owner-1', runnerId: '019a0000-0000-7000-8000-00000000000c', machineName: 'dev-laptop', userCode: '7KQ-4MZ', status,
+    }),
+  };
+  return { service, sent };
+}
+
+test('a terminal asking to be approved rings with its machine and code, and the shared Android fixture is that send', async () => {
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
-  const session = '019a0000-0000-7000-8000-000000000002';
-  const sends = [
-    ['loop-missed', {
-      ownerId: 'owner-1', sessionId: session, title: 'Migrate the archive', reason: 'RUNNER_OFFLINE',
-      missed: { loopId: '019a0000-0000-7000-8000-000000000009', ticks: 3, alertedAt: new Date('2026-11-01T10:20:00.000Z') },
-    }],
-    ['wakeup-dropped', {
-      ownerId: 'owner-1', sessionId: session, title: 'Watch the deploy', reason: 'SESSION_FAILED',
-      missed: { wakeupId: '019a0000-0000-7000-8000-00000000000a' },
-    }],
-  ] as const;
-  for (const [name, input] of sends) {
-    const { service, sent } = wakeupMissedHarness();
-    await service.notifyLoopMissed(input);
-    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
-    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
-    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
-    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
-  }
+  const { service, sent } = terminalLoginHarness();
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 1);
+  const { payload, collapseId } = sent[0];
+  assert.deepEqual(payload.aps.alert, { title: 'Approve a terminal?', body: 'Terminal on dev-laptop · code 7KQ-4MZ' });
+  assert.deepEqual([payload.kind, payload.terminalLoginID, payload.runnerID],
+    ['terminal-login', '019a0000-0000-7000-8000-00000000000b', '019a0000-0000-7000-8000-00000000000c']);
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(collapseId, 'terminal-login-019a0000-0000-7000-8000-00000000000b');
+  const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === 'terminal-login');
+  assert.ok(sample, 'the shared Android fixture has no terminal-login sample');
+  assert.equal(JSON.stringify(payload), JSON.stringify(sample.source));
+  assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
+});
+
+test('a terminal request already decided rings nothing', async () => {
+  const { service, sent } = terminalLoginHarness('APPROVED');
+  await service.notifyTerminalLogin('019a0000-0000-7000-8000-00000000000b');
+  assert.equal(sent.length, 0);
 });
 
 // The orphan sweep's push to an owner with no coordinator to tell (docs/evidence-always-has-an-addressee-design.md §4):
 // the shared Android fixture's `project-orphan` sample is this send, so Android's parser is held to what the server sends.
 test('the orphan push names its project, collapses on its one notice, and is the shared Android fixture key for key', async () => {
   const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
-  const { service, sent } = wakeupMissedHarness();
+  const { service, sent } = deviceAlertHarness();
   await service.notifyProjectOrphan({
     ownerId: 'owner-1',
     projectId: '019a0000-0000-7000-8000-000000000004',
@@ -1066,16 +1042,15 @@ test('the orphan push names its project, collapses on its one notice, and is the
   assert.deepEqual([sample.pushType, sample.collapseId], ['alert', collapseId]);
 });
 
-test('a wakeup-missed push that fails is logged, never thrown at the worker', async () => {
-  const { service, sent } = wakeupMissedHarness(async () => {
-    throw new Error('APNs went away');
-  });
+test('a wakeup-missed alert that fails is logged, never thrown at the worker', async () => {
+  const { service, cards } = wakeupMissedHarness();
+  (service as any).channels = async () => { throw new Error('the database went away'); };
 
   await service.notifyLoopMissed({
     ownerId: 'owner-1', sessionId: 's-1', title: 'Migrate the archive', missed: { loopId: 'loop-1', ticks: 2, alertedAt: new Date() }, reason: 'TURN_QUEUED',
   });
 
-  assert.equal(sent.length, 0);
+  assert.equal(cards.length, 0);
 });
 
 
@@ -1156,3 +1131,209 @@ for (const unavailable of ['missing', 'ended', 'paused', 'fused', 'refused']) {
     assert.match(JSON.parse(harness.sent[0]).aps.alert.body, /^Not reviewed by the coordinator · /);
   });
 }
+
+// ── the session's own notification switches (Settings → Notifications) ────
+//
+// notifyTurnFinished / notifyNeedsYou: null inherits, 'on' or 'off' overrides; notificationsMuted silences every push of
+// the session, on every transport.
+
+test('a finished push follows the session: inherit reads the account, on and off override it, muted silences it', async () => {
+  const cases: Array<[string | null, boolean, boolean | undefined, number]> = [
+    // [notifyTurnFinished, muted, account notifySessionFinished, pushes]
+    [null, false, undefined, 1],
+    [null, false, false, 0],
+    ['on', false, false, 1],
+    ['on', false, undefined, 1],
+    ['off', false, undefined, 0],
+    ['off', false, true, 0],
+    [null, true, undefined, 0],
+    ['on', true, true, 0],
+  ];
+  for (const [notifyTurnFinished, notificationsMuted, notifySessionFinished, pushes] of cases) {
+    const preferences = notifySessionFinished === undefined ? {} : { notifySessionFinished };
+    const { service, sent, lookups } = settleHarness(settledSession({ notifyTurnFinished, notificationsMuted, owner: { preferences } }));
+    await service.notifySessionSettled('s-1');
+    assert.equal(sent.length, pushes, JSON.stringify({ notifyTurnFinished, notificationsMuted, notifySessionFinished }));
+    assert.equal(lookups[0].select.notifyTurnFinished, true);
+    assert.equal(lookups[0].select.notificationsMuted, true);
+  }
+});
+
+test('a muted or off finished push sends no Feishu card either', async () => {
+  for (const over of [{ notificationsMuted: true }, { notifyTurnFinished: 'off' }]) {
+    const { service } = settleHarness(settledSession(over));
+    let channels = 0;
+    (service as any).channels = async () => { channels += 1; return { tokens: [], feishu: { ownerId: 'owner-1' } }; };
+    await service.notifySessionSettled('s-1');
+    assert.equal(channels, 0, 'decided before any transport is looked up');
+  }
+});
+
+/** An approval push harness whose session row carries the given switches; claims and deliveries are counted. */
+function approvalSwitchHarness(row: Record<string, unknown>, opts: { claim?: boolean } = {}) {
+  const bodies: string[] = [];
+  const cards: unknown[] = [];
+  const joined: unknown[] = [];
+  const claims: string[] = [];
+  const lookups: any[] = [];
+  const feishu = {
+    approvalCard: (...args: unknown[]) => ({ args }),
+    post: async (_target: unknown, card: unknown) => { cards.push(card); return true; },
+    joinApprovalStretch: async (...args: unknown[]) => { joined.push(args); return true; },
+  };
+  const prisma = {
+    session: { findFirst: async (args: any) => { lookups.push(args); return { title: 'Session', ownerId: 'owner-1', ...row }; } },
+  };
+  const service = new PushService(prisma as any, enabledConfig(), feishu as any);
+  (service as any).needsYouSessions = async () => ['s-1'];
+  (service as any).channels = async () => ({ tokens: [{ token: 'device', environment: 'sandbox' }], feishu: { ownerId: 'owner-1' } });
+  (service as any).claimApprovalAlert = async (_s: string, approvalId: string) => { claims.push(approvalId); return opts.claim ?? true; };
+  (service as any).deliver = async (_t: unknown, body: string) => { bodies.push(body); };
+  return { service, bodies, cards, joined, claims, lookups };
+}
+
+test('an approval or question push follows the session: inherit and on ring, off and muted do not', async () => {
+  const cases: Array<[Record<string, unknown>, boolean]> = [
+    [{ notifyNeedsYou: null, notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'on', notificationsMuted: false }, true],
+    [{ notifyNeedsYou: 'off', notificationsMuted: false }, false],
+    [{ notifyNeedsYou: null, notificationsMuted: true }, false],
+    [{ notifyNeedsYou: 'on', notificationsMuted: true }, false],
+  ];
+  for (const [row, rings] of cases) {
+    for (const tool of ['Bash', 'AskUserQuestion']) {
+      for (const coordinatorFallback of [false, true]) {
+        const h = approvalSwitchHarness(row);
+        await h.service.notifyApprovalRequest('s-1', 'a-1', tool, coordinatorFallback);
+        const label = JSON.stringify({ row, tool, coordinatorFallback });
+        assert.equal(h.bodies.length, rings ? 1 : 0, label);
+        assert.equal(h.cards.length, rings ? 1 : 0, `Feishu: ${label}`);
+        assert.equal(h.lookups[0].select.notifyNeedsYou, true);
+        assert.equal(h.lookups[0].select.notificationsMuted, true);
+        // A silenced alert takes no edge, so it leaves alerted_approval_at where it was.
+        if (!rings) assert.deepEqual(h.claims, [], `no claim: ${label}`);
+      }
+    }
+  }
+});
+
+test('a silenced approval does not join a Feishu stretch, and does not block the next one once unmuted', async () => {
+  const muted = approvalSwitchHarness({ notificationsMuted: true }, { claim: false });
+  await muted.service.notifyApprovalRequest('s-1', 'a-1', 'Bash');
+  assert.deepEqual(muted.joined, []);
+  assert.deepEqual(muted.claims, []);
+
+  // The row the claim reads was not moved while muted, so the next stretch's opener claims and rings.
+  const unmuted = approvalSwitchHarness({ notificationsMuted: false });
+  await unmuted.service.notifyApprovalRequest('s-1', 'a-2', 'Bash');
+  assert.deepEqual(unmuted.claims, ['a-2']);
+  assert.equal(unmuted.bodies.length, 1);
+});
+
+test('an agent message to a muted session is refused before it takes the once-a-minute turn', async () => {
+  const muted = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: true } });
+  muted.rang.beforeClaim = () => { assert.fail('a muted session must not spend its turn'); };
+  assert.deepEqual(await muted.service.notifyAgentMessage(agentInput), {
+    delivered: false, reason: 'notifications are muted for this session',
+  });
+  assert.equal(muted.sent.length, 0);
+  assert.equal(muted.rang.sessions.has('s-1'), false, 'agentNotifiedAt left unset');
+
+  // Not muted rings as today, and an unmuted session is not held by the refused call.
+  const on = agentNotifyHarness({ session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false } });
+  assert.equal((await on.service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(on.sent.length, 1);
+});
+
+test('the turn-finished and needs-you switches do not touch agent messages', async () => {
+  const { service, sent } = agentNotifyHarness({
+    session: { title: 'Fix the login bug', agentNotifiedAt: null, notificationsMuted: false, notifyTurnFinished: 'off', notifyNeedsYou: 'off' },
+  });
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
+  assert.equal(sent.length, 1);
+});
+
+// ── only sessions the owner started ring when they settle ─────────────────
+
+test('a session an agent, a task list or a coordinator started settles without ringing', async () => {
+  for (const over of [
+    { parentSessionId: 'parent-1' },
+    { runSource: 'TASK_LIST_AUTO' },
+    { runSource: 'PROJECT_COORDINATOR' },
+    { coordinatorForProject: { id: 'project-1' } },
+    { task: { project: { coordinatorEnabled: true } } },
+  ]) {
+    const { service, sent } = settleHarness(settledSession(over));
+    await service.notifySessionSettled('s-1');
+    assert.equal(sent.length, 0, JSON.stringify(over));
+  }
+});
+
+test('a session the owner started rings, and a session switched on rings whoever started it', async () => {
+  const mine = settleHarness(settledSession({ runSource: 'MANUAL', task: { project: { coordinatorEnabled: false } } }));
+  await mine.service.notifySessionSettled('s-1');
+  assert.equal(mine.sent.length, 1);
+
+  const askedFor = settleHarness(settledSession({ parentSessionId: 'parent-1', notifyTurnFinished: 'on' }));
+  await askedFor.service.notifySessionSettled('s-1');
+  assert.equal(askedFor.sent.length, 1);
+});
+
+test('an escalated item whose coordinator cannot be reached says so, not "no one acted on this"', async () => {
+  // 2026-11-15: the banner and the card said nobody acted while the card's own doors could not
+  // reach the coordinator. The push reads the project page's own answer (`readCoordinatorReach`).
+  const escalated = (session: Record<string, unknown>) => openItem({
+    kind: 'INTEGRATION_CONFLICT',
+    assigneeReason: 'ESCALATED',
+    title: 'Merge conflict: Add the landing receipt',
+    payload: {},
+    waitingSince: new Date('2026-09-13T10:00:00Z'),
+    escalatedAt: new Date('2026-09-13T12:56:00Z'),
+    project: { title: 'Integration line', coordinatorSessionId: 'coordinator', coordinatorSession: session },
+  });
+  const live = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const cases = [
+    { what: 'reaped, runner away', session: { ...live, status: 'FAILED', cancelRequestedAt: new Date() }, blocked: 'RUNNER_OFFLINE',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'live, but no message reaches it', session: live, blocked: 'RUN_RETIRED',
+      title: 'Now yours — the coordinator can’t take messages' },
+    { what: 'reachable', session: live, blocked: null, title: 'Now yours — no one acted on this for 2h 56m' },
+  ];
+  for (const { what, session, blocked, title } of cases) {
+    const { service, sent } = ownerItemHarness(escalated(session));
+    (service as any).moduleRef = { get: () => ({ receiveBlockedReasonFor: async () => blocked }) };
+    await service.notifyOwnerItem('item-1');
+    assert.equal(sent.length, 1, what);
+    const payload = JSON.parse(sent[0].body);
+    assert.equal(payload.kind, 'escalated-to-you', what);
+    assert.equal(payload.aps.alert.title, title, what);
+  }
+});
+
+// A scheduled task's push (docs/scheduled-tasks-design.md §7.3): a failure opens the run's session, a hold the schedule, and
+// each names the Waiting on you item it filed. The shared Android fixture's `schedule-failed` and `schedule-held` samples are
+// these sends, so Android's PushMessage parses exactly what is sent (ScheduleAppTest) and fcm-transport.spec converts each
+// to the data it holds.
+test('a scheduled task pushes its failure and its hold as the shared Android fixture holds them, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const schedule = '019a0000-0000-7000-8000-000000000010';
+  const sends = [
+    { name: 'schedule-failed', alert: { kind: 'FAILED', opens: { sessionId: '019a0000-0000-7000-8000-000000000012' },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000013', title: 'Nightly pg spec sweep failed 3 runs in a row',
+      body: 'The last run ended without a report. It keeps running until you pause it.',
+      collapseId: 'schedule-failed-019a0000-0000-7000-8000-000000000011' } },
+    { name: 'schedule-held', alert: { kind: 'HELD', opens: { scheduleId: schedule },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000015', title: 'Weekly dependency audit is held',
+      body: 'It could not start on Monday 09:00: the agent "auditor" in workspace web is disabled. Nothing runs until it is enabled and you resume.',
+      collapseId: 'schedule-held-019a0000-0000-7000-8000-000000000014' } },
+  ];
+  for (const { name, alert } of sends) {
+    const { service, sent } = deviceAlertHarness();
+    await service.notifySchedule({ ownerId: 'owner-1', scheduleId: schedule, ...alert });
+    assert.equal(sent.length, 1, name);
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
+    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
+});

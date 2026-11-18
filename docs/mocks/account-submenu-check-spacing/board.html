@@ -1,0 +1,61 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Account menu: the Appearance level's margins</title>
+<style>
+  body { margin: 0; background: #f4f5f7; }
+  .b-board { display: inline-block; padding: 28px 32px 32px; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1f2329; width: 1360px; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  .b-sub { color: #646a73; margin: 0 0 22px; }
+  .b-row { display: flex; gap: 24px; align-items: flex-start; }
+  .b-col { flex: 1; min-width: 0; }
+  .b-col h2 { font-size: 16px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .b-tag { font-size: 12px; font-weight: 600; color: #fff; background: #2f7d32; border-radius: 4px; padding: 1px 7px; }
+  .b-note { color: #3d434a; margin: 0 0 10px; min-height: 132px; font-size: 14px; }
+  .b-col img { width: 100%; display: block; border: 1px solid #dee0e3; border-radius: 8px; background: #fff; }
+  .b-col img + img { margin-top: 12px; }
+  .b-col.b-rec img { border-color: #2f7d32; box-shadow: 0 0 0 2px rgba(47,125,50,.25); }
+  .b-foot { margin-top: 22px; display: flex; gap: 32px; font-size: 14px; }
+  .b-foot h3 { font-size: 15px; margin: 0 0 6px; }
+  .b-foot ol, .b-foot ul { margin: 0; padding-left: 20px; }
+  .b-foot > div { flex: 1; }
+  code { font: 13px "JetBrains Mono", monospace; background: #eceef1; border-radius: 3px; padding: 0 4px; }
+</style>
+<div class="b-board">
+  <h1>Account menu → Appearance: balance the level's left and right margins</h1>
+  <p class="b-sub">The real web page at 2×, light theme. Red dimension lines measure the labels' left margin and the right margin of the last mark (text or check), in CSS px from the popup's edge.</p>
+  <div class="b-row">
+    <div class="b-col">
+      <h2>Today</h2>
+      <p class="b-note">The check sits in a 14 px slot in front of every row, used or not. The labels start 38 px in (16 + 14 + 8 gap); "System" ends 16 px from the right edge. Left is more than twice the right.</p>
+      <img src="today.png"><img src="today-clean.png">
+    </div>
+    <div class="b-col b-rec">
+      <h2>A · Check after the label <span class="b-tag">Recommended</span></h2>
+      <p class="b-note">Labels start at 16 px, the check ends 16 px from the right: the same margin on both sides, for every row. It is where the app's other checked menu rows already draw their check (<code>Menu.tsx</code> checkbox rows).</p>
+      <img src="a.png"><img src="a-clean.png">
+    </div>
+    <div class="b-col">
+      <h2>B · Check in front, matching right gutter</h2>
+      <p class="b-note">Keeps the check in front and widens the right padding until it equals the label indent: 38 / 38. The labels balance, but the popup grows 22 px wider, and the check alone still sits at 16 px, so the left edge stays ragged.</p>
+      <img src="b.png"><img src="b-clean.png">
+    </div>
+  </div>
+  <div class="b-foot">
+    <div>
+      <h3>Measured (CSS px)</h3>
+      <ul>
+        <li>Today: popup 103 wide · labels 38 from left · 16 right</li>
+        <li>A: popup 111 wide · labels 16 from left · check 16 from right · 16 between "System" and the check column</li>
+        <li>B: popup 125 wide · labels 38 from left · 38 right</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Landing A</h3>
+      <ol>
+        <li>Appearance rows put the check after the label. An empty slot stays on unchecked rows, so the checks line up in one column.</li>
+        <li>Machines keeps its leading status dots: the change is scoped to the Appearance level, not to <code>tp-account-submenu</code>.</li>
+        <li>Row height (44 px) and the main menu are unchanged.</li>
+      </ol>
+    </div>
+  </div>
+</div>

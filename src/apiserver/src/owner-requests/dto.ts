@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEmpty,
   IsIn,
   IsISO8601,
@@ -54,7 +55,8 @@ export class OwnerRequestSecretSpecDto {
 /** A session filing a request (`POST /runner/owner-requests`). Per-kind rules are `normalizeOwnerRequest`'s. */
 export class FileOwnerRequestDto {
   @IsIn(OWNER_REQUEST_KINDS) kind!: OwnerRequestKind;
-  @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_TITLE) title!: string;
+  /** Every kind's but WIKI_CREATE's, whose title Orbit writes (`normalizeOwnerRequest` holds each kind to it). */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_TITLE) title?: string;
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(50) @IsPublicId({ each: true }) blocksTaskIds?: string[];
   @IsOptional() @IsString() @MaxLength(MAX_OWNER_REQUEST_IF_UNANSWERED) ifUnanswered?: string;
@@ -76,11 +78,15 @@ export class FileOwnerRequestDto {
 export class CompleteOwnerRequestDto {
   @IsOptional() @IsInt() @Min(0) @Max(MAX_OWNER_REQUEST_OPTIONS - 1) option?: number;
   @IsOptional() @IsString() @MaxLength(4_000) text?: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /** The owner declining a request: the reason is required, because the asking session acts on it. */
 export class DeclineOwnerRequestDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_NOTE) reason!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /** The asking session withdrawing its own request. */

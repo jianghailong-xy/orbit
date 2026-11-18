@@ -111,7 +111,7 @@ public struct TaskStart: Sendable, Equatable, Codable {
 /// What the card says, in the web's own words: `lib/taskStartCard.ts`, which
 /// `TaskStartCopyParityTests` holds this end to.
 public enum TaskStartCard {
-    /// The card's name, on its head and on the sticky bar that points back at it.
+    /// The card's name, on its head.
     public static let header = "Task started"
     /// The chip a run started by one of the automatic doors carries.
     public static let autoLabel = "Auto-started"
@@ -178,12 +178,6 @@ public enum TaskStartCard {
         var line = "Task \(PublicID.toPublic(card.taskId))"
         if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
         return line
-    }
-
-    /// What the bar pinned to the top of a console says about this turn: the card's own name and the
-    /// task's title (web parity: the `data-sticky-label` / `data-sticky-text` the card's root carries).
-    public static func sticky(_ card: TaskStart) -> (label: String, text: String) {
-        (header, card.title)
     }
 
     /// The task, as the app's own `orbit-task:` door.

@@ -2,9 +2,13 @@ package io.orbitd.android.reader
 
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.runtime.CompositionLocalProvider
+import io.orbitd.android.cards.LocalQueuedHeld
+import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.directory.QueuedGate
 import io.orbitd.android.directory.QueuedRunnerUpdate
 import io.orbitd.android.ui.OrbitTheme
@@ -63,5 +67,45 @@ class RunnerUpdatingViewsTest {
         compose.onNode(hasText("Runner updating") and hasAnyAncestor(isDialog())).assertExists()
         assertEquals("studio-mac starts no new turns until 2 turns finish, then updates to 0.1.254. This message is sent right after.\nWaiting 38 min.",
             text("runner-updating-pop:text"))
+    }
+
+    /** A runner that is stopping, not updating (board runner-stopping): its own title, tag and account. */
+    @Test fun aRunnerThatIsStoppingSaysSoOnTheBlockAndTheFootRow() {
+        val stopping = gate.copy(queuedRunnerUpdate = gate.queuedRunnerUpdate!!.copy(stopping = true))
+        compose.setContent { OrbitTheme { Column { RunnerUpdatingQueued(stopping, "HPC", {}, now = now); RunnerUpdatingFoot(stopping, "HPC", now = now) } } }
+        assertEquals("Runner stopping", text("runner-updating:title"))
+        assertEquals("HPC is stopping. It starts no new work until 2 turns finish: Backfill missing shard rows and Why are 11-08 metrics zero. " +
+            "This session starts once HPC is back.", text("runner-updating:description"))
+        assertEquals("runner stopping", text("runner-updating-foot:reason"))
+        compose.onNodeWithTag("runner-updating-foot:reason", useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        compose.onNode(hasText("Runner stopping") and hasAnyAncestor(isDialog())).assertExists()
+        assertEquals("HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.\nWaiting 38 min.",
+            text("runner-updating-pop:text"))
+    }
+
+    /** docs/mocks/queued-card-runner-updating ②: a queued card's line reads the update's tag in place of `Queued`, Cancel beside it. */
+    @Test fun aQueuedTurnTheUpdateHoldsSaysSoOnItsOwnLineWithCancelBesideIt() {
+        var cancelled = 0
+        compose.setContent { OrbitTheme { Column {
+            CompositionLocalProvider(LocalQueuedHeld provides { RunnerUpdatingFoot(gate, "HPC", now = now) }) { QueuedFoot { cancelled++ } }
+        } } }
+        assertEquals("runner updating", text("runner-updating-foot:reason"))
+        compose.onNodeWithTag("queued-foot:cancel").performClick()
+        assertEquals(1, cancelled)
+    }
+
+    @Test fun aQueuedTurnNothingHoldsStillReadsQueued() {
+        compose.setContent { OrbitTheme { QueuedFoot {} } }
+        assertTrue(compose.onAllNodesWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Queued").assertExists()
+    }
+
+    @Test fun onlyATurnWaitingForItsOwnTurnIsHeld() {
+        val event = io.orbitd.android.core.realtime.RunEvent("user", 0, kotlinx.serialization.json.buildJsonObject {}, "t1")
+        val turn = QueuedTurn("t1", steer = false, event = event, cards = emptyList(), wake = null)
+        assertTrue(turn.heldByUpdate)
+        assertFalse(turn.copy(steer = true).heldByUpdate)
+        assertFalse(turn.copy(delivery = "failed").heldByUpdate)
     }
 }

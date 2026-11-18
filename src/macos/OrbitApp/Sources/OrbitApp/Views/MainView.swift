@@ -51,7 +51,11 @@ struct MainView: View {
                 // when the window narrows.
                 .navigationSplitViewColumnWidth(min: 320, ideal: 420, max: 480)
                 #else
-                .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
+                // Scheduled's timeline is the web board's page, with the long row line, so it takes the width a
+                // list column does not; its right-hand panel is the detail column (web board 01 ②).
+                .navigationSplitViewColumnWidth(min: model.selectedSection == .scheduled ? 400 : 240,
+                                                ideal: model.selectedSection == .scheduled ? 520 : 300,
+                                                max: model.selectedSection == .scheduled ? 760 : 420)
                 #endif
         } detail: {
             // The page is kept mounted under the task, so the conversation's scroll position and
@@ -151,6 +155,7 @@ struct SectionSidebar: View {
     let isAdmin: Bool
     @AppStorage("sidebar.workspacesExpanded") private var workspacesExpanded = true
     @AppStorage("sidebar.projectsExpanded") private var projectsExpanded = true
+    @AppStorage("sidebar.sharedWithMeExpanded") private var sharedWithMeExpanded = true
     /// The workspace whose settings its row's menu opened.
     @State private var editingWorkspace: Agent?
     /// ⌘ is down: the workspace rows show their ⌘1…⌘9 shortcuts only then, as Safari shows its tab
@@ -164,9 +169,10 @@ struct SectionSidebar: View {
     @State private var applied: SidebarSelection?
 
     /// The project the session column is showing, in the project list's own spelling of the id (the
-    /// spelling the row's tag uses), or nil when no project's sessions page is in the column.
+    /// spelling the row's tag uses), or nil when no project's sessions page is in the column. A page a
+    /// session list's coordinator row opened leaves the workspace selected (owner, 2026-11-14).
     private var selectedProjectID: String? {
-        guard model.selectedSection == .agents, let address = model.projectSessionsColumn else { return nil }
+        guard model.selectedSection == .agents, let address = model.projectSessionsColumnDestination else { return nil }
         let key = PublicID.storageKey(address.projectID)
         return model.projects?.projects.first { PublicID.storageKey($0.id) == key }?.id ?? address.projectID
     }
@@ -175,7 +181,8 @@ struct SectionSidebar: View {
     private var modelSelection: SidebarSelection {
         SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,
                                machineDraftRunnerID: model.machineDraftRunnerID,
-                               projectID: selectedProjectID)
+                               projectID: selectedProjectID,
+                               guestSessionID: model.guestSessionID)
     }
 
     var body: some View {
@@ -186,7 +193,11 @@ struct SectionSidebar: View {
             AppSection.workSections,
             wiki: model.wiki?.shown == true,
             projectsWaiting: model.projects?.needsYouCount ?? 0,
-            wikiWaiting: model.wiki?.waiting ?? 0)
+            wikiWaiting: model.wiki?.waiting ?? 0,
+            // Scheduled under Tasks with the schedules failing or held (web board 01 ①): account-wide, never a
+            // row of a workspace's list; away while the server predates scheduled tasks.
+            scheduled: model.scheduled.map { !$0.unsupported } ?? false,
+            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
@@ -211,6 +222,21 @@ struct SectionSidebar: View {
                     HStack(spacing: 6) {
                         Text(AppSection.projects.title)
                         Text("\(projects.count)").fontWeight(.regular)
+                    }
+                }
+            }
+
+            // Shared with me, the rail's last group (docs/session-guests-design.md §4): the sessions
+            // other people invited this account to reply in. No group while there is none.
+            if SharedWithMe.showsGroup(model.sharedWithMe) {
+                Section(isExpanded: $sharedWithMeExpanded) {
+                    ForEach(model.sharedWithMe) { session in
+                        sharedWithMeRow(session)
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text(GuestCopy.sharedWithMe)
+                        Text("\(model.sharedWithMe.count)").fontWeight(.regular)
                     }
                 }
             }
@@ -245,6 +271,9 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
+        // Scheduled's number — the schedules failing or held — read with the rail like the others.
+        .task { await model.scheduled?.load() }
+        .task { await model.followSharedWithMe() }
         .onChange(of: selection) { _, now in
             guard now != applied else { return }
             applied = now
@@ -257,6 +286,8 @@ struct SectionSidebar: View {
                 model.openMachineDraft(runnerID)
             case .project(let id):
                 model.openProjectSessions(id, inColumn: true)
+            case .guestSession(let id):
+                model.openGuestSession(id)
             case .none:
                 break
             }
@@ -284,6 +315,7 @@ struct SectionSidebar: View {
                 .accessibilityLabel("\(row.waiting) waiting on you")
         }
         .tag(SidebarSelection.section(row.section))
+        .accessibilityIdentifier("sidebar-\(row.section.rawValue)")
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
@@ -314,9 +346,10 @@ struct SectionSidebar: View {
     /// if/else or a second ForEach in here is the shape the outline list's row reload aborted on.
     private func workspaceRows(shortcutIndex: [String: Int]) -> some View {
         let agents = model.agents
-        // The runner is named only on a row whose name another workspace also has ("orbit" on two
-        // machines): there it is what tells them apart; anywhere else it repeated one machine's name
-        // down the whole list. The row's menu (Show Machine) still says where it runs.
+        // The runner is named always on a row whose name another workspace also has ("orbit" on two
+        // machines): there it is what tells them apart. Anywhere else it repeated one machine's name
+        // down the whole list, so it shows only on the row the pointer is on (Mac; board
+        // docs/mocks/workspace-runner-label E1). The row's menu (Show Machine) still says where it runs.
         let sharedNames = Set(Dictionary(grouping: agents?.orderedItems ?? [], by: \.name)
             .filter { $0.value.count > 1 }.keys)
         return ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? [])) { row in
@@ -325,14 +358,15 @@ struct SectionSidebar: View {
                 let configured = agents?.configuredProviders ?? []
                 WorkspaceNavigationRow(
                     agent: agent,
-                    runnerLabel: sharedNames.contains(agent.name) ? agents?.runnerLabel(agent.runnerId) ?? "" : "",
+                    runnerLabel: agents?.runnerLabel(agent.runnerId) ?? "",
                     // The system draws the selection, so the folder keeps one colour.
                     selected: false,
                     offline: agents?.runnerIsOffline(agent.runnerId) ?? false,
                     running: model.runningWorkspaceIDs.contains(agent.id),
                     jobs: model.jobWorkspaceIDs.contains(agent.id),
                     waiting: model.agentNeedsYou[agent.id] ?? 0,
-                    shortcut: shortcutIndex[agent.id]
+                    shortcut: shortcutIndex[agent.id],
+                    runnerOnHover: !sharedNames.contains(agent.name)
                 )
                 // What the two-line row used to say under the name: what its next session starts on, and where.
                 .help(SessionProviderChoices.engineVia(engine: agent.defaultEngine(configured: configured),
@@ -411,6 +445,31 @@ struct SectionSidebar: View {
         .tag(SidebarSelection.project(row.id))
     }
 }
+
+#if os(macOS)
+extension SectionSidebar {
+    /// A Shared with me row: the session's title, who shared it and how it stands, and when it last
+    /// moved — the web's row (`GuestSessionRow`).
+    func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "person.2").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(SharedWithMe.title(session)).lineLimit(1)
+                Text(SharedWithMe.subtitle(session))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            Text(SharedWithMe.ago(session))
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .tag(SidebarSelection.guestSession(session.id))
+    }
+}
+#endif
 
 /// Pinned to the bottom of the sidebar, mirroring the web's `tp-user` footer: a monogram avatar
 /// plus the signed-in user's name, and the drawer's Settings gear beside it. Clicking the name opens
@@ -556,6 +615,14 @@ struct SectionContent: View {
             TasksListView()
         case .wiki:
             WikiContentsColumn()
+        case .scheduled:
+            // The phone's drawer and the iPad's sidebar open the phone's page; the Mac's source list opens the web
+            // board's timeline, its panel in the detail column.
+            #if os(iOS)
+            ScheduledPage()
+            #else
+            ScheduledMacPage()
+            #endif
         case .following:
             FollowingListView()
         case .agents:
@@ -605,6 +672,14 @@ struct SectionDetail: View {
             TaskDetailView()
         case .wiki:
             WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
+        case .scheduled:
+            #if os(iOS)
+            // The detail is the page's own bottom panel.
+            ContentUnavailableView(section.title, systemImage: section.systemImage)
+            #else
+            // The right-hand panel: a row's detail, a draft, or a run's session (web boards 01 ②④, 02 ⑤).
+            ScheduledMacDetail()
+            #endif
         case .following:
             WatchDetailView()
         case .agents:

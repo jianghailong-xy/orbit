@@ -17,6 +17,8 @@
  *   9. an HTTPS heartbeat is answered as it always was, and a link heartbeat after it reconciles in full;
  *  10. a managed runner is admitted with its instance and reconciles in full on every beat.
  *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
+ *  14. the sessions a background job holds slots for (backgroundJobSessionIds) are written by the beat's one statement
+ *      and counted by the runners list as running, a session named both ways once; an older runner's beat clears them.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -245,7 +247,8 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.deepEqual(
       { ...quiet.answer, linkHints: undefined },
       {
-        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: null,
+        // A runner created without a Keep Free has the column's default: 10 GB since 0990_runner_keep_free_default.
+        cancelSessionIds: [], leaseLostSessionIds: [], maxConcurrent: 1, minFreeDiskMb: 10240,
         mergeRequests: [], commitRequests: [], artifactRequests: [], linkHints: undefined,
       },
     );
@@ -444,7 +447,16 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await t3.test('repoCleanupRequest (WorkspacesService.requestRepoCleanup)', async () => {
       // The runner reports the checkout wedged: a report, written without a full reconcile.
       body = { ...body, repos: [{ root: workDir, branch: 'main', state: 'rebase', agentIds: [workspaceId] }] } as never;
+      // ... and the owner's clients are told that workspace's checkout moved, so a Main checkout bar follows it.
+      const told: Array<{ type: string; data: Record<string, unknown> }> = [];
+      const stream = realtime.streamForUser(ownerId).subscribe((e) => told.push(e as never));
       assert.equal(isFull((await beat()).answer), false);
+      await new Promise((r) => setTimeout(r, 200));
+      stream.unsubscribe();
+      assert.deepEqual(
+        told.filter((e) => e.type === 'agent.changed').map((e) => e.data),
+        [{ agentId: workspaceId, affectsTaskRows: false, repoHealth: true }],
+      );
       const cleanup = await untilSettled(() => workspaces.requestRepoCleanup(ownerId, workspaceId), (a) => a.repoCleanupRequest,
         () => sql.query(`UPDATE "runner" SET repo_cleanup_status = 'done' WHERE id = $1`, [runnerId]));
       assert.equal(cleanup?.root, workDir);
@@ -808,29 +820,79 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
   });
 
   // ── 13 ─────────────────────────────────────────────────────────────────────────────────────────────────
-  await t.test('13. work queuing behind a drain is pushed on the next quiet beat, once per drain (D3)', async () => {
+  await t.test('13. a draining beat stays one statement, and work queuing behind the drain is pushed to no one', async () => {
     const draining = { draining: true, selfUpdate: { state: 'waitingForIdle', phase: 'draining', targetVersion: '0.1.254', turnsInFlight: 1 } } as
       Partial<RunnerHeartbeatRequest>;
     for (let i = 0; i < 4 && isFull((await beat(draining)).answer); i += 1);
     const idleDrain = await beat(draining);
     assert.equal(isFull(idleDrain.answer), false, 'a draining beat with nothing changed is quiet');
-    assert.equal(idleDrain.statements.length, 2, idleDrain.statements.join('\n---\n'));
-    assert.match(idleDrain.statements[1], /UPDATE "runner" r SET "drain_waiting_pushed_at"/, 'and asks for the drain push in one more statement');
-    assert.equal(drainPushes.length, 0, 'nothing of the owner\'s waits yet');
+    assert.equal(idleDrain.statements.length, 1, idleDrain.statements.join('\n---\n'));
 
     const waiting = await session(RunStatus.PENDING, { numTurns: 0, inboxLeaseOwner: null });
     const queued = await beat(draining);
     assert.equal(isFull(queued.answer), false, 'the work queued moved nothing a quiet beat reads');
-    assert.deepEqual(drainPushes.map((p) => [p.runnerId, p.waiting]), [[runnerId, { sessions: 1, messages: 0 }]]);
-    await beat(draining);
-    await beat(draining);
-    assert.equal(drainPushes.length, 1, 'one push per drain');
+    assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
+    assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
 
-    // The drain ends: the work no longer waits on it, and the record of its push goes with it.
     await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
-    const after = await sql.query(`SELECT drain_waiting_pushed_at FROM "runner" WHERE id = $1`, [runnerId]);
-    assert.equal(after.rows[0].drain_waiting_pushed_at, null);
+    await settle();
+  });
+
+  // ── 14 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('14. the sessions a background job holds slots for ride the link beat into presence, and the runners list counts them', async () => {
+    await settle();
+    const holders = async () => (await sql.query(
+      `SELECT "background_job_session_ids"::text[] AS ids FROM "runner_presence" WHERE "runner_id" = $1`, [runnerId])).rows[0].ids as string[];
+    const running = async () => {
+      const listed = (await runners.listRunners(ownerId)).find((r) => r.id === runnerId)!;
+      return listed.activeSessions;
+    };
+    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, status: RunStatus.RUNNING } });
+    assert.ok(inTurn >= 1, 'busy is in a turn');
+    assert.equal(await running(), inTurn, 'a beat without the member counts turns alone');
+    assert.deepEqual(await holders(), []);
+
+    // idle has no turn but its job holds a slot: one statement, written by the beat itself, and counted.
+    const held = await beat({ backgroundJobSessionIds: [idle.toUpperCase()] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(isFull(held.answer), false, 'nothing a beat delivers depends on it');
+    assert.equal(held.statements.length, 1, held.statements.join('\n---\n'));
+    assert.deepEqual(await holders(), [idle]);
+    assert.equal(await running(), inTurn + 1, 'a RUNNING session and a background-job holder are two');
+
+    // busy named too: it is counted once.
+    await beat({ backgroundJobSessionIds: [busy, idle] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(await running(), inTurn + 1, 'a session in a turn and named by its job counts once');
+
+    // An ended session, another account's session and a malformed id are not counted.
+    const ended = await session(RunStatus.SUCCEEDED, { inboxLeaseOwner: null });
+    const strangerId = randomUUID();
+    await prisma.user.create({ data: { id: strangerId, email: `link-heartbeat-${strangerId}@runner-link.invalid`, name: 'x', passwordHash: 'x' } });
+    const strangerRunner = randomUUID();
+    await prisma.runner.create({ data: { id: strangerRunner, ownerId: strangerId, name: 'theirs', tokenHash: sha256(randomUUID()), status: 'ONLINE' } });
+    const theirs = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: theirs, ownerId: strangerId, creatorId: strangerId, title: 'theirs', prompt: 'work', provider: 'claude',
+        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, assignedRunnerId: strangerRunner,
+      },
+    });
+    await beat({ backgroundJobSessionIds: [ended, theirs, 'not-a-session'] } as Partial<RunnerHeartbeatRequest>);
+    assert.deepEqual(await holders(), [ended], 'only this runner\'s own sessions are kept: not another account\'s, nor a malformed id');
+    assert.equal(await running(), inTurn, 'neither an ended session nor another runner\'s is counted');
+
+    // A stale report counts as before.
+    await beat({ backgroundJobSessionIds: [idle] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(await running(), inTurn + 1);
+    await sql.query(`UPDATE "runner_presence" SET "last_beat_at" = "last_beat_at" - interval '10 minutes' WHERE "runner_id" = $1`, [runnerId]);
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date(Date.now() - 10 * 60_000) } });
+    assert.equal(await running(), inTurn, 'an offline runner\'s report is not counted');
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date() } });
+
+    // An older runner, which never sends the member: the next beat clears what was kept.
+    await beat();
+    assert.deepEqual(await holders(), []);
+    assert.equal(await running(), inTurn, 'a runner that omits the member counts as before');
     await settle();
   });
 

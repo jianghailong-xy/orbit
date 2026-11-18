@@ -34,11 +34,24 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
-import io.orbitd.android.core.cards.withoutWakeBlocks
+import io.orbitd.android.core.cards.BackgroundWakeCard
+import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.cards.OrbitEventLine
+import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
+import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.BilingualEnglish
+import io.orbitd.android.translation.BilingualShown
+import io.orbitd.android.translation.InterleavedReply
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.ReplyTranslationFoot
+import io.orbitd.android.translation.ShownOriginals
+import io.orbitd.android.translation.TranslationShown
+import io.orbitd.android.translation.UserTranslationFoot
 import io.orbitd.android.management.RunnerUpdateNow
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
@@ -46,8 +59,19 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
+/** Where a row reads an event whole when it came back `truncated`: the owner's reader ([SessionReaderModel]), or the guest door
+ * (GuestSessionPage). */
+internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
+
+/** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
+ * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
+internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
+/** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
+private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
+
 @Composable
-internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
+internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
     detailOnly: Boolean = false, target: Long? = null) {
     // The turns Orbit opened, folded with their answers (ExchangeFold): [target] opens the way down to a record a link landed on.
     if (row.exchanges.isNotEmpty()) {
@@ -61,6 +85,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         return
     }
     val event = row.event
+    // Orbit's own SubAgent is one folded block of its own (board docs/mocks/subagent/03.png).
+    if (!detailOnly && event.type == "tool_use" && (event.fields.string("name") ?: event.fields.string("toolName")) == SubagentBlock.TOOL_NAME) {
+        SubagentBlockView(row, highlighted) { child -> TranscriptRowView(child, model, live, open) }
+        return
+    }
     val clipboard = LocalClipboardManager.current
     var expanded by rememberSaveable(row.key) { mutableStateOf(false) }
     var childrenOpen by rememberSaveable(row.key) { mutableStateOf(false) }
@@ -74,6 +103,50 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // The turns Orbit opens for its own news — a SubAgent's end, a background job's news or a wakeup coming due, a watch's wake — are lines
+    // in the agent's stream (owner 2026-11-16: they must not look like something the reader sent): no "Orbit" heading, no row tint, no Copy
+    // message — the lines are the whole row, as on the web and iOS.
+    // A turn carrying only Orbit's blocks that no line knows is the generic From Orbit line, never the reader's row (OrbitEvent).
+    if (event.type == "user") {
+        val note = shown.fields.string("controlPlaneNote")
+        val words = shown.personWords()
+        val wakeLines = cards.isNotEmpty() && cards.all { card -> WAKE_LINE_KEYS.any { card.key.endsWith(it) } } &&
+            (words.isBlank() || cards.any { it.key.endsWith(":watch") })
+        val orbitOnly = cards.isEmpty() && OrbitEvent.draws(words, note, (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
+        if (wakeLines || orbitOnly) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (orbitOnly) {
+                    val delivery = event.turnId?.let { LocalSteerDeliveries.current[it] } ?: shown.fields.string("delivery")
+                    val undelivered = delivery == "failed"
+                    OrbitEventLine(note!!.trim(), event.ts, BackgroundWakeCard.steerReceipt(
+                        BackgroundWakeCard.steerState(shown.fields["steer"] == JsonPrimitive(true), delivery, undelivered)), undelivered)
+                } else {
+                    cards.forEach { TranscriptCardView(it, open, shown) }
+                }
+            }
+            return
+        }
+    }
+    // A note-only turn with no card draws nothing, including no row padding.
+    val loneNote = shown.fields.string("controlPlaneNote")
+    if (event.type == "user" && cards.isEmpty() && shown.fields["sessionMessage"] !is JsonObject &&
+        BackgroundWakeCard.drawsNoteAlone(shown.personWords(), (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty(), loneNote, queued = false)) {
+        return
+    }
+    // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
+    // with its own flip to the English, held by the reader so a recycled row keeps its side.
+    val shownOriginals = LocalShownOriginals.current
+    val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
+    val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
+    val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
+    // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
+    val bilingual = LocalTranslation.current.bilingual
+    val flipped = !bilingual && shownOriginals?.has(translationKey) == true
+    fun shownWords(source: RunEvent): String = when {
+        source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
+        source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
+        else -> source.body()
+    }
     // The owner's answer handed to the coordinator: the row is its one line (`OwnerAnswerLineView`), not a message under a heading. So is
     // a fact told to this session (`CoordinatorDeliveryLineView`), also when the outcomes of this session's requests ride on the same
     // turn: the line first, then their reply cards (web `Transcript.tsx`'s session-replies branch).
@@ -93,7 +166,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             if (fullResult == null && row.result?.truncated == true) fullResult = model.full(row.result.seq)
             if (copy) {
                 val source = if (tool) fullResult ?: row.result ?: fullEvent ?: event else fullEvent ?: event
-                val value = (if (source.type == "user") source.personWords() else source.body()).ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
+                // Copy copies the version on screen (board frame 5).
+                val value = shownWords(source).ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
                 if (value.length > COPY_TEXT_LIMIT) copyOverflow = value else clipboard.setText(AnnotatedString(value))
             }
         } catch (cancel: CancellationException) { throw cancel }
@@ -119,7 +193,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // Somebody other than the owner — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2), or
             // a guest the owner invited (docs/session-guests-design.md §3): their words, headed `From Feishu · <name>` or `From <name>`
             // so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
-            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
+            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: LocalOwnerHeading.current
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
@@ -132,7 +206,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             else -> "Interrupted"
         }
         "error", "auth_error" -> "Error"
-        "notice", "diagnostic" -> "Notice"
+        "notice", "diagnostic", "auth_settled" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
@@ -157,8 +231,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         if (updateResume) {
             Text(RunnerUpdateNow.RESUME_NOTE, Modifier.testTag("runner-update-resume"), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            // What delivery appended — the background jobs that ended while the runner was away — rides under it.
-            shown.fields.string("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
             return@Column
         }
         if (dshRepair != null && console != null) { DshRepairCard(dshRepair, console); return@Column }
@@ -168,6 +240,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
             return@Column
         }
+        // The main checkout's card (board 01) and an action's outcome line (board 03).
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
+        if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
@@ -223,6 +298,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as their turns are, under the
+            // call rather than left inside its output (web `OwnerChatBubble`, OrbitKit `OwnerChatReply`).
+            if (!detailOnly) ownerChatWords(row)?.let { words ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp).testTag("owner-chat-reply"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You", style = MaterialTheme.typography.labelMedium)
+                    MarkdownText(words, open = open)
+                }
+            }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
                 if (taskKind == "Workflow" && progress != null) TaskProgressView(progress, row) { card ->
@@ -251,7 +335,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
-        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry")) {
+        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry", "auth_settled")) {
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
@@ -270,18 +354,36 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         } else {
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
-            // What delivery appended is not the person's: their row holds their words, and one line at its foot names the rest.
-            // Another session's message: its own block only tells the agent what the card shows, so it is not folded again (SessionMessageNote).
+            // Delivery's appended note stays out of the person's words and is never rendered separately.
             val sessionNote = if (shown.fields["sessionMessage"] is JsonObject) SessionMessageNote.split(shown.fields.string("controlPlaneNote")) else null
-            val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
-                // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
-                ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
-            val words = if (shown.type == "user") shown.personWords() else shown.body()
-            cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, note?.trim(), revealed = highlighted) else TranscriptCardView(it, open, shown) }
-            if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) MarkdownText(words.ifBlank { shown.payload.toString() }, open = open) }
-            // Another session's words, and what delivery attached, are its bubble's.
-            else if (bubble != null) Unit
-            else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
+            val words = shownWords(shown)
+            // A reply still to be translated is the English greyed, with its chip under it (2A).
+            val pendingReply = replyTranslation == null && row.awaitsTranslation
+            cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, revealed = highlighted) else TranscriptCardView(it, open, shown) }
+            if (cards.isEmpty() && !attachmentOnly) { if (shown.fields.string("controlPlaneNote").isNullOrBlank() || words.isNotBlank()) {
+                // Both languages, block by block, when the reply pairs with its translation (03-interleaved.png).
+                val pairs = if (event.type == "assistant") BilingualShown.replyPairs(shown.body(), replyTranslation, bilingual) else null
+                if (pairs != null) InterleavedReply(pairs, open)
+                else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
+                (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, bilingual)
+                    else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, bilingual) else null)
+                    ?.let { BilingualEnglish(it, collapsible = event.type == "assistant") }
+            } }
+            val doors = console?.composer
+            val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }
+            turnTranslation?.let { turn ->
+                val turnId = event.turnId
+                UserTranslationFoot(turn, flipped, toggle,
+                    retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
+                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
+                    bilingual = bilingual)
+            }
+            if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
+                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,
+                bilingual = bilingual)
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
@@ -300,8 +402,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 SteerStateLine(steer, putBack = composer?.takeIf { loaded }?.let { box -> { box.putBack(words) } })
             }
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
-            // Last, in the meta voice of the steer's line above it: the person's words stay what the eye lands on.
-            if (bubble == null) note?.let { AttachedNoteEntry(it.trim()) }
         }
     }
     copyOverflow?.let { LongTextDialog(it) { copyOverflow = null } }
@@ -355,7 +455,10 @@ private fun EngineLine(event: RunEvent) {
     when (event.type) {
         "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
             ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
-        "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        // An account switch the conversation has moved past is history, muted with the sign-in failure it came with.
+        "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
+            else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
         "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
             (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
@@ -389,6 +492,24 @@ private fun GlyphLine(glyph: String, text: String, color: Color, style: TextStyl
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(glyph, color = color, style = style, modifier = Modifier.clearAndSetSemantics { })
         SelectionContainer { Text(text, color = color, style = style) }
+    }
+}
+
+/** A sign-in failure the conversation moved past (web `.chat-authfix-settled`, iOS `AuthErrorCardView.settledRow`): one muted line,
+ * a check once the agent worked again, and the runtime's words a tap away. */
+@Composable
+private fun SettledAuthLine(message: String, resolved: Boolean) {
+    var expanded by rememberSaveable(message) { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelLarge
+    Column(Modifier.fillMaxWidth().testTag("auth-settled"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Hide message" else "Show message", role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (resolved) "✓" else "⚠", Modifier.clearAndSetSemantics { }, color = if (resolved) LocalOrbitColors.current.success else muted, style = style)
+            Text(if (resolved) "Sign-in failed — resolved" else "Sign-in failed", Modifier.weight(1f), color = muted, style = style)
+            Text(if (expanded) "⌄" else "›", Modifier.clearAndSetSemantics { }, color = muted, style = style)
+        }
+        if (expanded) SelectionContainer { Text(message, color = muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

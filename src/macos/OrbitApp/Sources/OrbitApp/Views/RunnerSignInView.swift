@@ -485,12 +485,19 @@ private struct PasteBackForm: View {
 struct AuthErrorCardView: View {
     let console: ConsoleModel
     let message: String
+    /// The conversation moved past this failure (`TranscriptSettlement`): one muted row, the
+    /// runtime's words a tap away, and no actions — signing in or re-sending from here would act on
+    /// a failure that is over, and its Retry would re-send a later message than the one it ate.
+    var settled: TranscriptSettlement.Auth? = nil
+    @State private var expanded = false
 
     private var remedy: EngineAuth.Remedy { EngineAuth.remedy(forProvider: console.provider, googleLogin: console.runnerAntigravity?.googleLogin) }
     private var retryText: String { console.lastUserMessageText }
 
     var body: some View {
-        if console.provider == "antigravity" || (console.executesAntigravity && EngineAuth.antigravityRepair(message) == .needsKey) {
+        if let settled {
+            settledRow(settled)
+        } else if console.provider == "antigravity" || (console.executesAntigravity && EngineAuth.antigravityRepair(message) == .needsKey) {
             AntigravityRepairCardView(console: console, repair: .needsKey)
         } else {
             ordinaryCard
@@ -507,6 +514,32 @@ struct AuthErrorCardView: View {
         }
         .padding(10)
         .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func settledRow(_ settled: TranscriptSettlement.Auth) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button { expanded.toggle() } label: {
+                HStack(spacing: 8) {
+                    if settled == .resolved {
+                        Image(systemName: "checkmark").foregroundStyle(.green)
+                        Text("\(title) — resolved")
+                    } else {
+                        Image(systemName: "exclamationmark.triangle")
+                        Text(title)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.caption2)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                Text(message).font(.orbitLabel).foregroundStyle(.tertiary).textSelection(.enabled)
+            }
+        }
+        .font(.orbitLabel).foregroundStyle(.secondary)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.25)))
     }
 
     private var title: String {

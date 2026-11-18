@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Settings → API keys: buttons</title>
+<link rel="stylesheet" href="kit.css"></head>
+<body><div class="board">
+<h1>Settings → API keys：按钮重排</h1>
+<p class="lede">今天这一屏有 6 个一模一样的带框 “Add”，每行还有 “Edit” + “⋯” 两个带框按钮，右侧排成一列按钮墙，比 key 的名字还抢眼。<br>
+提议：页面级新增只留一个按钮；分组新增和行操作降成无框的轻按钮；整行可点进入编辑，常规操作收进 “⋯”。</p>
+
+<div class="cols">
+<!-- ① today -->
+<div>
+<div class="col-h">① 今天 <small>按 owner 截图重画，账号名换成占位</small></div>
+<div class="frame">
+  <div class="head"><h2 class="title">API keys</h2><span class="btn m"><span class="mk" style="left:-26px;top:3px">2</span><span class="plus">+</span>Add key</span></div>
+  <p class="sub">Keys on your account, usable from every machine and billed per token.</p>
+  <div class="chips">
+    <span class="chip on broken m ring"><span class="mk" style="left:-12px;top:-14px">1</span>All <span class="n">7</span></span>
+    <span class="chip">Moonshot (Kimi) <span class="n">1</span></span><span class="chip">DeepSeek <span class="n">1</span></span><span class="chip">Anthropic <span class="n">2</span></span><span class="chip">Custom <span class="n">3</span></span>
+  </div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-kimi">K</span>Moonshot (Kimi) <span class="cnt">1 key</span></span><span class="btn ring m"><span class="mk" style="left:-28px;top:3px">2</span><span class="plus">+</span>Add</span></div>
+    <div class="card"><div class="row"><div class="body"><div class="name">Kimi (Moonshot)</div>
+      <div class="meta">Runs on <span class="tile sm t-kimi">K</span>Kimi Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Kimi K3.1 Pro</span> · last used 35d ago</div></div>
+      <div class="acts mid ring m"><span class="mk" style="left:-28px;top:3px">3</span><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div></div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-ds">D</span>DeepSeek <span class="cnt">1 key</span></span><span class="btn ring"><span class="plus">+</span>Add</span></div>
+    <div class="card"><div class="row"><div class="body"><div class="name">DeepSeek</div>
+      <div class="meta m">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · <span class="tile sm t-ds">D</span>DeepSeek Harness · Starts on <span class="model">DeepSeek V4.1 Flash 1017</span> <span class="ring" style="padding:0 3px">·</span><span class="mk" style="right:-6px;top:2px">6</span><br>last used just now</div>
+      <div class="bal">Account balance <b>$0.00</b> · <b>¥2,262.23</b><br>updated just now <span class="refresh-blue ring m">↻<span class="mk" style="left:20px;top:-4px">4</span></span></div></div>
+      <div class="acts mid ring m"><span class="mk" style="left:-28px;top:3px">5</span><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div></div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-an">✳</span>Anthropic <span class="cnt">2 keys</span></span><span class="btn ring"><span class="plus">+</span>Add</span></div>
+    <div class="card">
+      <div class="row"><div class="body"><div class="name">you@Claude</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · subscription token, Claude Code only · Starts on <span class="model">Claude Opus 5</span> <span class="ring" style="padding:0 3px">·</span><br>last used 5h 55m ago</div></div><div class="acts mid ring"><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div>
+      <div class="row"><div class="body"><div class="name">teammate@Claude</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · subscription token, Claude Code only · Starts on <span class="model">Claude Opus 5</span> <span class="ring" style="padding:0 3px">·</span><br>last used 2d 14h ago</div></div><div class="acts mid ring"><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div>
+    </div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-cu">C</span>Custom <span class="cnt">3 keys</span></span><span class="btn ring"><span class="plus">+</span>Add</span></div>
+    <div class="card">
+      <div class="row"><div class="body"><div class="name">Local vLLM</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B FP8</span> · last used 2d 8h ago</div></div><div class="acts mid ring"><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div>
+      <div class="row"><div class="body"><div class="name">Ollama HPC (Messages)</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B (Ollama, 64K)</span> · last used just now</div></div><div class="acts mid ring"><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div>
+      <div class="row"><div class="body"><div class="name">Ollama HPC (Responses)</div><div class="meta">Runs on <span class="tile sm t-cx">◎</span>Codex · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B (Ollama, 64K)</span> · never used</div></div><div class="acts mid ring"><span class="btn">Edit</span><span class="btn icon">⋯</span></div></div>
+    </div></div>
+</div></div>
+
+<!-- ② proposal -->
+<div>
+<div class="col-h">② 提议 <small>绿色标注 = 鼠标停留 / 打开时的样子</small></div>
+<div class="frame">
+  <div class="head"><h2 class="title">API keys</h2><span class="btn m"><span class="mk g" style="left:-26px;top:3px">2</span><span class="plus">+</span>Add key</span></div>
+  <p class="sub">Keys on your account, usable from every machine and billed per token.</p>
+  <div class="chips">
+    <span class="chip on m"><span class="mk g" style="left:-12px;top:-14px">1</span>All <span class="n">7</span></span>
+    <span class="chip">Moonshot (Kimi) <span class="n">1</span></span><span class="chip">DeepSeek <span class="n">1</span></span><span class="chip">Anthropic <span class="n">2</span></span><span class="chip">Custom <span class="n">3</span></span>
+  </div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-kimi">K</span>Moonshot (Kimi) <span class="cnt">1 key</span></span><span class="btn text m"><span class="mk g" style="left:-26px;top:3px">2</span><span class="plus">+</span>Add</span></div>
+    <div class="card"><div class="row hover m"><span class="callout" style="left:140px;top:-12px">整行可点 → 打开这把 key 的编辑页</span><div class="body"><div class="name">Kimi (Moonshot)</div>
+      <div class="meta">Runs on <span class="tile sm t-kimi">K</span>Kimi Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Kimi K3.1 Pro</span> · last used 35d ago</div></div>
+      <div class="acts m"><span class="mk g" style="left:-26px;top:3px">3</span><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div></div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-ds">D</span>DeepSeek <span class="cnt">1 key</span></span><span class="btn text"><span class="plus">+</span>Add</span></div>
+    <div class="card"><div class="row"><div class="body"><div class="name">DeepSeek</div>
+      <div class="meta m">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · <span class="tile sm t-ds">D</span>DeepSeek Harness · Starts on <span class="model">DeepSeek V4.1 Flash 1017</span><span class="mk g" style="left:-24px;top:24px">6</span><br>· last used just now</div>
+      <div class="bal">Account balance <b>$0.00</b> · <b>¥2,262.23</b><br>updated just now <span class="refresh-grey hover m">↻<span class="tip" style="left:30px;bottom:auto;top:2px;transform:none">Refresh balance</span><span class="mk g" style="left:152px;top:2px">4</span></span></div></div>
+      <div class="acts m"><span class="mk g" style="left:-26px;top:3px">5</span><span class="btn text icon" style="background:var(--bg-hover);color:var(--text-1)">⋯</span><span class="chev-r">›</span>
+        <div class="menu" style="right:14px"><div class="hl">Edit</div><div>Refresh balance</div><hr><div class="danger">Delete</div></div></div></div></div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-an">✳</span>Anthropic <span class="cnt">2 keys</span></span><span class="btn text"><span class="plus">+</span>Add</span></div>
+    <div class="card">
+      <div class="row"><div class="body"><div class="name">you@Claude</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · subscription token, Claude Code only · Starts on <span class="model">Claude Opus 5</span><br>· last used 5h 55m ago</div></div><div class="acts"><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div>
+      <div class="row"><div class="body"><div class="name">teammate@Claude</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · subscription token, Claude Code only · Starts on <span class="model">Claude Opus 5</span><br>· last used 2d 14h ago</div></div><div class="acts"><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div>
+    </div></div>
+
+  <div class="sec"><div class="sec-h"><span class="sec-name"><span class="tile t-cu">C</span>Custom <span class="cnt">3 keys</span></span><span class="btn text"><span class="plus">+</span>Add</span></div>
+    <div class="card">
+      <div class="row"><div class="body"><div class="name">Local vLLM</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B FP8</span> · last used 2d 8h ago</div></div><div class="acts"><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div>
+      <div class="row"><div class="body"><div class="name">Ollama HPC (Messages)</div><div class="meta">Runs on <span class="tile sm t-an">✳</span>Claude Code · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B (Ollama, 64K)</span> · last used just now</div></div><div class="acts"><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div>
+      <div class="row"><div class="body"><div class="name">Ollama HPC (Responses)</div><div class="meta">Runs on <span class="tile sm t-cx">◎</span>Codex · <span class="tile sm t-oc">o</span>OpenCode · Starts on <span class="model">Qwen3.8 27B (Ollama, 64K)</span> · never used</div></div><div class="acts"><span class="btn text icon">⋯</span><span class="chev-r">›</span></div></div>
+    </div></div>
+</div></div>
+</div>
+
+<div class="notes">
+<h2>改动清单</h2>
+<table>
+<tr><th></th><th>今天</th><th>提议</th><th>文件</th></tr>
+<tr><td><span class="n">1</span></td><td>选中的芯片读了不存在的 <code>--bg</code>，文字继承成深色，黑底黑字，像一块空白胶囊。</td><td><b>已修，<code>31f1409c6</code></b>：换成 <code>--bg-base</code>。同一个变量另外两处（<code>index.css</code> 的两张卡片背景）一起改了。</td><td><code>Settings.css</code>, <code>index.css</code></td></tr>
+<tr><td><span class="n">2</span></td><td>页头 “Add key” + 每组一个 “Add”，6 个同样的带框按钮。</td><td>页头 “Add key” 是唯一的带框新增按钮。分组的 “+ Add” 改成无框文字按钮（<code>--text-2</code>，鼠标停留时出背景）。</td><td><code>SettingsProviderPages.tsx</code></td></tr>
+<tr><td><span class="n">3</span></td><td>每行 “Edit” + “⋯” 两个带框按钮，右侧成了一列按钮墙。</td><td>整行可点打开编辑页，鼠标停留时整行出背景，行尾 “›” 提示可进入。“⋯” 改成无框图标按钮，菜单里是 Edit、Delete（危险操作放最后，用分隔线隔开）。</td><td><code>ProviderKeyCards.tsx</code></td></tr>
+<tr><td><span class="n">4</span></td><td>余额的刷新图标是全页唯一的蓝色按钮，可点区域约 16px。</td><td>改成灰色，可点区域 24px，鼠标停留出背景和提示 “Refresh balance”。“⋯” 菜单里也放一份。</td><td><code>ProviderKeyCards.tsx</code></td></tr>
+<tr><td><span class="n">5</span></td><td>按钮在多行卡片里垂直居中，和第一行的名字错开。</td><td>行操作统一和名字那一行顶对齐，单行、多行的卡片都一样。</td><td><code>ProviderKeyCards.tsx</code> / css</td></tr>
+<tr><td><span class="n">6</span></td><td>元信息换行时，分隔点 “·” 留在上一行末尾。</td><td>分隔点跟着下一项走，换行后出现在行首。</td><td><code>ProviderKeyCards.tsx</code></td></tr>
+</table>
+<div class="decide"><h3>待你定</h3><ol>
+<li>厂商筛选芯片和下面的分组标题完全重复。保留（提议图里保留），还是 key 少时（比如 ≤ 10 把）不显示？</li>
+<li>“Edit” 去掉可见按钮、改成整行可点 + 行尾 “›”，可以吗？还是想保留一个可见的 “Edit”，只把边框去掉？</li>
+</ol></div>
+</div>
+</div></body></html>

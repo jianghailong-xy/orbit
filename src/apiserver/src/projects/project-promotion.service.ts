@@ -56,6 +56,7 @@ import {
 } from './project-promotion';
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
+import { taskLanding } from './project-criterion-landing';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -314,13 +315,19 @@ export class ProjectPromotionService {
       select: {
         id: true,
         mergeReceipts: {
-          where: { result: { in: ['MERGED', 'ALREADY_MERGED'] }, targetBranch: input.upstreamBranch },
-          take: 1,
-          select: { id: true },
+          where: {
+            result: { in: ['MERGED', 'ALREADY_MERGED'] },
+            targetBranch: { in: [input.integrationBranch, input.upstreamBranch] },
+          },
+          select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true },
         },
       },
     });
-    return tasks.filter((task) => task.mergeReceipts.length === 0).map((task) => task.id);
+    // The same fold `integration.state` and a criterion's landing read, so a rework landed on the
+    // line after its earlier revision reached the upstream is carried again (F1-4, 2026-11-08).
+    const branches = { upstream: [input.upstreamBranch], integration: [input.integrationBranch] };
+    return tasks.filter((task) => taskLanding(task.mergeReceipts, branches) !== 'ON_UPSTREAM')
+      .map((task) => task.id);
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────
@@ -2110,7 +2117,7 @@ export async function requeuePromotionCheck(
 async function writeUpstreamReceipts(
   tx: Prisma.TransactionClient,
   input: {
-    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null; confirmedAutomatically: boolean };
+    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null; createdAt: Date; confirmedAutomatically: boolean };
     jobId: string;
     state: 'LANDED' | 'ALREADY_LANDED';
     mergedSha: string;
@@ -2181,21 +2188,30 @@ async function writeUpstreamReceipts(
 /** The promotion columns that decide which session each of its tasks' M9 receipts is written against. */
 type UpstreamReceiptPromotion = {
   id: string; projectId: string; sourceKind: string; sessionId: string | null; includedTaskIds: string[];
+  sourceSha: string | null; createdAt: Date;
 };
 
 /**
  * Which session each task of a promotion gets its M9 receipt against, and which of those sessions are still there
  * (`liveSessions`) — read, not locked. Its own landing's session for a `PROJECT_BRANCH` candidate, the candidate's
  * session for a `TASK_BRANCH` one (see `writeUpstreamReceipts`).
+ *
+ * A `PROJECT_BRANCH` task's landing is its newest one the candidate's frozen source carries: finished
+ * no later than the landing that left the line at `source_sha` (`candidateIn` froze that tip), or —
+ * when no landing names it — than the candidate itself. A rework that landed on the line while this
+ * merge was in flight is not on the upstream it reached, so its receipt must not name that rework
+ * (`upstreamReceiptCarriesLine` reads the name).
  */
 async function upstreamReceiptWork(tx: Prisma.TransactionClient, promotion: UpstreamReceiptPromotion) {
   const onItsOwnBranch = promotion.sourceKind === 'TASK_BRANCH';
+  const frozenAt = onItsOwnBranch ? null : await sourceFrozenAt(tx, promotion);
   const landings = onItsOwnBranch ? [] : await tx.projectIntegrationJob.findMany({
     where: {
       projectId: promotion.projectId,
       kind: 'LAND_TASK',
       state: 'LANDED',
       taskId: { in: promotion.includedTaskIds },
+      finishedAt: { lte: frozenAt! },
     },
     orderBy: { finishedAt: 'asc' },
     select: { taskId: true, sessionId: true, landedSha: true },
@@ -2211,6 +2227,16 @@ async function upstreamReceiptWork(tx: Prisma.TransactionClient, promotion: Upst
   return { onItsOwnBranch, byTask, sessionFor, liveSessions };
 }
 
+/** When a `PROJECT_BRANCH` candidate's source was frozen, as the landing records say (`upstreamReceiptWork`). */
+async function sourceFrozenAt(tx: Prisma.TransactionClient, promotion: UpstreamReceiptPromotion): Promise<Date> {
+  const source = promotion.sourceSha ? await tx.projectIntegrationJob.findFirst({
+    where: { projectId: promotion.projectId, kind: 'LAND_TASK', state: 'LANDED', landedSha: promotion.sourceSha },
+    orderBy: { finishedAt: 'desc' },
+    select: { finishedAt: true },
+  }) : null;
+  return source?.finishedAt ?? promotion.createdAt;
+}
+
 /**
  * The sessions and tasks this promotion's M9 receipts would name — read, not locked — for
  * `applyIntegrationJobResult`, which locks them ahead of the first receipt of a result that writes J12's receipts
@@ -2223,7 +2249,7 @@ export async function upstreamReceiptSubjects(
 ): Promise<{ sessionIds: string[]; taskIds: string[] }> {
   const promotion = await tx.projectPromotion.findUnique({
     where: { id: promotionId },
-    select: { id: true, projectId: true, sourceKind: true, sessionId: true, includedTaskIds: true },
+    select: { id: true, projectId: true, sourceKind: true, sessionId: true, includedTaskIds: true, sourceSha: true, createdAt: true },
   });
   if (!promotion) return { sessionIds: [], taskIds: [] };
   const { liveSessions } = await upstreamReceiptWork(tx, promotion);

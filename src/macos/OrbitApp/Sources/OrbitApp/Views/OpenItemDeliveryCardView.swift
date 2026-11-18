@@ -26,11 +26,6 @@ struct OpenItemDeliveryCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else the same turn's note carried (a `controlPlaneNote`), as its own folded entry.
-    /// It rides in the card because nobody typed this turn either: handing it back to a user bubble
-    /// would draw the control plane's own words in the reader's name (web parity:
-    /// `BackgroundWakeCardView.attached`).
-    var attached: (kind: String, text: String)?
     /// Withdraws a delivery that is still queued behind the running turn. Nil once a runner has
     /// taken it — by then the turn is the transcript's, and there is nothing left to take back
     /// (web parity: the queue's own line, drawn at the card's foot).
@@ -84,7 +79,6 @@ struct OpenItemDeliveryCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -106,7 +100,7 @@ struct OpenItemDeliveryCardView: View {
     /// control plane gets files a new turn for it — so unlike a watch's wake this asks nothing first.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

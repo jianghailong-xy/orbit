@@ -80,19 +80,17 @@ struct UserTurnRow: View {
         // not from the moment a runner takes it, so the queue draws the same card. With no payload the
         // turn keeps its old reading — this is checked before the wakes, as the browser checks it.
         if let card = b.sessionMessage {
-            // Its own block only tells the agent what the card shows: not folded under it again.
-            let note = SessionMessageCard.splitNote(b.note)
+            // Keep the sender's narrower-mode notice; appended note entries are not drawn.
+            let narrower = SessionMessageCard.narrowerLine(b.note)
             SessionMessageCardView(card: card, text: b.text, ts: b.ts,
-                                   undelivered: undelivered, narrower: note.narrower,
-                                   attached: note.attached, onCancelQueued: cancel,
+                                   undelivered: undelivered, narrower: narrower,
+                                   onCancelQueued: cancel,
                                    revealed: revealedItemID == b.id)
         } else if let card = b.itemCard {
-            // The note the same turn carried rides inside the card (`b.attached`): nobody typed
-            // this turn either, so the control plane's words do not go back into a bubble in the
-            // reader's own name — the same rule the wake card applies to a mixed note.
+            // Nobody typed this turn: draw the delivery card rather than the reader's own bubble.
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
-                                     attached: b.attached, onCancelQueued: cancel)
+                                     onCancelQueued: cancel)
         } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
             // The owner's answer handed to the coordinator is the platform's message too: the question
             // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
@@ -102,7 +100,7 @@ struct UserTurnRow: View {
             // delivered alike. Outcomes riding on it are the replies branch's below. No payload, the
             // old reading.
             OwnerAnswerLineView(card: card, text: b.text, undelivered: undelivered,
-                                attached: b.attached, onCancelQueued: cancel)
+                                onCancelQueued: cancel)
         } else if let card = b.coordinatorDelivery, b.sessionReplies?.isEmpty ?? true {
             // A fact told to this session — what its coordinator is told about a committed fact, or the
             // answer to its criteria proposal — is the platform's message too: a headline and paragraphs
@@ -112,18 +110,17 @@ struct UserTurnRow: View {
             // delivered alike — and the sticky bar's anchor (`StickySummary.isAnchor`). Outcomes riding
             // on it are the replies branch's below. No payload, the old reading.
             CoordinatorDeliveryLineView(card: card, text: b.text, undelivered: undelivered,
-                                        attached: b.attached, onCancelQueued: cancel)
+                                        onCancelQueued: cancel)
         } else if let card = b.taskStart {
             // A task run's opening turn is the brief written for the agent — the task, then four
             // steps of protocol — and nobody typed it either. With the task recorded beside it
-            // (`taskStart`, `TaskStart.parse`) it is drawn as that task, with anything delivery
-            // appended riding inside the card; the task's inputs the turn carried keep the
-            // bubble's own image and file rows under it, with no words in the owner's name. A
+            // (`taskStart`, `TaskStart.parse`) it is drawn as that task; its inputs keep the bubble's
+            // own image and file rows under it, with no words in the owner's name. A
             // resumed run's brief waits on the queue as the same card.
             VStack(alignment: .leading, spacing: 6) {
                 TaskStartCardView(card: card, text: b.text, ts: b.ts,
                                   undelivered: undelivered,
-                                  attached: b.attached, onCancelQueued: cancel)
+                                  onCancelQueued: cancel)
                 if !b.attachments.isEmpty {
                     UserBubbleView(bubble: inputsOnly(b))
                 }
@@ -134,24 +131,24 @@ struct UserTurnRow: View {
             // `ProjectStarted.parse`). No payload, the old reading.
             ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                    undelivered: undelivered,
-                                   attached: b.attached, onCancelQueued: cancel)
+                                   onCancelQueued: cancel)
         } else if let card = b.reviewRequest {
             // A confirmation request handed to this conversation to review, and a reviewer's
             // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as
-            // their cards with the block the agent read riding at the foot (web parity: NodeView).
+            // their cards (web parity: NodeView).
             ReviewRequestedCardView(card: card, ts: b.ts,
                                     undelivered: undelivered,
-                                    attached: b.attached, onCancelQueued: cancel)
+                                    onCancelQueued: cancel)
         } else if let card = b.reviewReturn {
             SentBackByReviewerCardView(card: card, ts: b.ts,
                                        undelivered: undelivered,
-                                       attached: b.attached, onCancelQueued: cancel)
+                                       onCancelQueued: cancel)
         } else if let card = b.reviewAnswers {
             // The owner's answers handed to the reviewer once they confirmed (§7 Q5): Orbit's words
             // to the agent about the reader, drawn as what the reader did (web parity: NodeView).
             YouConfirmedCardView(card: card, text: b.text,
                                  undelivered: undelivered,
-                                 attached: b.attached, onCancelQueued: cancel)
+                                 onCancelQueued: cancel)
         } else if let card = b.evidenceReview {
             // Five more of Orbit's own turns (`OrbitTurnCards.swift`, web parity: NodeView). The three
             // a block is rendered into at delivery carry nobody's words: what the agent read is the
@@ -161,7 +158,7 @@ struct UserTurnRow: View {
         } else if let card = b.evidenceSendBack {
             EvidenceSentBackCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
-                                     attached: b.attached, onCancelQueued: cancel)
+                                     onCancelQueued: cancel)
         } else if let card = b.runQuestion {
             RunQuestionCardView(card: card, told: told(b), ts: b.ts,
                                 undelivered: undelivered, onCancelQueued: cancel)
@@ -176,9 +173,8 @@ struct UserTurnRow: View {
             // The outcomes of this session's own requests, handed back (`sessionReplies`,
             // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
             // owner's may carry outcomes that were held for it — then the owner's words are their
-            // bubble, first, and the outcomes follow as cards, with what else delivery appended
-            // folded into them (web parity: NodeView). A queued reply turn's words are still the
-            // blocks the cards draw, so it has no bubble.
+            // bubble, first, and the outcomes follow as cards (web parity: NodeView). A queued reply
+            // turn's words are still the blocks the cards draw, so it has no bubble.
             VStack(alignment: .leading, spacing: 6) {
                 if queued == nil, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     // The owner's answer handed to the coordinator (its card or its line), or a fact
@@ -188,10 +184,10 @@ struct UserTurnRow: View {
                     } else if let delivery = b.coordinatorDelivery {
                         CoordinatorDeliveryLineView(card: delivery, text: b.text, undelivered: undelivered)
                     } else {
-                        UserBubbleView(bubble: withoutNote(b))
+                        UserBubbleView(bubble: b)
                     }
                 }
-                SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),
+                SessionReplyCardsView(replies: replies, ts: b.ts,
                                       undelivered: undelivered, onCancelQueued: cancel)
             }
         } else if let line = RunnerUpdateNow.resumeLine(b.text) {
@@ -213,15 +209,37 @@ struct UserTurnRow: View {
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                               undelivered: undelivered, onWithdraw: cancel,
                               queued: queued != nil)
+        } else if let subagent = SubagentFinishedText.parse(wakeNote) {
+            // A SubAgent's end is the same kind of turn, in a block of its own: one line in the
+            // agent's stream (web parity: `SubagentFinishedCard.tsx`). A note that carries a
+            // background job's news beside it draws that line too, after the SubAgent's, as the
+            // control plane wrote them; the job's line then says how the turn went, once.
+            let steerState = BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
+                                                           undelivered: b.undelivered)
+            VStack(alignment: .leading, spacing: 6) {
+                if let jobs = BackgroundWakeText.parse(subagent.rest) {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts, queued: queued != nil)
+                    BackgroundWakeCardView(wake: jobs, ts: b.ts,
+                                           undelivered: undelivered,
+                                           onCancelQueued: cancel,
+                                           steerState: steerState,
+                                           queued: queued != nil)
+                } else {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts,
+                                             undelivered: undelivered,
+                                             onCancelQueued: cancel,
+                                             steerState: steerState,
+                                             queued: queued != nil)
+                }
+                if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
+                    UserBubbleView(bubble: b)
+                }
+            }
         } else if let background = BackgroundWakeText.parse(wakeNote) {
             // A turn the control plane opened for a background job's news, or for a wakeup
             // coming due, is nobody's message either: the block IS the turn, so it is read off
             // the recorded note rather than the person's words, which are empty. Only the wake
-            // blocks become the card — anything else the same note carried (the inventory a
-            // returning engine is handed, a coordinator's standing role) is a folded entry in
-            // the same card, because it is the control plane's too. It used to be an entry in a
-            // user bubble under the card, which drew an empty bubble: a message with no words
-            // in it, in the reader's own name. A job that ended while a turn ran was written
+            // blocks become the card. A job that ended while a turn ran was written
             // into that turn as a steer: the same line, where its echo landed inside the running
             // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`) — and, while
             // it waits for the runner, with no Cancel: a steer is taken back only by its own
@@ -229,16 +247,22 @@ struct UserTurnRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 BackgroundWakeCardView(wake: background, ts: b.ts,
                                        undelivered: undelivered,
-                                       attached: attachedRest(background),
                                        onCancelQueued: cancel,
                                        steerState: BackgroundWakeCard.steerState(
                                            steer: b.steer, delivery: b.delivery,
                                            undelivered: b.undelivered),
                                        queued: queued != nil)
                 if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
-                    UserBubbleView(bubble: withoutNote(b))
+                    UserBubbleView(bubble: b)
                 }
             }
+        } else if queued == nil, OrbitEvent.draws(b) {
+            // Nothing typed and only Orbit's blocks in the note, none of which a line above knew: still
+            // nobody's message (owner rule 2026-11-16), so one generic line in the agent's stream rather
+            // than an empty bubble on the reader's side (web parity: `OrbitEventLine.tsx`).
+            OrbitEventLineView(note: b.note ?? "", ts: b.ts, undelivered: undelivered,
+                               steerState: BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
+                                                                         undelivered: b.undelivered))
         } else if let sender = b.externalSender {
             // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
             // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
@@ -250,12 +274,6 @@ struct UserTurnRow: View {
         }
     }
 
-    /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
-    /// its other blocks instead of repeating the wake beneath the card.
-    private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
-        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
-    }
-
     /// The block a platform turn was handed with: the note delivery recorded, else its own words
     /// (a queued turn's, which hold the block until delivery moves it into the note).
     private func told(_ bubble: UserBubble) -> String {
@@ -263,27 +281,12 @@ struct UserTurnRow: View {
         return bubble.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? note : bubble.text + "\n\n" + note
     }
 
-    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
-    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
-        let rest = SessionReply.withoutReplyBlocks(bubble.note)
-        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
-    }
-
-    /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here
-    /// would draw it a second time under the card that already holds it.
-    private func withoutNote(_ bubble: UserBubble) -> UserBubble {
-        var bare = bubble
-        bare.note = nil
-        return bare
-    }
-
-    /// The same bubble holding only what it was sent with: the brief and the note are the task-start
-    /// card's, so what is left is the images and files, drawn as the bubble draws them. Not pending:
+    /// The same bubble holding only its images and files: the brief stays in the task-start card.
+    /// Not pending:
     /// whether the turn is still queued is the card's to say, not a second line under the images.
     private func inputsOnly(_ bubble: UserBubble) -> UserBubble {
         var inputs = bubble
         inputs.text = ""
-        inputs.note = nil
         inputs.pending = false
         return inputs
     }

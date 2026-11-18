@@ -45,7 +45,7 @@ interface RootKindSpec {
   /** Under "Anyone with the link": what a visitor can and cannot do. */
   publicDetail: string;
   layers: readonly LayerRow[];
-  /** The signed-in address "Copy link" hands out — the owner's own, never the public one. */
+  /** The signed-in address "Copy link" hands out — never the public one. A session's also opens for its guests. */
   appPath: (id: string) => string;
   /** The reads that show whether this root is shared, refreshed after every change here. */
   shows: readonly QueryKey[];
@@ -385,7 +385,10 @@ export function ShareModal({
           {people}
           <div className="share-dialog-foot">
             <span className="share-dialog-stat">
-              Copy link <span className="share-dialog-muted">— the signed-in link, for yourself</span>
+              Copy link{' '}
+              <span className="share-dialog-muted">
+                {people ? '— works for you and the people you invite' : '— the signed-in link, for yourself'}
+              </span>
             </span>
             <Button
               icon={<LinkOutlined />}

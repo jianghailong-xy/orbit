@@ -120,6 +120,10 @@ type liveSession struct {
 	// pool. It is called under p.mu, and the tailer calls into the pool from under its own
 	// lock (bgTailer.holdFor), so it must be lock-free on the tailer's side.
 	monitorProbe func() bool
+	// subagentProbe is this run's "is a SubAgent of this session still running" query
+	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
+	// monitorProbe, because it is called under p.mu.
+	subagentProbe func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -282,6 +286,16 @@ func (p *sessionPool) sessionIDs() []string {
 	return ids
 }
 
+// isCold reports whether the pool holds session id with no engine of it starting, running or being
+// reaped, no turn permit, and no takeover or reclaim under way: a session whose conversation only its
+// next claim would touch (carryColdSessionsOff).
+func (p *sessionPool) isCold(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := p.sessions[id]
+	return s != nil && !s.resident && !s.active && !s.detaching && !p.reclaiming[id]
+}
+
 func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 	state := p.worktreeOps[id]
 	if state == nil {
@@ -296,16 +310,15 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // manual operation that has already linearized. It says who is there, not who may
 // proceed — the fence and `running` decide that (beginHeartbeatWorktreeOperation).
 //
-// The turn's engine and a running operation are what refuse a merge or commit, and
-// the refusal names them (worktreeOperationRefusal). A background job refuses
-// nothing: a merge replays committed work in a scratch worktree and a commit writes
-// only the index and refs, so both run beside a live job and name it in their
-// receipt (beginManualWorktreeOperation). The worktree GC, which deletes the
-// directory, is the one thing a live job holds off (ids).
+// The turn's engine, a running operation and a live background job are what refuse a
+// commit, and the refusal names them (worktreeOperationRefusal,
+// beginManualWorktreeOperation): a commit takes the checkout as it stands. None of them
+// holds a merge, which replays committed work in a scratch worktree (heartbeatMerge).
+// The worktree GC, which deletes the directory, is held off by a live job too (ids).
 //
 // A parked engine is no holder at all, whatever it left running: between turns
 // neither it nor its MCP servers — Orbit's own, or any the agent configured — are
-// waited on or stopped for a merge or commit.
+// waited on or stopped for a commit.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -369,15 +382,20 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // and not per job — several jobs of one session share one checkout, and a session is
 // the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
+	idle, _ := p.admissionOccupancy()
+	return idle
+}
+
+// admissionOccupancy is the one count admission and the heartbeat both read: the idle
+// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// through background jobs of their own — no turn permit, no reclaim under way — which
+// the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
+// as running (sorted). A draining runner offers no capacity, and its job holders still
+// hold their slots.
+func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.drainingForUpdate {
-		return 0
-	}
 	occupied := make(map[string]bool, len(p.sessions))
-	for sessionID := range p.backgroundJobCountsLocked() {
-		occupied[sessionID] = true
-	}
 	for id, s := range p.sessions {
 		if s.active {
 			occupied[id] = true
@@ -389,11 +407,22 @@ func (p *sessionPool) admissionIdleCapacity() int {
 			occupied[id] = true
 		}
 	}
+	var backgroundOnly []string
+	for sessionID := range p.backgroundJobCountsLocked() {
+		if !occupied[sessionID] {
+			occupied[sessionID] = true
+			backgroundOnly = append(backgroundOnly, sessionID)
+		}
+	}
+	sort.Strings(backgroundOnly)
+	if p.drainingForUpdate {
+		return 0, backgroundOnly
+	}
 	idle := p.max - len(occupied)
 	if idle < 0 {
 		idle = 0
 	}
-	return idle
+	return idle, backgroundOnly
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
@@ -612,8 +641,8 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	// A live background job is deliberately not asked about: a merge or commit runs
-	// beside it (beginManualWorktreeOperation).
+	// A live background job is not asked about here: a commit's own admission refuses
+	// it (beginManualWorktreeOperation).
 	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
@@ -636,15 +665,14 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 	}, true
 }
 
-// beginManualWorktreeOperation is how merge and commit enter a checkout. It admits the
-// operation exactly as beginHeartbeatWorktreeOperation does, and nothing else running in
-// the checkout comes into that: a merge replays the branch's commits in a scratch worktree
-// and never touches the checkout, and a commit writes only the index and refs. So a live
-// background job holds neither up, and a parked engine is not stopped for either, whatever
-// MCP servers it runs.
+// beginManualWorktreeOperation is how a commit (or a discard) enters a checkout. It admits the
+// operation exactly as beginHeartbeatWorktreeOperation does — no turn in the checkout, the epoch
+// the heartbeat advertised — and refuses one more thing: a live background job. A commit takes
+// the checkout as it stands, so it must not be taken while anything is still changing it; a job
+// writing a file would have that file committed half-written. A parked engine is not stopped for
+// it, whatever MCP servers it runs. A merge does not come through here at all (heartbeatMerge).
 //
-// Admitted, it returns the release func and the operation's receipt note, which names the
-// live background jobs it runs beside ("" when there are none). Refused, it returns a nil
+// Admitted, it returns the release func and an empty receipt note. Refused, it returns a nil
 // release and the refusal itself.
 func (p *sessionPool) beginManualWorktreeOperation(
 	id string,
@@ -669,14 +697,9 @@ func (p *sessionPool) beginManualWorktreeOperation(
 	if len(jobs) == 0 {
 		return release, "", true
 	}
-	beside := "this " + operation + " ran while background jobs were still running in the checkout (" +
-		strings.Join(jobs, ", ") + ")"
-	if operation == "commit" {
-		// A commit reads the checkout as it stands, so whoever reads this receipt has to be
-		// able to tell that a file those jobs were writing may have gone in half-written.
-		return release, beside + ": a file one of them was still writing is committed as it stood at that moment", true
-	}
-	return release, beside + ": a merge takes only what the branch had already committed", true
+	release()
+	return nil, operation + " was refused: background jobs are still changing this checkout (" +
+		strings.Join(jobs, ", ") + ") — wait for them to finish or stop them, then " + operation + " again", false
 }
 
 // appendWorktreeReceipt puts an operation's receipt note after the operation's own message,
@@ -722,6 +745,20 @@ func (p *sessionPool) turnsInFlightLocked() int {
 		}
 	}
 	return n
+}
+
+// turnRunning reports whether a turn is running in the session id names (an Orbit or a public id)
+// right now, counted as turnsInFlightLocked counts it. A Move into its worktree is refused while one
+// is (TARGET_BUSY): the agent would be writing the same files.
+func (p *sessionPool) turnRunning(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, key := range []string{id, decodeSessionID(id)} {
+		if s := p.sessions[key]; s != nil && ((s.active && !s.heldForUpdate) || s.selfDrivenTurn) {
+			return true
+		}
+	}
+	return false
 }
 
 // turnsInFlight is turnsInFlightLocked for a caller that does not hold the lock: the managed
@@ -954,6 +991,28 @@ func (p *sessionPool) setMonitorProbe(s *liveSession, probe func() bool) func() 
 		}
 		p.mu.Unlock()
 	}
+}
+
+// setSubagentProbe installs one session run's SubAgent liveness query and returns the
+// deregistration func, under the same epoch rule as setMonitorProbe.
+func (p *sessionPool) setSubagentProbe(s *liveSession, probe func() bool) func() {
+	p.mu.Lock()
+	if p.sessions[s.id] == s {
+		s.subagentProbe = probe
+	}
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.sessions[s.id] == s {
+			s.subagentProbe = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// subagentRunningLocked reports whether a SubAgent of this session is still running.
+func subagentRunningLocked(s *liveSession) bool {
+	return s.subagentProbe != nil && s.subagentProbe()
 }
 
 // monitorPinDeadlineLocked returns the instant after which this warm engine stops being held
@@ -1352,8 +1411,12 @@ func (p *sessionPool) rewarmLocked(s *liveSession) {
 // tool_result are output only a generating engine produces; a turn_end, or a system
 // init/resumed handshake, says no turn is running. A Bash pair the runner ran itself — a
 // `!cmd`, an EXECUTABLE acceptance (shell.go) — wears the engine's tool shape under a
-// `shell-` id, and says nothing about the engine.
+// `shell-` id, and says nothing about the engine. Nor does a SubAgent's event (subagent.go): its child engine
+// writes into the parent's stream nested under the delegate call, while the parent's own engine sits idle.
 func engineTurnSignal(eventType string, payload map[string]interface{}) (generating, ended bool) {
+	if id, _ := payload["subagentRunId"].(string); id != "" {
+		return false, false
+	}
 	switch eventType {
 	case evAssistant, evThinking:
 		return true, false
@@ -1425,7 +1488,7 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 // turn the engine is running on its own does — requestEvictLocked declines — and the end
 // of that turn winds the next timer. A Monitor still running inside the engine does too,
 // and is the one deferral that has to re-arm the timer here: the engine is genuinely idle,
-// so nothing else will come along to wind it.
+// so nothing else will come along to wind it. So does a SubAgent of the session still running.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
@@ -1433,7 +1496,9 @@ func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 		p.mu.Unlock()
 		return
 	}
-	if !p.monitorPinDeadlineLocked(s).IsZero() {
+	// A SubAgent still running defers the idle park outright, with no cap (docs/subagent-design.md §5.2, §9 C):
+	// the session is still at work, and its end wakes the parent, which this engine is then still here to take.
+	if !p.monitorPinDeadlineLocked(s).IsZero() || subagentRunningLocked(s) {
 		p.rewarmLocked(s)
 		p.mu.Unlock()
 		return

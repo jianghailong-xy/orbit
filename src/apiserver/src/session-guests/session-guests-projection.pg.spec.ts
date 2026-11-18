@@ -12,7 +12,15 @@
  *       session, workspace and runner — shown in the owner's own read first — are absent, as values and as field
  *       names, from every read the public link to the session gives AND from every guest read route: Shared with me,
  *       the guest page, its events (tail, before, after) and one event whole. The guest's user id and email are absent
- *       from all of them; only the guest's name appears, and on the guest door, the owner's name.
+ *       from all of them; only the guest's name appears, and on the guest door, the owner's name;
+ *   (5) the same doors pushed (docs/session-viewer-stream-design.md §3–§4): the guest's stream, a session link's (Tool
+ *       output on) and a task link's conversation stream (Tool output off), open while the owner's session emits every
+ *       event type — durable and live-only, deltas, tool_output, background_output, approvals, queued_turns_changed,
+ *       translation, task_progress, tombstone, status, a rename — are held by one set of negative assertions
+ *       (test-support/viewer-door-checks.ts) against each door's paged read: no field and no event type the read does
+ *       not carry, deltas on every stream, tool output only where the read shows it, and head frames that say what the
+ *       `events?after=` header says. The guest's stream refuses a stranger and a link that does not open the session
+ *       with a 404 status before anything is read.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/session-guests/session-guests-projection.pg.spec.ts
  *
@@ -24,7 +32,9 @@ import { test } from 'node:test';
 
 import { JwtService } from '@nestjs/jwt';
 import { ControlEventType, uuidToBase62 } from '@orbit/shared';
-import { type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
+import {
+  CreatorType, type PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskCompletionCriterion,
+} from '@prisma/client';
 import { Client } from 'pg';
 import { filter, firstValueFrom, timeout } from 'rxjs';
 
@@ -37,6 +47,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import { RealtimeService } from '../realtime/realtime.service';
 import '../test-support/daemon-routes-over-http';
 import { keysOf, redLineCrossings } from '../test-support/share-red-line';
+import { openStream, type HeldStream } from '../test-support/sse-client';
+import { viewerStreamCrossings } from '../test-support/viewer-door-checks';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -321,5 +333,187 @@ test('session guests: the guest door shows only what the public link may, and th
       [],
       'the guest page carries a field the public page does not',
     );
+  });
+
+  await t.test('(5) the streams: one set of negative assertions holds each door\'s stream to its paged read while the session emits every event type', async (st) => {
+    const s = pub(sessionId);
+    const base = `http://127.0.0.1:${server!.port}/api`;
+    // What only tool output carries, stored and live, and what only the owner's live events carry.
+    const TOOL = {
+      input: `stored-tool-input-${RUN}`,
+      result: `stored-tool-result-${RUN}`,
+      background: `stored-background-command-${RUN}`,
+      liveOutput: `live-tool-output-${RUN}`,
+      liveInput: `live-tool-input-${RUN}`,
+      liveResult: `live-tool-result-${RUN}`,
+    };
+    const OWNER_ONLY = {
+      approval: `approval-input-${RUN}`,
+      translation: `translation-text-${RUN}`,
+      progress: `task-progress-${RUN}`,
+      tombstone: `tombstone-${RUN}`,
+      legacyLive: `legacy-stored-live-${RUN}`,
+    };
+    const ids = { owner: ownerId, guest: guestId, workspace: workspaceId, runner: runnerId };
+    const neverShown = [...Object.values(SECRET), ...Object.values(ids).map(pub), ...Object.values(ids), ...Object.values(OWNER_ONLY)];
+
+    // A task link that opens this session as one of its task's runs, with Tool output off.
+    const taskId = randomUUID();
+    await db.task.create({
+      data: {
+        id: taskId, ownerId, title: `The guests' task ${RUN}`, creatorType: CreatorType.USER, creatorId: ownerId,
+        completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
+      },
+    });
+    await db.session.update({ where: { id: sessionId }, data: { taskId } });
+    const taskToken = randomBytes(24).toString('base64url');
+    await sql.query(
+      `INSERT INTO share_link (id, owner_id, token, task_id, include) VALUES (gen_random_uuid(), $1::uuid, $2, $3::uuid, $4::jsonb)`,
+      [ownerId, taskToken, taskId, JSON.stringify({ conversations: true, toolOutput: false })],
+    );
+
+    // Stored history the streams replay: tool bodies, a background task, thinking, a progress ping, a stored status,
+    // and two live-only rows an older API persisted (fenced from every read).
+    const stored = async (type: string, payload: unknown) => {
+      await event(type, payload);
+      return eventSeq;
+    };
+    await stored('thinking', { text: `Thinking it over ${RUN}` });
+    const cursor = await stored('tool_use', { id: 'toolu_stored', name: 'Bash', input: { command: `echo ${TOOL.input}` } });
+    await stored('tool_result', { toolUseId: 'toolu_stored', content: TOOL.result, isError: false });
+    await stored('background_task', { shellId: 'bg_1', toolUseId: 'toolu_stored', status: 'completed', command: TOOL.background });
+    await stored('system', { model: null, subtype: 'status', sessionId: SECRET.runtime });
+    await stored('status', { status: 'RUNNING' });
+    await stored('tool_output', { toolUseId: 'toolu_stored', output: OWNER_ONLY.legacyLive });
+    await stored('task_progress', { toolUseId: 'toolu_stored', description: OWNER_ONLY.legacyLive });
+
+    // ── the doors ─────────────────────────────────────────────────────────────────────────────
+    const doors: Array<{ name: string; toolOutput: boolean; guest: boolean; streamPath: string; readPath: string; bearer?: string }> = [
+      { name: 'guest', toolOutput: true, guest: true, streamPath: `/guest-sessions/${s}/stream?access_token=${guestLogin}`, readPath: `/guest-sessions/${s}/events`, bearer: guestLogin },
+      { name: 'session link (Tool output on)', toolOutput: true, guest: false, streamPath: `/shared/${shareToken}/stream`, readPath: `/shared/${shareToken}/events` },
+      { name: 'task link conversation (Tool output off)', toolOutput: false, guest: false, streamPath: `/shared/${taskToken}/sessions/${s}/stream`, readPath: `/shared/${taskToken}/sessions/${s}/events` },
+    ];
+    const streams: HeldStream[] = [];
+    st.after(() => streams.forEach((held) => held.close()));
+    for (const door of doors) {
+      const held = await openStream(`${base}${door.streamPath}`);
+      streams.push(held);
+      assert.equal(held.status, 200, `${door.name}: ${held.status}`);
+      assert.match(String(held.headers['content-type']), /^text\/event-stream/, door.name);
+      await held.until((f) => f.type === 'head', `${door.name}: the opening head`);
+    }
+    // A guest stream resumed from a cursor replays exactly the gap after it.
+    const resumed = await openStream(`${base}/guest-sessions/${s}/stream?sinceSeq=${cursor}&access_token=${guestLogin}`);
+    streams.push(resumed);
+    assert.equal(resumed.status, 200);
+
+    // Refused as a status, before anything is read: a stranger on the guest door, the owner (no guest of their own
+    // session), a session link asked for a conversation, and a token that opens nothing.
+    const strangerLogin = await jwt.signAsync({ sub: randomUUID(), email: `stranger.${RUN}@x.invalid` });
+    for (const [what, path, status] of [
+      ['a stranger', `/guest-sessions/${s}/stream?access_token=${strangerLogin}`, 404],
+      ['the owner on the guest door', `/guest-sessions/${s}/stream?access_token=${ownerLogin}`, 404],
+      ['no sign-in', `/guest-sessions/${s}/stream`, 401],
+      ['a session link asked for a conversation', `/shared/${shareToken}/sessions/${s}/stream`, 404],
+      ['a token that opens nothing', `/shared/${randomBytes(24).toString('base64url')}/stream`, 404],
+      ['a task link asked for its root as a session', `/shared/${taskToken}/stream`, 404],
+    ] as const) {
+      const refused = await openStream(`${base}${path}`);
+      await refused.ended;
+      assert.equal(refused.status, status, `${what}: ${refused.status} ${refused.body().slice(0, 200)}`);
+      assert.deepEqual(refused.frames, [], `${what}: a refusal sent frames`);
+    }
+
+    // ── the owner's session emits every event type ─────────────────────────────────────────────
+    // Published as another apiserver would publish them (RealtimeService.publish → NOTIFY), so they reach the
+    // server's hub exactly as the live half of every stream reads it. A durable one is stored first, as ingest does.
+    const notify = (e: Json) => sql.query(`SELECT pg_notify('orbit_event', $1)`, [
+      JSON.stringify({ i: `viewer-spec-${RUN}`, r: sessionId, e: { ts: new Date().toISOString(), ...e } }),
+    ]);
+    const live = (type: string, payload: unknown, seq = 0) => notify({ seq, type, payload });
+    const durable = async (type: string, payload: unknown) => live(type, payload, await stored(type, payload));
+    const NEW_TITLE = `Renamed while watched ${RUN}`;
+    const approvalId = randomUUID();
+    await db.session.update({ where: { id: sessionId }, data: { title: NEW_TITLE, status: RunStatus.AWAITING_INPUT } });
+    await db.approval.create({ data: { id: approvalId, sessionId, toolName: 'Bash', input: { command: OWNER_ONLY.approval } } });
+    await live('text_delta', { text: 'Hel' });
+    await live('thinking_delta', { text: 'hmm' });
+    await live('tool_output', { toolUseId: 'toolu_live', output: TOOL.liveOutput });
+    await live('background_output', { shellId: 'bg_1', output: TOOL.liveOutput });
+    await live('approval_request', { id: approvalId, toolName: 'Bash', input: { command: OWNER_ONLY.approval } });
+    await live('queued_turns_changed', {});
+    await live('translation', { of: 2, lang: 'zh', text: OWNER_ONLY.translation });
+    await live('task_progress', { toolUseId: 'toolu_live', description: OWNER_ONLY.progress });
+    await live('tombstone', { reason: OWNER_ONLY.tombstone });
+    await live('status', { status: 'AWAITING_INPUT' });
+    await live('status', { status: 'AWAITING_INPUT', final: true }, Number.MAX_SAFE_INTEGER);
+    await live('resync', {});
+    await live('session_updated', {});
+    await live('some_future_live_type', { secret: OWNER_ONLY.tombstone });
+    await durable('system', { model: null, subtype: 'status', sessionId: SECRET.runtime });
+    await durable('tool_use', { id: 'toolu_live', name: 'Bash', input: { command: `echo ${TOOL.liveInput}` } });
+    await durable('tool_result', { toolUseId: 'toolu_live', content: TOOL.liveResult, isError: false });
+    await durable('assistant', { text: `Done ${RUN}.` });
+    const lastSeq = eventSeq;
+
+    for (const [i, door] of doors.entries()) {
+      const held = streams[i]!;
+      await held.until((f) => f.seq === lastSeq, `${door.name}: the last reply`);
+      await held.until(
+        (f) => f.type === 'head' && f.payload.title === NEW_TITLE && f.payload.runState === 'AWAITING_INPUT'
+          && (!door.guest || f.payload.waitingOnOwner === true),
+        `${door.name}: the head after the rename, the status and the card`,
+      );
+    }
+    await resumed.until((f) => f.seq === lastSeq, 'the resumed stream: the last reply');
+    // Let anything late (a second head read) arrive before the frames are judged.
+    await new Promise((r) => setTimeout(r, 600));
+
+    // ── one set of assertions, both doors ──────────────────────────────────────────────────────
+    for (const [i, door] of doors.entries()) {
+      const held = streams[i]!;
+      const page = ok(await api('GET', `${door.readPath}?after=0&limit=500`, door.bearer), `${door.name}: the read`);
+      const { events: readEvents, after: _after, ...readHeader } = page.json;
+      // The read itself keeps the red line (as (4) holds every other read).
+      const readCrossed = redLineCrossings(page, neverShown);
+      assert.deepEqual(readCrossed, { values: [], fields: [] }, `${door.name}: the read crosses the red line`);
+      assert.deepEqual(
+        viewerStreamCrossings({ readEvents, readHeader, toolOutput: door.toolOutput, frames: held.frames, texts: held.texts, neverShown }),
+        [],
+        `${door.name}: the stream carries what its read does not`,
+      );
+      const types = new Set(held.frames.map((f) => f.type as string));
+      // Deltas arrive on every stream; tool output only where the read shows it.
+      assert.ok(types.has('text_delta') && types.has('thinking_delta'), `${door.name}: no deltas: ${[...types].join(',')}`);
+      assert.equal(types.has('tool_output'), door.toolOutput, `${door.name}: tool_output`);
+      assert.equal(types.has('background_output'), door.toolOutput, `${door.name}: background_output`);
+      assert.ok(types.has('resync'), `${door.name}: resync`);
+      for (const value of Object.values(TOOL)) {
+        assert.equal(held.texts.some((text) => text.includes(value)), door.toolOutput, `${door.name}: ${value}`);
+      }
+      // The durable frames are the read's durable events: replayed and live alike.
+      const durableSeqs = held.frames.filter((f) => f.seq > 0 && f.type !== 'head').map((f) => f.seq);
+      const readSeqs = (readEvents as Json[]).map((e) => e.seq).filter((seq) => durableSeqs.includes(seq));
+      assert.deepEqual(durableSeqs, readSeqs, `${door.name}: the durable frames, in order`);
+      assert.ok(durableSeqs.includes(lastSeq) && durableSeqs.includes(cursor), `${door.name}: replay and live both reached it`);
+      // Heads: the first says how it stood, the last what `events?after=` says now, none repeats the one before.
+      const heads = held.frames.filter((f) => f.type === 'head').map((f) => f.payload as Json);
+      assert.equal(heads[0]!.title, TITLE, `${door.name}: the opening head`);
+      assert.deepEqual(heads.at(-1), readHeader, `${door.name}: the last head is the read's header`);
+      for (let h = 1; h < heads.length; h += 1) {
+        assert.notDeepEqual(heads[h], heads[h - 1], `${door.name}: head ${h} repeats the one before`);
+      }
+      // The triggers (a rename, two statuses, a card) came within one 250 ms window: one read, not four.
+      assert.ok(heads.length <= 3, `${door.name}: ${heads.length} heads for one burst of triggers`);
+      if (door.guest) assert.equal(readHeader.waitingOnOwner, true, 'the guest read says the agent waits on the owner');
+      else assert.equal('waitingOnOwner' in readHeader, false, `${door.name}: a public header says whom the agent waits on`);
+    }
+    // The resumed guest stream replayed only what came after its cursor, then went live.
+    const resumedSeqs = resumed.frames.filter((f) => f.seq > 0 && f.type !== 'head').map((f) => f.seq);
+    const after = ok(await api('GET', `/guest-sessions/${s}/events?after=${cursor}&limit=500`, guestLogin), 'the gap read');
+    // (`status` excepted: a viewer stream says it as a head frame.)
+    const gap = (after.json.events as Json[]).filter((e) => e.type !== 'status').map((e) => e.seq);
+    assert.deepEqual(resumedSeqs, gap, 'the resumed stream is the read after its cursor');
+    assert.ok(resumedSeqs.every((seq) => seq > cursor), 'the resumed stream replayed what it already had');
   });
 });

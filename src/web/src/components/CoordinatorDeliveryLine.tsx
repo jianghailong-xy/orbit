@@ -8,7 +8,6 @@ import {
   COORDINATOR_DELIVERY_ITS_TASK,
   COORDINATOR_DELIVERY_SENT_TO_SESSION,
   COORDINATOR_DELIVERY_SESSION_TOLD,
-  COORDINATOR_DELIVERY_STICKY_LABEL,
   coordinatorDeliverySentence,
 } from '../lib/coordinatorDelivery';
 import { routeId } from '../lib/idCodec';
@@ -30,9 +29,9 @@ import { routeId } from '../lib/idCodec';
  * `Sent to the coordinator · 07:30 PM` does not (`sentToCoordinatorLine`, the receipt clock); at phone
  * width the two take a row each, the sentence first.
  *
- * Unlike the owner's answer, this line IS an anchor for the sticky bar: the reply under it answers it,
- * so once it is scrolled past the bar reads `↑ From Orbit` and this sentence — never `Your question`
- * over words the owner did not write. A queued twin is skipped like any queued turn (`is-queued`).
+ * Unlike the owner's answer, this line heads a round (`data-orbit-round`): the reply under it answers
+ * it, so once it is scrolled past the sticky bar hides rather than naming an earlier question — and
+ * never names this line either, which nobody typed. A queued twin is skipped like any queued turn.
  *
  * Undelivered, it says so in the words every Orbit card uses and offers nothing to put back in the
  * composer: the words are the platform's, not the reader's.
@@ -47,7 +46,6 @@ export function CoordinatorDeliveryLine({
   text,
   seq,
   undelivered = false,
-  attached,
   queued,
 }: {
   card: CoordinatorDeliveryCard;
@@ -55,8 +53,6 @@ export function CoordinatorDeliveryLine({
   text: string;
   seq?: number;
   undelivered?: boolean;
-  /** What delivery appended to the same turn, as its own folded entry under the words. */
-  attached?: ReactNode;
   /** The queue's own line, while the turn still waits behind a running one. */
   queued?: ReactNode;
 }) {
@@ -67,8 +63,7 @@ export function CoordinatorDeliveryLine({
       className={`coordinator-delivery${queued ? ' is-queued' : ''}`}
       data-seq={seq}
       data-coordinator-delivery={card.kind}
-      data-sticky-label={COORDINATOR_DELIVERY_STICKY_LABEL}
-      data-sticky-text={sentence}
+      data-orbit-round
     >
       <details className="owner-answer-fold">
         <summary className="owner-answer-line" title={sentence}>
@@ -85,7 +80,6 @@ export function CoordinatorDeliveryLine({
             {card.toCoordinator ? OWNER_ANSWER_TOLD : COORDINATOR_DELIVERY_SESSION_TOLD}
           </div>
           <pre>{text}</pre>
-          {attached}
           {taskPublic && (
             <AppLink className="coordinator-delivery-task" to={`/tasks/${encodeURIComponent(taskPublic)}`}>
               {COORDINATOR_DELIVERY_ITS_TASK}

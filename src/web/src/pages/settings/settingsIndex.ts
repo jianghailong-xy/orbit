@@ -21,10 +21,14 @@ export const PERSONAL_PAGES = [
   { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
+  { path: '/settings/terminals', label: 'Terminals' },
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
-export const INTEGRATION_PAGES = [{ path: '/settings/integrations/feishu', label: 'Feishu' }] as const;
+export const INTEGRATION_PAGES = [
+  { path: '/settings/integrations/feishu', label: 'Feishu' },
+  { path: '/settings/integrations/github', label: 'GitHub' },
+] as const;
 
 const setting = <K extends string>(
   anchor: K,
@@ -32,6 +36,11 @@ const setting = <K extends string>(
   title: string,
   description?: string,
 ): PersonalSetting & { anchor: K } => ({ anchor, path, title, description });
+
+/** The Translate conversations row's line, naming the language agents work in ("Agents work in"). */
+export function translationEnabledDescription(agentLanguage: string): string {
+  return `Agents read and write in ${agentLanguage}; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.`;
+}
 
 export const PERSONAL_SETTINGS = {
   defaultPermissionMode: setting(
@@ -52,6 +61,13 @@ export const PERSONAL_SETTINGS = {
     'Suggested replies',
     "When a Claude turn ends, the empty message box offers what you'd probably type next.",
   ),
+  // Board docs/mocks/prompt-optimizer frame 1: right under Suggested replies.
+  promptOptimizer: setting(
+    'promptOptimizer',
+    '/settings/general',
+    'Prompt optimizer',
+    "Show an Optimize button in the composer. DeepSeek rewrites your draft with this session's context; you review it before it replaces the draft.",
+  ),
   recaps: setting(
     'recaps',
     '/settings/general',
@@ -62,13 +78,28 @@ export const PERSONAL_SETTINGS = {
     'enableOrchestration',
     '/settings/general',
     'Let sessions orchestrate',
-    'Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.',
+    'Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.',
   ),
+  // Settings › Translation (docs/mocks/session-translation, frames 1 and 2): between New sessions and Orchestration.
+  translationEnabled: setting(
+    'translationEnabled',
+    '/settings/general',
+    'Translate conversations',
+    translationEnabledDescription('English'),
+  ),
+  translationLanguage: setting(
+    'translationLanguage',
+    '/settings/general',
+    'Your language',
+    'What you write in, and what replies are shown in.',
+  ),
+  translationBilingual: setting('translationBilingual', '/settings/general', 'Show both languages'),
+  agentLanguage: setting('agentLanguage', '/settings/general', 'Agents work in', 'What the agent receives and answers in.'),
   notifySessionFinished: setting(
     'notifySessionFinished',
     '/settings/notifications',
     'When a session finishes',
-    'Alert your devices when a run finishes on its own or fails for good.',
+    'Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.',
   ),
   notifyAgentMessage: setting(
     'notifyAgentMessage',

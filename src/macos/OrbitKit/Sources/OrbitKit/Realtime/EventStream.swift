@@ -56,11 +56,18 @@ public struct URLSessionEventStream: EventStreaming {
     }
 
     public func events(sessionID: String, sinceSeq: Int) -> AsyncThrowingStream<RunEvent, Error> {
+        frames(path: "api/sessions/\(sessionID)/events", sinceSeq: sinceSeq, decode: SSEDecoding.runEvent(from:))
+    }
+
+    /// One SSE route of a session, read byte by byte with the watchdog: the owner's events above, the
+    /// guest's stream (`GuestStreaming`) below. Each dispatched frame is `decode`d; nil drops it.
+    func frames<Frame: Sendable>(path: String, sinceSeq: Int,
+                                 decode: @escaping @Sendable (SSEEvent) -> Frame?) -> AsyncThrowingStream<Frame, Error> {
         AsyncThrowingStream { continuation in
             let clock = ByteClock()
             let task = Task {
                 do {
-                    var comps = URLComponents(url: baseURL.appendingPathComponent("api/sessions/\(sessionID)/events"),
+                    var comps = URLComponents(url: baseURL.appendingPathComponent(path),
                                               resolvingAgainstBaseURL: false)!
                     comps.queryItems = [
                         URLQueryItem(name: "sinceSeq", value: String(sinceSeq)),
@@ -85,8 +92,8 @@ public struct URLSessionEventStream: EventStreaming {
                     // frames included — feeds the clock.
                     for try await byte in bytes {
                         clock.pulse()
-                        if let sse = parser.consume(byte: byte), let ev = SSEDecoding.runEvent(from: sse) {
-                            continuation.yield(ev)
+                        if let sse = parser.consume(byte: byte), let frame = decode(sse) {
+                            continuation.yield(frame)
                         }
                     }
                     continuation.finish()
@@ -112,6 +119,14 @@ public struct URLSessionEventStream: EventStreaming {
                 monitor.cancel()
             }
         }
+    }
+}
+
+extension URLSessionEventStream: GuestStreaming {
+    /// The guest door's stream (`GET /api/guest-sessions/:id/stream`): the same transport and
+    /// watchdog as the owner's, on the guest's own route.
+    public func guestFrames(sessionID: String, sinceSeq: Int) -> AsyncThrowingStream<GuestStreamFrame, Error> {
+        frames(path: "api/guest-sessions/\(sessionID)/stream", sinceSeq: sinceSeq, decode: GuestStreamFrame.decode)
     }
 }
 #endif

@@ -120,11 +120,6 @@ final class SessionMessageCopyParityTests: XCTestCase {
         assertDeclares(web, "SESSION_MESSAGE_NOT_YOU", SessionMessageCard.notYou)
         assertDeclares(web, "SESSION_MESSAGE_OPEN_TASK", SessionMessageCard.openTask)
         assertDeclares(web, "SESSION_MESSAGE_UNDELIVERED", SessionMessageCard.undelivered)
-        // The sticky bar's label is the same composition at both ends: the word, a space, the title.
-        XCTAssertTrue(web.contains("label: `${SESSION_MESSAGE_FROM} ${sessionMessageTitle(card)}`"),
-                      "the sticky label drifted: \(Self.webLib) names the turn differently")
-        XCTAssertEqual(SessionMessageCard.sticky(SessionMessage(fromSessionId: "s", fromTitle: "Worker"),
-                                                 text: "hi").label, "From Worker")
     }
 
     /// A narrower sender gets the same line at both ends, and the same block is left out of the fold.

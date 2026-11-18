@@ -199,7 +199,7 @@ Each is a projection in `reader/` beside the A06 rows, not a second renderer.
   `progress` (background_task / REST background list), drawn as phases, agent rows and totals on Agent/Workflow
   calls and in Session details' background list; `TaskProgressCopyParityTest` reads the shared golden table.
   Agent rows open to model, error and the Agent call's nested activity (A06-6).
-- **Orbit context card** (`AttachedNote.kt`, A06-9) and the bubble split at `controlPlaneNote`.
+- **Appended context** is filtered from message text at `controlPlaneNote` and has no transcript line or panel (owner, 2026-11-18).
 - **Image file rows** (`text/MarkdownFileRef.kt`, A06-3) for links the session can serve as an image.
 - **Worktree bar** (`Worktree*.kt`, `MergeRecovery*.kt`) above the composer: Commit/Merge/Resolve/Retry/Adopt,
   the target caret, merge recovery's row and review, the changed files with diffs, a binary file's current bytes

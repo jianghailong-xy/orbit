@@ -8,6 +8,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.WelcomeCopy
+import io.orbitd.android.composer.WelcomeSignInCopy
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
@@ -39,12 +41,12 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * End-to-end Compose & Robolectric native-graphics screenshot verification for a machine's first workspace
- * (project 34pLjYBjU6ILsehatEjJs, task 34pLtXumbawMl6II4gUPa, board 03 iPhone rules & board 04):
+ * (docs/mocks/new-folder-in-home/workspace-card-with-name):
  * - Drawer `Set up <machine>` row and enabled `New session` with 0 workspaces
- * - Cold-start landing on the first online machine's draft (or `Machines & models` when all are offline)
- * - Setup card (`MachineSetupCard`) with 3-way folder picker, `dir-probe` check, sign-in card & `Use an API Key`
- * - Held first message (`HeldFirstMessageView`), `Withdraw`, and automatic `POST /sessions` with `newWorkspace`
- * - `Created workspace` line at the top of the conversation with `Rename` (`PATCH /workspaces/:id`) and `Settings`
+ * - Cold-start landing on the first online machine's page (or `Machines & models` when all are offline)
+ * - The card alone (`MachineSetupCard`): one folder name in the machine's home checked by `dir-probe`, a Name that follows the folder
+ *   until it is edited, and `Create workspace`, which sends `POST /workspaces` and opens the new workspace's new session page
+ * - A refused Create stays on the card and says why; offline, connecting and too-old machines can't create
  * - Machine page empty state with `Start a session` and no `"on the web"`
  *
  * Writes PNG screenshots to `src/android/build/evidence/first-workspace-android/`.
@@ -104,28 +106,28 @@ class FirstWorkspaceShotsTest {
         bitmap.recycle()
     }
 
-    @Test fun coldStartWithNoWorkspacesLandsOnTheFirstOnlineMachineShowsTheSetupCardAndTheDrawerSetUpRow() {
+    private val create get() = compose.onNodeWithTag("setup-create")
+    private val nameField get() = compose.onNodeWithTag("setup-workspace-name")
+
+    @Test fun coldStartWithNoWorkspacesLandsOnTheFirstOnlineMachineShowsTheCardAloneAndTheDrawerSetUpRow() {
         signIn()
 
-        // Lands on the first online machine's new session page and probes registerDir (/home/orbit/code/app).
-        awaitText(MachineSetupCopy.setupTitle("orbit@austin"))
-        awaitText("Found · git repository · main")
-        awaitText(MachineSetupCopy.SETUP_REGISTER_DIR)
-        awaitText(MachineSetupCopy.SETUP_NEW_FOLDER)
-        awaitText(MachineSetupCopy.setupOtherFolder("orbit@austin"))
-        awaitText(MachineSetupCopy.SETUP_USE_FOLDER)
-        awaitText(MachineSetupCopy.setupSignIn("Claude Code", "orbit@austin"))
-        awaitText(MachineSetupCopy.SETUP_USE_API_KEY)
-        awaitText(MachineSetupCopy.setupUseEngine("Codex"))
-        awaitText(MachineSetupCopy.composerPlaceholderFor("orbit@austin"))
+        // Lands on the first online machine's page: one folder name, in the machine's home (create-workdir/v2), and a Name.
+        awaitText(MachineSetupCopy.setupNewWorkspaceTitle("orbit@austin"))
+        awaitText(MachineSetupCopy.setupNewWorkspaceLead("orbit@austin"))
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
+        awaitText("/home/orbit/")
+        awaitText(MachineSetupCopy.SETUP_NEW_FOLDER_NAME)
+        awaitText(MachineSetupCopy.SETUP_NAME_PLACEHOLDER)
+        awaitText(MachineSetupCopy.SETUP_NAME_HINT)
+        create.assertIsNotEnabled()
+        // No sign-in, no composer, no footer: the card asks only for the folder and the name.
+        compose.onAllNodesWithText("Sign in", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("composer-input", useUnmergedTree = true).assertCountEquals(0)
 
-        assertTrue(
-            "expected POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe",
+        assertFalse(
+            "nothing is asked about before a name is typed",
             FirstWorkspaceShell.calls.contains("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe")
-        )
-        assertEquals(
-            buildJsonObject { put("path", "/home/orbit/code/app") },
-            FirstWorkspaceShell.body("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe")
         )
 
         shot("01-setup-card")
@@ -144,75 +146,96 @@ class FirstWorkspaceShotsTest {
         shot("02-drawer-set-up")
     }
 
-    @Test fun heldMessageWaitsCanBeWithdrawnAutoCreatesTheSessionOnceReadyAndDrawsTheCreatedWorkspaceLine() {
+    /** A new account's first machine (docs/mocks/new-user-onboarding): the welcome head replaces the card's, and nothing else is
+     *  added: no sign-in and no first messages. */
+    @Test fun aNewAccountsCardGreetsItAndAsksNothingMore() {
+        FirstWorkspaceShell.history = false
         signIn()
-        awaitText("Found · git repository · main")
+        awaitText(WelcomeCopy.welcomeTitle("Owner"))
+        awaitText(WelcomeCopy.WELCOME_LEAD)
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
+        awaitText(MachineSetupCopy.SETUP_NAME_HINT)
+        compose.onAllNodesWithText(MachineSetupCopy.setupNewWorkspaceTitle("orbit@austin"), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText(WelcomeSignInCopy.USE_API_KEY_INSTEAD, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithTag("composer-input", useUnmergedTree = true).assertCountEquals(0)
+        assertTrue("the Open list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=open&limit=1"))
+        assertTrue("the Completed list was read", FirstWorkspaceShell.calls.contains("GET sessions?view=completed&limit=1"))
+        shot("05-welcome-setup-card")
+    }
 
-        val prompt = "Fix the flaky login test in tests/auth — it fails about one run in five on CI."
-        compose.onNodeWithTag("composer-input").performTextInput(prompt)
-        compose.onNodeWithTag("composer-send").performClick()
+    /** An account that has had a session sees the card's own head, and no greeting. */
+    @Test fun anAccountWithHistorySeesNoWelcome() {
+        signIn()
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
+        compose.waitUntil(30_000) { FirstWorkspaceShell.calls.contains("GET sessions?view=completed&limit=1") }
         compose.waitForIdle()
+        compose.onAllNodesWithText(WelcomeCopy.welcomeTitle("Owner"), substring = true, useUnmergedTree = true).assertCountEquals(0)
+        awaitText(MachineSetupCopy.setupNewWorkspaceTitle("orbit@austin"))
+    }
 
-        // Not ready yet: no POST /sessions was sent, and the message waits under the card with Withdraw.
-        assertFalse("must not POST sessions before both steps are done", FirstWorkspaceShell.calls.contains("POST sessions"))
-        awaitText(MachineSetupCopy.heldWaiting("orbit@austin"))
-        awaitText(MachineSetupCopy.HELD_WITHDRAW)
-        compose.onNodeWithTag("held-first-message").assertExists()
+    @Test fun theNameFollowsTheFolderUntilEditedAndCreateMakesTheWorkspaceAndOpensItsNewSessionPage() {
+        signIn()
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
 
-        // Withdraw restores the text to the composer and clears the waiting message.
-        compose.onNode(hasText(MachineSetupCopy.HELD_WITHDRAW) and hasClickAction())
-            .performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
-        compose.onAllNodesWithTag("held-first-message").assertCountEquals(0)
-        compose.onNodeWithTag("composer-input").assertTextContains(prompt)
+        // The name app finds /home/orbit/app; the Name follows it.
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("app")
+        waitFor("Found · git repository · main")
+        nameField.assertTextEquals("app")
+        create.assertIsEnabled()
 
-        // Step 1: Use This Folder (/home/orbit/code/app) -> folds Step 1 to its compact summary line.
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction())
-            .performSemanticsAction(SemanticsActions.OnClick)
-        compose.waitForIdle()
+        // Emptied, it is never filled in again, and nothing can be created.
+        nameField.performTextReplacement("")
+        waitFor(MachineSetupCopy.SETUP_NAME_EMPTY)
+        create.assertIsNotEnabled()
 
-        // Send again: Step 2 is still unsigned, so the message waits under the card until Step 2 finishes.
-        compose.onNodeWithTag("composer-send").performClick()
-        awaitText(MachineSetupCopy.heldWaiting("orbit@austin"))
-        assertFalse("must not POST sessions when only step 1 is done", FirstWorkspaceShell.calls.contains("POST sessions"))
+        // Edited, it stays whatever the folder becomes.
+        nameField.performTextReplacement("  Payments API ")
+        waitFor(MachineSetupCopy.SETUP_NAME_EDITED)
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("payments")
+        waitFor("Found · git repository · main")
+        nameField.assertTextEquals("  Payments API ")
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("app")
+        waitFor("Found · git repository · main")
+        assertFalse("nothing is made before Create workspace", FirstWorkspaceShell.calls.contains("POST workspaces"))
 
-        shot("03-setup-held")
+        shot("03-setup-named")
 
-        // Step 2: Use an API Key -> both steps are now done, so the held message sends automatically!
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_API_KEY) and hasClickAction())
-            .performSemanticsAction(SemanticsActions.OnClick)
-
-        compose.waitUntil(60_000) { FirstWorkspaceShell.calls.contains("POST sessions") }
-        val createBody = FirstWorkspaceShell.body("POST sessions")!!
-        assertEquals(FirstWorkspaceShell.RUNNER, createBody["assignedRunnerId"]?.jsonPrimitive?.content)
-        assertNull("bare machine session creation must not send agentId", createBody["agentId"])
+        create.performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(60_000) { FirstWorkspaceShell.calls.contains("POST workspaces") }
         assertEquals(
-            buildJsonObject { put("workDir", "/home/orbit/code/app") },
-            createBody["newWorkspace"]?.jsonObject
+            buildJsonObject {
+                put("name", "Payments API")
+                put("runnerId", FirstWorkspaceShell.RUNNER)
+                put("workDir", "/home/orbit/app")
+            },
+            FirstWorkspaceShell.body("POST workspaces"),
         )
-        assertEquals("claude", createBody["engine"]?.jsonPrimitive?.content)
-        assertEquals("deepseek", createBody["provider"]?.jsonPrimitive?.content)
-        assertEquals(prompt, createBody["prompt"]?.jsonPrimitive?.content)
+        assertFalse("Create workspace starts no session", FirstWorkspaceShell.calls.contains("POST sessions"))
 
-        // Opens the created session with the Created workspace line at the top of the transcript.
-        awaitText("Created workspace app on orbit@austin · /home/orbit/code/app")
-        compose.onNodeWithTag("created-workspace").assertExists()
-        compose.onNode(hasText(MachineSetupCopy.CREATED_RENAME) and hasAnyAncestor(hasTestTag("created-workspace"))).assertExists()
-        compose.onNode(hasText(MachineSetupCopy.CREATED_SETTINGS) and hasAnyAncestor(hasTestTag("created-workspace"))).assertExists()
-
+        // On to the new workspace's new session page, its composer the one a workspace has.
+        compose.waitUntil(60_000) {
+            compose.onAllNodesWithTag("machine-setup-card", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() &&
+                compose.onAllNodesWithTag("composer-input", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        awaitText("Payments API")
         shot("04-created-workspace")
+    }
 
-        // Rename from the Created workspace line sends PATCH workspaces/:id and updates the line.
-        compose.onNode(hasText(MachineSetupCopy.CREATED_RENAME) and hasAnyAncestor(hasTestTag("created-workspace"))).performClick()
-        compose.waitUntil(60_000) { compose.onAllNodesWithTag("created-workspace-rename-input").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("created-workspace-rename-input").performTextReplacement("payments")
-        compose.onNode(hasText("Save") and hasClickAction()).performClick()
-        compose.waitUntil(60_000) { FirstWorkspaceShell.calls.contains("PATCH workspaces/${FirstWorkspaceShell.CREATED_WORKSPACE}") }
-        assertEquals(
-            buildJsonObject { put("name", "payments") },
-            FirstWorkspaceShell.body("PATCH workspaces/${FirstWorkspaceShell.CREATED_WORKSPACE}")
-        )
-        awaitText("Created workspace payments on orbit@austin · /home/orbit/code/app")
+    @Test fun aRefusedCreateStaysOnTheCardSayingWhyAndKeepsWhatWasTyped() {
+        FirstWorkspaceShell.createRefusal = "This runner is too old to make a new folder — update it."
+        signIn()
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("app")
+        waitFor("Found · git repository · main")
+        create.performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(60_000) { FirstWorkspaceShell.calls.contains("POST workspaces") }
+        waitFor(MachineSetupCopy.setupCreateFailed("This runner is too old to make a new folder — update it."))
+        compose.onNodeWithTag("machine-setup-card").assertExists()
+        compose.onNodeWithTag("setup-new-folder-name").assertTextContains("app")
+        nameField.assertTextEquals("app")
+        create.assertIsEnabled()
+        shot("08-create-refused")
     }
 
     @Test fun allMachinesOfflineLandsOnMachinesAndModelsAndRunnerPageSaysStartASessionWithoutOnTheWeb() {
@@ -229,8 +252,19 @@ class FirstWorkspaceShotsTest {
         compose.onAllNodesWithText("on the web", substring = true).assertCountEquals(0)
         compose.onNode(hasText(MachineSetupCopy.START_A_SESSION) and hasClickAction()).performScrollTo().performClick()
 
-        // Opens the offline machine's draft page, showing the offline notice on the setup card.
-        awaitText(MachineSetupCopy.setupOffline("orbit@austin"))
+        // Opens the offline machine's page, showing the offline notice on the card, which can't create.
+        awaitText(MachineSetupCopy.setupOfflineCreate("orbit@austin"))
+        compose.onNodeWithTag("setup-new-folder-name").assertIsNotEnabled()
+        nameField.assertIsNotEnabled()
+        create.assertIsNotEnabled()
+    }
+
+    @Test fun aMachineTooOldToCheckFoldersSaysItUpdatesFirstAndCantCreate() {
+        FirstWorkspaceShell.oldRunner = true
+        signIn()
+        awaitText(MachineSetupCopy.setupUpdatingCreate("orbit@austin"))
+        compose.onNodeWithTag("setup-new-folder-name").assertIsNotEnabled()
+        create.assertIsNotEnabled()
     }
 
     private fun openTheMachineFromMachinesAndModels() {
@@ -241,90 +275,85 @@ class FirstWorkspaceShotsTest {
     }
 
     /** Lets the page's own timers run: its reads of the machine, the relay's polls and the typing pause are on the test clock. */
-    private fun waitFor(text: String, maxMs: Long = 6_000) {
+    private fun waitFor(text: String, maxMs: Long = 6_000) = waitUntil("\"$text\" showed", maxMs) {
+        compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
+
+    private fun waitUntil(what: String, maxMs: Long = 6_000, done: () -> Boolean) {
         var waited = 0L
-        while (compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            assertTrue("\"$text\" never showed within ${maxMs}ms of the page's clock", waited < maxMs)
+        while (!done()) {
+            assertTrue("never $what within ${maxMs}ms of the page's clock", waited < maxMs)
             compose.mainClock.advanceTimeBy(250)
             waited += 250
             compose.waitForIdle()
         }
     }
 
-    @Test fun aMachineApprovedAMomentAgoIsWaitedForAndItsFolderStepOpensWithinSecondsOfItsFirstHeartbeat() {
+    @Test fun aMachineApprovedAMomentAgoIsWaitedForAndItsFolderFieldOpensWithinSecondsOfItsFirstHeartbeat() {
         FirstWorkspaceShell.runnerConnecting = true
         signIn()
         // Nothing online yet: rule 11 lands on Machines & models, and the machine's Start a session opens its card.
         openTheMachineFromMachinesAndModels()
-        awaitText(MachineSetupCopy.setupConnecting("orbit@austin"))
+        awaitText(MachineSetupCopy.setupConnectingCreate("orbit@austin"))
         compose.onAllNodesWithText("updates itself first", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("is offline", substring = true).assertCountEquals(0)
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsNotEnabled()
+        create.assertIsNotEnabled()
         assertFalse("a machine still connecting is asked nothing", FirstWorkspaceShell.calls.any { it.startsWith("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe") })
         shot("06-connecting")
 
+        compose.onNodeWithTag("setup-new-folder-name").assertIsNotEnabled()
+
         // Its first heartbeat. Nothing tells the page: its own reads, 2 s apart while it connects, find it.
         FirstWorkspaceShell.runnerConnecting = false
-        waitFor("Found · git repository · main", maxMs = 5_000)
-        compose.onAllNodesWithText(MachineSetupCopy.setupConnecting("orbit@austin")).assertCountEquals(0)
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
-    }
-
-    @Test fun aRegisterQuestionAnotherPathTookIsAskedAgainSoTheSuggestionStillComes() {
-        FirstWorkspaceShell.slots = true
-        FirstWorkspaceShell.slowFirstRegisterAnswer = true
-        signIn()
-        awaitText(MachineSetupCopy.setupOtherFolder("orbit@austin"))
-        compose.onAllNodesWithText(MachineSetupCopy.SETUP_REGISTER_DIR).assertCountEquals(0)
-
-        // Another folder, typed before the machine has answered about the register directory: its question takes the slot.
-        compose.onNode(hasText(MachineSetupCopy.setupOtherFolder("orbit@austin")) and hasClickAction()).performClick()
-        compose.onNodeWithTag("setup-other-folder-path").performTextInput("/srv/shared")
-        waitFor("Found · not a git repository")
-        waitFor(MachineSetupCopy.SETUP_REGISTER_DIR)
-        assertEquals(
-            "the register directory is asked twice: once at first, once after the path's answer",
-            2,
-            FirstWorkspaceShell.bodies.count { (call, body) ->
-                call == "POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe" && body.contains("/home/orbit/code/app")
-            },
-        )
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+        waitUntil("the folder field opens", maxMs = 5_000) {
+            compose.onAllNodes(hasTestTag("setup-new-folder-name") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText(MachineSetupCopy.setupConnectingCreate("orbit@austin")).assertCountEquals(0)
+        compose.onNodeWithTag("setup-new-folder-name").performTextInput("app")
+        waitFor("Found · git repository · main")
+        create.assertIsEnabled()
     }
 
     @Test fun aNewFolderNameIsCheckedWhereItWouldGoBeforeAnythingIsSent() {
         FirstWorkspaceShell.slots = true
         signIn()
-        awaitText("Found · git repository · main")
-        compose.onNode(hasText(MachineSetupCopy.SETUP_NEW_FOLDER) and hasClickAction()).performClick()
+        awaitText(MachineSetupCopy.SETUP_FOLDER_HINT)
 
-        // A folder a deleted workspace left: it is used with what is in it, not called empty.
+        // A folder that is there: it is used as it stands, read as any folder is.
         compose.onNodeWithTag("setup-new-folder-name").performTextInput("payments")
-        waitFor(MachineSetupCopy.setupNewFolderExists("orbit@austin"))
+        waitFor("Found · git repository · main")
         assertEquals(
-            buildJsonObject { put("path", "/home/orbit/orbit-repos/payments") },
+            buildJsonObject { put("path", "/home/orbit/payments") },
             FirstWorkspaceShell.body("POST runners/${FirstWorkspaceShell.RUNNER}/dir-probe"),
         )
-        compose.onAllNodesWithText("Starts empty", substring = true).assertCountEquals(0)
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
+        compose.onAllNodesWithText(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE, substring = true).assertCountEquals(0)
+        create.assertIsEnabled()
         shot("07-new-folder-exists")
 
         // A file of that name: it can't be one, and says why.
         compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("notes.txt")
         waitFor(MachineSetupCopy.setupNewFolderIsFile("orbit@austin"))
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsNotEnabled()
+        create.assertIsNotEnabled()
 
-        // Nothing there: it starts empty, as the board says.
+        // A name the server wouldn't take: said before anything is asked.
+        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("my notes")
+        waitFor(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID)
+        create.assertIsNotEnabled()
+
+        // Nothing there: it is made with the workspace, and Create sends it by its name.
         compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("scratch-notes")
-        waitFor(MachineSetupCopy.SETUP_NEW_FOLDER_META)
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).assertIsEnabled()
-
-        // Back to the one that is there: Use This Folder takes it as that folder.
-        compose.onNodeWithTag("setup-new-folder-name").performTextReplacement("payments")
-        waitFor(MachineSetupCopy.setupNewFolderExists("orbit@austin"))
-        compose.onNode(hasText(MachineSetupCopy.SETUP_USE_FOLDER) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
-        awaitText("/home/orbit/orbit-repos/payments")
-        compose.onAllNodesWithText(MachineSetupCopy.SETUP_NEW_FOLDER_DONE).assertCountEquals(0)
+        waitFor(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE)
+        nameField.assertTextEquals("scratch-notes")
+        create.performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(60_000) { FirstWorkspaceShell.calls.contains("POST workspaces") }
+        assertEquals(
+            buildJsonObject {
+                put("name", "scratch-notes")
+                put("runnerId", FirstWorkspaceShell.RUNNER)
+                put("newFolder", "scratch-notes")
+            },
+            FirstWorkspaceShell.body("POST workspaces"),
+        )
     }
 }
 
@@ -342,36 +371,37 @@ internal object FirstWorkspaceShell {
     @Volatile var runnerConnecting = false
     /** The relay as the server keeps it: one question per machine, answered only for the path in it. */
     @Volatile var slots = false
-    /** With [slots]: the register directory's first question is not answered until another takes its place. */
-    @Volatile var slowFirstRegisterAnswer = false
     @Volatile var workspaceCreated = false
+    /** Whether the account's Completed list holds a session: by default it does, so the setup card is today's, not a new account's
+     *  welcome card (docs/mocks/new-user-onboarding). */
+    @Volatile var history = true
     @Volatile var workspaceName = "app"
+    /** Online, but too old to check folders: it declares nothing. */
+    @Volatile var oldRunner = false
+    /** What the server says refusing `POST /workspaces`, or null to make it. */
+    @Volatile var createRefusal: String? = null
     @Volatile private var asked: String? = null
-    private val asks = ConcurrentHashMap<String, Int>()
 
     fun reset() {
+        history = true
         calls.clear()
         bodies.clear()
         disk.clear()
-        asks.clear()
         asked = null
         runnerOnline = true
         runnerConnecting = false
         slots = false
-        slowFirstRegisterAnswer = false
         workspaceCreated = false
         workspaceName = "app"
+        oldRunner = false
+        createRefusal = null
     }
 
-    private const val REGISTER = "/home/orbit/code/app"
-
-    /** What the runner finds at a path, in the slot model: the register directory, and the Repos Folder's leftovers. */
+    /** What the runner finds at a path, in the slot model: what is already in the machine's home. */
     private fun at(path: String): String = when (path) {
-        REGISTER -> """{"path":"$path","exists":true,"isDir":true,"isGit":true,"branch":"main","isHome":false,"freeBytes":10737418240}"""
-        "/srv/shared" -> """{"path":"$path","exists":true,"isDir":true,"isGit":false,"branch":null,"isHome":false,"freeBytes":10737418240}"""
-        "/home/orbit/orbit-repos/payments" ->
+        "/home/orbit/payments" ->
             """{"path":"$path","exists":true,"isDir":true,"isGit":true,"branch":"main","isHome":false,"freeBytes":10737418240}"""
-        "/home/orbit/orbit-repos/notes.txt" ->
+        "/home/orbit/notes.txt" ->
             """{"path":"$path","exists":true,"isDir":false,"isGit":false,"branch":null,"isHome":false,"freeBytes":null}"""
         else -> """{"path":"$path","exists":false,"isDir":false,"isGit":false,"branch":null,"isHome":false,"freeBytes":null}"""
     }
@@ -383,7 +413,7 @@ internal object FirstWorkspaceShell {
         val now = Instant.now()
         val online = runnerOnline && !runnerConnecting
         val heartbeat = if (runnerConnecting) "null" else "\"${if (online) now else now.minusSeconds(3 * 86_400)}\""
-        val capabilities = if (runnerConnecting) "[]" else """["dir-probe/v1","create-workdir/v1"]"""
+        val capabilities = if (runnerConnecting || oldRunner) "[]" else """["dir-probe/v1","create-workdir/v1","create-workdir/v2"]"""
         val engines = if (runnerConnecting) "null" else """[
                     {"engine":"claude","installed":true,"version":"2.1.302","auth":"no"},
                     {"engine":"codex","installed":true,"version":"0.164.0","auth":"no"}
@@ -398,7 +428,7 @@ internal object FirstWorkspaceShell {
                 "maxConcurrent":16,
                 "activeSessions":0,
                 "lastHeartbeatAt":$heartbeat,
-                "registerDir":"/home/orbit/code/app",
+                "registerDir":"/home/orbit/app",
                 "reposRoot":"/home/orbit/orbit-repos",
                 "capabilities":$capabilities,
                 "engines":$engines,
@@ -415,7 +445,7 @@ internal object FirstWorkspaceShell {
             "id":"$CREATED_WORKSPACE",
             "name":"$workspaceName",
             "runnerId":"$RUNNER",
-            "workDir":"/home/orbit/code/app",
+            "workDir":"/home/orbit/app",
             "enabled":true,
             "position":0,
             "provider":"deepseek",
@@ -439,7 +469,7 @@ internal object FirstWorkspaceShell {
             "agent":{
                 "id":"$CREATED_WORKSPACE",
                 "name":"$workspaceName",
-                "workDir":"/home/orbit/code/app",
+                "workDir":"/home/orbit/app",
                 "runnerId":"$RUNNER",
                 "deletedAt":null
             },
@@ -496,22 +526,21 @@ internal object FirstWorkspaceShell {
             path == "runners/$RUNNER/dir-probe" && method == "POST" && slots -> {
                 val p = api.body?.decodeToString()?.let(::obj)?.get("path")?.jsonPrimitive?.contentOrNull.orEmpty()
                 asked = p
-                asks.merge(p, 1, Int::plus)
                 ok("""{"path":"$p","status":"pending","requestedAt":"2026-10-31T08:00:00Z"}""")
             }
             path == "runners/$RUNNER/dir-probe" && method == "GET" && slots -> {
                 val p = api.query.firstOrNull { it.first == "path" }?.second.orEmpty()
                 when {
                     p != asked -> ok("""{"path":"$p","status":"idle","result":null}""")
-                    p == REGISTER && slowFirstRegisterAnswer && asks[p] == 1 -> ok("""{"path":"$p","status":"pending","result":null}""")
                     else -> ok("""{"path":"$p","status":"done","result":${at(p)}}""")
                 }
             }
-            path == "runners/$RUNNER/dir-probe" && method == "POST" -> ok(
-                """{"path":"/home/orbit/code/app","status":"pending","requestedAt":"2026-10-31T08:00:00Z"}"""
-            )
+            path == "runners/$RUNNER/dir-probe" && method == "POST" -> {
+                val p = api.body?.decodeToString()?.let(::obj)?.get("path")?.jsonPrimitive?.contentOrNull.orEmpty()
+                ok("""{"path":"$p","status":"pending","requestedAt":"2026-10-31T08:00:00Z"}""")
+            }
             path == "runners/$RUNNER/dir-probe" && method == "GET" -> {
-                val p = api.query.firstOrNull { it.first == "path" }?.second ?: "/home/orbit/code/app"
+                val p = api.query.firstOrNull { it.first == "path" }?.second.orEmpty()
                 ok(
                     """{
                         "path":"$p",
@@ -527,6 +556,16 @@ internal object FirstWorkspaceShell {
                         }
                     }"""
                 )
+            }
+            path == "workspaces" && method == "POST" -> {
+                val refusal = createRefusal
+                if (refusal != null) {
+                    ApiResponse(400, buildJsonObject { put("statusCode", 400); put("message", refusal) }.toString().encodeToByteArray())
+                } else {
+                    api.body?.decodeToString()?.let(::obj)?.get("name")?.jsonPrimitive?.contentOrNull?.let { workspaceName = it }
+                    workspaceCreated = true
+                    ok(workspaceJson().toString())
+                }
             }
             path == "workspaces" && method == "GET" -> ok(if (workspaceCreated) "[${workspaceJson()}]" else "[]")
             path == "workspaces/$CREATED_WORKSPACE" && method == "GET" -> ok(workspaceJson().toString())
@@ -555,6 +594,8 @@ internal object FirstWorkspaceShell {
                 workspaceCreated = true
                 ok("""{"id":"$SESSION"}""")
             }
+            path == "sessions" && method == "GET" && history && !workspaceCreated && query == "view=completed&limit=1" ->
+                ok("""[{"id":"34FwSessionEarlier0001","title":"An earlier session","status":"COMPLETED"}]""")
             path == "sessions" && method == "GET" -> ok(if (workspaceCreated) "[${sessionDetailJson()}]" else "[]")
             path == "sessions/$SESSION" && method == "GET" -> ok(sessionDetailJson().toString())
             path == "sessions/$SESSION/events/page" -> ok(

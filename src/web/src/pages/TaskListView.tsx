@@ -602,7 +602,7 @@ export function TaskListView() {
   const taskPageCounts = taskCounts.data;
   const workspaces = useQuery({
     queryKey: ['workspaces'],
-    meta: { entities: ['workspace'] },
+    meta: { entities: ['workspace', 'checkout'] },
     queryFn: () => api<any[]>('/workspaces'),
   });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no

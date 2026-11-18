@@ -14,6 +14,7 @@
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
+import type { OwnerCardTranslation } from './translation';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -1066,6 +1067,12 @@ export interface OpenItemFacts {
   check: IntegrationCheckResult | null;
   /** Whether the task's own branch passed — the check failed only combined with it. */
   branchUnchanged: boolean;
+  /** The Branch row's sentence, written by the server because it depends on the job the check failed
+   *  in: a task's landing (the task passed on its own branch), or a promotion of the project branch or
+   *  of one task's branch to main (that branch did not move and nothing reached main). Null when
+   *  `branchUnchanged` is false; absent from a server older than the field, where a card keeps the
+   *  task's sentence. */
+  branchLine?: string | null;
   /** The code an integration job ended with (INTEGRATION_ERROR). */
   errorCode: string | null;
   /** Why an attempt failed, and where its chain stands (TASK_FAILED). */
@@ -1264,6 +1271,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from —
    *  and null for every other kind. Absent from a server that predates done requests. */
   doneRequest?: DoneRequest | null;
+  /** The card's agent-written words in the owner's language (Settings › Translation): a
+   *  `COORDINATOR_QUESTION`'s `question`, `options` and `ifUnanswered`; a `START_REQUEST`'s `why`; a
+   *  `DONE_REQUEST`'s `judgment` and `gaps`. Absent until translated, on
+   *  every item translation was off for, and from a server that predates it. */
+  translation?: OwnerCardTranslation;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -1278,6 +1290,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** "Chat about this": where the item's handling stands, and whether a message about it can reach
    *  the project's coordinator conversation. Absent from a server that predates it. */
   chat?: OpenItemChat | null;
+  /** Whether the project's coordinator can be neither asked again nor messaged right now, as the
+   *  server read it with the list. An escalated item's heading says so ("the coordinator can’t take
+   *  messages") instead of "no one acted on this", because its doors already say it. Absent from a
+   *  server that predates it, which reads as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /**
@@ -1304,6 +1321,9 @@ export interface ProjectClosedQuestion<Instant = string> {
   delivery: { sessionId: string; at: Instant } | null;
   /** The reason it was withdrawn with; null for an answered question. */
   withdrawReason: string | null;
+  /** `question` in the owner's language, as it was translated while the question was open; absent
+   *  when it never was. An ended question is never translated again. */
+  translation?: OwnerCardTranslation;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -1947,11 +1967,14 @@ export interface SessionOwnerItem<Instant = string> {
  * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
  * and that its coordinator did not ask to have recorded done within the project's escalation window:
  * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
- * keeps the generic approval wording, and so does one counting two kinds at once.
+ * keeps the generic approval wording, and so does one counting two kinds at once. `OWNER_REQUEST`
+ * is an owner request (`request_owner_action`) the conversation filed and the owner has not ended:
+ * the row says "Waiting on you", over the request's card.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'
   | 'OWNER_ITEM'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'RECORD_AS_DONE';
+  | 'RECORD_AS_DONE'
+  | 'OWNER_REQUEST';

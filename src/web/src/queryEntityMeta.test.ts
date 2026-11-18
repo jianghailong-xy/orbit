@@ -31,13 +31,14 @@ import { describe, expect, it } from 'vitest';
  * ENTITY NAMES
  *   The names are the entities of the control-plane events `entitiesFor` routes on:
  *   `task.*` → task (incl. task.list.changed), `session.*` / `approval.*` / `background.task` /
- *   sessions.list_changed → session, `agent.changed` / `workspace.*` → workspace, `tag.*` → tag,
- *   `folder.*` → folder, `provider.*` → provider, `project.*` → project, `watch.*` → watch,
- *   `wiki.*` → wiki. A site names every entity whose change would make what it feeds wrong; one
- *   site may name several. The declaration says what the view derives from, not how often it is
- *   read: the consumer is free to keep its own cost exclusions (an expensive worktree diff is
- *   still session-derived even though the console refreshes it on turn end rather than on every
- *   session event).
+ *   sessions.list_changed → session, `agent.changed` / `workspace.*` → workspace (an `agent.changed`
+ *   that says only `repoHealth` → checkout: the workspace's checkout as its runner last saw it),
+ *   `tag.*` → tag, `folder.*` → folder, `provider.*` → provider, `project.*` → project, `watch.*` →
+ *   watch, `wiki.*` → wiki, `terminals.changed` → terminal. A site names every entity whose change
+ *   would make what it feeds wrong; one site may name several. The declaration says what the view
+ *   derives from, not how often it is read: the consumer is free to keep its own cost exclusions
+ *   (an expensive worktree diff is still session-derived even though the console refreshes it on
+ *   turn end rather than on every session event).
  *
  * ADDING A QUERY
  *   Write `meta: { entities: ['<entity>'] }` in its options object. If it truly derives from no
@@ -49,7 +50,7 @@ import { describe, expect, it } from 'vitest';
 const WEB_SRC = fileURLToPath(new URL('./', import.meta.url));
 
 /** The control-plane entities, as `entitiesFor` (lib/useControlPlane.tsx) names its events. */
-const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'tag', 'folder', 'provider', 'watch', 'wiki']);
+const ENTITIES = new Set(['task', 'session', 'project', 'workspace', 'checkout', 'tag', 'folder', 'provider', 'watch', 'wiki', 'terminal']);
 
 /**
  * Sites that derive from no control-plane entity, with the reason. Frozen: every key must name a
@@ -64,14 +65,24 @@ const EXEMPT: Record<string, string> = {
   'src/components/ProjectShareControls.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/RunnerRegisterGuide.tsx#1': "runner state is polled; no control-plane event announces a runner change",
   'src/components/RunnerSignIn.tsx#2': "a runner's login state is polled; no control-plane event announces it",
+  'src/components/SessionSettingsDrawer.tsx#3': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/ShareModal.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/TaskDetailPanel.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/TasksSidePanel.tsx#4': "runner state is polled; no control-plane event announces a runner change",
   'src/components/WikiShareButton.tsx#1': "share-link tokens are written from this tab; no control-plane event announces them",
   'src/components/WorkspaceConsole.tsx#2': "runner state is polled; no control-plane event announces a runner change",
+  'src/components/settings/AdminLayout.tsx#1': "the admin user list; no control-plane event announces account creation",
+  'src/components/settings/MachineResources.tsx#1': "a runner's resource readings are polled; no control-plane event announces them",
   'src/components/settings/MachineSettingsPage.tsx#1': "runner state is polled; no control-plane event announces a runner change",
   'src/lib/deepseekBalance.ts#1': "reads a provider key's upstream balance; no control-plane event announces it",
+  'src/lib/githubIntegration.ts#2': "the repositories the GitHub App reaches, read from GitHub; no control-plane event announces them",
+  'src/lib/githubIntegration.ts#3': "a repository's branches, read from GitHub; no control-plane event announces them",
   'src/lib/googleLink.ts#1': "sign-in configuration read once; no control-plane event announces it",
+  'src/lib/help/helpAsk.ts#1': "the machines an Ask can run on are runner state, which no control-plane event announces, and the pick is written from this tab",
+  'src/lib/help/helpFeedback.ts#1': "help feedback votes come from every reader; no control-plane event announces them",
+  'src/lib/help/helpQueries.ts#1': "the help index ships with the server; no control-plane event announces it",
+  'src/lib/help/helpQueries.ts#2': "a help article ships with the server; no control-plane event announces it",
+  'src/lib/help/helpQueries.ts#3': "a search over the help articles, which ship with the server; no control-plane event announces them",
   'src/lib/managedRunner.ts#1': "server capabilities read once; no control-plane event announces them",
   'src/lib/managedRunner.ts#2': "the managed-runner status is polled; no control-plane event announces it",
   'src/lib/queries.ts#1': "runner state is polled; no control-plane event announces a runner change",
@@ -79,13 +90,15 @@ const EXEMPT: Record<string, string> = {
   'src/lib/queries.ts#3': "the one-time setup status; no control-plane event announces it",
   'src/lib/queries.ts#8': "the signed-in owner's own profile; no control-plane event announces it",
   'src/lib/queries.ts#9': "attachment storage usage; no control-plane event announces it",
-  'src/lib/queries.ts#10': "the owner's avatar, versioned by the profile read; no control-plane event announces it",
-  'src/lib/queries.ts#28': "account secrets are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#47': "share-link tokens are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#48': "access tokens are written from this tab; no control-plane event announces them",
-  'src/lib/queries.ts#81': "link preview metadata read from the linked pages; no control-plane event announces it",
+  'src/lib/queries.ts#10': "the files attachment storage keeps, listed for one scope; no control-plane event announces them",
+  'src/lib/queries.ts#11': "the owner's avatar, versioned by the profile read; no control-plane event announces it",
+  'src/lib/queries.ts#29': "account secrets are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#48': "share-link tokens are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#49': "access tokens are written from this tab; no control-plane event announces them",
+  'src/lib/queries.ts#82': "link preview metadata read from the linked pages; no control-plane event announces it",
   'src/lib/useDirProbe.ts#1': "a runner filesystem probe; no control-plane event announces directory state",
   'src/pages/AdminEmailPage.tsx#1': "admin email settings are written from this tab; no control-plane event announces them",
+  'src/pages/AdminGithubPage.tsx#1': "admin GitHub App settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminIntegrationsPage.tsx#1': "admin integration settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminSignInPage.tsx#1': "admin sign-in settings are written from this tab; no control-plane event announces them",
   'src/pages/AdminUsersPage.tsx#1': "a user's avatar, versioned by the user row; no control-plane event announces it",

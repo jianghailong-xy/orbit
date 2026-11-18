@@ -20,7 +20,7 @@ test('the runners response carries Antigravity readiness for old, missing and re
       engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'env_key' }],
     },
   ];
-  const prisma = { runner: { findMany: async () => rows }, session: { groupBy: async () => [] } };
+  const prisma = { runner: { findMany: async () => rows }, session: { groupBy: async () => [] }, $queryRaw: async () => [] };
   const runners = await new RunnersService(prisma as never).listRunners('owner-1');
   assert.deepEqual(runners.map((runner) => runner.antigravity), [
     { supported: false, installed: null, version: null, envKeyAvailable: false, authSource: null, googleLogin: 'needs_update' },
@@ -51,6 +51,7 @@ test('the runners response hands clients the Google sign-in and its quota, and n
   const prisma = {
     runner: { findMany: async () => [{ id: 'google', capabilities: [ANTIGRAVITY_GOOGLE_LOGIN_V1], engines: stored }] },
     session: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   };
   const [runner] = await new RunnersService(prisma as never).listRunners('owner-1');
   assert.deepEqual(runner.engines, [{

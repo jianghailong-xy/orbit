@@ -22,7 +22,47 @@ public enum RunnerPageCopy {
     public static let RUNNER_WORKSPACES = "Workspaces"
     public static let RUNNER_ABOUT = "About This Runner"
 
+    // MARK: Resources
+
+    public static let RUNNER_RESOURCES = "Resources"
+    public static let RUNNER_RESOURCES_CPU = "CPU"
+    public static let RUNNER_RESOURCES_MEMORY = "Memory"
+    public static let RUNNER_RESOURCES_LIVE = "Live · every 30 s · last hour"
+    public static let RUNNER_RESOURCES_OFFLINE = "Offline"
+    public static let RUNNER_RESOURCES_DISK_ONLY = "Disk is read from your workspaces"
+    public static let RUNNER_RESOURCES_UPDATE = "Update runner"
+    public static let RUNNER_RESOURCES_NO_READING = "No reading yet"
+    public static let RUNNER_RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+    /// A managed runner that has not reported yet: its Resources and Engines say only this.
+    public static let MANAGED_RUNNER_NOT_REPORTED = "Available once the runner is ready."
+
+    /// The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`).
+    public static func runnerResourcesLastReading(ago: String) -> String { "Offline · last reading \(ago)" }
+    /// A runner too old to report CPU or memory; `what` is the tile's own name (`CPU`, `memory`).
+    public static func runnerResourcesPredates(what: String) -> String { "This runner predates \(what) readings." }
+
+    public static let RUNNER_CPU_ONE_CORE = "1 core"
+
+    public static func runnerCpuCores(count: String) -> String { "\(count) cores" }
+    /// The one-minute load average, already formatted (`3.0`).
+    public static func runnerCpuLoad(load: String) -> String { "load \(load)" }
+    public static func runnerDiskFree(free: String) -> String { "\(free) GB free" }
+
     public static let RUNNER_MAX_CONCURRENT = "Max Concurrent"
+    /// Max Concurrent's dialog: when a change takes effect. The unit after the number says what it counts.
+    public static let RUNNER_MAX_CONCURRENT_HINT = "Applies to the next session it picks up — no restart."
+    /// After the dialog's number: what it counts.
+    public static let RUNNER_MAX_CONCURRENT_UNIT = "sessions at once"
+    /// The web dialog's − and + beside its field.
+    public static let RUNNER_MAX_CONCURRENT_DECREASE = "Decrease Max Concurrent"
+    public static let RUNNER_MAX_CONCURRENT_INCREASE = "Increase Max Concurrent"
+    /// The web dialog's sessions running now, while the machine is online.
+    public static func runnerRunningNow(active: Int) -> String { "\(active) running" }
+    /// Under the web dialog's field when the new limit is below what runs now: a lower limit stops nothing.
+    public static func runnerMaxBelowRunning(active: Int, max: Int) -> String {
+        "The \(active) running now carry on; new ones wait until fewer than \(max) are running."
+    }
+    public static let RUNNER_EDIT = "Edit"
     public static let RUNNER_DISK = "Disk"
     public static let RUNNER_KEEP_FREE = "Keep Free"
     public static let RUNNER_KEEP_FREE_OFF = "Off"
@@ -30,8 +70,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_KEEP_FREE_20_GB = "20 GB"
     public static let RUNNER_KEEP_FREE_50_GB = "50 GB"
     public static let RUNNER_CAPACITY_FOOTER =
-        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task "
-        + "runs stop being sent here and finished worktrees are cleaned up sooner."
+        "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, new sessions and "
+        + "task runs wait until space frees up, and finished worktrees are cleaned up sooner."
 
     public static func runnerGb(amount: String) -> String { "\(amount) GB" }
     public static func runnerDiskUsed(used: String, total: String) -> String {
@@ -56,6 +96,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_REFRESH_MODEL_LISTS = "Refresh Model Lists"
     public static let RUNNER_ENGINES_FOOTER =
         "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends "
+        + "that subscription, nothing to paste."
+    /// A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min.
+    public static let RUNNER_ENGINES_MANAGED_FOOTER =
+        "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends "
         + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
 
@@ -104,6 +148,13 @@ public enum RunnerPageCopy {
         "installs when the runner has been idle for \(minutes) min"
     }
     public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
+    /// A managed runner — the machine Orbit runs for the account — wherever its name is shown, unless the
+    /// owner renamed it. Its stored name (`orbit-managed`) is the server's, not a word for anyone to read.
+    public static let MANAGED_RUNNER_LABEL = "Orbit Cloud"
+    /// A managed runner's version, when it reports none that is a release (its image is `managed-<sha>`).
+    public static let MANAGED_RUNNER_KEPT_UP_TO_DATE = "Kept up to date by Orbit"
+    /// About's Version note on a managed runner: Orbit rolls its image, so it neither updates itself nor needs to.
+    public static let MANAGED_RUNNER_UPDATED_BY_ORBIT = "Orbit updates this machine for you."
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =
@@ -361,7 +412,7 @@ public enum RunnerPageCopy {
     }
     public static func attentionDiskBelowReserve(free: String, total: String,
                                                   reserve: String) -> String {
-        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — task runs stop being sent here until space frees up."
+        "\(free) GB free of \(total) GB, under the \(reserve) GB it keeps free — new sessions and task runs wait until space frees up."
     }
 
     public static let ATTENTION_CANT_UPDATE_ITSELF = "Can’t update itself"
@@ -407,4 +458,25 @@ public enum RunnerPageCopy {
     public static func attentionEngineUpdateDetail(note: String) -> String {
         "\(note). Orbit retries every 30 min — Update Engines Now tries again right away."
     }
+    /// Fix with an agent: one press starts a session on that machine (`RunnerAgentFixLogic`).
+    public static let AGENT_FIX_BUTTON = "Fix with an agent"
+    /// In place of the button while that session is open; the link after it opens it.
+    public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    public static let AGENT_FIX_OPEN_SESSION = "Open session"
+    /// Under the button on an Install failed panel: where the session would run.
+    public static func agentFixStartsIn(workspace: String, engine: String) -> String {
+        "Starts a session in \(workspace) on this machine, with \(engine)."
+    }
+    /// After a signed-out reason on an Install failed panel, whose engine's Sign In is above it.
+    public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
+    /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
+    public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
+    /// The head of what a press that didn't start a session says, before the server's own sentence.
+    public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
+    /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.
+    public static func attentionDismissUntilNextRelease(engine: String) -> String {
+        "Dismiss until next \(engine) release"
+    }
+    /// The engine page's warning: the same dismissal, after its failed-update line.
+    public static let RUNNER_ENGINE_UPDATE_DISMISS = "Dismiss"
 }

@@ -47,12 +47,14 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, type OwnerCardTranslation } from '@orbit/shared';
 
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { CROSSING_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
 import {
@@ -128,9 +130,14 @@ export interface HandoffRow {
  * there, and which of the source project's criteria it stops serving.
  */
 export interface HandoffListRow extends HandoffRow {
-  fromProject: { title: string; status: string };
-  /** null for a move out of every project. */
-  toProject: { title: string; status: string } | null;
+  /** `coordinatorSessionId` as on `toProject`, for the source end: it draws a move out of every
+   *  project (`toProject` null) as a decision card, since that move has no target to be drawn in. */
+  fromProject: { title: string; status: string; coordinatorSessionId: string | null };
+  /** null for a move out of every project. `coordinatorSessionId` is the conversation that draws
+   *  this row as a decision card, null when the target has none or its coordinator is in Trash:
+   *  a row with one is answered there, and the project pages leave it out
+   *  (docs/mocks/crossings-page-only-uncovered). */
+  toProject: { title: string; status: string; coordinatorSessionId: string | null } | null;
   /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
    *  and for a subject that has since been deleted. */
   subjectTask: { id: string; title: string } | null;
@@ -142,6 +149,9 @@ export interface HandoffListRow extends HandoffRow {
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes
    *  back. Null when it declares none, or none of the source project's. */
   withdrawnCriterion: { key: string; text: string } | null;
+  /** `title` and `reason` in the owner's language (Settings › Translation, migration 1080); absent
+   *  until translated and on every crossing translation is off for. */
+  translation?: OwnerCardTranslation;
 }
 
 /**
@@ -235,16 +245,65 @@ export interface HandoffMoveApplier {
   ): Promise<void>;
 }
 
+/** What `crossingCardSessionId` reads of a crossing. */
+export const CARD_SESSION_SELECT = {
+  toProjectId: true,
+  toProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+  fromProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+} as const;
+
+type CardEnd = { coordinatorSessionId: string | null; coordinatorSession: { deletedAt: Date | null } | null };
+
+/**
+ * The conversation that draws a crossing as a decision card (`CrossingDecisionCard`): the target
+ * project's coordinator, or — for a task asked to be taken out of every project, which has no
+ * target — the source project's. Null when that project has no coordinator or it is in Trash, the
+ * same rule `list` applies to the `coordinatorSessionId` the project pages read.
+ */
+export function crossingCardSessionId(row: {
+  toProjectId: string | null;
+  toProject: CardEnd | null;
+  fromProject: CardEnd;
+}): string | null {
+  const end = row.toProjectId ? row.toProject : row.fromProject;
+  if (!end || end.coordinatorSession?.deletedAt) return null;
+  return end.coordinatorSessionId;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
   private moveApplier?: HandoffMoveApplier;
+
+  private changeListener?: (change: { id: string; ownerId: string; filed: boolean }) => void;
 
   constructor(private readonly prisma: PrismaService) {}
 
   /** Called by the `TasksService` that shares this instance; see `HandoffMoveApplier`. */
   bindMoveApplier(applier: HandoffMoveApplier): void {
     this.moveApplier = applier;
+  }
+
+  /**
+   * Told of every question this service files (`filed`, after its transaction commits) and every
+   * answer it records: the `TasksService` over this instance binds itself here to push a new
+   * question to the owner and to redraw the conversation that shows its card. Bound rather than injected for the reason the move applier
+   * is: this module imports nothing it does not have to.
+   */
+  bindChangeListener(listener: (change: { id: string; ownerId: string; filed: boolean }) => void): void {
+    this.changeListener = listener;
+  }
+
+  /**
+   * The open conversation that draws this crossing as a decision card, or null when none does
+   * (see `crossingCardSessionId`).
+   */
+  async cardSessionOf(ownerId: string, handoffId: string): Promise<string | null> {
+    const row = await this.prisma.projectHandoffApproval.findFirst({
+      where: { id: handoffId, ownerId },
+      select: CARD_SESSION_SELECT,
+    });
+    return row ? crossingCardSessionId(row) : null;
   }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
@@ -498,7 +557,7 @@ export class ProjectHandoffService {
     now: Date,
   ): Promise<HandoffAnswer> {
     const authority = this.authorityOf(ownerId, declaration);
-    return withTransactionRetry(this.prisma, async (tx) => {
+    const answer = await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`;
       // FOR SHARE, not FOR KEY SHARE. What is derived from this row is `task_id` — which project
       // a worker session is acting for — and that is not a key column, so an ordinary
@@ -615,6 +674,14 @@ export class ProjectHandoffService {
       }
       return { ...filed, filed: inserted === 1 };
     }, loggedRetry(this.log, 'projectHandoff.declare'));
+    // A question somebody has to answer, filed by this call: tell them, once. One already standing
+    // was told when it was filed, and one a policy answered asks nobody.
+    if (answer.filed && answer.row.state === 'PENDING') {
+      this.changeListener?.({ id: answer.row.id, ownerId: answer.row.ownerId, filed: true });
+      // And translated for the owner in the background, when their translation is on (decision 1A).
+      this.translateFiled(ownerId, answer.row.id);
+    }
+    return answer;
   }
 
   /**
@@ -877,14 +944,114 @@ export class ProjectHandoffService {
       // the row: `title` is the plan's own title, bound into the digest the approval authorises.
       select: {
         ...HANDOFF_SELECT,
-        fromProject: { select: { title: true, status: true } },
-        toProject: { select: { title: true, status: true } },
+        translation: true,
+        fromProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
+        toProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
     })) as unknown as Array<Omit<HandoffListRow,
-      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
-    return this.withRequestDetail(ownerId, rows);
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion' | 'toProject'
+      | 'fromProject'> & {
+      fromProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      };
+      toProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      } | null;
+    }>;
+    await this.translateUntranslated(ownerId, rows).catch((error: Error) =>
+      this.log.warn(`queueing crossing translations failed: ${error.message}`));
+    // A coordinator in Trash draws no card (the web skips a trashed conversation's cards), so the
+    // row counts as having no conversation to be answered in.
+    return this.withRequestDetail(ownerId, rows.map(({ fromProject, toProject, translation, ...row }) => ({
+      ...row,
+      ...(translation ? { translation } : {}),
+      fromProject: {
+        title: fromProject.title,
+        status: fromProject.status,
+        coordinatorSessionId: fromProject.coordinatorSession?.deletedAt
+          ? null
+          : fromProject.coordinatorSessionId,
+      },
+      toProject: toProject && {
+        title: toProject.title,
+        status: toProject.status,
+        coordinatorSessionId: toProject.coordinatorSession?.deletedAt
+          ? null
+          : toProject.coordinatorSessionId,
+      },
+    })));
+  }
+
+  /** After a crossing is filed PENDING: queue its translation when the owner's translation is on. Never awaited and
+   *  never a reason the filing fails. */
+  translateFiled(ownerId: string, id: string): void {
+    void translationLanguages(this.prisma, ownerId)
+      .then((langs) => { if (langs) this.queueTranslation(ownerId, id, langs); })
+      .catch((error: Error) => this.log.warn(`translating crossing ${id} failed to queue: ${error.message}`));
+  }
+
+  /**
+   * Queue the translation of one crossing's title and reason into the owner's language
+   * (sessions/card-translation.ts): stored in `translation` while it is still PENDING — a write the row's guard
+   * allows, since neither the state nor any guarded column moves — and the conversation that draws its card
+   * redrawn, as when it was filed. Returns at once: true when it queued one.
+   */
+  queueTranslation(ownerId: string, id: string, langs: TranslationLanguages): boolean {
+    const where = { id, ownerId, state: 'PENDING' };
+    return queueOwnerCardTranslation({
+      key: `crossing:${id}`,
+      read: async () => {
+        const row = await this.prisma.projectHandoffApproval.findFirst({
+          where,
+          select: { title: true, reason: true, translation: true },
+        });
+        return row ? { source: row, fields: CROSSING_FIELDS, translation: row.translation } : null;
+      },
+      write: async (translation) => (await this.prisma.projectHandoffApproval.updateMany({
+        where,
+        data: { translation: translation as unknown as Prisma.InputJsonValue },
+      })).count > 0,
+      published: () => this.changeListener?.({ id, ownerId, filed: false }),
+    }, langs);
+  }
+
+  /**
+   * Decision 1A: a PENDING crossing with no translation in the owner's current language gets one queued as the
+   * list is read; one already tried in this language, failed or not, is left.
+   */
+  private async translateUntranslated(
+    ownerId: string,
+    rows: ReadonlyArray<{ id: string; state: string; translation?: unknown }>,
+  ): Promise<void> {
+    const pending = rows.filter((row) => row.state === 'PENDING');
+    if (pending.length === 0) return;
+    const langs = await translationLanguages(this.prisma, ownerId);
+    if (!langs) return;
+    for (const row of pending) {
+      if (!translatedInto(row.translation, langs)) this.queueTranslation(ownerId, row.id, langs);
+    }
   }
 
   /**
@@ -984,6 +1151,20 @@ export class ProjectHandoffService {
    * answered through, recorded with the move.
    */
   async decide(
+    ownerId: string,
+    userId: string,
+    id: string,
+    decision: 'APPROVE' | 'DENY',
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<HandoffAnswer> {
+    const answer = await this.decideOnce(ownerId, userId, id, decision, now, credential);
+    // The conversation that drew the card redraws its row: the question it was waiting on is gone.
+    this.changeListener?.({ id: answer.row.id, ownerId, filed: false });
+    return answer;
+  }
+
+  private async decideOnce(
     ownerId: string,
     userId: string,
     id: string,

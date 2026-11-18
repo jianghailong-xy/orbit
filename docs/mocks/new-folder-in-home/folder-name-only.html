@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>Folder 步骤只留一个路径框 · 01 设计板</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="board.css">
+<body>
+<div class="board">
+<h1>Folder 步骤：只输入一个目录名 · 设置卡</h1>
+<div class="lede">
+所有者 2026-11-16 要求：Folder 步骤只有一个输入框，前缀固定是 HOME 目录（<code>/root/</code>），只输入目录名。<b>目录已经存在就用，不存在就建。</b>
+没有其他选项。界面文案全部是英文。机器是 jdcloud，home 是 <code>/root</code>。
+</div>
+<div class="grid2" id="frames"></div>
+<figure class="tile wide">
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">只有一个输入框，前缀 <code>/root/</code> 固定不能改，用户只输入目录名。前缀是 runner 报上来的 home 目录。</span></li>
+    <li><span class="num">2</span><span class="t">目录不存在：会话开始时 Orbit 建 <code>/root/&lt;名字&gt;</code>。</span></li>
+    <li><span class="num">3</span><span class="t">目录已经存在：直接用它，里面的东西不动。</span></li>
+    <li><span class="num">4</span><span class="t">同名的是一个文件：不能用，换个名字。名字规则跟今天一样（字母、数字、<code>.</code> <code>-</code> <code>_</code>，最长 64 个字符）。</span></li>
+  </ul>
+</figure>
+</div>
+<script>
+const F = [
+  ['1 · 打开时', '', 'meta', 'Uses this folder if it exists, otherwise creates it.', false, 1],
+  ['2 · 不存在：建它', 'orbit', 'meta', 'New folder · created as the session starts.', true, 2],
+  ['3 · 已存在：用它', 'develop', 'ok', 'Found · git repository · main', true, 3],
+  ['4 · 是个文件：换个名字', 'bench-tp2.sh', 'bad', 'There’s already a file with this name on jdcloud. Pick another name.', false, 4],
+];
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+document.getElementById('frames').innerHTML = F.map(([title, value, tone, text, ok, n]) => `
+<figure class="tile">
+  <div class="tile-title">${title}</div>
+  <div class="app">
+  <div class="msc">
+    <div class="msc-step"><span class="msc-num">1</span><div style="position:relative">
+      <div class="msc-step-title">Folder</div>
+      <div class="msc-step-help">Where on jdcloud should sessions work? They can read and change everything in it.</div>
+      <span class="orbit-text-control orbit-input orbit-input-affix msc-input" style="display:flex;max-width:520px;margin:10px 0 6px"><span class="orbit-input-prefix"><span class="msc-prefix">/root/</span></span><input class="orbit-input-field" placeholder="name" value="${esc(value)}"></span>
+      <div class="${tone === 'meta' ? 'msc-meta' : 'msc-verdict ' + tone}" style="margin-bottom:12px">${esc(text)}</div>
+      <span class="num m" style="right:-14px;top:96px">${n}</span>
+      <div><button class="orbit-button orbit-button-primary orbit-button-middle msc-use" type="button" ${ok ? '' : 'disabled'}>Use this folder</button></div>
+    </div></div>
+  </div></div>
+</figure>`).join('');
+</script>
+<script src="icons.js"></script>
+</body>
+</html>

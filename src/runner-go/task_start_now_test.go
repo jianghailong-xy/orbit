@@ -277,7 +277,8 @@ func TestTaskCreateCardStartAfterCreateTakesTheStartNowPath(t *testing.T) {
 	if starts := hitsTo(got, "POST", "/api/runner/tasks/t1/execute"); len(starts) != 1 {
 		t.Fatalf("the owner's Create and start did not start the task: %v", startNowPaths(got))
 	}
-	if !strings.Contains(resultText(res), "Started at once") {
+	// The receipt says the start was the owner's, so the agent does not undo it as a start nobody asked for.
+	if !strings.Contains(resultText(res), startedByOwnerNote) {
 		t.Fatalf("result = %s", resultText(res))
 	}
 }

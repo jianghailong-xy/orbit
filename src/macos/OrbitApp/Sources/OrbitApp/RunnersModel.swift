@@ -65,6 +65,14 @@ final class RunnersModel {
         if let counts = try? await api.sessionCounts() { sessionCounts = counts }
     }
 
+    /// GET /runners/:id/resources, by runner: a runner page's Resources (`MachineResources`).
+    private(set) var resources: [String: RunnerResourcesAnswer] = [:]
+
+    /// A failed read keeps the last answer rather than showing none.
+    func loadResources(_ id: String) async {
+        if let answer = try? await api.runnerResources(id) { resources[id] = answer }
+    }
+
     // MARK: presses — each answers nil once it went through, else why not, in a sentence
 
     @discardableResult
@@ -142,7 +150,20 @@ final class RunnersModel {
     /// restarts; each interrupted turn continues once it is back. Nil once taken; else why not.
     @discardableResult
     func updateNow(_ id: String) async -> String? {
-        await press { _ = try await self.api.updateRunnerNow(id) }
+        if let reason = await press({ _ = try await self.api.updateRunnerNow(id) }) { return reason }
+        // The runner answers on its next heartbeat, after the read `press` made: read again until it
+        // reports the restart, so the card moves without a pull.
+        Task { await self.awaitUpdateNowAnswer(id) }
+        return nil
+    }
+
+    private func awaitUpdateNowAnswer(_ id: String) async {
+        let started = Date()
+        while !RunnerUpdateNow.answered(runner(id)),
+              Date().timeIntervalSince(started) < RunnerUpdateNow.answerWait {
+            try? await Task.sleep(for: .seconds(RunnerUpdateNow.answerPollInterval))
+            await load()
+        }
     }
 
     /// The runners whose Check again is on its way (`checkRegion`): their presses hold until the check
@@ -213,6 +234,24 @@ final class RunnersModel {
     @discardableResult
     func restoreDefault(_ id: String, engine: LoginEngine) async -> String? {
         await press { try await self.api.restoreRunnerDefault(id, engine: engine) }
+    }
+
+    /// Dismiss an engine's update warning until its next release. Orbit's own record, so it works with
+    /// the runner offline; the list read after it carries the dismissal, which quiets the warning.
+    @discardableResult
+    func dismissEngineUpdateWarning(_ id: String, engine: String) async -> String? {
+        await press { try await self.api.dismissEngineUpdateWarning(id, engine: engine) }
+    }
+
+    /// Fix with an agent: one press starts the session, then the list is read again — its `agentFix`
+    /// carries the session as `fixing`, which turns the button into the fixing line. Nothing navigates.
+    /// A refusal (a 409's own sentence) comes back to show, and the list is read again then too.
+    @discardableResult
+    func fixAttention(_ id: String, target: RunnerAgentFixTarget) async -> String? {
+        let body = RunnerAgentFixLogic.request(target, latestVersion: latestVersion)
+        let failure = await press { _ = try await self.api.fixRunnerAttention(id, kind: target.kind, body: body) }
+        if failure != nil { await load() }
+        return failure
     }
 
     /// The list in a new order: the rows move at once, and the server's answer — every runner, in the

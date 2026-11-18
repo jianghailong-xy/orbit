@@ -128,16 +128,22 @@ public enum AgentListLogic {
     /// The work rows the Mac source list opens with, in `sections`' order. `wiki` is the server's
     /// answer (`WikiLogic.shown`): a false one drops the Wiki row here, as data, so the List body
     /// holds no branch. The waiting counts are the drawer's amber numbers, 0 when nothing waits.
+    /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
+    /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
+    /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
-                                       projectsWaiting: Int, wikiWaiting: Int) -> [SidebarSectionRow] {
-        sections.filter { $0 != .wiki || wiki }.map { section in
+                                       projectsWaiting: Int, wikiWaiting: Int,
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
+        sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
             case .projects: waiting = projectsWaiting
             case .wiki:     waiting = wikiWaiting
             default:        waiting = 0
             }
-            return SidebarSectionRow(section, waiting: waiting)
+            let row = SidebarSectionRow(section, waiting: waiting)
+            if section == .tasks && scheduled { return [row, SidebarSectionRow(.scheduled, waiting: scheduledNeedsYou)] }
+            return [row]
         }
     }
 
@@ -155,12 +161,11 @@ public enum AgentListLogic {
         }.filter { seen.insert($0.id).inserted }
     }
 
-    /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
-    /// workspace of this account on them: an offline one is already what Machines & models says needs
-    /// you. A runner the server hasn't said is online is not one.
-    public static func machinesToSetUp(runners: [Runner], agents: [Agent]) -> [MachineToSetUp] {
+    /// Machines with no workspace, in the runner list's order: online machines and managed runners
+    /// whose setup card accepts a folder while preparing or asleep.
+    public static func machinesToSetUp(runners: [Runner], agents: [Agent], managedStatus: ManagedRunnerStatus? = nil) -> [MachineToSetUp] {
         let taken = Set(agents.compactMap(\.runnerId))
-        return runners.filter { !taken.contains($0.id) && isOnline($0) }
+        return runners.filter { !taken.contains($0.id) && (isOnline($0) || ManagedRunnerLogic.managedSetupState(runnerID: $0.id, status: managedStatus) != nil) }
             .map { MachineToSetUp(id: $0.id, name: RunnerPageFormat.displayName($0)) }
     }
 

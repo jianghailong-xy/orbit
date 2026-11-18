@@ -99,7 +99,7 @@ internal fun BackgroundWakeLine(wake: JsonObject, ts: String?, steerState: Strin
         jobs.filter { BackgroundWakeCard.isFailed(it) && !it.text("outputTail").isNullOrEmpty() }.forEach { job ->
             Column(Modifier.padding(start = 20.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (several) Text(BackgroundWakeCard.name(job), style = MaterialTheme.typography.labelSmall, color = secondary)
-                FailedOutput(job.text("outputTail").orEmpty())
+                OutputTail(job.text("outputTail").orEmpty())
             }
         }
         if (undelivered) Text(BackgroundWakeCard.undelivered, Modifier.padding(start = 20.dp), style = MaterialTheme.typography.labelSmall,
@@ -109,21 +109,35 @@ internal fun BackgroundWakeLine(wake: JsonObject, ts: String?, steerState: Strin
     }
 }
 
+/**
+ * Provided on a queued-tail turn its runner's update holds (docs/mocks/queued-card-runner-updating ②⑤): the tag its queue line reads in
+ * place of its word — `Queued · runner updating`, opening to why (reader `RunnerUpdatingFoot`). Null on every other turn.
+ */
+internal val LocalQueuedHeld = staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
+/** The word a queued turn's line opens with, or, where its runner's update holds it, the tag that says so ([LocalQueuedHeld]). */
+@Composable
+internal fun QueuedWord(label: String = "Queued", color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    val held = LocalQueuedHeld.current
+    if (held != null) held() else Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+}
+
 /** The queue's own line under a turn still waiting for a runner: "Queued", and the Cancel a queued message has. */
 @Composable
 internal fun QueuedFoot(modifier: Modifier = Modifier, cancel: () -> Unit) {
     Row(modifier.testTag("queued-foot"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Queued", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        QueuedWord()
         TextButton(onClick = cancel, Modifier.testTag("queued-foot:cancel")) { Text("Cancel", style = MaterialTheme.typography.labelSmall) }
     }
 }
 
-/** A failed job's output tail, bounded by rendered lines so compact JSON cannot fill the transcript; its own fold, apart from the line's. */
+/** A job's output tail — a failure's under the line, a quiet job's in its row in the fold — bounded by rendered lines so compact JSON
+ * cannot fill the transcript; its own fold, apart from the line's. */
 @Composable
-private fun FailedOutput(text: String) {
+private fun OutputTail(text: String, tag: String = "background-wake:failed-output") {
     var open by rememberSaveable(text) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f), RoundedCornerShape(6.dp))
-        .padding(horizontal = 10.dp, vertical = 8.dp).testTag("background-wake:failed-output"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        .padding(horizontal = 10.dp, vertical = 8.dp).testTag(tag), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(BackgroundWakeCard.outputTail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SelectionContainer {
             Text(text, Modifier.testTag("background-wake:tail"), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -155,6 +169,12 @@ private fun WakeFold(wake: JsonObject, several: Boolean) {
                     }
                     if (described || !several) Text(job.text("command").orEmpty(), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
                     Text(BackgroundWakeCard.jobMeta(job), style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
+                    BackgroundWakeCard.stall(job)?.let { stall ->
+                        Text(BackgroundWakeCard.stallLine(stall), Modifier.testTag("background-wake:stall"),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace), color = secondary)
+                        // A quiet job is no bad news: what it last wrote stays in the fold, not under the line.
+                        job.text("outputTail")?.takeIf { it.isNotEmpty() }?.let { OutputTail(it, "background-wake:stall-output") }
+                    }
                 }
             }
             BackgroundWakeCard.wakeups(wake).forEach { wakeup ->

@@ -33,7 +33,9 @@ data class OwnerRequestSecretGrant(val state: String, val endReason: String? = n
     val runnerOnline: Boolean = false, val runnerLastSeenAt: String? = null)
 
 @Serializable
-data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null)
+data class OwnerRequestAnswer(val option: Int? = null, val text: String? = null,
+    /** WIKI_CREATE once DONE: the wiki made, by id and name. */
+    val spaceId: String? = null, val name: String? = null)
 
 @Serializable
 data class OwnerRequest(
@@ -52,6 +54,9 @@ data class OwnerRequest(
     val secretScope: String? = null,
     val secretGrant: OwnerRequestSecretGrant? = null,
     val verifyHint: String? = null,
+    /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
+    val repoUrlNorm: String? = null,
+    val workspaceId: String? = null,
     val expiresAt: String? = null,
     val askedBySessionId: String = "",
     val projectId: String? = null,
@@ -61,6 +66,8 @@ data class OwnerRequest(
     val resolutionNote: String? = null,
     val answer: OwnerRequestAnswer? = null,
     val resolvedClient: String? = null,
+    /** The agent-written fields in the owner's language (Settings › Translation; `OwnerCardTranslation`); absent until translated. */
+    val translation: JsonElement? = null,
     val createdAt: String,
 ) {
     val pending get() = state == OwnerRequests.PENDING
@@ -82,7 +89,9 @@ object OwnerRequests {
     const val SECRET = "SECRET"
     const val MANUAL_STEP = "MANUAL_STEP"
     const val CONFIRM = "CONFIRM"
-    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM)
+    /** An agent asking the owner to create a wiki for its workspace's repository (docs/wiki-explicit-creation-design.md §3.6). */
+    const val WIKI_CREATE = "WIKI_CREATE"
+    val kinds = setOf(DECISION, SECRET, MANUAL_STEP, CONFIRM, WIKI_CREATE)
 
     const val waitingOnYou = "Waiting on you"
     const val holdingUp = "Holding up"
@@ -114,16 +123,25 @@ object OwnerRequests {
     const val later = "Later"
 
     /** The tag beside a card's title. */
-    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; else -> kind }
+    fun kindTag(kind: String) = when (kind) { MANUAL_STEP -> "STEPS"; WIKI_CREATE -> "WIKI"; else -> kind }
     /** The card's primary button. */
-    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; else -> "Confirm" }
+    fun primary(kind: String) = when (kind) { DECISION -> "Send answer"; SECRET -> "Provide key"; MANUAL_STEP -> "Mark done"; WIKI_CREATE -> "Create wiki"; else -> "Confirm" }
     /** An inbox row's button. */
     fun inboxAction(kind: String) = when (kind) { DECISION -> "Answer"; SECRET -> "Provide"; MANUAL_STEP -> "Open steps"; else -> "Review" }
     /** A push's primary action, which opens the card on its input. */
     fun pushAction(kind: String): String? = when (kind) {
-        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM -> "Review"; else -> null
+        SECRET -> "Provide key"; DECISION -> "Answer"; MANUAL_STEP -> "Mark done"; CONFIRM, WIKI_CREATE -> "Review"; else -> null
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
+
+    /** Talking about a request rather than answering it, as every card that hands a reply to the composer says it. */
+    const val chatAction = "Chat about this"
+    /**
+     * What a press of [chatAction] puts in front of the owner's words, in the composer of the session that asked: which request, and
+     * that it is still open. Nothing is resolved. The web's `ownerRequestChatContext` and OrbitKit's `OwnerRequests.chatContext`.
+     */
+    fun chatContext(request: OwnerRequest) = "The owner pressed Chat about this on your request “${request.title}” " +
+        "(owner request ${request.id}). It is still open: not marked done and not declined. Their message:"
 
     /** A pending request whose deadline has passed. The door refuses it; the sweep writes EXPIRED within a minute. */
     fun pastDeadline(request: OwnerRequest, now: Instant): Boolean = parse(request.expiresAt)?.let { !it.isAfter(now) } == true
@@ -194,6 +212,7 @@ object OwnerRequests {
                     }
                 }
                 request.kind == CONFIRM -> "Confirmed"
+                request.kind == WIKI_CREATE -> request.answer?.name?.takeIf { it.isNotEmpty() }?.let { "Created the wiki $it" } ?: "Wiki created"
                 else -> "Marked done"
             }
         }
@@ -273,6 +292,9 @@ object OwnerRequests {
             (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
     }
 
+    /** The row's title: the request's, in [owner]'s language when its card would be drawn translated ([OwnerCardTranslation.ownerRequest]). */
+    fun rowTitle(request: OwnerRequest, owner: String?): String = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
+
     /** The row's detail line: the kind's own words, then what it holds up. */
     fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
 
@@ -348,6 +370,11 @@ object OwnerRequests {
         return byId.values.sortedBy { parse(it.createdAt) ?: Instant.MIN }
     }
 
+    /** The request a press on a session's needs-you notice opens: the oldest it asked that is still pending, or null when this
+     * device holds none of them yet (OrbitKit `oldestPending`). */
+    fun oldestPending(sessionId: String, vararg lists: List<OwnerRequest>): OwnerRequest? =
+        forSession(sessionId, *lists).firstOrNull { it.pending }
+
     /**
      * Where each request goes in a conversation (web `decisionReceiptAnchor`): after the last row stamped at or before it was filed,
      * by the row's index, or -1 ahead of every row. Requests with no readable moment are left out.
@@ -386,18 +413,32 @@ object OwnerRequests {
  * log, a saved state or an error (the transport redacts both request and response).
  */
 class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHandle) {
-    suspend fun list(state: String): List<OwnerRequest> =
-        Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body,
-            OwnerRequestList.serializer()).requests
+    suspend fun list(state: String): List<OwnerRequest> = listWithSchedules(state).first
+
+    /** The list, and apart from it the scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which no session
+     * files and [OwnerRequest] does not draw: they are answered at the schedule's own doors (docs/scheduled-tasks-design.md §6.4). */
+    suspend fun listWithSchedules(state: String): Pair<List<OwnerRequest>, List<io.orbitd.android.core.schedule.ScheduleWaitingItem>> {
+        val body = api.request(handle, ApiRequest(listOf("owner-requests"), query = listOf("state" to state))).requireSuccess().body
+        val requests = Wire.decode(body, OwnerRequestList.serializer()).requests
+        val rows = (Wire.decode(body, JsonObject.serializer())["requests"] as? JsonArray).orEmpty()
+        return requests.filterNot { it.kind in io.orbitd.android.core.schedule.ScheduleWaitingItem.KINDS } to
+            rows.mapNotNull { io.orbitd.android.core.schedule.ScheduleWaitingItem.parse(it) }
+    }
 
     suspend fun get(id: String): OwnerRequest =
         Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests", id))).requireSuccess().body, OwnerRequest.serializer())
 
-    suspend fun done(id: String, option: Int? = null, text: String? = null): OwnerRequest = post(id, listOf("done"), buildJsonObject {
-        option?.let { put("option", it) }; text?.let { put("text", it) }
+    /** [sendAsWritten]: the owner's words again, untranslated, after the door refused them 422 TRANSLATION_FAILED (Settings › Translation). */
+    suspend fun done(id: String, option: Int? = null, text: String? = null, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("done"), buildJsonObject {
+        option?.let { put("option", it) }; text?.let { put("text", it) }; if (sendAsWritten) put("sendAsWritten", true)
     })
 
-    suspend fun decline(id: String, reason: String): OwnerRequest = post(id, listOf("decline"), buildJsonObject { put("reason", reason) })
+    suspend fun decline(id: String, reason: String, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("decline"), buildJsonObject {
+        put("reason", reason); if (sendAsWritten) put("sendAsWritten", true)
+    })
+
+    /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
+    suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })
 
     /** The key itself, optionally saved under [saveAs]. */
     suspend fun provide(id: String, value: String, saveAs: String? = null): OwnerRequest =

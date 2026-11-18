@@ -731,13 +731,25 @@ test('0453 §10.4 §10.9 on the schema before it, over rows of every table it al
     const applied0453 = await shape(sql);
 
     await t.test('the result is the schema a database migrated from empty has', async () => {
-      // 0508 and 0513 extend the codebase and job after 0453. Compare at that frontier,
+      // 0508 and 0513 extend the codebase and job after 0453, and 0615/0616/0617 the task (its fork
+      // columns). Compare at that frontier,
       // then restore 0453 so the next assertion still proves its own replay is unchanged.
       await sql.query('BEGIN');
       try {
         await sql.query(readFileSync(path.join(MIGRATIONS, '0508_project_landing_check', 'migration.sql'), 'utf8'));
         await sql.query(readFileSync(path.join(MIGRATIONS, '0513_integration_baseline_red', 'migration.sql'), 'utf8'));
-        assert.deepEqual(await shape(sql), await shape(caseClient),
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0615_task_session_fork', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0616_task_session_fork_checks', 'migration.sql'), 'utf8'));
+        await sql.query(readFileSync(path.join(MIGRATIONS, '0617_task_fork_changed_files', 'migration.sql'), 'utf8'));
+        // 1060 adds `task.start_when_condition_id` with its unique index, its foreign key to `condition` and
+        // `task_run_at_or_start_when_chk`. The key needs 1030's `condition` table, which needs `schedule` and more,
+        // so 1060 cannot be replayed here alone: its four objects, by name, are left out of the empty side instead.
+        const from1060 = new Set(['start_when_condition_id', 'task_start_when_condition_id_key',
+          'task_start_when_condition_id_fkey', 'task_run_at_or_start_when_chk']);
+        const empty = await shape(caseClient);
+        const before1060 = Object.fromEntries(Object.entries(empty).map(([kind, rows]) =>
+          [kind, rows.filter((row) => !(row.table === 'task' && from1060.has(row.name)))]));
+        assert.deepEqual(await shape(sql), before1060,
           'the tables 0453 alters differ between a database migrated over data and one migrated from empty');
       } finally {
         await sql.query('ROLLBACK');

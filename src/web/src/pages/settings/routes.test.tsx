@@ -17,10 +17,12 @@ describe('the Personal pages, each at /settings/<slug>', () => {
     ['appearance', '<AppearanceSettingsPage />'],
     ['profile', '<ProfilePage />'],
     ['storage', '<StorageSettingsPage />'],
+    ['storage/:kind/:id', '<StorageFilesPage />'],
     ['shared-links', '<SharedLinksPage />'],
     ['access-tokens', '<AccessTokensPage />'],
     ['integrations/feishu', '<FeishuIntegrationPage />'],
     ['integrations/feishu/connect-group', '<FeishuConnectGroupPage />'],
+    ['integrations/github', '<GithubIntegrationPage />'],
   ])('routes %s to %s inside the Settings window', (slug, element) => {
     expect(block).toContain(`<Route path="${slug}" element={${element}} />`);
   });

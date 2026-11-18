@@ -628,8 +628,12 @@ private fun landingInk(tone: String): Color = when (tone) {
  * that engine runs, then a model of the pair (docs/provider-engine-contract.md §1.2). The Runs with line and its sheet read the same. */
 private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: JsonObject?, val smartSelection: Boolean) {
     val catalog = data.runner?.let { ComposerCatalog(it, data.providers) }
-    val assigneeProvider = assignee?.text("lastProvider") ?: assignee?.text("provider") ?: ProviderEngines.CLAUDE
-    val assigneeEngine = ProviderEngines.sessionEngine(assignee?.text("lastEngine"), assigneeProvider, data.providers)
+    // Unpinned, what the server's `runsWith` says its dispatch would start (the project's coordinator session, else the workspace's
+    // newest person-opened session); an older server sends none, and the assignee's lastEngine/lastProvider stand in.
+    val unpinnedRuns = TaskDetailLogic.unpinnedRuns(task)
+    val assigneeProvider = unpinnedRuns?.text("provider") ?: assignee?.text("lastProvider") ?: assignee?.text("provider") ?: ProviderEngines.CLAUDE
+    val assigneeEngine = ProviderEngines.sessionEngine(if (unpinnedRuns != null) unpinnedRuns.text("engine") else assignee?.text("lastEngine"),
+        assigneeProvider, data.providers)
     val pinnedProvider = task.text("provider")
     val pinnedEngine = task.text("engine")?.takeIf(ProviderEngines::isEngine)
     // A credential pinned alone, by an older client, runs on its default engine.
@@ -652,7 +656,10 @@ private class RunPins(val task: JsonObject, val data: TaskDetailData, assignee: 
         slug == ProviderEngines.OPENCODE -> EngineCopy.OPENCODE_OWN
         else -> data.providers.firstOrNull { it.text("slug") == slug }?.text("label") ?: slug
     }
-    val providerValue = pinnedProvider?.let(::pinLabel) ?: "${EngineCopy.ENGINE_DEFAULT} · $engineDefault"
+    // Unpinned on a key or a pool (runsWith), that credential; on an engine's own sign-in, as before.
+    val providerValue = pinnedProvider?.let(::pinLabel)
+        ?: unpinnedRuns?.takeIf { pinnedEngine == null && it.flag("providerBuiltin") != true }?.text("provider")?.let(::pinLabel)
+        ?: "${EngineCopy.ENGINE_DEFAULT} · $engineDefault"
     val offList = pinnedProvider?.takeIf { slug -> credentials.none { it.id == slug } }
     val pools = credentials.filter { it.kind == CredentialKind.POOL }
     val keys = credentials.filter { it.kind == CredentialKind.KEY }
@@ -849,6 +856,8 @@ private fun FiledRow(task: JsonObject, at: String?, workspaces: List<JsonObject>
             task.obj("creatorSession")?.let { source -> Text("from ${source.text("title") ?: TaskDetailCopy.untitledSession}",
                 Modifier.clickable(role = Role.Button) { source.text("id")?.let { open(OrbitRoute(Destination.SESSION, it)) } }.testTag("task-created-from"),
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TaskDetailLogic.forkSource(task)?.let { Text(it, Modifier.testTag("task-fork-source"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         at?.let(TaskTime::relative)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }

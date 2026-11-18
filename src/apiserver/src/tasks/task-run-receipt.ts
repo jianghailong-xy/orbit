@@ -124,6 +124,9 @@ export interface TaskRunExecuteTarget {
   runSource: string;
   /** The appointment this run keeps, so a takeover consumes the one the press kept. */
   runAt: string | null;
+  /** The startWhen condition this run ends (docs/condition-triggers-design.md §5.2), as a start clears runAt.
+   *  Optional: a target bound before C4 names none. */
+  startWhenConditionId?: string | null;
   /** Whether the press was a retry of a FAILED task, so the status flip is the one it planned. */
   clearFailed: boolean;
   /** Automatic doors record no USER trigger, exactly as they did before the receipt existed. */
@@ -154,6 +157,8 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
   effort: string | null;
   route: TaskRunRoute | null;
   runAt: string | null;
+  /** As on the single run: the startWhen condition this start ends. */
+  startWhenConditionId?: string | null;
   clearFailed: boolean;
   /** The Project this item's durable USER signal belongs to, as the press saw it. */
   projectId: string | null;
@@ -387,6 +392,9 @@ export function taskRunInProgress(kind: string, token: string): ConflictExceptio
     owner: 'USER',
     requiredAction: 'retry the same request in a moment',
     triggerId: token,
+    // How long "a moment" is, in the field the recovery contract reads (docs/recovery-contract.md
+    // §3): the runner waits at least this long before it asks again under the same triggerId.
+    retryAfterSeconds: TASK_RUN_RETRY_AFTER_SECONDS,
   });
 }
 

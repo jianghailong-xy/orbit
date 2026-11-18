@@ -109,52 +109,6 @@ have gone.
 `,
 }
 
-// fileCLICapabilities are the file tools' commands. upload, fetch and pin are SessionOnly: a terminal outside a session
-// has no session for a file to stay with, or uploads directory for one to arrive in.
-var fileCLICapabilities = []cliCapabilitySpec{
-	{
-		Tool:  "file_upload",
-		Argv:  []string{"orbit", "file", "upload"},
-		Usage: "orbit file upload <path> [--task-id ID] [--label TEXT] [--as test-report] [--pin] [--json]",
-		Arguments: []string{
-			"[path] (required; a file or a directory)",
-			"--task-id <id> (this session's own task; any other is refused)",
-			"--label <text>",
-			"--as test-report (keep a summary of a Playwright JSON or JUnit XML report)",
-			"--pin (keep it past the date it would expire on)",
-			"--json",
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		Tool:        "file_fetch",
-		Argv:        []string{"orbit", "file", "fetch"},
-		Usage:       "orbit file fetch <id> [--json]",
-		Arguments:   []string{"[id] (required; a file's or a bundle's)", "--json"},
-		SessionOnly: true,
-	},
-	{
-		Tool:        "file_pin",
-		Argv:        []string{"orbit", "file", "pin"},
-		Usage:       "orbit file pin <id> [--unpin] [--json]",
-		Arguments:   []string{"[id] (required; a file's or a bundle's)", "--unpin", "--json"},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		Tool:  "file_list",
-		Argv:  []string{"orbit", "file", "list"},
-		Usage: "orbit file list [--task-id ID | --session-id ID | --evidence-id ID] [--json]",
-		Arguments: []string{
-			"--task-id <id>",
-			"--session-id <id>",
-			"--evidence-id <id>",
-			"--json",
-		},
-	},
-}
-
 func cmdFileCLI(args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, fileHelp)

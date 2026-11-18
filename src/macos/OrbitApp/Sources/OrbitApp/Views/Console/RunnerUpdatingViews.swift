@@ -7,6 +7,8 @@ import OrbitKit
 // foot row of the reader's last message. The words are `RunnerUpdating`'s, which are the web's
 // (`runnerSlots.ts`). Both offer Later (`RunnerUpdateLaterControl`) and, for a runner that declares
 // `self-update-now/v1`, Update Now… (`RunnerUpdateNowControl`) for the session's runner (board 5).
+// A runner that is stopping rather than updating (docs/mocks/runner-stopping) says "stopping" and
+// offers neither: it has no release to postpone or install.
 
 /// What the foot-row tag needs: which bubble carries it, the session it explains and its runner.
 struct RunnerUpdatingFoot: Equatable {
@@ -21,11 +23,37 @@ private struct RunnerUpdatingFootKey: EnvironmentKey {
     static let defaultValue: RunnerUpdatingFoot? = nil
 }
 
+private struct RunnerUpdatingQueuedKey: EnvironmentKey {
+    static let defaultValue: RunnerUpdatingFoot? = nil
+}
+
 extension EnvironmentValues {
     /// Set by `TranscriptView` while the session is held by its runner's update.
     var runnerUpdatingFoot: RunnerUpdatingFoot? {
         get { self[RunnerUpdatingFootKey.self] }
         set { self[RunnerUpdatingFootKey.self] = newValue }
+    }
+    /// Set on a queued-tail row the update holds (`RunnerUpdating.holdsQueued`): its queued line reads
+    /// `Queued · runner updating` (docs/mocks/queued-card-runner-updating ②⑤).
+    var runnerUpdatingQueued: RunnerUpdatingFoot? {
+        get { self[RunnerUpdatingQueuedKey.self] }
+        set { self[RunnerUpdatingQueuedKey.self] = newValue }
+    }
+}
+
+/// The word a queued turn's line opens with — `Queued`, or the label a card names — and, where its
+/// runner's update holds the turn, `Queued · runner updating` in its place, opening to why. Every
+/// card's queued line draws it, so a card says what holds it exactly as a message does.
+struct QueuedWord: View {
+    var label: String = RunnerUpdating.queuedWord
+    @Environment(\.runnerUpdatingQueued) private var held
+
+    var body: some View {
+        if let held {
+            RunnerUpdatingTagView(foot: held)
+        } else {
+            Text(label).font(.orbitMeta).foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -42,7 +70,7 @@ struct RunnerUpdatingQueuedView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(spacing: 10) {
-                Text(RunnerUpdating.RUNNER_UPDATING_TITLE)
+                Text(RunnerUpdating.title(session))
                     .font(.headline)
                 Text(description)
                     .font(.callout)
@@ -58,7 +86,7 @@ struct RunnerUpdatingQueuedView: View {
                 if let waited = RunnerUpdating.waited(session, now: context.date) {
                     Text(waited).font(.footnote).foregroundStyle(.tertiary)
                 }
-                if let runnerID {
+                if let runnerID, !RunnerUpdating.stopping(session) {
                     RunnerUpdateLaterControl(runnerID: runnerID, version: session.queuedRunnerUpdate?.targetVersion,
                                              machine: machine)
                         .padding(.top, 8)
@@ -90,17 +118,23 @@ struct RunnerUpdatingQueuedView: View {
 }
 
 /// The foot-row tag under the message the update holds (web `RunnerUpdatingTag`): `Queued · runner
-/// updating`, the reason underlined because a press opens why.
+/// updating`, the reason underlined because a press opens why. A session a full runner, run or batch
+/// holds is drawn the same way with `QueuedCapacity`'s words (`Queued · runner full`, web
+/// `CapacityHeldTag`, docs/mocks/queued-card-runner-full), and its popover offers nothing to press.
+/// A new session Keep Free holds reads `Queued · low disk space` (`QueuedDiskLow`), likewise.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
     @State private var open = false
+
+    private var full: Bool { QueuedCapacity.holds(foot.session) }
+    private var disk: Bool { QueuedDiskLow.holds(foot.session) }
 
     var body: some View {
         HStack(spacing: 4) {
             Text(RunnerUpdating.queuedWord)
             Text("·")
             Button { open = true } label: {
-                Text(RunnerUpdating.RUNNER_UPDATING_TAG)
+                Text(disk ? QueuedDiskLow.tag : full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
                     .underline(pattern: .dot)
             }
             .buttonStyle(.plain)
@@ -114,13 +148,17 @@ struct RunnerUpdatingTagView: View {
     private var pop: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                Text(RunnerUpdating.RUNNER_UPDATING_TITLE).font(.headline)
-                Text(RunnerUpdating.messageText(foot.session, machine: foot.machine))
+                Text(disk ? QueuedDiskLow.title : full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session))
+                    .font(.headline)
+                Text(disk ? QueuedDiskLow.wait : full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
+                     : RunnerUpdating.messageText(foot.session, machine: foot.machine))
                     .font(.callout)
-                if let waited = RunnerUpdating.waited(foot.session, now: context.date) {
+                // Keep Free's wait counts from when the session went PENDING, as a full runner's does.
+                if let waited = full || disk ? QueuedCapacity.waited(foot.session, now: context.date)
+                    : RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
                 }
-                if let runnerID = foot.runnerID {
+                if let runnerID = foot.runnerID, !full, !disk, !RunnerUpdating.stopping(foot.session) {
                     RunnerUpdateLaterControl(runnerID: runnerID,
                                              version: foot.session.queuedRunnerUpdate?.targetVersion,
                                              machine: foot.machine)

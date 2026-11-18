@@ -22,8 +22,6 @@ internal object MachinesAndModels {
     // Words
     /** The page's name: the Settings row that opens it, and its title. */
     const val TITLE = "Machines & models"
-    /** The page's line: under Settings' Machines & models row. */
-    const val SUBTITLE = "Where your agents run, and whose model quota they spend."
     const val NEEDS_YOU = "Needs you"
     const val MACHINES = "Machines"
     const val MACHINES_DETAIL = "Subscriptions signed in here are spent only by sessions on that machine."
@@ -49,13 +47,14 @@ internal object MachinesAndModels {
     fun poolLine(pool: String) = "$pool is unavailable"
 
     /** A machine draining for its update with the reader's work waiting on it (board 5's note, D3): "studio-mac is updating — 1 session
-     * and 1 message waiting" (OrbitKit `MachinesAndModels.updatingLine`). */
-    fun updatingLine(machine: String, sessions: Int, messages: Int): String {
+     * and 1 message waiting" (OrbitKit `MachinesAndModels.updatingLine`); "HPC is stopping — …" for one that is stopping, not updating
+     * (board runner-stopping). */
+    fun updatingLine(machine: String, sessions: Int, messages: Int, stopping: Boolean = false): String {
         val parts = buildList {
             if (sessions > 0) add(if (sessions == 1) "1 session" else "$sessions sessions")
             if (messages > 0) add(if (messages == 1) "1 message" else "$messages messages")
         }
-        return "$machine is updating — ${parts.joinToString(" and ")} waiting"
+        return "$machine is ${if (stopping) "stopping" else "updating"} — ${parts.joinToString(" and ")} waiting"
     }
 
     /** "Updating to 0.1.254 · it starts no new work until 2 turns finish" (OrbitKit `MachinesAndModels.updatingDetail`). */
@@ -63,6 +62,11 @@ internal object MachinesAndModels {
         val updating = targetVersion?.let { "Updating to $it" } ?: "Updating"
         if (turns <= 0) return "$updating · it restarts once nothing is running"
         return "$updating · it starts no new work until " + (if (turns == 1) "1 turn finishes" else "$turns turns finish")
+    }
+    /** "Not taking new work · it stops once 2 turns finish": a machine stopping, not updating (board runner-stopping). */
+    fun stoppingDetail(turns: Int): String {
+        if (turns <= 0) return "Not taking new work · it stops now"
+        return "Not taking new work · it stops once " + (if (turns == 1) "1 turn finishes" else "$turns turns finish")
     }
     /** "No account can run · no session can start on it" — the pool's own reason first. */
     fun poolDetail(reason: String) = "$reason · no session can start on it"
@@ -98,6 +102,8 @@ internal object MachinesAndModels {
     /** One line of what waits on a person (web's NeedsAttention): "ThinkPad is offline", the names it sets in bold, and what it means
      * under it. */
     data class Attention(val kind: Kind, val line: String, val names: List<String>, val detail: String) {
+        /** A machine's line rather than a pool's: Settings' Machines page holds these, its Providers page the rest. */
+        val isMachine: Boolean get() = kind !is Kind.PoolUnavailable
         val id: String get() = when (kind) {
             is Kind.Offline -> "offline:${kind.runnerId}"
             is Kind.NoCliSignedIn -> "nocli:${kind.runnerId}"
@@ -112,8 +118,9 @@ internal object MachinesAndModels {
      * web's machine card draws it nothing: the machine's own page says so, and signs it in (OrbitKit `MachinesAndModels.attention`).
      * [workspaces] are the account's, each on the machine it names. */
     fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>,
-                  nowMs: Long): List<Attention> {
-        val offline = runners.filter { it.bool("online") != true }.map { runner ->
+                  nowMs: Long, managedRunnerId: String? = null): List<Attention> {
+        // The account's managed runner says where it stands by its own row's label (asleep is not offline), never as a machine away.
+        val offline = runners.filter { it.bool("online") != true && !ObjectId.same(it.text("id"), managedRunnerId) }.map { runner ->
             val machine = RunnerPage.displayName(runner)
             Attention(Kind.Offline(runner.text("id")), offlineLine(machine), listOf(machine), offlineDetail(runner.str("lastHeartbeatAt"), nowMs))
         }
@@ -132,8 +139,9 @@ internal object MachinesAndModels {
             val machine = RunnerPage.displayName(runner)
             val report = runner.obj("selfUpdate")
             val turns = report?.int("turnsInFlight") ?: runner.list("updateTurns").size
-            Attention(Kind.Updating(runner.text("id")), updatingLine(machine, sessions, messages), listOf(machine),
-                updatingDetail(report?.str("targetVersion"), turns))
+            val stopping = waiting.bool("stopping") == true
+            Attention(Kind.Updating(runner.text("id")), updatingLine(machine, sessions, messages, stopping), listOf(machine),
+                if (stopping) stoppingDetail(turns) else updatingDetail(report?.str("targetVersion"), turns))
         }
         val unavailable = (memberPools.map { it to false } + ownPools.map { it to true }).mapNotNull { (pool, own) ->
             val reason = pool.unavailable ?: return@mapNotNull null
@@ -198,7 +206,8 @@ internal object MachinesAndModels {
                     cursor != CursorRuntime.RunnerState.UPDATE_RUNNER && cursor != CursorRuntime.RunnerState.UNSUPPORTED_PLATFORM))
         }
         val shown = reported.filter { it.str("engine") in engines }
-        val stale = shown.count { it.bool("installed") == true && RunnerPage.updateNoteOf(it.obj("update"), nowMs)?.first == "warn" }
+        val stale = shown.count { it.bool("installed") == true && RunnerPage.updateNoteOf(it.obj("update"), nowMs,
+            dismissed = RunnerPage.engineUpdateDismissedFor(runner, it.str("engine")))?.first == "warn" }
         if (stale > 0 && runner.bool("online") == true) return if (stale == 1) "1 engine not updating" else "$stale engines not updating"
         val ready = shown.count(::signedIn)
         return if (ready == engines.size) "All signed in" else "$ready of ${engines.size} signed in"

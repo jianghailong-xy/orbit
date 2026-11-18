@@ -11,12 +11,15 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AgentProvider, ENGINE_CLI_NAMES, type RunnerRepoHealth } from '@orbit/shared';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { machineName } from '../../lib/machineSetup';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../../lib/managedRunner';
+import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   api,
   askClaudeHistory,
+  cleanUpWorkspaceRepo,
   countImportedSessions,
   getClaudeHistory,
   importClaudeHistory,
@@ -25,7 +28,16 @@ import {
   type ClaudeHistoryResult,
 } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
-import { meQuery, providersQuery, runnersQuery, workspacePermissionRulesQuery, workspacesQuery } from '../../lib/queries';
+import type { MainCheckoutTarget } from '../../lib/mainCheckout';
+import {
+  meQuery,
+  providersQuery,
+  runnersQuery,
+  sessionsQuery,
+  workspacePermissionRulesQuery,
+  workspacesQuery,
+} from '../../lib/queries';
+import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import { runnerIsOffline } from '../../lib/runnerAttention';
 import { ago } from '../../lib/runnerEngines';
 import { CLAUDE_SESSION_ID_RE, importClaudeSessionAndWait } from '../../lib/sessionImport';
@@ -36,6 +48,7 @@ import { sessionEngineOf } from '../../lib/workspaceDefaults';
 import { AccountSelect, offersAccount } from '../AccountSelect';
 import { AUTO_COMPACT_VARIABLE, AutoCompactSelect, withAutoCompact } from '../AutoCompactSelect';
 import { ClaudeHistoryOffer, type ImportMode } from '../ClaudeHistoryOffer';
+import { useMainCheckoutController } from '../MainCheckoutDrawer';
 import { BrandMark } from '../NewSessionProviderHero';
 import type { Runner } from '../TasksSidePanel';
 import { Button } from '../ui/Button';
@@ -49,13 +62,22 @@ import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
+import { SubagentSettings } from '../SubagentSettings';
+import {
+  WorktreeIsolationDialog,
+  worktreeIsolationDialogFor,
+  type WorktreeIsolationDialogKind,
+} from '../WorktreeIsolationDialog';
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from './SettingsBlocks';
+import { AgentToolsDrawer } from '../AgentToolsDrawer';
 import './Settings.css';
 
 export interface SettingsWorkspace {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
+  /** Base instructions, in place of the engine's own prompt (agent_update's systemPrompt); rarely set. */
+  systemPrompt?: string | null;
   /** What this project last ran on, derived server-side: the engine and the provider of its last
    *  interactive session. `provider` is the deprecated alias of `lastProvider`. */
   lastEngine?: string | null;
@@ -81,12 +103,17 @@ export interface SettingsWorkspace {
   modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). */
   modelRoutingProviders?: string[];
+  /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
+  subagentsEnabled?: boolean;
+  subagentsMaxRunning?: number;
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). */
   workDirExists?: boolean | null;
   workDirIsGit?: boolean | null;
   workDirProbedAt?: string | null;
   repoHealth?: RunnerRepoHealth | null;
+  /** The runner declares main-checkout-git/v1: the main checkout's Review files can act. */
+  mainCheckoutActions?: boolean;
   autoInitGit?: boolean;
   /** When a conversation last started or took a turn here (server: lastActiveByWorkspace). */
   lastActiveAt?: string | null;
@@ -106,6 +133,8 @@ type WorkspacePatch = Partial<
     | 'modelRouting'
     | 'modelRoutingOptimizeFor'
     | 'modelRoutingProviders'
+    | 'subagentsEnabled'
+    | 'subagentsMaxRunning'
     | 'env'
     | 'appendSystemPrompt'
     | 'enabled'
@@ -117,8 +146,11 @@ type WorkspacePatch = Partial<
   >
 >;
 
-const runnerName = (runner: { name?: string; displayName?: string | null } | null | undefined): string =>
-  runner?.displayName?.trim() || runner?.name || '';
+/** A machine as the app names it: Orbit Cloud for the account's managed runner (machineName). */
+const runnerName = (
+  runner: { id?: string; name?: string; displayName?: string | null } | null | undefined,
+  managedRunnerId: string | null,
+): string => (runner ? machineName(runner, managedRunnerId) : '');
 
 /** How long the history question waits for the runner. It rides the runner's 30s heartbeat, so this
  *  is two beats plus the scan — past that the offer simply never appears. */
@@ -221,6 +253,7 @@ export function SettingsWorkspacePage() {
  * or Enter, a drawer on its Save — each with one PATCH carrying only that field.
  */
 function WorkspaceSettingsPage({ id }: { id: string }) {
+  const managedRunnerId = useManagedRunnerId();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const message = useToast();
@@ -250,7 +283,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   });
   const history = useClaudeHistory(workspace?.runnerId ?? null, workspace?.workDir ?? '', !!workspace);
 
-  const [drawer, setDrawer] = useState<null | 'env' | 'instructions' | 'rules' | 'history'>(null);
+  const [drawer, setDrawer] = useState<null | 'env' | 'instructions' | 'rules' | 'history' | 'agent-tools'>(null);
   const [dirDraft, setDirDraft] = useState<string | null>(null);
 
   const patch = useMutation({
@@ -329,6 +362,36 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
     },
     onError: (e: Error) => message.error("Couldn't remove the imported conversations", e.message),
   });
+  const repairMut = useMutation({
+    mutationFn: () => cleanUpWorkspaceRepo(id),
+    onSuccess: () => {
+      message.success(REPO_CLEANUP_QUEUED);
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
+  });
+
+  // Board 04: the dialog flipping worktree isolation asks first, and the main checkout its Review files opens.
+  const [isolationDialog, setIsolationDialog] = useState<WorktreeIsolationDialogKind | null>(null);
+  const sessionsQ = useQuery({ ...sessionsQuery({ workspaceId: workspace?.id ?? null, view: 'open' }), enabled: !!workspace });
+  const worktrees = useMemo<MainCheckoutTarget[]>(
+    () =>
+      (sessionsQ.data ?? [])
+        .filter((s) => s.isolationStatus === 'worktree' && !!s.branch && s.mergeStatus !== 'merged' && s.branchMerged !== true)
+        .map((s) => ({
+          id: s.id,
+          title: s.title || 'Untitled session',
+          branch: s.branch,
+          busy: (s.runState ?? s.runStatus ?? s.status) === 'RUNNING',
+        })),
+    [sessionsQ.data],
+  );
+  const isolationCheckout = useMainCheckoutController({
+    workspaceId: workspace?.id ?? null,
+    actionsSupported: workspace?.mainCheckoutActions === true,
+    health: (workspace?.repoHealth as MainCheckoutRepoHealth | null | undefined) ?? null,
+    targets: worktrees,
+  });
 
   if (workspacesQ.isPending) {
     return (
@@ -339,7 +402,7 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
   }
   if (!workspace) return <p className="settings-empty">This workspace doesn't exist, or isn't yours.</p>;
 
-  const machineName = runnerName(runner ?? workspace.runner);
+  const machineName = runnerName(runner ?? workspace.runner, managedRunnerId);
   const sessionCount = detail.data?.sessionCount;
   const lastActiveAt = detail.data?.lastActiveAt ?? workspace.lastActiveAt;
   const headline = [
@@ -499,10 +562,47 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
               <Switch
                 aria-label="Worktree isolation"
                 checked={workspace.enableWorktree ?? false}
-                onCheckedChange={(enableWorktree) => save({ enableWorktree })}
+                onCheckedChange={(enableWorktree) => {
+                  // Board 04: the switch says what it means for the main checkout first; it never blocks.
+                  const ask = worktreeIsolationDialogFor(
+                    enableWorktree,
+                    workspace.repoHealth as MainCheckoutRepoHealth | null | undefined,
+                    worktrees.length,
+                    workspace.workDir ?? '',
+                  );
+                  if (ask) setIsolationDialog(ask);
+                  else save({ enableWorktree });
+                }}
               />
             }
           />
+          <WorktreeIsolationDialog
+            dialog={isolationDialog}
+            onCancel={() => setIsolationDialog(null)}
+            onConfirm={() => {
+              save({ enableWorktree: isolationDialog?.kind !== 'off' });
+              setIsolationDialog(null);
+            }}
+            onReview={
+              workspace.mainCheckoutActions
+                ? () => {
+                    setIsolationDialog(null);
+                    isolationCheckout.host?.openReview();
+                  }
+                : undefined
+            }
+            onCleanUp={() => {
+              setIsolationDialog(null);
+              const cleanup = repoCleanupConfirm(isolationDialog && 'root' in isolationDialog ? isolationDialog.root : '');
+              void confirm({
+                title: cleanup.title,
+                description: cleanup.content,
+                confirmText: cleanup.okText,
+                onConfirm: () => repairMut.mutateAsync().catch(() => {}),
+              });
+            }}
+          />
+          {isolationCheckout.drawer}
           {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
               agent tools cannot set it (docs/model-routing-design.md §7.2). */}
           {smartSelection && (
@@ -629,6 +729,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
         </SettingsCard>
       </SettingsSection>
 
+      <SubagentSettings
+        enabled={workspace.subagentsEnabled ?? true}
+        onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
+        optimizeFor={workspace.modelRoutingOptimizeFor ?? 'cost'}
+        onOptimizeForChange={(modelRoutingOptimizeFor) => save({ modelRoutingOptimizeFor })}
+        maxRunning={workspace.subagentsMaxRunning ?? 4}
+        onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
+      />
+
       <SettingsSection title="Agent environment" className="workspace-section-environment">
         <SettingsCard>
           <SettingsRow
@@ -640,10 +749,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
             title="Instructions"
             description={
               instructions
-                ? `Added to this workspace’s system prompt on every run · ${instructions.length} characters`
-                : 'Added to this workspace’s system prompt on every run · none yet'
+                ? `Added to every run's runtime instructions · ${instructions.length} characters`
+                : "Added to every run's runtime instructions · none yet"
             }
             control={<Button onClick={() => setDrawer('instructions')}>Edit</Button>}
+          />
+          <SettingsRow
+            title="Agent tools"
+            description="What agents here are given: Orbit's tools, the instructions they read and in what order, and the playbooks."
+            control={<Button onClick={() => setDrawer('agent-tools')}>View</Button>}
           />
           <SettingsRow
             title="Always allowed"
@@ -712,6 +826,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
           save({ appendSystemPrompt });
           setDrawer(null);
         }}
+      />
+      <AgentToolsDrawer
+        mode="workspace"
+        open={drawer === 'agent-tools'}
+        onClose={() => setDrawer(null)}
+        workspaceName={workspace.name}
+        instructions={workspace.appendSystemPrompt ?? ''}
+        baseInstructions={!!workspace.systemPrompt?.trim()}
+        onEditInstructions={() => setDrawer('instructions')}
       />
       <Drawer open={drawer === 'rules'} onClose={() => setDrawer(null)} title="Always allowed" width={480}>
         <WorkspacePermissionRules workspaceId={id} />
@@ -900,7 +1023,7 @@ function InstructionsDrawer({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={12}
-        placeholder="Added to this workspace's system prompt on every run (optional)"
+        placeholder="Added to every run's runtime instructions (optional)"
       />
     </Drawer>
   );
@@ -1098,6 +1221,8 @@ function NewWorkspacePage() {
   const [params, setParams] = useSearchParams();
   const runnersQ = useQuery(runnersQuery());
   const runners = (runnersQ.data ?? []) as Runner[];
+  // The account's managed runner reads its shared state here (Asleep, Waking up…), never Offline.
+  const { managed } = useManagedRunner();
   const machineId = routeId(params.get('machine'));
   const runner = runners.find((r) => r.id === machineId) ?? null;
 
@@ -1174,8 +1299,8 @@ function NewWorkspacePage() {
                     onClick={() => setParams({ machine: r.id })}
                   >
                     <SettingsRow
-                      title={runnerName(r)}
-                      description={offline ? 'Offline' : 'Online'}
+                      title={runnerName(r, managed?.status.runnerId ?? null)}
+                      description={managedRowOf(managed, r.id)?.label ?? (offline ? 'Offline' : 'Online')}
                       control={<RightOutlined />}
                     />
                   </button>
@@ -1194,7 +1319,7 @@ function NewWorkspacePage() {
         title="New workspace"
         description={
           <>
-            On {runnerName(runner)} ·{' '}
+            On {runnerName(runner, managed?.status.runnerId ?? null)} ·{' '}
             <button type="button" className="workspace-change-machine" onClick={() => setParams({})}>
               Change machine
             </button>

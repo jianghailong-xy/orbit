@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -46,16 +49,27 @@ func replyFileScope(asked, existing []string) localFileScope {
 }
 
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
+	rewritten, _, _ := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
+	return rewritten
+}
+
+// rewriteLocalMarkdownLinks is rewriteLocalMarkdownImagesWithUploader, and also names, as the reply wrote them and each
+// once, the links it left as written because they lead outside the session's directories (localFileOutsideTheSession),
+// and the links to a local file that does not exist (missing). A relative link is looked for in each root in turn, the
+// working directory first: an agent told it may link a file in its uploads directory links one it saved there by name.
+// A link with a colon in it is no file this misses: `session.go:77` is a place in code, `orbit-task:…` an Orbit object.
+func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string, upload artifactUploader) (string, []string, []string) {
 	if text == "" || upload == nil || len(roots) == 0 {
-		return text
+		return text, nil, nil
 	}
 	cleanRoots := cleanExistingRoots(roots)
 	if len(cleanRoots) == 0 {
-		return text
+		return text, nil, nil
 	}
 	scope := replyFileScope(roots, cleanRoots)
 	uploaded := map[string]string{}
-	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
+	var outside, missing []string
+	rewritten := markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)
 		if len(parts) < 5 {
 			return match
@@ -64,12 +78,19 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 		if skipMarkdownAttachmentSrc(raw) {
 			return match
 		}
-		path := localMarkdownImagePath(raw, cleanRoots[0])
+		path := localMarkdownLinkTarget(raw, cleanRoots)
 		if path == "" {
 			return match
 		}
 		file, _, err := scope.open(path)
 		if err != nil {
+			var refused *localFileRefused
+			if errors.As(err, &refused) && refused.reason == localFileOutsideTheSession && !slices.Contains(outside, raw) {
+				outside = append(outside, raw)
+			}
+			if errors.Is(err, fs.ErrNotExist) && !strings.Contains(raw, ":") && !slices.Contains(missing, raw) {
+				missing = append(missing, raw)
+			}
 			return match
 		}
 		defer file.Close()
@@ -93,6 +114,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 		}
 		return fmt.Sprintf("[%s](orbit-attachment:%s %q)", parts[2], id, filepath.Base(path))
 	})
+	return rewritten, outside, missing
 }
 
 // codexGeneratedImagesDir is the directory Codex's image tools write into —
@@ -148,6 +170,25 @@ func skipMarkdownAttachmentSrc(src string) bool {
 		strings.HasPrefix(lower, "http://") ||
 		strings.HasPrefix(lower, "https://") ||
 		strings.HasPrefix(lower, "orbit-attachment:")
+}
+
+// localMarkdownLinkTarget is the file a link names: an absolute path as it is, and a relative one under the first root
+// that has it, or under the first root when none does.
+func localMarkdownLinkTarget(src string, roots []string) string {
+	path := localMarkdownImagePath(src, roots[0])
+	if path == "" {
+		return path
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return path
+	}
+	for _, root := range roots[1:] {
+		candidate := localMarkdownImagePath(src, root)
+		if _, err := os.Lstat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return path
 }
 
 func localMarkdownImagePath(src, baseDir string) string {

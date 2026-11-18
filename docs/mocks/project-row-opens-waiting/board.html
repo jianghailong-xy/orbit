@@ -1,0 +1,120 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>项目行在等你时，点它打开在等你的会话（2026-11-14）</title>
+<!-- Every frame under shots/ is the real web console (vite build of main 9328d7380, and the same tree with
+     prototype.patch), over the ui-migration fixtures plus capture/data.mjs; capture/run.sh retakes them.
+     The approval card is the console's own owner-request card, fed a DECISION request. Red rings and
+     numbers are annotations. -->
+<link rel="stylesheet" href="board.css">
+<style>
+  .b-frame { position: relative; display: block; }
+  .b-frame img { display: block; width: 100%; height: auto; }
+  .b-ring { position: absolute; border: 2.5px dashed #f5222d; border-radius: 10px; pointer-events: none; }
+  .b-num { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #f5222d; color: #fff;
+           font: 600 12.5px/22px Inter, -apple-system, sans-serif; text-align: center; }
+  .b-part { margin-bottom: 34px; }
+  .b-desk { width: 1110px; }
+  .b-ph { width: 300px; }
+  .b-arrow { align-self: center; color: #8a8a92; font-size: 26px; flex: none; }
+</style>
+<body>
+<h1>项目行显示 Waiting on you 时，点它直接打开等你的那个会话</h1>
+<p class="lede">今天：点项目行一律打开 <b>coordinator</b>，审批卡在 P0 的会话里，要再去右栏找。<b>A（你选的）</b>：项目行第 2 行是 Waiting on you 时，点它打开第 2 行说的那个会话；电脑上项目栏照常展开，手机上标题栏的项目按钮一下回到 coordinator。<br>
+截图都是真实的 web 控制台（main 9328d7380 和加了 <code>prototype.patch</code> 的同一棵树）；iOS / Android 按同一条规则改。</p>
+
+<section class="b-part">
+  <div class="cap"><span class="tag now">今天</span>电脑 · 点 GitHub-backed workspaces 这一行</div>
+  <div class="shot b-desk"><div class="b-frame" data-shot="t-click"><img src="shots/t-click.png" alt=""></div></div>
+  <ul class="notes" style="width:1110px">
+    <li class="n" data-n="1">第 2 行写的是 <b>Waiting on you · GitHub workspaces P0…</b>。</li>
+    <li class="n" data-n="2">点进去是 coordinator：它只说“P0 在等你回答”，这里没有能按的卡。</li>
+    <li class="n" data-n="3">真正要处理的卡在右栏的 P0 里，还要再点一次。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <div class="cap"><span class="tag new">A</span>电脑 · 点同一行</div>
+  <div class="shot b-desk"><div class="b-frame" data-shot="a-click"><img src="shots/a-click.png" alt=""></div></div>
+  <ul class="notes" style="width:1110px">
+    <li class="n" data-n="1">同一行，同一句话。项目行保持选中（选中的是它的成员）。</li>
+    <li class="n" data-n="2">打开的是 <b>P0</b>，审批卡就在眼前，选完点 Send answer 就行。</li>
+    <li class="n" data-n="3">右栏照常展开，P0 被选中；<b>Coordinator</b> 固定在最上面，一下就能回去。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <div class="cap"><span class="tag now">今天</span><span class="tag new">A</span>手机 · 会话列表 → 点项目行</div>
+  <div class="row" style="gap:22px">
+    <div class="col"><div class="cap">会话列表</div>
+      <div class="shot phone b-ph"><div class="b-frame" data-shot="p-list"><img src="shots/p-list.png" alt=""></div></div></div>
+    <div class="b-arrow">→</div>
+    <div class="col"><div class="cap"><span class="tag now">今天</span>coordinator</div>
+      <div class="shot phone b-ph"><div class="b-frame" data-shot="p-t-click"><img src="shots/p-t-click.png" alt=""></div></div></div>
+    <div class="col"><div class="cap"><span class="tag new">A</span>P0，卡在眼前</div>
+      <div class="shot phone b-ph"><div class="b-frame" data-shot="p-a-click"><img src="shots/p-a-click.png" alt=""></div></div></div>
+    <div class="b-arrow">→</div>
+    <div class="col"><div class="cap"><span class="tag new">A</span>点标题栏 <b>⊞ 3</b></div>
+      <div class="shot phone b-ph"><div class="b-frame" data-shot="p-a-sheet"><img src="shots/p-a-sheet.png" alt=""></div></div></div>
+  </div>
+  <ul class="notes" style="width:1340px">
+    <li class="n" data-n="1">手机上同一行：第 2 行说 P0 在等你。</li>
+    <li class="n" data-n="2">今天：打开 coordinator（11-11 board 5 的规则），没有卡。</li>
+    <li class="n" data-n="3">A：打开 P0。返回键回到会话列表，和从列表点开任何会话一样。</li>
+    <li class="n" data-n="4">P0 的标题栏也有项目按钮：底部弹出项目页，Coordinator 在最上面，P0 是选中的那行。</li>
+  </ul>
+</section>
+
+<section class="box b-part" style="width:1340px">
+  <h2>规则（三端一致：web、iOS、Android）</h2>
+  <p class="hint">只改“点项目行打开谁”。行上写什么、排序、菜单都不变。</p>
+  <table>
+    <tr><th>项目行第 2 行</th><th>今天点它</th><th>A 点它</th></tr>
+    <tr><td class="k">某个成员在等你（Waiting on you · &lt;会话名&gt;）</td><td>coordinator</td><td class="new"><b>那个成员</b>；有几个时开最早的那个，也就是第 2 行写的那个</td></tr>
+    <tr><td class="k">coordinator 自己在等你</td><td>coordinator</td><td>coordinator（不变）</td></tr>
+    <tr><td class="k">其他（在跑、落地、coordinator 在处理、空闲）</td><td>coordinator</td><td>coordinator（不变）</td></tr>
+  </table>
+  <ul class="notes">
+    <li><b>答完不自动跳</b>：P0 的卡答完以后，页面停在 P0。项目行第 2 行自己变成下一件事，再点一下才去下一个。</li>
+    <li><b>键盘 ↑↓</b> 经过项目行时仍然停在 coordinator：浏览要稳定，点击才是“去处理”。</li>
+    <li><b>菜单</b>里的 Open Session、Sessions、Open Project 不变。</li>
+    <li><b>电脑</b>：地址带 <code>?project=</code>，右栏照常展开；窗口太窄时右栏收起，标题栏的 ⊞ 按钮照旧。</li>
+    <li><b>手机（web / iOS / Android）</b>：打开那个成员会话，标题栏项目按钮弹出项目页；返回键回列表。这会改 11-11 board 5“手机点项目行开 coordinator”的规则，只改有人在等你的那种情况。</li>
+    <li class="bug">手机截图 A 里卡片标题被顶部的 “Your question” 条挡住了一半：会话打开时滚到底，卡比屏幕高。这是今天就有的行为，不是这次改出来的。建议顺带修：从项目行点进来时，滚到卡片顶部。</li>
+  </ul>
+</section>
+
+<script>
+// Rings from shots/marks.json (CSS px of each frame), scaled to the frame's drawn width.
+const RINGS = {
+  't-click': [['project', 1], ['msg', 2, [618, 172, 524, 84]], ['p0', 3]],
+  'a-click': [['project', 1], ['card', 2], ['p0', 3], ['coord', 3]],
+  'p-list': [['project', 1]],
+  'p-t-click': [['msg', 2, [14, 186, 365, 74]]],
+  'p-a-click': [['card', 3]],
+  'p-a-sheet': [['coord', 4], ['p0', 4]],
+};
+window.drawMarks = async () => {
+  const marks = await (await fetch('shots/marks.json')).json();
+  for (const frame of document.querySelectorAll('.b-frame')) {
+    frame.querySelectorAll('.b-ring, .b-num').forEach((el) => el.remove());
+    const m = marks[frame.dataset.shot];
+    const k = frame.clientWidth / m.w;
+    const seen = new Set();
+    for (const [name, n, own] of RINGS[frame.dataset.shot] ?? []) {
+      const b = own ?? m.boxes[name];
+      if (!b) continue;
+      const [x, y, w, h] = b.map((v) => v * k);
+      const ring = document.createElement('div');
+      ring.className = 'b-ring';
+      Object.assign(ring.style, { left: `${x - 3}px`, top: `${y - 3}px`, width: `${w + 6}px`, height: `${h + 6}px` });
+      frame.append(ring);
+      if (seen.has(n)) continue;
+      seen.add(n);
+      const num = document.createElement('div');
+      num.className = 'b-num'; num.textContent = n;
+      Object.assign(num.style, { left: `${Math.max(0, x - 14)}px`, top: `${Math.max(0, y - 14)}px` });
+      frame.append(num);
+    }
+  }
+};
+</script>
+</body></html>

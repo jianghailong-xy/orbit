@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -15,6 +16,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.CardTranslationFoot
+import io.orbitd.android.translation.AnswerNotTranslated
 import io.orbitd.android.tasks.TaskReopen
 import io.orbitd.android.tasks.TaskReopenCopy
 import io.orbitd.android.text.*
@@ -44,7 +48,14 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     var confirming by remember { mutableStateOf<CardVerb?>(null) }
     // A08-7: the batch review's open task page, by its place in the window; the batch's yes waits on the review it came from.
     var batchPage by rememberSaveable(card.key, card.binding) { mutableStateOf<Int?>(null) }
-    val batchPreview = card.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
+    // Orbit's own cards in the owner's language: one foot flips the whole card to the agent's words and back.
+    var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
+    // The owner cards outside a session — a coordinator's question, evidence, a criteria change, an owner confirmation — the same
+    // way, drawn from the card's own `translation` (OwnerCardTranslation); their doors and binding stay the card's.
+    val owner = LocalTranslation.current.cardLanguage
+    val owned = remember(card, owner) { OwnerCardTranslation.card(card, owner) }
+    val shown = if (owned != null) (if (showOriginal) card else owned) else OrbitCardTranslation.shown(card, showOriginal)
+    val batchPreview = shown.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
     val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
     // Restart the task is a Run press: named once per drawn card, so a press sent again is the same press, not a second run.
@@ -62,21 +73,24 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
             put("title", editTitle.trim()); put("summary", editSummary.trim())
         }, reason = reason)
-    fun send(verb: CardVerb) = submit(verb, input)
+    // The press the door last answered, for Settings › Translation's way out of an answer it could not translate (1A).
+    var lastVerb by remember(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
+    fun send(verb: CardVerb) { lastVerb = verb; submit(verb, input) }
     val body: @Composable ColumnScope.() -> Unit = {
         if (!review) Text(card.title, style = MaterialTheme.typography.titleMedium)
         // A record's words are dimmed, still readable — and what opens (a fold, a task) still opens.
         Column(Modifier.alpha(if (recorded != null) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("From Orbit", style = MaterialTheme.typography.labelSmall)
             if (recorded == null) card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-            if (batchPreview != null) BatchReviewBody(card, open, batchPage) { batchPage = it }
-            else CardBody(card, open, owner = when {
+            if (batchPreview != null) BatchReviewBody(shown, open, batchPage) { batchPage = it }
+            else CardBody(shown, open, owner = when {
                     card.family != CardFamily.OWNER_CONFIRMATION || CardVerb.CONFIRM_OWNER !in card.actions -> null
                     recorded != null -> OwnerForm(recorded.ownerAnswers, false) {}
                     else -> OwnerForm(ownerAnswers, enabled) { answer -> ownerAnswers = ownerAnswers.filterNot { it.key == answer.key } + answer }
                 }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
                 recorded = recorded != null)
         }
+        if (recorded == null && (owned != null || OrbitCardTranslation.translated(card))) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
         if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
@@ -102,7 +116,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
         }
         if (card.family == CardFamily.OWNER_QUESTION && CardVerb.OWNER_ANSWER in card.actions) {
-            val q = card.source.obj("question")
+            val q = shown.source.obj("question")
             q?.objects("options")?.forEachIndexed { index, o ->
                 ChoiceRow(o.text("label") ?: "", o.text("description"), option == index, enabled,
                     recommended = index == q.number("recommendedOption")) { option = index }
@@ -129,7 +143,11 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     }
     val doors: @Composable ColumnScope.() -> Unit = doors@{
         if (batchPage != null) return@doors
-        result.message?.let { Text(it, Modifier.testTag("card-result"), color = if (result.uncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+        // Settings › Translation (3A, 1A): the answer's words could not be translated, so nothing was recorded — send it again, or as
+        // it was written (422 TRANSLATION_FAILED).
+        val untranslated = lastVerb?.takeIf { result.response?.text("code") == Translation.FAILED_CODE && !result.busy }
+        if (untranslated != null) AnswerNotTranslated({ submit(untranslated, input) }, { submit(untranslated, input.copy(sendAsWritten = true)) }, fresh)
+        else result.message?.let { Text(it, Modifier.testTag("card-result"), color = if (result.uncertain) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
         result.response?.takeIf { it.text("code") in setOf("TASK_ALREADY_RUNNING", "TASK_RUN_PIN_CONFLICT", "TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED") }
             ?.text("conflictingSessionId")?.takeIf { it.isNotBlank() }?.let { LinkButton("Open the run", "orbit-session:$it", open) }
         if (result.busy) LinearProgressIndicator(Modifier.fillMaxWidth())

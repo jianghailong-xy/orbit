@@ -69,7 +69,11 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.MachineSetupCopy
+import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.ManagedRunnerNotice
+import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
@@ -123,6 +127,20 @@ internal class RunnersModel(private val api: ManagementApi) {
     /** Each press answers null once it went through (then reads again), else why not. */
     suspend fun press(op: suspend () -> Unit): String? = try { op(); load(); null }
         catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+    /** Fix with an agent: one POST starts the session (no sheet, nothing to pick), then the runners are read again either way — the
+     * fixing entry appears, or a refusal (409: blocked, already running, no warning) changes what the card shows. Null once started,
+     * else why not in the server's words. */
+    var agentFixPressing by mutableStateOf(false); private set
+    suspend fun fixWithAgent(runnerId: String, kind: String, engine: String?, latest: String?): String? {
+        if (agentFixPressing) return null
+        agentFixPressing = true
+        try {
+            val failure = try { api.post(RunnerPage.agentFixPath(runnerId, kind), RunnerPage.agentFixBody(kind, engine, latest)); null }
+                catch (e: CancellationException) { throw e } catch (e: Exception) { personalFailure(e) }
+            load()
+            return failure
+        } finally { agentFixPressing = false }
+    }
     /** The runners whose Check again is on its way ([checkRegion]): their presses hold until the check they asked for is answered. */
     var regionChecking by mutableStateOf<Set<String>>(emptySet()); private set
     /** Check again (docs/claude-region-check-contract.md §7; OrbitKit RunnersModel.checkRegion): the runner checks its Claude region at
@@ -144,6 +162,8 @@ internal class RunnersModel(private val api: ManagementApi) {
             return null
         } finally { regionChecking = regionChecking - id }
     }
+    /** After Update Now went through: read again until the runner reports the restart (its next heartbeat), for up to 30 s. */
+    suspend fun awaitUpdateNowAnswer(id: String) = RunnerUpdateNow.awaitAnswer({ runner(id) }) { load() }
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners
@@ -198,6 +218,23 @@ internal fun StatusDot(presence: String, size: Int = 9, ringed: Boolean = false)
 
 internal val IDLE_DOT = Color(0xFFA8A8AD)
 
+/** The managed runner's row tone as a colour: green ready, orange attention, grey otherwise (asleep is never a fault's colour). */
+@Composable
+internal fun managedToneColour(tone: ManagedRunner.Tone): Color = when (tone) {
+    ManagedRunner.Tone.READY -> Ink.green
+    ManagedRunner.Tone.ATTENTION -> Ink.amber
+    ManagedRunner.Tone.PROGRESS -> MaterialTheme.colorScheme.primary
+    ManagedRunner.Tone.IDLE -> Ink.muted
+}
+
+/** The managed runner's mark in place of the heartbeat's dot: a spinner while it moves by itself, else a dot of its tone. */
+@Composable
+internal fun ManagedRunnerMark(tone: ManagedRunner.Tone, size: Int = 9) {
+    if (tone == ManagedRunner.Tone.PROGRESS) CircularProgressIndicator(Modifier.size((size + 3).dp).testTag("managed-runner-spinner"), strokeWidth = 2.dp,
+        color = MaterialTheme.colorScheme.primary)
+    else Dot(if (tone == ManagedRunner.Tone.IDLE) IDLE_DOT else managedToneColour(tone), size)
+}
+
 @Composable
 internal fun Dot(colour: Color, size: Int = 8, ringed: Boolean = false) {
     Box(Modifier.clip(CircleShape).background(colour.copy(alpha = if (ringed) .2f else 0f)).padding(if (ringed) 2.5.dp else 0.dp)) {
@@ -219,7 +256,8 @@ private fun styled(text: String, strong: List<String> = emptyList(), code: List<
 /** Machines & models' machines (iOS 5e75edbde's Machines section): every runner — a row opens it, its handle reorders it and its ⋯ menu
  * removes it, with no Edit mode (iOS 91316c246). The removal itself is asked by the page that holds the rows ([remove]). */
 @Composable
-internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) -> Unit, remove: (JsonObject) -> Unit) {
+internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) -> Unit, managed: ManagedRunner.Status? = null,
+                         remove: (JsonObject) -> Unit) {
     val scope = rememberCoroutineScope()
     var drag by remember { mutableStateOf<RunnerDrag?>(null) }
     val heights = remember { mutableStateMapOf<String, Int>() }
@@ -253,7 +291,7 @@ internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) ->
                 val dragged = drag?.id == id
                 Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
                     .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
-                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now,
+                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, ManagedRunner.row(id, managed),
                         canMoveUp = index > 0, canMoveDown = index < shown.lastIndex,
                         open = { openRunner(id) }, remove = { remove(runner) },
                         move = { by -> scope.launch {
@@ -290,9 +328,9 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
  * something needs a person, the list's third line. A press opens it, its handle — the list's drag — moves it, and its ⋯ menu removes it
  * (iOS's swipe). TalkBack, which cannot drag, moves it with the row's Move up and Move down actions. */
 @Composable
-private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long,
+private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
                       canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
-    val items = RunnerPage.attention(runner, workspaces, now, latest)
+    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null || RunnerPage.isManaged(runner))
     val name = RunnerPage.displayName(runner)
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -301,17 +339,22 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                     CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
             }.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatusDot(RunnerPage.presence(runner, now), ringed = true)
+            if (managed != null) ManagedRunnerMark(managed.tone) else StatusDot(RunnerPage.presence(runner, now), ringed = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(name, Modifier.weight(1f), maxLines = 2)
                     val slots = RunnerPage.slots(runner, now)
-                    if (slots != null) {
+                    // The account's managed runner says the shared state's short label, never the heartbeat's Offline (D4).
+                    if (managed != null) Text(managed.label, Modifier.testTag("managed-runner-label"), style = MaterialTheme.typography.bodySmall,
+                        color = managedToneColour(managed.tone))
+                    else if (slots != null) {
                         val (active, max) = slots
                         Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
                     } else if (RunnerPage.isOffline(runner, now)) Text(RunnerCopy.OFFLINE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
-                Text(MachinesAndModels.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
+                // The asleep line is a whole sentence: it wraps rather than being cut.
+                Text(managed?.detail ?: MachinesAndModels.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted,
+                    maxLines = if (managed?.detail != null) 2 else 1)
                 RunnerPage.listAttentionLine(items)?.let { line ->
                     Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
                 }
@@ -337,7 +380,7 @@ fun RunnerScreen(api: ManagementApi, runnerId: String?, record: String?, revisio
     when {
         runnerId == null -> MachinesAndModelsPage(api, revision, open)
         record == "name" -> RunnerNamePage(api, runnerId, revision, back)
-        record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision)
+        record?.startsWith("engine:") == true -> RunnerEnginePage(api, runnerId, record.removePrefix("engine:"), revision, open)
         else -> RunnerDetail(api, runnerId, revision, open, back, openWorkspace)
     }
 }
@@ -365,6 +408,11 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         // A machine checks in every 30s: read it again while its page is up.
         while (true) { delay(15_000); model.load(); model.loadSessionCounts() }
     }
+    // The account's managed runner: its state's label in the head and the banner at the top; nothing is read without the capability.
+    val managedReader = rememberManagedRunner(api, ask = true)
+    FollowManagedRunner(managedReader, follow = resumed && managedReader.shown != null)
+    val managed = managedReader.shown?.takeIf { ObjectId.same(it.status.runnerId, id) }
+    val managedRow = ManagedRunner.row(id, managed?.status)
     val runner = model.runner(id)
     if (runner == null) {
         if (model.loaded) RunnerGone("Runner") else Text(if (model.failed) model.error.orEmpty() else "Loading…", Modifier.padding(24.dp), color = Ink.muted)
@@ -372,7 +420,13 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     }
     val workspaces = model.workspacesOf(id)
     val offline = RunnerPage.isOffline(runner, now)
-    val items = RunnerPage.attention(runner, workspaces, now, model.latestVersion)
+    // The account's managed runner before it first reports (preparing, waiting for capacity, failed to start): no version, no readings,
+    // no engines. Its page is the banner and its state only — no Update runner, no "predates" lines, no engine rows to install or sign in
+    // (the owner's ruling of 2026-11-14, as the web's MachineSettingsPage). Once it reports a version or is available, the page is as today.
+    val managedWaiting = managedRow != null && managedRow.kind != "available" && runner.str("version")?.trim().isNullOrEmpty()
+    // Asleep (or any managed state) is said by the banner, not as a machine away.
+    val items = if (managedWaiting) emptyList()
+        else RunnerPage.attention(runner, workspaces, now, model.latestVersion, managed = managedRow != null || RunnerPage.isManaged(runner)).filter { managedRow == null || it.kind != "offline" }
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -386,6 +440,14 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         scope.launch { show(model.press { api.patch("runners/$id", buildJsonObject { put("minFreeDiskMb", mb?.let(::JsonPrimitive) ?: JsonNull) }) }) }
     }
     fun updateEngines() = scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
+    // Dismiss until the engine's next release: the server records its current update.latest (runner.engineUpdateDismissals), which hides
+    // both the Needs Attention card and the row's warning until a newer release.
+    var dismissing by remember(id) { mutableStateOf(false) }
+    fun dismissUpdateWarning(engine: String) = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // Checks for its own release now rather than at its next 10-minute check, by the same rules: a turn in flight still holds it.
     fun updateRunner() = scope.launch { notice.show(model.press { api.post("runners/$id/self-update") } ?: RunnerCopy.UPDATE_RUNNER_REQUESTED) }
     fun copy(text: String) { copyText(context, "Orbit", text); notice.show("Copied") }
@@ -393,9 +455,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     fun checkRegion() = scope.launch { model.checkRegion(id)?.let { notice.show("${ClaudeRegionCopy.CLAUDE_REGION_CHECK_FAILED} — $it") } }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            RunnerHead(runner, now)
+            RunnerHead(runner, now, managedRow)
+            managed?.let { ManagedRunnerNotice(managedReader, it) { open(OrbitRoute(Destination.RUNNER, null)) } }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
-            RunnerPage.updateCard(runner, now)?.let { card ->
+            if (!managedWaiting) RunnerPage.updateCard(runner, now)?.let { card ->
                 // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
                 // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
                 val updateNow = RunnerUpdateNow.offered(runner)
@@ -405,7 +468,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }, change = card.phase == "postponed")
                     if (updateNow) RunnerUpdateNowButton(RunnerPage.displayName(runner), updateVersion.orEmpty(), { RunnerPage.updateTurns(runner, System.currentTimeMillis()) }, {
                         model.press { api.post(RunnerUpdateNow.path(id).joinToString("/"), RunnerUpdateNow.request()) }
-                            .also { if (it == null) notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())) }
+                            .also { if (it == null) { notice.show(RunnerUpdateNow.toast(updateVersion.orEmpty())); scope.launch { model.awaitUpdateNowAnswer(id) } } }
                     })
                     else if (card.phase == "postponed") OutlinedButton({ confirmingUpdateNow = true }, Modifier.testTag("runner-update-now")) {
                         Text(RunnerUpdateLater.UPDATE_NOW)
@@ -418,6 +481,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     if (index > 0) HorizontalDivider()
                     AttentionRow(item, now) {
                         val action = item.action
+                        // Fix with an agent: after the card's own buttons, before its Dismiss link; the line under the row says who is at
+                        // work on it or why no agent can start.
+                        val fix = RunnerPage.agentFixOnCard(runner, item)
+                        val fixTag = "attention-fix:${item.kind}${action?.engine?.let { ":$it" }.orEmpty()}"
+                        val fixButton: @Composable () -> Unit = {
+                            fix?.let { AgentFixButton(it, fixTag, model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, item.kind, action?.engine, model.latestVersion)) }
+                            } }
+                        }
                         when (action?.kind) {
                             // Only where that engine can sign in here, as its Engines row offers it: an Antigravity that needs the runner
                             // updated says why on its row instead (RunnerPage.signInHint).
@@ -427,37 +499,68 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                             "repair" -> AttentionButton(RunnerCopy.REPAIR) { scope.launch { show(model.press { api.post("workspaces/${action.workspaceId}/repo-cleanup") }) } }
                             "setReserve" -> AttentionButton(RunnerCopy.SET_A_RESERVE) { choosingReserve = true }
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }
-                            "updateEngines" -> AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                            "updateEngines" -> {
+                                AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                                fixButton()
+                                // Until the next release: only a warning against a known latest has one to wait for.
+                                val engine = action.engine
+                                if (engine != null && RunnerPage.offersUpdateDismiss(runner, engine, now)) {
+                                    DismissWarningLink(RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName(engine)), "attention-dismiss:$engine",
+                                        enabled = !dismissing) { dismissUpdateWarning(engine) }
+                                }
+                            }
                             "updateRunner" -> AttentionButton(RunnerCopy.UPDATE_RUNNER_NOW) { updateRunner() }
                             "checkRegion" -> AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = id !in model.regionChecking) { checkRegion() }
+                        }
+                        if (fix != null) {
+                            if (action?.kind != "updateEngines") fixButton()
+                            AgentFixLine(fix, "$fixTag:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
                         }
                     }
                 }
             }
-            RunnerCapacity(runner, workspaces, model, notice, api)
+            if (managedWaiting) FormSection(RunnerCopy.RESOURCES) {
+                Text(RunnerCopy.MANAGED_NOT_REPORTED, Modifier.padding(vertical = 8.dp).testTag("managed-waiting-resources"), color = Ink.muted)
+            }
+            else RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed, awayLabel = managedRow?.label)
+            RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
             val engineRows = RunnerPage.engines(runner, model.runners)
             // A machine blocked for the Claude region says why under its engines, and where Claude's connection came out (board 03's
             // group footnote) — not that a session spends a subscription signed in here, which its Claude ones don't.
             val regionNote = RunnerPage.claudeRegionNote(runner, now)
-            FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
+            if (managedWaiting) FormSection(RunnerCopy.ENGINES) {
+                Text(RunnerCopy.MANAGED_NOT_REPORTED, Modifier.padding(vertical = 8.dp).testTag("managed-waiting-engines"), color = Ink.muted)
+            }
+            else FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
                 regionNote != null -> null
                 offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
+                RunnerPage.isManaged(runner) -> RunnerCopy.ENGINES_MANAGED_FOOTER
                 engineRows.any { it.str("engine") == ProviderEngines.CURSOR } -> CursorCopy.ENGINES_FOOTER
                 else -> RunnerCopy.ENGINES_FOOTER
             }, footerContent = regionNote?.let { note -> { ClaudeRegionNote(note, offline) } }) {
                 if (runner["engines"] == null || runner["engines"] is JsonNull) Text("This runner hasn’t reported its engines yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
                 engineRows.forEachIndexed { index, health ->
                     if (index > 0) HorizontalDivider()
-                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion) {
+                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion,
+                        dismissing = dismissing, dismiss = { dismissUpdateWarning(health.text("engine")) }) {
                         open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${health.text("engine")}"))
                     }
                 }
                 if (!offline) {
                     HorizontalDivider()
                     TextButton(onClick = { updateEngines() }, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
-                    RunnerPage.updateRelayLine(runner.obj("install"))?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                    RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                    // A failed line: an agent can be sent to fix it, under the report (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                    RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                            }
+                            AgentFixLine(view, "update-fix:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+                        }
+                    }
                     TextButton(onClick = { scope.launch {
                         notice.show(model.press { api.post("runners/$id/refresh-models") } ?: "Re-reading this machine’s model lists — the picker updates within a minute.")
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
@@ -471,7 +574,9 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 }
                 workspaces.forEachIndexed { index, workspace ->
                     if (index > 0) HorizontalDivider()
-                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts)) { openWorkspace(workspace.text("id")) }
+                    WorkspaceRow(workspace, RunnerPage.runningCount(workspace, model.counts), isolation = {
+                        WorktreeIsolationSwitch(api, workspace, reload = { model.load() }, failed = notice::show)
+                    }) { openWorkspace(workspace.text("id")) }
                 }
             }
             FormSection(RunnerCopy.ABOUT, footer = if (runner.bool("runsAsRoot") == true) RunnerCopy.ROOT_NO_BYPASS else null) {
@@ -479,7 +584,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(RunnerCopy.ABOUT_NAME, Modifier.weight(1f)); Text(RunnerPage.displayName(runner), color = Ink.muted, maxLines = 1); Spacer(Modifier.width(8.dp)); Chevron()
                 }
-                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion),
+                AboutRows(RunnerCopy.ABOUT_HOSTNAME to runner.str("hostname"), RunnerCopy.ABOUT_VERSION to RunnerPage.versionValue(runner, model.latestVersion, managed = managedRow != null || RunnerPage.isManaged(runner)),
                     RunnerCopy.ABOUT_LAST_UPDATE to RunnerPage.lastUpdate(runner))
                 if (RunnerPage.canUpdateNow(runner, now)) { HorizontalDivider(); TextButton(onClick = { updateRunner() }) { Text(RunnerCopy.UPDATE_RUNNER_NOW) } }
                 AboutRows(RunnerCopy.ABOUT_RUNS_AS to RunnerPage.runsAsValue(runner), RunnerCopy.ABOUT_REPOS_FOLDER to runner.str("reposRoot"),
@@ -524,23 +629,29 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
 }
 
 @Composable
-private fun RunnerHead(runner: JsonObject, now: Long) {
+private fun RunnerHead(runner: JsonObject, now: Long, managed: ManagedRunner.Row? = null) {
     val presence = RunnerPage.presence(runner, now)
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Box(Modifier.size(56.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFF6E7076)), Alignment.BottomEnd) {
             Text("▣", Modifier.align(Alignment.Center).clearAndSetSemantics { }, color = Color.White, style = MaterialTheme.typography.titleLarge)
-            Box(Modifier.padding(3.dp)) { StatusDot(presence, 14) }
+            Box(Modifier.padding(3.dp)) { if (managed != null) ManagedRunnerMark(managed.tone, 14) else StatusDot(presence, 14) }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(RunnerPage.displayName(runner), style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), maxLines = 2)
-            val line = RunnerPage.statusLine(runner, now)
-            val word = if (RunnerPage.isOffline(runner, now)) RunnerCopy.OFFLINE else RunnerCopy.ONLINE
-            val wordColor = if (word == RunnerCopy.ONLINE) Ink.green else Ink.muted
-            Text(buildAnnotatedString {
-                append(line)
-                if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
+            if (managed != null) Text(buildAnnotatedString {
+                withStyle(SpanStyle(color = managedToneColour(managed.tone), fontWeight = FontWeight.Medium)) { append(managed.label) }
+                managed.detail?.let { append(RunnerCopy.SEP); append(it) }
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            RunnerPage.hostLine(runner).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+            else {
+                val line = RunnerPage.statusLine(runner, now)
+                val word = if (RunnerPage.isOffline(runner, now)) RunnerCopy.OFFLINE else RunnerCopy.ONLINE
+                val wordColor = if (word == RunnerCopy.ONLINE) Ink.green else Ink.muted
+                Text(buildAnnotatedString {
+                    append(line)
+                    if (line.startsWith(word)) addStyle(SpanStyle(color = wordColor, fontWeight = FontWeight.Medium), 0, word.length)
+                }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+            }
+            RunnerPage.hostLine(runner, managed = managed != null || RunnerPage.isManaged(runner)).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
         }
     }
 }
@@ -567,58 +678,93 @@ private fun AboutRows(vararg rows: Pair<String, String?>) = rows.filter { !it.se
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(label, Modifier.weight(1f)); SelectionContainer { Text(value!!, color = Ink.muted) } }
 }
 
+/** Fix with an agent's button, gone while an agent is at work on the warning ([AgentFixView.fixing]). */
+@Composable
+private fun AgentFixButton(view: AgentFixView, tag: String, pressing: Boolean, onClick: () -> Unit) {
+    if (view.fixing != null) return
+    Box(Modifier.testTag(tag)) { AttentionButton(RunnerCopy.FIX_WITH_AGENT, enabled = view.enabled && !pressing, onClick = onClick) }
+}
+
+/** Under Fix with an agent: "An agent is fixing this in <workspace> · Open session" while its session is open (board 2's blue dot), else
+ * the grey line — why no agent can start, or where one would. */
+@Composable
+private fun AgentFixLine(view: AgentFixView, tag: String, openSession: (String) -> Unit) {
+    val fixing = view.fixing
+    if (fixing != null) Row(Modifier.testTag(tag), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.padding(end = 6.dp).size(6.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+        Text(RunnerCopy.agentFixing(fixing.workspaceName), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+        TextButton(onClick = { openSession(fixing.sessionId) }, modifier = Modifier.testTag("$tag:open"), contentPadding = PaddingValues(horizontal = 0.dp)) {
+            Text(RunnerCopy.OPEN_SESSION, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    else view.line?.let { Text(it, Modifier.testTag(tag), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+}
+
+/** Dismiss an engine's update warning until its next release: a text link, beside the warning it hides (web's `re-link`). */
+@Composable
+private fun DismissWarningLink(label: String, tag: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag), contentPadding = PaddingValues(horizontal = 0.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 @Composable
 private fun AttentionButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.padding(top = 4.dp), shape = RoundedCornerShape(50)) { Text(label) }
 }
 
-/** Max Concurrent (saved once the presses settle), Disk, and Keep Free. */
+/** Max Concurrent as a meter (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. The disk is a
+ * reading, shown under Resources (RunnerResourcesSection). */
 @Composable
-private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, model: RunnersModel, notice: Notice, api: ManagementApi) {
+private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
     val id = runner.text("id")
     val serverMax = runner.int("maxConcurrent") ?: 1
-    var maxConc by remember(id) { mutableIntStateOf(serverMax) }
-    var pending by remember(id) { mutableStateOf(false) }
-    var edits by remember(id) { mutableIntStateOf(0) }
+    // Max Concurrent's dialog, and the number it holds while open.
+    var editing by remember(id) { mutableStateOf(false) }
+    var draft by remember(id) { mutableIntStateOf(serverMax) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(serverMax) { if (!pending) maxConc = serverMax }
-    // Saved once the presses settle, as the stepper's release and settle save it on iOS.
-    LaunchedEffect(edits) {
-        if (edits == 0) return@LaunchedEffect
-        delay(900)
-        val value = maxConc
-        if (value != (model.runner(id)?.int("maxConcurrent") ?: 1)) {
-            model.press { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) }?.let { failure ->
-                maxConc = model.runner(id)?.int("maxConcurrent") ?: value; notice.show(failure)
+    if (editing) AlertDialog(onDismissRequest = { editing = false }, title = { Text(RunnerCopy.MAX_CONCURRENT) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(RunnerCopy.MAX_CONCURRENT_HINT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The glyph carries the words, so TalkBack says them alone, not "…, minus".
+                    TextButton(onClick = { draft -= 1 }, enabled = draft > 1) {
+                        Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+                    }
+                    Text("$draft", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
+                    TextButton(onClick = { draft += 1 }, enabled = draft < 64) {
+                        Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
+                    }
+                }
             }
-        }
-        pending = false
-    }
-    // A press still settling is sent when the page goes (iOS saves on the stepper's release), so leaving at once loses nothing.
-    DisposableEffect(id) {
-        onDispose {
-            val value = maxConc
-            if (pending && value != (model.runner(id)?.int("maxConcurrent") ?: 1))
-                api.background.launch { try { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) } catch (_: Exception) { } }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton({
+                editing = false
+                val value = draft
+                if (value != serverMax) scope.launch {
+                    model.press { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) }?.let(notice::show)
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton({ editing = false }) { Text("Cancel") } })
     FormSection(RunnerCopy.CAPACITY, footer = RunnerCopy.CAPACITY_FOOTER) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))
-            Text("$maxConc", color = Ink.muted)
-            // The glyph carries the words, so TalkBack says them alone, not "…, minus".
-            TextButton(onClick = { maxConc -= 1; pending = true; edits++ }, enabled = maxConc > 1) {
-                Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+        // A meter, as Disk is: the name, `3 of 16 running` and Edit on a line, a bar of the slots taken across the row under them
+        // (online only), amber once all are. Edit opens the dialog that changes the limit.
+        val slots = RunnerPage.slots(runner, now)
+        Column(Modifier.padding(bottom = if (slots != null) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))
+                Text(slots?.let { (active, max) -> RunnerCopy.runningOf(active, max) } ?: "$serverMax",
+                    style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                // No padding after Edit, so it ends where the bar under it does.
+                TextButton({ draft = serverMax; editing = true },
+                    Modifier.semantics { contentDescription = "${RunnerCopy.EDIT} ${RunnerCopy.MAX_CONCURRENT}" },
+                    contentPadding = PaddingValues(start = 12.dp)) { Text(RunnerCopy.EDIT) }
             }
-            TextButton(onClick = { maxConc += 1; pending = true; edits++ }, enabled = maxConc < 64) {
-                Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
-            }
-        }
-        RunnerPage.runnerDisk(workspaces)?.let { disk ->
-            HorizontalDivider()
-            Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row { Text(RunnerCopy.DISK, Modifier.weight(1f)); Text(RunnerPage.diskUsedLine(disk), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                Gauge(disk.usedPercent / 100f, if (RunnerPage.diskIsTight(disk, runner.int("minFreeDiskMb"))) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
+            slots?.let { (active, max) ->
+                Gauge((active.toFloat() / max).coerceAtMost(1f), if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
             }
         }
         HorizontalDivider()
@@ -648,7 +794,7 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
  * Region not supported, reads no usage and names no next account, and offers Check Again in Sign In's place: a press of its own. */
 @Composable
 private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, checking: Boolean, checkAgain: () -> Unit,
-                      open: () -> Unit) {
+                      dismissing: Boolean, dismiss: () -> Unit, open: () -> Unit) {
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
@@ -674,7 +820,12 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
                     if (tone == "muted") append(text) else withStyle(SpanStyle(color = Ink.tone(tone))) { append(text) }
                 }
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            RunnerPage.updateFailedLine(health, now)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+            RunnerPage.updateFailedLine(health, now, dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine))?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-row:$engine:dismiss",
+                    enabled = !dismissing, onClick = dismiss)
+            }
             cursorHint?.let { Text(it, Modifier.testTag("cursor-state-hint"), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
             if (RunnerPage.claudeRegionBlocked(runner, engine)) Box(Modifier.testTag("engine-row:$engine:check-again")) {
                 AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = !offline && !checking, onClick = checkAgain)
@@ -694,7 +845,7 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
 }
 
 @Composable
-private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) {
+private fun WorkspaceRow(workspace: JsonObject, running: Int, isolation: @Composable () -> Unit = {}, open: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = open).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
@@ -702,6 +853,8 @@ private fun WorkspaceRow(workspace: JsonObject, running: Int, open: () -> Unit) 
             RunnerPage.workspaceLine(workspace).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1) }
         }
         if (running > 0) Text(RunnerCopy.workspaceRunning(running), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        // Worktree isolation, switched here as on web's runner page (board 04's dialogs say what it means for the main checkout).
+        isolation()
         Chevron()
     }
 }
@@ -731,16 +884,18 @@ private fun RunnerNamePage(api: ManagementApi, id: String, revision: Long, back:
     // Leaving saves; a rotation does not leave.
     val activity = LocalActivity.current
     DisposableEffect(id) { onDispose { if (activity?.isChangingConfigurations != true) save() } }
+    // The name an empty field falls back to: Orbit Cloud for the managed runner, else its machine name.
+    val machine = RunnerPage.nameOf(runner.text("id"), runner.text("name"), null, managed = runner.bool("managed"))
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(runner.text("name")) }, singleLine = true,
+        OutlinedTextField(name.orEmpty(), { name = it }, Modifier.fillMaxWidth(), placeholder = { Text(machine) }, singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { save(); back() }))
-        Text("Leave empty to use the machine name (${runner.text("name")}).", style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+        Text("Leave empty to use the machine name ($machine).", style = MaterialTheme.typography.bodySmall, color = Ink.muted)
     }
 }
 
 /** RunnerEnginePage: one engine CLI on one runner, every account it is signed into, and their sign-ins. */
 @Composable
-private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, revision: Long) {
+private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, revision: Long, open: (OrbitRoute) -> Unit) {
     val model = remember(api) { RunnersModel(api) }
     val resumed = rememberResumed()
     val now = rememberNow(10_000)
@@ -781,6 +936,17 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
         restoring = false
     }
     fun install() = scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", engine) }) }) }
+    // Fix with an agent on a failed install: the session starts at once and the page stays; its line links to it.
+    fun fixInstall() = scope.launch { show(model.fixWithAgent(id, "installFailed", engine, null)) }
+    fun openSession(session: String) = open(OrbitRoute(Destination.SESSION, session, origin = Origin.LINK))
+    // Dismiss until the next release, as the machine page's card and row do.
+    val dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine)
+    var dismissing by remember(id, engine) { mutableStateOf(false) }
+    fun dismissUpdateWarning() = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // A machine blocked for the Claude region keeps Claude Code's accounts as they are, each saying its sign-in alone, and offers Check
     // Again in Add Account's place (board 03): no Claude sign-in starts there.
     val regionBlocked = RunnerPage.claudeRegionBlocked(runner, engine)
@@ -795,7 +961,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         val version = RunnerPage.engineVersion(health.str("version"))
                         append(version.orEmpty())
                         // Cursor CLI's build is the one Orbit pins, which its note says (`pinned · checked 6m ago`).
-                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR)?.let { (tone, text) ->
+                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR, dismissed = dismissed)?.let { (tone, text) ->
                             if (version != null) append(RunnerCopy.SEP)
                             if (tone == "warn") withStyle(SpanStyle(color = Ink.amber)) { append(text) } else append(text)
                         }
@@ -806,7 +972,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         withStyle(SpanStyle(color = Ink.amber)) { append(ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED) }
                     }
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                health?.let { RunnerPage.updateFailedLine(it, now, dismissed = dismissed) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-page:dismiss",
+                    enabled = !dismissing) { dismissUpdateWarning() }
                 // DeepSeek Harness signs nothing in here: each session runs on the DeepSeek key it was started with (board 1 ⑥).
                 if (engine == ProviderEngines.DSH && health != null) RunnerPage.dshStatus(health, runner).let { (text, _) ->
                     Text(if (text == RunnerCopy.USES_API_KEYS) RunnerCopy.DSH_READY else text, Modifier.testTag("dsh-engine-status"),
@@ -836,7 +1005,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
-                            resume = { scope.launch { show(pause(line, null)) } })
+                            resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
                     }
                     // A Default removed from Orbit ends the accounts that remain, with the way back.
                     RunnerPage.removedDefault(health)?.let { removed ->
@@ -861,19 +1030,32 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             // installs it (iOS 5e75edbde).
             else if (RunnerPage.isLoginEngine(engine)) EngineInstallSection(runner, engine,
                 MachinesAndModels.rowKind(MachinesAndModels.engineHealth(runner, engine), runner.obj("install"), engine),
-                MachinesAndModels.installable(runner, engine), offline, ::install)
+                MachinesAndModels.installable(runner, engine), offline, ::install, model.agentFixPressing, ::fixInstall, ::openSession)
             else if (engine == ProviderEngines.OPENCODE) EngineInstallSection(runner, engine, MachinesAndModels.rowKind(health, runner.obj("install"), engine),
-                MachinesAndModels.installsOpenCode(runner), offline, ::install)
+                MachinesAndModels.installsOpenCode(runner), offline, ::install, model.agentFixPressing, ::fixInstall, ::openSession)
             // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now has nothing to do for it.
             if (cursor != null) Text(if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else CursorCopy.ENGINE_FOOTER,
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp).testTag("cursor-engine-footer"), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else FormSection(footer = if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else if (engine == ProviderEngines.DSH) RunnerCopy.DSH_FOOTER
-                else RunnerCopy.ENGINES_FOOTER) {
+            else FormSection(footer = when {
+                offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
+                RunnerPage.isManaged(runner) -> if (engine == ProviderEngines.DSH) RunnerCopy.DSH_MANAGED_FOOTER else RunnerCopy.ENGINES_MANAGED_FOOTER
+                engine == ProviderEngines.DSH -> RunnerCopy.DSH_FOOTER
+                else -> RunnerCopy.ENGINES_FOOTER
+            }) {
                 TextButton(enabled = !offline && !RunnerPage.engineUpdateInFlight(runner.obj("install")), onClick = {
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
-                RunnerPage.updateRelayLine(runner.obj("install"))?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+                RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                    Column(Modifier.padding(bottom = 8.dp)) {
+                        AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                            scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                        }
+                        AgentFixLine(view, "update-fix:line", ::openSession)
+                    }
+                }
             }
             Spacer(Modifier.height(48.dp))
         }
@@ -913,7 +1095,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
  * engine it has, or for an Antigravity this runner can't run at all ([installable]). */
 @Composable
 private fun EngineInstallSection(runner: JsonObject, engine: String, kind: MachinesAndModels.RowKind, installable: Boolean, offline: Boolean,
-                                 install: () -> Unit) {
+                                 install: () -> Unit, fixPressing: Boolean, fix: () -> Unit, openSession: (String) -> Unit) {
     if (kind != MachinesAndModels.RowKind.INSTALLING && !installable) return
     val relay = runner.obj("install")
     FormSection {
@@ -923,6 +1105,13 @@ private fun EngineInstallSection(runner: JsonObject, engine: String, kind: Machi
         }
         relay?.takeIf { it.str("engine") == engine }?.str("message")?.takeIf { it.isNotEmpty() }?.let {
             Text(it, Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // A failed install: Fix with an agent after the machine's own words, with the line saying where the session starts or why not.
+        if (kind == MachinesAndModels.RowKind.INSTALL_FAILED) RunnerPage.agentFixOnInstall(runner, engine)?.let { view ->
+            Column(Modifier.padding(bottom = 8.dp)) {
+                AgentFixButton(view, "install-fix:$engine", fixPressing, fix)
+                AgentFixLine(view, "install-fix:$engine:line", openSession)
+            }
         }
     }
 }
@@ -961,7 +1150,7 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
-                       regionBlocked: Boolean = false) {
+                       openSession: (String) -> Unit, regionBlocked: Boolean = false) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -1028,7 +1217,14 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                 OutlinedButton(onClick = signIn, enabled = !signInBlocked) { Text(AccountCopy.RENEW) }
             }
         }
-        removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+        // Under way, and waiting on the sessions it moved to another account to leave this one.
+        RunnerPage.movingLine(runner.obj("accountRemove"), engine, line.id)?.let {
+            Text(it, Modifier.testTag("account-moving"), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        }
+        // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
+        val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)
+        if (inUse.isNotEmpty()) AccountInUse(engine, inUse, openSession)
+        else removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
         if (signingIn) RunnerSignInCard(api, runner, engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.
@@ -1038,6 +1234,28 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             // accounts, Add Account is where another joins. An account signed in is signed in again from its menu.
             if (canSignIn && (!line.envKey || alone) && line.auth != "yes") OutlinedButton(onClick = signIn, enabled = !signInBlocked) {
                 Text(if (line.envKey) AccountCopy.SIGN_IN_WITH_GOOGLE else RunnerCopy.SIGN_IN)
+            }
+        }
+    }
+}
+
+/** A removal refused over sessions running in the account: what to do, then each session — its dot, title, state and Open session. */
+@Composable
+private fun AccountInUse(engine: String, sessions: List<RunnerPage.InUseSession>, openSession: (String) -> Unit) {
+    Column(Modifier.testTag("account-in-use")) {
+        Text(RunnerPage.inUseHeading(engine, sessions.size), style = MaterialTheme.typography.labelMedium, color = Ink.red)
+        sessions.forEach { session ->
+            val (label, tone) = RunnerPage.inUseStatus(session.status)
+            Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { openSession(session.id) }.padding(vertical = 6.dp)
+                .testTag("account-in-use:${session.id}"), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.padding(end = 8.dp).size(6.dp).clip(CircleShape).background(Ink.tone(tone)))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(RunnerPage.inUseTitle(session), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    label?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                }
+                Text(RunnerAccountCopy.IN_USE_OPEN, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -1223,7 +1441,9 @@ private class SignInRelay(private val api: ManagementApi, val runnerId: String, 
 @Composable
 internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: String, account: String? = null, accountName: String? = null,
                              autoStart: Boolean = false, signInTitle: String? = null, onUseApiKey: (() -> Unit)? = null,
-                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null) {
+                             onClose: (() -> Unit)? = null, onSignedIn: (() -> Unit)? = null,
+                             apiKeyLabel: String = io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY,
+                             apiKeyHint: String? = null) {
     val runnerId = runner.text("id")
     val scope = rememberCoroutineScope()
     val relay = remember(runnerId, engine, account) { SignInRelay(api, runnerId, engine, account, adding = accountName != null) }
@@ -1308,9 +1528,10 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                     }
                     Text(KimiSite.SEPARATE_ACCOUNTS, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
-                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                } else FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // The key button wraps under the sign-in where both don't fit on a line, rather than being squeezed beside it.
                     Button(onClick = { scope.launch { relay.begin(accountName, scope) } }, enabled = !relay.busy && named) {
                         Text(when {
                             relay.busy -> "Starting…"
@@ -1322,9 +1543,11 @@ internal fun RunnerSignInCard(api: ManagementApi, runner: JsonObject, engine: St
                         })
                     }
                     onUseApiKey?.let { useKey ->
-                        OutlinedButton(onClick = useKey) { Text(io.orbitd.android.composer.MachineSetupCopy.SETUP_USE_API_KEY) }
+                        OutlinedButton(onClick = useKey) { Text(apiKeyLabel) }
                     }
                 }
+                // What a key is beside a sign-in, where the card says it (the web's RunnerSignIn hint, on the welcome card).
+                if (onUseApiKey != null && apiKeyHint != null) Text(apiKeyHint, style = MaterialTheme.typography.labelMedium, color = Ink.muted)
                 close()
             }
         }

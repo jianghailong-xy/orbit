@@ -144,7 +144,7 @@ describe('the DeepSeek account balance', () => {
       answers.ds = async () => ok();
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Account balance ¥110.00 · updated 2 min ago');
-      expect(container.querySelector('button[title="Refresh"]')).not.toBeNull();
+      expect(container.querySelector('button[aria-label="Refresh the balance"]')).not.toBeNull();
       expect(balanceRequests()).toEqual(['/providers/mine/ds/balance']);
     });
 

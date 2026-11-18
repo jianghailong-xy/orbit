@@ -1,0 +1,112 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<style>
+body{margin:0;background:#f2f3f5;font-family:Inter,"Noto Sans SC",sans-serif;color:#1f2329;width:1960px;padding:36px 40px 44px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 6px}.sub{color:#646a73;font-size:14px;margin-bottom:22px;line-height:1.6}
+.b-row{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-bottom:26px}
+.b-col{background:#fff;border-radius:14px;padding:16px 16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.b-h{font-size:16px;font-weight:600;margin-bottom:4px}.b-h b{display:inline-block;width:24px;height:24px;border-radius:12px;background:#1f2329;color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.b-c{font-size:12.5px;color:#646a73;line-height:1.55;min-height:58px;margin-bottom:10px}
+.b-lab{font-size:12px;color:#8f959e;margin:10px 0 6px;font-weight:600;letter-spacing:.3px}
+.b-stage{display:flex;justify-content:center}
+.ph{width:393px;transform:scale(.98);transform-origin:top center}
+/* report lines and the fix block, as RunnerEnginePage / SkillsRunnersView draw them */
+.rp{padding:0 16px 11px;font-size:13px;line-height:18px}
+.rp .red{color:#ff3b30}.rp .mut{color:#8a8a8e}
+.fx{padding:2px 16px 12px}
+.fx .bb{background:rgba(62,105,246,.12);color:#3e69f6}
+.fx .bb.dis{background:rgba(120,120,128,.08);color:#bfbfc4}
+.fx .hint{margin-top:6px;font-size:13px;line-height:18px;color:#8a8a8e}
+.fx .fixing{display:flex;align-items:center;gap:6px;font-size:13px;color:#8a8a8e}
+.fx .fixing i{width:6px;height:6px;border-radius:3px;background:#3e69f6;display:inline-block}
+.fx .fixing a{color:#3e69f6;white-space:nowrap}.fx .fixing{flex-wrap:wrap}.fx .fixing i{flex:none}
+.new{outline:2px dashed #f5a623;outline-offset:-2px;border-radius:8px}
+/* Android: Material list section, as RunnerScreens draws it */
+.an{width:360px;margin:0 auto;border-radius:22px;background:#fdfbff;border:8px solid #1d1d1f;overflow:hidden;font-family:Roboto,Inter,sans-serif}
+.an-top{height:56px;display:flex;align-items:center;padding:0 16px;font-size:20px;color:#1b1b1f;gap:24px}
+.an-h{padding:16px 16px 4px;font-size:14px;color:#5d5e66;font-weight:500}
+.an-card{margin:0 12px;background:#fff;border-radius:16px;padding:0 16px}
+.an-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #e3e2e6;font-size:15px}
+.an-row small{display:block;color:#5d5e66;font-size:12.5px}
+.an-dot{width:30px;height:30px;border-radius:8px;flex:none;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px}
+.an-tb{color:#3e5bd6;font-size:14px;font-weight:500;padding:10px 0}
+.an-tb.dis{color:#b9b9c0}
+.an-l{font-size:12px;line-height:16px;color:#5d5e66;padding:1px 0}.an-l.red{color:#ba1a1a}
+.an-fx{padding:8px 0 10px}
+.an-btn{display:inline-block;border:1px solid #767680;border-radius:20px;padding:7px 18px;font-size:14px;font-weight:500;color:#3e5bd6}
+.an-btn.dis{color:#b9b9c0;border-color:#d9d9de}
+.an-hint{margin-top:6px;font-size:12px;line-height:16px;color:#5d5e66}
+.an-fixing{display:flex;align-items:center;gap:6px;font-size:12px;color:#5d5e66}.an-fixing i{width:6px;height:6px;border-radius:3px;background:#3e5bd6}.an-fixing a{color:#3e5bd6;white-space:nowrap}.an-fixing{flex-wrap:wrap}.an-fixing i{flex:none}
+.dec{background:#fff;border-radius:14px;padding:18px 22px;font-size:13.5px;line-height:1.75}
+.dec h2{font-size:17px;margin:0 0 8px}
+</style></head><body>
+<h1>Update Engines Now 失败时让 Agent 去修 · iOS / Android 设计图</h1>
+<div class="sub">跟今天上线的网页版同一套规则（三个决定都按推荐）：报告里有红行时，红行下面放一个 <i>Fix with an agent</i>；按一下就在这台机器上最近用过的 workspace 里起会话，不弹窗、页面不跳走。iOS 和 Android 都已经有这个报告（机器页 Engines 区底部，以及每个引擎页的 Update Engines Now 下面），按钮和下面那行灰字直接复用 Install failed 面板现成的组件。黄色虚线框是新增部分。<br>
+注意：11-14 的旧图 <code>engine-update-report/02</code> 曾画成每条红行后跟一个链接、引擎坏了就换别的引擎；今天你批的是整个报告一个按钮、坏了就置灰写原因，网页已按今天的做，手机跟网页一致。</div>
+
+<div class="b-row" id="ios"></div>
+<div class="b-row" id="and"></div>
+
+<div class="dec"><h2>落地</h2>
+1. OrbitKit：<code>RunnerAttentionFixKind</code> 加 <code>engineUpdateFailed</code>；<code>RunnerAgentFixLogic.engineUpdateState(runner)</code>（有红行才有，规则同 installFailedState）；<code>request</code> 对它发空 body。<br>
+2. iOS/macOS：<code>SkillsRunnersView.enginesSection</code> 和 <code>RunnerEnginePage.updateSection</code> 的报告行下面放 <code>RunnerAgentFixButton</code> + <code>RunnerAgentFixLine</code>。<br>
+3. Android：<code>RunnerPage.agentFixOnUpdate(runner)</code>，<code>RunnerScreens</code> 两处报告行下面放 <code>AgentFixButton</code> + <code>AgentFixLine</code>。<br>
+4. 测试：OrbitKit 单测（Linux 上跑不了 SwiftUI，只能跑 OrbitKit），Android 单测 <code>RunnerPageTest</code>；服务端不用改。
+</div>
+
+<script src="../antigravity-accounts/glyphs.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script>
+const LINE = 'OpenCode — update timed out after 5m0s';
+const rows = (claude) => [
+  engineRow({ engine: 'claude', name: 'Claude Code', version: '2.1.325', status: claude ? { text: 'Signed out', tone: 'warn' } : { text: 'Signed in', tone: 'ok' } }),
+  engineRow({ engine: 'codex', name: 'Codex', version: '0.169.0', status: { text: 'Signed in', tone: 'ok' } }),
+  engineRow({ engine: 'opencode', name: 'OpenCode', version: '1.0.98', status: { text: 'Unknown', tone: 'muted' } }),
+];
+const fixIOS = {
+  ready: `<div class="fx new"><span class="bb">Fix with an agent</span><div class="hint">Starts a session in orbit-develop on this machine, with Claude Code.</div></div>`,
+  fixing: `<div class="fx new"><div class="fixing"><i></i>An agent is fixing this in orbit-develop · <a>Open session</a></div></div>`,
+  blocked: `<div class="fx new"><span class="bb dis">Fix with an agent</span><div class="hint">An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine. Sign in to Claude Code above to use this.</div></div>`,
+  fixed: '',
+};
+const STATES = [
+  ['ready', '能修', '红行下面一个按钮，再下面一行灰字写明会话在哪起、用哪个引擎。'],
+  ['fixing', '修理中', '按钮换成 “An agent is fixing this in … · Open session”；同一个故障不会再起第二个。'],
+  ['blocked', '修不了', '按钮置灰写原因。引擎行在报告上面，所以写 “above”（跟 Install failed 面板同一句）。'],
+  ['fixed', '修好了', 'Agent 重跑 Update Engines Now，新报告没有红行，按钮也就没了。'],
+];
+function iosPhone(state) {
+  const report = state === 'fixed'
+    ? `<div class="rp"><span class="mut">Nothing here needs your attention.</span></div>`
+    : `<div class="rp"><span class="red">${LINE}</span></div>`;
+  const body = section({ header: 'ENGINES', rows: [
+      ...rows(state === 'blocked'),
+      btnRow('Update Engines Now') + report + fixIOS[state],
+      btnRow('Refresh Model Lists'),
+    ], footer: 'Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine.' });
+  return phone({ title: 'vmi3753066', body, height: 640 });
+}
+function andPhone(state) {
+  const report = state === 'fixed'
+    ? `<div class="an-l">Nothing here needs your attention.</div>`
+    : `<div class="an-l red">${LINE}</div>`;
+  const fx = {
+    ready: `<div class="an-fx new"><span class="an-btn">Fix with an agent</span><div class="an-hint">Starts a session in orbit-develop on this machine, with Claude Code.</div></div>`,
+    fixing: `<div class="an-fx new"><div class="an-fixing"><i></i>An agent is fixing this in orbit-develop · <a>Open session</a></div></div>`,
+    blocked: `<div class="an-fx new"><span class="an-btn dis">Fix with an agent</span><div class="an-hint">An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine. Sign in to Claude Code above to use this.</div></div>`,
+    fixed: '',
+  }[state];
+  const eng = (bg, n, sub) => `<div class="an-row"><span class="an-dot" style="background:${bg}">${n[0]}</span><div>${n}<small>${sub}</small></div></div>`;
+  return `<div class="an"><div class="an-top">←&nbsp; vmi3753066</div><div class="an-h">Engines</div><div class="an-card">
+    ${eng('#c96442', 'Claude Code', state === 'blocked' ? '2.1.325 · Signed out' : '2.1.325 · Signed in')}
+    ${eng('#2b2d31', 'Codex', '0.169.0 · Signed in')}
+    ${eng('#8a8a8e', 'OpenCode', '1.0.98 · Unknown')}
+    <div class="an-tb">Update Engines Now</div>${report}${fx}
+    <div class="an-tb">Refresh Model Lists</div></div><div style="height:24px"></div></div>`;
+}
+document.getElementById('ios').innerHTML = STATES.map(([s, t, c], i) =>
+  `<div class="b-col"><div class="b-h"><b>${i + 1}</b>${t}</div><div class="b-c">${c}</div><div class="b-lab">iOS</div><div class="b-stage">${iosPhone(s)}</div></div>`).join('');
+document.getElementById('and').innerHTML = STATES.map(([s, t], i) =>
+  `<div class="b-col"><div class="b-h"><b>${i + 1}</b>${t}</div><div class="b-lab">ANDROID</div>${andPhone(s)}</div>`).join('');
+</script>
+</body></html>

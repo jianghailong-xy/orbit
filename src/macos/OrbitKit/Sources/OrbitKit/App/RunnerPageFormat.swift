@@ -32,10 +32,39 @@ public enum RunnerPageFormat {
         isOffline(runner, now: now) ? .offline : .online
     }
 
-    /// The name the list and the page head show: the alias, else the machine's own name.
+    /// The name every screen shows a machine by: the owner's alias, else Orbit Cloud for the account's
+    /// managed runner (its row's `managed`, else `ManagedRunnerIdentity`, the managed status's runnerId —
+    /// never its stored name `orbit-managed`), else the machine's own name.
     public static func displayName(_ runner: Runner) -> String {
+        displayName(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `displayName` against a given managed runner id: what the default form reads, kept pure for tests.
+    public static func displayName(_ runner: Runner, managedRunnerID: String?) -> String {
         let alias = runner.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return alias.isEmpty ? runner.name : alias
+        if !alias.isEmpty { return alias }
+        return isManaged(runner, managedRunnerID: managedRunnerID) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+    }
+
+    /// The name a machine falls back to with no alias: Orbit Cloud for the managed runner, else its own.
+    public static func defaultName(_ runner: Runner) -> String {
+        isManaged(runner) ? RunnerPageCopy.MANAGED_RUNNER_LABEL : runner.name
+    }
+
+    /// Whether `runner` is the account's managed runner: its row says so (`managed`), or its id is the
+    /// managed status's runnerId (an older server, which sends no flag).
+    public static func isManaged(_ runner: Runner) -> Bool {
+        isManaged(runner, managedRunnerID: ManagedRunnerIdentity.runnerID)
+    }
+
+    /// `isManaged` against a given managed runner id, kept pure for tests.
+    public static func isManaged(_ runner: Runner, managedRunnerID: String?) -> Bool {
+        runner.managed == true || isManaged(runner.id, managedRunnerID: managedRunnerID)
+    }
+
+    public static func isManaged(_ runnerID: String?, managedRunnerID: String?) -> Bool {
+        guard let runnerID, let managedRunnerID, !runnerID.isEmpty, !managedRunnerID.isEmpty else { return false }
+        return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
@@ -85,12 +114,14 @@ public enum RunnerPageFormat {
 
     /// `vmi3129740 · v0.1.197` — the list's second line for a machine that is up, whether or not
     /// this one is: a hostname empty or the same as the name shown is left out.
-    public static func hostLine(_ runner: Runner) -> String {
-        let shown = displayName(runner)
+    /// A managed runner's version is `RunnerAttention.runnerVersionLine`'s: its release or "Kept up to date
+    /// by Orbit", never `managed-<sha>`.
+    public static func hostLine(_ runner: Runner, managed: Bool? = nil) -> String {
+        let orbitCloud = managed ?? isManaged(runner)
+        let shown = displayName(runner, managedRunnerID: orbitCloud ? runner.id : nil)
         let host = (runner.hostname?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty || $0 == shown ? nil : $0 }
-        let version = (runner.version?.trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap { $0.isEmpty ? nil : RunnerPageCopy.runnerVersionTag(version: $0) }
+        let version = RunnerAttention.runnerVersionLine(runner.version, managed: orbitCloud)
         return [host, version].compactMap { $0 }.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
@@ -181,6 +212,7 @@ public enum RunnerPageFormat {
     /// (board iOS 2 ②) — its version is the one Orbit pins, not the latest every 30 minutes.
     public static func enginesFooter(_ runner: Runner, fleet: [Runner]? = nil, offline: Bool) -> String {
         if offline { return RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER }
+        if isManaged(runner) { return RunnerPageCopy.RUNNER_ENGINES_MANAGED_FOOTER }
         return showsCursor(runner, fleet: fleet) ? CursorRuntime.machineEnginesFooter : RunnerPageCopy.RUNNER_ENGINES_FOOTER
     }
 
@@ -424,14 +456,33 @@ public enum RunnerPageFormat {
 
     /// `Update to 2.1.270 failed Sep 13` — only for a failure that has become the row's problem
     /// (`RunnerAttention.updateNoteOf` says warn); a failed pass the updater retries in half an hour
-    /// is the engine page's footnote, not the row's.
-    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date,
+    /// is the engine page's footnote, not the row's. `dismissed` is the release its warning was dismissed
+    /// against (`Runner.engineUpdateDismissals`), which keeps the line away while it is still the latest.
+    public static func updateFailedLine(_ health: RunnerEngineHealth, now: Date, dismissed: String? = nil,
                                         timeZone: TimeZone = .current) -> String? {
         guard health.installed == true, let update = health.update, update.status == "failed",
               let latest = update.latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty,
-              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now))?.tone == .warn,
+              RunnerAttention.updateNoteOf(update, nowMs: nowMs(now), dismissed: dismissed)?.tone == .warn,
               let at = update.at, let when = day(at, now: now, timeZone: timeZone) else { return nil }
         return RunnerPageCopy.runnerEngineUpdateFailed(version: latest, when: when)
+    }
+
+    /// The engine a Needs Attention item's "Dismiss until next … release" dismisses: an engine not
+    /// updating whose latest release is known — only a warning against a known latest has a next one
+    /// to wait for (web MachineSettingsPage).
+    public static func updateWarningDismissEngine(_ item: RunnerAttentionItem) -> String? {
+        guard item.kind == .engineNotUpdating, let engine = item.action?.engine,
+              case .string(let latest)? = item.params["latest"], !latest.isEmpty else { return nil }
+        return engine
+    }
+
+    /// Whether the engine page offers Dismiss for this engine's update warning: an online runner, an
+    /// installed CLI whose note still warns, against a known latest (web RunnerEngines' panel).
+    public static func offersUpdateWarningDismiss(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> Bool {
+        guard !isOffline(runner, now: now), health.installed == true,
+              let latest = health.update?.latest, !latest.isEmpty else { return false }
+        return RunnerAttention.updateNoteOf(health.update, nowMs: nowMs(now),
+                                            dismissed: runner.engineUpdateDismissals?[health.engine])?.tone == .warn
     }
 
     /// The Engines header's note: when the updater last looked (`Checked 6m ago`) — or, for a runner
@@ -663,17 +714,70 @@ public enum RunnerPageFormat {
     }
 
     /// What became of the last removal asked of this account: under way, or refused in the machine's
-    /// own words. Nil when the last removal was another account's.
+    /// own words. Nil when the last removal was another account's. Refused because sessions are running
+    /// in the account, it says so in the page's words and lists them (`blocking`, web `BlockingSessions`).
     public struct AccountRemoval: Equatable, Sendable {
         public let pending: Bool
         public let refused: String?
+        public let blocking: [BlockingSession]
+        /// Under way and waiting on the sessions it moved to another account to leave this one (web
+        /// `runnerAccountMovingOne`/`Many`); nil otherwise.
+        public let moving: String?
+
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = [], moving: String? = nil) {
+            self.pending = pending
+            self.refused = refused
+            self.blocking = blocking
+            self.moving = moving
+        }
+    }
+
+    /// One session a refused removal lists: its title, or Untitled session; a dot — green in a turn,
+    /// orange waiting for input, grey otherwise — and the word for the first two; opened by `id`.
+    public struct BlockingSession: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let title: String
+        public let tone: Tone
+        public let label: String?
+
+        public init(_ session: RunnerAccountRemoveSession) {
+            id = session.id
+            let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            title = trimmed.isEmpty ? RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_UNTITLED : trimmed
+            switch session.status {
+            case .running?, .pending?:
+                tone = .ok
+                label = RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_RUNNING
+            case .awaitingInput?:
+                tone = .warn
+                label = RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_WAITING
+            default:
+                tone = .muted
+                label = nil
+            }
+        }
     }
 
     public static func removal(_ state: RunnerAccountRemoveState?, engine: String,
                                account: String) -> AccountRemoval? {
         guard let state, state.engine == engine, state.account == account else { return nil }
-        return AccountRemoval(pending: state.status == "pending",
-                              refused: state.status == "failed" ? state.message : nil)
+        let failed = state.status == "failed"
+        let blocking = failed ? state.sessions.map(BlockingSession.init) : []
+        let refused: String?
+        switch blocking.count {
+        case 0: refused = failed ? state.message : nil
+        case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
+        default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
+        }
+        let pending = state.status == "pending"
+        let count = pending ? (state.moving ?? 0) : 0
+        let moving: String?
+        switch count {
+        case ..<1: moving = nil
+        case 1: moving = RunnerAccountCopy.runnerAccountMovingOne(engine: engineName(engine))
+        default: moving = RunnerAccountCopy.runnerAccountMovingMany(engine: engineName(engine), count: count)
+        }
+        return AccountRemoval(pending: pending, refused: refused, blocking: blocking, moving: moving)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
@@ -700,8 +804,7 @@ public enum RunnerPageFormat {
     /// terminal keeps working (the web's words, `RunnerAccountCopy`). An added account's sign-in goes from
     /// the machine: while Default is removed from Orbit its workspaces go to Automatic, or — for the last
     /// account Orbit uses there — to Default, by its name, which Orbit then uses again (the web's words
-    /// too), never to a Default as though it were in use; while Default is, the page's own question,
-    /// which says Default is untouched.
+    /// too), never to a Default as though it were in use; while Default is, to Default (the web's words).
     public static func removalQuestion(_ line: AccountLine, health: RunnerEngineHealth,
                                        runner: Runner) -> RemovalQuestion {
         let machine = displayName(runner)
@@ -716,10 +819,8 @@ public enum RunnerPageFormat {
                                        ? RunnerAccountCopy.runnerAccountRemoveDetailAutomatic(runner: machine)
                                        : RunnerAccountCopy.runnerAccountRemoveDetailLast(runner: machine, name: name))
         }
-        let place = line.home ?? "Its sign-in"
-        return RemovalQuestion(title: "Remove “\(line.name)” from \(machine)?",
-                               message: "\(place) goes from this machine, and sessions stop running on it. "
-                                   + "Default is untouched.")
+        return RemovalQuestion(title: RunnerAccountCopy.runnerAccountRemoveTitle(name: line.name),
+                               message: RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL)
     }
 
     /// What a Default removed from Orbit is called: the name it was given in Orbit, else `Default` (web
@@ -756,17 +857,40 @@ public enum RunnerPageFormat {
         return install.status == "pending" || install.status == "installing"
     }
 
-    /// Where the last Update Engines Now got to, in the web engine section's words.
-    public static func updateRelayLine(_ install: RunnerInstallState?) -> String? {
-        guard let install, install.mode == "update", let status = install.status else { return nil }
+    /// One line of what the last Update Engines Now said, and whether it is a failure (drawn red).
+    public struct UpdateRelayLine: Equatable {
+        public let text: String
+        public let failed: Bool
+        public init(_ text: String, failed: Bool = false) {
+            self.text = text
+            self.failed = failed
+        }
+    }
+
+    /// Where the last Update Engines Now got to, in the web engine section's words. A finished run
+    /// lists only the engines that need someone (web `engineUpdateReportLines`): the failures, and
+    /// an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+    /// on the next pass sort themselves out, and listing them buried the line that mattered.
+    public static func updateRelayLines(_ install: RunnerInstallState?) -> [UpdateRelayLine] {
+        guard let install, install.mode == "update", let status = install.status else { return [] }
         switch status {
-        case "pending": return "Queued — the runner picks this up on its next check-in."
-        case "installing": return "Updating this machine’s engine CLIs…"
+        case "pending": return [UpdateRelayLine("Queued — the runner picks this up on its next check-in.")]
+        case "installing": return [UpdateRelayLine("Updating this machine’s engine CLIs…")]
         case "done", "failed":
             let message = install.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return message.isEmpty ? "Nothing to update." : message
-        default: return nil
+            if message.isEmpty { return [UpdateRelayLine("Nothing to update.")] }
+            let lines = message.split(separator: "\n").map(String.init)
+                .filter { updateLineFailed($0) || $0.contains("owned by another user") }
+                .map { UpdateRelayLine($0, failed: updateLineFailed($0)) }
+            return lines.isEmpty ? [UpdateRelayLine("Nothing here needs your attention.")] : lines
+        default: return []
         }
+    }
+
+    /// The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go),
+    /// read per line.
+    static func updateLineFailed(_ line: String) -> Bool {
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
     }
 
     // MARK: Workspaces
@@ -806,7 +930,9 @@ public enum RunnerPageFormat {
 
     /// Whether a newer release than this runner's own is out — the case About This Runner's Update
     /// Runner Now is there for. False when either version isn't known, so nothing is offered on a guess.
-    public static func isBehindLatest(_ runner: Runner, latest: String?) -> Bool {
+    /// Never for the account's managed runner: Orbit rolls its image, so there is no release for it to catch up with.
+    public static func isBehindLatest(_ runner: Runner, latest: String?, managed: Bool? = nil) -> Bool {
+        if managed ?? isManaged(runner) { return false }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
               let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return false
@@ -819,14 +945,22 @@ public enum RunnerPageFormat {
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
     /// Attention's to say, and here is just its version. A runner that reports where its updates stand
     /// says which it is; an older one is judged by `runsAsRoot`, as before.
-    public static func versionValue(_ runner: Runner, latest: String?) -> String? {
+    ///
+    /// The account's managed runner (Orbit Cloud) says only that Orbit updates it: its release with that
+    /// note, or "Kept up to date by Orbit" for an image that reports no release — never `managed-<sha>`.
+    public static func versionValue(_ runner: Runner, latest: String?, managed: Bool? = nil) -> String? {
+        if managed ?? isManaged(runner) {
+            guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  RunnerAttention.isReleaseVersion(version) else { return RunnerPageCopy.MANAGED_RUNNER_KEPT_UP_TO_DATE }
+            return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.MANAGED_RUNNER_UPDATED_BY_ORBIT
+        }
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {
             return nil
         }
         guard let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return version
         }
-        if !isBehindLatest(runner, latest: latest) {
+        if !isBehindLatest(runner, latest: latest, managed: false) {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
         // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.

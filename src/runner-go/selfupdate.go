@@ -45,7 +45,162 @@ func platformKey() string {
 	}
 }
 
+// isNewer reports whether the published release `remote` is newer than `local`, by the same SemVer
+// precedence the control plane uses (contracts/release-versions.json, runner-release.ts).
 func isNewer(remote, local string) bool {
+	return compareReleaseVersions(remote, local) > 0
+}
+
+// releaseVersion is a published runner release version: numeric parts, an optional SemVer prerelease
+// ("0.1.257-beta.1"), and build metadata, which is read and ignored.
+type releaseVersion struct {
+	core []int64
+	pre  []string
+}
+
+func releaseIdentifier(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func releaseIdentifiers(raw string) bool {
+	for _, id := range strings.Split(raw, ".") {
+		if !releaseIdentifier(id) {
+			return false
+		}
+	}
+	return true
+}
+
+// parseReleaseVersion reads a release version, or reports false for a string no release manifest may name.
+func parseReleaseVersion(v string) (releaseVersion, bool) {
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		if !releaseIdentifiers(v[i+1:]) {
+			return releaseVersion{}, false
+		}
+		v = v[:i]
+	}
+	var pre []string
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		if !releaseIdentifiers(v[i+1:]) {
+			return releaseVersion{}, false
+		}
+		pre = strings.Split(v[i+1:], ".")
+		v = v[:i]
+	}
+	if v == "" {
+		return releaseVersion{}, false
+	}
+	parts := strings.Split(v, ".")
+	core := make([]int64, len(parts))
+	for i, part := range parts {
+		if part == "" {
+			return releaseVersion{}, false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return releaseVersion{}, false
+			}
+		}
+		n, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
+			return releaseVersion{}, false
+		}
+		core[i] = n
+	}
+	return releaseVersion{core: core, pre: pre}, true
+}
+
+func releaseIdentifierNumber(id string) (int64, bool) {
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	n, err := strconv.ParseInt(id, 10, 64)
+	return n, err == nil
+}
+
+func compareReleaseIdentifier(a, b string) int {
+	an, aNum := releaseIdentifierNumber(a)
+	bn, bNum := releaseIdentifierNumber(b)
+	switch {
+	case aNum && bNum:
+		if an != bn {
+			if an > bn {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	case aNum:
+		return -1 // numeric identifiers sort below alphanumeric ones
+	case bNum:
+		return 1
+	case a == b:
+		return 0
+	case a > b:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// compareReleaseVersions orders published releases by SemVer precedence. A string that is not a release
+// version falls back to the legacy dot-by-dot numeric comparison this function replaced.
+func compareReleaseVersions(a, b string) int {
+	x, okx := parseReleaseVersion(a)
+	y, oky := parseReleaseVersion(b)
+	if !okx || !oky {
+		return compareLegacyVersions(a, b)
+	}
+	for i := 0; i < len(x.core) || i < len(y.core); i++ {
+		var p, q int64
+		if i < len(x.core) {
+			p = x.core[i]
+		}
+		if i < len(y.core) {
+			q = y.core[i]
+		}
+		if p != q {
+			if p > q {
+				return 1
+			}
+			return -1
+		}
+	}
+	switch {
+	case len(x.pre) == 0 && len(y.pre) == 0:
+		return 0
+	case len(x.pre) == 0:
+		return 1 // a release outranks its prereleases
+	case len(y.pre) == 0:
+		return -1
+	}
+	for i := 0; i < len(x.pre) && i < len(y.pre); i++ {
+		if c := compareReleaseIdentifier(x.pre[i], y.pre[i]); c != 0 {
+			return c
+		}
+	}
+	switch {
+	case len(x.pre) > len(y.pre):
+		return 1
+	case len(x.pre) < len(y.pre):
+		return -1
+	}
+	return 0
+}
+
+// compareLegacyVersions is the ordering used before the SemVer parser: each dot-separated component read
+// as an integer, anything after a non-digit reading as 0. It only answers for strings no release names.
+func compareLegacyVersions(remote, local string) int {
 	r := splitVer(remote)
 	l := splitVer(local)
 	for i := 0; i < len(r) || i < len(l); i++ {
@@ -57,10 +212,13 @@ func isNewer(remote, local string) bool {
 			b = l[i]
 		}
 		if a != b {
-			return a > b
+			if a > b {
+				return 1
+			}
+			return -1
 		}
 	}
-	return false
+	return 0
 }
 
 // elevateUpgrade re-runs `orbit upgrade` under sudo (which prompts for the

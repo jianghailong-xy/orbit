@@ -35,14 +35,11 @@ import {
 import {
   api,
   completeSession,
-  decideApproval,
   deleteSession,
   interruptSession,
-  listApprovals,
   renameSession,
   restoreSession,
   updateSessionConfig,
-  type PermissionRule,
 } from '../api';
 import { Menu } from './ui/Menu';
 import { ApprovalPanel } from './ApprovalPanel';
@@ -71,7 +68,7 @@ import { composerDraftAfterSend, isCurrentWorkUnavailable } from '../lib/compose
 import { materializeReferences, type ReferenceMap } from '../lib/composerRefs';
 import { CURSOR_QUEUE_NOTE, cursorModelPick, cursorSettingRows } from '../lib/cursorRuntime';
 import { encodeId, routeId } from '../lib/idCodec';
-import { machineName } from '../lib/machineSetup';
+import { useMachineName } from '../lib/managedRunner';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { poolsAsProviders, providerPoolsQuery } from '../lib/providerPools';
 import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQuery, wikiChatsQuery, workspacesQuery, type Me } from '../lib/queries';
@@ -146,7 +143,6 @@ import {
   clampPermissionModeForModel,
   DEFAULT_PERMISSION_MODE,
   defaultModelFor,
-  defaultModelKey,
   effectiveSessionModel,
   effortOptionsFor,
   isLoginProvider,
@@ -159,6 +155,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { wikiEntryPath, type WikiSpaceRow } from '../lib/wiki';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
 import { wikiDocSectionPath } from '../lib/wikiDocs';
 import { wikiPlanDocPath, wikiPlanPath } from '../lib/wikiPlan';
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
@@ -222,7 +219,8 @@ export function WikiChatPanel({
   // A chat's first message, kept from the create until its own conversation draws it.
   const [opening, setOpening] = useState<{ sessionId: string; message: ChatOpening } | null>(null);
 
-  const style: CSSProperties = layout === 'sheet' ? {} : { top, width: width ?? undefined };
+  // A column stands from the window's top (board wiki-rail 03 Ⓑ); only a panel over the page keeps under the head.
+  const style: CSSProperties = layout === 'sheet' ? {} : layout === 'over' ? { top, width: width ?? undefined } : { width: width ?? undefined };
   return (
     <aside
       className={`wk-chat-panel is-${layout}${layout === 'sheet' && sheetFull ? ' is-full' : ''}`}
@@ -582,7 +580,7 @@ const modeLabel = (value: string): string => MODE_OPTIONS.find((option) => optio
  * The composer toolbar's facts and picks for a chat, by the session page's own rules: the models of the engine and
  * provider the chat runs on, the mode and the effort as that model takes them, a fast lane where there is one, and a
  * Cursor model's own settings. A pick says what it changes and `change` applies it — a new chat keeps it for its
- * create, a chat that runs writes its session's config — and, as on the session page, a model or an effort picked is
+ * create, a chat that runs writes its session's config — and, as on the session page, an effort picked is
  * remembered as the account's next.
  */
 function useChatToolbar({
@@ -603,12 +601,6 @@ function useChatToolbar({
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
-  const modelPreference = useMutation({
-    // In the order they were made, beside the session page's own picks.
-    scope: { id: 'model-preferences' },
-    mutationFn: (model: string) =>
-      api('/users/me/preferences', { method: 'PATCH', body: { defaultModels: { [defaultModelKey(engine, provider)]: model } } }),
-  });
   const catalog = runner?.modelCatalog ?? null;
   const shownModel = current.model;
   const shownCursorPick = engine === AgentProvider.CURSOR ? cursorModelPick(shownModel, catalog) : null;
@@ -629,23 +621,12 @@ function useChatToolbar({
   const permissionSemanticsFor = (label: string) =>
     derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog);
 
-  const remember = (patch: { defaultModels?: Record<string, string>; defaultEffort?: string }) =>
+  const remember = (patch: { defaultEffort: string }) =>
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
-      prev
-        ? {
-            ...prev,
-            preferences: {
-              ...prev.preferences,
-              ...(patch.defaultModels ? { defaultModels: { ...prev.preferences?.defaultModels, ...patch.defaultModels } } : {}),
-              ...(patch.defaultEffort !== undefined ? { defaultEffort: patch.defaultEffort } : {}),
-            },
-          }
-        : prev,
+      prev ? { ...prev, preferences: { ...prev.preferences, defaultEffort: patch.defaultEffort } } : prev,
     );
   const pickModel = (model: string): void => {
-    // A re-selection is still a preference, as on the session page.
-    remember({ defaultModels: { [defaultModelKey(engine, provider)]: model } });
-    modelPreference.mutate(model);
+    // The pick is this chat's alone: no account-wide model memory is written (docs/workspace-default-model-design.md).
     if (model === shownModelName) return;
     // A model that cannot run Auto drops it to Default, and an effort the model does not take goes too.
     const drop = shownMode === 'Auto' && !supportsAuto(model, engine, provider, configured, catalog);
@@ -804,7 +785,6 @@ function sharedComposerProps(
     replyTo: null,
     workspaceReadOnly: true,
     setWorkspaceId: () => undefined,
-    managedDraftBlocked: false,
     ...modelMenu,
     shownMode: toolbar.shownMode,
     onDraftMode: toolbar.onMode,
@@ -1156,6 +1136,7 @@ function WikiChatSession({
   opening: ChatOpening | null;
   onNewChat: () => void;
 }) {
+  const machineNameOf = useMachineName();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const message = useToast();
@@ -1280,7 +1261,12 @@ function WikiChatSession({
   });
 
   // ── Sending, by the session page's rules: into the running turn unless held or ⌥Enter, Stop with nothing typed ──
-  const defaultSendIntent = defaultSessionTurnIntent({ live, status: runStatus, numTurns: Number(session?.numTurns ?? 0) });
+  const defaultSendIntent = defaultSessionTurnIntent({
+    live,
+    status: runStatus,
+    numTurns: Number(session?.numTurns ?? 0),
+    nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
+  });
   const generating = !!session && (isGenerating(session, sessionRunStateOf(session)) || outlivingSessionWork(session) !== null);
   const showStop = generating && !draft.text.trim() && draft.readyImages.length === 0;
   const queueOffered = defaultSendIntent === 'CURRENT_WORK' && !showStop && runtimeTakesMidTurnSteer(engine);
@@ -1388,12 +1374,12 @@ function WikiChatSession({
           ...previous.slice(-4),
           statusCard({
             surface: 'Web',
-            runnerName: runner ? machineName(runner) : undefined,
+            runnerName: runner ? machineNameOf(runner) : undefined,
             runnerOnline: runner?.online,
             activeSessions: runner?.activeSessions,
             maxConcurrent: runner?.maxConcurrent,
             sessionTitle: session?.title ?? null,
-            sessionStatus: session ? statusLabel(session, null, runner ? machineName(runner) : null) : null,
+            sessionStatus: session ? statusLabel(session, null, runner ? machineNameOf(runner) : null) : null,
             workspaceName: session?.workspace?.name,
             engine: ENGINE_CLI_NAMES[engine],
             provider,
@@ -1435,6 +1421,7 @@ function WikiChatSession({
   // The engine's guess at the next message, offered in an idle, empty composer as on the session page.
   const offeredSuggestion = offeredPromptSuggestion(stream.eventsSessionId === sessionId ? currentPromptSuggestion(stream.events) : null, {
     idle,
+    queuedTurns: visibleQueuedTurns.length,
     draftEmpty: draft.text === '' && draft.images.length === 0,
     replying: false,
     pendingApprovals: approvals.length + (session?.pendingApprovals ?? 0),
@@ -1454,23 +1441,7 @@ function WikiChatSession({
     }, 0);
   };
 
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    note?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    setApprovals((previous) => previous.filter((approval) => approval.id !== approvalId));
-    try {
-      await decideApproval(sessionId, approvalId, behavior, note, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(sessionId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated } = useApprovalDecisions(sessionId, setApprovals);
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).
   const focusCard = useMemo(() => {
@@ -1521,7 +1492,7 @@ function WikiChatSession({
   const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(stream.events);
   return (
     <>
-      {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineName(runner))}</div>}
+      {runner && runner.online === false && <div className="wk-chat-note">{wikiChatOffline(machineNameOf(runner))}</div>}
       <div className="wk-chat-body" ref={bodyRef}>
         <SessionConversation
           sessionId={sessionId}
@@ -1544,6 +1515,7 @@ function WikiChatSession({
               key={approval.id}
               approval={approval}
               onDecide={decide}
+              untranslated={untranslated[approval.id]}
               rememberable={approvalRememberOffered(engine ?? '')}
             />
           ))}

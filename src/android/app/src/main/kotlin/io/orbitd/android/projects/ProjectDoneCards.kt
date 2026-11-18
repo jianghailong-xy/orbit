@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.AnswerNotTranslated
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -45,20 +49,25 @@ import java.time.Instant
 @Composable
 internal fun ProjectDoneCard(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, record: JsonObject?,
     sealRead: Boolean, now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit,
-    onNotYet: (suspend (String) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, actions: CriteriaActions? = null,
-    trailing: @Composable () -> Unit = {}) {
+    onNotYet: (suspend (String, Boolean) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, actions: CriteriaActions? = null,
+    trailing: @Composable () -> Unit = {}, notTranslated: Boolean = false) {
     if (ProjectDone.recorded(doc, record)) ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
-    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions, trailing)
+    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions, trailing,
+        notTranslated)
 }
 
 @Composable
 private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, sealRead: Boolean,
-    now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String) -> Boolean)?,
-    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit) {
+    now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String, Boolean) -> Boolean)?,
+    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit, notTranslated: Boolean) {
     val counts = ProjectDone.counts(doc)
     val nonCode = DoneFollowUps.nonCode(doc)
     val main = ProjectDone.mainBranch(doc)
-    val asked = request?.obj("doneRequest")
+    // The coordinator's call and gaps in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    var showOriginal by rememberSaveable(tag) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = request?.let { OwnerCardTranslation.openItem(it, owner) }
+    val asked = (if (translated != null && !showOriginal) translated else request)?.obj("doneRequest")
     var recording by remember { mutableStateOf(false) }
     // "Not yet…" and the note it asks for, kept while the card is up.
     var notYetOpen by rememberSaveable(tag) { mutableStateOf(false) }
@@ -75,9 +84,10 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             trailing()
         }
         // Which project, and who asked and how long it has waited — or that nobody did.
-        Text(ProjectDone.meta(doc.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request.text("waitingSince"), now) else null),
+        Text(ProjectDone.meta(doc.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request?.text("waitingSince"), now) else null),
             Modifier.testTag("$tag-meta"), style = MaterialTheme.typography.labelMedium, color = muted)
         asked?.let { DoneHead(ProjectDone.coordinatorCall); DonePanel { Text(it.text("judgment").orEmpty(), Modifier.padding(12.dp).testTag("$tag-judgment")) } }
+        if (asked != null && translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         // A non-code project says so first, who marked it and when, and where to change it (decided board ③ A).
         if (nonCode) NonCodeBanner(doc, "$tag-non-code", actions?.changeMark)
         // Done when: the counts, and every criterion — open at once up to a dozen, one press away beyond.
@@ -113,12 +123,16 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth().testTag("$tag-note"), enabled = !sending,
                 placeholder = { Text(ProjectDone.missingBeforeDone) }, minLines = 2, maxLines = 5)
             Text(ProjectDone.notYetHint, style = MaterialTheme.typography.labelMedium, color = muted)
-            Button(onClick = {
-                val text = ProjectDone.declineNote(note) ?: return@Button
-                if (sending) return@Button
+            fun send(asWritten: Boolean) {
+                val text = ProjectDone.declineNote(note) ?: return
+                if (sending) return
                 sending = true
-                scope.launch { try { if (onNotYet(text)) { note = ""; notYetOpen = false } } finally { sending = false } }
-            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-send"), enabled = enabled && !sending && ProjectDone.declineNote(note) != null) {
+                scope.launch { try { if (onNotYet(text, asWritten)) { note = ""; notYetOpen = false } } finally { sending = false } }
+            }
+            // Settings › Translation (2A): the note could not be translated, so nothing was sent.
+            if (notTranslated) AnswerNotTranslated({ send(false) }, { send(true) }, enabled && !sending && ProjectDone.declineNote(note) != null,
+                Modifier.testTag("$tag-translation-failed"))
+            Button(onClick = { send(false) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-send"), enabled = enabled && !sending && ProjectDone.declineNote(note) != null) {
                 Text(ProjectDone.sendToCoordinator) }
             OutlinedButton(onClick = { notYetOpen = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-back"), enabled = !sending) {
                 Text(ProjectDone.back) }
@@ -268,6 +282,8 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     var record by remember(handle, sessionId) { mutableStateOf<JsonObject?>(null) }
     var readsAtRecord by remember(handle, sessionId) { mutableStateOf<Map<String, JsonElement>?>(null) }
     var error by remember(handle, sessionId) { mutableStateOf<String?>(null) }
+    // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
+    var notTranslated by remember(handle, sessionId) { mutableStateOf(false) }
     LaunchedEffect(reads) {
         if (record != null && reads !== readsAtRecord && doc != null && ProjectDoc.status(doc) != "DONE") { record = null; readsAtRecord = null }
     }
@@ -290,7 +306,12 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
         finally { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
     }.await()
     val itemId = live?.text("itemId")
-    val notYet: (suspend (String) -> Boolean)? = if (itemId == null) null else { note -> write(ProjectDone.notDeclined) { api.declineDone(projectId, itemId, note) } }
+    val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
+        write(ProjectDone.notDeclined) {
+            try { api.declineDone(projectId, itemId, note, asWritten); notTranslated = false }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); throw failure }
+        }.also { if (!it && notTranslated) error = null }
+    }
     // Open, Change, Move to a follow-up… and Confirm… from the conversation: links into the app, and the owner's doors, after which the
     // conversation is read again.
     val actions = remember(handle, projectId, open) { open?.let { link ->
@@ -313,7 +334,7 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
                         val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
                         if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
                     },
-                    onNotYet = notYet, actions = actions,
+                    onNotYet = notYet, actions = actions, notTranslated = notTranslated,
                     onReopen = { if (write(ProjectDone.notReopened) { api.setStatus(projectId, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; readsAtRecord = null } })
                 ProjectDone.Slot.None -> Unit
             }

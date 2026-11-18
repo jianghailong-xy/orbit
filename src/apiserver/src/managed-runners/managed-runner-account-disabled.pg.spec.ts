@@ -19,7 +19,7 @@
  *       hold it — and the drain is never called off. Compute stays reserved while the instance runs,
  *       once only its stop is reported, and while its volume is attached; the kubelet's report is
  *       recorded as the proof, the Pod is deleted by UID, and only then is the generation retired and
- *       compute given back. The PVC, the runner row and the default workspace stay; the old
+ *       compute given back. The PVC, the runner row and the owner-created workspace stay; the old
  *       credential is dead. An instance that already stopped on its own sleeps the same way (an
  *       enabled owner's is started again); one gone without the kubelet's report fences, compute kept;
  *   (4) nothing wakes it while the account is disabled: demand — the hook every session path calls —
@@ -84,9 +84,10 @@ test('a disabled account\'s managed runner is put to sleep and kept there, again
 
   /** A session of the runner, in `status`, as a turn queued or run there leaves one. */
   async function session(m: ManagedRunner, status: string): Promise<string> {
+    const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const id = randomUUID();
     const columns: Record<string, unknown> = {
-      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: m.defaultWorkspaceId, assigned_runner_id: m.runnerId,
+      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'managed work', prompt: 'work', provider: 'claude', status, num_turns: 1, runtime_session_id: randomUUID(),
     };
     const names = Object.keys(columns);
@@ -316,8 +317,8 @@ test('a disabled account\'s managed runner is put to sleep and kept there, again
     assert.equal(asleep.volumeHandle, ready.volumeHandle);
     const runnerAfter = await db.runner.findUniqueOrThrow({ where: { id: ready.runnerId } });
     assert.notEqual(runnerAfter.tokenHash, runnerBefore.tokenHash, 'the drained instance\'s credential is replaced');
-    const workspace = await db.workspace.findUniqueOrThrow({ where: { id: ready.defaultWorkspaceId } });
-    assert.equal(workspace.deletedAt, null, 'the default workspace is kept');
+    const workspace = await db.workspace.findFirstOrThrow({ where: { runnerId: ready.runnerId } });
+    assert.equal(workspace.deletedAt, null, 'the owner-created workspace is kept');
     assert.equal(workspace.runnerId, ready.runnerId);
     assert.deepEqual(madeSince(w, mark), [], 'nothing was created');
     await assertSaysDisabled(w, ownerId, 'SLEEPING');

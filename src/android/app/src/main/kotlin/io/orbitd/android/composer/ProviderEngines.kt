@@ -30,6 +30,15 @@ object ProviderEngines {
     val ENGINE_CLI_NAMES = mapOf(CLAUDE to "Claude Code", CODEX to "Codex", KIMI to "Kimi Code", ANTIGRAVITY to "Antigravity CLI",
         OPENCODE to "OpenCode", DSH to "DeepSeek Harness", CURSOR to "Cursor CLI")
 
+    /** The name Claude Code gives a Claude api id — `claude-opus-5-5` is "Opus 5.5", `claude-haiku-4-5` "Haiku 4.5" (web
+     *  `claudeModelName`, the runner's claudeModelID in reverse) — for a model the runner's catalogue has no row for: a runner whose
+     *  probe failed, a pin on a previous model. Anything else stays as it is. */
+    fun claudeModelName(id: String): String {
+        val m = Regex("^claude-([a-z]+)-(\\d+)(?:-(\\d{1,2}))?$").matchEntire(id) ?: return id
+        val (family, major, minor) = m.destructured
+        return family.replaceFirstChar { it.uppercase() } + " " + major + if (minor.isEmpty()) "" else ".$minor"
+    }
+
     /**
      * Whether this app draws [engine] in a list of engines, given the runners in view — the account's, where a page has them, else the
      * one it is about (web `webShowsEngine`, OrbitKit `appleShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of

@@ -16,6 +16,7 @@ import {
   OPEN_ITEM_TURN_PREFIX,
   openItemOwed,
   openItemDeliveredAt,
+  openItemCoordinatorCanTake,
 } from './project-open-item';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 
@@ -170,7 +171,9 @@ export interface ReconciledOpenItem {
  * that it is taking too long — that card reached an owner on 2026-10-08 about a fix that had landed
  * and been merged into main two hours earlier.
  *
- * Before the ITEM delivery is taken, there is no deadline. Once delivered, the frozen window
+ * Before the ITEM delivery is taken, there is no deadline while the coordinator can still take it
+ * (`openItemCoordinatorCanTake`); one that is down with no retry coming gets the window from
+ * `waiting_since`, so the item reaches the owner. Once delivered, the frozen window
  * starts at delivered_at and follows concrete progress on this item. An item is opened with `escalate_at`
  * equal to `waiting_since + the project's frozen window` (§4.1, X-E2). The latest progress fact (the
  * answered delivery turn, a task linked as a fix, the linked task's work session, or an integration
@@ -186,7 +189,9 @@ export interface ReconciledOpenItem {
 export function escalatesAt(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
   return Prisma.sql`CASE
-    WHEN ${openItemDeliveredAt(alias)} IS NULL THEN NULL
+    -- Undelivered, it waits for its receipt only while the coordinator can still take the turn. One
+    -- that is down with no retry coming never will, so the clock runs from when the item opened.
+    WHEN ${openItemDeliveredAt(alias)} IS NULL AND ${openItemCoordinatorCanTake(alias)} THEN NULL
     -- A live concrete fix owns the clock. The item remains OPEN, but it is not handed to the owner
     -- while the task/session or the coordinator's integration retry is still in flight.
     WHEN EXISTS (
@@ -238,7 +243,8 @@ export function escalatesAt(alias: string): Prisma.Sql {
     )
     THEN NULL
     ELSE GREATEST(
-      ${openItemDeliveredAt(alias)} + (${item}."escalate_at" - ${item}."waiting_since"),
+      COALESCE(${openItemDeliveredAt(alias)} + (${item}."escalate_at" - ${item}."waiting_since"),
+               ${item}."escalate_at"),
       COALESCE((
         SELECT max(progress."at") + (${item}."escalate_at" - ${item}."waiting_since")
           FROM (

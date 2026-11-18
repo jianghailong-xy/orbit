@@ -85,6 +85,8 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
     let tone: Color
     let summary: String
     let dimmed: Bool
+    /// The card's edge drawn solid and heavier (`approvalChrome`'s `emphasized`).
+    let emphasized: Bool
     let badge: String?
     /// The review drawn as a grouped page: cards on the grouped backdrop. The batch card's review
     /// draws its content as cards, and the other reviews keep the plain sheet they were built on.
@@ -93,13 +95,14 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
     private let actions: Actions
 
     init(title: String, symbol: String, tone: Color, summary: String, dimmed: Bool = false,
-         badge: String? = nil, grouped: Bool = false,
+         emphasized: Bool = false, badge: String? = nil, grouped: Bool = false,
          @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions) {
         self.title = title
         self.symbol = symbol
         self.tone = tone
         self.summary = summary
         self.dimmed = dimmed
+        self.emphasized = emphasized
         self.badge = badge
         self.grouped = grouped
         self.content = content()
@@ -157,7 +160,7 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
                     }
                     .font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.accentColor)
                 }
-                .approvalChrome(tone, dimmed: dimmed)
+                .approvalChrome(tone, dimmed: dimmed, emphasized: emphasized)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -168,7 +171,7 @@ struct ApprovalReviewLayout<Content: View, Actions: View>: View {
                 content
                 actions
             }
-            .approvalChrome(tone, dimmed: dimmed)
+            .approvalChrome(tone, dimmed: dimmed, emphasized: emphasized)
         }
     }
 }

@@ -15,7 +15,6 @@ import {
   SESSION_MESSAGE_NOT_YOU,
   SESSION_MESSAGE_OPEN_TASK,
   SESSION_MESSAGE_UNDELIVERED,
-  sessionMessageSticky,
   sessionMessageTitle,
 } from '../lib/sessionMessage';
 import { AppLink } from './AppLink';
@@ -29,8 +28,7 @@ import { ExportCtx, MD, REVEAL_EVENT, relTime } from './Transcript';
  * The words are the sending agent's and are drawn as they were sent; what the card adds is who sent
  * them: the session's title, which opens it, the agent it runs as, and the task it runs, from the
  * payload the control plane recorded beside the echo (`sessionMessage`, lib/sessionMessage). The
- * block delivery appended to tell the recipient the same thing is not shown again; anything else
- * delivery appended rides inside, folded.
+ * block delivery appended stays out of the transcript.
  *
  * Every word is shared with the native card (OrbitKit `SessionMessageCard`), and
  * `SessionMessageCopyParityTests.swift` reads lib/sessionMessage.ts to hold the two to it.
@@ -42,7 +40,6 @@ export function SessionMessageCard({
   ts,
   undelivered,
   narrower,
-  attached,
   queued,
 }: {
   card: Card;
@@ -51,10 +48,8 @@ export function SessionMessageCard({
   seq?: number;
   ts?: string;
   undelivered?: boolean;
-  /** The line for a sender that runs narrower than this session (`splitSessionMessageNote`). */
+  /** The line for a sender that runs narrower than this session (`parseSessionMessageNarrower`). */
   narrower?: string | null;
-  /** What delivery appended to the same turn, as its own folded entry. */
-  attached?: ReactNode;
   /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
    *  tail): the card it will be once a runner takes it, with how it stands and Cancel at its foot. */
   queued?: ReactNode;
@@ -83,7 +78,6 @@ export function SessionMessageCard({
   const sessionHref = sessionPublic ? `/sessions/${encodeURIComponent(sessionPublic)}` : null;
   const taskPublic = card.fromTaskId ? routeId(card.fromTaskId) : null;
   const taskHref = taskPublic ? `/tasks/${encodeURIComponent(taskPublic)}` : null;
-  const sticky = sessionMessageSticky(card, text);
   const sentAt = ts ? relTime(ts) : null;
   // Drawn the way a chat draws somebody else's message (docs/mocks/session-message-bubble, approved
   // 2026-11-12): who sent it on one grey line, their words in a bubble on the incoming side that hugs
@@ -91,14 +85,13 @@ export function SessionMessageCard({
   // message is the side it sits on and the "From" line; the sentence saying so is that line's tooltip.
   return (
     <div className="smc-wrap">
-      {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
-          way it names every other turn the owner did not type. */}
+      {/* `data-orbit-round`: Orbit opened this round, so the sticky bar at the top of the transcript
+          hides over it rather than naming a message nobody typed (WorkspaceView). */}
       <div
         ref={rootRef}
         className={`smc${queued ? ' is-queued' : ''}${clamped ? ' is-clamped' : ''}`}
         data-seq={seq}
-        data-sticky-label={sticky.label}
-        data-sticky-text={sticky.text}
+        data-orbit-round
       >
         <div className="smc-head" title={SESSION_MESSAGE_NOT_YOU}>
           <span className="smc-mark" aria-hidden><MessageOutlined /></span>
@@ -129,7 +122,6 @@ export function SessionMessageCard({
           {card.requestId && (exporting
             ? <span className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></span>
             : <SessionRequestStatus requestId={card.requestId} />)}
-          {attached}
         </div>
         {narrower && <div className="smc-narrower">{narrower}</div>}
         {undelivered && <div className="smc-undelivered">{SESSION_MESSAGE_UNDELIVERED}</div>}

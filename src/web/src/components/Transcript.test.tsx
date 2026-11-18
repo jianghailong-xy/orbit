@@ -51,7 +51,7 @@ describe('transcript sign-in cards', () => {
     expect(cards(html)).toBe(1);
   });
 
-  it('keeps a card per failure when the runner reports different ones', () => {
+  it('keeps a row per failure when the runner reports different ones — the older one settled', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -61,7 +61,8 @@ describe('transcript sign-in cards', () => {
       />,
     );
 
-    expect(cards(html)).toBe(2);
+    expect(cards(html)).toBe(1);
+    expect(html).toContain('data-settled="superseded"');
   });
 
   it('shows the message the retry would re-send', () => {
@@ -75,6 +76,65 @@ describe('transcript sign-in cards', () => {
 
     expect(html).toContain('ship the thing');
     expect(html).toContain('Retry — re-send my last message');
+  });
+
+  // Once the session has moved past a failure its card is history: one muted row, no sign-in and
+  // no Retry — whose re-send is the session's latest message, not the one this failure ate.
+  describe('a card the session has moved past', () => {
+    const OTHER = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+    const user = (seq: number, text: string): RunEvent => ({ seq, type: 'user', payload: { text } });
+    const switched = (seq: number, notice: string): RunEvent => ({
+      seq,
+      type: 'system',
+      payload: { subtype: 'init', notice, noticeKind: 'pool-member-switched' },
+    });
+    const render = (events: RunEvent[]) =>
+      renderToStaticMarkup(
+        <AuthErrorCtx.Provider value={{ provider: 'codex', onRetry: () => {}, retryText: 'ship the thing' }}>
+          <Transcript events={events} />
+        </AuthErrorCtx.Provider>,
+      );
+    const settled = (html: string) => [...html.matchAll(/data-settled="(\w+)"/g)].map((m) => m[1]);
+
+    it('keeps only the latest unsettled failure as a full card', () => {
+      const html = render([
+        user(1, 'deploy'),
+        errorEvent(2, AUTH_FAILED),
+        user(3, 'deploy'),
+        errorEvent(4, OTHER),
+      ]);
+
+      expect(settled(html)).toEqual(['superseded']);
+      expect(cards(html)).toBe(1);
+      expect(html.split('Retry — re-send my last message').length - 1).toBe(1);
+    });
+
+    it('marks failures resolved once the agent works again, and mutes the account switches', () => {
+      const html = render([
+        user(1, 'deploy'),
+        switched(2, 'Switched to B — A is signed out'),
+        errorEvent(3, AUTH_FAILED),
+        user(4, 'deploy'),
+        switched(5, 'Switched to A — B is signed out'),
+        errorEvent(6, OTHER),
+        user(7, 'deploy'),
+        switched(8, 'Switched to B — A is signed out'),
+        { seq: 9, type: 'assistant', payload: { text: 'Deployed.' } },
+      ]);
+
+      expect(settled(html)).toEqual(['superseded', 'resolved']);
+      expect(cards(html)).toBe(0);
+      expect(html).not.toContain('Retry — re-send my last message');
+      expect(html).toContain('— resolved');
+      expect(html.split('chat-notice chat-notice-settled').length - 1).toBe(3);
+    });
+
+    it('leaves the switch beside a live card in the warning tone', () => {
+      const html = render([user(1, 'deploy'), switched(2, 'Switched to B — A is signed out'), errorEvent(3, AUTH_FAILED)]);
+
+      expect(cards(html)).toBe(1);
+      expect(html).not.toContain('chat-notice-settled');
+    });
   });
 });
 
@@ -1382,6 +1442,56 @@ describe('Orbit write tool cards', () => {
     payload: { id: 't1', name, input },
   });
 
+  it("draws the owner's Chat about this reply to a card as their message, not inside the call", () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { result: string }[] };
+    for (const name of ['mcp__orbit__project_create', 'mcp__orbit__runner_delete']) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent(name, { title: 'Move the database' }),
+              {
+                seq: 2,
+                type: 'tool_result',
+                payload: { toolUseId: 't1', content: [{ type: 'text', text: fixture.cases[0].result }] },
+              },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      // Its own bubble, as anything else they type is, and never folded into a steps line (where
+      // the native client used to leave it, under "Used tool").
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+      expect(html).not.toContain('Not done yet, and not a no');
+    }
+  });
+
+  it("draws the owner's words from the chat receipt an engine records in place of the text", () => {
+    // Claude Code and Codex record a result's structuredContent, the runner's receipt, instead of its
+    // text; a chat's receipt carries the same reply as its `text`.
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { name: string; result: string }[] };
+    const receipt = fixture.cases.find((c) => c.name === 'the receipt an engine shows in place of the text')!.result;
+    for (const content of [receipt, [{ type: 'text', text: receipt }]]) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent('mcp__orbit__project_create', { title: 'Move the database' }),
+              { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content } },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.
@@ -1565,10 +1675,10 @@ describe('injected context in a user bubble', () => {
   // These events carry the note the apiserver records beside the echo (`controlPlaneNote`), which
   // is the only thing that tells what was appended apart; an event without one is drawn exactly as
   // echoed (Transcript.controlPlaneNote.test.tsx).
-  const COORDINATOR = `<orbit_project_coordinator_context>
-  你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
-</orbit_project_coordinator_context>`;
-  const appended = `\n\n${COORDINATOR}`;
+  const CONDITIONS = `<list-conditions>
+  这个列表的协调会话。
+</list-conditions>`;
+  const appended = `\n\n${CONDITIONS}`;
   const userEvent = (text: string, controlPlaneNote?: string): RunEvent => ({
     seq: 1,
     type: 'user',
@@ -1580,40 +1690,28 @@ describe('injected context in a user bubble', () => {
       <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
     );
 
-    // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
+    // Over the whole markup: the block is nowhere in it — not in the body, and not in an
     // attribute either, where it used to ride as a tooltip.
     expect(html).toContain('把这个项目协调起来');
-    expect(html).not.toContain('orbit_project_coordinator_context');
+    expect(html).not.toContain('list-conditions');
     expect(html).not.toContain('的协调会话');
   });
 
-  it('keeps the block one click away, so what the model read is not lost', () => {
-    const events = [userEvent(`把这个项目协调起来${appended}`, appended)];
+  it('omits the appended note from both the live transcript and the export', () => {
+    const events = [userEvent(`Keep this project coordinated${appended}`, appended)];
     const html = renderToStaticMarkup(<Transcript events={events} />);
     const exported = renderToStaticMarkup(
       <ExportCtx.Provider value={{ images: new Map() }}>
         <Transcript events={events} live={false} />
       </ExportCtx.Provider>,
     );
-
-    // A tooltip is out of reach on a touch screen, so the entry itself opens to the block: folded
-    // here (⊕), and already open in an export (⊖), where there is nothing to click.
-    const entry = (expanded: boolean) =>
-      new RegExp(
-        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: project coordinator context</button>`,
-      );
-    expect(html).toMatch(entry(false));
-    expect(exported).toMatch(entry(true));
-    expect(exported).toContain('的协调会话');
-  });
-
-  it('says that something was attached, so the reply is not unexplained', () => {
-    const html = renderToStaticMarkup(
-      <Transcript events={[userEvent(`把这个项目协调起来${appended}`, appended)]} />,
-    );
-
-    expect(html).toContain('Orbit attached');
-    expect(html).toContain('project coordinator context');
+    for (const markup of [html, exported]) {
+      expect(markup).toContain('Keep this project coordinated');
+      expect(markup).not.toContain('Orbit attached');
+      expect(markup).not.toContain('chat-injected');
+      expect(markup).not.toContain('list-conditions');
+      expect(markup).not.toContain('的协调会话');
+    }
   });
 
   it('leaves a message nobody appended to completely alone', () => {
@@ -1623,10 +1721,14 @@ describe('injected context in a user bubble', () => {
     expect(html).not.toContain('Orbit attached');
   });
 
-  it('does not offer to copy a message whose only text was injected', () => {
+  // Owner rule 2026-11-16: a turn whose only text was injected is nobody's message — the From Orbit line in the
+  // agent's stream (OrbitEventLine), naming the block, never the reader's bubble.
+  it('draws a message whose only text was injected as the From Orbit line, with nothing to copy', () => {
     const html = renderToStaticMarkup(<Transcript events={[userEvent(appended, appended)]} />);
 
-    expect(html).toContain('Orbit attached');
+    expect(html).toContain('From Orbit');
+    expect(html).toContain('list conditions');
+    expect(html).not.toContain('chat-user');
     expect(html).not.toContain('aria-label="Copy message"');
   });
 });
@@ -2275,14 +2377,14 @@ describe('runtime authentication help', () => {
   });
 });
 
-describe('shared-checkout notice', () => {
+describe('main-checkout notice', () => {
   const NOTICE =
-    'This turn left 1 file modified in the shared checkout /root/orbit, outside this session’s worktree: src/a.ts.';
+    "1 file changed in the main checkout during this turn /root/orbit on main, outside this session's worktree. Orbit saw them appear; it can't tell who wrote them.";
 
   it('renders a runner notice as a calm note, not an error', () => {
     const html = renderToStaticMarkup(
       <Transcript
-        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'shared-checkout-dirty' } }]}
+        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'main-checkout-changed' } }]}
       />,
     );
 
@@ -2581,5 +2683,33 @@ describe('an auto-retry card whose task a newer run has taken', () => {
 
     expect(html).toContain('chat-quota');
     expect(html).not.toContain('A newer run has this task');
+  });
+});
+
+describe('legacy secret patch notices', () => {
+  const pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report.";
+  const unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret.";
+  const legacy = (seq: number, template = pending, turnId = 'one'): RunEvent => ({
+    seq, type: 'system', turnId,
+    payload: { subtype: 'secret_patch_withheld', path: `file${seq}`, notice: `file${seq}: ${template}` },
+  });
+  it('folds consecutive temporary templates and preserves real matches, unknown notices and summaries', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), legacy(2, unreadable),
+      { seq: 3, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'real', notice: 'real holds the value of a secret' } },
+      { seq: 4, type: 'system', payload: { subtype: 'secret_patch_withheld', path: 'unknown', notice: 'Unknown notice' } },
+      { seq: 5, type: 'system', payload: { subtype: 'secret_patches_withheld', count: 3, reason: 'record_unreadable', notice: 'Record summary' } },
+    ]} />);
+    expect(html).toContain("Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.");
+    expect(html).not.toContain('file1:');
+    expect(html).toContain('real holds the value of a secret');
+    expect(html).toContain('Unknown notice');
+    expect(html).toContain('Record summary');
+  });
+  it('does not fold across a different event or turn', () => {
+    const html = renderToStaticMarkup(<Transcript events={[
+      legacy(1), { seq: 2, type: 'system', payload: { notice: 'Boundary' } }, legacy(3), legacy(4, pending, 'two'),
+    ]} />);
+    expect(html.match(/Orbit held back the diff of 1 file while/g)).toHaveLength(3);
   });
 });

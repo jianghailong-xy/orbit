@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -45,9 +46,25 @@ const (
 	// updates without draining, and one that never is gets the release within the hour plus the
 	// longest turn it was running when the limit came (docs/runner-link-design.md §15.14).
 	selfUpdateDeferralLimit = time.Hour
+	// A busy runner's automatic update does not drain at selfUpdateDeferralLimit (owner, 2026-11-14):
+	// a drain starting an hour after a release came out landed while the owner was at work, and their
+	// new session waited behind it. It waits for idle for selfUpdateIdleWait instead, then drains at
+	// the first check inside the low hours, selfUpdateLowHoursFrom to selfUpdateLowHoursTo on the
+	// runner's local clock. A window rather than one moment, so a wait that runs out at 03:00 still
+	// drains that night. Worst case: the wait runs out just past the window, and the drain comes the
+	// next night, about 26 hours after the release. A release the owner put off (Later) keeps
+	// selfUpdateDeferralLimit and no window: the owner chose its time.
+	selfUpdateIdleWait     = 6 * time.Hour
+	selfUpdateLowHoursFrom = 2
+	selfUpdateLowHoursTo   = 6
 	// How often a draining runner looks again whether its turns have run out: the drain holds work
 	// back, so it should not outlast them by a whole check interval.
 	selfUpdateDrainCheckInterval = 15 * time.Second
+	// How long a drain waits for the turns in flight before it interrupts them, as the owner's Update
+	// Now does (owner, 2026-11-14: "wait at most 5 minutes"). Holding every new session and follow-up
+	// behind a turn that runs for hours cost more than cutting it: the cut turn is handed back as the
+	// update's continuation and goes on on the updated runner.
+	selfUpdateDrainLimit = 5 * time.Minute
 	// How long the runner must have been quiet — no turn ended, no session or turn claimed — before an
 	// automatic update installs (closeForUpdate). A conversation between two turns has nothing in
 	// flight, and an update taken then makes the owner's next message wait behind the restart and
@@ -128,12 +145,17 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // the pool drains for it (drainForUpdate): this runner claims no new session or turn and the
 // heartbeat says it is draining, so the control plane hands it no merge, commit, landing or
 // repository operation either, and a follow-up the control plane hands a session's permit to as its
-// turn ends does not start (holdFollowUpForUpdate). Nothing running is stopped — the drain waits for the turns and
-// operations in flight to end by themselves, and the first check that finds none takes the update.
+// turn ends does not start (holdFollowUpForUpdate). The drain waits for the turns and operations in
+// flight to end by themselves, and the first check that finds none takes the update — for drainLimit
+// at most (selfUpdateDrainLimit): the first check past it takes the update as the owner's Update Now
+// does, interrupting the turns still in flight.
 // Draining, a check does not read the release again: one that failed would otherwise reopen the
 // pool, and the install that follows the stop reads the assigned release anyway (selfUpdate). The
 // clock is not restarted by a check that finds nothing, a failed one included: the runner has been
 // behind a release since it started.
+//
+// In runLoop the gate waits longer and at night (lowHours, drainIsDue): selfUpdateIdleWait, then the
+// first check in the low hours, so the drain does not land while the owner works.
 //
 // An automatic update also waits for the runner to be quiet (quiet, selfUpdateQuietWindow in
 // runLoop): no turn ended and nothing claimed within it. Neither the drain nor the owner's Update
@@ -152,6 +174,11 @@ type selfUpdateGate struct {
 	pool                   *sessionPool
 	operations             func() int
 	interval, limit, quiet time.Duration
+	// drainLimit: how long a drain waits for its turns before interrupting them (selfUpdateDrainLimit).
+	drainLimit time.Duration
+	// lowHours: an automatic update drains after selfUpdateIdleWait and only in the low hours
+	// (inUpdateLowHours), not at limit. runLoop sets it.
+	lowHours bool
 
 	mu                                           sync.Mutex
 	deferredSince, drainingSince, postponedUntil time.Time
@@ -169,7 +196,7 @@ type selfUpdateGate struct {
 }
 
 func newSelfUpdateGate(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) *selfUpdateGate {
-	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet}
+	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet, drainLimit: selfUpdateDrainLimit}
 }
 
 // take is updateWhenNoTurnInFlight's check. While the owner's postponement lasts it reports the
@@ -205,9 +232,11 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		}
 	}
 	g.target = remote
-	if g.nowAsked {
-		// The owner's Update Now: the turns in flight are interrupted, not waited for — nor the quiet
-		// window or the heartbeat's operations, which the stop gives their own budget and hands back.
+	if g.nowAsked || (g.draining != "" && now.Sub(g.drainingSince) >= g.drainLimit) {
+		// The owner's Update Now, or a drain past drainLimit: the turns in flight are interrupted, not
+		// waited for — nor the quiet window or the heartbeat's operations, which the stop gives their
+		// own budget and hands back.
+		asked := g.nowAsked
 		g.nowAsked = false
 		turns := g.pool.closeForUpdateNow()
 		g.restarting, g.interrupting = true, true
@@ -218,7 +247,12 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 			availableSince: g.deferredSince, drainingSince: g.drainingSince,
 			interruptedTurns: turns,
 		})
-		logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		if asked {
+			logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		} else {
+			logln(fmt.Sprintf("orbit %s update drained for %s, the limit; interrupting the %d turn(s) in flight, then updating",
+				remote, now.Sub(g.drainingSince).Round(time.Second), turns))
+		}
 		return remote, true
 	}
 	window := g.quiet
@@ -257,7 +291,7 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
 			remote, g.quiet, g.interval))
 	}
-	if g.draining == "" && now.Sub(g.deferredSince) >= g.limit {
+	if g.draining == "" && g.drainIsDue(now) {
 		g.draining = remote
 		g.drainingSince = now
 		g.turnsAtDrain = turns
@@ -286,6 +320,21 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		turnsInFlight: turns,
 	})
 	return "", false
+}
+
+// drainIsDue is whether a busy runner's wait for idle is over, so the pool drains for the release.
+func (g *selfUpdateGate) drainIsDue(now time.Time) bool {
+	waited := now.Sub(g.deferredSince)
+	if !g.lowHours || g.cameDue {
+		return waited >= g.limit
+	}
+	return waited >= selfUpdateIdleWait && inUpdateLowHours(now)
+}
+
+// inUpdateLowHours is whether t, on its own clock, falls in the hours an automatic update drains in.
+func inUpdateLowHours(t time.Time) bool {
+	h := t.Hour()
+	return h >= selfUpdateLowHoursFrom && h < selfUpdateLowHoursTo
 }
 
 // postpone is the owner's Later (HeartbeatResponse.PostponeSelfUpdateUntil): the drain ends at
@@ -518,7 +567,14 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 // has said something true rather than failed: it isn't worth a log line on every refresh, and it
 // mustn't be covered over with the list it had while signed in (see mergeModelCatalog). Only the
 // probe's conclusive "no" counts — an engine whose sign-in is unknown, or not probed yet, that can't
-// list its models is a fault, and is logged as one.
+// list its models is a fault, and is logged as one. So is Claude Code or Codex coming back empty
+// signed out: their lists never came from the sign-in, so the empty answer is a failed probe, and
+// treating it as a sign-out left a signed-out Mac mini's picker with no Claude list and no log line —
+// the composer showed the bare `claude-opus-5-5` where it reads "Opus 5.5".
+//
+// A signed-out Claude's fast-lane answer is dropped to unknown: with no account, `/fast` answers
+// "Fast mode has been disabled by your organization" for every model (Claude Code 2.1.325), which
+// says nothing about the model, and a catalog row's "no" outranks the clients' fallback.
 func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut func(engine string) bool, logf func(...interface{})) (*ModelCatalog, map[string]bool) {
 	catalog := &ModelCatalog{}
 	empty := map[string]bool{}
@@ -527,13 +583,19 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 			continue
 		}
 		models, err := rt.fetch(ctx)
-		if len(models) == 0 && signedOut(rt.engine) {
+		listsSignedOut := rt.engine == providerClaude || rt.engine == providerCodex
+		if len(models) == 0 && signedOut(rt.engine) && !listsSignedOut {
 			empty[rt.engine] = true
 			continue
 		}
 		if err != nil {
 			logf(rt.engine, "model catalog refresh failed:", err)
 			continue
+		}
+		if rt.engine == providerClaude && signedOut(rt.engine) {
+			for i := range models {
+				models[i].FastMode = nil
+			}
 		}
 		*catalog.models(rt.engine) = models
 	}
@@ -653,13 +715,17 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		WorkDir:            r.WorkDir,
 		Branch:             r.Branch,
 		AutoInitGit:        r.AutoInitGit,
+		CodelessCheckout:   r.CodelessCheckout,
+		CodelessBranch:     r.CodelessBranch,
 		CreateWorkDir:      r.CreateWorkDir,
+		WorkSubdir:         r.WorkSubdir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,
 		TaskID:             r.TaskID,
 		AllowOrchestration: r.AllowOrchestration,
 		WatchesDisabled:    r.WatchesDisabled,
 		WikiDisabled:       r.WikiDisabled,
+		ScheduleRun:        r.ScheduleRun,
 		OrchestrationToken: r.OrchestrationToken,
 		Reclaimed:          true,
 		SessionUUID:        r.SessionUUID,
@@ -857,17 +923,54 @@ func reclaimMissingSessions(
 	knownStates func() map[string]bool,
 	prepareTakeover func(*ClaimedSession) (func(), error),
 ) ([]reclaimedStart, bool, error) {
+	starts, _, skipped, err := reclaimSessions(ctx, t, knownStates, prepareTakeover, false)
+	return starts, skipped, err
+}
+
+// reclaimWaitedOnSessions is the startup reclaim's priority phase: reclaimMissingSessions over the
+// sessions somebody may be waiting on, RUNNING (or a legacy server's statusless row, which is RUNNING)
+// and PENDING, and nothing else. The rest of the snapshot comes back untaken, in ascending id order, for
+// the idle phase to take over in the background (reclaimStarter.takeOverIdle): on 2026-11-13 the
+// takeovers of 339 mostly idle sessions held the claim loop for three minutes.
+//
+// Each phase takes its rows over in ascending id order. Two overlapping processes therefore each take
+// the waited-on rows over before the idle ones, every row of a tier in the one order they agree on; a
+// row whose status changed between their snapshots can put it in different phases for each, and that
+// conflict is bounded as every other is: takeoverConflictLimit refreshes per session, then it is set
+// aside for the deferred retry. Nothing either phase has handed over is ever taken over again by it,
+// so no refresh undoes progress.
+func reclaimWaitedOnSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
+	return reclaimSessions(ctx, t, knownStates, prepareTakeover, true)
+}
+
+// reclaimWaitedOn says whether a snapshot row is one the startup reclaim's priority phase takes over.
+func reclaimWaitedOn(status string) bool {
+	return status == "" || status == stRunning || status == stPending
+}
+
+func reclaimSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) (func(), error),
+	leaveIdle bool,
+) ([]reclaimedStart, []*ClaimedSession, bool, error) {
 	delay := 250 * time.Millisecond
 	conflicts := map[string]int{}
 	for ctx.Err() == nil {
 		rec, err := t.reclaim(ctx)
 		if err != nil {
 			if !isRetryableTransportError(err) {
-				return nil, false, err
+				return nil, nil, false, err
 			}
 			select {
 			case <-ctx.Done():
-				return nil, false, ctx.Err()
+				return nil, nil, false, ctx.Err()
 			case <-time.After(delay):
 			}
 			if delay < 5*time.Second {
@@ -882,6 +985,8 @@ func reclaimMissingSessions(
 		})
 		localStates := knownStates()
 		pending := make([]reclaimedStart, 0, len(sessions))
+		// The rows left to the idle phase (leaveIdle), in ascending id order.
+		var idle []*ClaimedSession
 		// Every takeover this pass began. A row it hands to no supervisor — terminal,
 		// conflicted, or dropped when the snapshot is refreshed — ends its takeover here, or
 		// its checkout stays fenced against merges with nothing left to lift the fence.
@@ -900,6 +1005,16 @@ func reclaimMissingSessions(
 		retrySnapshot := false
 		skippedAny := false
 		lastID := ""
+		// The rows this pass takes over, in ascending id order. They are taken over in chunks of
+		// takeoverBatchSize, one request each, and each row's answer is judged in that order as the
+		// one request per row was judged; a conflict that refreshes the snapshot leaves the rest of
+		// its chunk's answers unread, and their takeovers are ended with the pass's.
+		type takeoverCandidate struct {
+			job          *ClaimedSession
+			locallyKnown bool
+			status       string
+		}
+		var candidates []takeoverCandidate
 		for i := range sessions {
 			r := sessions[i]
 			if r.SessionID == "" || r.SessionID == lastID {
@@ -925,68 +1040,127 @@ func reclaimMissingSessions(
 				continue
 			}
 			job := claimedSessionFromReclaim(r)
-			endTakeover := func() {}
-			if prepareTakeover != nil {
-				prepared, prepareErr := prepareTakeover(job)
-				if prepareErr != nil {
-					endTakeoversExcept(nil)
-					return nil, false, prepareErr
-				}
-				endTakeover = prepared
-				begun[r.SessionID] = prepared
+			if leaveIdle && !reclaimWaitedOn(r.Status) {
+				idle = append(idle, job)
+				continue
 			}
-			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
-			if takeoverErr != nil {
-				// 409 means another process advanced the snapshot owner or the server
-				// is fail-closing the row (e.g. a fenced worktree operation); 403 means
-				// the assignment changed after reclaim. Refresh the whole ordered set —
-				// a bounded number of times per session, so one persistently rejected
-				// row cannot livelock this loop and starve the claim loop.
-				if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
-					conflicts[r.SessionID]++
-					if conflicts[r.SessionID] >= takeoverConflictLimit {
-						logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
-							r.SessionID, conflicts[r.SessionID], takeoverErr))
-						skippedAny = true
-						continue
+			candidates = append(candidates, takeoverCandidate{job: job, locallyKnown: locallyKnown, status: r.Status})
+		}
+	chunks:
+		for start := 0; start < len(candidates); {
+			end := start + t.takeoverBatchSize()
+			if end > len(candidates) {
+				end = len(candidates)
+			}
+			chunk := candidates[start:end]
+			jobs := make([]*ClaimedSession, len(chunk))
+			endTakeovers := make([]func(), len(chunk))
+			for k, c := range chunk {
+				jobs[k] = c.job
+				endTakeovers[k] = func() {}
+				if prepareTakeover != nil {
+					prepared, prepareErr := prepareTakeover(c.job)
+					if prepareErr != nil {
+						endTakeoversExcept(nil)
+						return nil, nil, false, prepareErr
 					}
-					logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", r.SessionID, takeoverErr))
-					retrySnapshot = true
-					break
+					endTakeovers[k] = prepared
+					begun[c.job.SessionID] = prepared
 				}
+			}
+			rows, chunkErr := takeoverChunk(ctx, t, jobs)
+			if errors.Is(chunkErr, errTakeoverBatchUnsupported) {
+				// A control plane older than the batch takeover: nothing was taken over. The chunk is
+				// taken over again one session at a time, as it was before there was one.
+				for k, c := range chunk {
+					endTakeovers[k]()
+					delete(begun, c.job.SessionID)
+				}
+				continue
+			}
+			if chunkErr != nil {
 				endTakeoversExcept(nil)
-				return nil, false, takeoverErr
+				return nil, nil, false, chunkErr
 			}
-			if !reclaimStatusOpen(status) {
-				continue
+			for k, c := range chunk {
+				job := c.job
+				status, takeoverErr := rows[k].status, rows[k].err
+				if takeoverErr != nil {
+					// 409 means another process advanced the snapshot owner or the server
+					// is fail-closing the row (e.g. a fenced worktree operation); 403 means
+					// the assignment changed after reclaim. Refresh the whole ordered set —
+					// a bounded number of times per session, so one persistently rejected
+					// row cannot livelock this loop and starve the claim loop.
+					if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
+						conflicts[job.SessionID]++
+						if conflicts[job.SessionID] >= takeoverConflictLimit {
+							logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
+								job.SessionID, conflicts[job.SessionID], takeoverErr))
+							skippedAny = true
+							continue
+						}
+						logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", job.SessionID, takeoverErr))
+						retrySnapshot = true
+						break chunks
+					}
+					endTakeoversExcept(nil)
+					return nil, nil, false, takeoverErr
+				}
+				if !reclaimStatusOpen(status) {
+					continue
+				}
+				if c.locallyKnown && !reclaimInitiallyActive(status) {
+					continue
+				}
+				pending = append(pending, reclaimedStart{
+					job:             job,
+					initiallyActive: reclaimInitiallyActive(status),
+					endTakeover:     endTakeovers[k],
+					status:          c.status,
+				})
 			}
-			if locallyKnown && !reclaimInitiallyActive(status) {
-				continue
-			}
-			pending = append(pending, reclaimedStart{
-				job:             job,
-				initiallyActive: reclaimInitiallyActive(status),
-				endTakeover:     endTakeover,
-				status:          r.Status,
-			})
+			start = end
 		}
 		if !retrySnapshot {
 			endTakeoversExcept(pending)
 			orderReclaimedStarts(pending)
-			return pending, skippedAny, nil
+			return pending, idle, skippedAny, nil
 		}
 		// The refreshed snapshot prepares its own takeovers; end this pass's first.
 		endTakeoversExcept(nil)
 		select {
 		case <-ctx.Done():
-			return nil, false, ctx.Err()
+			return nil, nil, false, ctx.Err()
 		case <-time.After(delay):
 		}
 		if delay < 5*time.Second {
 			delay *= 2
 		}
 	}
-	return nil, false, ctx.Err()
+	return nil, nil, false, ctx.Err()
+}
+
+// reclaimSnapshot reads the reclaim snapshot, retrying a transport failure with reclaimMissingSessions'
+// backoff, and returns its rows.
+func reclaimSnapshot(ctx context.Context, t *Transport) ([]ReclaimSession, error) {
+	delay := 250 * time.Millisecond
+	for {
+		rec, err := t.reclaim(ctx)
+		if err == nil {
+			return rec.Sessions, nil
+		}
+		if !isRetryableTransportError(err) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay < 5*time.Second {
+			delay *= 2
+		}
+	}
 }
 
 // A terminal revive rotates the Session owner before it can be claimed. If this
@@ -1058,39 +1232,25 @@ func settleSessionCheckout(job *ClaimedSession, execDir string) {
 	syncManagedVolume("the session's checkout", execDir)
 }
 
-// heartbeatMerge performs one heartbeat-delivered merge against the exact supervisor
-// epoch its heartbeat advertised, or answers why it did not. merge is mergeToMain.
+// heartbeatMerge performs one heartbeat-delivered merge. merge is mergeToMain.
+//
+// It does not ask the session's checkout for admission: a merge reads only the commit the branch
+// is at when it starts, replays it in the repository's scratch worktree and never touches the
+// checkout. So a turn running in the checkout, a supervisor being handed over or a background job
+// neither holds a merge up nor is held up by one (session-merge-beside-turn-v1). What the
+// merge must not overlap — another merge of the same repository — mergeToMain's own lock keeps
+// out, and the control plane hands this process only an operation it claimed for it.
+// pool and advertised are kept for the call site's shape; nothing here reads them.
 func heartbeatMerge(
-	pool *sessionPool,
+	_ *sessionPool,
 	req MergeCommand,
-	advertised heartbeatSupervisorSnapshot,
+	_ heartbeatSupervisorSnapshot,
 	merge func(MergeCommand) mergeOutcome,
 ) mergeOutcome {
-	release, receipt, admitted := pool.beginManualWorktreeOperation(
-		req.SessionID,
-		advertised.supervisor,
-		advertised.permitGeneration,
-		false,
-		"merge",
-	)
-	if !admitted {
-		// Either the server already claimed this exact epoch before returning the
-		// heartbeat, or a turn or another operation still holds the checkout. Close it
-		// explicitly, naming which: a silent drop would leave Resume permanently blocked
-		// on its operation owner, and a refusal that names the wrong reason reads as a
-		// control-plane race rather than as "wait for the turn".
-		logln("not merging", req.SessionID+":", receipt)
-		return mergeOutcome{Status: "error", Message: receipt}
-	}
-	if receipt != "" {
-		logln("merging", req.SessionID+":", receipt)
-	}
 	res := merge(req)
 	syncManagedVolume("a merge", expandTilde(req.WorkDir))
-	// Record where this session's work went before opening the gate.
+	// Record where this session's work went.
 	rememberMergeTarget(req.SessionID, req.TargetBranch)
-	release()
-	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
 }
 
@@ -1141,6 +1301,24 @@ type manualWorktreeOperationKey struct {
 	sessionID   string
 	operationID string
 	leaseOwner  string
+}
+
+// answeredOperations is, per session, the last operation whose result the control plane took. The
+// heartbeat redelivers an operation until its result is stored, so an answer drained before that —
+// on a slow link it arrives after the result was posted (2026-11-13: answers 11.7 s late) — still
+// names it. Run again, a merge recovery check runs with the record the first run was handed, and
+// its answer is refused as no longer current. One entry per session: a session's next operation
+// has a new id.
+type answeredOperations map[string]manualWorktreeOperationKey
+
+func (a answeredOperations) answered(key manualWorktreeOperationKey) bool {
+	return key.operationID != "" && a[key.sessionID] == key
+}
+
+func (a answeredOperations) answer(key manualWorktreeOperationKey) {
+	if key.operationID != "" {
+		a[key.sessionID] = key
+	}
 }
 
 // unstartedWorktreeCommands picks the merge/commit commands a draining process must hand
@@ -1198,17 +1376,76 @@ type worktreeCommandRelease manualWorktreeOperationKey
 type runnerAgentList struct {
 	mu     sync.Mutex
 	agents []RunnerAgent
+	// sessionDirs are workDirs of sessions started here that the last listing did not have: a
+	// workspace made after that listing (which repeats only every five minutes). Kept until a listing
+	// read after they were noted replaces them, so its main checkout is on the heartbeat as soon as
+	// its first session runs rather than minutes later.
+	sessionDirs []notedWorkDir
+}
+
+type notedWorkDir struct {
+	agentWorkDir
+	at time.Time
 }
 
 // refresh re-reads the list; a failed read keeps the last one.
 func (l *runnerAgentList) refresh(t *Transport) {
+	asked := time.Now()
 	me, err := t.me()
 	if err != nil {
 		return
 	}
+	l.set(me.Agents, asked)
+}
+
+// set replaces the list with one read at asked, dropping the session dirs noted before then: that
+// listing has their workspace if it still exists.
+func (l *runnerAgentList) set(agents []RunnerAgent, asked time.Time) {
 	l.mu.Lock()
-	l.agents = append([]RunnerAgent(nil), me.Agents...)
-	l.mu.Unlock()
+	defer l.mu.Unlock()
+	l.agents = append([]RunnerAgent(nil), agents...)
+	kept := l.sessionDirs[:0]
+	for _, d := range l.sessionDirs {
+		if d.at.After(asked) {
+			kept = append(kept, d)
+		}
+	}
+	l.sessionDirs = kept
+}
+
+// noteSessionDir adds a starting session's workDir to what the repo-health scan reads, reporting
+// whether it is new to the list — a workspace the last listing did not have.
+func (l *runnerAgentList) noteSessionDir(agentID, dir string) bool {
+	if dir == "" {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, a := range l.agents {
+		if a.ID == agentID && a.WorkDir == dir {
+			return false
+		}
+	}
+	for _, d := range l.sessionDirs {
+		if d.AgentID == agentID && d.Dir == dir {
+			return false
+		}
+	}
+	l.sessionDirs = append(l.sessionDirs, notedWorkDir{agentWorkDir{AgentID: agentID, Dir: dir}, time.Now()})
+	return true
+}
+
+// reportSessionCheckout makes a starting session's main checkout known to the control plane at once
+// when its workspace is new to this runner: the turn-end card offers Move straight away, and the
+// apiserver acts only on a checkout a heartbeat has reported.
+func reportSessionCheckout(agents *runnerAgentList, probe *repoHealthProbe, beatNow func(), agentID, dir string) {
+	if !agents.noteSessionDir(agentID, dir) {
+		return
+	}
+	go func() {
+		probe.refreshNow()
+		beatNow()
+	}()
 }
 
 func (l *runnerAgentList) snapshot() []RunnerAgent {
@@ -1234,6 +1471,11 @@ func (l *runnerAgentList) repoDirs() []agentWorkDir {
 	for _, a := range l.snapshot() {
 		dirs = append(dirs, agentWorkDir{AgentID: a.ID, Dir: a.WorkDir})
 	}
+	l.mu.Lock()
+	for _, d := range l.sessionDirs {
+		dirs = append(dirs, d.agentWorkDir)
+	}
+	l.mu.Unlock()
 	return dirs
 }
 
@@ -1296,6 +1538,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// Remote SubAgents a previous process was hosting when it ended unreported: worktrees removed, runs INTERRUPTED.
+	go recoverRemoteSubagents(t)
 	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
 	// copies a crash or a kill left behind go before any session starts again.
 	pruneAntigravityTokenCopies()
@@ -1307,6 +1551,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	defer runnerSecretStore.Store(nil)
 	// Heartbeat answers are applied here, and the ledger's expiries are checked every minute.
 	secretSync := newSecretReconciler(secrets)
+	forkRefs := newForkRefSweeper()
 	secretCtx, stopSecrets := context.WithCancel(context.Background())
 	defer stopSecrets()
 	go secretSync.run(secretCtx, secretExpiryInterval)
@@ -1385,6 +1630,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var updateGate *selfUpdateGate
 	if selfUpdateEnabled() {
 		updateGate = newSelfUpdateGate(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
+		updateGate.lowHours = true
 		gated := updateGate.take
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
@@ -1638,10 +1884,24 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the background, and the answer rides the next heartbeat.
 	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
 	go agentDirs.run(loopCtx)
+	// The GitHub workspaces the control plane asks this runner to clone (clone_workdir.go). A clone that starts or
+	// ends has its work directory probed again and is reported at once. Their credential, and the landing's in
+	// such a checkout, is Orbit's when the machine's own cannot authenticate (github_credential.go).
+	clones := newCloner(loopCtx, cfg.Name, func() {
+		agentDirs.rescan()
+		beatNow()
+	})
+	// Condition probes (condition_probe.go): the heartbeat answer names them, each runs on its own interval, and
+	// what they read rides the next beat.
+	conditions := newConditionProber(loopCtx)
+	setOrbitGitCredentialSource(t.gitCredential)
+	defer setOrbitGitCredentialSource(nil)
 
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
+	// The CPU reading is a difference between two beats: this one primes it, so the first beat has one.
+	machineResources(nil, "")
 
 	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
 	// and could not deliver is offered to the control plane first, so a job this machine is holding a
@@ -1694,6 +1954,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		mergingNow := map[string]bool{}
 		committingNow := map[string]bool{}
 		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
+		mergesAnswered := answeredOperations{}
 		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
 		// Integration jobs this process has in flight. A claim is already exclusive in the control
@@ -1727,6 +1988,11 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
+			probes := agentDirs.snapshot()
+			resources := machineResources(probes, machineReposRoot)
+			cloneReports, cloneSeq := clones.snapshot()
+			storage.diskResources(&resources)
+			conditionSamples := conditions.take()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1735,14 +2001,19 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
-				AgentDirProbes:       agentDirs.snapshot(),
+				AgentDirProbes:       probes,
+				Resources:            &resources,
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
 				SelfUpdate:           selfUpdateReport(),
 				ManagedWorkload:      workload,
+				CloneReports:         cloneReports,
+				ConditionSamples:     conditionSamples,
 			}, t.heartbeat)
 			if err != nil {
+				// Kept for the next beat (bounded per condition).
+				conditions.requeue(conditionSamples)
 				// No reconcile is coming from this beat; sessions do not wait on one (secretStore.waitReady).
 				secrets.markReady()
 				logln("heartbeat failed:", err)
@@ -1779,6 +2050,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
+			// Clones: start what is newly listed, stop what is no longer. A draining process starts none.
+			clones.reconcile(resp.CloneRequests, cloneSeq, !draining)
+			// Condition probes: start what is newly listed, stop what is no longer.
+			conditions.reconcile(resp.ConditionProbes)
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
 				// Where an owner-request secret file may not go (secret_path.go).
@@ -1787,6 +2062,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Owner-request secrets: fetch what is newly listed and remove what is not. Off this goroutine, which
 			// the fetches must not hold up; one reconcile runs at a time, in the order the answers came.
 			secretSync.post(resp.SecretGrants, resp.SecretGrantsRemoving)
+			// Fork keep-alive refs no open task names any more (design §2.6). Only on a beat that states
+			// both the open snapshots and the workspaces' directories, which is a full reconcile.
+			forkRefs.post(resp.ForkSnapshotsOpen, resp.AgentDirs)
 			// The legacy half of the scratch sweep: builds before the move staged a job's
 			// throwaway worktree beside its workspace, and only the control plane knows those
 			// directories. Once, before this response's jobs are launched, the parent of every
@@ -1835,11 +2113,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 				}
 			}
+			// Before the cancel: a coordinator handing over may be heard of here before its inbox hands over the
+			// end turn that says the same (session_keep_work.go). Only a session this process supervises.
+			for _, id := range resp.KeepWorkSessionIDs {
+				if _, ok := supervisors[id]; ok {
+					markSessionKeepsWork(id)
+				}
+			}
 			for _, id := range resp.CancelSessionIDs {
 				if snapshot, ok := supervisors[id]; ok && snapshot.cancel != nil {
 					snapshot.cancel()
 				}
 			}
+			// Remote SubAgents this runner is the target of: claimed while it takes work, stopped whenever asked.
+			remoteSubagents.onHeartbeat(t, resp.RemoteSubagentRuns, resp.StopSubagentRunIDs, draining)
 			if loopCtx.Err() != nil {
 				// Drain began after the server claimed this cycle's git commands, so nothing
 				// below will run them and this process image is about to be replaced. Hand
@@ -1951,8 +2238,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if reclaimDeferred.deferForReclaim(pool, m.SessionID, "merge", snapshot, beatNow) {
 					continue
 				}
+				answeredKey := manualWorktreeOperationKey{
+					kind: "merge", sessionID: m.SessionID,
+					operationID: m.OperationID, leaseOwner: m.LeaseOwner,
+				}
 				mergeMu.Lock()
-				busy := mergingNow[m.SessionID]
+				busy := mergingNow[m.SessionID] || mergesAnswered.answered(answeredKey)
 				if !busy {
 					mergingNow[m.SessionID] = true
 				}
@@ -2005,6 +2296,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					} else {
 						mergeMu.Lock()
 						delete(mergeOutcomes, key)
+						mergesAnswered.answer(key)
 						mergeMu.Unlock()
 					}
 				}(m, snapshot)
@@ -2245,6 +2537,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
 			}
+			// Main checkout reads and actions (main_checkout_actions.go). Each is handed out once
+			// and runs on its own goroutine, so a Move of many files never holds the heartbeat up;
+			// the checkout's lock serializes the ones on one checkout, and with merges into it.
+			for _, mr := range resp.MainCheckoutRequests {
+				go func(mr MainCheckoutRunnerRequest) {
+					handleMainCheckoutRequest(t, mr, mainCheckoutDeps{
+						owns:        func(root string) bool { return runnerOwnsCheckout(repoHealth.dirs(), root) },
+						turnRunning: pool.turnRunning,
+					})
+					if mr.Op == "action" {
+						repoHealth.refresh() // the bar shows the new state on the next heartbeat
+					}
+				}(mr)
+			}
 			// Remove an account slot the user asked to be rid of. Carried out here, on the
 			// heartbeat's own goroutine, for the reason the repair above is: it is a directory
 			// removal, and the request is redelivered until we report, so a second one racing the
@@ -2262,8 +2568,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					logln("account-remove: unknown engine", rr.Engine)
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
-						res.Status, res.Message = "failed", firstLine(err.Error())
+					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(kind, rr, pool)); err != nil {
+						res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
 						// now rather than a heartbeat — or five minutes — later.
@@ -2278,8 +2584,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				}
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
-				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
-					res.Status, res.Message = "failed", firstLine(err.Error())
+				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, accountLiveDirsAfterColdCarry(codexAccountKind, rr, pool)); err != nil {
+					res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 				} else {
 					go func() {
 						engineHealth.refreshEngine(providerCodex)
@@ -2396,8 +2702,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// The branch this session merges into, so branchMergedInto's "already merged" check
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
-		execDir := pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
-		settleSessionCheckout(job, execDir)
+		var execDir string
+		if job.HelpAsk != nil {
+			// An Ask runs in no workspace and no repository: a scratch folder of help articles (help_ask.go).
+			execDir = prepareHelpAskDir(cfg.ServerURL, job)
+		} else {
+			execDir = pool.setupSupervisorCheckout(job, sessionExecDir(job.WorkDir), initiallyActive)
+			settleSessionCheckout(job, execDir)
+			reportSessionCheckout(&runnerAgents, repoHealth, beatNow, job.AgentID, job.WorkDir)
+		}
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {
@@ -2460,10 +2773,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// 2026-10-03 a session claimed while this reclaim was still running read "Starting" for 15 minutes.
 	lateClaimCheckAt := time.Now().Add(lateClaimWindow)
 	// The startup reclaim's sessions start in the background once their takeovers have answered
-	// (reclaimStarter); nil until then, and if the reclaim never answers.
+	// (reclaimStarter); nil until then, and if the reclaim never answers. Only the takeovers of the
+	// sessions somebody may be waiting on (RUNNING, PENDING) are made before the claim loop opens; the
+	// idle ones are made in the background (reclaimWaitedOnSessions, reclaimStarter.takeOverIdle).
 	var startupStarts *reclaimStarter
 	reclaimBegan := time.Now()
-	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+	pendingStarts, idleReclaims, reclaimSkipped, reclaimErr := reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
 		loopCancel()
@@ -2474,25 +2789,53 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// Prune crash leftovers before any reclaimed provider can start and refresh
 		// its credential. This avoids racing cleanup against the atomic temp file used
 		// by a live refresh.
-		credentialLiveSet := make(map[string]bool, len(pendingStarts))
+		credentialLiveSet := make(map[string]bool, len(pendingStarts)+len(idleReclaims))
 		for _, pending := range pendingStarts {
 			credentialLiveSet[pending.job.SessionID] = true
+		}
+		for _, job := range idleReclaims {
+			credentialLiveSet[job.SessionID] = true
 		}
 		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
 			logln("credential cleanup failed:", err)
 		}
-		// Every session's takeover has answered and holds its fence; each start ends its own
-		// (reclaimStarter). The claim loop and the first heartbeat do not wait for them.
+		// Every waited-on session's takeover has answered and holds its fence; each start ends its own
+		// (reclaimStarter). The idle sessions are counted as being reclaimed from here on, and are taken
+		// over in the background. The claim loop and the first heartbeat wait for neither.
 		answeredIn := time.Since(reclaimBegan)
-		startupStarts = newReclaimStarter(pool, pendingStarts, func(pending reclaimedStart) {
+		startupStarts = newReclaimStarter(pool, pendingStarts, idleReclaims, func(pending reclaimedStart) {
 			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
 			startSession(pending.job, pending.initiallyActive)
 		})
+		startupStarts.takeover = func(job *ClaimedSession) (func(), string, error) {
+			endTakeover, err := prepareTakeover(job)
+			if err != nil {
+				return nil, "", err
+			}
+			status, err := takeoverClaimedSession(loopCtx, t, job)
+			if err != nil {
+				endTakeover()
+				return nil, "", err
+			}
+			return endTakeover, status, nil
+		}
+		// The idle phase takes its sessions over a chunk per request (takeoverClaimedSessions), each
+		// prepared locally first as the single takeover above prepares one.
+		startupStarts.batchSize = t.takeoverBatchSize
+		startupStarts.takeoverMany = batchIdleTakeover(loopCtx, t, prepareTakeover)
 		startupStarts.onStarted = func(id string) { reclaimDeferred.started(id, beatNow) }
 		startupStarts.run(reclaimStartWorkers, func() {
-			logln(fmt.Sprintf("startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)",
-				len(pendingStarts), time.Since(reclaimBegan).Round(time.Millisecond), answeredIn.Round(time.Millisecond)))
+			idleHanded, idleTook := startupStarts.idlePhase()
+			logln(startupReclaimFinishedLine(time.Since(reclaimBegan), len(pendingStarts), answeredIn, idleHanded, idleTook))
 		})
+		go func() {
+			if err := startupStarts.takeOverIdle(loopCtx, func(ctx context.Context) ([]ReclaimSession, error) {
+				return reclaimSnapshot(ctx, t)
+			}); err != nil && loopCtx.Err() == nil {
+				logln("reclaim of idle sessions permanently failed; stopping runner:", err)
+				loopCancel()
+			}
+		}()
 		reclaimed = true
 	}
 
@@ -2544,6 +2887,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		gcWorktrees(t, liveSet, pressure)
 		worktreeGC.sweepResumable(t, pool, pressure, false)
 		gcUploads(liveSet)
+		gcSubagentRuns(t, liveSet)
 	}
 
 	// A managed instance claims nothing before its first heartbeat (managedStartupBeat): the manager's
@@ -2568,9 +2912,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// startup (worktreeSweeper's `armed`).
 		if armOnceStarted && startupStarts.finished() {
 			armOnceStarted = false
-			worktreeGC.armed = true
-			pool.endUnclaimedHostlessJobs()
-			gcUploads(pool.ids())
+			if startupStarts.setAside() {
+				// The idle phase set sessions aside over takeover conflicts: as when the startup reclaim
+				// sets one aside, the deferred retry takes them over, and arms the sweep once nothing is left.
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+			} else {
+				worktreeGC.armed = true
+				pool.endUnclaimedHostlessJobs()
+				gcUploads(pool.ids())
+			}
 		}
 		// Sessions set aside by an earlier reclaim have authoritative rows but no local
 		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
@@ -2636,6 +2986,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure, false)
+			gcSubagentRuns(t, pool.ids())
+			gcRemoteSubagentConversations(time.Now())
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is
@@ -2730,7 +3082,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		}
 		// A session the startup reclaim has not started yet starts first, or its start is waited for:
 		// the claim then meets the supervisor the reclaim made, and never makes a second one.
-		startupStarts.settle(job.SessionID)
+		// An idle session the startup reclaim had not taken over when this claim was answered is taken over
+		// by settle, or by the idle phase meanwhile: the claim still names the owner that takeover replaced,
+		// and takes the session over from this process instead.
+		if replaced, tookOver := startupStarts.settle(job.SessionID); tookOver && strings.EqualFold(job.LeaseOwner, replaced) {
+			job.LeaseOwner = t.leaseOwner
+		}
 		// A successful claim response can narrowly win the race with loopCtx
 		// cancellation. Register it rather than orphaning an already-claimed session;
 		// startSession observes the cancelled shutdown context and detaches without
@@ -2790,6 +3147,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// A start still running registers its supervisor (it observes the cancelled loop context and
 	// detaches), and the drain below must see it.
 	startupStarts.wait()
+	// The remote SubAgents this process hosts end with it, reported INTERRUPTED; beside the sessions' drain, which
+	// keeps the heartbeat beating meanwhile. One not reported in time is reported by the next start.
+	go remoteSubagents.stopAll(subagentStopRunnerStopped)
 	logln("runner stopping; draining session supervisors...")
 	// Keep the heartbeat goroutine alive through the drain: the server's reaper force-fails
 	// any live session whose runner has been silent >90s, so going quiet while we finish an

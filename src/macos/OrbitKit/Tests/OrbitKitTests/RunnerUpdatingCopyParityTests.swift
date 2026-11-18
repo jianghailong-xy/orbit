@@ -38,7 +38,10 @@ final class RunnerUpdatingCopyParityTests: XCTestCase {
     func testTheConstantsAreTheWebs() throws {
         try assertSays(Self.webCopy, "export const RUNNER_UPDATING_TITLE = '\(RunnerUpdating.RUNNER_UPDATING_TITLE)';")
         try assertSays(Self.webCopy, "export const RUNNER_UPDATING_TAG = '\(RunnerUpdating.RUNNER_UPDATING_TAG)';")
+        try assertSays(Self.webCopy, "export const RUNNER_STOPPING_TITLE = '\(RunnerUpdating.RUNNER_STOPPING_TITLE)';")
+        try assertSays(Self.webCopy, "export const RUNNER_STOPPING_TAG = '\(RunnerUpdating.RUNNER_STOPPING_TAG)';")
         try assertSays(Self.webCopy, "gate?.queuedReason === '\(RunnerUpdating.reason)'")
+        try assertSays(Self.webCopy, "gate?.queuedRunnerUpdate?.stopping === true")
         // The word before the tag, in the web's foot row.
         try assertSays("src/web/src/components/WorkspaceView.tsx",
                        "<span className=\"chat-runner-updating\"> \(RunnerUpdating.queuedWord) <span className=\"chat-meta-sep\">·</span>")
@@ -55,6 +58,15 @@ final class RunnerUpdatingCopyParityTests: XCTestCase {
         try assertSays(Self.webCopy, "`\(versioned)`")
         try assertSays(Self.webCopy, "`\(bare)`")
         try assertSays(Self.webCopy, "'This session starts right after.'")
+        let stopping = RunnerUpdatingTests.held(active: 0, version: nil, turns: [], stopping: true)
+        guard case .text(let stops) = RunnerUpdating.description(stopping, machine: "${who}")[0],
+              case .text(let back)? = RunnerUpdating.description(stopping, machine: "${name || 'it'}").last
+        else { return XCTFail("the stopping description no longer opens and ends with words") }
+        try assertSays(Self.webCopy, "`\(stops)`")
+        try assertSays(Self.webCopy, "`\(back)`")
+        try assertSays(Self.webCopy, "`${who} starts no new turns until ${turnsFinish(count)}, then stops.`")
+        try assertSays(Self.webCopy, "`${who} stops now.`")
+        try assertSays(Self.webCopy, "`${first} This message is sent once it is back.`")
         try assertSays(Self.webCopy, "`It starts no new work until ${turnsFinish(count)}: `")
         try assertSays(Self.webCopy, "`${who} ${update} now.`")
         try assertSays(Self.webCopy, "`${first} This message is sent right after.`")

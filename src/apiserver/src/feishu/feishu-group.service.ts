@@ -138,7 +138,7 @@ export class FeishuGroupService {
         const made = await this.sessions.create(
           route.ownerId,
           { workspaceId: route.workspaceId, prompt: message.text, permissionMode: route.permissionMode },
-          { id: sessionId, credential: actor.credential, ...(sender ? { externalSender: sender } : {}) },
+          { id: sessionId, credential: actor.credential, openedBy: 'FEISHU', ...(sender ? { externalSender: sender } : {}) },
         );
         session = { id: made.id, title: made.title };
       } catch (error) {
@@ -183,6 +183,7 @@ export class FeishuGroupService {
     const sessionId = thread.sessionId;
     try {
       await this.sessions.createTurn(route.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, message.eventId), content: message.text }, {
+        senderClient: { client: 'feishu' },
         ...(sender ? { externalSender: sender } : {}),
         // Written with the turn, so a replay of this clientTurnId records nothing again.
         onTurnWritten: async (tx, turn) => {

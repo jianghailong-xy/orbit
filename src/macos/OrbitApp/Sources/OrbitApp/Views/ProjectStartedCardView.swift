@@ -20,9 +20,6 @@ struct ProjectStartedCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else the same turn's note carried (a `controlPlaneNote`), as its own folded entry —
-    /// nobody typed this turn, so it does not go back into a bubble in the reader's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
     /// taken it.
     var onCancelQueued: (() -> Void)?
@@ -82,7 +79,6 @@ struct ProjectStartedCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -154,7 +150,7 @@ struct ProjectStartedCardView: View {
     /// The queue's own line at the card's foot, in the words a queued message already uses.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

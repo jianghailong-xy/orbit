@@ -12,6 +12,10 @@ struct CrossingDecisionCard: View {
     @Environment(\.inApprovalReview) private var inReview
     @State private var deciding = false
     @State private var showAll = false
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: every crossing's title and reason flip back to the asker's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
 
     var body: some View {
         if let batch = console.crossingBatch(batchID) {
@@ -28,17 +32,20 @@ struct CrossingDecisionCard: View {
                                  dimmed: !live,
                                  badge: inReview && live ? CrossingBatches.waitingLine(batch)
                                                          : CrossingBatches.badge(batch)) {
-                review(batch)
+                review(batch.shown(owner: owner, showOriginal: showOriginal))
+                TranslationFootView(parts: batch.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                    showOriginal.toggle()
+                }
             } actions: {
                 if live {
                     ApprovalActions {
                         Button { decide(.approve) } label: {
-                            Text(CrossingBatches.approveLabel).approvalActionLabel()
+                            Text(CrossingBatches.approveLabel(for: batch)).approvalActionLabel()
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(deciding)
                         Button { decide(.deny) } label: {
-                            Text(CrossingBatches.refuseLabel).approvalActionLabel()
+                            Text(CrossingBatches.refuseLabel(for: batch)).approvalActionLabel()
                         }
                         .buttonStyle(.bordered)
                         .disabled(deciding)
@@ -84,12 +91,13 @@ struct CrossingDecisionCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         VStack(alignment: .leading, spacing: 2) {
             (Text("\(CrossingBatches.fromLabel) ").foregroundStyle(.secondary) + Text(batch.sourceTitle))
-            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary) + Text(CrossingBatches.toThisProject))
+            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary)
+                + Text(batch.out ? CrossingBatches.toNoProject : CrossingBatches.toThisProject))
         }
         .font(.orbitProse)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-        Text(CrossingBatches.listHead(batch.kind))
+        Text(CrossingBatches.listHead(for: batch))
             .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         let shown = showAll ? batch.rows : Array(batch.rows.prefix(CrossingBatches.shownRows))

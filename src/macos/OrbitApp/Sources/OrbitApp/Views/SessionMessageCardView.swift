@@ -9,8 +9,7 @@ import OrbitKit
 /// them — the session's title, which opens it, the agent it runs as, and the task it runs — from the
 /// payload the control plane recorded beside the echo (OrbitKit's `SessionMessage`, read out of
 /// `sessionMessage`). The block delivery appended to tell the recipient the same thing is not shown
-/// again (`SessionMessageCard.splitNote`); anything else delivery appended is named on the foot line,
-/// folded.
+/// again; appended notes stay out of the transcript.
 ///
 /// One view for both native clients: `src/ios/project.yml` compiles this folder in place. Web parity:
 /// `SessionMessageCard.tsx`, with every word from OrbitKit's `SessionMessageCard`, which
@@ -23,8 +22,6 @@ struct SessionMessageCardView: View {
     var undelivered: Bool = false
     /// The line for a sender that runs narrower than this session (`SessionMessageCard.narrower`).
     var narrower: String? = nil
-    /// What delivery appended to the same turn (a `controlPlaneNote`), as its own folded entry.
-    var attached: (kind: String, text: String)?
     /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
     /// taken it. Withdrawing hands none of it back to the composer: the words are the sending
     /// session's, not the reader's (`ComposerLogic.restorableText`).
@@ -41,8 +38,6 @@ struct SessionMessageCardView: View {
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var expanded = false
-    /// The "⊕ Orbit attached" line in the foot is open: what it names is drawn under the foot.
-    @State private var attachedOpen = false
     /// The body's full height and one line of its font, measured as drawn: a message taller than
     /// `SessionMessageCard.clampFrom` lines shows its first `clampLines` until "Show more" (web parity:
     /// `SessionMessageCard.tsx`, measured rather than counted, which replaced a 6,000-character cut).
@@ -67,7 +62,6 @@ struct SessionMessageCardView: View {
                     .font(.orbitMeta).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if attachedOpen, let attached { AttachedNoteBody(attached: attached) }
             if undelivered {
                 // Amber, not red: the message was handed to a session that has not confirmed it.
                 Text(SessionMessageCard.undelivered)
@@ -146,7 +140,7 @@ struct SessionMessageCardView: View {
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)
@@ -191,30 +185,27 @@ struct SessionMessageCardView: View {
         return "\(label). \(SessionMessageCard.notYou)"
     }
 
-    /// One grey line under the bubble: "2m ago · Its task ↗ · Asked for a reply · Replied · ⊕ Orbit
-    /// attached: …", each item that applies, wrapping between items when the column is narrow.
+    /// One grey line under the bubble: "2m ago · Its task ↗ · Asked for a reply · Replied",
+    /// each item that applies, wrapping between items when the column is narrow.
     private var foot: some View {
         let time = SessionMessageCard.meta(ts: ts)
         let task = SessionMessageCard.taskLink(card)
         let request = card.requestId != nil
         return FlowLayout(spacing: 0) {
             if let time {
-                footItem(more: task != nil || request || attached != nil) { Text(time) }
+                footItem(more: task != nil || request) { Text(time) }
             }
             if let url = task {
-                footItem(more: request || attached != nil) {
+                footItem(more: request) {
                     Button(SessionMessageCard.openTask) { openLink(url) }
                         .buttonStyle(.plain)
                 }
             }
             if let requestId = card.requestId {
                 // The message asks for a reply: what it asks, by when, and where it stands — read live.
-                footItem(more: attached != nil) {
+                footItem(more: false) {
                     SessionRequestStatusView(requestId: requestId)
                 }
-            }
-            if let attached {
-                footItem(more: false) { AttachedNoteLine(attached: attached, open: $attachedOpen) }
             }
         }
         .font(.orbitMeta)
@@ -233,13 +224,17 @@ struct SessionMessageCardView: View {
 /// Lays its one view out no wider than that view's own single-line width, nor than it is offered:
 /// a bubble that hugs short words and wraps long ones at the column, even when what it holds would
 /// take every point it is offered.
-private extension View {
-    func hugWidth() -> some View { HugWidthLayout { self } }
+/// `hugs: false` passes the offer through untouched.
+extension View {
+    func hugWidth(_ hugs: Bool = true) -> some View { HugWidthLayout(hugs: hugs) { self } }
 }
 
-private struct HugWidthLayout: Layout {
+struct HugWidthLayout: Layout {
+    var hugs = true
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let view = subviews.first else { return .zero }
+        guard hugs else { return view.sizeThatFits(proposal) }
         let ideal = view.sizeThatFits(.unspecified).width
         let width = min(ideal, proposal.width ?? ideal)
         return view.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))

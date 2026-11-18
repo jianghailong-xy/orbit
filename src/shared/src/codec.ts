@@ -67,6 +67,12 @@ export function toUuid(idOrPublicId: string): string {
 export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'consumedByPromotionId',
   'promotionRequestId',
+  // `condition_sample.condition_id`, `condition_event.condition_id` (1030): the condition a sample or an event belongs
+  // to, which the owner opens with GET /conditions/:id. An address, not a fence: the runner's sample names it only to
+  // say which condition it read.
+  'conditionId',
+  // `task.start_when_condition_id` (1060): the condition that starts a task, a peer of runAt. An address, not a fence.
+  'startWhenConditionId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
   // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
@@ -74,11 +80,26 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'id',
   'ownerId',
   'userId',
+  // `attachment.uploaded_by_guest_id` — the session guest who uploaded an image (0880): a user's id, as `userId`.
+  'uploadedByGuestId',
   'sessionId',
   'parentSessionId',
   'rootSessionId',
   'creatorSessionId',
+  // Scheduled tasks (migration 0790): the schedule a run, finding, revision or request belongs to; the run a session
+  // serves; the runs a finding was first and last seen in; the workspace an envelope allows; the session a schedule
+  // was created from. All addresses a reader follows and may hand back, none a fence.
+  'scheduleId',
+  'scheduleRunId',
+  'firstRunId',
+  'lastSeenRunId',
+  'envelopeWorkspaceId',
+  'createdFromSessionId',
+  // A scheduled task's Waiting on you item (migration 0840): the change request its Allow or Decline answers.
+  'scheduleChangeRequestId',
   'authorSessionId',
+  // A main checkout request's initiating session (migration 0534): where its result line is written.
+  'initiatedFromSessionId',
   // An exception item, the work it is about and the rows other tasks of the integration-line contract
   // attach to it (migration 0273). Every one of them addresses a row a caller may be handed and hand
   // back: the item in `GET /projects/:id/open-items`, and the job, promotion or pause behind it.
@@ -223,6 +244,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // `evidenceTaskId` stood here until migration 0233 removed the criterion's pointer at the work
   // that serves it — that edge is now `criterionDefinitionId`, pointing the other way.
   'runId',
+  // The SubAgent run a card asked from (`approval.subagent_run_id`, 0528): the run the subagents door hands out.
+  'subagentRunId',
+  // The SubAgent run a remote claim continues (RemoteSubagentClaim.resumeOf): spelled as `runId` is, so the target
+  // runner finds the directory it keeps under that run's id.
+  'resumeOf',
   'definitionId',
   'criterionId',
   // Migration 0232's declaration on `task`: WHICH stated criterion a piece of work says it serves.
@@ -319,6 +345,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'resolvedByUserId',
   // And the one who resumed a paused coordinator (0280), which is the same kind of name.
   'resumedByUserId',
+  // The coordinator that recorded an owner ruling (0970): a session a reader opens.
+  'recordedBySessionId',
   // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
   // and a person opens it, so it is an address like every other id in an error body.
   'handoffId',
@@ -454,6 +482,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
   'linkUserId',
   'actorId',
+  // The admin an Ask was sent to (`help_ask_admin_request`, migration 0890).
+  'adminId',
   'mentions',
   // Wire-only aggregates: no column of their own, but they carry the same ids in request and
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
@@ -650,6 +680,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
   // never a fence.
   'wikiChatSpaceId',
+  // A forked task's session and that session's machine (migration 0615, SR55): addresses a reader follows to the
+  // session the task started from and the runner its snapshot is on. History references with no foreign key — never a
+  // fence: the fork's placement is decided on the task's own row.
+  'forkSessionId',
+  'forkRunnerId',
   // A wiki chat's cards (migration 0483, contract `chat.drafts`): the card a drafting tool answers (`draftId`), which the
   // panel draws and `GET /wiki/chat-drafts/:id` reads, and the card a newer one replaced (`replacesId`, a history
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.
@@ -671,6 +706,15 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // tell an identity the database worked out from one somebody chose. It appears in no request and
   // no response, and decoding it on the way in is the one way to make that comparison lie.
   'coordinatorIdentityLandingId',
+  // The sessions a runner's background jobs hold slots for (runner_presence, migration 0780): the machine protocol's raw
+  // UUIDs, kept only where they equal the id of a session assigned to that runner and counted by that equality. It
+  // appears in no response, and a decode on the way in could only refuse a heartbeat over one id it cannot read.
+  'backgroundJobSessionIds',
+  // The sessions a refused account removal says are using the account (runner.codex_account_remove_sessions, migration
+  // 0910): the machine protocol's raw UUIDs, kept on the reporting runner's row and read back only where they equal the
+  // id of a session assigned to that runner. The column appears in no response (runners.service.ts drops it; the page
+  // lists the matched sessions' own ids), and a decode on the way in could only refuse the report over one id.
+  'codexAccountRemoveSessions',
   'generation',
   'leaseGeneration',
   'leaseOwner',

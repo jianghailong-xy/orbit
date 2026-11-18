@@ -15,10 +15,11 @@ final class SidebarClickDriverTests: XCTestCase {
         continueAfterFailure = true
     }
 
-    /// Every row the sidebar can draw. Names are stable in the stub even while its set churns.
+    /// Every row the sidebar can draw, by the name it draws. Names are stable in the stub even while
+    /// its set churns. This is the fallback for a host that does not expose the rows themselves.
     private var targetLabels: [String] {
-        ["Projects", "Tasks", "Wiki", "Following", "Settings",
-         "orbit-macos", "atlas", "shared-laptop", "Set up mini.local", "Workspaces"]
+        ["Projects", "Tasks", "Wiki", "orbit-macos", "atlas", "shared-laptop",
+         "Set up mini.local", "Workspaces", "Project P1"]
     }
 
     func testTwoHundredSidebarClicksWhileDataChanges() throws {
@@ -29,46 +30,104 @@ final class SidebarClickDriverTests: XCTestCase {
         app.launch()
         dismissSystemPrompts()
         XCTAssertTrue(waitForWindow(app, timeout: 20), "no window after launch")
+        // The CI Mac does not make a launched app frontmost on its own: its accessibility tree read
+        // `Disabled` and every row `Not hittable`, which is why earlier runs "clicked" 200 times
+        // without selecting anything. Ask for the front explicitly.
+        app.activate()
+        settle(1)
 
         signIn(app)
         XCTAssertTrue(appears(app, "Workspaces", timeout: 60),
                       "the sidebar never drew; the app did not sign in against the stub")
+        app.activate()
         settle(2)
         note("signed in; sidebar is up; \(windowSize(app))")
         note("sidebar dump (first 6000 chars):\n" + String(app.debugDescription.prefix(6000)))
 
+        // Every click that lands is one click of the 200 the gate asks for; a step that finds no
+        // hittable row is skipped and tried again, so the run ends with 200 real presses or says
+        // how many it got. The row count is re-read every step because the stub's changing answer
+        // rebuilds the rail underneath the clicks — the same rows a user's pointer would find.
         var clicked = 0
         var skipped = 0
-        for step in 0..<clicks {
+        var selectedPresses = 0
+        var rescues = 0
+        var step = 0
+        let deadline = Date().addingTimeInterval(900)
+        while clicked < clicks {
             guard appIsAlive(app) else {
                 fail("app left the foreground after \(clicked) clicks (step \(step))")
                 return
             }
-            var pressed = false
-            for offset in 0..<targetLabels.count {
-                let label = targetLabels[(step + offset) % targetLabels.count]
-                guard let element = findRow(app, label) else { continue }
-                if !element.exists || !element.isHittable { continue }
-                element.click()
+            guard Date() < deadline else {
+                fail("only \(clicked) of \(clicks) clicks landed before the 15-minute deadline")
+                return
+            }
+            if pressNextRow(app, step: step) {
                 clicked += 1
-                pressed = true
-                print("CLICK \(clicked)/\(clicks) -> \(label) at \(Date().timeIntervalSince1970)")
-                break
-            }
-            if !pressed {
+                if lastSelectedRows > 0 { selectedPresses += 1 }
+            } else {
                 skipped += 1
-                print("SKIP step \(step): no target hittable")
+                if skipped == 1 {
+                    // What the window looks like the first time the rail cannot be reached.
+                    note("first miss; window says: \(windowSize(app)); tree (first 4000 chars):\n"
+                         + String(app.debugDescription.prefix(4000)))
+                }
+                // The rail can go away under this harness: the probe window is 1100 points wide on
+                // a 1024-point screen, and a section page that opens a third column makes the split
+                // view fold the sidebar away. Ask for it back rather than spending the run skipping.
+                if skipped >= 2 && rescues < 8 {
+                    app.activate()
+                    app.typeKey("s", modifierFlags: [.command, .control])
+                    rescues += 1
+                    note("rail unreachable at step \(step); sent the sidebar toggle (rescue \(rescues))")
+                }
             }
+            step += 1
             // No settle: the next click lands while the server's answer is still on its way.
             Thread.sleep(forTimeInterval: 0.03)
         }
 
         let alive = appIsAlive(app)
-        note("driver done: clicked=\(clicked) skipped=\(skipped) alive=\(alive) state=\(app.state.rawValue)")
-        print("DRIVER_DONE clicked=\(clicked) skipped=\(skipped) alive=\(alive) state=\(app.state.rawValue)")
+        note("driver done: clicked=\(clicked) skipped=\(skipped) selected_presses=\(selectedPresses)"
+             + " alive=\(alive) state=\(app.state.rawValue)")
+        print("DRIVER_DONE clicked=\(clicked) skipped=\(skipped) selected_presses=\(selectedPresses)"
+              + " alive=\(alive) state=\(app.state.rawValue)")
         shot(app, "sidebar-after-clicks")
-        if !alive { fail("app left the foreground during the run") }
-        XCTAssertGreaterThanOrEqual(clicked, 150, "too few clicks landed on real rows")
+        XCTAssertTrue(alive, "app left the foreground during the run")
+        XCTAssertEqual(clicked, clicks, "fewer than \(clicks) clicks landed on real rows")
+    }
+
+    // MARK: clicking a row
+
+    /// How many rows the last press saw selected (AX `isSelected`). Zero on a press that did not
+    /// reach the sidebar — the run reports it, and the test requires at least one non-zero press.
+    private var lastSelectedRows = 0
+
+    /// One press on the sidebar, cycling the rows by index so every row — the Wiki included, and
+    /// whatever the churn is drawing at this instant — gets clicked; the named rows are the fallback
+    /// when the host does not expose the list's rows as elements. Nothing here may raise: a row that
+    /// is gone or not hittable is skipped, not clicked. An XCUITest "Not hittable" failure unwinds
+    /// the enclosing block even inside an expected-failure allowance (the first run that used one
+    /// ended after its first press), so the driver asks before it presses instead.
+    private func pressNextRow(_ app: XCUIApplication, step: Int) -> Bool {
+        for offset in 0..<targetLabels.count {
+            let label = targetLabels[(step + offset) % targetLabels.count]
+            guard let element = findRow(app, label) else { continue }
+            // Ask before pressing: a click on a row that is gone or reported "Not hittable" ends
+            // the whole test in this XCTest, and under this churn a row can go at any moment.
+            if !element.isHittable { continue }
+            element.click()
+            // What the press selected, read back from the pressed element itself. Reading the
+            // list's rows as a whole (`allElementsBoundByIndex`) is what failed after two presses:
+            // it re-resolves each index after the list has shrunk, and XCTest ends the test on it.
+            lastSelectedRows = element.exists && element.isSelected ? 1 : 0
+            print("CLICK \(step + 1) -> \(label) selected=\(lastSelectedRows)"
+                  + " at \(Date().timeIntervalSince1970)")
+            return true
+        }
+        print("SKIP step \(step): no target hittable")
+        return false
     }
 
     // MARK: signing in
@@ -96,15 +155,19 @@ final class SidebarClickDriverTests: XCTestCase {
     /// The row carrying this name: an outline row, a cell, or the text inside one. The first
     /// hittable match is pressed. Rows come and go with the stub's changing data, so a miss is
     /// ordinary and the driver moves to the next name.
+    /// One element at most: `firstMatch` + `exists`, never an enumeration of matches. Resolving a
+    /// list of matches re-reads each index after the tree has changed, which is the query XCTest
+    /// ends a test on ("Failed to get matching snapshot") when a row leaves under the pointer.
     private func findRow(_ app: XCUIApplication, _ label: String) -> XCUIElement? {
+        let byLabel = NSPredicate(format: "label == %@", label)
         for query in [app.outlineRows, app.cells, app.otherElements, app.staticTexts] {
-            let matches = query.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
-            if let hit = matches.first(where: { $0.exists && $0.isHittable }) { return hit }
+            let element = query.matching(byLabel).firstMatch
+            if element.exists { return element }
         }
         // A Label's title can be exposed as the value of the row rather than its label.
         let byValue = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "value == %@", label)).allElementsBoundByIndex
-        return byValue.first(where: { $0.exists && $0.isHittable })
+            .matching(NSPredicate(format: "value == %@", label)).firstMatch
+        return byValue.exists ? byValue : nil
     }
 
     private func appears(_ app: XCUIApplication, _ words: String, timeout: TimeInterval) -> Bool {

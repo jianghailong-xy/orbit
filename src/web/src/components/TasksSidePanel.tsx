@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   CodeOutlined,
   DeleteOutlined,
+  DesktopOutlined,
   DisconnectOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -13,6 +14,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoreOutlined,
+  PlusOutlined,
+  QuestionCircleOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -42,6 +45,8 @@ import type {
   RunnerAntigravityState,
   RunnerAccountRemoveState,
   RunnerEngineHealth,
+  RunnerEngineUpdateDismissals,
+  RunnerAgentFix,
   RunnerInstallState,
   RunnerModelCatalog,
   RunnerRegionView,
@@ -50,11 +55,15 @@ import type {
   RunnerUpdateTurn,
   RuntimeDefaultModels,
   SlashCommandInfo,
+  ManagedRunnerRow,
 } from '@orbit/shared';
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
+import { managedRowOf, useManagedRunner, useManagedRunnerId } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
 import { SharedWithMeGroup } from './SharedWithMe';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useSidebarFolded } from '../lib/sidebarFold';
 import {
   avatarQuery,
   meQuery,
@@ -79,6 +88,7 @@ import {
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
 import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
+import { useScheduledNeedsCount } from '../lib/schedules';
 import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
@@ -95,6 +105,7 @@ import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
 import { Tooltip } from './ui/Tooltip';
+import { HELP_PATH, useHelpDrawer } from '../lib/helpDrawer';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -162,6 +173,9 @@ const TOP: TopNavItem[] = [
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
   { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
+  // Scheduled tasks live here and only here: no workspace's session list carries them (owner ruling). Its count is
+  // the failing and the held schedules, the page's Needs you.
+  { key: 'scheduled', icon: <SidebarNavIcon name="scheduled" />, label: SCHEDULE_COPY.nav.scheduled },
   // Every thing an agent has asked the owner to do, in one inbox. Its amber count follows the rule the
   // Wiki's states below: a row carrying an amber number shows no shortcut.
   { key: 'waiting', icon: <SidebarNavIcon name="waiting" />, label: WAITING_ON_YOU },
@@ -279,9 +293,18 @@ export interface Runner {
   // The directory `orbit register` ran in: a suggestion for its first workspace, to be checked on the
   // machine before it is offered (docs/first-workspace-contract.md §1). null = nothing registered one.
   registerDir?: string | null;
+  // The account's managed runner, labelled Orbit Cloud (RunnerRowIdentity). Absent from an older server,
+  // where the managed status's runnerId says which runner it is.
+  managed?: boolean;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
+  // The engine update warnings dismissed on this runner, by engine: the update.latest each was
+  // dismissed against. Absent from an older server, which dismisses nothing.
+  engineUpdateDismissals?: RunnerEngineUpdateDismissals | null;
+  // Fix with an agent: where a press would start its session here, or why it can't, and the agents
+  // already at work on this runner's warnings. Absent from an older server, which draws no button.
+  agentFix?: RunnerAgentFix | null;
   /** Server-computed capability and CLI readiness for Gemini sessions. */
   antigravity?: RunnerAntigravityState;
   // The engine install this runner has in flight, if any.
@@ -357,6 +380,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const help = useHelpDrawer();
   // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
   // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
   // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
@@ -370,6 +394,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiRows = wikiSpaces.data ?? [];
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
+  // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form, opened from the group's last row.
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -401,9 +426,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
+  // its session lights Scheduled, and no workspace row.
+  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId
+    (sessionId && !onScheduleRun
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -413,6 +441,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The open projects, which close the rail the way they close the iPhone drawer (below).
   const projects = useQuery(openProjectsQuery());
   const waitingOnYou = useWaitingOnYouCount();
+  const scheduledNeeds = useScheduledNeedsCount();
   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
   // A project's own page lights its row in that group rather than the Projects entry, which stands
   // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
@@ -423,11 +452,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? `project:${openProjectId}`
       : null;
   // A project's sessions page — the console with `?project=` — is that project's row's, over
-  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
+  // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
+  // workspace's, so the workspace's row stays lit (owner 2026-11-14).
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
   const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
   const projectPageKey =
-    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+    narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
@@ -460,6 +491,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
+    : onScheduleRun
+    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -497,16 +530,28 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // Collapse the whole panel to a slim icon rail (desktop) — hands the content
   // region the full width back. Persisted so the choice survives a refresh.
-  const [collapsed, setCollapsed] = useState<boolean>(
+  const [kept, setCollapsed] = useState<boolean>(
     () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
   );
+  // A page may ask for the icon rail while it needs the width (the Wiki's chat column, `useSidebarFolded`): shown
+  // collapsed then, and the toggle opens it back for that while without changing the choice kept above.
+  const folded = useSidebarFolded();
+  const [unfolded, setUnfolded] = useState(false);
+  useEffect(() => {
+    if (!folded) setUnfolded(false);
+  }, [folded]);
+  const collapsed = kept || (folded && !unfolded);
   const toggleCollapsed = useCallback(() => {
+    if (folded && !kept) {
+      setUnfolded((u) => !u);
+      return;
+    }
     setCollapsed((c) => {
       const next = !c;
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
       return next;
     });
-  }, []);
+  }, [folded, kept]);
   // Cmd/Ctrl + Backslash toggles the sidebar — the VS Code / Linear / Notion convention.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -556,6 +601,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     queryFn: () => api<Runner[]>('/runners'),
     refetchInterval: streamPoll(15_000),
   });
+  // The account's managed runner is never Offline here: asleep is Asleep, coming up is Waking up…
+  // (docs/managed-runner-existing-account-entry-design.md, D4). Nothing is read with the feature off.
+  const { managed: accountManaged } = useManagedRunner();
+  // Which runner is Orbit Cloud: its row's `managed`, else the status's runnerId (an older server).
+  const managedRunnerId = useManagedRunnerId();
   const runnerOnlineById = useMemo(
     () => new Map((runners.data ?? []).map((runner) => [runner.id, runner.online])),
     [runners.data],
@@ -564,14 +614,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
   const runnerLabels = useMemo(() => {
     const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    for (const r of runners.data ?? []) m.set(r.id, machineName(r, managedRunnerId));
     return m;
-  }, [runners.data]);
+  }, [runners.data, managedRunnerId]);
+
+  // The account menu's Machines row: every machine, and how many of them are online.
+  const machineList = runners.data ?? [];
+  const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({
     queryKey: ['workspaces'],
-    meta: { entities: ['workspace'] },
+    meta: { entities: ['workspace', 'checkout'] },
     queryFn: () => api<Workspace[]>('/workspaces'),
   });
   // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
@@ -581,8 +635,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // session page, where its setup card is (board rule 9). Not before the list is known: every machine
   // would read as bare until it lands.
   const bareMachines = useMemo(
-    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data) : []),
-    [runners.data, workspaces.data, workspaces.isSuccess],
+    () => (workspaces.isSuccess ? machinesToSetUp(runners.data ?? [], workspaces.data, accountManaged?.status) : []),
+    [runners.data, workspaces.data, workspaces.isSuccess, accountManaged],
   );
 
   // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
@@ -825,13 +879,16 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // so the workspace only decides where the page's back leads), or the first one; with no
   // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
   // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
-  // shows one pane, so there the page is what opens.
+  // shows one pane, so there the page is what opens. A session shared with you is drawn as the guest
+  // view, which has no project column (its owner's read fails for you), so from there the page opens too.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
-    if (sel === `project:${key}`) return;
-    setSel(`project:${key}`);
-    if (sessionId && !narrow) {
+    const besideConversation = !!sessionId && !narrow && !sessionQ.isError;
+    // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
+    if (sel === `project:${key}` || (besideConversation && projectPageId === key)) return;
+    if (narrow) setSel(`project:${key}`);
+    if (besideConversation) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;
     }
@@ -906,6 +963,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 {waitingOnYou}
               </span>
             )}
+            {t.key === 'scheduled' && scheduledNeeds > 0 && (
+              <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                {scheduledNeeds}
+              </span>
+            )}
             {t.key === 'wiki' && wikiWaitingCount > 0 && (
               <span
                 className="tp-rail-badge needs-you"
@@ -926,8 +988,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
           const shortcutLabel = workspaceShortcutLabel(i);
           const runnerLabel =
             (runnerId ? runnerLabels.get(runnerId) : null) ??
-            a.runner?.displayName ??
-            a.runner?.name ??
+            (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
             'Shared';
           return (
             <div
@@ -939,10 +1000,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
               <WorkspaceStateMark
                 compact
-                offline={workspaceRunnerIsOffline(
-                  runnerId,
-                  runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                )}
+                managed={managedRowOf(accountManaged, runnerId)}
+                offline={
+                  !managedRowOf(accountManaged, runnerId) &&
+                  workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                }
                 running={(workspaceRunning.get(a.id) ?? 0) > 0}
                 jobs={workspaceJobs.get(a.id) ?? 0}
                 needsYou={workspaceNeedsYou.get(a.id) ?? 0}
@@ -974,6 +1036,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   aria-label={wikiWaitingOnYou(waitingOnYou)}
                 >
                   {waitingOnYou}
+                </span>
+              ) : t.key === 'scheduled' && scheduledNeeds > 0 ? (
+                <span className="tp-count needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
                 </span>
               ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
@@ -1035,8 +1101,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     const runnerId = workspaceRunnerId(a);
                     const runnerLabel =
                       (runnerId ? runnerLabels.get(runnerId) : null) ??
-                      a.runner?.displayName ??
-                      a.runner?.name ??
+                      (a.runner ? machineName(a.runner, managedRunnerId) || null : null) ??
                       'Shared';
                     const row = (dragHandle?: ReactNode) => (
                       <WorkspaceRow
@@ -1044,10 +1109,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                         workspace={a}
                         runnerLabel={runnerLabel}
                         active={a.id === litWorkspaceId}
-                        offline={workspaceRunnerIsOffline(
-                          runnerId,
-                          runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                        )}
+                        managed={managedRowOf(accountManaged, runnerId)}
+                        offline={
+                          !managedRowOf(accountManaged, runnerId) &&
+                          workspaceRunnerIsOffline(runnerId, runnerId ? runnerOnlineById.get(runnerId) : undefined)
+                        }
                         running={(workspaceRunning.get(a.id) ?? 0) > 0}
                         jobs={workspaceJobs.get(a.id) ?? 0}
                         needsYou={workspaceNeedsYou.get(a.id) ?? 0}
@@ -1085,7 +1151,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     <FolderAddOutlined aria-hidden="true" />
                   </span>
                   <span className="tp-label tp-workspace-label">
-                    <span className="tp-workspace-name">{setupTitle(machineName(runner))}</span>
+                    <span className="tp-workspace-name">{setupTitle(machineName(runner, managedRunnerId))}</span>
                   </span>
                 </div>
               ))}
@@ -1216,12 +1282,82 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
+              popupClassName: 'tp-account-submenu',
             },
+            // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
+            // open, so the row picks one. With none yet it is the way to add the first.
+            machineList.length > 0
+              ? {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">
+                        {onlineMachines === machineList.length
+                          ? 'All online'
+                          : `${onlineMachines} of ${machineList.length} online`}
+                      </span>
+                    </span>
+                  ),
+                  children: [
+                    ...machineList.map((runner) => {
+                      // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
+                      const managedRow = managedRowOf(accountManaged, runner.id);
+                      const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
+                      return {
+                        key: `machine-${runner.id}`,
+                        textValue: machineName(runner, managedRunnerId),
+                        icon: (
+                          <span
+                            className="tp-account-machine-dot"
+                            data-online={ready}
+                          />
+                        ),
+                        label: (
+                          <span className="tp-account-appearance-label">
+                            <span>{machineName(runner, managedRunnerId)}</span>
+                            {!ready && (
+                              <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
+                            )}
+                          </span>
+                        ),
+                        onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
+                      };
+                    }),
+                    { type: 'separator' as const, key: 'machines-add-separator' },
+                    {
+                      key: 'machines-add',
+                      icon: <PlusOutlined />,
+                      label: 'Add a machine',
+                      onSelect: () => navigate('/settings/machines/new'),
+                    },
+                  ],
+                  popupClassName: 'tp-account-submenu',
+                }
+              : {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">None</span>
+                    </span>
+                  ),
+                  onSelect: () => navigate('/settings/machines/new'),
+                },
             {
               key: 'settings',
               icon: <SettingOutlined />,
               label: 'Settings',
               onSelect: () => navigate('/settings'),
+            },
+            // The full help center (board help-center 01 ⓪②), where a reader who looks in the account menu finds it.
+            {
+              key: 'help',
+              icon: <QuestionCircleOutlined />,
+              label: 'Help center',
+              onSelect: () => navigate(HELP_PATH),
             },
             // User management, for admins only. It opens a settings page as the row above does, so
             // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
@@ -1263,6 +1399,25 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             </button>
           }
         />
+        {/* Help, beside the avatar (board help-center 01 ⓪①); above it on the collapsed rail. */}
+        <Tooltip
+          side="top"
+          content={
+            <>
+              Help<kbd className="tp-help-key">?</kbd>
+            </>
+          }
+        >
+          <button
+            type="button"
+            className={`tp-help${help.open ? ' is-open' : ''}`}
+            aria-label="Help"
+            aria-pressed={help.open}
+            onClick={help.toggleHelp}
+          >
+            <QuestionCircleOutlined />
+          </button>
+        </Tooltip>
       </div>
 
       <div
@@ -1383,6 +1538,7 @@ export function WikiRow({
  */
 export function WorkspaceStateMark({
   offline,
+  managed = null,
   running,
   jobs = 0,
   needsYou,
@@ -1390,6 +1546,8 @@ export function WorkspaceStateMark({
   compact = false,
 }: {
   offline: boolean;
+  /** The account's managed runner, when it is this workspace's: its shared state instead of Offline. */
+  managed?: ManagedRunnerRow | null;
   running: boolean;
   /** Sessions in this workspace with a background job in flight — see `workspaceJobs`. */
   jobs?: number;
@@ -1411,6 +1569,10 @@ export function WorkspaceStateMark({
     );
   }
   if (!compact) return badge;
+  if (managedRest(managed) && !running) {
+    if (badge) return badge;
+    return <ManagedRunnerMark row={managed!} className="tp-rail-managed" />;
+  }
   if (offline) {
     if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
@@ -1462,6 +1624,26 @@ export function WorkspaceStateMark({
   return badge;
 }
 
+/** A managed runner not simply ready: the sidebar marks it, quietly, where Offline would have been. */
+function managedRest(row: ManagedRunnerRow | null | undefined): boolean {
+  return !!row && row.kind !== 'available';
+}
+
+/** The managed runner's state on a workspace: a grey dot (asleep, waking) or an orange one, its words on hover. */
+export function ManagedRunnerMark({ row, className }: { row: ManagedRunnerRow; className: string }) {
+  const title = row.detail ? `${row.label} · ${row.detail}` : row.label;
+  return (
+    <Tooltip content={title}>
+      <span
+        className={`${className} managed-mark managed-mark--${row.tone}`}
+        role="img"
+        aria-label={title}
+        data-kind={row.kind}
+      />
+    </Tooltip>
+  );
+}
+
 // A compact, permanently visible workspace row. Its folder occupies the same icon column as the
 // fixed first-level destinations above, so Workspace names share their label alignment. Runner is
 // descriptive metadata on the same line, not a disclosure parent the user has to remember.
@@ -1470,6 +1652,7 @@ export function WorkspaceRow({
   runnerLabel,
   active,
   offline,
+  managed = null,
   running,
   jobs,
   needsYou,
@@ -1482,6 +1665,8 @@ export function WorkspaceRow({
   runnerLabel: string;
   active: boolean;
   offline: boolean;
+  /** The account's managed runner, when it is this workspace's: Asleep or Waking up…, never Offline. */
+  managed?: ManagedRunnerRow | null;
   running: boolean;
   jobs: number;
   needsYou: number;
@@ -1547,6 +1732,9 @@ export function WorkspaceRow({
         aria-label={offline ? offlineTitle : undefined}
       >
         <FolderOutlined aria-hidden="true" />
+        {managedRest(managed) && !showRunningDot && !showJobsDot && (
+          <ManagedRunnerMark row={managed!} className="tp-workspace-icon-managed" />
+        )}
         {offline && (
           <Tooltip content={offlineTitle}>
             <DisconnectOutlined
@@ -1576,6 +1764,7 @@ export function WorkspaceRow({
       {needsYou === 0 && shortcut}
       <WorkspaceStateMark
         offline={offline}
+        managed={managed}
         running={running}
         needsYou={needsYou}
         runnerLabel={runnerLabel}

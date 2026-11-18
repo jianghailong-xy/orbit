@@ -25,13 +25,23 @@ data class PushPayload(
     val watchId: String? = null,
     val generation: Int? = null,
     val wikiSpaceId: String? = null,
-    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP or CONFIRM), which names the notification's action. */
+    /** `owner-request`: the request, and its kind (DECISION, SECRET, MANUAL_STEP, CONFIRM or WIKI_CREATE), which names the notification's action. */
     val ownerRequestId: String? = null,
     val ownerRequestKind: String? = null,
+    /** `terminal-login`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
+    val terminalLoginId: String? = null,
+    /** `crossing-request`: the cross-project request waiting on the owner's decision. */
+    val handoffId: String? = null,
+    /** `schedule`: the schedule an alert is about, and which of its alerts it is (a finding, a failure, a hold...). */
+    val scheduleId: String? = null,
+    val scheduleKind: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
     val isOwnerRequest get() = kind == OWNER_REQUEST
+    val isTerminalLogin get() = kind == TERMINAL_LOGIN
+    /** A decision only the owner can make, raised outside the owner items: a crossing request, a coordinator's confirmation hold. */
+    val isOwnerDecision get() = kind == CROSSING_REQUEST || kind == CONFIRMATION_RAISED
     /** An owner request's primary action (`orbit://owner-request/<id>`): the inbox, its card open on its input. Neither it nor
      * Later ends the request; the tap on the notification itself opens the session that asked, as [link] says. */
     val ownerRequestLink: String? get() = ownerRequestId?.takeIf { isOwnerRequest }?.let { "orbit://owner-request/$it" }
@@ -40,7 +50,11 @@ data class PushPayload(
     val link: String? get() = when {
         // A project done, and a pending item of a project nobody has (the orphan sweep, owner with no coordinator): its project.
         kind == "project-done" || kind == "project-orphan" -> projectId?.let { "orbit://project/$it" }
+        // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
+        kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
+        // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.
+        kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
         kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
@@ -63,6 +77,10 @@ data class PushPayload(
         val ownerItemKinds = setOf("approve-merge-to-main", "coordinator-question", "escalated-to-you", "fuse-paused",
             "landed-without-confirmation")
         const val OWNER_REQUEST = "owner-request"
+        const val TERMINAL_LOGIN = "terminal-login"
+        const val CROSSING_REQUEST = "crossing-request"
+        const val CONFIRMATION_RAISED = "confirmation-raised"
+        const val SCHEDULE = "schedule"
     }
 }
 
@@ -81,7 +99,8 @@ data class PushMessage(
         private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "project-orphan", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
-            "runner-updating", PushPayload.OWNER_REQUEST)
+            "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.CROSSING_REQUEST,
+            PushPayload.CONFIRMATION_RAISED, PushPayload.SCHEDULE)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -114,7 +133,9 @@ data class PushMessage(
             val payload = PushPayload(string("title"), string("body"), string("category"), string("threadId"),
                 string("kind"), number("badge"), clear, id("sessionID"), id("projectID"), id("openItemID"),
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
-                number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"))
+                number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
+                terminalLoginId = id("terminalLoginID"), handoffId = id("handoffID"), scheduleId = id("scheduleID"),
+                scheduleKind = string("scheduleKind"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -124,6 +145,14 @@ data class PushMessage(
                     "agent-message" -> Unit // Headless orbit notify deliberately names no session.
                     // A session filed an owner request: about that session, and the request its actions open.
                     PushPayload.OWNER_REQUEST -> require(payload.sessionId != null && payload.ownerRequestId != null)
+                    // A terminal asking to be approved names the request and the machine it asks for.
+                    PushPayload.TERMINAL_LOGIN -> require(payload.terminalLoginId != null && payload.runnerId != null)
+                    // A crossing request names the project that lists it and the request; its card's conversation only when it has one.
+                    PushPayload.CROSSING_REQUEST -> require(payload.projectId != null && payload.handoffId != null)
+                    // A coordinator raising a task for the owner's confirmation: the run's session, its task, the review record.
+                    PushPayload.CONFIRMATION_RAISED -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
+                    // A scheduled task's alert names its schedule; the run's session only when it opens one.
+                    PushPayload.SCHEDULE -> require(payload.scheduleId != null)
                     "confirmation-problems" -> require(payload.sessionId != null && payload.taskId != null && payload.recordId != null)
                     // A confirmed region flip is about its runner's Claude Code, as a sign-out is about its runner's engine.
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())

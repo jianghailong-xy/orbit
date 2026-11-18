@@ -15,7 +15,9 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
   let counted: unknown;
   const prisma = {
     session: {
-      findFirst: async ({ where }: { where: { id: string } }) => ({
+      findFirst: async ({ where, select }: { where: { id: string }; select?: { createdAt?: boolean } }) => select?.createdAt
+        ? { createdAt: new Date(Date.now() - 30 * 60_000) }
+        : ({
         id: where.id,
         rootSessionId: 'root',
         spawnDepth: 0,
@@ -23,6 +25,9 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
         owner: { preferences: {} },
       }),
       update: async () => ({}),
+      // What a refusal names (session-recovery.ts): the unsettled sessions holding the tree at its limit,
+      // and the oldest spawn in the rate window, which says when the window admits another.
+      findMany: async () => [{ id: 'child-1' }],
       // Two different questions about the same tree: how much of it is unfinished, and how
       // fast it is being created. They are told apart by what the count filters on.
       //

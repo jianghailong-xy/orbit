@@ -16,6 +16,7 @@ import { decryptSecret } from './provider-crypto';
 import { readResponsesEvent, ResponsesStreamTap, type ResponsesOutcome } from './responses-stream-tap';
 import { maskedKey, nextUsageWindowStart, sharedPoolKeyCandidates, usageWindowStart } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
+import { servesKeptSubagent } from './kept-subagent-gateway';
 
 /**
  * Where the pool gateway sends every request it forwards: OpenAI's API. Fixed here — no request, header,
@@ -144,6 +145,11 @@ export interface GatewayCaller {
   accountId: string | null;
   /** `session.pool_key_id`: the API key of the pool the session runs on, if any. */
   keyId: string | null;
+  /**
+   * A SubAgent's child (migration 0800): `accountId` and `keyId` are its token's, not its session's, and the
+   * session — its parent's — is owed no transcript line about them.
+   */
+  subagent?: boolean;
 }
 
 /** A key as the gateway uses one. The secret is decrypted only for the request, and never kept. */
@@ -339,15 +345,16 @@ export class PoolGatewayService {
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool } = row.person;
     const { session } = row;
+    const open = OPEN_SESSION_STATUSES.includes(session.status) && !session.completedAt;
     const current =
       pool.engine === AgentProvider.CODEX &&
-      OPEN_SESSION_STATUSES.includes(session.status) &&
-      !session.completedAt &&
       !session.deletedAt &&
       session.ownerId === row.userId &&
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
+    // A session no longer open serves on only while its handover left a SubAgent running on its tokens.
+    if (!open && !(await servesKeptSubagent(this.prisma, row.sessionId))) return null;
     // The session's owner is the token's person (above). Asked last, as the runner credential asks it:
     // the token itself is good, and works again once the account is enabled.
     if (session.owner.disabledAt) return ACCOUNT_DISABLED;

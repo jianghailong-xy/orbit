@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, type MouseEventHandler, type ReactNode } from 'react';
 import './Settings.css';
 
 /** A page's own heading in the right-hand column: its name, a line under it, and an optional action on its right. */
@@ -66,6 +66,7 @@ export function SettingsRow({
   control,
   tooltip,
   anchor,
+  onClick,
 }: {
   title: ReactNode;
   description?: ReactNode;
@@ -74,9 +75,12 @@ export function SettingsRow({
   tooltip?: string;
   /** The row's name on its page: Settings' search opens the page at it and flashes it. */
   anchor?: string;
+  /** A row that opens something from a press anywhere on it. Keyboard users reach the same place through
+   *  the row's own control, so the row itself stays out of the tab order. */
+  onClick?: MouseEventHandler<HTMLDivElement>;
 }) {
   return (
-    <div className="settings-row" data-setting-anchor={anchor}>
+    <div className={onClick ? 'settings-row settings-row--link' : 'settings-row'} data-setting-anchor={anchor} onClick={onClick}>
       <div className="settings-row-text">
         <div className="settings-row-title">{title}</div>
         {description != null && <div className="settings-row-description">{description}</div>}

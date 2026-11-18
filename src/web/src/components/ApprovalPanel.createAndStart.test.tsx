@@ -3,13 +3,14 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, CREATE_AND_START, offersCreateAndStart } from './ApprovalPanel';
+import { ApprovalPanel, CREATE_AND_START, createAndStartLeads, offersCreateAndStart } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 
 // The single-task card's second yes: "Create and start" creates the task and starts its run in the
 // same press, so the owner is not asked again to start it. Offered only where the server's forecast
 // says nothing else would start the task, and sent as `startAfterCreate` beside the plain allow,
-// which itself stays exactly what it was.
+// which itself stays exactly what it was. Where offered it is the card's primary answer, Enter
+// included, unless the agent filed the task held (`autoRunWhenReady: false`).
 
 /** A single create card, with the server's forecast when one is given — filed, unless `accepts` is
  *  false, by a runner that acts on Create and start, which the server records beside the forecast. */
@@ -79,11 +80,41 @@ describe('Create and start', () => {
     }
   });
 
-  it('sits after the plain yes, which is still there', () => {
-    const html = render(taskCreate({ needsManualStart: 1 }));
-    expect(html).toContain('Create it');
-    expect(html.indexOf('Create it')).toBeLessThan(html.indexOf(CREATE_AND_START));
-    expect(html.indexOf(CREATE_AND_START)).toBeLessThan(html.indexOf('Chat about this'));
+  /** The card's buttons, in order, each with its tone. */
+  const buttons = (a: ApprovalInfo): Array<[string, string]> => {
+    const div = document.createElement('div');
+    div.innerHTML = render(a);
+    return [...div.querySelectorAll('button')].map((b) => [
+      b.textContent!.replace('Enter', '').trim(),
+      (b.className.match(/card-action--(\w+)/) ?? [])[1] ?? '',
+    ]);
+  };
+
+  it('leads the card, with the plain yes beside it', () => {
+    const card = taskCreate({ needsManualStart: 1 });
+    expect(createAndStartLeads(card)).toBe(true);
+    expect(buttons(card)).toEqual([
+      [CREATE_AND_START, 'primary'],
+      ['Create it', 'accent'],
+      ['💬 Chat about this', 'secondary'],
+    ]);
+  });
+
+  it('stays second on a task the agent filed held', () => {
+    const card = taskCreate({ needsManualStart: 1 });
+    (card.input as Record<string, unknown>).autoRunWhenReady = false;
+    expect(offersCreateAndStart(card)).toBe(true);
+    expect(createAndStartLeads(card)).toBe(false);
+    expect(buttons(card)).toEqual([
+      ['Create it', 'primary'],
+      [CREATE_AND_START, 'accent'],
+      ['💬 Chat about this', 'secondary'],
+    ]);
+  });
+
+  it('leaves Create it alone where it is not offered', () => {
+    expect(createAndStartLeads(taskCreate({ startingNow: 1 }))).toBe(false);
+    expect(buttons(taskCreate({ startingNow: 1 }))[0]).toEqual(['Create it', 'primary']);
   });
 
   describe('pressed', () => {
@@ -125,6 +156,34 @@ describe('Create and start', () => {
       expect(onDecide).toHaveBeenCalledTimes(2);
       // Exactly the call it made before this button existed.
       expect(onDecide.mock.calls[1]).toEqual(['c1', 'allow']);
+    });
+
+    const pressEnter = () =>
+      act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+
+    it('is what Enter presses, and wears the hint', async () => {
+      const onDecide = vi.fn();
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={taskCreate({ needsManualStart: 1 })} onDecide={onDecide} active />);
+      });
+      expect(button(CREATE_AND_START).querySelector('.approval-kbd')?.textContent).toBe('Enter');
+      expect(button('Create it').querySelector('.approval-kbd')).toBeNull();
+      await pressEnter();
+      expect(onDecide.mock.calls).toEqual([['c1', 'allow', undefined, undefined, undefined, true]]);
+    });
+
+    it('leaves Enter on Create it for a held task', async () => {
+      const onDecide = vi.fn();
+      const card = taskCreate({ needsManualStart: 1 });
+      (card.input as Record<string, unknown>).autoRunWhenReady = false;
+      await act(async () => {
+        mounted!.render(<ApprovalPanel approval={card} onDecide={onDecide} active />);
+      });
+      expect(button('Create it').querySelector('.approval-kbd')?.textContent).toBe('Enter');
+      await pressEnter();
+      expect(onDecide.mock.calls).toEqual([['c1', 'allow']]);
     });
 
     it('cannot be pressed on a card nobody is waiting on any more', async () => {

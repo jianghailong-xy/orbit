@@ -166,10 +166,10 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public let submittedAt: String?
     public let ageSeconds: Int?
     /// What the submitter says the work established.
-    public let claim: String
+    public var claim: String
     /// What the submitter says it did NOT establish. Carried on every row because it is the field
     /// most likely to change the answer; no client may drop it to save space.
-    public let gaps: [String]
+    public var gaps: [String]
     public let citations: [EvidenceDecisionCitation]
     public let decidability: EvidenceDecisionDecidability
     public let independence: EvidenceDecisionIndependence
@@ -178,6 +178,8 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     /// the server's string rather than an enum, so a value this build does not know reads as no
     /// action instead of failing the whole queue.
     public let ownerAction: String?
+    /// `claim` and `gaps` in the owner's language (Settings › Translation); nil until translated.
+    public let translation: EvidenceTranslation?
 
     /// A row is one revision of one task — the pair the decision door's compare-and-set is against.
     public var id: String { "\(taskId)#\(evidenceRevision)" }
@@ -190,7 +192,7 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
                 citations: [EvidenceDecisionCitation],
                 decidability: EvidenceDecisionDecidability,
                 independence: EvidenceDecisionIndependence,
-                ownerAction: String? = nil) {
+                ownerAction: String? = nil, translation: EvidenceTranslation? = nil) {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
@@ -205,6 +207,7 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
         self.decidability = decidability
         self.independence = independence
         self.ownerAction = ownerAction
+        self.translation = translation
     }
 }
 
@@ -357,13 +360,16 @@ public struct EvidenceDecisionRequest: Codable, Equatable, Sendable {
     public let decision: EvidenceDecisionAnswer
     /// The reason, on a send-back and on nothing else. Nil is left out of the body, not sent as null.
     public let note: String?
+    /// `true` delivers the note untranslated (Send as written); nil is left out of the body.
+    public let sendAsWritten: Bool?
 
     public init(decidingSessionId: String, evidenceRevision: String,
-                decision: EvidenceDecisionAnswer, note: String? = nil) {
+                decision: EvidenceDecisionAnswer, note: String? = nil, sendAsWritten: Bool = false) {
         self.decidingSessionId = decidingSessionId
         self.evidenceRevision = evidenceRevision
         self.decision = decision
         self.note = note
+        self.sendAsWritten = sendAsWritten ? true : nil
     }
 }
 
@@ -842,6 +848,19 @@ public enum EvidenceDecisions {
     public static let agentRecordedHeading = "An agent recorded a decision"
     /// The label over a send-back's reason, as the receipt shows it (web: `DECISION_RECEIPT_REASON`).
     public static let receiptReasonLabel = "the reason it was sent back"
+    /// The label over a confirm's note: it is not a reason anything was sent back (web:
+    /// `DECISION_RECEIPT_NOTE`).
+    public static let receiptNoteLabel = "Note"
+
+    /// The label over a receipt's note: a send-back's reason, or a confirm's note.
+    public static func noteLabel(_ decided: RecordedEvidenceDecision) -> String {
+        decided.decision == .confirm ? receiptNoteLabel : receiptReasonLabel
+    }
+
+    /// The fold over a receipt's note on a native receipt, which shows it only when asked.
+    public static func noteToggle(_ decided: RecordedEvidenceDecision, open: Bool) -> String {
+        "\(open ? "Hide" : "Show") the \(decided.decision == .confirm ? "note" : "reason")"
+    }
 
     private static let receiptClockFormatter: DateFormatter = {
         let f = DateFormatter()

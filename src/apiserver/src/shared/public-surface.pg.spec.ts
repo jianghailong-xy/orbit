@@ -16,7 +16,16 @@
  *       and the same address on another link, are not;
  *   (e) a session in the trash cannot be shared, and the refusal writes no token;
  *   (f) `/events?after=` reads what the session added since a seq, oldest first with a cursor to the
- *       rest, and the root's header as it stands now.
+ *       rest, and the root's header as it stands now;
+ *   (h) `/stream` (docs/session-viewer-stream-design.md §3–§4) is held by the same negative assertions
+ *       as the guest door's (test-support/viewer-door-checks.ts) against `/events`, on a link with
+ *       Tool output and one without: no field or event type the read does not carry, deltas on both,
+ *       tool output only on the first, head frames saying what `events?after=` says; it is answered
+ *       no-store and noindex, a token that opens nothing is a 404 status, and an open spends the
+ *       visitor's budget like any request;
+ *   (i) the anonymous stream caps (§6, D5): a visitor's fifth open stream on one link, a link's stream past its cap and
+ *       a stream past the apiserver's total are each refused 429, and closing one stream frees its slot. The harness
+ *       keeps the real per-visitor cap (4) and lowers the other two, so each is reached in a handful of streams.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/shared/public-surface.pg.spec.ts
  *
@@ -31,7 +40,9 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
+import {
+  CreatorType, PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin, TaskCompletionCriterion,
+} from '@prisma/client';
 import { RunEventType, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -50,16 +61,25 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { withSessionState } from '../sessions/session-state';
 import { SessionsService } from '../sessions/sessions.service';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
+import { VIEWER_STREAM_CAPS, ViewerStreamCaps } from '../sessions/viewer-stream-caps';
+import { RealtimeService } from '../realtime/realtime.service';
+import { openStream, type HeldStream } from '../test-support/sse-client';
+import { viewerStreamCrossings } from '../test-support/viewer-door-checks';
 import { ShareLinksController } from '../share-links/share-links.controller';
 import { ShareLinksService } from '../share-links/share-links.service';
 import { SharedRateLimiter } from './public-surface.guard';
 import { SharedController } from './shared.controller';
+import { SharedStreamGuard } from './shared-stream.guard';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 
-/** The budget this harness gives the guard, so (d) can spend it in a handful of requests. */
-const BUDGET = 5;
+/** The budget this harness gives the guard, so (d) can spend it in a handful of requests — and (i) a visitor its
+ *  four streams, a refused fifth, and one more after closing one. */
+const BUDGET = 6;
+/** The stream caps this harness gives the guard: the real one per visitor, and lowered ones per link and in all. */
+const STREAM_CAPS = { perVisitor: VIEWER_STREAM_CAPS.perVisitor, perLink: 6, total: 9 };
 /** Filler replies at seq 2..LAST_FILLER: more history than one page may hold (500). */
 const LAST_FILLER = 600;
 /** Length of the two bulky tool bodies, and the smallest cap `maxPayload` accepts. */
@@ -233,6 +253,11 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
   // Queue and realtime are the ways a session reaches its runner; nothing under test may use them,
   // so any call is a TypeError that surfaces as a 500 against the status each request asserts.
   const sessions = new SessionsService(prisma, {} as never, {} as never);
+  // The streams' live half: this process's own hub, published to directly by (h). No LISTEN connection is opened
+  // (onModuleInit is never called), so nothing from another process reaches it.
+  const realtime = new RealtimeService(prisma, { scheduleBadgeSync: () => undefined, notifySessionSettled: () => undefined } as never);
+  t.after(() => realtime.onModuleDestroy());
+  const caps = new ViewerStreamCaps(STREAM_CAPS);
   @Module({
     controllers: [SharedController, ShareLinksController],
     providers: [
@@ -240,6 +265,9 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       { provide: AttachmentsService, useValue: new AttachmentsService(prisma) },
       { provide: ShareLinksService, useValue: new ShareLinksService(prisma) },
       { provide: SharedRateLimiter, useValue: new SharedRateLimiter({ max: BUDGET, windowMs: 60_000 }) },
+      { provide: ViewerStreamService, useValue: new ViewerStreamService(prisma, realtime, sessions) },
+      { provide: ViewerStreamCaps, useValue: caps },
+      SharedStreamGuard,
       JwtAuthGuard,
       Reflector,
       { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: ownerId }) } },
@@ -312,13 +340,16 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     const state = withSessionState(row);
 
     // The root: every old field, then the tail page (200) and hasMore, and the link's own three
-    // (kind, include, sharedAt) — nothing else.
+    // (kind, include, sharedAt), and what the session is still doing while parked (`activity`, one of
+    // TURN, BACKGROUND_JOB or WAITING, or null: 29fc026c1, read by the shared page to say it is ongoing)
+    // — nothing else.
     const root = await visit(at(''));
     assert.equal(root.status, 200, root.body.toString());
     assert.deepEqual(
       Object.keys(root.json).sort(),
-      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName'].sort(),
+      [...OLD_FIELDS, ...LINK_FIELDS, 'events', 'hasMore', 'agentName', 'activity'].sort(),
     );
+    assert.ok(root.json.activity === null || ['TURN', 'BACKGROUND_JOB', 'WAITING'].includes(root.json.activity));
     assert.equal(root.json.kind, 'SESSION');
     assert.equal(root.json.title, 'Draw the mock and show me');
     assert.equal(root.json.workspaceName, workspaceName);
@@ -416,6 +447,7 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
       await visit(on('/events/1'), spender),
       await visit(on(''), spender),
       await visit(on('/events?limit=1'), spender),
+      await visit(on('/events?limit=2'), spender),
     ];
     assert.equal(spent.length, BUDGET);
     assert.deepEqual(spent.map((a) => a.status), spent.map(() => 200));
@@ -478,8 +510,8 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
 
     // The header is the root's — its fields, as the root answers them, and nothing else.
     const root = await visit(at(''));
-    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'events', 'after'].sort());
-    for (const field of [...OLD_FIELDS, 'agentName']) assert.deepEqual(rest.json[field], root.json[field], field);
+    assert.deepEqual(Object.keys(rest.json).sort(), [...OLD_FIELDS, 'agentName', 'activity', 'events', 'after'].sort());
+    for (const field of [...OLD_FIELDS, 'agentName', 'activity']) assert.deepEqual(rest.json[field], root.json[field], field);
 
     // A conversation that moves on: the next read holds what it added and how it stands now.
     const liveToken = newToken();
@@ -495,6 +527,193 @@ test('the public share surface: stored artifacts only, a paged transcript, no-st
     assert.deepEqual(seqs(moved), [2]);
     assert.equal(moved.json.events[0].payload.text, 'going on');
     assert.equal(moved.json.runState, 'RUNNING');
+  });
+
+  await t.test('(g) the card names the link for a chat app, is no view, and a token that opens nothing is the one 404', async () => {
+    const views = async () => Number((await sql.query(
+      'SELECT view_count AS n FROM share_link WHERE token = $1', [token],
+    )).rows[0].n);
+    const before = await views();
+    const card = await visit(at('/card'));
+    assert.equal(card.status, 200, card.body.toString());
+    assert.match(String(card.headers['content-type']), /^text\/html/);
+    const head = card.body.toString('utf8');
+    assert.match(head, /<title>Draw the mock and show me<\/title>/);
+    assert.match(head, /<meta property="og:description" content="A conversation shared from Orbit" \/>/);
+    assert.match(head, /<meta property="og:image" content="[^"]*\/icon-512\.png" \/>/);
+    assert.equal(await views(), before, 'a chat fetching the card counted as a view');
+
+    assert.equal((await visit(`${encodeURIComponent(newToken())}/card`)).status, 404);
+  });
+
+  await t.test('(h) the stream: the same negative assertions as its read, on a link with Tool output and one without', async (st) => {
+    // The same session behind a second link, with Tool output off: a task link whose task it is a run of (a session
+    // has one live session link), read through the conversation routes.
+    const taskId = randomUUID();
+    await db.task.create({
+      data: {
+        id: taskId, ownerId, title: `Shared task ${RUN}`, creatorType: CreatorType.USER, creatorId: ownerId,
+        completionCriterion: TaskCompletionCriterion.EVIDENCE_JUDGMENT,
+      },
+    });
+    await db.session.update({ where: { id: shared }, data: { taskId } });
+    const bareToken = newToken();
+    await sql.query(
+      `INSERT INTO share_link (id, owner_id, token, task_id, include) VALUES (gen_random_uuid(), $1::uuid, $2, $3::uuid, '{"conversations": true, "toolOutput": false}'::jsonb)`,
+      [ownerId, bareToken, taskId],
+    );
+    const LIVE_OUTPUT = `live-output-${RUN}`;
+    const OWNER_ONLY = [`approval-${RUN}`, `translation-${RUN}`, `progress-${RUN}`];
+    const streams: HeldStream[] = [];
+    st.after(() => streams.forEach((held) => held.close()));
+    const doors = [
+      { name: 'session link with Tool output', token, at: '', toolOutput: true },
+      { name: 'task link conversation without Tool output', token: bareToken, at: `/sessions/${pub(shared)}`, toolOutput: false },
+    ];
+    for (const door of doors) {
+      const held = await openStream(`${base}/api/shared/${encodeURIComponent(door.token)}${door.at}/stream`, { 'x-real-ip': freshAddress() });
+      streams.push(held);
+      assert.equal(held.status, 200, door.name);
+      // Nest's SSE writer sets its own Cache-Control over the guard's; it still says no-store.
+      assert.match(String(held.headers['cache-control']), /(^|, )no-store(,|$)/, door.name);
+      assert.equal(held.headers['x-robots-tag'], 'noindex, nofollow', door.name);
+      await held.until((f) => f.type === 'head', `${door.name}: the opening head`);
+    }
+    // The cursor-less replay is the tail the read pages: the newest SSE_REPLAY_CAP (200) of the transcript.
+    const replayed = streams[0]!.frames.filter((f) => f.seq > 0).map((f) => f.seq);
+    assert.deepEqual(replayed, REPLAYABLE.slice(-200));
+
+    // Every event type, live, as the ingest and the decisions publish them.
+    const publish = (seq: number, type: string, payload: Record<string, unknown>) =>
+      realtime.publish(shared, { seq, type: type as never, payload, ts: new Date().toISOString() });
+    publish(0, RunEventType.TEXT_DELTA, { text: 'Hel' });
+    publish(0, RunEventType.THINKING_DELTA, { text: 'hmm' });
+    publish(0, RunEventType.TOOL_OUTPUT, { toolUseId: 'toolu_live', output: LIVE_OUTPUT });
+    publish(0, RunEventType.BACKGROUND_OUTPUT, { shellId: 'bg', output: LIVE_OUTPUT });
+    publish(0, RunEventType.APPROVAL_REQUEST, { id: randomUUID(), toolName: 'Bash', input: { command: OWNER_ONLY[0] } });
+    publish(0, RunEventType.QUEUED_TURNS_CHANGED, {});
+    publish(0, RunEventType.TRANSLATION, { of: 606, lang: 'zh', text: OWNER_ONLY[1] });
+    publish(0, RunEventType.TASK_PROGRESS, { toolUseId: 'toolu_live', description: OWNER_ONLY[2] });
+    publish(0, 'tombstone', {});
+    publish(0, RunEventType.STATUS, { status: 'RUNNING' });
+    await db.session.update({ where: { id: shared }, data: { status: RunStatus.RUNNING } });
+    publish(0, RunEventType.APPROVAL_RESOLVED, { id: randomUUID(), behavior: 'allow' });
+    // A durable reply, stored first as the ingest stores it, with a tool body the bare link must not show.
+    await event(shared, 607, RunEventType.TOOL_USE, { id: 'toolu_live', name: 'Bash', input: { command: LIVE_OUTPUT } });
+    publish(607, RunEventType.TOOL_USE, { id: 'toolu_live', name: 'Bash', input: { command: LIVE_OUTPUT } });
+    await event(shared, 608, RunEventType.ASSISTANT, { text: 'live reply' });
+    publish(608, RunEventType.ASSISTANT, { text: 'live reply' });
+
+    for (const [i, door] of doors.entries()) {
+      const held = streams[i]!;
+      await held.until((f) => f.seq === 608, `${door.name}: the live reply`);
+      await held.until((f) => f.type === 'head' && f.payload.runState === 'RUNNING', `${door.name}: the head after the status`);
+    }
+    await new Promise((r) => setTimeout(r, 600));
+    for (const [i, door] of doors.entries()) {
+      const held = streams[i]!;
+      const page = await visit(`${encodeURIComponent(door.token)}${door.at}/events?after=${REPLAYABLE.at(-201)}&limit=500`);
+      assert.equal(page.status, 200, page.body.toString());
+      const { events: readEvents, after: _after, ...readHeader } = page.json;
+      assert.deepEqual(
+        viewerStreamCrossings({
+          readEvents, readHeader, toolOutput: door.toolOutput, frames: held.frames, texts: held.texts,
+          neverShown: [...OWNER_ONLY, ownerId, pub(ownerId), runnerId, pub(runnerId)],
+        }),
+        [],
+        `${door.name}: the stream carries what its read does not`,
+      );
+      const types = new Set(held.frames.map((f) => f.type as string));
+      assert.ok(types.has('text_delta') && types.has('thinking_delta'), `${door.name}: deltas`);
+      assert.equal(types.has('tool_output'), door.toolOutput, `${door.name}: tool_output`);
+      assert.equal(held.texts.some((text) => text.includes(LIVE_OUTPUT)), door.toolOutput, `${door.name}: tool output text`);
+      const heads = held.frames.filter((f) => f.type === 'head');
+      assert.deepEqual(heads.at(-1)!.payload, readHeader, `${door.name}: the last head is the read's header`);
+    }
+
+    // Refusals are statuses, with the surface's headers, and an open spends the budget.
+    const nothing = await openStream(`${base}/api/shared/${newToken()}/stream`, { 'x-real-ip': freshAddress() });
+    await nothing.ended;
+    assert.equal(nothing.status, 404, nothing.body());
+    assert.equal(nothing.headers['cache-control'], 'no-store');
+    assert.equal(nothing.headers['x-robots-tag'], 'noindex, nofollow');
+    const notAConversation = await openStream(`${base}/api/shared/${encodeURIComponent(token)}/sessions/${pub(shared)}/stream`, { 'x-real-ip': freshAddress() });
+    await notAConversation.ended;
+    assert.equal(notAConversation.status, 404, 'a session link opens no conversation stream');
+    const spender = '198.51.100.70';
+    const bareAt = `${encodeURIComponent(bareToken)}/sessions/${pub(shared)}`;
+    for (let n = 0; n < BUDGET; n += 1) assert.equal((await visit(`${bareAt}/events?limit=1`, spender)).status, 200);
+    const over = await openStream(`${base}/api/shared/${bareAt}/stream`, { 'x-real-ip': spender });
+    await over.ended;
+    assert.equal(over.status, 429, 'a stream open past the budget');
+  });
+
+  await t.test('(i) the anonymous stream caps: 429 at cap + 1 per visitor, per link and in all, and a closed stream frees its slot', async (st) => {
+    const held: HeldStream[] = [];
+    st.after(() => held.forEach((s) => s.close()));
+    /** Wait until the caps count `n` open streams: a slot is given back when the server sees the answer close. */
+    const settled = async (n: number, what: string) => {
+      for (const started = Date.now(); caps.held !== n; await new Promise((r) => setTimeout(r, 20))) {
+        if (Date.now() - started > 10_000) assert.fail(`${what}: the caps still count ${caps.held} streams, not ${n}`);
+      }
+    };
+    await settled(0, 'the streams (h) closed');
+    const linkA = newToken();
+    const linkB = newToken();
+    await conversation('Capped A', { shareToken: linkA });
+    await conversation('Capped B', { shareToken: linkB });
+    const open = async (link: string, from = freshAddress()) => {
+      const s = await openStream(`${base}/api/shared/${encodeURIComponent(link)}/stream`, { 'x-real-ip': from });
+      if (s.status === 200) held.push(s);
+      else await s.ended;
+      return s;
+    };
+    const refusedByCap = async (link: string, from: string | undefined, what: string) => {
+      const before = caps.held;
+      const s = await open(link, from);
+      assert.equal(s.status, 429, `${what}: ${s.body()}`);
+      assert.match(s.body(), /too many live viewers/, `${what}: the caps' refusal, not the request budget's`);
+      assert.equal(s.headers['cache-control'], 'no-store', what);
+      assert.equal(caps.held, before, `${what}: a refused stream holds no slot`);
+      return s;
+    };
+    const closeOne = async (s: HeldStream, what: string) => {
+      const n = caps.held;
+      s.close();
+      held.splice(held.indexOf(s), 1);
+      await settled(n - 1, what);
+    };
+
+    // Per visitor on one link (4): the fifth is refused; another address on that link and the visitor on another
+    // link are not; one closed, the visitor opens again.
+    const visitor = '198.51.100.90';
+    const mine: HeldStream[] = [];
+    for (let n = 1; n <= STREAM_CAPS.perVisitor; n += 1) {
+      const s = await open(linkA, visitor);
+      assert.equal(s.status, 200, `the visitor's stream ${n}`);
+      mine.push(s);
+    }
+    await refusedByCap(linkA, visitor, 'the visitor\'s fifth stream on the link');
+    assert.equal((await open(linkA)).status, 200, 'another address on the same link');
+    await closeOne(mine[0]!, 'the visitor closed one');
+    assert.equal((await open(linkA, visitor)).status, 200, 'the visitor again, after closing one');
+    assert.equal(caps.held, 5);
+
+    // Per link (6 here): one more from a new address fills it, the next new address is refused; one closed frees it.
+    assert.equal((await open(linkA)).status, 200, 'the link\'s sixth stream');
+    await refusedByCap(linkA, undefined, 'the link\'s seventh stream');
+    await closeOne(held.find((s) => !mine.includes(s))!, 'one of the link\'s streams closed');
+    assert.equal((await open(linkA)).status, 200, 'the link again, after closing one');
+
+    // In all (9 here): three on another link fill it, the next stream anywhere is refused; one closed frees it.
+    for (let n = 7; n <= STREAM_CAPS.total; n += 1) assert.equal((await open(linkB)).status, 200, `stream ${n} in all`);
+    await refusedByCap(linkB, undefined, 'the tenth stream in all');
+    await closeOne(held.at(-1)!, 'one stream closed');
+    assert.equal((await open(linkB)).status, 200, 'a stream again, after closing one');
+
+    // Every slot is given back when its stream ends.
+    held.splice(0).forEach((s) => s.close());
+    await settled(0, 'every stream closed');
   });
 
   await t.test('(c) …and so did every other /shared answer this run received', () => {

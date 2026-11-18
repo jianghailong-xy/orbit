@@ -242,6 +242,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     await db.session.update({ where: { id: sessionId }, data: { changedFiles: [{ path: 'census.txt', status: 'M' }] } });
     const eventId = randomUUID();
     await db.runEvent.create({ data: { id: eventId, sessionId, seq: 1, type: 'assistant_text', payload: { text: `wrote ${artifactPath}` } } });
+    // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
+    await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
     await db.attachment.create({
       data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
     });
@@ -704,6 +706,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       turnId,
       eventId,
       eventSeq: 1,
+      replyEventSeq: 2,
       sessionRequestId,
       folderId,
       tagId,
@@ -767,6 +770,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         agentId: await workspace(ownerId, runnerId, `${name}-spare-agent`),
         workspaceId: await workspace(ownerId, runnerId, `${name}-spare-workspace`),
         attachmentId: await attachment(),
+        // Its own, because the owner's delete from Settings → Storage really removes it.
+        storedFileId: await attachment(),
         projectId: await project(`${name} spare project`),
         providerId: await provider(`${name}-spare-provider`),
         poolId: idOf(await as('POST', '/providers/pools', { label: `${name} spare pool` }), 'a spare pool'),

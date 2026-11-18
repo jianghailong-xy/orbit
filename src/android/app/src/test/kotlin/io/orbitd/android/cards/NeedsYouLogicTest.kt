@@ -21,6 +21,87 @@ class NeedsYouLogicTest {
         agentName?.let { name -> putJsonObject("agent") { put("id", agentId ?: "a"); put("name", name) } }
     }
 
+    // the conversation's own capsule (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule; OrbitKit's twin)
+
+    /** Its cards first, in their words and direction; its approvals after them, at its tail — so alone they say "below". */
+    @Test fun theConversationsOwnCapsuleCountsItsCardsAndItsApprovals() {
+        val alone = NeedsYouLogic.here(emptyList(), listOf(BelowRow("approval:a1", false)), null)!!
+        assertEquals("1 waiting below", alone.text)
+        assertEquals("approval:a1", alone.rowId)
+        assertEquals(ReaderSide.BELOW, alone.side)
+        assertEquals(NeedsYouGlyph.HAND, alone.glyph)
+        val both = NeedsYouLogic.here(listOf(BelowRow("q1", true)), listOf(BelowRow("approval:a1", false)), ReaderSide.ABOVE)!!
+        assertEquals("2 waiting above", both.text)
+        assertEquals("q1", both.rowId)
+        assertEquals(NeedsYouGlyph.QUESTION, both.glyph)
+        assertEquals("1 open question below", NeedsYouLogic.here(listOf(BelowRow("q1", true)), emptyList(), ReaderSide.BELOW)?.text)
+        assertNull(NeedsYouLogic.here(emptyList(), emptyList(), ReaderSide.BELOW))
+    }
+
+    // swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats; OrbitKit's twin test)
+
+    /** A wait is noticed once, by the conversation's name and what it waits on (the owner, 2026-11-15,
+     * docs/mocks/needs-you-capsule/12-once; OrbitKit's twin). */
+    @Test fun aWaitIsNoticedOnceByNameAndWhat() {
+        val a = session("a", 1, "w1", "orbit-develop", "Android update fails", "2026-11-15T01:00:00Z")
+        val b = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T02:00:00Z")
+        val seen = setOf(NeedsYouLogic.waitKey(a))
+        val fresh = NeedsYouLogic.newlyWaiting(listOf(a, b), seen)
+        assertEquals("only what was not waiting before", listOf("b"), fresh.map { it.target.text("id") })
+        assertEquals("Wire up Ollama", fresh.single().title)
+        assertEquals("Needs your reply · orbit-op", fresh.single().line)
+        assertEquals(NeedsYouGlyph.HAND, fresh.single().glyph)
+        val bothSeen = setOf(a, b).map(NeedsYouLogic::waitKey).toSet()
+        assertTrue("the same wait, not again", NeedsYouLogic.newlyWaiting(listOf(a, b), bothSeen).isEmpty())
+        val bAgain = session("b", 1, "w2", "orbit-op", "Wire up Ollama", "2026-11-15T03:00:00Z")
+        assertEquals("stopping again is a new wait", listOf("b"), NeedsYouLogic.newlyWaiting(listOf(a, bAgain), bothSeen).map { it.target.text("id") })
+        assertTrue("the conversation on screen has its own card", NeedsYouLogic.newlyWaiting(listOf(a, b), seen, "b").isEmpty())
+    }
+
+    /** An owner request stops no turn: the turns after it are the same wait, and the notice says the request's words (OrbitKit's
+     * twin). */
+    @Test fun anOwnerRequestIsNoticedOnceWhateverTurnsFollow() {
+        fun filed(lastTurnAt: String) = buildJsonObject {
+            put("id", "t"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_REQUEST")
+            put("title", "Task: Walkthrough"); put("lastTurnAt", lastTurnAt)
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting on you · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:36:15Z")), emptySet()).single().line)
+        val seen = setOf(NeedsYouLogic.waitKey(filed("2026-11-17T22:36:15Z")))
+        assertTrue("a later turn is the same wait", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:52:34Z")), seen).isEmpty())
+    }
+
+    /** Any wait the server names says the row's own words, never the tool call's "Needs your reply" (OrbitKit's twin). */
+    @Test fun aNamedWaitIsNoticedInTheRowsWords() {
+        val confirming = buildJsonObject {
+            put("id", "c"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_CONFIRMATION")
+            put("title", "Task: Ship it"); put("lastTurnAt", "2026-11-18T01:00:00Z")
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting for your confirmation · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(confirming), emptySet()).single().line)
+    }
+
+    /** The first look only takes stock; at most three notices, the rest "and N more"; a notice whose wait ended goes. */
+    @Test fun theNoticesTakeStockFirstAndShowAtMostThree() {
+        val notices = NeedsYouNotices()
+        val a = session("a", 1, lastTurnAt = "2026-11-15T01:00:00Z")
+        notices.look(listOf(a), null)
+        assertTrue("what waits at launch is not news", notices.toasts.isEmpty())
+        val more = (1..4).map { session("n$it", 1, lastTurnAt = "2026-11-15T0${it + 1}:00:00Z") }
+        notices.look(listOf(a) + more, null)
+        assertEquals(3, notices.toasts.size)
+        assertEquals(1, notices.more)
+        notices.look(listOf(a) + more.drop(1), null)
+        assertEquals("an answered wait takes its notice", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.retake()
+        notices.look(listOf(a) + more + session("late", 1, lastTurnAt = "2026-11-15T09:00:00Z"), null)
+        assertEquals("back in the foreground: stock again", listOf("n2", "n3"), notices.toasts.map { it.target.text("id") })
+        notices.dismiss("n2|2026-11-15T03:00:00Z")
+        notices.dismiss("n3|2026-11-15T04:00:00Z")
+        assertTrue(notices.toasts.isEmpty())
+        assertEquals(0, notices.more)
+    }
+
     // banner
 
     @Test fun bannerIsNullWhenNothingIsWaiting() = assertNull(NeedsYouLogic.banner(emptyList()))
@@ -233,6 +314,34 @@ class NeedsYouLogicTest {
         assertEquals("Older project", banner?.detail)
         assertEquals(2, banner?.count)
         assertEquals("the one it names, and +1", 1, banner?.more)
+    }
+
+    // the bar unfolded (owner 2026-11-13, 03-expand option B)
+
+    @Test fun entriesListEveryConversationInTheBarsOwnOrder() {
+        val blockedNew = session("s-new", 1, "dev", "orbit-prod", "Rebuild the report", "2026-09-13T11:00:00Z")
+        val blockedOld = session("s-old", 1, "dev", "orbit-prod", "Ship the release", "2026-09-13T07:00:00Z")
+        val newer = coordinator("c1", "Newer project", listOf(ownerItem("COORDINATOR_QUESTION", "2026-09-13T12:00:00Z", "new")))
+        val older = coordinator("c2", "Older project", listOf(ownerItem("PROMOTION_APPROVAL", "2026-09-13T08:00:00Z", "old")))
+        val waiting = listOf(blockedNew, newer, blockedOld, older)
+        val entries = NeedsYouLogic.entries(waiting)
+        assertEquals(listOf("c2", "c1", "s-old", "s-new"), entries.map { it.target.text("id") })
+        assertEquals(listOf("Approve merge to main", "Question from coordinator", "orbit-prod needs you", "orbit-prod needs you"),
+            entries.map { it.text })
+        assertEquals(listOf("Older project", "Newer project", "Ship the release", "Rebuild the report"), entries.map { it.detail })
+        assertEquals(listOf("old", "new", null, null), entries.map { it.ownerItem?.itemId })
+        assertEquals("each line is one conversation", listOf(0, 0, 0, 0), entries.map { it.more })
+        val banner = NeedsYouLogic.banner(waiting)
+        assertEquals("the folded bar names the first line", banner?.target?.text("id"), entries.first().target.text("id"))
+        assertEquals(banner?.ownerItem?.itemId, entries.first().ownerItem?.itemId)
+    }
+
+    @Test fun entriesNameEachBlockedSessionAndLeaveOutTheFocusedOne() {
+        val a = session("a", 1, "a", "A", "First", "2026-08-14T09:00:00.000Z")
+        val b = session("b", 1, "b", "B", "Second", "2026-08-14T08:00:00.000Z")
+        assertEquals(listOf("B needs you", "A needs you"), NeedsYouLogic.entries(listOf(a, b)).map { it.text })
+        assertEquals(listOf("b"), NeedsYouLogic.entries(listOf(a, b), "a").map { it.target.text("id") })
+        assertTrue(NeedsYouLogic.entries(emptyList()).isEmpty())
     }
 
     @Test fun anOwnerItemOutranksABlockedToolCall() {

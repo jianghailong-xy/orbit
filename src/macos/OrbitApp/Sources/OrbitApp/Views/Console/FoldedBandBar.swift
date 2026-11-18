@@ -52,7 +52,7 @@ struct FoldedBandBar: View {
         let tasks = taskCard
         let branch = branchMark(turnActive: turnActive)
         let lead = FoldedBand.lead(draft: draft, hasMarks: watching != nil || !console.state.background.isEmpty
-                                   || tasks != nil || branch != nil)
+                                   || tasks != nil || agents != nil || branch != nil)
         Button(action: open) {
             HStack(spacing: 8) {
                 if turnActive {
@@ -109,22 +109,30 @@ struct FoldedBandBar: View {
                 let part = FoldedBand.tasks(tasks)
                 mark("checkmark.square", part.text, tint: part.failed ? .red : nil)
             }
+            if let agents {
+                // The session's Agents (`AgentsBandRow`): how many, no cost.
+                mark("sparkle", agents.capsule, tint: .purple)
+            }
             if let branch {
                 switch branch {
                 case .landed(let words):
-                    // The merge slot's own chip (`WTChip`).
+                    // The merge slot's own chip (`WTChip`). The one mark that gives way: a long
+                    // target ("Merged → scratch/…") is cut at its tail rather than widening the pill.
                     Text(words).font(.orbitLabel.weight(.semibold)).foregroundStyle(.green)
+                        .truncationMode(.tail)
                 case .merging:
                     Text(FoldedBand.merging).font(.orbitLabel).foregroundStyle(.secondary)
                 case .changes(let added, let deleted):
                     // The branch bar's own count (`WorktreeBar.statView`).
                     (Text("+\(added)").foregroundStyle(.green) + Text(" −\(deleted)").foregroundStyle(.red))
                         .font(.orbitMono)
+                        .fixedSize()
                 }
             }
         }
+        // Not `.fixedSize()` on the row: a pill wider than the screen widened the band under it,
+        // and the whole conversation slid sideways and stayed there while the band was folded.
         .lineLimit(1)
-        .fixedSize()
     }
 
     /// A card's glyph — the one its own line leads with — and its count.
@@ -137,6 +145,12 @@ struct FoldedBandBar: View {
                 .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
         }
         .foregroundStyle(.secondary)
+        .fixedSize()
+    }
+
+    /// The Agents line's own reading (`AgentsBandRow`).
+    private var agents: SubagentSessionSummary? {
+        SubagentSessionSummary.make(Array(console.subagentRuns.values))
     }
 
     /// The Tasks card's own reading (`CreatedTasksCard`): the tasks created here and those the
@@ -197,6 +211,7 @@ struct FoldedBandBar: View {
             parts.append("Background processes: \(FoldedBand.processes(console.state.background))")
         }
         if let tasks { parts.append("\(SessionCreatedTasksCopy.title): \(FoldedBand.tasks(tasks).text)") }
+        if let agents { parts.append("Agents: \(agents.capsule)") }
         switch branch {
         case .landed(let words): parts.append(words)
         case .merging: parts.append(FoldedBand.merging)

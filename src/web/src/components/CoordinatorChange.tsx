@@ -27,6 +27,7 @@ import { ProviderTile } from './ProviderGallery';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Spinner } from './ui/Spinner';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /** What `POST /projects/:id/coordinator` and its `/replace` answer with: the conversation the
  *  project is now coordinated from, and the workspace it runs in. */
@@ -105,6 +106,7 @@ export function CoordinatorChangeDialog({
   });
   const workspaces = useQuery({ ...workspacesQuery(), enabled: !sessionId });
   const runners = useQuery({ ...runnersQuery(), enabled: !sessionId });
+  const managedRunnerId = useManagedRunnerId();
 
   // Read defensively: an older server answers move-targets with something that isn't this shape.
   const answer: SessionMoveTargets | undefined =
@@ -120,6 +122,7 @@ export function CoordinatorChangeDialog({
           coordinator.workspaceId,
           runners.data ? new Set(runners.data.filter((r: { online?: boolean }) => r.online).map((r: { id: string }) => r.id)) : null,
           providerName,
+          managedRunnerId,
         )
       : null;
   const loadError = sessionId ? targetsQ.error : workspaces.error;

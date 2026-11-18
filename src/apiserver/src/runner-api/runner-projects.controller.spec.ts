@@ -782,7 +782,7 @@ test('a session the service refuses is not quietly downgraded to a headless crea
 // The exact header, spelled the way `publicIdHeaders` normalizes and the way every shipped runner
 // sends it. A typo here is silent: the parameter is `undefined` on every request and every
 // in-session create quietly becomes headless again.
-test('createProject reads exactly two headers: which session, and the proof it is that session', () => {
+test('createProject reads exactly three headers: which session, the proof it is that session, and the request id', () => {
   const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'createProject') as
     | Record<string, { index: number; data?: unknown }>
     | undefined;
@@ -790,9 +790,10 @@ test('createProject reads exactly two headers: which session, and the proof it i
   // The pair, and nothing else. The id says which conversation this request came from; the token
   // is what makes that claim worth anything when the body names a workspace, since a session id is
   // discoverable and this door would otherwise let any live runner place a coordinator anywhere.
+  // The request id names the create, so a repeat of it reads its receipt (create-request-receipts.ts).
   assert.deepEqual(
     headers.map((arg) => arg.data).sort(),
-    ['x-orbit-session-id', 'x-orbit-session-token'],
+    ['x-orbit-request-id', 'x-orbit-session-id', 'x-orbit-session-token'],
   );
 });
 
@@ -974,6 +975,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // orchestration credential: the observation only reads, and starts no session.
     'observeIntegration',
     'recordMergeEvidence',
+    // A coordinator recording an owner ruling given in its conversation (coordinator handoff v2 §2):
+    // the acting session is the authority, checked against the project's coordinator pointer, and the
+    // quote against the turn's owner text. It records a fact and grants nothing.
+    'recordRuling',
     'removeProject',
     // The coordinator asking the owner to record the project done (`project_request_done`). It is
     // the counterpart of requestStart: the service checks readiness and files a card; only the
@@ -1041,6 +1046,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     observeIntegration: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
+    recordRuling: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     requestDone: RequestMethod.POST,
     requestPromotion: RequestMethod.POST,

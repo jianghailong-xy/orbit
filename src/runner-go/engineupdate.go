@@ -590,7 +590,7 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	facts := engineUpdateFacts{installed: before, latest: latest}
 	if latest != "" && sameVersion(before, latest) {
 		logln("engine-update:", spec.name, "already current ("+before+" at "+binPath+")")
-		return recordEngineUpdate(spec.bin, updateChecked, "", facts), spec.name + " — already up to date (" + before + ")"
+		return recordEngineUpdate(spec.bin, updateChecked, "", facts), upToDatePhrase(spec.name, before)
 	}
 	// `claude update` sends the login stored here to Anthropic (claudeLoginBlocked): not while Claude's connection
 	// is in a region Anthropic does not offer Claude in. The pass after that changes updates.
@@ -674,6 +674,9 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 				step+detail+" — the installed "+spec.name+" does not run at all (it is present and cannot be exec'd).", facts)
 			return rec, spec.name + " — installed but does not run: " + detail
 		}
+		if tool := missingUpdaterTool(out.bytes(), servicePath); tool != "" {
+			detail = missingUpdaterToolDetail(spec.name, tool)
+		}
 		logln("engine-update:", spec.name, "failed:", detail)
 		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
 		return rec, spec.name + " — update failed: " + detail
@@ -683,7 +686,10 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	if after != "" && after != before {
 		logln("engine-update:", spec.name, "updated", before, "->", after)
 		rec := recordEngineUpdate(spec.bin, updateUpdated, "", facts)
-		return rec, spec.name + " updated " + before + " → " + after
+		if from := shownVersion(before); from != "" {
+			return rec, spec.name + " updated " + from + " → " + shownVersion(after)
+		}
+		return rec, spec.name + " updated to " + shownVersion(after)
 	}
 	// Answered before, silent after: the updater exited 0 and left an engine that no longer
 	// starts. Live on 2026-10-05 18:36Z: `codex update` rewrote the npm package to 0.160.1
@@ -702,7 +708,22 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// reports success forever while the binary the runner execs never moves.
 	logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
 	rec := recordEngineUpdate(spec.bin, updateChecked, "", facts)
-	return rec, spec.name + " — already up to date (" + before + ")"
+	return rec, upToDatePhrase(spec.name, before)
+}
+
+// shownVersion is a CLI's version the way the update report prints it: the number alone, since
+// the prose around it repeats the engine's name ("2.1.323 (Claude Code)" read as
+// "Claude Code — already up to date (2.1.323 (Claude Code))"). A line with no number stays whole.
+func shownVersion(v string) string { return firstNonEmpty(versionNumber(v), v) }
+
+// upToDatePhrase is the report's line for an updater that moved nothing. Without a version — the
+// probe didn't answer, which a loaded machine does (see engineVersionTimeout) — it says so, rather
+// than printing "already up to date ()" about a version nobody read.
+func upToDatePhrase(name, version string) string {
+	if v := shownVersion(version); v != "" {
+		return name + " — already up to date (" + v + ")"
+	}
+	return name + " — updater finished, but its version couldn't be read"
 }
 
 // engineBinaryUpdatable reports whether this runner could actually replace the binary it is
@@ -799,6 +820,41 @@ func updateErrDetail(err error, out []byte) string {
 		return firstLine(err.Error()) + " — last output: " + clean[len(clean)-1]
 	}
 	return firstLine(err.Error())
+}
+
+// missingUpdaterTool names the package manager `codex update` handed the update to, when that is
+// what failed to start. An npm-installed Codex updates itself by running `npm install -g`, and
+// with no npm on the PATH all it prints is "Updating Codex via `npm install -g @openai/codex`..."
+// and then "Error: No such file or directory (os error 2)" — which names no file, so nobody
+// reading it on the machine page can tell what to install (aivps-sg, 2026-11: 13 days behind).
+// Only a tool the service PATH really lacks counts, so the advice is never a guess.
+func missingUpdaterTool(out []byte, servicePath string) string {
+	s := string(out)
+	if !strings.Contains(s, "(os error 2)") {
+		return ""
+	}
+	_, after, ok := strings.Cut(s, "Updating Codex via `")
+	if !ok {
+		return ""
+	}
+	tool, _, _ := strings.Cut(after, " ")
+	tool = strings.TrimSuffix(tool, "`")
+	if tool == "" {
+		return ""
+	}
+	if _, found := lookPathIn(tool, servicePath); found {
+		return ""
+	}
+	return tool
+}
+
+func missingUpdaterToolDetail(engine, tool string) string {
+	install := "Install " + tool + " on this machine"
+	if tool == "npm" {
+		install += " (on Debian or Ubuntu: `sudo apt install npm`)"
+	}
+	return engine + " updates itself with " + tool + ", and " + tool + " isn't on this runner's PATH. " +
+		install + ", then press Update Engines Now."
 }
 
 // cmdEngineUpdate is the `orbit engine-update` entry point: update every installed engine

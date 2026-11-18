@@ -33,9 +33,6 @@ struct OwnerAnswerLineView: View {
     /// The words the agent was handed, verbatim — what the line opens to.
     let text: String
     var undelivered: Bool = false
-    /// Whatever else the same turn's note carried, as its own folded entry under the words in the
-    /// sheet: nobody typed this turn, so it never goes back into a bubble in the reader's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws an answer still queued behind the running turn; nil once a runner has taken it.
     var onCancelQueued: (() -> Void)?
 
@@ -56,7 +53,7 @@ struct OwnerAnswerLineView: View {
 
     private var line: some View {
         VStack(spacing: 4) {
-            Button { openTold(OwnerAnswerTold(card: card, text: text, attached: attached)) } label: {
+            Button { openTold(OwnerAnswerTold(card: card, text: text)) } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.right").accessibilityHidden(true)
                     Text(OwnerAnswerCard.line(card)).lineLimit(2).multilineTextAlignment(.leading)
@@ -84,7 +81,7 @@ struct OwnerAnswerLineView: View {
             }
             if let onCancelQueued {
                 HStack(spacing: 8) {
-                    Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+                    QueuedWord()
                     Button("Cancel") { onCancelQueued() }
                         .buttonStyle(.plain)
                         .font(.orbitMeta)
@@ -101,7 +98,6 @@ struct OwnerAnswerLineView: View {
 struct OwnerAnswerTold: Identifiable {
     let card: OwnerAnswer
     let text: String
-    let attached: (kind: String, text: String)?
     var id: String { "\(card.itemId):\(card.sessionId)" }
 }
 
@@ -157,7 +153,6 @@ struct OwnerAnswerSheet: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let attached = told.attached { AttachedNoteEntry(attached: attached) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()

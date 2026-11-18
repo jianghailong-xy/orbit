@@ -29,6 +29,10 @@ export const SOURCE_FIX_ACTION_WHY: Readonly<Record<SourceFixAction, string>> = 
   UPGRADE_RUNNER: 'This runner is too old to start from a pinned project commit.',
   START_NEW_RUN: 'That baseline is closed to a second resolution, so this run cannot be restarted.',
   FIX_CODEBASE_CONFIG: 'This project’s repository binding is not valid.',
+  ASSIGN_ON_FORK_RUNNER:
+    'This task starts from a session’s snapshot, which exists only on that session’s machine.',
+  FORK_OUTSIDE_PROJECT:
+    'This project starts every task from its own line, so a task cannot start from a session’s snapshot here.',
 };
 
 /** The one a newer server named, or a code this build cannot phrase. */

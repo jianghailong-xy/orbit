@@ -10,6 +10,7 @@ import type {
   SessionCreatedTasks,
   SessionSearchResponse,
   TaskRunReason,
+  TranslationLanguage,
   WatchView,
 } from '@orbit/shared';
 import {
@@ -139,7 +140,7 @@ export const setupStatusQuery = () =>
 export const workspacesQuery = () =>
   queryOptions({
     queryKey: ['workspaces'],
-    meta: { entities: ['workspace'] },
+    meta: { entities: ['workspace', 'checkout'] },
     queryFn: () => api<any[]>('/workspaces'),
   });
 
@@ -186,8 +187,6 @@ export const presetModelsQuery = () =>
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
   defaultModel?: string;
-  /** Last-picked model for each provider, synced across clients. */
-  defaultModels?: Record<string, string>;
   defaultPermissionMode?: string;
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
@@ -213,6 +212,19 @@ export interface UserPreferences {
    *  raw last reply. Read by every client's list row; absent means on, so only opting out is ever
    *  written. */
   recaps?: boolean;
+  /** Settings › Translation (@orbit/shared translation.ts): absent means OFF. */
+  translationEnabled?: boolean;
+  /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
+  translationLanguage?: TranslationLanguage;
+  /** "Agents work in". Absent = DEFAULT_AGENT_LANGUAGE (English). */
+  translationAgentLanguage?: TranslationLanguage;
+  /** Settings › General › Prompt optimizer (@orbit/shared prompt-optimizer.ts): the composer's
+   *  ✦ Optimize button. Absent means OFF; only turning it on has to be written. */
+  promptOptimizer?: boolean;
+  /** "Show both languages": absent means OFF. */
+  translationBilingual?: boolean;
+  /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
+  subagentBlockedProviders?: string[];
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */
@@ -232,6 +244,12 @@ export interface Me {
   avatarUpdatedAt?: string | null;
   /** Absent from a server that predates Google sign-in, where an account has a password and nothing else. */
   signInMethods?: SignInMethods;
+  /** The server holds a DeepSeek key and can translate (Settings › Translation). Absent from a
+   *  server that predates translation, which reads as unable. */
+  translationAvailable?: boolean;
+  /** The server holds a DeepSeek key and can optimize a draft (Settings › General › Prompt optimizer).
+   *  Absent from a server that predates it, which reads as unable. */
+  promptOptimizerAvailable?: boolean;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
@@ -257,6 +275,59 @@ export const storageUsageQuery = () =>
   queryOptions({
     queryKey: ['attachments', 'usage'] as const,
     queryFn: () => api<StorageUsage>('/attachments/usage'),
+  });
+
+/** Which of the Storage page's rows a file list is opened from: a project's or a task's id, or a week's Monday. */
+export type StorageScope = { kind: 'projects' | 'tasks' | 'weeks'; id: string };
+
+/** One content in that list, counted once however many places keep it, as the Storage page counts it. */
+export interface StoredFile {
+  /** The row it is shown by, which Download and Pin act on. */
+  id: string;
+  fileName: string | null;
+  label: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  /** When the scope first kept it. */
+  createdAt: string;
+  taskId: string | null;
+  taskTitle: string | null;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  /** `upload`: an agent's file_upload; `task-input`: attached to a task; `conversation`: sent in a session. */
+  source: 'upload' | 'task-input' | 'conversation';
+  pinnedAt: string | null;
+  expiresAt: string | null;
+  /** Set when nothing keeps it any more: a week lists what arrived then, expired or not. */
+  expiredAt: string | null;
+  /** What keeps it from being deleted, or null when it can be. */
+  heldBy: 'EVIDENCE' | 'CONVERSATION' | null;
+  /** How many other places keep the same bytes. */
+  alsoIn: number;
+}
+
+export interface StoredFilesPage {
+  /** The project's or task's title; a week's Monday, YYYY-MM-DD. */
+  title: string;
+  totalBytes: number;
+  fileCount: number;
+  files: StoredFile[];
+  nextCursor: string | null;
+}
+
+export type StoredFilesOrder = 'size' | 'newest';
+
+export const storedFilesKey = (scope: StorageScope) => ['attachments', 'usage', scope.kind, scope.id] as const;
+
+export const storedFilesQuery = (scope: StorageScope, order: StoredFilesOrder) =>
+  infiniteQueryOptions({
+    queryKey: [...storedFilesKey(scope), order] as const,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api<StoredFilesPage>(
+        `/attachments/usage/${scope.kind}/${encodeURIComponent(scope.id)}/files?order=${order}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
+      ),
+    getNextPageParam: (page) => page.nextCursor,
   });
 
 /** The account's profile photo as a data URL, by the version `me` names — a new photo is a new

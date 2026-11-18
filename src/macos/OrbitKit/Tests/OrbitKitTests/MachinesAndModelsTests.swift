@@ -128,6 +128,27 @@ final class MachinesAndModelsTests: XCTestCase {
          "targetVersion":"0.1.254","turnsInFlight":2}}
         """#)
         XCTAssertEqual(attention([nothingWaits]), [], "a drain nothing waits on needs nobody")
+
+        // A machine that is stopping rather than updating (board runner-stopping) says so.
+        let stopping = try runner(#"""
+        {"id":"hpc","name":"HPC","online":true,"selfUpdate":{"state":"idle","turnsInFlight":2},
+         "drainWaiting":{"sessions":2,"messages":1,"stopping":true}}
+        """#)
+        XCTAssertEqual(stopping.drainWaiting, RunnerDrainWaiting(sessions: 2, messages: 1, stopping: true))
+        XCTAssertEqual(says(attention([stopping])[0]),
+                       "HPC is stopping — 2 sessions and 1 message waiting · Not taking new work · it stops once 2 turns finish")
+        let stoppingOne = try runner(#"""
+        {"id":"hpc","name":"HPC","online":true,"selfUpdate":{"state":"idle","turnsInFlight":1},
+         "drainWaiting":{"sessions":0,"messages":1,"stopping":true}}
+        """#)
+        XCTAssertEqual(says(attention([stoppingOne])[0]),
+                       "HPC is stopping — 1 message waiting · Not taking new work · it stops once 1 turn finishes")
+        let stoppingIdle = try runner(#"""
+        {"id":"hpc","name":"HPC","online":true,"selfUpdate":{"state":"idle","turnsInFlight":0},
+         "drainWaiting":{"sessions":1,"messages":0,"stopping":true}}
+        """#)
+        XCTAssertEqual(says(attention([stoppingIdle])[0]),
+                       "HPC is stopping — 1 session waiting · Not taking new work · it stops now")
     }
 
     /// orbit@austin on 2026-10-31: online, Claude Code and Codex installed, neither signed in.

@@ -42,10 +42,12 @@ public enum EngineAuth {
     }
     /// Whether text carries a sign-in failure — this machine's stored credentials being gone,
     /// expired or rejected. Keys on the runtime's stable `Failed to authenticate` prefix;
-    /// heuristic and intentionally narrow. Keep in sync with `isAuthErrorText` in @orbit/shared
-    /// and `isAuthError` in the runner's claude.go.
+    /// heuristic and intentionally narrow. A failure of the connection — Cloudflare's block page, a
+    /// dropped socket — carries the same prefix but is not one (EngineErrors.isConnectionFailureText):
+    /// the credentials are fine there, so the transcript retries it instead of offering a sign-in.
+    /// Keep in sync with `isAuthErrorText` in @orbit/shared and `isAuthError` in the runner's claude.go.
     public static func isAuthErrorText(_ text: String?) -> Bool {
-        guard let text else { return false }
+        guard let text, !EngineErrors.isConnectionFailureText(text) else { return false }
         return text.drop(while: { $0.isWhitespace }).hasPrefix("Failed to authenticate")
     }
 

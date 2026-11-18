@@ -1,4 +1,20 @@
-import type { GuestSessionSummary, MergeRecovery, MergeRecoveryAction, SessionGuestPerson } from '@orbit/shared';
+import type {
+  ApprovalTranslation,
+  GuestSessionSummary,
+  MainCheckoutActionAnswer,
+  MainCheckoutActionPost,
+  MainCheckoutView,
+  MergeRecovery,
+  MergeRecoveryAction,
+  PromptOptimization,
+  PromptOptimizationRequest,
+  ReplyTranslationRetryResponse,
+  SessionGuestPerson,
+  SessionGuestSuggestion,
+  TranslationActionResponse,
+  TurnTranslation,
+  SubagentRunView,
+} from '@orbit/shared';
 import type {
   BgShell,
   ConfirmationAnswersCard,
@@ -24,6 +40,10 @@ import type {
   OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
+  SessionRestartResponse,
+  SessionSettings,
+  SessionSettingsPatch,
+  SessionUsage,
   SessionRequestView,
   SessionProjectMembership,
   SessionTurnIntent,
@@ -43,6 +63,7 @@ import { userFileUrl } from './lib/userFile';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
+import type { AgentToolsReport } from './lib/agentTools';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -229,6 +250,17 @@ export function scheduleProactiveRefresh(): void {
 // a browser tab left open for a month is exactly the client nothing else can see.
 declare const __APP_VERSION__: string;
 
+/** The pages a signed-out visitor may stay on: a dead session found under one is not sent to /login. */
+export function readSignedOut(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/s/') ||
+    pathname === '/help' ||
+    pathname.startsWith('/help/')
+  );
+}
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -257,9 +289,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
-    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
+    // The privacy policy, a shared link (/s/…) and the help center (/help…) are read signed out as well: a
+    // stored session found dead under one (the theme's read of the account) is cleared, and the reader stays.
+    if (!readSignedOut(location.pathname)) location.href = '/login';
   }
   return res;
 }
@@ -452,6 +484,10 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
 
+/** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
+export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
+  api<SubagentRunView[]>(`/sessions/${id}/subagents`);
+
 // ── Interactive sessions (Route B) ──
 
 /** Start a long-lived interactive session. Pick a workspace (its machine + project dir
@@ -496,6 +532,9 @@ export const createInteractiveSession = (body: {
   /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
    *  the transaction that creates it (docs/first-workspace-contract.md §3). */
   newWorkspace?: NewWorkspaceRequest;
+  /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
+  skipTranslation?: true;
+  optimizedTranslation?: string;
 }) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
@@ -602,6 +641,13 @@ export const removeImportedSessions = (workspaceId: string) =>
  *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
  *  the next executable, queued behind an earlier one, or steered into the running one. New Web is deployed only after every API replica supports this required receipt;
  *  silently guessing across version skew would reintroduce the race. */
+/**
+ * Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): what a send of the unedited optimized text adds to
+ * its body. With a reading copy (Translation on), the box holds the owner-language text and the send carries the
+ * optimizer's agent-language prompt as its translation; without one, the text goes as written.
+ */
+export type OptimizedSend = { skipTranslation: true } | { optimizedTranslation: string };
+
 export const sendTurn = (
   sessionId: string,
   content: string,
@@ -609,6 +655,9 @@ export const sendTurn = (
   kind?: 'message' | 'shell',
   intent: SessionTurnIntent = 'NEXT_TURN',
   clientTurnId: string = uuid(),
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box, so the server sends it
+   *  as written or with the optimizer's own translation. Absent for anything else. */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -616,6 +665,8 @@ export const sendTurn = (
     kind: ConversationTurnKind;
     placement: SessionTurnPlacement;
     targetTurnId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/turns/current-work-routing`, {
     method: 'POST',
     body: {
@@ -624,6 +675,7 @@ export const sendTurn = (
       intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
+      ...optimized,
     },
   });
 
@@ -689,6 +741,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 /** Pin a file, or take its pin away. A pin brings back a file with a tombstone whose bytes remain; once they have gone, 410. */
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
+
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
@@ -814,7 +870,34 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** Settings › Translation: the owner's message as typed, and how far its translation got. While
+   *  TRANSLATING or FAILED the turn is held and not delivered; `content` is then what they typed. */
+  translation?: TurnTranslation;
+  /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
+   *  created the session drew itself (`initial:<session>`). */
+  opening?: true;
 }
+
+/** Settings › Translation, a held message whose translation failed (1A): translate it again. */
+export const retryTurnTranslation = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/retry`, { method: 'POST' });
+
+/** Settings › Translation, a held message whose translation failed (1A): deliver it untranslated. */
+export const sendTurnAsWritten = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/send-as-written`, {
+    method: 'POST',
+  });
+
+/** Settings › Translation, an agent reply whose translation failed (2A): translate it again. The
+ *  result arrives on the stream as a `translation` event for `seq`. */
+export const retryReplyTranslation = (sessionId: string, seq: number) =>
+  api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
+
+/** Prompt optimizer (docs/prompt-optimizer-design.md): DeepSeek improves a composer draft. The answer is
+ *  a suggestion the composer draws as a card (board frame 4); the box keeps the draft until the owner presses Use.
+ *  Refusals: 409 PROMPT_OPTIMIZER_OFF, 404, 400, and 422 PROMPT_OPTIMIZATION_FAILED (frame 6). */
+export const optimizePrompt = (body: PromptOptimizationRequest, signal?: AbortSignal) =>
+  api<PromptOptimization>('/prompt-optimizations', { method: 'POST', body, signal });
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
@@ -849,6 +932,8 @@ export const resumeSession = (
    *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
    *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
   stopSessionId?: string,
+  /** As sendTurn's: the text is still exactly what the optimizer's Use put in the box (D2). */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -860,6 +945,8 @@ export const resumeSession = (
      *  ordinary resume, so an older server reads exactly as it always did. See
      *  `docs/session-message-routing-contract.md` §2.1. */
     routedToSessionId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
@@ -869,6 +956,7 @@ export const resumeSession = (
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
       ...(stopSessionId ? { stopSessionId } : {}),
+      ...optimized,
     },
   });
 
@@ -882,10 +970,16 @@ export interface ApprovalInfo {
    *  it names (`shared/dto.ts`): the reader that outlives the turn, and what the local
    *  "is this still a question" predicate below reads against `Session.runningBgShells`. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this under the session (`shared/dto.ts`); its `toolUseId` is then the child's
+   *  call as the transcript writes it. */
+  subagentRunId?: string;
   status: 'PENDING' | 'ALLOWED' | 'DENIED';
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A): what the card shows, in the owner's language. Absent until the
+   *  server has translated it, and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Pending (default) tool-permission approvals awaiting a human allow/deny. */
@@ -919,7 +1013,8 @@ export const revokeWorkspacePermissionRule = (workspaceId: string, ruleId: strin
  *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow.
  *  `rememberRules` (on an allow) auto-allows the same kinds of call for the session.
  *  `startAfterCreate` is the single-task card's Create and start, sent only when chosen, so
- *  every other answer's body is what it always was. */
+ *  every other answer's body is what it always was. `sendAsWritten` is Settings › Translation's
+ *  "Send as written" after a 422 TRANSLATION_FAILED, sent the same way. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
@@ -928,10 +1023,18 @@ export const decideApproval = (
   answers?: Record<string, string[]>,
   rememberRules?: PermissionRule[],
   startAfterCreate?: boolean,
+  sendAsWritten?: boolean,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message, answers, rememberRules, ...(startAfterCreate ? { startAfterCreate: true } : {}) },
+    body: {
+      behavior,
+      message,
+      answers,
+      rememberRules,
+      ...(startAfterCreate ? { startAfterCreate: true } : {}),
+      ...(sendAsWritten ? { sendAsWritten: true } : {}),
+    },
   });
 
 /** Change a live session's model, permission mode, effort, fast mode and/or provider — mid-turn
@@ -960,6 +1063,14 @@ export const updateSessionConfig = (
  *  on its next resume. */
 export const switchSessionAccount = (sessionId: string, account: string) =>
   api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
+
+/** Settings drawer: write the session's own variables (the whole map) or its notification choices. */
+export const patchSessionSettings = (sessionId: string, patch: SessionSettingsPatch) =>
+  api<SessionSettings>(`/sessions/${sessionId}/settings`, { method: 'PATCH', body: patch });
+
+/** Settings drawer: reload the live engine with the session's env, after the running turn if there is one. */
+export const restartSession = (sessionId: string) =>
+  api<SessionRestartResponse>(`/sessions/${sessionId}/restart`, { method: 'POST' });
 
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
@@ -1422,6 +1533,8 @@ export interface SharedSession {
   sessionState?: string;
   runStatus?: string;
   status: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: string | null;
   createdAt: string;
   /** The transcript's newest page, not all of it. */
   events: SharedEvent[];
@@ -1699,6 +1812,13 @@ export const getSharedEventsAfter = (
     `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
   );
 
+/** The shared conversation's stream (docs/session-viewer-stream-design.md §3): what it adds after
+ *  `sinceSeq`, clipped like the rest, then the reply as it is written and its header as it changes. */
+export const sharedStreamUrl = (token: string, opts: { sinceSeq: number; sessionId?: string }): string => {
+  const since = opts.sinceSeq > 0 ? `sinceSeq=${opts.sinceSeq}&` : '';
+  return `/api/shared/${encodeURIComponent(token)}${sharedConversation(opts.sessionId)}/stream?${since}maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
   sharedGet<SharedEvent>(token, `${sharedConversation(sessionId)}/events/${seq}`);
@@ -1712,6 +1832,9 @@ export const getSessionGuests = (sessionId: string) =>
  *  `No Orbit account uses this email.` */
 export const inviteSessionGuest = (sessionId: string, email: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+/** People the owner invited before, to any session, who can't yet reply in this one: newest first, up to 50. */
+export const getSessionGuestSuggestions = (sessionId: string) =>
+  api<{ people: SessionGuestSuggestion[] }>(`/sessions/${sessionId}/guests/suggestions`);
 export const removeSessionGuest = (sessionId: string, userId: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
 
@@ -1736,8 +1859,34 @@ export const getGuestEventPage = (id: string, opts: { before: number; limit: num
 export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
   api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
 export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
-/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
-export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+/** The guest page's stream (docs/session-viewer-stream-design.md §3): the sign-in rides `access_token`, as on the
+ *  owner's stream, since EventSource sends no header; `sinceSeq` replays only what came after it. */
+export const guestStreamUrl = (id: string, sinceSeq?: number): string => {
+  const tok = encodeURIComponent(getToken() ?? '');
+  const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
+  return `/api${guestPath(id)}/stream?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
+/** Object URL for an inline image in the guest page's transcript, read through the guest door (the owner's
+ *  `/attachments/:id` is theirs alone). Caller revokes it. */
+export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: string): Promise<string> => {
+  const res = await authedFetch(`/api${guestPath(id)}/attachments/${encodeURIComponent(attachmentId)}`);
+  return userFileUrl(await attachmentBlob(res, attachmentId));
+};
+/** A guest's image for their next message, through the guest door (multipart, as `uploadAttachment`): a PNG, JPEG,
+ *  WebP or GIF of at most 5MB, the owner composer's images. Returns the id `sendGuestTurn` names it by. */
+export const uploadGuestAttachment = async (id: string, file: File): Promise<{ id: string }> => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authedFetch(`/api${guestPath(id)}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new ApiError(msg.message || res.statusText, res.status);
+  }
+  return (await res.json()) as { id: string };
+};
+/** A guest's message: words and the images they uploaded here, a turn of the owner's session (resumed when it has
+ *  ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string; attachmentIds?: string[] }) =>
   api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
 
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */
@@ -1907,6 +2056,9 @@ export interface SessionDetail {
    *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
   engine?: string | null;
   provider?: string | null;
+  /** The session's Agent Tools report (lib/agentTools): what its engine was given from Orbit and took, in the
+   *  engine's own words. Null until the runner sends one; optional, because an older server does not send it. */
+  agentTools?: AgentToolsReport | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
   // The run's SOURCE, as the session row carries it (project-source-contract §6.1). `REFUSED` is a
@@ -1917,6 +2069,14 @@ export interface SessionDetail {
   sourceRef?: string | null;
   sourceRefusalCode?: string | null;
   sourceRefusalDetail?: Record<string, unknown> | null;
+  /** The SOURCE line of the task this session runs when that task was forked from a session
+   *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
+   *  Optional, because an older server does not send it. */
+  forkSource?: string | null;
+  /** How the session was started; `SCHEDULE` is a scheduled task's run (docs/scheduled-tasks-design.md §6.3), and
+   *  `scheduleRunId` names the run. Optional, because an older server does not send them. */
+  runSource?: string | null;
+  scheduleRunId?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
@@ -1975,6 +2135,13 @@ export interface SessionDetail {
     kimiAccount?: string | null;
     /** The Cursor CLI account this workspace's sessions run on; null is Default. */
     cursorAccount?: string | null;
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+     *  stands. All null for one that is not. */
+    repoUrl?: string | null;
+    githubRepoId?: string | null;
+    cloneRef?: string | null;
+    cloneState?: string | null;
+    cloneError?: string | null;
   } | null;
   /** This session made its workspace (docs/first-workspace-contract.md §3.3): the conversation opens
    *  by saying so. Only the detail carries it. */
@@ -1994,6 +2161,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
@@ -2029,6 +2200,12 @@ export interface SessionDetail {
   // "Shared · Live" and the menu's "Live link"; the Share dialog reads the link itself (getShareLink).
   shareToken?: string | null;
   sharedAt?: string | null;
+  /** The Settings drawer's own fields (docs/mocks/session-settings). Optional: an older server sends none. */
+  settings?: SessionSettings;
+  usage?: SessionUsage;
+  engineVersion?: string | null;
+  /** The engine's own id for the conversation (Claude's session id, Codex's thread id). */
+  runtimeSessionId?: string | null;
   completedAt?: string | null;
   /** Legacy API timestamp retained during rolling upgrades. */
   archivedAt?: string | null;
@@ -2135,17 +2312,6 @@ export const getWorktreeFile = async (idOrPublicId: string, path: string, signal
   return res.blob();
 };
 
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
- *  it wrote none. */
-export type RecapOutcome =
-  | { written: true; recapText: string; recapEventSeq: number }
-  | { written: false; reason: string };
-
-/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
- *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
-export const refreshSessionRecap = (idOrPublicId: string) =>
-  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
-
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline
  *  commit) on the workspace's next run, after which sessions isolate on their own branch. */
@@ -2163,5 +2329,23 @@ export const setWorkspaceWorktree = (workspaceId: string, enableWorktree: boolea
 export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
     `/workspaces/${workspaceId}/repo-cleanup`,
+    { method: 'POST' },
+  );
+
+/** The main checkout as the workspace's runner sees it now, with the patches of `diffPaths`
+ *  (docs/main-checkout-git-contract.md §10.4). */
+export const getMainCheckout = (workspaceId: string, diffPaths: readonly string[] = [], signal?: AbortSignal) => {
+  const q = diffPaths.map((p) => `diff=${encodeURIComponent(p)}`).join('&');
+  return api<MainCheckoutView>(`/workspaces/${workspaceId}/main-checkout${q ? `?${q}` : ''}`, { signal });
+};
+
+/** Move, commit, push or rescue the main checkout. Repeating a requestId answers with the first request's state. */
+export const postMainCheckoutAction = (workspaceId: string, body: MainCheckoutActionPost) =>
+  api<MainCheckoutActionAnswer>(`/workspaces/${workspaceId}/main-checkout/actions`, { method: 'POST', body });
+
+/** Cancel an action its runner has not been handed yet. */
+export const cancelMainCheckoutAction = (workspaceId: string, requestId: string) =>
+  api<MainCheckoutActionAnswer>(
+    `/workspaces/${workspaceId}/main-checkout/actions/${encodeURIComponent(requestId)}/cancel`,
     { method: 'POST' },
   );

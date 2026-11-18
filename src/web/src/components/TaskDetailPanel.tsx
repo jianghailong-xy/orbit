@@ -101,6 +101,7 @@ import {
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
 import { UNDER_REVIEW } from './OwnerConfirmationReview';
+import { useMachineName } from '../lib/managedRunner';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -697,6 +698,17 @@ export interface TaskSummary {
   dueDate?: string | null;
 }
 
+/** What the task's next fresh run starts on, as the server resolves it for dispatch (apiserver
+ *  workspaces/start-anchor.ts TaskRunsWith, on the task payload). */
+interface TaskRunsWith {
+  engine: string | null;
+  provider: string | null;
+  providerBuiltin: boolean;
+  source: 'TASK_PIN' | 'PROJECT_COORDINATOR' | 'WORKSPACE' | 'DEFAULT';
+  anchorSessionId: string | null;
+  refusal: string | null;
+}
+
 interface WorkspaceRow {
   id: string;
   name: string;
@@ -929,7 +941,7 @@ export function TaskDetailPanel({
   // Owner's workspaces, for @-mention autocomplete and to label/trigger mentions.
   const workspacesQ = useQuery({
     queryKey: ['workspaces'],
-    meta: { entities: ['workspace'] },
+    meta: { entities: ['workspace', 'checkout'] },
     queryFn: () => api<WorkspaceRow[]>('/workspaces'),
   });
   const workspaceList = useMemo(() => workspacesQ.data ?? [], [workspacesQ.data]);
@@ -959,10 +971,22 @@ export function TaskDetailPanel({
   );
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
+  const machineNameOf = useMachineName();
   const navigate = useNavigate();
-  // What an unpinned task runs on: what its assignee's project last ran, engine and provider both.
-  const assigneeProvider = assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
-  const assigneeEngine = sessionEngineOf(assigneeWorkspace?.lastEngine, assigneeProvider, configuredProviders);
+  // What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its
+  // project's coordinator session, else the workspace's newest person-opened session). Under a pin it
+  // is the pin, which the pins below already say; an older server sends none, and the assignee's
+  // lastEngine/lastProvider stand in.
+  const unpinnedRuns: TaskRunsWith | null = q.data?.runsWith?.source && q.data.runsWith.source !== 'TASK_PIN'
+    ? q.data.runsWith
+    : null;
+  const assigneeProvider =
+    unpinnedRuns?.provider ?? assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
+  const assigneeEngine = sessionEngineOf(
+    unpinnedRuns ? unpinnedRuns.engine : assigneeWorkspace?.lastEngine,
+    assigneeProvider,
+    configuredProviders,
+  );
   // The task's own pins (docs/provider-engine-contract.md §1.2): an engine, a credential it runs, a
   // model. A provider pinned alone — by an older client — runs on its default engine.
   const pinnedProvider: string | null = q.data?.provider ?? null;
@@ -992,7 +1016,7 @@ export function TaskDetailPanel({
     pinnedProvider && !pinCredentials.some((c) => c.slug === pinnedProvider)
       ? currentProviderChoice(runEngine, pinnedProvider, pinCredentials, choiceSources)
       : null;
-  const assigneeRunnerName = assigneeRunner?.displayName || assigneeRunner?.name;
+  const assigneeRunnerName = assigneeRunner ? machineNameOf(assigneeRunner) || undefined : undefined;
   /** What "Engine default" runs a task on (§3.2, only an engine named): the runner's own sign-in, OpenCode's own configuration, the first DeepSeek key. */
   const engineDefaultLabel =
     runEngine === AgentProvider.DSH
@@ -1498,7 +1522,15 @@ export function TaskDetailPanel({
     { label: 'Agent', value: task?.assignee?.name ?? 'Unassigned' },
     ...(smartSelection && q.data?.modelHint ? [{ label: 'Tier', value: modelHintLabel(q.data.modelHint, modelHintOptions) }] : []),
     { label: 'Engine', value: ENGINE_CLI_NAMES[runEngine] },
-    { label: 'Provider', value: pinnedProvider ? pinLabelOf(pinnedProvider) : capital(engineDefaultLabel) },
+    {
+      label: 'Provider',
+      // Unpinned on a key or a pool (runsWith), that credential; on an engine's own sign-in, as before.
+      value: pinnedProvider
+        ? pinLabelOf(pinnedProvider)
+        : !pinnedEngine && unpinnedRuns?.provider && !unpinnedRuns.providerBuiltin
+          ? pinLabelOf(unpinnedRuns.provider)
+          : capital(engineDefaultLabel),
+    },
     {
       label: 'Model',
       value: q.data?.model
@@ -1764,6 +1796,9 @@ export function TaskDetailPanel({
             {latestModel && <span className="tdp-meta-item muted">· {modelLabel(latestModel)}</span>}
             {totalCost && <span className="tdp-meta-item muted">· {totalCost}</span>}
           </div>
+          {/* A task forked from a session says where its checkout came from, in the server's own
+              words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
+          {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}

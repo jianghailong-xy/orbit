@@ -85,6 +85,16 @@ function isoTime(value: unknown): string | undefined {
 }
 
 /**
+ * Whether a runner whose heartbeat says draining is stopping rather than updating. It drains for a
+ * release only in the phases `draining` (past the deferral limit) and `restarting` (installing it);
+ * any other drain is its process finishing its turns before it exits on a stop signal, whatever
+ * release may also be waiting (runner-go runloop: `draining := loopCtx.Err() != nil || …`).
+ */
+export function runnerDrainIsStop(report: Pick<RunnerSelfUpdate, 'phase'> | null | undefined): boolean {
+  return report?.phase !== 'draining' && report?.phase !== 'restarting';
+}
+
+/**
  * The explanation a session held by queuedReason 'runner_updating' carries, from the columns the
  * session list reads beside the gate. Null for any other row. The release and the drain's start come
  * from the runner's own report when it sends them; without a drainingSince, the session's own wait is
@@ -99,6 +109,7 @@ export function queuedRunnerUpdateOf(row: {
   if (row.queuedReason !== 'runner_updating') return null;
   const report = sanitizeRunnerSelfUpdate(row.queuedRunnerSelfUpdate);
   return {
+    stopping: runnerDrainIsStop(report),
     targetVersion: report?.targetVersion ?? null,
     since: report?.drainingSince ?? row.queuedSince?.toISOString() ?? null,
     turns: row.queuedRunnerTurns ?? [],

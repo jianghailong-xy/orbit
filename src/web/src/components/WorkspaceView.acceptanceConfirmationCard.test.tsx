@@ -95,7 +95,8 @@ function conversation(id: string, projectId: string | null, title: string) {
     runState: 'RUNNING',
     engineTurnActive: true,
     provider: 'claude',
-    createdAt: '2026-09-11T03:00:00Z',
+    // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+    createdAt: '2026-09-09T00:00:00Z',
     updatedAt: '2026-09-11T03:10:00Z',
   };
 }
@@ -1120,14 +1121,17 @@ describe('where the card is mounted', () => {
    * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a send through this
    * branch that grew one would have this card answering a call that nobody made. The project
    * settlement card's press was the other kind on this branch until 2026-09-25; it now sends its
-   * own turn from its own handler, with no armed reply and nothing typed, so this branch is the
-   * plan change's alone.
+   * own turn from its own handler, with no armed reply and nothing typed. Since 2026-11-14 the
+   * branch also sends a talked-about owner request (848d2fffe), which is the same ordinary turn
+   * with a request in front instead of a plan, so it is shared with that kind and nothing else.
    */
   it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
     const source = workspaceView();
     // The whole line: the disarm effect above carries the same kind and ends in `return;`, and this
     // is the branch that sends.
-    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
+    const at = source.indexOf(
+      "if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'ownerRequest') {",
+    );
     expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
     // To the end of the branch: the `return` that leaves onSend's replyTo block.
     const branch = source.slice(at, source.indexOf('\n      }', at));

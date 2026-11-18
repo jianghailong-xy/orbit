@@ -1,0 +1,315 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SubagentRunView } from '@orbit/shared';
+import { type RunEvent, SubagentRunsCtx, Transcript } from './Transcript';
+import { delegateResultText, delegateRunsSignature, subagentMeta, subagentWhy } from '../lib/subagentRuns';
+
+/**
+ * Orbit's SubAgent (`mcp__orbit__delegate`) drawn as docs/mocks/subagent/02.png: the Agent card's purple
+ * row named SubAgent, `<type> · <description>`, grey `tier · model` on the right — then time (no cost) once
+ * done — a Background tag, the child's latest step while it runs, and a grey Why first when opened. Result
+ * shapes are the runner's (src/runner-go/subagent.go).
+ */
+
+const ev = (seq: number, type: string, payload: Record<string, unknown>): RunEvent => ({
+  seq,
+  type,
+  ts: `2026-11-11T10:00:${String(seq).padStart(2, '0')}.000Z`,
+  payload,
+});
+
+const FG_RESULT = JSON.stringify({
+  runId: 'run1',
+  status: 'DONE',
+  result: 'Three callers, all in **quota/**.',
+  changedFiles: [],
+  model: 'claude-sonnet-5-5',
+  costUsd: 0.21,
+});
+
+const events: RunEvent[] = [
+  ev(1, 'tool_use', {
+    id: 'toolu_fg',
+    name: 'mcp__orbit__delegate',
+    input: { description: 'Find every caller of pollQuota', prompt: 'Find them.', type: 'explore', size: 'S' },
+  }),
+  ev(2, 'tool_use', { id: 'run1:toolu_c1', name: 'Grep', input: { pattern: 'pollQuota(' }, parentToolUseId: 'toolu_fg' }),
+  ev(3, 'tool_result', { toolUseId: 'run1:toolu_c1', content: 'quota/a.ts', parentToolUseId: 'toolu_fg' }),
+  ev(4, 'tool_result', { toolUseId: 'toolu_fg', content: [{ type: 'text', text: FG_RESULT }] }),
+  ev(5, 'tool_use', {
+    id: 'toolu_bg',
+    name: 'mcp__orbit__delegate',
+    input: { description: 'Write the backoff spec', prompt: 'Write it.', type: 'spec-writer', background: true },
+  }),
+  ev(6, 'tool_result', { toolUseId: 'toolu_bg', content: [{ type: 'text', text: '{"runId":"run2","status":"running"}' }] }),
+  ev(7, 'tool_use', {
+    id: 'run2:toolu_c2',
+    name: 'Edit',
+    input: { file_path: '/repo/src/apiserver/src/quota/poller.spec.ts', old_string: 'a', new_string: 'b' },
+    parentToolUseId: 'toolu_bg',
+  }),
+];
+
+const run = (over: Partial<SubagentRunView>): SubagentRunView => ({
+  toolUseId: 'toolu_fg',
+  type: 'explore',
+  background: false,
+  status: 'DONE',
+  level: 'S',
+  model: 'claude-sonnet-5-5',
+  modelLabel: 'Sonnet 5.5',
+  effort: null,
+  reasons: ['Tier S, set by the caller: a search', 'Optimize For: Cost'],
+  why: null,
+  removed: [],
+  costUsd: 0.21,
+  resultSummary: 'Three callers, all in quota/.',
+  workspaceName: null,
+  description: null,
+  engine: 'claude',
+  readonly: false,
+  changedFiles: [],
+  createdAt: '2026-11-11T10:00:01.000Z',
+  endedAt: '2026-11-11T10:00:42.000Z',
+  ...over,
+});
+
+const REMOVED = Array.from({ length: 11 }, (_, i) => ({
+  provider: i === 0 ? 'kimi' : `key-${i}`,
+  engine: i === 0 ? 'kimi' : 'claude',
+  model: i === 0 ? null : `model-${i}`,
+  effort: null,
+  reason: i === 0 ? "kimi is not installed on the parent's runner" : 'The model has no tier',
+}));
+const FG_WHY =
+  'Tier S, set by the caller · Cost: claude-sonnet-5-5 · low on claude, subscription with 64% quota left · 11 others removed';
+const FG = run({
+  why: FG_WHY,
+  removed: REMOVED,
+  reasons: [
+    'Tier S, set by the caller: a search',
+    'Picked claude-sonnet-5-5 · low on claude (Cost): a subscription with 64% of its quota left, used before any metered key',
+    '3 candidates in tier S; ties go by the owner\'s provider order',
+    '11 candidates removed, each with its reason',
+  ],
+});
+const BG_RUNNING = run({
+  toolUseId: 'toolu_bg',
+  type: 'spec-writer',
+  background: true,
+  status: 'RUNNING',
+  level: 'M',
+  modelLabel: 'Opus 5.5',
+  model: 'claude-opus-5-5',
+  effort: 'medium',
+  reasons: ['Tier M, set by the caller: one service plus its spec'],
+  costUsd: 0,
+  resultSummary: null,
+  endedAt: null,
+});
+
+let container: HTMLDivElement;
+let root: Root;
+beforeEach(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+});
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  vi.restoreAllMocks();
+});
+
+function render(runs: SubagentRunView[], live = true) {
+  act(() =>
+    root.render(
+      <MemoryRouter>
+        <SubagentRunsCtx.Provider value={new Map(runs.map((r) => [r.toolUseId, r]))}>
+          <Transcript events={events} live={live} />
+        </SubagentRunsCtx.Provider>
+      </MemoryRouter>,
+    ),
+  );
+}
+
+const card = (seq: number) => container.querySelector(`.chat-tool-card[data-seq="${seq}"]`) as HTMLElement;
+const text = (el: Element | null) => el?.textContent ?? null;
+
+describe('the SubAgent block', () => {
+  it('folds to one row: Agent, type · description, and grey tier · model', () => {
+    render([FG, BG_RUNNING]);
+    const bg = card(5);
+    expect(bg.className).toContain('chat-tone-agent');
+    expect(bg.className).toContain('chat-tool-task');
+    expect(text(bg.querySelector('.chat-tool-name'))).toBe('Agent');
+    expect(text(bg.querySelector('.chat-tool-summary'))).toBe('spec-writer · Write the backoff spec');
+    expect(text(bg.querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium');
+    // Folded, the Why is nowhere: no colour and no tag beyond the meta.
+    expect(container.querySelector('.chat-subagent-why')).toBeNull();
+  });
+
+  it('adds duration, but no cost, to the meta once the run is done', () => {
+    render([FG, BG_RUNNING]);
+    const fg = card(1);
+    expect(text(fg.querySelector('.chat-tool-summary'))).toBe('explore · Find every caller of pollQuota');
+    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('S · Sonnet 5.5 · 41s');
+    expect(fg.querySelector('.chat-tool-status.ok')).not.toBeNull();
+    expect(fg.querySelector('.chat-tool-tag')).toBeNull();
+  });
+
+  it('tags a background run, spins while it runs and shows its latest step under the row', () => {
+    render([FG, BG_RUNNING]);
+    const bg = card(5);
+    expect(text(bg.querySelector('.chat-tool-tag'))).toBe('Background');
+    expect(bg.querySelector('.chat-tool-status.running')).not.toBeNull();
+    expect(text(bg.querySelector('.chat-tool-live'))).toBe('Edit poller.spec.ts');
+    // A finished foreground run has no live line.
+    expect(card(1).querySelector('.chat-tool-live')).toBeNull();
+  });
+
+  it('checks a background run off and drops its live line once its run has ended', () => {
+    const ended = { ...BG_RUNNING, status: 'DONE' as const, endedAt: '2026-11-11T10:03:13.000Z', costUsd: 0.5, resultSummary: 'Added six cases.' };
+    render([FG, ended], false);
+    const bg = card(5);
+    expect(bg.querySelector('.chat-tool-live')).toBeNull();
+    expect(text(bg.querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium · 3m 12s');
+    act(() => (bg.querySelector('.chat-tool-row') as HTMLElement).click());
+    // The receipt is not the result: the run's own result is.
+    expect(bg.textContent).toContain('Added six cases.');
+    expect(bg.textContent).not.toContain('"status":"running"');
+  });
+
+  it('opens on a grey Why line first, then the child steps and the result as Markdown', () => {
+    render([FG, BG_RUNNING]);
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const detail = fg.querySelector('.chat-tool-detail')!;
+    const why = detail.firstElementChild!;
+    expect(why.className).toBe('chat-subagent-why');
+    // One clause per part, the provider named once, no shadow sentence; the full account is one click away.
+    expect(why.textContent).toBe(`Why · ${FG_WHY}Details`);
+    expect(why.textContent!.split(' on claude').length - 1).toBe(1);
+    expect(why.textContent).not.toMatch(/shadow|Picked|runs on/i);
+    expect(text(why.querySelector('b'))).toBe('Why');
+    expect(detail.querySelector('.chat-subagent')).not.toBeNull();
+    expect(detail.textContent).toContain('Three callers, all in quota/.');
+    expect(detail.querySelector('strong')?.textContent).toBe('quota/');
+    expect(detail.textContent).not.toContain('runId');
+    // No prompt: the board opens on Why, steps and result.
+    expect(detail.textContent).not.toContain('Find them.');
+  });
+
+  it('keeps the full reasons and every removed candidate behind the Why: a tooltip and a Details list', () => {
+    render([FG]);
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why') as HTMLElement;
+    const tooltip = why.getAttribute('title')!;
+    expect(tooltip.split('\n')[0]).toBe('Tier S, set by the caller: a search');
+    expect(tooltip).toContain('Picked claude-sonnet-5-5 · low on claude (Cost)');
+    expect(tooltip).toContain("- kimi: kimi is not installed on the parent's runner");
+    expect(tooltip).toContain('- key-10 (claude), model-10: The model has no tier');
+    expect(fg.querySelector('.chat-subagent-why-list')).toBeNull();
+
+    const more = why.querySelector('.chat-subagent-why-more') as HTMLButtonElement;
+    act(() => more.click());
+    const items = [...fg.querySelectorAll('.chat-subagent-why-list li')].map((li) => li.textContent);
+    expect(items).toHaveLength(FG.reasons.length + 11);
+    expect(items.slice(0, FG.reasons.length)).toEqual(FG.reasons);
+    expect(items[FG.reasons.length]).toBe("Removed · kimi: kimi is not installed on the parent's runner");
+    expect(more.textContent).toBe('Hide');
+    // The block itself stays open: the button is not the row.
+    expect(fg.querySelector('.chat-tool-detail')).not.toBeNull();
+  });
+
+  it("an older run's Why is its reasons, with nothing behind it", () => {
+    render([run({ why: null, removed: [] })]);
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why')!;
+    expect(why.textContent).toBe('Why · Tier S, set by the caller: a search · Optimize For: Cost');
+    expect(why.querySelector('.chat-subagent-why-more')).toBeNull();
+    expect(why.getAttribute('title')).toBeNull();
+  });
+
+  it("shows the result once when the child's own last message already says it", () => {
+    const said = 'Three callers, all in **quota/**.';
+    const withReply: RunEvent[] = [
+      ...events.slice(0, 3),
+      ev(4, 'assistant', { text: said, parentToolUseId: 'toolu_fg' }),
+      { ...events[3], seq: 5 },
+    ];
+    act(() =>
+      root.render(
+        <MemoryRouter>
+          <SubagentRunsCtx.Provider value={new Map([[FG.toolUseId, FG]])}>
+            <Transcript events={withReply} />
+          </SubagentRunsCtx.Provider>
+        </MemoryRouter>,
+      ),
+    );
+    const fg = card(1);
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    expect(fg.textContent!.split('Three callers, all in').length - 1).toBe(1);
+  });
+
+  it("names the workspace a remote run ran on, and leads its Why with how that workspace was chosen", () => {
+    const chosen = 'Needs os:darwin: orbit-macos is the only workspace of this repository whose runner reports it';
+    // As the server writes a remote run (subagent-remote.ts): no tier, the target's own model, the choice first.
+    const remote = run({
+      level: null,
+      model: 'claude-sonnet-5-5',
+      modelLabel: 'Sonnet 5.5',
+      reasons: [chosen, "Runs on orbit-macos's own default engine and model, claude-sonnet-5-5"],
+      why: null,
+      workspaceName: 'orbit-macos',
+    });
+    render([remote, BG_RUNNING]);
+    const fg = card(1);
+    expect(text(fg.querySelector('.chat-tool-meta'))).toBe('Sonnet 5.5 · on orbit-macos · 41s');
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    const why = fg.querySelector('.chat-subagent-why')!;
+    expect(why.textContent!.startsWith(`Why · ${chosen}`)).toBe(true);
+    // A run on this machine says nothing of a workspace.
+    expect(text(card(5).querySelector('.chat-tool-meta'))).toBe('M · Opus 5.5 · medium');
+  });
+
+  it('draws the row before its run is read, with no meta and no Why', () => {
+    render([]);
+    const fg = card(1);
+    expect(text(fg.querySelector('.chat-tool-name'))).toBe('Agent');
+    expect(fg.querySelector('.chat-tool-meta')).toBeNull();
+    act(() => (fg.querySelector('.chat-tool-row') as HTMLElement).click());
+    expect(fg.querySelector('.chat-subagent-why')).toBeNull();
+  });
+});
+
+describe('subagentRuns helpers', () => {
+  it('reads runs only for a transcript that delegated, and again whenever a call or its end lands', () => {
+    expect(delegateRunsSignature([ev(1, 'tool_use', { id: 'x', name: 'Bash', input: {} })])).toBe('');
+    expect(delegateRunsSignature(events)).toBe('1,4,5,6');
+    expect(
+      delegateRunsSignature([...events, ev(9, 'background_task', { toolUseId: 'toolu_bg', status: 'completed' })]),
+    ).toBe('1,4,5,6,9');
+  });
+
+  it("adds ' · on <workspace>' to a remote run's meta, and leads a routed Why with the workspace's choice", () => {
+    const remote = run({ status: 'RUNNING', endedAt: null, level: 'M', effort: 'high', workspaceName: 'orbit-macos' });
+    expect(subagentMeta(remote)).toBe('M · Sonnet 5.5 · high · on orbit-macos');
+    expect(subagentMeta({ ...remote, workspaceName: null })).toBe('M · Sonnet 5.5 · high');
+    const routed = { ...remote, reasons: ['Named by the delegate call: orbit-macos', 'Tier M'], why: 'Tier M, set by the caller · 2 others removed' };
+    expect(subagentWhy(routed)).toBe('Named by the delegate call: orbit-macos · Tier M, set by the caller · 2 others removed');
+    expect(subagentWhy({ ...routed, workspaceName: null })).toBe('Tier M, set by the caller · 2 others removed');
+  });
+
+  it('says nothing about a run it has not read, and hides a bare receipt', () => {
+    expect(subagentMeta(undefined)).toBeNull();
+    expect(delegateResultText('{"runId":"r","status":"running"}', undefined)).toBeNull();
+    expect(delegateResultText('plain text', undefined)).toBe('plain text');
+  });
+});

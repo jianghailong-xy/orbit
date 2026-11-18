@@ -46,13 +46,26 @@ import Foundation
 
 /// What the run said when it ended the turn the owner is being asked about: its last message.
 public struct OwnerConfirmationReport: Codable, Equatable, Sendable {
-    public let text: String
+    public var text: String
     /// ISO-8601, as JSON carries it. Never parsed here.
     public let reportedAt: String
+    /// The run event's own translation of that message, served when it is in the owner's current
+    /// language (Settings › Translation); nil otherwise.
+    public let translation: ReplyTranslation?
 
-    public init(text: String, reportedAt: String) {
+    public init(text: String, reportedAt: String, translation: ReplyTranslation? = nil) {
         self.text = text
         self.reportedAt = reportedAt
+        self.translation = translation
+    }
+
+    private enum CodingKeys: String, CodingKey { case text, reportedAt, translation }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        text = try box.decode(String.self, forKey: .text)
+        reportedAt = try box.decode(String.self, forKey: .reportedAt)
+        translation = ReplyTranslation.parse((try? box.decodeIfPresent(JSONValue.self, forKey: .translation)) ?? nil)
     }
 }
 
@@ -355,23 +368,29 @@ public struct OwnerDecisionRequest: Encodable, Equatable, Sendable {
     public let note: String?
     public let reviewRecordId: String?
     public let answers: [OwnerAnswerBody]
+    /// Send as written, after a 422 TRANSLATION_FAILED: the owner's words go untranslated. Only
+    /// `true` is written.
+    public let sendAsWritten: Bool
 
     public init(decision: OwnerDecision, requestId: String? = nil, note: String? = nil,
-                reviewRecordId: String? = nil, answers: [OwnerAnswerBody] = []) {
+                reviewRecordId: String? = nil, answers: [OwnerAnswerBody] = [],
+                sendAsWritten: Bool = false) {
         self.decision = decision
         self.requestId = requestId
         self.note = note
         self.reviewRecordId = reviewRecordId
         self.answers = answers
+        self.sendAsWritten = sendAsWritten
     }
 
-    private enum CodingKeys: String, CodingKey { case decision, requestId, note, reviewRecordId, answers }
+    private enum CodingKeys: String, CodingKey { case decision, requestId, note, reviewRecordId, answers, sendAsWritten }
 
     public func encode(to encoder: Encoder) throws {
         var box = encoder.container(keyedBy: CodingKeys.self)
         try box.encode(decision, forKey: .decision)
         try box.encode(requestId, forKey: .requestId)
         try box.encodeIfPresent(note, forKey: .note)
+        if sendAsWritten { try box.encode(true, forKey: .sendAsWritten) }
         guard decision == .confirm else { return }
         if let reviewRecordId {
             try box.encode(reviewRecordId, forKey: .reviewRecordId)

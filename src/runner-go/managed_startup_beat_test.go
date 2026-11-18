@@ -179,7 +179,7 @@ func TestRunLoopBeatsOnceASelfManagedRunnerHasReclaimed(t *testing.T) {
 	if at < 0 {
 		t.Fatal("runLoop does not beat a self-managed runner's first heartbeat by itself, with one for the probe")
 	}
-	reclaim := strings.Index(body, "reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)")
+	reclaim := strings.Index(body, "reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)")
 	reclaimed := strings.Index(body, "reclaimed = true")
 	if reclaim < 0 || reclaimed < reclaim || at < reclaimed {
 		t.Fatal("the first heartbeat is asked for before the reclaim has made the supervisors it advertises")

@@ -1,3 +1,5 @@
+import { capacityHeldTitle, isCapacityHeld } from './queuedCapacity';
+import { CLONE_STARTS_WHEN_DONE } from './machineSetupCopy';
 import {
   sessionIsStarting,
   sessionRunStateOf,
@@ -220,6 +222,9 @@ export interface QueuedGate {
 
 /** The server's account of a runner draining for a self-update (docs/runner-update-drain-design.md). */
 export interface QueuedRunnerUpdate {
+  /** The runner is stopping, not updating: its process finishes its turns before it exits on a stop
+   *  signal (docs/mocks/runner-stopping). Absent from a server that predates the field. */
+  stopping?: boolean;
   /** The release it installs next; null from a runner that does not report it. */
   targetVersion: string | null;
   /** When the wait began: the drain's start, or this session's own wait where the runner names none. */
@@ -229,11 +234,42 @@ export interface QueuedRunnerUpdate {
 }
 
 export const RUNNER_UPDATING_TITLE = 'Runner updating';
+
+/** A session held by its GitHub workspace's clone (queuedReason WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED). */
+export const CLONE_WAIT_TITLE = 'Waiting for the clone';
+export const CLONE_FAILED_TITLE = 'Clone failed';
+export const CLONE_FAILED_WAIT = 'This session starts once the repository is cloned. Retry the clone from the conversation’s first line.';
+/** A new session held by Keep Free (queuedReason disk_below_floor): its workspace's disk is below its runner's floor. */
+export const DISK_LOW_TITLE = 'Low disk space';
+export const DISK_LOW_WAIT = 'This runner has less free disk space than its Keep Free setting. This session starts once space is freed.';
 /** The foot-row tag under a message the drain holds: `Queued · ` then this, underlined, to open why. */
 export const RUNNER_UPDATING_TAG = 'runner updating';
 
+export const RUNNER_STOPPING_TITLE = 'Runner stopping';
+/** RUNNER_UPDATING_TAG's words for a runner that is stopping rather than updating. */
+export const RUNNER_STOPPING_TAG = 'runner stopping';
+
 export function isRunnerUpdating(gate?: QueuedGate | null): boolean {
   return gate?.queuedReason === 'runner_updating';
+}
+
+/**
+ * Whether the runner holding this session is stopping rather than updating (board runner-stopping ①):
+ * it drains because its process got a stop signal, with no release being installed. It then has
+ * nothing to postpone or install now, so the places that offer Later and Update Now offer neither.
+ */
+export function isRunnerStopping(gate?: QueuedGate | null): boolean {
+  return isRunnerUpdating(gate) && gate?.queuedRunnerUpdate?.stopping === true;
+}
+
+/** `Runner updating`, or `Runner stopping` for a runner that is stopping. */
+export function runnerUpdatingTitle(gate?: QueuedGate | null): string {
+  return isRunnerStopping(gate) ? RUNNER_STOPPING_TITLE : RUNNER_UPDATING_TITLE;
+}
+
+/** The foot-row tag's words: `runner updating`, or `runner stopping`. */
+export function runnerUpdatingTag(gate?: QueuedGate | null): string {
+  return isRunnerStopping(gate) ? RUNNER_STOPPING_TAG : RUNNER_UPDATING_TAG;
 }
 
 /** A run of the explanation: words, or a turn the reader can open. */
@@ -271,17 +307,23 @@ function turnCount(gate: QueuedGate): number {
  * The queued page's explanation (board 2 ②): `studio-mac is updating to 0.1.254. It starts no new
  * work until 2 turns finish: A and B. This session starts right after.` The turns are parts the page
  * draws as links. A runner that names no release is "updating", and one with nothing left in flight
- * is about to restart, so the sentence about turns goes.
+ * is about to restart, so the sentence about turns goes. A runner that is stopping says so, and the
+ * session starts once it is back (board runner-stopping ①): `HPC is stopping. It starts no new work
+ * until 2 turns finish: A and B. This session starts once HPC is back.`
  */
 export function runnerUpdatingDescription(gate: QueuedGate, machine?: string | null): RunnerUpdatingPart[] {
-  const who = machine?.trim() || 'The runner';
+  const name = machine?.trim();
+  const who = name || 'The runner';
+  const stopping = isRunnerStopping(gate);
   const version = gate.queuedRunnerUpdate?.targetVersion;
-  const parts: RunnerUpdatingPart[] = [version ? `${who} is updating to ${version}. ` : `${who} is updating. `];
+  const parts: RunnerUpdatingPart[] = [
+    stopping ? `${who} is stopping. ` : version ? `${who} is updating to ${version}. ` : `${who} is updating. `,
+  ];
   const count = turnCount(gate);
   if (count > 0) {
     parts.push(`It starts no new work until ${turnsFinish(count)}: `, ...namedTurns(gate), '. ');
   }
-  parts.push('This session starts right after.');
+  parts.push(stopping ? `This session starts once ${name || 'it'} is back.` : 'This session starts right after.');
   return parts;
 }
 
@@ -292,6 +334,13 @@ export function runnerUpdatingDescription(gate: QueuedGate, machine?: string | n
  */
 export function runnerUpdatingMessageText(gate: QueuedGate, machine?: string | null): string {
   const who = machine?.trim() || 'The runner';
+  if (isRunnerStopping(gate)) {
+    // Board runner-stopping ②: `HPC starts no new turns until 2 turns finish, then stops. This
+    // message is sent once it is back.`
+    const count = turnCount(gate);
+    const first = count > 0 ? `${who} starts no new turns until ${turnsFinish(count)}, then stops.` : `${who} stops now.`;
+    return `${first} This message is sent once it is back.`;
+  }
   const version = gate.queuedRunnerUpdate?.targetVersion;
   const update = version ? `updates to ${version}` : 'updates';
   const count = turnCount(gate);
@@ -369,6 +418,14 @@ export function pendingSlotDescription(
       return runnerUpdatingPlain(runnerUpdatingDescription(gate!, machine));
     case 'worktree_op_pending':
       return 'A merge or commit is finishing on this session’s checkout. It starts as soon as that settles.';
+    // A GitHub workspace's clone (docs/github-workspace-design.md §6): the claim's own gate, named before capacity.
+    case 'WORKSPACE_CLONING':
+      return `${CLONE_STARTS_WHEN_DONE}.`;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_WAIT;
+    // Keep Free (the claim's gate on a session that has never run): lifts when the runner reports space above its floor.
+    case 'disk_below_floor':
+      return DISK_LOW_WAIT;
     // The server checked every gate and found none: nothing is contended, it simply has not been
     // picked up yet — normally one long-poll round trip. See queuedTitle for why this may not
     // collapse into the `undefined` case below.
@@ -396,13 +453,21 @@ export function queuedTitle(gate?: QueuedGate | null): string {
     case 'runner_offline':
       return 'Runner offline';
     case 'runner_updating':
-      return RUNNER_UPDATING_TITLE;
+      return runnerUpdatingTitle(gate);
     case 'worktree_op_pending':
       return 'Waiting for a git operation';
+    case 'WORKSPACE_CLONING':
+      return CLONE_WAIT_TITLE;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_TITLE;
+    case 'disk_below_floor':
+      return DISK_LOW_TITLE;
     case null:
       return QUEUED_LABEL;
     default:
-      return PENDING_SLOT_TITLE;
+      // A full runner, run or batch names itself (board queued-card-runner-full ②); only a server too
+      // old to name the gate keeps the slot wording.
+      return isCapacityHeld(gate) ? capacityHeldTitle(gate!) : PENDING_SLOT_TITLE;
   }
 }
 
@@ -412,10 +477,16 @@ export function queuedLabel(gate?: QueuedGate | null): string {
     case 'runner_offline':
       return 'Runner offline';
     case 'runner_updating':
-      return RUNNER_UPDATING_TITLE;
+      return runnerUpdatingTitle(gate);
+    case 'WORKSPACE_CLONING':
+      return CLONE_WAIT_TITLE;
+    case 'WORKSPACE_CLONE_FAILED':
+      return CLONE_FAILED_TITLE;
+    case 'disk_below_floor':
+      return DISK_LOW_TITLE;
     case null:
       return QUEUED_LABEL;
     default:
-      return PENDING_SLOT_LABEL;
+      return isCapacityHeld(gate) ? capacityHeldTitle(gate!) : PENDING_SLOT_LABEL;
   }
 }

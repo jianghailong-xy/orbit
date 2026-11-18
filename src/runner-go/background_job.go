@@ -273,6 +273,10 @@ type bgJob struct {
 	reaping     bool
 	exited      bool
 	adoptedExit *int
+	// keptPastEnd marks a job its session left running when it ended by a coordinator handing over
+	// (keepJobsPastEnd): handedOff too, so the tailer neither kills nor reaps it, and its waiter ends it
+	// when it exits by itself (endKeptJob).
+	keptPastEnd bool
 	// awaitingOwner marks a job the gate sent to a person, whose process has not started
 	// (background_gate.go). Its status stays bgStatusRunning, so that everything that ends or reports a job
 	// treats it as one. ownerWaitAnnounced records that a call has told the agent it is waiting, which
@@ -507,11 +511,13 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	// The launch pair the UI already understands: the "Background processes" tray
 	// keys off a Bash tool_use with run_in_background, and clears on the terminal
 	// background_task below. The runner emits it here because no engine tool call
-	// produced this process — that is precisely what makes it survivable.
-	b.emit(evToolUse, map[string]interface{}{
-		"id": jobID, "name": "Bash",
-		"input": map[string]interface{}{"command": spec.Command, "run_in_background": true},
-	})
+	// produced this process — that is precisely what makes it survivable. The description
+	// rides along because the tray titles a row with it, as it does an engine's own Bash.
+	input := map[string]interface{}{"command": spec.Command, "run_in_background": true}
+	if spec.Description != "" {
+		input["description"] = spec.Description
+	}
+	b.emit(evToolUse, map[string]interface{}{"id": jobID, "name": "Bash", "input": input})
 	b.emit(evToolResult, map[string]interface{}{
 		"toolUseId": jobID,
 		"content": fmt.Sprintf(
@@ -541,6 +547,8 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 		awaitChildExit(job.pid)
 		if b.claimReap(job) {
 			b.finishJob(job, job.reap())
+		} else {
+			b.endKeptJob(job)
 		}
 	}()
 	return status, nil
@@ -697,7 +705,7 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 	if b.ctx.Err() == nil || reason != "" {
 		if b.markTerminal(job.id) {
 			b.emit(evBackgroundTask, job.endPayload(status, exit, reason))
-			b.alertIfNobodyIsWatching(job, status, exit)
+			bgBetweenEndAndWake()
 			b.wakeOnEnd(job, reason)
 		}
 	}
@@ -705,6 +713,22 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 		removeBgJobRecord(b.sessionID, job.id)
 	}
 	close(job.done)
+}
+
+// bgBetweenEndAndWake runs after finishJob has reported a job's end and before it sends the wake that
+// end owes. A variable only so a test can hold a job there while the runner begins to stop — the
+// moment a job that exits on its own as the runner stops sits in, too briefly to hit from outside.
+var bgBetweenEndAndWake = func() {}
+
+// finished reports whether finishJob has done everything a job's end owes: reported it, sent its
+// wake, and closed done.
+func (j *bgJob) finished() bool {
+	select {
+	case <-j.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // endLocked records how a job ended — killed when a reason was named for killing it, otherwise as its
@@ -749,33 +773,6 @@ func (j *bgJob) endPayload(status string, exit int, reason string) map[string]in
 		payload["reason"] = reason
 	}
 	return payload
-}
-
-// alertIfNobodyIsWatching is the whole point of stage 2b: a job that finishes while
-// the session is cold has nobody to tell. The event above is durable, but a durable
-// event is something you find when you come back — and "come back and find out" is
-// the behaviour this project is removing.
-//
-// Cold only. A resident engine is going to be handed the transcript of this event on
-// its next turn, and paying a lock-screen alert for something already on screen is
-// how a channel gets muted. A kill is not announced either: an explicit one was asked
-// for by whoever is reading the answer, and a drain kill happens while the session is
-// being torn down around it.
-//
-// Called with b.mu released — engineResident takes the pool's lock, and the pool
-// takes this tailer's.
-func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) {
-	if b.notify == nil || b.engineResident == nil || b.engineResident() {
-		return
-	}
-	if status != bgStatusCompleted && status != bgStatusFailed {
-		return
-	}
-	// Read on a lock screen: what ended, how it ended, and the id that reads the rest.
-	message := fmt.Sprintf("Background %s %s ended (exit code %d): %s", job.kind, job.id, exit, job.command)
-	if err := b.notify(message); err != nil {
-		logln("could not alert the owner about background job", job.id+":", err)
-	}
 }
 
 // bgWake is what a job tells the control plane when it wakes its session. Field names are the wire
@@ -1002,6 +999,8 @@ func (b *bgTailer) sendWake(wake bgWake) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
+		logln(fmt.Sprintf("background %s %s: its %s wake was not sent — the session's background work had already stopped",
+			wake.Kind, wake.JobID, wake.Trigger))
 		return
 	}
 	b.wg.Add(1)
@@ -1239,6 +1238,12 @@ func (b *bgTailer) drainJobs(budget time.Duration) {
 	var services, jobs []*bgJob
 	for _, job := range b.jobs {
 		if job.status != bgStatusRunning {
+			// Ended, but finishJob may not have sent the wake its end owes yet. Wait for it as for a
+			// running job: stopAll closes the gate sendWake checks once this drain returns, and a wake
+			// arriving after that was dropped (2026-11-16, a job that exited as the runner stopped).
+			if !job.finished() {
+				jobs = append(jobs, job)
+			}
 			continue
 		}
 		// A job still waiting for its card has nothing to land, so waiting for it would only hold the drain.
@@ -1331,9 +1336,21 @@ func (b *bgTailer) drainOnRunnerShutdown(shutdown context.Context) {
 			return
 		}
 		b.wg.Add(1)
+		stopSubagents := b.stopSubagents
 		b.mu.Unlock()
 		defer b.wg.Done()
+		// The session's SubAgents end with the runner too, beside its jobs: INTERRUPTED, and the server wakes
+		// the parent with why (subagent.go).
+		var subagents sync.WaitGroup
+		if stopSubagents != nil {
+			subagents.Add(1)
+			go func() {
+				defer subagents.Done()
+				stopSubagents(subagentStopRunnerStopped)
+			}()
+		}
 		b.drainJobs(bgDrainWaitCap)
+		subagents.Wait()
 	})
 }
 

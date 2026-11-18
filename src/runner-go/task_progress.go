@@ -27,55 +27,6 @@ const (
 // taskProgressFields are what a report can name, besides the revision it is based on.
 var taskProgressFields = []string{"phase", "current", "total", "message"}
 
-func taskProgressDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}, taskIDProp map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{
-		"name": "task_progress_report",
-		"description": "Report where an Orbit task stands, or read it. A report states a position: a phase (a named " +
-			"stage such as \"tests\"), a current count and the total it counts toward, with an optional message for " +
-			"whoever reads it. Progress is only what is reported here: Orbit never infers it from your Bash output, a " +
-			"transcript, a comment or a message. Only a change of phase, current or total is progress and moves " +
-			"lastProgressAt, which a watch waiting for a stall reads; a message alone, or the same report repeated, is " +
-			"not progress. Each field you pass replaces that field and null clears it; a field you omit is kept. Given " +
-			"none of phase, current, total or message, it reads the progress and its revision instead. With " +
-			"expectedRevision the report applies only if the progress is still at the revision you read: on 409 " +
-			"PROGRESS_REVISION_CONFLICT, read it again, then report against the revision it shows. A DONE, CANCELLED or " +
-			"FAILED task is refused with 409 TASK_NOT_OPEN; reopening it starts a new epoch with nothing reported. " +
-			"taskId defaults to the current task.",
-		"inputSchema": obj(map[string]interface{}{
-			"taskId": taskIDProp,
-			"phase": map[string]interface{}{
-				"type":        []string{"string", "null"},
-				"minLength":   1,
-				"maxLength":   taskProgressMaxPhaseChars,
-				"description": "The named stage the task is in, such as \"tests\". null clears it.",
-			},
-			"current": map[string]interface{}{
-				"type":        []string{"integer", "null"},
-				"minimum":     0,
-				"maximum":     taskProgressMaxCount,
-				"description": "How many units of the work are done. null clears it; a total needs a current beside it.",
-			},
-			"total": map[string]interface{}{
-				"type":        []string{"integer", "null"},
-				"minimum":     1,
-				"maximum":     taskProgressMaxCount,
-				"description": "How many units there are in all. It needs a current beside it, and current may not pass it. null clears it.",
-			},
-			"message": map[string]interface{}{
-				"type":        []string{"string", "null"},
-				"minLength":   1,
-				"maxLength":   taskProgressMaxMessageChars,
-				"description": "A note for whoever reads the progress. Never progress on its own, and no watch reads it. null clears it.",
-			},
-			"expectedRevision": map[string]interface{}{
-				"type":        "integer",
-				"minimum":     0,
-				"description": "The revision you last read. The report applies only if the progress is still at it, and is refused with 409 PROGRESS_REVISION_CONFLICT otherwise. Omit it to report regardless.",
-			},
-		}),
-	}
-}
-
 // runTaskProgressTool reports when args name any field of a report, and reads the progress otherwise.
 func runTaskProgressTool(t *Transport, taskID string, args map[string]interface{}) (string, error) {
 	body, err := taskProgressReportArgs(args)

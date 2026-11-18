@@ -30,6 +30,11 @@ final class ProjectsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient) {
+        self.api = api
+    }
+
     /// By either spelling of its id: a link may name the UUID while the list spells it base62.
     func project(_ id: String) -> ProjectSummary? {
         let key = PublicID.storageKey(id)
@@ -46,16 +51,15 @@ final class ProjectsModel {
     }
 
     func load() async {
-        loadState.begin()
+        assignIfChanged(\.loadState, loadState.startingRead())
         async let sidebarRead = api.sidebarProjects()
         do {
-            let list = try await api.projects()
-            if list != projects { projects = list }
-            loadState.succeed()
+            assignIfChanged(\.projects, try await api.projects())
+            assignIfChanged(\.loadState, loadState.afterSuccess())
         } catch {
-            loadState.fail()
+            assignIfChanged(\.loadState, loadState.afterFailure())
         }
-        if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }
+        if let list = try? await sidebarRead { assignIfChanged(\.sidebarProjects, list) }
     }
 
     /// Called by the app's existing polling task, which stops on sign-out.
@@ -394,11 +398,24 @@ final class ProjectDetailModel {
 
     /// "Not yet…" on the coordinator's request: the note goes to the coordinator, and the request
     /// ends. Nil when it went through; otherwise the sentence to show.
-    func declineDone(itemID: String, note: String) async -> String? {
-        await runWrite(ProjectDone.notDeclined) {
-            _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)
+    func declineDone(itemID: String, note: String, sendAsWritten: Bool = false) async -> String? {
+        var untranslated = false
+        let refused = await runWrite(ProjectDone.notDeclined) {
+            do {
+                _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note,
+                                                          sendAsWritten: sendAsWritten)
+            } catch {
+                untranslated = OwnerCardTranslations.refused(error)
+                throw error
+            }
         }
+        doneDeclineRefusedUntranslated = untranslated
+        return untranslated ? nil : refused
     }
+
+    /// The last Not yet… note was refused with 422 TRANSLATION_FAILED and not sent: the card offers
+    /// Retry and Send as written.
+    var doneDeclineRefusedUntranslated = false
 
     // MARK: the done card's follow-ups
 

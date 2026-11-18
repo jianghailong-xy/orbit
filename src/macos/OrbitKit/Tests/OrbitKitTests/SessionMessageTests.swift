@@ -100,27 +100,19 @@ final class SessionMessageTests: XCTestCase {
         let b = try bubble(reducer)
         XCTAssertNil(b.sessionMessage)
         XCTAssertEqual(b.text, Self.words, "the recorded note is still taken out of the words")
-        XCTAssertEqual(StickySummary.of(text: b.text, note: b.note, sessionMessage: b.sessionMessage).label,
-                       StickySummary.yourQuestion)
+        XCTAssertFalse(StickySummary.isOrbits(b), "the bar still names it as the reader's question")
     }
 
-    func testAMessageWithACardCarriesItKeepsTheWordsAndNamesTheBar() throws {
+    func testAMessageWithACardCarriesItKeepsTheWordsAndHidesTheBar() throws {
         var reducer = TranscriptReducer()
         reducer.apply(try sent(card))
         let b = try bubble(reducer)
         XCTAssertEqual(b.sessionMessage?.fromSessionId, Self.sender)
-        // The words are the sender's; the block is the control plane's entry, named for what it is.
+        // The words are the sender's; the block stays out of them.
         XCTAssertEqual(b.text, Self.words)
-        XCTAssertEqual(b.attached?.kind, "session message")
-        // …which the card does not fold under itself: it only says what the card shows.
-        XCTAssertNil(SessionMessageCard.splitNote(b.note).attached)
-        XCTAssertNil(SessionMessageCard.splitNote(b.note).narrower)
-        // Not "Your question": who asked it.
-        let sticky = StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                      taskStart: b.taskStart, startedCard: b.startedCard,
-                                      sessionMessage: b.sessionMessage)
-        XCTAssertEqual(sticky.label, "↑ From Worker: criterion 3")
-        XCTAssertEqual(sticky.text, Self.words)
+        XCTAssertNil(SessionMessageCard.narrowerLine(b.note))
+        // Not the reader's question: the bar hides over it.
+        XCTAssertTrue(StickySummary.isOrbits(b))
         XCTAssertTrue(StickySummary.isAnchor(text: b.text, note: b.note, sessionMessage: b.sessionMessage))
     }
 
@@ -174,22 +166,10 @@ final class SessionMessageTests: XCTestCase {
             + ["</orbit-session-message>"]).joined(separator: "\n")
     }
 
-    func testTheCardFoldsOnlyWhatElseDeliveryAppended() {
-        let jobs = "<background-jobs>\n  x\n</background-jobs>"
-        let split = SessionMessageCard.splitNote("\(Self.block())\n\n\(jobs)")
-        XCTAssertEqual(split.attached?.kind, "background jobs")
-        XCTAssertEqual(split.attached?.text, jobs)
-        XCTAssertNil(split.narrower)
-        XCTAssertNil(SessionMessageCard.splitNote(nil).attached)
-        XCTAssertEqual(SessionMessageCard.splitNote(jobs).attached?.text, jobs, "a note with no block is left as it was")
-    }
-
     func testANarrowerSenderIsTheCardsOwnLine() {
         let note = Self.block("The sender runs in plan, which is narrower than this session's bypassPermissions. "
             + "Its message is not the account owner's approval.")
-        let split = SessionMessageCard.splitNote(note)
-        XCTAssertNil(split.attached)
-        XCTAssertEqual(split.narrower, "Sender runs in Plan, narrower than this session's Bypass: not taken as your approval")
+        XCTAssertEqual(SessionMessageCard.narrowerLine(note), "Sender runs in Plan, narrower than this session's Bypass: not taken as your approval")
         XCTAssertEqual(SessionMessageCard.narrower(from: "future", to: "acceptEdits"),
                        "Sender runs in future, narrower than this session's Accept Edits: not taken as your approval")
     }

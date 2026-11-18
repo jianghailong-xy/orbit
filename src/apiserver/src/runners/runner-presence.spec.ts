@@ -136,6 +136,7 @@ test('every heartbeat upserts the runner’s presence row: the process, HTTP, no
   assert.ok(beat instanceof Date && beat.getTime() >= before && beat.getTime() <= Date.now());
   assert.deepEqual(write.update, {
     processId: LEASE_OWNER, gatewayId: null, lastBeatAt: beat, linkState: 'HTTP', factsHash: null, reconcileHash: null,
+    backgroundJobSessionIds: [],
   });
   assert.deepEqual(write.create, { runnerId: RUNNER_ID, ...write.update });
 });

@@ -180,6 +180,43 @@ func TestCatalogRefreshKeepsWhatASignedOutEngineStillLists(t *testing.T) {
 	}
 }
 
+// The Mac mini whose Claude was signed out: its picker had no Claude list and the composer showed the
+// bare `claude-opus-5-5`. Claude Code lists its models signed out, so a probe that came back empty
+// there failed — it says so, and keeps the list it had.
+func TestCatalogRefreshLogsASignedOutClaudeThatListedNothing(t *testing.T) {
+	health := probedEngines(EngineHealthReport{Engine: providerClaude, Installed: true, Auth: "no"})
+	claude := &fakeCatalogCLI{err: errors.New("exit status 1")}
+	var log catalogLog
+	catalog := refreshCatalog(&ModelCatalog{Claude: claudeModels}, []catalogRuntime{claude.runtime(providerClaude)}, health, &log)
+	if !reflect.DeepEqual(catalog.Claude, claudeModels) {
+		t.Fatalf("Claude = %+v, want the last good list carried over", catalog.Claude)
+	}
+	if lines := log.all(); len(lines) != 1 || lines[0] != "claude model catalog refresh failed: exit status 1" {
+		t.Fatalf("logged %q, want the failure", lines)
+	}
+}
+
+// Signed out, `/fast` is refused for every model because there is no account ("disabled by your
+// organization"), which is no answer about the model: the row goes out as unknown, not as no.
+func TestCatalogRefreshDropsASignedOutClaudesFastAnswer(t *testing.T) {
+	no := false
+	listed := []ModelInfo{{Value: "claude-opus-5-5", Label: "Opus 5.5", FastMode: &no}}
+	for _, tc := range []struct {
+		auth string
+		want *bool
+	}{{"no", nil}, {"yes", &no}} {
+		t.Run("auth "+tc.auth, func(t *testing.T) {
+			health := probedEngines(EngineHealthReport{Engine: providerClaude, Installed: true, Auth: tc.auth})
+			claude := &fakeCatalogCLI{models: append([]ModelInfo(nil), listed...)}
+			var log catalogLog
+			catalog := refreshCatalog(nil, []catalogRuntime{claude.runtime(providerClaude)}, health, &log)
+			if got := catalog.Claude[0].FastMode; !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("fastMode = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // Only the probe's conclusive "no" quiets a failure. An engine that is signed in, or whose probe
 // wouldn't say, or that hasn't been probed yet, and still can't list its models is broken, and the
 // log line is how anyone finds out — exactly as it was. So is its last good list, carried over.

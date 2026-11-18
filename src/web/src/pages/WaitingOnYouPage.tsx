@@ -2,6 +2,7 @@ import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
+  BookOutlined,
   KeyOutlined,
   OrderedListOutlined,
   QuestionOutlined,
@@ -9,6 +10,8 @@ import {
 } from '@ant-design/icons';
 import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow } from '../components/CoordinatorQuestionCard';
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
+import { TerminalApproveCard } from '../components/TerminalApproveCard';
+import { isScheduleWaitingKind } from '../components/ScheduleWaitingCard';
 import { Spinner } from '../components/ui/Spinner';
 import { formatSpan, ago } from '../lib/watches';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -19,10 +22,12 @@ import {
   projectsWithQuestions,
   useSnoozes,
   useWaitingOnYouCount,
+  type AgentRequestKind,
   type OwnerRequest,
 } from '../lib/ownerRequests';
 import { decisionReceiptTime } from '../components/EvidenceDecisionCard';
 import { openProjectsQuery, ownerRequestsQuery, projectOpenItemsQuery } from '../lib/queries';
+import { terminalRequestsQuery } from '../lib/terminals';
 import '../components/OwnerRequest.css';
 
 type InboxTab = 'open' | 'done' | 'declined';
@@ -37,18 +42,20 @@ const isTab = (value: string | null): value is InboxTab => TABS.some((tab) => ta
 
 const DAY = 86_400_000;
 
-const ACTION: Readonly<Record<OwnerRequest['kind'], string>> = {
+const ACTION: Readonly<Record<AgentRequestKind, string>> = {
   DECISION: 'Answer',
   SECRET: 'Provide',
   MANUAL_STEP: 'Open steps',
   CONFIRM: 'Review',
+  WIKI_CREATE: 'Review',
 };
 
-const ICON: Readonly<Record<OwnerRequest['kind'], ReactNode>> = {
+const ICON: Readonly<Record<AgentRequestKind, ReactNode>> = {
   DECISION: <QuestionOutlined />,
   SECRET: <KeyOutlined />,
   MANUAL_STEP: <OrderedListOutlined />,
   CONFIRM: <SafetyCertificateOutlined />,
+  WIKI_CREATE: <BookOutlined />,
 };
 
 /** "holds 2 tasks", and for how long once that has passed a day: the part of the row that is overdue. */
@@ -119,6 +126,8 @@ export function WaitingOnYouPage(): JSX.Element {
   const tab: InboxTab = isTab(tabParam) ? tabParam : 'open';
   const count = useWaitingOnYouCount();
   const open = useQuery(ownerRequestsQuery('open'));
+  // A terminal asking to be approved waits ten minutes at most, so its card is drawn whole at the top, not folded.
+  const terminals = useQuery(terminalRequestsQuery()).data?.requests ?? [];
   const ended = useQuery({ ...ownerRequestsQuery(tab === 'declined' ? 'declined' : 'done'), enabled: tab !== 'open' });
   const projects = useQuery(openProjectsQuery());
   const asking = useMemo(() => projectsWithQuestions(projects.data ?? []), [projects.data]);
@@ -130,8 +139,15 @@ export function WaitingOnYouPage(): JSX.Element {
   const titleOf = (projectId: string | null): string | undefined =>
     projects.data?.find((project) => project.id === projectId)?.title;
 
+  // A scheduled task's items are drawn whole, as the board draws them (docs/mocks/scheduled-tasks/web/02-board.png ④):
+  // each is a card with its own doors, newest first.
+  const scheduleItems = (open.data?.requests ?? [])
+    .filter((request) => isScheduleWaitingKind(request.kind))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const rows: OpenRow[] = [
-    ...(open.data?.requests ?? []).map((request) => ({ at: request.createdAt, request })),
+    ...(open.data?.requests ?? [])
+      .filter((request) => !isScheduleWaitingKind(request.kind))
+      .map((request) => ({ at: request.createdAt, request })),
     ...asking.flatMap((project, index) =>
       coordinatorQuestions(items[index]?.data).map((question) => ({ at: question.waitingSince, project, question }))),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
@@ -139,7 +155,9 @@ export function WaitingOnYouPage(): JSX.Element {
   const current = TABS.find((candidate) => candidate.key === tab)!;
   const loading = tab === 'open' ? open.isLoading : ended.isLoading;
   const endedRows = ended.data?.requests ?? [];
-  const empty = !loading && (tab === 'open' ? rows.length === 0 : endedRows.length === 0);
+  const empty = !loading && (tab === 'open'
+    ? rows.length === 0 && terminals.length === 0 && scheduleItems.length === 0
+    : endedRows.length === 0);
 
   return (
     <div className="owner-inbox">
@@ -163,6 +181,16 @@ export function WaitingOnYouPage(): JSX.Element {
       </header>
       {loading ? <Spinner /> : null}
       {empty ? <p className="owner-inbox-empty">{current.empty}</p> : null}
+      {tab === 'open' && terminals.length > 0 ? (
+        <div className="owner-inbox-terminals">
+          {terminals.map((request) => <TerminalApproveCard key={request.id} request={request} now={now} />)}
+        </div>
+      ) : null}
+      {tab === 'open' && scheduleItems.length > 0 ? (
+        <div className="sched-waiting-list" data-schedule-waiting="">
+          {scheduleItems.map((request) => <OwnerRequestCard key={request.id} request={request} now={now} />)}
+        </div>
+      ) : null}
       {tab === 'open' && rows.length > 0 ? (
         <ul className="owner-inbox-list">
           {rows.map((row) => {
@@ -173,14 +201,14 @@ export function WaitingOnYouPage(): JSX.Element {
               return (
                 <InboxRow
                   key={request.id}
-                  icon={ICON[request.kind]}
+                  icon={ICON[request.kind as AgentRequestKind]}
                   title={request.title}
                   detail={[project, requestDetail(request)].filter(Boolean).join(' · ')}
                   overdue={holdsText(request, now)}
                   age={until > now
                     ? `Reminder ${decisionReceiptTime(new Date(until).toISOString(), new Date(now))}`
                     : ago(request.createdAt, now)}
-                  action={ACTION[request.kind]}
+                  action={ACTION[request.kind as AgentRequestKind]}
                 >
                   <OwnerRequestCard request={request} now={now} />
                 </InboxRow>

@@ -80,7 +80,7 @@ internal object ExchangeFold {
 
     /** A turn that asks the reader something, or went wrong, stays in view whatever opened it. */
     private fun needsReader(turn: List<TranscriptRow>) = turn.flatMap { listOf(it) + it.steps }.any { row ->
-        row.event.type in setOf("error", "auth_error") ||
+        row.event.type in setOf("error", "auth_error", MainCheckout.ROW_CARD) ||
             row.event.type == "tool_use" && asksTheOwner.containsMatchIn(row.event.fields.string("name") ?: row.event.fields.string("toolName").orEmpty())
     }
 

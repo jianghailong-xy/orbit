@@ -15,6 +15,12 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// When the account's profile photo was set — the version it is fetched and cached by
     /// (`GET /users/me/avatar`). Nil while there is none, and in login's user payload.
     public let avatarUpdatedAt: String?
+    /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
+    /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
+    public let translationAvailable: Bool?
+    /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
+    /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
+    public let promptOptimizerAvailable: Bool?
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -96,6 +102,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// runs on Claude Code, OpenCode and DeepSeek Harness alike). Nil from an older server, and where
     /// nobody can tell; `defaultEngine(configured:)` reads it.
     public let lastEngine: String?
+    /// The model that session ran on — what a new-session draft on `lastEngine`/`lastProvider` starts
+    /// with (`AgentDefaults.newSessionModel`). Nil from an older server, and where it ran on its default.
+    public var lastModel: String? = nil
     /// @deprecated The same derived value under its old name, served for builds that predate
     /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
@@ -141,6 +150,13 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
     /// owner's user API writes it.
     public let modelRouting: Bool?
+    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`. Nil from an
+    /// older server reads as Cost (`SubagentSettings.OptimizeFor(stored:)`).
+    public var modelRoutingOptimizeFor: String? = nil
+    /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
+    public var subagentsEnabled: Bool? = nil
+    /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
+    public var subagentsMaxRunning: Int? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -149,18 +165,21 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let workDirTotalBytes: Int64?
     public let repoHealth: RunnerRepoHealth?
     public let repoCleanup: RunnerRepoCleanup?
+    /// Its runner declares `main-checkout-git/v1`: the Main checkout bar and card draw their buttons.
+    /// Nil from an older server, read as no.
+    public var mainCheckoutActions: Bool? = nil
     /// The repository its directory is a checkout of, as the runner reported it; nil for a workspace on none.
     public let repoUrl: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir, repoUrl
+        case id, name, lastProvider, lastEngine, lastModel, provider, model, permissionMode, effort, workDir, repoUrl
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting
+        case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
-        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
 
     public init(from decoder: Decoder) throws {
@@ -169,6 +188,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         name = try c.decode(String.self, forKey: .name)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
         lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
+        lastModel = try c.decodeIfPresent(String.self, forKey: .lastModel)
         provider = try c.decodeIfPresent(String.self, forKey: .provider)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
@@ -196,12 +216,16 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
+        modelRoutingOptimizeFor = try c.decodeIfPresent(String.self, forKey: .modelRoutingOptimizeFor)
+        subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
+        subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
         workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
         repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
         repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+        mainCheckoutActions = try? c.decodeIfPresent(Bool.self, forKey: .mainCheckoutActions)
         repoUrl = try c.decodeIfPresent(String.self, forKey: .repoUrl)
     }
 }
@@ -256,6 +280,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on this runner, by engine: the `update.latest` each was
+    /// dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Nil from an older
+    /// server, which dismisses nothing (`RunnerAttention.updateNoteOf`'s `dismissed`).
+    public var engineUpdateDismissals: [String: String]? = nil
     /// Antigravity support and CLI readiness resolved by the server from the runner's report.
     public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude
@@ -282,6 +310,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// checked on the machine before it is offered (docs/first-workspace-contract.md §1). Nil when
     /// nothing registered one, and from an older server.
     public var registerDir: String? = nil
+    /// True on the account's managed runner, which every screen calls Orbit Cloud (@orbit/shared
+    /// `RunnerRowIdentity.managed`), false on every other. Nil from an older server, where
+    /// `ManagedRunnerIdentity` (the managed status's runnerId) still says which runner it is.
+    public var managed: Bool? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
@@ -290,11 +322,98 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.
     public var region: RunnerRegionView? = nil
+    /// Where a press of Fix with an agent on this runner starts its session, or why it can't, and the
+    /// warnings an agent is fixing now (@orbit/shared `RunnerAgentFix`). Nil from an older server, which
+    /// draws no button (`RunnerAgentFixLogic`).
+    public var agentFix: RunnerAgentFix? = nil
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
         engines?.first { $0.engine == engine.rawValue }
     }
+}
+
+/// `agentFix` on GET /runners (@orbit/shared `RunnerAgentFix`): the workspace on the machine used most
+/// recently, the engine its sessions start on, why no agent can start (`blocked`, its `message` the line a
+/// client shows) and the open sessions a press started (`fixing`). Codes and kinds stay raw strings, so a
+/// newer control plane cannot make the runner list undecodable.
+public struct RunnerAgentFix: Codable, Equatable, Sendable {
+    public let workspaceId: String?
+    public let workspaceName: String?
+    /// The engine slug ("claude") and its name ("Claude Code").
+    public let engine: String?
+    public let engineName: String?
+    public let blocked: Blocked?
+    public let fixing: [RunnerAgentFixing]?
+
+    /// `code` is `offline`, `noWorkspace` or `engineSignedOut`.
+    public struct Blocked: Codable, Equatable, Sendable {
+        public let code: String
+        public let message: String
+
+        public init(code: String, message: String) {
+            self.code = code
+            self.message = message
+        }
+    }
+
+    public init(workspaceId: String?, workspaceName: String?, engine: String?, engineName: String?,
+                blocked: Blocked?, fixing: [RunnerAgentFixing]?) {
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.engine = engine
+        self.engineName = engineName
+        self.blocked = blocked
+        self.fixing = fixing
+    }
+}
+
+/// An agent at work on one warning (@orbit/shared `RunnerAgentFixing`): `kind` is a
+/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate` and `engineUpdateFailed`.
+public struct RunnerAgentFixing: Codable, Equatable, Sendable {
+    public let kind: String
+    public let engine: String?
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+
+    public init(kind: String, engine: String?, sessionId: String, workspaceId: String, workspaceName: String) {
+        self.kind = kind
+        self.engine = engine
+        self.sessionId = sessionId
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+    }
+}
+
+/// The warnings Fix with an agent is offered on (@orbit/shared `RunnerAttentionFixKind`), the `:kind` of
+/// POST /runners/:id/attention/:kind/fix.
+public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
+    case engineNotUpdating
+    case cannotSelfUpdate
+    case installFailed
+    /// An Update Engines Now report with a failed line: the machine's, whichever engines failed.
+    case engineUpdateFailed
+}
+
+/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
+/// `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
+public struct RunnerAttentionFixRequest: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let latest: String?
+
+    public init(engine: String? = nil, latest: String? = nil) {
+        self.engine = engine
+        self.latest = latest
+    }
+}
+
+/// What the fix endpoint answers with: the session it started.
+public struct RunnerAttentionFixResult: Codable, Equatable, Sendable {
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+    public let title: String
 }
 
 /// `region` on GET /runners (docs/claude-region-check-contract.md §6, the web's `RunnerRegionView`):
@@ -455,8 +574,19 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var queuedReason: String? = nil
     public var queuedActive: Int? = nil
     public var queuedLimit: Int? = nil
+    /// Of `queuedActive`, the slots background jobs hold; beside `runner_at_capacity` only (`QueuedCapacity`).
+    public var queuedHeldByJobs: Int? = nil
     /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
     public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
+    /// What the engine is doing before it says anything, as the runner names it — so far only
+    /// `compacting`; nil when none (the server clears it on any engine output). Kept as the word: a
+    /// runner can name a phase this build has never heard of.
+    public var enginePhase: String? = nil
+    /// The handoff this coordinator is handing over through (docs/coordinator-handoff.md), as the
+    /// detail read and `session.updated` carry it: nil when there is none, or it was cancelled.
+    public var coordinatorHandoff: SessionCoordinatorHandoff? = nil
+    /// On a successor coordinator: the handoff it opened with — the note card and the moved waits.
+    public var coordinatorHandoffReceived: SessionCoordinatorHandoffReceived? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -513,6 +643,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
+    /// read; nil for every other session. What puts the run's header over its conversation.
+    public var scheduleRunId: String? = nil
     /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
@@ -562,12 +695,20 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Session.runningSubagents, counted): the parked-but-working state web calls "Running Agent".
     /// Read off the session list; absent from older servers, which reads as none.
     public let runningSubagentCount: Int?
+    /// What the newest of those is doing, as its launch call described it ("Deploy dacad7403 to
+    /// production"): the row says "Agent: <this>…". Nil when none is running, when the call said
+    /// nothing, and from older servers — the row then keeps "Running Agent…".
+    public let runningSubagentTitle: String?
     /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
     /// on its own when a background task reports in or a scheduled wake-up fires; those turns
     /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
     /// while tools and replies stream for minutes. Absent from older servers, which simply keeps
     /// the old parked reading. See `isGenerating`.
     public let engineTurnActive: Bool?
+    /// What the session is doing beyond its status, as the server decides it (`SessionActivity`:
+    /// `TURN`, `BACKGROUND_JOB` or `WAITING`; nil when none, and from an older server). See
+    /// `resumesOnItsOwn`.
+    public let activity: String?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
@@ -584,6 +725,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// §10.1's fifth column with `fixAction` folded in — what the refusal was about, in the ref's
     /// and the runner's own words.
     public let sourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's sentence for a session of a task forked from another session
+    /// (docs/task-fork-from-session-design.md §2.3), finished by the server — "Forked from session
+    /// «title» at abc1234 (includes uncommitted changes)" — and drawn as it is. The detail read's
+    /// only: nil on a list row, on a task that was not forked, and from an older server.
+    public let forkSource: String?
     /// When the server will re-send the message a self-healing failure killed — a spent quota, a
     /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
     /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
@@ -626,6 +772,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var isGenerating: Bool {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
+    }
+    /// Whether something will resume this parked session by itself — a watch it observes, a
+    /// scheduled wake-up, an armed auto-retry (the server's `activity` WAITING). The watch strip
+    /// names a watch in its own words; this is what the header, glyph and row say when they hold
+    /// no watch to name, instead of "Waiting for your reply" (web `resumeWords`).
+    public var resumesOnItsOwn: Bool {
+        effectiveRunState == .awaitingInput && activity == "WAITING"
     }
     /// Whether work this session started is still running under a parked turn — a sub-agent or
     /// workflow the runtime started, or a background process. A port of web's
@@ -706,7 +859,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         queuedReason = try? values.decodeIfPresent(String.self, forKey: .queuedReason)
         queuedActive = try? values.decodeIfPresent(Int.self, forKey: .queuedActive)
         queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
+        queuedHeldByJobs = try? values.decodeIfPresent(Int.self, forKey: .queuedHeldByJobs)
         queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
+        enginePhase = try? values.decodeIfPresent(String.self, forKey: .enginePhase)
+        // A shape this build cannot read is no handoff, rather than a session that fails to decode.
+        coordinatorHandoff = try? values.decodeIfPresent(SessionCoordinatorHandoff.self, forKey: .coordinatorHandoff)
+        coordinatorHandoffReceived = try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
+                                                                 forKey: .coordinatorHandoffReceived)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -726,6 +885,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -744,13 +904,16 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
         runningBgJobCount = try values.decodeIfPresent(Int.self, forKey: .runningBgJobCount)
         runningSubagentCount = try values.decodeIfPresent(Int.self, forKey: .runningSubagentCount)
+        runningSubagentTitle = try values.decodeIfPresent(String.self, forKey: .runningSubagentTitle)
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
+        activity = try values.decodeIfPresent(String.self, forKey: .activity)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
         sourceState = try values.decodeIfPresent(String.self, forKey: .sourceState)
         sourceRefusalCode = try values.decodeIfPresent(String.self, forKey: .sourceRefusalCode)
         sourceRefusalDetail = try? values.decodeIfPresent(SourceRefusalDetail.self,
                                                           forKey: .sourceRefusalDetail)
+        forkSource = try? values.decodeIfPresent(String.self, forKey: .forkSource)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
@@ -783,10 +946,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 runningBgCount: Int? = nil,
                 runningBgJobCount: Int? = nil,
                 runningSubagentCount: Int? = nil,
+                runningSubagentTitle: String? = nil,
                 engineTurnActive: Bool? = nil,
+                activity: String? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 sourceState: String? = nil, sourceRefusalCode: String? = nil,
-                sourceRefusalDetail: SourceRefusalDetail? = nil,
+                sourceRefusalDetail: SourceRefusalDetail? = nil, forkSource: String? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
@@ -862,12 +1027,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.runningBgCount = runningBgCount
         self.runningBgJobCount = runningBgJobCount
         self.runningSubagentCount = runningSubagentCount
+        self.runningSubagentTitle = runningSubagentTitle
         self.engineTurnActive = engineTurnActive
+        self.activity = activity
         self.error = error
         self.endReason = endReason
         self.sourceState = sourceState
         self.sourceRefusalCode = sourceRefusalCode
         self.sourceRefusalDetail = sourceRefusalDetail
+        self.forkSource = forkSource
         self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
@@ -959,6 +1127,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// the conversation that made it reads (`CreatedWorkspaceLine`).
     public var workDir: String? = nil
     public var deletedAt: String? = nil
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+    /// stands. All nil for one that is not.
+    public var repoUrl: String? = nil
+    public var cloneState: String? = nil
+    public var cloneError: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -1068,14 +1241,24 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): the text is the optimizer's prompt, sent exactly as inserted, so
+    /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
+    public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): the text is the reading copy Use inserted, and this is the optimizer's
+    /// agent-language prompt, which Translation releases instead of translating. Nil leaves the key out
+    /// (`PromptOptimizerState.optimizedTranslation`).
+    public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil,
+                optimizedTranslation: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
     }
 }
 
@@ -1128,6 +1311,11 @@ public struct TurnAccepted: Codable, Sendable {
     /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
     /// kind, which is the pre-steer behaviour: queued.
     public let kind: String?
+    /// Where the server put this turn, decided under the Session row lock: `accepted` (the
+    /// executable head, delivered now), `queued` (waiting behind a turn in flight) or `steer`.
+    /// Authoritative over the send's own guess (`ComposerLogic.willQueue`), which reads a status
+    /// that can be stale — web parity: `turnPlacementOf`. Nil from a server that predates it.
+    public let placement: String?
     /// Where the message actually landed, when that is not the session it was sent to.
     ///
     /// A task has one run at a time, and the platform re-dispatches a failed one within seconds —
@@ -1138,6 +1326,10 @@ public struct TurnAccepted: Codable, Sendable {
     /// sends it keeps behaving exactly as it did.
     /// Contract: `docs/session-message-routing-contract.md` §2.1.
     public let routedToSessionId: String?
+    /// Settings › Translation: the message is being translated (state TRANSLATING) before the engine
+    /// gets it. Raw, read by `TurnTranslation.parse`; absent when translation was not involved.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
 }
 
 /// One user turn from GET /sessions/:id/turns?view=active that no transcript event draws yet: the
@@ -1202,8 +1394,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// predates the field.
     public let coordinatorDelivery: JSONValue?
     public var coordinatorDeliveryCard: CoordinatorDelivery? { CoordinatorDelivery.parseCard(coordinatorDelivery) }
-    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
-    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's, or a
+    /// run's opening turn while no runner has taken it — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
     public let taskStart: JSONValue?
     public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
@@ -1269,6 +1461,14 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// Settings › Translation: a held message (TRANSLATING / FAILED, `content` still what the owner
+    /// wrote) or a delivered one. Raw, read by `TurnTranslation.parse`.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
+    /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
+    /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
+    /// from a server that predates the field.
+    public let opening: Bool?
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
@@ -1281,7 +1481,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil) {
+                deliveryReason: String? = nil, translation: JSONValue? = nil, opening: Bool? = nil) {
+        self.translation = translation
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1309,6 +1510,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.runQuestion = runQuestion
         self.runNotice = runNotice
         self.sessionOpening = sessionOpening
+        self.opening = opening
     }
 }
 
@@ -1356,6 +1558,11 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
     /// the transaction that creates it (docs/first-workspace-contract.md §3).
     public let newWorkspace: NewWorkspaceRequest?
+    /// Prompt optimizer (D2): the opening message is the optimizer's prompt, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): the opening message is the reading copy Use inserted; this is its agent-language
+    /// prompt. Nil omits it.
+    public let optimizedTranslation: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1363,7 +1570,10 @@ public struct CreateSessionRequest: Codable, Sendable {
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
-                newWorkspace: NewWorkspaceRequest? = nil) {
+                newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil,
+                optimizedTranslation: String? = nil) {
+        self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -1399,6 +1609,9 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
+    /// `ApprovalTranslation.parse`.
+    public let translation: JSONValue?
 }
 
 /// One background shell from GET /sessions/:id/background — the server's authoritative, complete
@@ -1471,9 +1684,13 @@ public struct ApprovalDecisionRequest: Codable, Sendable {
     /// also starts the new task's run. Nil leaves the key out of the JSON altogether, so every other
     /// answer, that card's own Create it included, is the body it was before the choice existed.
     public let startAfterCreate: Bool?
+    /// Settings › Translation: send the owner's own words untranslated — the Send as written of a
+    /// decision refused 422 TRANSLATION_FAILED. Nil leaves the key out.
+    public let sendAsWritten: Bool?
     public init(behavior: ApprovalBehavior, message: String? = nil,
                 answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil,
-                startAfterCreate: Bool? = nil) {
+                startAfterCreate: Bool? = nil, sendAsWritten: Bool? = nil) {
+        self.sendAsWritten = sendAsWritten
         self.behavior = behavior
         self.message = message
         self.answers = answers
@@ -1681,6 +1898,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// The landing a code session's work fed (§2.9 LS1's derived field), or nil for a conversation
     /// that produced no landing work.
     public let sourceLanding: SessionSourceLanding?
+    /// What the session's engine was given from Orbit and took, in the engine's own words (contract
+    /// §2.7) — what the Agent Tools sheet draws. Nil until its runner sends one, from an older server,
+    /// and for a value this build cannot read, which never costs the rest of the detail.
+    public let agentTools: AgentToolsReport?
 
     /// Whether this detail is a landing session, which is what chooses its renderer.
     public var isLanding: Bool { sessionKind == "LANDING" }
@@ -1740,6 +1961,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
         sourceLanding = try? values.decodeIfPresent(SessionSourceLanding.self,
                                                     forKey: .sourceLanding)
+        agentTools = try? values.decodeIfPresent(AgentToolsReport.self, forKey: .agentTools)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1763,7 +1985,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
                 retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil,
                 sessionKind: String? = nil, landing: SessionLandingView? = nil,
-                sourceLanding: SessionSourceLanding? = nil) {
+                sourceLanding: SessionSourceLanding? = nil, agentTools: AgentToolsReport? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1803,6 +2025,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.sessionKind = sessionKind
         self.landing = landing
         self.sourceLanding = sourceLanding
+        self.agentTools = agentTools
     }
 }
 
@@ -1843,11 +2066,19 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): a revive whose words are the optimizer's prompt, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
+    /// Prompt optimizer (D2): a revive whose words are the reading copy Use inserted; this is its
+    /// agent-language prompt. Nil omits it.
+    public let optimizedTranslation: String?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
-                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil) {
+                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                skipTranslation: Bool? = nil, optimizedTranslation: String? = nil) {
+        self.skipTranslation = skipTranslation
+        self.optimizedTranslation = optimizedTranslation
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -2015,20 +2246,4 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     /// The match count to display. An older server sends no total, and a page with nothing behind
     /// it is its own total either way.
     public var effectiveTotal: Int { total ?? hits.count }
-}
-
-/// What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it
-/// wrote none — the answer of `POST /sessions/:id/recap` (`APIClient.refreshRecap`).
-public struct RecapOutcome: Decodable, Equatable, Sendable {
-    public let written: Bool
-    /// The recap the pass wrote; nil when it wrote none.
-    public let recapText: String?
-    /// Why it wrote none (`RecapCard.notice(for:)`); nil when it wrote.
-    public let reason: String?
-
-    public init(written: Bool, recapText: String? = nil, reason: String? = nil) {
-        self.written = written
-        self.recapText = recapText
-        self.reason = reason
-    }
 }

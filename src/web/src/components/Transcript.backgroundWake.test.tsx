@@ -13,6 +13,9 @@ import {
   ZH_SCHEDULED,
   ZH_TWO_JOBS,
   ZH_WAKE_WITH_COORDINATOR_CONTEXT,
+  EN_STALL,
+  EN_STALL_SILENT,
+  EN_TWO_STALLS,
 } from '../lib/backgroundWake.fixtures';
 import type { Runner } from './TasksSidePanel';
 import type { RunEvent } from './Transcript';
@@ -138,7 +141,7 @@ describe('a wake turn in the transcript', () => {
     expect(line().getAttribute('data-seq')).toBe('7');
     expect(line().className).toContain('is-ok');
     // No anchor for the sticky bar: it keeps naming the question the answer around this belongs to.
-    expect(container.querySelector('[data-sticky-label]'), 'the line is no sticky anchor').toBeNull();
+    expect(container.querySelector('[data-orbit-round]'), 'the line is no sticky anchor').toBeNull();
 
     // The line: what happened, which job, how it came out, and when.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
@@ -305,7 +308,7 @@ describe('a wake turn in the transcript', () => {
     ]);
   });
 
-  it('takes only the wake out of a note that carried more, and keeps the rest its own entry in the fold', async () => {
+  it('takes only the wake out of a note that carried more, and draws no entry for the coordinator role left over', async () => {
     await mount([wakeEvent(ZH_WAKE_WITH_COORDINATOR_CONTEXT)]);
 
     // The line is the wake alone — the coordinator's standing role is not part of what woke anybody.
@@ -314,23 +317,10 @@ describe('a wake turn in the transcript', () => {
     expect(raw.textContent?.startsWith('<background-job-wake>')).toBe(true);
     expect(raw.textContent).not.toContain('orbit_project_coordinator_context');
 
-    // The rest is still an entry of its own, named for what it is — in the line's fold, since it is
-    // the control plane's too and this turn has no words of anybody's to sit under.
-    const toggle = [...container.querySelectorAll('button')].find((b) =>
-      b.textContent?.startsWith('⊕ Orbit attached:'),
-    );
-    expect(toggle, `no entry for the rest of the note:\n${container.innerHTML}`).toBeTruthy();
-    expect(toggle!.textContent).toBe('⊕ Orbit attached: project coordinator context');
-    expect(fold().contains(toggle!), 'the entry was left outside the fold').toBe(true);
+    // What is left is the coordinator's routine block, which nobody attached: no entry for it.
+    expect(container.textContent).not.toContain('Orbit attached');
     // And no bubble: an empty one here reads as a message the person sent without words.
     expect(container.querySelector('.chat-user')).toBeNull();
-
-    await act(async () => {
-      toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    const opened = toggle!.parentElement!.querySelector('pre')!;
-    expect(opened.textContent?.startsWith('<orbit_project_coordinator_context>')).toBe(true);
-    expect(opened.textContent).not.toContain('bgj_');
   });
 
   // The shape that raised this: 16 of this deployment's `<background-jobs>` notes ride a turn whose
@@ -349,13 +339,76 @@ describe('a wake turn in the transcript', () => {
     await mount([wakeEvent(`${ZH_JOB_DONE}\n\n${inventory}`)]);
 
     expect(container.querySelector('.chat-user')).toBeNull();
-    const toggle = [...fold().querySelectorAll('button')].find((b) =>
-      b.textContent?.startsWith('⊕ Orbit attached:'),
-    );
-    expect(toggle?.textContent).toBe('⊕ Orbit attached: background jobs');
-    expect(toggle?.getAttribute('aria-label')).toBe('⊕ Orbit attached: background jobs · 1 ended, exit 0');
+    // The inventory is Orbit's routine and names nothing, so no entry is drawn for it (owner, 2026-11-14).
+    expect(container.textContent).not.toContain('Orbit attached');
     // The wake itself is still the line's own subject, not one of the entry's rows.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
+  });
+
+  // A quiet job's wake came in a block of its own that no client read, so it drew as an empty bubble
+  // with "⊕ Orbit attached: context" under it, opening onto the words written for the agent
+  // (docs/mocks/background-job-stall-line).
+  it('draws a job gone quiet as the same line: still running, quiet for how long, its last output in the fold', async () => {
+    await mount([wakeEvent(EN_STALL)]);
+
+    expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(line().className).toContain('is-ok');
+    // Quiet is no failure: the same grey clock as a job's new output.
+    expect(row().querySelector('.bgwake-mark')?.classList.contains('is-pending')).toBe(true);
+    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job went quiet');
+    expect(row().querySelector('.bgwake-name')?.textContent).toBe('Nightly index rebuild (6 workers)');
+    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 15m');
+
+    const job = fold().querySelector('.bgwake-job')!;
+    expect(job.querySelector('.bgwake-job-cmd')?.textContent).toBe('./scripts/rebuild-index.sh --workers 6');
+    const meta = [...job.querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent);
+    expect(meta[0]).toBe('bgj_28a9b17fe75c · 21 B of output');
+    expect(meta[1]).toMatch(/^Still running · 15m in · last wrote .+$/);
+    // Its last output is in the fold, not under the line as a failure's is.
+    expect(job.querySelector('.bgwake-output-full')?.textContent).toBe('entries=32 workers=6');
+    expect(line().querySelector('.bgwake-tail')).toBeNull();
+    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(EN_STALL);
+
+    const shown = line().cloneNode(true) as HTMLElement;
+    shown.querySelector('.bgwake-body')!.remove();
+    expect(shown.textContent).not.toContain('mcp__orbit__bg_kill');
+    expect(shown.textContent).not.toContain('bgj_');
+  });
+
+  it('says a quiet job that never wrote anything has written nothing yet, with no output to show', async () => {
+    await mount([wakeEvent(EN_STALL_SILENT)]);
+
+    expect(row().querySelector('.bgwake-name')?.textContent).toBe('pg_dump orbit > /backup/orbit.sql');
+    expect(row().querySelector('.bgwake-name')?.classList.contains('is-command')).toBe(true);
+    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 30m');
+    expect([...fold().querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent)).toEqual([
+      'bgj_5c03e1aa90d2 · no output',
+      'Still running · 30m in · has written nothing yet',
+    ]);
+    expect(fold().querySelector('.bgwake-output')).toBeNull();
+  });
+
+  it('counts two quiet jobs on the line and says how long each has been quiet in the fold', async () => {
+    await mount([wakeEvent(EN_TWO_STALLS)]);
+
+    expect(row().querySelector('.bgwake-title')?.textContent).toBe('2 background jobs went quiet');
+    expect(row().querySelector('.bgwake-name')).toBeNull();
+    expect(row().querySelector('.bgwake-status')).toBeNull();
+    expect([...fold().querySelectorAll('.bgwake-job-exit')].map((el) => el.textContent)).toEqual([
+      'quiet 15m',
+      'quiet 10m',
+    ]);
+  });
+
+  // Owner rule 2026-11-16: such a turn is the From Orbit line in the agent's stream (OrbitEventLine).
+  it('draws a turn nobody typed, carrying only a block this client cannot read, as the From Orbit line — no empty bubble', async () => {
+    const unknown = '<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>';
+    await mount([wakeEvent(unknown)]);
+
+    expect(container.querySelector('.chat-user'), 'no empty bubble').toBeNull();
+    expect(container.querySelector('.orbitwake .bgwake-title')?.textContent).toBe('From Orbit');
+    expect(container.querySelector('.orbitwake .bgwake-name')?.textContent).toBe('context');
   });
 
   it('keeps the line, and the words behind a native disclosure, in an exported transcript', () => {

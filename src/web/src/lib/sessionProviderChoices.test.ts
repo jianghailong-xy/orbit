@@ -412,8 +412,7 @@ describe('the runner’s Codex accounts, on Codex’s own sign-in', () => {
     ).toEqual([
       { id: 'default', label: 'Default', quota: '5h 100%', nearLimit: true },
       { id: '3fa91c2e', label: 'Work', quota: 'Weekly 0%' },
-      // Unnamed, unread, and signed out: it is listed, and says why it can't take a session.
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+      // Signed out on this runner, c0ffee42 is not one it can run: no row.
     ]);
     expect(accountsOf(codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', auth: 'yes' }]), CLAUDE)).toBeUndefined();
   });
@@ -520,7 +519,6 @@ describe('the runner’s Antigravity (Google) accounts, on Antigravity’s own s
     expect(row?.accounts).toEqual([
       { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
     // The Provider menu may still say how the engine signs in.
     expect(row?.labelDetail).toBe('Google account');
@@ -580,7 +578,6 @@ describe('the runner’s Kimi Code accounts, on Kimi Code’s own sign-in', () =
       // is never one of them.
       { id: 'default', label: 'Default', quota: 'Monthly 41%' },
       { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
   });
 

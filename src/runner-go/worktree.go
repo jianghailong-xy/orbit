@@ -473,7 +473,7 @@ func baseRefName(sessionID string) string {
 // it (persisted must be an ancestor of the candidate), never loosened — a branch forked off a
 // non-HEAD branch (e.g. develop while the root sits on main) keeps its tighter recorded fork.
 // And it is never tightened all the way TO the branch tip: a fully-merged branch keeps its old
-// fork, so the bar still shows the session's cumulative work and branchMergedInto's ≥1-commit
+// fork (or, when it was rebased before landing, that rebase's onto point), so the bar still shows the session's cumulative work and branchMergedInto's ≥1-commit
 // guard keeps reading "✓ In main" (tip==base would read as a session that never worked). The
 // moment new work lands past the merge, the candidate falls behind the tip again and the base
 // snaps to it — diffs then show only the new work. Healed values are re-persisted to the base
@@ -507,7 +507,21 @@ func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted 
 		}
 	}
 	if valid {
-		if persisted == mb || mb == tip {
+		if mb == tip {
+			// Fully landed. Keep the old fork — unless the branch was rebased before it landed: then
+			// the old fork also spans the target commits that rebase brought in, and the bar counts
+			// them as this session's work. The last rebase's onto point is the tighter fork, as long
+			// as it still sits strictly between the old fork and the tip (≥1 commit stays ahead).
+			if onto := ops.lastRebaseOnto(repoRoot, branch); onto != "" && onto != persisted && onto != tip &&
+				ops.isAncestor(repoRoot, persisted, onto) && ops.isAncestor(repoRoot, onto, tip) {
+				if ops.persistBaseRef {
+					_, _ = ops.run(repoRoot, "update-ref", baseRefName(sessionID), onto)
+				}
+				return onto
+			}
+			return persisted
+		}
+		if persisted == mb {
 			return persisted
 		}
 		// Tighten a slack fork (rebase moved it forward); keep a fork the candidate can't see
@@ -524,6 +538,31 @@ func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted 
 		_, _ = ops.run(repoRoot, "update-ref", baseRefName(sessionID), mb)
 	}
 	return mb
+}
+
+// lastRebaseOnto is the commit the branch's newest rebase put it onto, from the branch's reflog
+// ("rebase (finish): refs/heads/<branch> onto <sha>"), or "" when its newest rebase can't be read.
+func (ops worktreeGitOps) lastRebaseOnto(repoRoot, branch string) string {
+	out, err := ops.run(repoRoot, "reflog", "show", "--format=%gs", "-n", "50", "refs/heads/"+branch, "--")
+	if err != nil || ops.cancelled() {
+		return ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "rebase (finish): ") {
+			continue
+		}
+		if i := strings.LastIndex(line, " onto "); i >= 0 {
+			return strings.TrimSpace(line[i+len(" onto "):])
+		}
+		return ""
+	}
+	return ""
+}
+
+// isAncestor reports whether a is an ancestor of (or equal to) b.
+func (ops worktreeGitOps) isAncestor(repoRoot, a, b string) bool {
+	_, err := ops.run(repoRoot, "merge-base", "--is-ancestor", a, b)
+	return err == nil && !ops.cancelled()
 }
 
 // freshenBaseSha re-validates wt.BaseSha before a diff is computed: a branch rebased mid-session
@@ -664,6 +703,20 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		return execDir
 	}
 
+	if src.Kind == sourceKindSessionFork {
+		// A fork's snapshot exists only in the forking session's repository on its machine (SR55): the
+		// authority is this machine's checkout, and nothing is fetched. Any other authority is not one
+		// this build can honour for a snapshot, and guessing would start the task from something else.
+		if src.RefAuthority != refAuthorityRunnerLocal {
+			return refuseSourceWorktree(job, sourceRefusalAuthorityUnreachable,
+				fmt.Sprintf("a forked run's snapshot is %s-authoritative, and only a RUNNER_LOCAL snapshot can be checked out", src.RefAuthority))
+		}
+		if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+				fmt.Sprintf("the session snapshot %s this task was forked from is not in the repository at %s: "+
+					"the task must run in a workspace whose workDir is the forking session's repository", pin, repoRoot))
+		}
+	}
 	if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
 		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
 			fmt.Sprintf("pinned commit %s is not in the repository at %s", pin, repoRoot))
@@ -732,7 +785,8 @@ func refuseSourceWorktree(job *ClaimedSession, code, reason string) string {
 // claude should run in, creating baseDir first when it isn't there yet. When job has no
 // branch, baseDir isn't a git repo, or the repo has no commits, it returns baseDir
 // unchanged (shared-dir fallback) and records why on job.IsolationStatus. Otherwise it
-// sets job.WT and returns the checkout's exec dir. A session whose SOURCE is resolved takes
+// sets job.WT and returns the checkout's exec dir, or, when that checkout cannot be made, ""
+// with job.SourceRefusal set: it never runs an isolated session in the shared checkout. A session whose SOURCE is resolved takes
 // setupSourceWorktree instead, and none of those fallbacks.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
 	return setupCheckout(job, baseDir, false)
@@ -778,7 +832,13 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 			logln(fmt.Sprintf("session %s — created missing workDir %q", job.SessionID, baseDir))
 		}
 	}
+	if job.Branch == "" && job.CodelessCheckout && isGitRepo(baseDir) {
+		return setupCodelessCheckout(job, baseDir)
+	}
 	if job.Branch == "" {
+		if job.WorkSubdir != "" {
+			return workSubdirExecDir(job, baseDir)
+		}
 		job.IsolationStatus = isoShared
 		return baseDir
 	}
@@ -818,9 +878,10 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	// made below.
 	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
 		if err := retireCheckout(job.SessionID, wtPath); err != nil {
-			job.IsolationStatus = isoSharedNoGit
-			logln(fmt.Sprintf("session %s — checkout %s is not this session's and could not be retired (%v); running shared", job.SessionID, wtPath, err))
-			return baseDir
+			// Never the shared checkout instead: an isolated session writing there is writing in
+			// everybody's main checkout (docs/main-checkout-git-contract.md). The run fails, saying why.
+			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+				fmt.Sprintf("the checkout at %s is not this session's and could not be retired: %v", wtPath, err))
 		}
 	}
 
@@ -872,7 +933,7 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 			// too full to hold it, or the branch checked out somewhere else, is why it did not come back,
 			// and running in the shared directory instead has the agent writing in somebody else's checkout.
 			// A session with no base ref has nothing to restore: a run taking over the branch of the run
-			// before it, while that run's checkout still holds it, takes the fallback below.
+			// before it, while that run's checkout still holds it, is refused below like any other.
 			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("the session's checkout could not be restored from %s: %v", job.Branch, err))
 		}
 		_, _ = git(repoRoot, "update-ref", "-d", absentRefName(job.SessionID))
@@ -882,9 +943,10 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 	}
 	if err != nil {
 		_, _ = git(repoRoot, "update-ref", "-d", baseRefName(job.SessionID))
-		job.IsolationStatus = isoSharedNoGit
-		logln(fmt.Sprintf("session %s — `git worktree add` failed (%v); running shared", job.SessionID, err))
-		return baseDir
+		// A session that asked for isolation and cannot get its checkout does not run, rather than
+		// run in the shared checkout: a disk too full, a path in the way, or the branch held by
+		// another run's checkout all end the run with the reason.
+		return refuseSourceWorktree(job, sourceRefusalWorktreeRequired, fmt.Sprintf("`git worktree add` failed: %v", err))
 	}
 	job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 	job.IsolationStatus = isoWorktree
@@ -934,6 +996,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
+	// Nor is what a SubAgent stopped with the session was writing (subagent.go holdSubagentPaths).
+	unstageSubagentPaths(wt.Path, wt.Session)
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
 		var msg string
@@ -1020,11 +1084,38 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 	// Candidate merge targets for the ended session's "Merge to…" dropdown.
 	req.MergeTargets = mergeTargetsForWT(wt)
 	// The tip the work ends on, the finalize commit included: what the control plane freezes as a
-	// finished task's delivered commit (contract §10.5 O-L4). Not for a park checkpoint, which the
-	// next resume undoes — the tip the last live report gave stands for that session.
+	// finished task's delivered commit (contract §10.5 O-L4). A park checkpoint is not part of it —
+	// the next resume undoes it — so a cancelled run reports the commit under its checkpoint. It is
+	// still reported: a run the control plane ends (a task its acceptance made DONE ends as
+	// `task_done`, which the runner sees as a cancel) has no later report, and the last live one
+	// may predate the run's own commits.
 	if status != stCancelled {
 		req.BranchSha = effectiveBranchSha(wt)
+	} else {
+		req.BranchSha = tipUnderParkCheckpoint(wt)
 	}
+}
+
+// tipUnderParkCheckpoint is the tip of the effective branch with this session's park checkpoint
+// left out: its parent when the tip is that checkpoint, else the tip. Empty when either cannot be
+// resolved, which leaves the tip the last live report gave.
+func tipUnderParkCheckpoint(wt *Worktree) string {
+	tip := effectiveBranchSha(wt)
+	if tip == "" {
+		return ""
+	}
+	msg, err := git(wt.RepoDir, "log", "-1", "--format=%B", tip)
+	if err != nil {
+		return ""
+	}
+	if !strings.Contains(msg, parkCheckpointTrailer+": "+wt.Session) {
+		return tip
+	}
+	parent, err := git(wt.RepoDir, "rev-parse", "--verify", "--quiet", tip+"^")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parent)
 }
 
 // uncommitParkCheckpoint undoes a park checkpoint (see parkCheckpointTrailer) at the start of a
@@ -1554,6 +1645,9 @@ type mergeOutcome struct {
 func mergeToMain(req MergeCommand) mergeOutcome {
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	// And the checkout's own lock, which the main checkout actions (move, commit, push, Save & clean)
+	// take: a merge fast-forwards this very tree (main_checkout_lock.go).
+	defer lockMainCheckout(req.WorkDir)()
 	if req.RecoveryAction != "" {
 		return recoverMerge(req)
 	}

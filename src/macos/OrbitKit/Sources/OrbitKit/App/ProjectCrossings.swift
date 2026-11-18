@@ -39,10 +39,14 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         public let title: String
         /// `OPEN`, `DONE` or `CANCELLED`.
         public let status: String?
+        /// The end's live (not trashed) coordinator conversation, which draws the crossing's
+        /// decision card; nil when it has none, or from a server that does not send it.
+        public let coordinatorSessionId: String?
 
-        public init(title: String, status: String? = nil) {
+        public init(title: String, status: String? = nil, coordinatorSessionId: String? = nil) {
             self.title = title
             self.status = status
+            self.coordinatorSessionId = coordinatorSessionId
         }
     }
 
@@ -99,11 +103,13 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
     /// `PENDING`, `APPROVED`, `DENIED` or `APPLIED`.
     public let state: String
     /// What the crossing is about: the plan's title, or the task's as it was when it was asked.
-    public let title: String
-    public let reason: String?
+    public var title: String
+    public var reason: String?
     public let requestedAt: String
     public let decidedAt: String?
     public let expiresAt: String?
+    /// `title` and `reason` in the owner's language (Settings › Translation); nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public init(id: String, publicId: String? = nil, fromProjectId: String,
                 fromProjectPublicId: String? = nil, toProjectId: String?, toProjectPublicId: String? = nil,
@@ -112,7 +118,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
                 subjectTask: SubjectTask? = nil, requestedCriterion: Criterion? = nil,
                 withdrawnCriterion: Criterion? = nil, crossingKey: String, state: String, title: String,
                 reason: String? = nil, requestedAt: String, decidedAt: String? = nil,
-                expiresAt: String? = nil) {
+                expiresAt: String? = nil, translation: OwnerCardTranslation? = nil) {
         self.id = id
         self.publicId = publicId
         self.fromProjectId = fromProjectId
@@ -134,13 +140,14 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         self.requestedAt = requestedAt
         self.decidedAt = decidedAt
         self.expiresAt = expiresAt
+        self.translation = translation
     }
 
     enum CodingKeys: String, CodingKey {
         case id, publicId, fromProjectId, fromProjectPublicId, toProjectId, toProjectPublicId
         case fromProject, toProject, kind, subjectTaskId, subjectTaskPublicId, subjectTask
         case requestedCriterion, withdrawnCriterion, crossingKey, state, title, reason
-        case requestedAt, decidedAt, expiresAt
+        case requestedAt, decidedAt, expiresAt, translation
     }
 
     /// What a row cannot be answered without is required: which row, its source, what it is and
@@ -168,6 +175,7 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         state = try c.decode(String.self, forKey: .state)
         title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
         reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+        translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
         requestedAt = (try? c.decodeIfPresent(String.self, forKey: .requestedAt)) ?? ""
         decidedAt = try? c.decodeIfPresent(String.self, forKey: .decidedAt)
         expiresAt = try? c.decodeIfPresent(String.self, forKey: .expiresAt)
@@ -289,6 +297,21 @@ public enum ProjectCrossings {
         let pending = rows.filter { isAnswerable($0.state) }.sorted { $0.requestedAt < $1.requestedAt }
         let answered = rows.filter { !isAnswerable($0.state) }.sorted { $0.requestedAt > $1.requestedAt }
         return pending + answered
+    }
+
+    /// A crossing a coordinator conversation answers as a decision card is not listed on either
+    /// end's project page; only what no conversation can answer is. A move into a project is
+    /// answered in the target's conversation; a move out to no project is answered in the SOURCE's.
+    /// A row from a server that does not say is listed — better a duplicate than a request nowhere
+    /// to answer.
+    public static func isShownOnProjectPage(_ row: ProjectCrossing) -> Bool {
+        if row.toProjectId == nil { return row.fromProject?.coordinatorSessionId == nil }
+        return row.toProject?.coordinatorSessionId == nil
+    }
+
+    /// The rows the project page lists.
+    public static func shownOnProjectPage(_ rows: [ProjectCrossing]) -> [ProjectCrossing] {
+        rows.filter(isShownOnProjectPage)
     }
 
     /// How many of these a person can still answer.

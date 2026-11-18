@@ -1,6 +1,8 @@
+import { SCHEDULE_COPY, type OwnerCardTranslation } from '@orbit/shared';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { openProjectsQuery, ownerRequestsQuery } from './queries';
+import { terminalRequestsQuery } from './terminals';
 import type { SidebarProject } from './projectAttention';
 import { formatSpan, sameResourceId } from './watches';
 
@@ -10,7 +12,12 @@ import { formatSpan, sameResourceId } from './watches';
  * waiting, and the one thing the server does not hold — a reminder for later.
  */
 
-export type OwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM';
+export type OwnerRequestKind =
+  | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
+  // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
+  | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN';
+/** The kinds a session files, answered on the request's own doors. */
+export type AgentRequestKind = Exclude<OwnerRequestKind, `SCHEDULE_${string}`>;
 export type OwnerRequestState = 'PENDING' | 'DONE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
 export type OwnerRequestListFilter = 'open' | 'done' | 'declined' | 'all';
 
@@ -71,6 +78,14 @@ export interface OwnerRequest {
   secretScope?: 'TASK' | 'SESSION';
   secretGrant: OwnerRequestSecretGrant | null;
   verifyHint: string | null;
+  /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
+  repoUrlNorm?: string | null;
+  workspaceId?: string | null;
+  /** SCHEDULE_*: the schedule, run, approval card and change request the item is about. */
+  scheduleId?: string | null;
+  scheduleRunId?: string | null;
+  approvalId?: string | null;
+  scheduleChangeRequestId?: string | null;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -78,9 +93,12 @@ export interface OwnerRequest {
   resolvedByUserId: string | null;
   resolvedBySessionId: string | null;
   resolutionNote: string | null;
-  answer: { option?: number; text?: string } | null;
+  /** DECISION: the option and text; WIKI_CREATE once DONE: the wiki made. */
+  answer: { option?: number; text?: string; spaceId?: string; name?: string } | null;
   /** The client that ended it, from `X-Orbit-Client`. Not served yet: without it the summary names no device. */
   resolvedClient?: string | null;
+  /** The agent-written fields in the owner's language (Settings › Translation); null or absent until translated. */
+  translation?: OwnerCardTranslation | null;
   createdAt: string;
 }
 
@@ -91,6 +109,11 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   SECRET: 'SECRET',
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
+  WIKI_CREATE: 'WIKI',
+  SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
+  SCHEDULE_WIDEN: SCHEDULE_COPY.waiting.kinds.schedule,
 };
 
 const DEVICES: Readonly<Record<string, string>> = {
@@ -153,6 +176,22 @@ export function waitingCount(
 ): number {
   const awake = requests.filter((request) => !((snoozes[request.id] ?? 0) > now)).length;
   return awake + projects.reduce((sum, project) => sum + openQuestionCount(project), 0);
+}
+
+/* ── Chat about this ───────────────────────────────────────────────────────────────────────────────
+   A request talked about rather than answered: the next send is an ordinary turn to the session that
+   asked, with the request named in front of the typed words. Nothing is resolved — the card stays, and
+   its own buttons stay the ways out. OrbitKit's `OwnerRequests` and Android's say the same words. */
+
+/** What the armed composer's bar says, ahead of the request's title. */
+export const OWNER_REQUEST_CHAT_PREFIX = 'About your request: ';
+/** What the empty composer asks for while armed. */
+export const OWNER_REQUEST_CHAT_PLACEHOLDER = 'Ask about this request…';
+
+/** What rides in front of the owner's words: which request, and that it is still open. */
+export function ownerRequestChatContext(request: Pick<OwnerRequest, 'id' | 'title'>): string {
+  return `The owner pressed Chat about this on your request “${request.title}” (owner request ${request.id}). `
+    + 'It is still open: not marked done and not declined. Their message:';
 }
 
 /* ── How a resolution turn reads ──────────────────────────────────────────────────────────────── */
@@ -256,9 +295,11 @@ export function useSnoozes(): Readonly<Record<string, number>> {
 export function useWaitingOnYouCount(): number {
   const requests = useQuery(ownerRequestsQuery('open'));
   const projects = useQuery(openProjectsQuery());
+  const terminals = useQuery(terminalRequestsQuery());
   const held = useSnoozes();
   return useMemo(
-    () => waitingCount(requests.data?.requests ?? [], projects.data ?? [], held, Date.now()),
-    [requests.data, projects.data, held],
+    () => waitingCount(requests.data?.requests ?? [], projects.data ?? [], held, Date.now())
+      + (terminals.data?.requests?.length ?? 0),
+    [requests.data, projects.data, terminals.data, held],
   );
 }

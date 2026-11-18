@@ -407,6 +407,19 @@ describe('W7: a workspace changed re-reads the workspace list', () => {
     expect(reads(exactly('/workspaces'), from), 'a renamed workspace kept its old name').toBe(1);
     expect(reads(isOpenList, from), 'the rows that show its name were not read').toBe(1);
   });
+
+  // A heartbeat moved a workspace's checkout (a commit, push, move or clean-up): the Main checkout bar draws the
+  // workspace list's repoHealth, so that list is read — and only that list, since these come with every change.
+  it('reads only /workspaces when the event says the checkout health moved', async () => {
+    await mount(<OnScreen queries={[workspacesQuery(), OPEN_LIST]} />);
+    await open();
+    const from = mark();
+
+    await publish('agent.changed', { agentId: 'W1', affectsTaskRows: false, repoHealth: true });
+    await advance(1_000);
+    expect(reads(exactly('/workspaces'), from), 'the Main checkout bar kept its old counts').toBe(1);
+    expect(reads(isOpenList, from), 'a checkout change read the session lists').toBe(0);
+  });
 });
 
 describe('W6: a reopened stream reads what is on screen once, a few at a time', () => {

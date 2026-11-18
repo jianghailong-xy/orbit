@@ -6,6 +6,7 @@ import { MODEL_UNAVAILABLE } from '@orbit/shared';
 import {
   assertManagedFirstSessionRuntime,
   managedFirstSessionKey,
+  managedFirstSessionKeyOf,
   managedFirstSessionProvider,
   managedKeySupply,
   managedRuntimeReady,
@@ -52,14 +53,24 @@ test('Antigravity counts only on a runner that advertises it to the claim', () =
   assert.deepEqual(managedRuntimeSupply({ defaultRemoved: [], engines, capabilities: ['provider:antigravity'] }), ['antigravity']);
 });
 
-test('OpenCode and DeepSeek Harness are not supply in this version, whatever is reported', () => {
+test('OpenCode and DeepSeek Harness, with no sign-in of their own, count only for a session bringing its own credential', () => {
   const runner = {
     defaultRemoved: [],
     engines: [engine('opencode'), engine('dsh', { dsh: { versionCompatible: true, credentialPresent: true } })],
     capabilities: ['provider:opencode', 'provider:dsh'],
   };
   assert.deepEqual(managedRuntimeSupply(runner), []);
-  assert.equal(managedRuntimeReady(runner, 'opencode', { bringsOwnCredentials: true }), false);
+  for (const runtime of ['opencode', 'dsh']) {
+    assert.equal(managedRuntimeReady(runner, runtime), false, runtime);
+    assert.equal(managedRuntimeReady(runner, runtime, { bringsOwnCredentials: true }), true, runtime);
+    assert.equal(managedRuntimeReady({ ...runner, capabilities: [] }, runtime, { bringsOwnCredentials: true }), false, `${runtime} not advertised`);
+  }
+});
+
+test('Cursor CLI signed in is supply, on a runner that advertises it', () => {
+  const engines = [engine('cursor')];
+  assert.deepEqual(managedRuntimeSupply({ defaultRemoved: [], engines, capabilities: [] }), []);
+  assert.deepEqual(managedRuntimeSupply({ defaultRemoved: [], engines, capabilities: ['provider:cursor'] }), ['cursor']);
 });
 
 test("a session bringing its own credential needs the CLI installed, not the CLI's sign-in", () => {
@@ -73,7 +84,7 @@ test('a first session with no runtime ready is refused, to be signed in from the
   const prisma = { session: { findFirst: async () => null } } as never;
   await assert.rejects(
     assertManagedFirstSessionRuntime(prisma, {
-      workspaceId: 'w',
+      runnerId: 'r',
       runtime: 'claude',
       bringsOwnCredentials: false,
       runner: { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] },
@@ -104,14 +115,22 @@ const key = (slug: string, change: Record<string, unknown> = {}) => ({
   ...change,
 });
 
-/** The owner's keys as the database answers the query, and the query it was asked. */
-function keysOf(rows: unknown[]) {
+/** The owner's keys as the database answers the query, and the query it was asked; with `runner`, the
+ *  owner's managed runner row as its last heartbeat left it (absent: no mapping). */
+function keysOf(rows: unknown[], runner?: unknown) {
   const asked: unknown[] = [];
   return {
     asked,
-    prisma: { modelProvider: { findMany: async (args: unknown) => (asked.push(args), rows) } } as never,
+    prisma: {
+      modelProvider: { findMany: async (args: unknown) => (asked.push(args), rows) },
+      managedRunner: { findUnique: async () => (runner === undefined ? null : { runnerId: 'r' }) },
+      runner: { findUnique: async () => runner ?? null },
+    } as never,
   };
 }
+
+/** A Kimi (Moonshot) key, which runs on Kimi Code (or OpenCode). */
+const moonshot = () => key('moonshot', { runtime: 'kimi', baseUrl: 'https://api.moonshot.ai/v1', presetSlug: 'moonshot' });
 
 test("an owner's key is supply when the runner has the key's engine installed, signed in or not", async () => {
   const { prisma, asked } = keysOf([key('deepseek')]);
@@ -151,9 +170,9 @@ test('the owner\'s order decides between keys; a key named like a built-in runti
   assert.equal(await managedKeySupply(keysOf([key('kimi')]).prisma, 'o', runner), null);
 });
 
-test('a key no managed runtime runs is no supply: a Cursor key, a protocol no engine speaks', async () => {
+test('a Cursor key is supply where Cursor CLI is installed; a protocol no engine speaks is not', async () => {
   const runner = { defaultRemoved: [], engines: [engine('claude', { auth: 'no' }), engine('cursor', { auth: 'no' })], capabilities: ['provider:cursor'] };
-  assert.equal(await managedKeySupply(keysOf([key('cursor-key', { runtime: 'cursor', baseUrl: 'https://api.cursor.com', presetSlug: 'cursor' })]).prisma, 'o', runner), null);
+  assert.equal(await managedKeySupply(keysOf([key('cursor-key', { runtime: 'cursor', baseUrl: 'https://api.cursor.com', presetSlug: 'cursor' })]).prisma, 'o', runner), 'cursor-key');
   assert.equal(await managedKeySupply(keysOf([key('odd', { runtime: 'not-a-protocol', presetSlug: null })]).prisma, 'o', runner), null);
 });
 
@@ -161,7 +180,7 @@ test('a key no managed runtime runs is no supply: a Cursor key, a protocol no en
 // been heard from yet — a first session on one of the owner's keys is queued for it, not refused.
 
 test('the key a first session waits on before the runner was ready is the first READY would consider', async () => {
-  const { prisma, asked } = keysOf([key('kimi'), key('cursor-key', { runtime: 'cursor', baseUrl: 'https://api.cursor.com', presetSlug: 'cursor' }), key('deepseek'), key('later')]);
+  const { prisma, asked } = keysOf([key('kimi'), key('odd', { runtime: 'not-a-protocol', presetSlug: null }), key('deepseek'), key('later')]);
   assert.equal(await managedFirstSessionKey(prisma, 'owner-1'), 'deepseek');
   assert.deepEqual(asked, [{
     where: { ownerId: 'owner-1', enabled: true },
@@ -175,17 +194,20 @@ test('a first session on its own credential is queued for a runner that has repo
   const prisma = { session: { findFirst: async () => null } } as never;
   const unreported = { defaultRemoved: [], engines: null, capabilities: [] };
   // The owner's model key on Claude Code: queued, and run once the runner is READY.
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: unreported });
-  await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'codex', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'codex', bringsOwnCredentials: true, runner: unreported });
   const refused = (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE;
   // Claude Code's own sign-in: nobody could have signed it in on a runner that has never come up.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: false, runner: unreported }), refused);
-  // A runtime that is no supply waits for nothing.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'opencode', bringsOwnCredentials: true, runner: unreported }), refused);
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: false, runner: unreported }), refused);
+  // Every engine of the managed image is queued for on a key: OpenCode and DeepSeek Harness included.
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'opencode', bringsOwnCredentials: true, runner: unreported });
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'dsh', bringsOwnCredentials: true, runner: unreported });
+  // A runtime the image does not have waits for nothing.
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'gemini-cli', bringsOwnCredentials: true, runner: unreported }), refused);
   // Once the runner has reported, what it said decides, as before: Claude Code not installed, the key's session is refused.
-  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [] } }), refused);
+  await assert.rejects(assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [] } }), refused);
   await assert.rejects(
-    assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [engine('claude', { installed: false })] } }),
+    assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'claude', bringsOwnCredentials: true, runner: { defaultRemoved: [], engines: [engine('claude', { installed: false })] } }),
     refused,
   );
 });
@@ -203,8 +225,10 @@ test('the first session the status names is the one the create takes: READY\'s r
   // Before READY, with no key of the owner's own: nothing to start on.
   assert.equal(managedFirstSessionProvider(null, null, { defaultRemoved: [], engines: null }), null);
   assert.equal(managedFirstSessionProvider(null, null, { defaultRemoved: [], engines: [engine('claude')] }), null);
-  // A runner row not read is treated as one that has reported nothing: the key is named.
+  // A runner row not read is treated as one that has reported nothing: the key is named when the
+  // managed image has its engine.
   assert.equal(managedFirstSessionProvider(null, deepseek, null), 'deepseek');
+  assert.equal(managedFirstSessionProvider(null, kimi, null), 'kimi-key');
 
   const prisma = { session: { findFirst: async () => null } } as never;
   const cases: Array<[string, { slug: string; engine: 'claude' | 'kimi' }, { defaultRemoved: [], engines: unknown; capabilities?: string[] }, string | null]> = [
@@ -212,14 +236,66 @@ test('the first session the status names is the one the create takes: READY\'s r
     ["reported the key's engine installed, not signed in", deepseek, { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] }, 'deepseek'],
     ["reported without the key's engine (MODEL_UNAVAILABLE)", deepseek, { defaultRemoved: [], engines: [engine('codex', { auth: 'no' })] }, null],
     ['reported an empty list', deepseek, { defaultRemoved: [], engines: [] }, null],
+    // The managed image installs Kimi Code: a Kimi key waits for the runner.
     ['a Kimi key, nothing reported yet', kimi, { defaultRemoved: [], engines: null }, 'kimi-key'],
     ['a Kimi key on a runner that reported no Kimi Code', kimi, { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] }, null],
   ];
   for (const [name, key, runner, named] of cases) {
     assert.equal(managedFirstSessionProvider(null, key, runner), named, name);
     // The create, for the session a client sends with nothing named: the key, on its own engine.
-    const taken = await assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: key.engine, bringsOwnCredentials: true, runner })
+    const taken = await assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: key.engine, bringsOwnCredentials: true, runner })
       .then(() => true, () => false);
     assert.equal(taken, named !== null, `${name}: the create agrees`);
   }
+});
+
+// Found in the production rollout (2026-11-14): a runner of the managed image (then Claude Code and Codex
+// only) was offered the owner's Kimi key, which only Kimi Code or OpenCode runs, and the session was refused.
+// The image now installs both; a runner that reported neither (an older image) still is never offered it.
+
+test('a first session is never named on a key no engine on the runner runs: a Kimi key on a Claude/Codex runner', async () => {
+  const claudeCodex = { defaultRemoved: [], engines: [engine('claude', { auth: 'no' }), engine('codex', { auth: 'no' })] };
+  const unreported = { defaultRemoved: [], engines: null, capabilities: [] };
+  assert.equal(await managedFirstSessionKey(keysOf([moonshot()], claudeCodex).prisma, 'o'), null);
+  assert.equal(managedFirstSessionKeyOf([{ slug: 'moonshot', engine: 'kimi' }], claudeCodex), null);
+  // Before the runner has reported, the image's Kimi Code is what the key waits for.
+  for (const [name, runner] of [['nothing reported yet', unreported], ['no mapping', undefined]] as const) {
+    assert.equal(await managedFirstSessionKey(keysOf([moonshot()], runner).prisma, 'o'), 'moonshot', name);
+  }
+  // READY records nothing on it either: the runner stays without supply, with its sign-in/add-key reason.
+  assert.equal(await managedKeySupply(keysOf([moonshot()]).prisma, 'o', claudeCodex), null);
+  // And the create refuses it rather than queueing it for a runner that reported no Kimi Code.
+  const prisma = { session: { findFirst: async () => null } } as never;
+  for (const runner of [claudeCodex]) {
+    await assert.rejects(
+      assertManagedFirstSessionRuntime(prisma, { runnerId: 'r', runtime: 'kimi', bringsOwnCredentials: true, runner }),
+      (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE,
+    );
+  }
+});
+
+test('with a Kimi key first and a DeepSeek key after it, a Claude/Codex runner is offered DeepSeek', async () => {
+  const claudeCodex = { defaultRemoved: [], engines: [engine('claude', { auth: 'no' }), engine('codex', { auth: 'no' })] };
+  for (const [name, runner] of [['reported Claude Code and Codex', claudeCodex]] as const) {
+    assert.equal(await managedFirstSessionKey(keysOf([moonshot(), key('deepseek')], runner).prisma, 'o'), 'deepseek', name);
+    const picked = managedFirstSessionKeyOf([{ slug: 'moonshot', engine: 'kimi' as const }, { slug: 'deepseek', engine: 'claude' as const }], runner ?? null);
+    assert.deepEqual(picked, { slug: 'deepseek', engine: 'claude' }, name);
+    assert.equal(managedFirstSessionProvider(null, picked, runner ?? null), 'deepseek', name);
+  }
+  // A runner that does report Kimi Code takes the owner's order: the Kimi key first.
+  const withKimi = { defaultRemoved: [], engines: [engine('kimi', { auth: 'no' }), engine('claude', { auth: 'no' })] };
+  assert.equal(await managedFirstSessionKey(keysOf([moonshot(), key('deepseek')], withKimi).prisma, 'o'), 'moonshot');
+  // READY on the same runner records DeepSeek too.
+  assert.equal(await managedKeySupply(keysOf([moonshot(), key('deepseek')]).prisma, 'o', claudeCodex), 'deepseek');
+});
+
+
+test('first-session history is scoped to the runner and excludes task runs, children and landing rows', async () => {
+  let seen: unknown;
+  const prisma = { session: { findFirst: async (args: unknown) => { seen = args; return { id: 'earlier-conversation' }; } } } as never;
+  await assertManagedFirstSessionRuntime(prisma, { runnerId: 'managed-runner', runtime: 'claude', bringsOwnCredentials: false, runner: { defaultRemoved: [], engines: null } });
+  assert.deepEqual(seen, {
+    where: { assignedRunnerId: 'managed-runner', taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
+    select: { id: true },
+  });
 });

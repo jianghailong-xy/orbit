@@ -6,7 +6,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerSelfUpdate } from '@orbit/shared';
 import { runnerUpdateCard } from '../lib/runnerUpdateCard';
-import { isRunnerUpdateResume, runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
+import {
+  awaitRunnerUpdateNowAnswer,
+  isRunnerUpdateResume,
+  RUNNER_UPDATE_NOW_ANSWER_POLL_MS,
+  RUNNER_UPDATE_NOW_ANSWER_WAIT_MS,
+  runnerTakesUpdateNow,
+  runnerUpdateNowAnswered,
+} from '../lib/runnerUpdateNow';
 import { clearToasts } from '../lib/toastStore';
 import { RunnerUpdateNowButton } from './RunnerUpdateNow';
 import type { Runner } from './TasksSidePanel';
@@ -152,6 +159,32 @@ describe('who is offered Update Now…', () => {
     expect(runnerTakesUpdateNow({ ...studioMac([]), selfUpdate: { ...DRAINING, phase: 'postponed' } })).toBe(true);
     expect(runnerTakesUpdateNow({ ...studioMac([]), capabilities: [] })).toBe(false);
     expect(runnerTakesUpdateNow({ ...studioMac([]), selfUpdate: { ...DRAINING, phase: 'restarting' } })).toBe(false);
+  });
+});
+
+describe('after the press', () => {
+  it('reads the runners again until the runner reports the restart, so the card moves without a reload', async () => {
+    const qc = new QueryClient();
+    const restarting = { ...studioMac([]), selfUpdate: { ...DRAINING, phase: 'restarting' as const } };
+    const reads = [[studioMac([])], [restarting]];
+    let served = 0;
+    qc.setQueryDefaults(['runners'], { queryFn: () => reads[Math.min(served++, reads.length - 1)] });
+    qc.setQueryData(['runners'], [studioMac([])]);
+    const sleep = vi.fn(async () => {});
+    await awaitRunnerUpdateNowAnswer(qc, studioMac([]).id, sleep);
+    expect(served).toBe(2);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(RUNNER_UPDATE_NOW_ANSWER_POLL_MS);
+    expect(runnerUpdateNowAnswered(qc.getQueryData<Runner[]>(['runners'])?.[0])).toBe(true);
+  });
+
+  it('gives up after the wait when the runner never answers', async () => {
+    const qc = new QueryClient();
+    qc.setQueryDefaults(['runners'], { queryFn: () => [studioMac([])] });
+    qc.setQueryData(['runners'], [studioMac([])]);
+    const sleep = vi.fn(async () => {});
+    await awaitRunnerUpdateNowAnswer(qc, studioMac([]).id, sleep);
+    expect(sleep).toHaveBeenCalledTimes(RUNNER_UPDATE_NOW_ANSWER_WAIT_MS / RUNNER_UPDATE_NOW_ANSWER_POLL_MS);
   });
 });
 

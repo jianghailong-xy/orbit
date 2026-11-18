@@ -1,0 +1,404 @@
+<!-- DESIGN MOCK (2026-11-14), revision 3. Scheduled tasks on iOS, from docs/scheduled-tasks-design.md rev 2:
+     left drawer, created and changed by talking to a session, the Scheduled page modelled on Reminders.
+     Schedule names, versions, times and PRs are demo data.
+     Render (fonts in /mnt/data/tmp/mockfonts), with render.mjs, which waits for document.fonts:
+       node docs/mocks/scheduled-tasks/render.mjs $PWD/docs/mocks/scheduled-tasks/01-board.html \
+         $PWD/docs/mocks/scheduled-tasks/01-board.png
+-->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>定时任务（iOS）第 3 版</title>
+<style>
+  @font-face { font-family:"MockInter"; src:url("file:///mnt/data/tmp/mockfonts/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockSC"; src:url("file:///mnt/data/tmp/mockfonts/NotoSansSC.ttf"); font-weight:100 900; }
+  :root { --brand:#3E69F6; --brand-bg:#EAF0FF; --t1:#111114; --t2:#8a8a90; --t3:#b4b4ba; --sep:#e4e4e8;
+          --grp:#f2f2f7; --green:#23a15a; --green-bg:#e3f5ea; --red:#e0453a; --red-bg:#fde8e6;
+          --amber:#b86e00; --amber-bg:#FFF4E0; --grey-bg:#efeff2; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 48px; width:1500px; background:#ececef; color:var(--t1);
+         font:14px/1.5 -apple-system,"MockInter","MockSC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 24px; max-width:1400px; }
+  .grid { display:grid; grid-template-columns:repeat(3, 440px); gap:30px 30px; }
+  .fh { font-weight:700; font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .fh small { font-weight:400; color:#6b6b75; font-size:12.5px; }
+  .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; }
+  .note { font-size:12.5px; color:#55555e; margin:8px 2px 0; line-height:1.65; } .note b { color:var(--t1); }
+  code { font:12px "DejaVu Sans Mono",monospace; }
+
+  /* ---- phone, 430 pt ---- */
+  .ph { width:430px; background:var(--grp); border-radius:22px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.06);
+        font-size:15px; position:relative; padding-bottom:16px; }
+  .ph.white { background:#fff; }
+  .nav { display:flex; align-items:center; padding:12px 16px 6px; gap:8px; min-height:44px; }
+  .nav .back { color:var(--brand); font-size:16px; white-space:nowrap; }
+  .nav .tt { flex:1; text-align:center; font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav .act { color:var(--brand); font-size:16px; font-weight:600; white-space:nowrap; }
+  .big { font-size:30px; font-weight:700; padding:2px 18px 10px; }
+  .gh { font-size:12.5px; color:var(--t2); text-transform:uppercase; letter-spacing:.02em; padding:14px 32px 6px; }
+  .gf { font-size:12.5px; color:var(--t2); padding:6px 32px 0; line-height:1.45; }
+  .grp { background:#fff; border-radius:12px; margin:0 16px; }
+  .row { display:flex; align-items:center; gap:10px; padding:11px 14px; min-height:44px; border-top:1px solid var(--sep); }
+  .row:first-child { border-top:0; }
+  .row .l { flex:1; min-width:0; }
+  .row .v { color:var(--t2); white-space:nowrap; }
+  .row .chev { color:var(--t3); font-size:18px; }
+  .sub { color:var(--t2); font-size:13px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .t1 { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; border-radius:999px; padding:2px 8px; white-space:nowrap; flex:none; }
+  .p-ok { background:var(--grey-bg); color:#55555e; } .p-new { background:var(--green-bg); color:#17683b; }
+  .p-fail { background:var(--red-bg); color:#b3261e; } .p-held { background:var(--amber-bg); color:var(--amber); }
+  .p-run { background:var(--brand-bg); color:#2546b8; } .p-pause { background:var(--grey-bg); color:var(--t2); }
+  .p-mute { background:transparent; color:var(--t2); border:1px dashed #cfcfd5; }
+  .ico { width:15px; height:15px; flex:none; }
+  .seg { display:flex; background:#e3e3e8; border-radius:9px; padding:2px; margin:0; }
+  .seg span { flex:1; text-align:center; font-size:13.5px; padding:5px 0; border-radius:7px; color:var(--t1); }
+  .seg span.on { background:#fff; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  .radio { width:20px; height:20px; border-radius:50%; border:1.6px solid #c7c7cc; flex:none; }
+  .radio.on { border:6px solid var(--brand); }
+  .tog { width:46px; height:28px; border-radius:14px; background:#34c759; position:relative; flex:none; }
+  .tog::after { content:''; position:absolute; right:2px; top:2px; width:24px; height:24px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .tog.off { background:#e3e3e8; } .tog.off::after { right:auto; left:2px; }
+  .text { padding:11px 14px; font-size:15px; line-height:1.45; min-height:96px; }
+
+  /* hero card on the detail page */
+  .hero { background:#fff; border-radius:12px; margin:4px 16px 0; padding:14px 16px; }
+  .hero .k { color:var(--t2); font-size:12.5px; }
+  .hero .n { font-size:22px; font-weight:700; margin:1px 0 2px; }
+  .hero .z { color:var(--t2); font-size:13px; }
+  .acts { display:flex; gap:8px; margin:12px 16px 0; }
+  .btn { flex:1; text-align:center; background:#fff; border-radius:10px; padding:9px 0; font-weight:600; color:var(--brand); font-size:14.5px; }
+  .btn.pri { background:var(--brand); color:#fff; }
+  .last { display:flex; gap:10px; align-items:flex-start; }
+  .last .b { flex:1; min-width:0; }
+  .banner { margin:6px 16px 0; border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.45; }
+  .banner.held { background:var(--amber-bg); color:#6b4200; }
+  .banner.fail { background:var(--red-bg); color:#8c1d15; }
+  .banner b { display:block; margin-bottom:2px; }
+  .banner .go { color:var(--brand); font-weight:600; margin-top:6px; display:block; }
+
+  /* chat */
+  .bub { margin:8px 16px 0 70px; background:var(--brand); color:#fff; border-radius:18px 18px 4px 18px; padding:9px 13px; font-size:14.5px; line-height:1.45; }
+  .ans { margin:10px 18px 0; font-size:14.5px; line-height:1.5; }
+  .card { background:#fff; border:1px solid var(--sep); border-radius:14px; margin:10px 16px 0; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .card .hd { display:flex; align-items:center; gap:8px; padding:11px 14px 4px; font-weight:700; }
+  .card .kv { display:grid; grid-template-columns:86px 1fr; gap:4px 10px; padding:6px 14px 10px; font-size:13.5px; }
+  .card .kv .k { color:var(--t2); }
+  .card .ft { display:flex; border-top:1px solid var(--sep); }
+  .card .ft span { flex:1; text-align:center; padding:10px 0; font-weight:600; color:var(--brand); }
+  .card .ft span + span { border-left:1px solid var(--sep); }
+  .card .ft span.pri { background:var(--brand); color:#fff; }
+  .runhd { background:#fff; border-bottom:1px solid var(--sep); padding:10px 16px; font-size:13.5px; display:flex; gap:8px; align-items:center; }
+  .report { background:#fff; border:1px solid var(--sep); border-left:3px solid var(--green); border-radius:10px; margin:10px 16px 0; padding:10px 12px; font-size:13.5px; line-height:1.5; }
+  .report .h { font-weight:700; display:flex; gap:6px; align-items:center; }
+  .report a { color:var(--brand); text-decoration:none; }
+  .push { background:rgba(250,250,252,.97); border-radius:18px; margin:12px 10px 4px; padding:11px 13px; box-shadow:0 4px 18px rgba(0,0,0,.12); font-size:13.5px; line-height:1.4; }
+  .push .a { display:flex; gap:7px; align-items:center; color:var(--t2); font-size:12px; margin-bottom:3px; }
+  .push .a i { width:18px; height:18px; border-radius:5px; background:var(--brand); display:inline-block; }
+  .push b { display:block; }
+  .push .tm { margin-left:auto; }
+
+  .x { position:relative; } .x::after { content:attr(data-n); position:absolute; top:-9px; right:-9px; width:19px; height:19px; border-radius:50%;
+       background:#d93838; color:#fff; font:700 11.5px/19px sans-serif; text-align:center; z-index:2; }
+
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; margin-top:30px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:20px; font-size:13px; line-height:1.7; }
+  .q b { color:#7a4a00; }
+</style>
+<style>
+  .drawer { background:#f7f7f9; }
+  .dr-brand { font-size:20px; font-weight:700; padding:16px 20px 10px; display:flex; align-items:center; gap:8px; }
+  .dr-row { display:flex; align-items:center; gap:12px; padding:10px 14px; margin:0 8px; border-radius:10px; font-size:16px; }
+  .dr-row.on { background:rgba(62,105,246,.14); font-weight:600; }
+  .dr-row .ic { width:24px; text-align:center; color:var(--t1); }
+  .dr-row.on .ic { color:var(--brand); }
+  .dr-row .cnt { margin-left:auto; color:#f08a00; font-weight:600; font-size:14px; }
+  .dr-h { font-size:13px; color:var(--t2); font-weight:600; padding:16px 22px 6px; }
+  .dr-sep { height:1px; background:var(--sep); margin:10px 20px; }
+  .rev { background:#fafafc; }
+  .undo { color:var(--brand); font-weight:600; font-size:14px; }
+  .bar { display:flex; gap:8px; margin:14px 16px 0; }
+  .bar .btn { padding:9px 0; }
+  .line { display:flex; gap:8px; align-items:center; margin:10px 16px 0; padding:9px 12px; border-radius:10px; background:var(--grp); font-size:13.5px; color:#55555e; }
+  .line b { color:var(--t1); }
+  .line .r { margin-left:auto; display:flex; gap:12px; color:var(--brand); font-weight:600; white-space:nowrap; }
+  .card.widen { border-color:#f1c27d; }
+  .card.widen .hd { color:#7a4500; }
+  .card .nt { padding:0 14px 10px; font-size:12.5px; color:var(--t2); }
+  .sheethd { display:flex; align-items:center; padding:14px 16px 8px; }
+  .sheethd .tt { font-size:17px; font-weight:700; flex:1; }
+  .wcard { background:#fff; border:1px solid #f3d9a4; border-radius:12px; margin:10px 16px 0; overflow:hidden; }
+  .wcard .wh { background:#fff6e6; color:#a35f00; font-size:12.5px; font-weight:600; padding:6px 12px; display:flex; }
+  .wcard .wh span { margin-left:auto; font-weight:400; color:#b98a3e; }
+  .wcard .wb { padding:10px 12px 12px; font-size:13.5px; line-height:1.45; }
+  .wcard .wt { font-weight:700; font-size:14.5px; margin-bottom:3px; }
+  .wcard .ws { display:flex; gap:8px; margin-top:10px; }
+  .wcard .ws span { font-size:13.5px; font-weight:600; border-radius:8px; padding:6px 12px; background:var(--grp); color:var(--brand); }
+  .wcard .ws span.pri { background:var(--brand); color:#fff; }
+  .card, .wcard { overflow:visible !important; }
+  .card .ft span.pri { border-radius:0 0 13px 0; }
+  .wcard .wh { border-radius:11px 11px 0 0; }
+  .xl::after { left:-26px; right:auto; top:0; }
+  .crumb { color:var(--brand); font-size:13px; padding:0 18px; }
+  .empty { text-align:center; padding:56px 26px 10px; }
+  .empty .ei { width:56px; height:56px; border-radius:16px; background:var(--brand-bg); color:var(--brand); display:grid; place-items:center; margin:0 auto 14px; }
+  .empty h3 { margin:0 0 6px; font-size:19px; }
+  .empty p { color:#55555e; margin:0 0 18px; font-size:14.5px; }
+  .ex { background:#fff; border-radius:12px; text-align:left; }
+  .ex div { padding:11px 14px; border-top:1px solid var(--sep); font-size:14px; }
+  .ex div:first-child { border-top:0; }
+  .rt { color:var(--brand); font-size:30px; font-weight:700; padding:2px 18px 0; display:flex; align-items:baseline; }
+  .rt .n { margin-left:auto; color:var(--t3); font-weight:600; }
+  .rtools { display:flex; gap:8px; padding:6px 18px 0; font-size:13px; color:var(--t2); align-items:center; }
+  .rtools .chip { border:1px solid #dcdce1; border-radius:999px; padding:2px 10px; color:var(--t1); background:#fff; }
+  .rsec { padding:14px 18px 0; }
+  .rsec h4 { margin:0; font-size:17px; font-weight:700; padding-bottom:4px; border-bottom:1px solid var(--sep); display:flex; gap:8px; align-items:baseline; }
+  .rsec h4 small { color:var(--t2); font-weight:400; font-size:13px; }
+  .rsec.red h4 { color:var(--red); } .rsec.dim h4 { color:var(--t2); }
+  .rr { display:flex; gap:11px; padding-top:9px; }
+  .rr .bd { flex:1; min-width:0; border-bottom:1px solid var(--sep); padding-bottom:9px; display:flex; gap:8px; }
+  .rr .tx { flex:1; min-width:0; }
+  .rr .t { font-size:15.5px; line-height:21px; }
+  .rr .s { font-size:12.5px; color:var(--t2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rr .tm { font-size:13px; color:var(--t2); white-space:nowrap; }
+  .rr .tg { font-size:12px; font-weight:600; white-space:nowrap; padding-top:2px; }
+  .rr.past .t { color:var(--t2); } .rr.draft .t { color:var(--t2); font-style:italic; }
+  .rc { width:22px; height:22px; border-radius:50%; border:1.7px solid #c7c7cc; flex:none; display:grid; place-items:center; color:#fff; font:700 12px/1 sans-serif; }
+  .rc.ok { background:#c0c0c6; border-color:#c0c0c6; } .rc.new { background:var(--green); border-color:var(--green); }
+  .rc.fail { background:var(--red); border-color:var(--red); } .rc.held { border-color:#e08a00; color:#e08a00; }
+  .rc.run { border-color:var(--brand); border-right-color:transparent; } .rc.draft { border-style:dashed; border-color:var(--brand); }
+  .radd { display:flex; gap:11px; align-items:center; padding:14px 18px 0; color:var(--t3); font-size:15.5px; }
+  .radd .pl { width:22px; height:22px; border-radius:50%; background:var(--brand); color:#fff; display:grid; place-items:center; font-weight:700; flex:none; }
+  .radd .in { flex:1; border-bottom:1px solid var(--sep); padding-bottom:8px; }
+  .radd .ws { border:1px solid #dcdce1; border-radius:999px; padding:1px 9px; font-size:12px; color:var(--t2); }
+  .sheet-ph { position:relative; }
+  .dimbg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  .bsheet { position:absolute; left:0; right:0; bottom:0; top:96px; background:var(--grp); border-radius:14px 14px 0 0; box-shadow:0 -4px 20px rgba(0,0,0,.15); overflow:visible; }
+  .bsheet .grab { width:38px; height:5px; border-radius:3px; background:#c7c7cc; margin:7px auto 0; }
+</style>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.6V8l2.3 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="warn" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.2v3.6M8 11.6v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m5.2 8.2 2 2 3.8-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="cal" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 6.5h12M5.5 1.6v2.6M10.5 1.6v2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+
+
+<h1>定时任务（iOS）第 3 版：参考 Reminders 的「计划」列表</h1>
+<p class="lede">按 <code>docs/scheduled-tasks-design.md</code> 第 3 版重画：Scheduled 页参考 macOS / iOS 提醒事项（Reminders）的「计划」列表，按日期排列执行时间，点一行弹出详情面板，列表末尾一行直接输入。定时任务只出现在左侧抽屉，<b>不进任何工作区的会话列表</b>。<b>agent-first</b>：在任意会话里说一句话，Agent 填好全部内容，人只在两处按一下：<b>创建</b>和<b>扩大权限</b>。其他修改直接生效，写进历史，可以 <b>Undo</b>。没有新建按钮，也没有编辑表单。页面只用来看和停。界面文案英文，注释中文；名称、时间、版本号都是演示数据。</p>
+
+<div class="grid">
+
+<!-- 1. DRAWER -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ① 左侧抽屉 <small>和 Projects、Tasks、Wiki 并列</small></div>
+  <div class="ph drawer">
+    <div class="dr-brand">Orbit</div>
+    <div class="dr-row"><span class="ic">⊞</span>Projects</div>
+    <div class="dr-row"><span class="ic">☰</span>Tasks</div>
+    <div class="dr-row on"><span class="ic"><svg class="ico" style="width:18px;height:18px"><use href="#cal"/></svg></span><span class="x" data-n="1">Scheduled</span><span class="cnt x xl" data-n="2">2</span></div>
+    <div class="dr-row"><span class="ic">✋</span>Waiting on you<span class="cnt">3</span></div>
+    <div class="dr-row"><span class="ic">▤</span>Wiki</div>
+    <div class="dr-sep"></div>
+    <div class="dr-h">Workspaces</div>
+    <div class="dr-row"><span class="ic">▭</span>apiserver</div>
+    <div class="dr-row"><span class="ic">▭</span>web</div>
+    <div class="dr-row"><span class="ic">▭</span>Orbit baseline</div>
+    <div class="dr-h">Projects</div>
+    <div class="dr-row"><span class="ic" style="color:#c0c4cc">●</span>Orbit UI migration</div>
+    <div style="height:40px"></div>
+  </div>
+  <p class="note"><b>1</b> 定时任务是账户级的，跨所有工作区，放在 Tasks 和 Waiting on you 之间。<b>2</b> 橙色数字和 Projects、Wiki 的规则一样：只数需要你处理的（失败、挂起），为 0 时不显示。</p>
+</div>
+
+<!-- 2. TIMELINE -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ② Scheduled <small>参考 Reminders 的「计划」列表</small></div>
+  <div class="ph white">
+    <div class="nav"><span class="back">☰</span><span class="tt"></span><span class="act">⋯</span></div>
+    <div class="rt">Scheduled<span class="n">6</span></div>
+    <div class="rtools"><span class="chip">All workspaces ▾</span></div>
+    <div class="rsec red x" data-n="1"><h4>Needs you <small>2</small></h4>
+      <div class="rr "><span class="rc fail ">!</span><div class="bd"><div class="tx"><div class="t">Nightly pg spec sweep</div><div class="s">↻ Daily 02:00 · apiserver</div></div><span class="tg" style="color:var(--red)">Failed ×3</span><span class="tm">02:00</span></div></div>
+      <div class="rr "><span class="rc held ">!</span><div class="bd"><div class="tx"><div class="t">Weekly dependency audit</div><div class="s">↻ Mondays 09:00 · agent disabled</div></div><span class="tg" style="color:#b86e00">Held</span><span class="tm"></span></div></div>
+    </div>
+    <div class="rsec"><h4>Today <small>Fri, Nov 14</small></h4>
+      <div class="rr "><span class="rc run x" data-n="2"></span><div class="bd"><div class="tx"><div class="t">Docs link check</div><div class="s">↻ Daily 12:00 · web · running 21 min</div></div><span class="tm">12:00</span></div></div>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Release notes draft</div><div class="s">↻ Fridays 17:00 · Orbit baseline</div></div><span class="tm">17:00</span></div></div>
+    </div>
+    <div class="rsec"><h4>Tomorrow <small>Sat, Nov 15</small></h4>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Nightly pg spec sweep</div><div class="s">↻ Daily 02:00 · apiserver</div></div><span class="tm">02:00</span></div></div>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Codex stable check</div><div class="s">↻ Daily 09:00 · apiserver · Open a PR</div></div><span class="tm">09:00</span></div></div>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Claude CLI version check</div><div class="s">↻ Daily 10:30 · apiserver</div></div><span class="tm">10:30</span></div></div>
+    </div>
+    <div class="rsec"><h4>Monday <small>Nov 17</small></h4>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Weekly cost report</div><div class="s">↻ Mondays 10:00 · Orbit baseline</div></div><span class="tm">10:00</span></div></div>
+    </div>
+    <div class="rsec dim"><h4>Paused <small>1</small></h4></div>
+    <div class="radd x" data-n="3"><span class="pl">+</span><span class="in">Describe a scheduled task…</span><span class="ws">apiserver</span></div>
+  </div>
+  <p class="note">按 Reminders 的「计划」列表来排：<b>按日期分组</b>，每个定时任务显示在它下一次执行的那一天，圆圈就是状态。<b>1</b> 需要你处理的放最上面，红色，相当于 Reminders 里的“已过期”。<b>2</b> 圆圈表示状态：空心是待执行，蓝色转圈是正在跑，灰色勾是没变化，绿色勾是有新发现，红色是失败，橙色是挂起。<b>3</b> 列表末尾一行输入框，相当于 Reminders 的“新提醒事项”：输入一句话就行，右边是会用哪个工作区。<b>⋯</b> 菜单里有 <b>Show Past Runs</b>，相当于“显示已完成”。</p>
+</div>
+
+<!-- 3. DETAILS SHEET -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ③ 详情：底部弹出的面板 <small>相当于 Reminders 的 ⓘ</small></div>
+  <div class="ph white sheet-ph" style="height:1010px">
+    <div class="nav"><span class="back">☰</span><span class="tt"></span><span class="act">⋯</span></div>
+    <div class="rt">Scheduled<span class="n">6</span></div>
+    <div class="dimbg"></div>
+    <div class="bsheet">
+      <div class="grab"></div>
+      <div class="nav" style="padding-top:6px"><span class="back">Close</span><span class="tt"></span><span class="act x" data-n="4">⋯</span></div>
+      <div class="big" style="font-size:22px;padding-bottom:0">Codex stable check</div>
+      <div class="crumb" style="color:var(--t2);padding-bottom:6px">↻ Daily 09:00 · Asia/Shanghai · apiserver · Open a PR</div>
+      <div class="hero"><div class="k">Next run</div><div class="n">Tomorrow 09:00</div><div class="z">Last: today 10:00 · Known 0.49.0 · not notified</div></div>
+      <div class="bar x" data-n="1"><span class="btn pri">Run now</span><span class="btn">Pause</span><span class="btn">Change…</span></div>
+      <div class="gh">What it does</div>
+      <div class="grp x" data-n="2"><div class="text" style="min-height:0;font-size:14px">Check the latest stable Codex release and compare it with the version the apiserver pins. If it is newer, report the version and release notes, and open a PR that bumps it.</div></div>
+      <div class="gh">History</div>
+      <div class="grp x" data-n="3">
+        <div class="row rev"><div class="l"><div class="t1">Time 10:00 → 09:00</div><div class="sub">Today 12:19 · by Codex release watch</div></div><span class="undo">Undo</span></div>
+        <div class="row"><div class="l"><div class="t1">Today 10:00</div><div class="sub">0.49.0 again · linked PR #831</div></div><span class="pill p-ok">Known</span><span class="chev">›</span></div>
+        <div class="row"><div class="l"><div class="t1">Nov 13 10:01</div><div class="sub">New 0.49.0 · notified</div></div><span class="pill p-new">Changed</span><span class="chev">›</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">点任意一行，从底部弹出详情，不跳到新页面，相当于 Reminders 的 ⓘ。<b>1</b> 三个按钮：Run now、Pause、Change…；Change… 开一个带着这个任务的会话。<b>2</b> 做什么，是 Agent 根据你的原话写的。<b>3</b> 最近几条历史，执行记录和修改记录放在一起，直接生效的修改带 Undo。<b>4</b> 删除放在 ⋯ 菜单里。</p>
+</div>
+
+<!-- 4. CREATE IN CHAT -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ④ 在会话里创建 <small>人只需按一次 Create</small></div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Codex release watch</span><span class="act"> </span></div>
+    <div class="bub">每天北京时间 10 点检查 Codex 官方稳定版，和 apiserver 固定的版本比一下。没变化就别吵我，有新版告诉我版本号和发布说明。</div>
+    <div class="ans">I'll set that up as a scheduled task. It checks only and opens nothing; you'll hear from it only when there's a new version or a run fails. Closing this chat won't stop it.</div>
+    <div class="card x" data-n="1">
+      <div class="hd"><svg class="ico" style="color:var(--brand);width:17px;height:17px"><use href="#cal"/></svg>Create scheduled task?</div>
+      <div class="kv">
+        <span class="k">Name</span><span>Codex stable check</span>
+        <span class="k">When</span><span>Daily 10:00 · Asia/Shanghai<br><span style="color:var(--t2)">First run tomorrow</span></span>
+        <span class="k">Runs in</span><span>apiserver · Codex agent</span>
+        <span class="k">Access</span><span><b>Check only</b> · reads and reports</span>
+      </div>
+      <div class="nt">You'll hear about new versions and failures only.</div>
+      <div class="ft"><span>Not now</span><span class="pri">Create</span></div>
+    </div>
+    <div class="line x" data-n="2" style="margin-top:14px"><svg class="ico" style="color:var(--green)"><use href="#check"/></svg><span>Created <b>Codex stable check</b></span><span class="r">Open ›</span></div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> 用户说一句话，Agent 填好名称、时间、时区、执行位置和权限。卡上<b>没有可编辑的字段</b>，只有 Create 和 Not now；有不对的地方，直接在会话里说。时区取用户说的“北京时间”，没说就取按 Create 的那台设备的。通知规则是固定的，卡上用一句话说明。<b>2</b> 按 Create 后，卡片收成一行，可以跳到详情。</p>
+</div>
+
+<!-- 5. CHANGE IN CHAT -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑤ 在会话里修改 <small>直接生效 · 扩大权限才要卡</small></div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹</span><span class="tt">Codex release watch</span><span class="act"> </span></div>
+    <div class="bub">改成早上 9 点。另外有新版的话直接开个升级 PR。</div>
+    <div class="ans">Done: it now runs at 09:00. Opening a PR needs more access than it has, so that part waits for you.</div>
+    <div class="line x" data-n="1"><svg class="ico" style="color:var(--brand)"><use href="#cal"/></svg><span>Changed <b>Codex stable check</b>: 10:00 → 09:00</span><span class="r">Undo</span></div>
+    <div class="card widen x" data-n="2">
+      <div class="hd"><svg class="ico" style="color:#e08a00;width:16px;height:16px"><use href="#warn"/></svg>Let Codex stable check open PRs?</div>
+      <div class="kv">
+        <span class="k">Now</span><span>Check only · reads and reports</span>
+        <span class="k">Asked</span><span><b>Open a PR</b> · edits in its own worktree and opens a PR. Can't merge or deploy.</span>
+      </div>
+      <div class="nt">Applies from the next run. Each run checks this again before it starts.</div>
+      <div class="ft"><span>Keep check only</span><span class="pri">Allow</span></div>
+    </div>
+    <div style="height:14px"></div>
+  </div>
+  <p class="note"><b>1</b> 改时间、内容、结束时间，以及缩小权限：<b>直接生效</b>，会话里留一行记录，可以 Undo，详情页的历史里也有。<b>2</b> 扩大权限（Check only → Open a PR），或者换工作区：要过一张卡，按 Allow 才生效。在任意会话里都能改，不一定要回到创建它的那个会话。</p>
+</div>
+
+<!-- 6. WAITING ON YOU -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑥ 需要你处理的进 Waiting on you</div>
+  <div class="ph">
+    <div class="push x" data-n="1"><div class="a"><i></i>ORBIT<span class="tm">02:41</span></div><b>Nightly pg spec sweep failed 3 runs in a row</b>The last run ended without a report. It keeps running until you pause it.</div>
+    <div class="sheethd"><span class="tt">Waiting on you</span><span style="color:var(--brand);font-weight:600">Done</span></div>
+    <div class="wcard x" data-n="2"><div class="wh">Scheduled<span>Today 02:41</span></div><div class="wb"><div class="wt">Nightly pg spec sweep failed 3 runs in a row</div>The last run ended without a report. It keeps running on schedule until you pause it.<div class="ws"><span class="pri">Open run</span><span>Pause schedule</span></div></div></div>
+    <div class="wcard"><div class="wh">Scheduled<span>Nov 10</span></div><div class="wb"><div class="wt">Weekly dependency audit is held</div>The agent "auditor" in web is disabled. Nothing runs until it's enabled and you resume.<div class="ws"><span class="pri">Agent settings</span><span>Resume</span></div></div></div>
+    <div class="wcard x" data-n="3"><div class="wh">Scheduled run<span>Today 02:03</span></div><div class="wb"><div class="wt">Approve a psql command for Nightly pg spec sweep</div>If nobody answers by 04:00 the run fails; the next one starts tomorrow.<div class="ws"><span class="pri">Allow once</span><span>Deny</span></div></div></div>
+  </div>
+  <p class="note"><b>1</b> 只在两种情况下推送：发现了新东西，或者需要你处理。<b>2</b> 失败和挂起不在定时任务页上弹横幅，而是和其他需要你处理的事项一起放进 <b>Waiting on you</b>，卡片上直接有处理按钮。连续失败只提醒，不自动暂停。<b>3</b> 无人值守的执行碰到审批也进这里，写明超时时间，到时没人处理这次就算失败。</p>
+</div>
+
+<!-- 7. RUN SESSION -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑦ 一次执行的会话</div>
+  <div class="ph white">
+    <div class="nav"><span class="back">‹ Codex stable check</span><span class="tt"></span><span class="act"> </span></div>
+    <div class="big" style="font-size:22px;padding-bottom:2px">Run of Nov 13</div>
+    <div class="runhd x" data-n="1" style="border-top:1px solid var(--sep)"><svg class="ico" style="color:var(--brand)"><use href="#cal"/></svg><span>Planned 10:00 · started 10:01 · Check only</span></div>
+    <div class="ans">The latest stable Codex is <b>0.49.0</b>, released Nov 12. The apiserver pins <b>0.48.0</b>.<br>• Turn steering now covers tool calls<br>• Fixes the sandbox path bug on macOS<br>• No breaking flag changes</div>
+    <div class="report x" data-n="2"><div class="h"><svg class="ico" style="color:var(--green)"><use href="#check"/></svg>Reported: Changed · codex@0.49.0</div>Codex 0.49.0 is out (pinned 0.48.0). You were notified. <a>Release notes</a></div>
+    <div style="height:16px"></div>
+  </div>
+  <p class="note">从通知、详情页的历史进入；这类会话不进会话列表。<b>1</b> 顶部写计划时间、实际开始时间和这次执行的权限。<b>2</b> 执行结果由 Agent 结构化上报，并写明这次有没有通知你。“有变化”和“失败”的会话保持打开，可以接着追问。</p>
+</div>
+
+<!-- 8. QUICK ADD -->
+<div>
+  <div class="fh"><span class="tag">新增</span> ⑧ 在列表里直接说一句 <small>不用离开 Scheduled</small></div>
+  <div class="ph white sheet-ph" style="height:720px">
+    <div class="nav"><span class="back">☰</span><span class="tt"></span><span class="act">⋯</span></div>
+    <div class="rt">Scheduled<span class="n">7</span></div>
+    <div class="rsec"><h4>Monday <small>Nov 17</small></h4>
+      <div class="rr draft"><span class="rc draft x" data-n="1"></span><div class="bd"><div class="tx"><div class="t">Weekday issue summary</div><div class="s">↻ Weekdays 09:00 · apiserver · draft</div></div><span class="tm">09:00</span></div></div>
+      <div class="rr "><span class="rc  "></span><div class="bd"><div class="tx"><div class="t">Weekly cost report</div><div class="s">↻ Mondays 10:00 · Orbit baseline</div></div><span class="tm">10:00</span></div></div>
+    </div>
+    <div class="dimbg" style="top:250px"></div>
+    <div class="bsheet" style="top:270px">
+      <div class="grab"></div>
+      <div class="sub" style="padding:10px 18px 0;white-space:normal;font-size:13.5px">You typed: “every weekday at 9, summarise new GitHub issues in orbit and tell me only if there are any”</div>
+      <div class="card x" data-n="2" style="margin-top:12px">
+        <div class="hd"><svg class="ico" style="color:var(--brand);width:17px;height:17px"><use href="#cal"/></svg>Create scheduled task?</div>
+        <div class="kv">
+          <span class="k">Name</span><span>Weekday issue summary</span>
+          <span class="k">When</span><span>Weekdays 09:00 · Asia/Shanghai<br><span style="color:var(--t2)">First run Monday</span></span>
+          <span class="k">Runs in</span><span>apiserver · Claude agent</span>
+          <span class="k">Access</span><span><b>Check only</b> · reads and reports</span>
+        </div>
+        <div class="nt">You'll hear about new issues and failures only.</div>
+        <div class="ft"><span>Not now</span><span class="pri">Create</span></div>
+      </div>
+      <div class="gf" style="text-align:center;padding-top:14px;color:var(--brand);font-weight:600;font-size:14px"><span class="x" data-n="3">Open conversation</span></div>
+    </div>
+  </div>
+  <p class="note">在列表末尾那一行输入一句话：会在右侧显示的那个工作区里开一个会话，由 Agent 生成这个定时任务。<b>1</b> 生成好之前，列表里先出现一条虚线圆圈的草稿。<b>2</b> 草稿的面板里就是创建确认卡，按 Create 即可，不用跳去聊天。<b>3</b> 想再商量，点 Open conversation 进入那个会话；这个会话是你自己开的，所以留在该工作区的会话列表里。列表为空时，输入行下面显示三个例句。</p>
+</div>
+
+<!-- 9. RULES -->
+<div class="sheet" style="margin-top:0;align-self:start">
+  <h2>谁来做什么</h2>
+  <table>
+    <tr><th>事情</th><th>谁做</th><th>人要按几下</th></tr>
+    <tr><td>名称、执行内容、时间</td><td>Agent，根据你的原话写</td><td>0</td></tr>
+    <tr><td>时区</td><td>你说了就用你说的；没说用按 Create 的那台设备的</td><td>0</td></tr>
+    <tr><td>工作区、Agent</td><td>发起对话的那个会话</td><td>0</td></tr>
+    <tr><td>权限</td><td>Agent 根据任务内容判断</td><td>创建时 1 次</td></tr>
+    <tr><td>通知</td><td>固定规则：有新发现，或者需要你处理</td><td>0</td></tr>
+    <tr><td>改时间、改内容、缩小权限</td><td>任意会话里说一句，直接生效</td><td>0（可 Undo）</td></tr>
+    <tr><td>扩大权限、换工作区</td><td>任意会话里说</td><td>1 次 Allow</td></tr>
+    <tr><td>暂停、立即执行、终止、删除</td><td>页面上直接按，或在会话里说</td><td>1</td></tr>
+  </table>
+  <h2 style="margin-top:16px">和前两版比</h2>
+  <table>
+    <tr><td>工作区里的入口行</td><td>改成左侧抽屉</td></tr>
+    <tr><td>新建按钮、编辑表单</td><td>改成在会话里说</td></tr>
+    <tr><td>通知方式三选一</td><td>改成固定规则</td></tr>
+    <tr><td>详情页的失败、挂起横幅</td><td>改进 Waiting on you</td></tr>
+    <tr><td>单独的详情页</td><td>改成底部弹出的面板（第 3 版）</td></tr>
+    <tr><td>按状态分组的表格</td><td>改成按日期排列的时间线（第 3 版）</td></tr>
+  </table>
+</div>
+
+</div>
+</html>

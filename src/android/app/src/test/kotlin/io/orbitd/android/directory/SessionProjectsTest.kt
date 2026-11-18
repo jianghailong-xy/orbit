@@ -280,6 +280,33 @@ class SessionProjectsTest {
         assertEquals(Target.Session("worker"), listing(listOf(session("worker", approvals = 1))).projects.first().target)
     }
 
+    /** Owner 2026-11-14: a row whose line says a member waits on you opens that member; the oldest one, the one the line names. */
+    @Test fun aWaitingMembersRowOpensThatMember() {
+        val row = listing(listOf(coordinator(), session("younger", approvals = 1, since = listOf(ago(5))),
+            session("older", approvals = 1, since = listOf(ago(90))))).projects.first()
+        assertEquals(Tone.APPROVAL, row.line.tone)
+        assertEquals("older", row.waitingMember)
+        // With no coordinator the waiting member still opens, where the row would otherwise open the project's sessions.
+        assertEquals("worker", listing(listOf(session("worker", approvals = 1))).projects.first().waitingMember)
+    }
+
+    /** Every other row opens the coordinator as before: the coordinator itself waiting, running, landing, a held item, or idle. */
+    @Test fun everyOtherRowOpensTheCoordinator() {
+        val waiting = listing(listOf(coordinator(approvals = 1), session("worker", approvals = 1, since = listOf(ago(90))))).projects.first()
+        assertEquals(Target.Session("coordinator"), waiting.target)
+        assertNull("the coordinator waiting", waiting.waitingMember)
+        assertNull("a member running", listing(listOf(coordinator(), session("worker", state = "RUNNING", tool = "Bash"))).projects.first().waitingMember)
+        assertNull("the coordinator running", listing(listOf(session("coordinator", role = "COORDINATOR", state = "RUNNING", tool = "Bash"),
+            session("worker"))).projects.first().waitingMember)
+        landingNow()
+        val landing = row(listOf(coordinator(), session("worker")), landingProject(queued()))!!
+        assertEquals(Tone.QUEUED, landing.line.tone)
+        assertNull("landing", landing.waitingMember)
+        assertNull("a held item", listing(listOf(coordinator(), session("worker")), projects = listOf(project(held("TASK_FAILED", ago(18))))).projects.first().waitingMember)
+        assertNull("idle", listing(listOf(coordinator(), session("worker"))).projects.first().waitingMember)
+        assertNull("no coordinator, nobody waiting", listing(listOf(session("worker"))).projects.first().waitingMember)
+    }
+
     @Test fun indicatorUsesSharedReadingsWaitingThenRunningThenJobs() {
         val coord = coordinator()
         val background = session("background", bg = 2, jobs = 1)

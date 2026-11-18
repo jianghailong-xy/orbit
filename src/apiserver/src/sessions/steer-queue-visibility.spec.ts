@@ -266,7 +266,8 @@ test('one ordered snapshot asks for every active row needed to classify the queu
     clientTurnId?: unknown;
   };
   assert.deepEqual([...where.kind.in].sort(), ['message', 'shell', 'steer']);
-  assert.deepEqual([...where.OR[0].status!.in].sort(), ['IN_FLIGHT', 'PENDING']);
+  // HELD: an owner's message held for translation (Settings › Translation) is listed with its chip.
+  assert.deepEqual([...where.OR[0].status!.in].sort(), ['HELD', 'IN_FLIGHT', 'PENDING']);
   assert.deepEqual(where.OR[1], {
     sendIntent: 'CURRENT_WORK',
     deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
@@ -299,7 +300,7 @@ test('a head message is accepted while later executables queue and steers stay d
   );
 });
 
-test('the hidden initial prompt remains the head and makes a follow-up queued', async () => {
+test('the initial prompt, not yet echoed, is listed as the head and makes a follow-up queued', async () => {
   const h = makeService([
     row('initial', 'message', 'opening prompt', {
       seq: 1,
@@ -312,8 +313,10 @@ test('the hidden initial prompt remains the head and makes a follow-up queued', 
 
   assert.deepEqual(
     listed.map((turn) => ({ id: turn.turnId, placement: turn.placement })),
-    [{ id: 'follow-up', placement: 'queued' }],
+    [{ id: 'initial', placement: 'accepted' }, { id: 'follow-up', placement: 'queued' }],
   );
+  // The session's first message, drawn until its echo: marked as the opening a client drew itself.
+  assert.equal((listed[0] as { opening?: true }).opening, true);
 });
 
 test('an announced hidden initial prompt remains the head and makes a follow-up queued', async () => {

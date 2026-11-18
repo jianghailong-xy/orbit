@@ -1650,7 +1650,7 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 	}); res["isError"] == true {
 		t.Fatalf("session_send errored: %#v", res["content"])
 	}
-	// …and without one, which is what every caller sent before: the server mints it.
+	// …and without one: the runner draws a key for the call.
 	if res := mcp.callTool("session_send", map[string]interface{}{
 		"sessionId": "child", "message": "adjust the tests",
 	}); res["isError"] == true {
@@ -1671,6 +1671,10 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 		t.Fatalf("session_interrupt errored: %#v", res["content"])
 	}
 
+	// The send that named no key carries one the runner drew for it.
+	if len(calls) > 1 {
+		takeDrawnKey(t, calls[1].body)
+	}
 	want := []call{
 		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests", "clientTurnId": "key-1"}},
 		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests"}},
@@ -1740,6 +1744,8 @@ func resultText(res map[string]interface{}) string {
 // Under an engine that ends tool calls on its own deadline, a create that waits for the owner returns
 // at once and hands the wait to a runner-hosted job: the job files the card (naming itself, so the card
 // outlives the turn), writes only on a confirmation, and wakes the session with the call's own result.
+// The session is in Don't Ask, which refuses every background job, because the hand-off is not one. (Plan
+// refuses the create itself before anything is handed off: TestPlanGateRefusesAnOwnerWaitBeforeTheHandOff.)
 func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 	d := newOwnerWaitDouble(t)
 	// The job runs this test binary as `orbit mcp`, which reaches the double through ORBIT_HOME.
@@ -1761,7 +1767,7 @@ func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 	bg.wakeSessionVia(func(w bgWake) error { wakesMu.Lock(); wakes[w.JobID] = w; wakesMu.Unlock(); return nil })
 	defer bg.stopAll()
 	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho",
-		agentID: "agent-ho", taskID: "task-ho", mode: func() string { return "plan" }}
+		agentID: "agent-ho", taskID: "task-ho", mode: func() string { return "dontAsk" }}
 	socket := filepath.Join(home, "bg.sock")
 	stop, err := startBgJobService(ctx, svc, socket, filepath.Join(home, "bg.token"))
 	if err != nil {
@@ -2153,5 +2159,28 @@ func TestMCPReadsNameTheLandingSession(t *testing.T) {
 				t.Fatalf("%s's description does not mention %q: %q", tool, want, desc)
 			}
 		}
+	}
+}
+
+// session_create forwards worktree only as false: it can turn a session's isolation off, never on.
+func TestSessionCreateForwardsOnlyWorktreeFalse(t *testing.T) {
+	for _, tc := range []struct {
+		args map[string]interface{}
+		want interface{}
+	}{
+		{args: map[string]interface{}{"worktree": false}, want: false},
+		{args: map[string]interface{}{"worktree": true}, want: nil},
+		{args: map[string]interface{}{}, want: nil},
+	} {
+		tc.args["prompt"] = "read the logs"
+		_, body := callEngineDoor(t, engineDoorCall{tool: "session_create", request: "POST /api/runner/sessions", args: tc.args,
+			body: func(b map[string]interface{}) map[string]interface{} { return b }})
+		if got, ok := body["worktree"]; tc.want == nil && ok || tc.want != nil && got != tc.want {
+			t.Fatalf("args %v forwarded worktree = %v (present %v), want %v", tc.args, got, ok, tc.want)
+		}
+	}
+	props := mcpToolProps(toolDescriptors(false, true), "session_create")
+	if schema, _ := props["worktree"].(map[string]interface{}); schema["type"] != "boolean" {
+		t.Fatalf("session_create worktree schema = %#v", props["worktree"])
 	}
 }

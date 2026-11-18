@@ -660,7 +660,9 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
     assert.equal(beat.status, 201, `the authorized instance’s heartbeat: ${beat.text}`);
   });
   const generation1 = { credential: credentialOf(first.runnerId), headers: podInstance(first.runnerId) };
-  const workspaceId = (await call(server, 'GET', '/api/workspaces', token)).json.find((w: { id: string }) => toUuid(w.id) === first.defaultWorkspaceId).id;
+  const made = await call(server, 'POST', '/api/workspaces', token, { name: 'Project', runnerId: first.runnerId, workDir: '/tmp/project' });
+  assert.equal(made.status, 201, made.text);
+  const workspaceId = made.json.id;
   const session = await call(server, 'POST', '/api/sessions', token, { workspaceId, prompt: 'hello', title: 'fence' });
   assert.equal(session.status, 201, session.text);
   const sessionId = toUuid(session.json.id);

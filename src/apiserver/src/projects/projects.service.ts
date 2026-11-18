@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { previousCoordinatorAnchor } from '../workspaces/start-anchor';
 import {
   BadRequestException,
   ConflictException,
@@ -36,10 +37,24 @@ import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
+import { codedRefusal } from '../common/refusal-recovery';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { type CoordinatorPendingWait, pendingWaitLabel } from './coordinator-pending-waits';
+
+/** A handoff a replacement completes (`ProjectsService.coordinator`'s `handoff`). */
+export interface CoordinatorHandoffBinding {
+  /** The coordinator_handoff row, which must be HANDING_OVER. */
+  id: string;
+  /** The coordinator it hands over; the project must still name it. */
+  fromSessionId: string;
+  /** Appended to the successor's opening; null when the note was skipped. */
+  note: string | null;
+  /** The pending-waits preview read before the swap, for the moved waits' labels. */
+  waits: readonly CoordinatorPendingWait[];
+}
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import {
   DependencyState,
@@ -58,7 +73,7 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
+import { ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -76,6 +91,7 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
@@ -84,8 +100,11 @@ import {
   criteriaDecisionRecorded,
   criteriaProposalDiff,
   readPendingCriteriaDecisionsForOwner,
+  stillUnanswered,
   type OwnerPendingCriteriaDecisionQueue,
 } from './criteria-pending-decisions';
+import { CRITERIA_CHANGE_FIELDS, queueOwnerCardTranslation, translatedInto } from '../sessions/card-translation';
+import { translationLanguages, type TranslationLanguages } from '../sessions/turn-translation';
 import { type CriteriaEditDirection, classifyCriteriaEdit } from './criteria-edit-classification';
 import { type CriteriaDecisionReply, sendCriteriaDecisionReply } from './criteria-decision-reply';
 import {
@@ -107,10 +126,11 @@ import {
   standardSetVersion,
 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
+import { readStateDigest } from './coordinator-digest';
 import {
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
-  buildDelegatedCoordinatorNotice,
+  buildChildCoordinatorPrompt,
   coordinatorSessionTitle,
 } from './coordinator-opening';
 import {
@@ -812,6 +832,8 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   // Read by the approval count below: the live set a card's `background_job_id` has to be in to
   // still be a question on a conversation that is not generating (migration 0291).
   runningBgShells: true,
+  // And the SubAgents still running, whose cards are questions on it too (docs/subagent-design.md §5.3).
+  runningSubagents: true,
 } satisfies Prisma.SessionSelect;
 
 type CoordinatorStatusSessionRow = Prisma.SessionGetPayload<{
@@ -1018,12 +1040,9 @@ export class ProjectsService {
    * be bound to it, and landing unbound while reporting success is the defect this whole path
    * exists to stop producing.
    *
-   * It no longer carries a remedy, because the remedy is no longer the caller's to carry out:
-   * `createInSession` catches this and gives the new project a conversation of its own in the same
-   * workspace. What is left is the rule, which is still true and is still what the code below
-   * switches on. A caller that sees this message reached it some other way, and telling it "record
-   * this from a session that coordinates nothing yet" would name a workaround that produced the
-   * coordinator-less projects this deployment had to repair by hand.
+   * This is the bare rule, as `create` raises it. `createInSession` replaces it with the refusal the
+   * caller can act on (`alreadyCoordinatingRefusal`): the project the session coordinates, and the
+   * child-session recovery chain for the one it could not record.
    */
   private static readonly ALREADY_COORDINATING =
     'this session already coordinates another project, and a session coordinates at most one';
@@ -1839,11 +1858,61 @@ export class ProjectsService {
     // an empty queue, so this route cannot be used to learn which project ids exist by the
     // difference between two successful answers.
     await this.assertOwned(ownerId, projectId);
-    return readPendingCriteriaDecisionsForOwner(
+    const queue = await readPendingCriteriaDecisionsForOwner(
       this.prisma as unknown as Prisma.TransactionClient,
       ownerId,
       projectId,
     );
+    // Decision 1A: a pending proposal with no translation in the owner's current language gets one queued as it
+    // is read; one already tried in this language, failed or not, is left.
+    if (queue.pending.length > 0) {
+      await translationLanguages(this.prisma, ownerId)
+        .then((langs) => {
+          if (!langs) return;
+          for (const row of queue.pending) {
+            if (!translatedInto(row.translation, langs)) this.queueProposalTranslation(ownerId, projectId, row.intentId, langs);
+          }
+        })
+        .catch((error: Error) => this.logger.warn(`queueing proposal translations failed: ${error.message}`));
+    }
+    return queue;
+  }
+
+  /**
+   * Queue the translation of one criteria proposal's words into the owner's language
+   * (sessions/card-translation.ts) while it is still a question. 0195 freezes the proposal itself, so the
+   * translation is kept in project_criteria_change_translation beside it; the owner's pending criteria
+   * decisions are then announced changed, as filing it was. Returns at once: true when it queued one.
+   */
+  queueProposalTranslation(ownerId: string, projectId: string, intentId: string, langs: TranslationLanguages): boolean {
+    return queueOwnerCardTranslation({
+      key: `criteria-change:${intentId}`,
+      read: async () => {
+        const db = this.prisma as unknown as Prisma.TransactionClient;
+        const rows = await db.projectRatifiedActionIntent.findMany({
+          where: { ownerId, projectId, effectClass: CRITERIA_WEAKENING_EFFECT_CLASS },
+          select: { id: true, action: true },
+        });
+        const open = (await stillUnanswered(db, rows)).find((row) => row.id === intentId);
+        if (!open) return null;
+        const stored = await this.prisma.projectCriteriaChangeTranslation.findUnique({
+          where: { intentId },
+          select: { translation: true },
+        });
+        const proposed = (open.action as { request?: { proposed?: unknown } } | null)?.request?.proposed;
+        return { source: { proposed }, fields: CRITERIA_CHANGE_FIELDS, translation: stored?.translation ?? null };
+      },
+      write: async (translation) => {
+        const value = translation as unknown as Prisma.InputJsonValue;
+        await this.prisma.projectCriteriaChangeTranslation.upsert({
+          where: { intentId },
+          create: { intentId, ownerId, translation: value },
+          update: { translation: value },
+        });
+        return true;
+      },
+      published: () => this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, projectId),
+    }, langs);
   }
 
   /**
@@ -2387,6 +2456,8 @@ export class ProjectsService {
                             ELSE COALESCE("title_before_project_management", "title") END,
                      "title" = ${coordinatorSessionTitle(dto.title)},
                      "title_managed_by_project" = TRUE,
+                     -- A coordinator no longer counts toward the workspace default (0670).
+                     "opened_by" = 'COORDINATOR',
                      "updated_at" = CURRENT_TIMESTAMP
                WHERE "id" = ${coordinator.sessionId}::uuid
                  AND "owner_id" = ${ownerId}::uuid
@@ -2475,29 +2546,7 @@ export class ProjectsService {
       project = await this.create(ownerId, dto, seed, principal);
     } catch (e) {
       if (!ProjectsService.isAlreadyCoordinating(e)) throw e;
-      // The acting session already coordinates a project, and the unique index on
-      // `coordinator_session_id` is what says a session coordinates at most one. That rule is
-      // sound and stays; what used to follow it was not. The caller was refused, and the only
-      // thing it could do about a refusal it had no other door for was to drop the session header
-      // and retry — which succeeds, and produces a project coordinated by nobody, in an account
-      // where nothing else produces one. This deployment has such a project and it took a manual
-      // write to make it openable.
-      //
-      // So the second project gets a conversation of its own, in the SAME workspace: the landing
-      // stays server-derived from where this request came from, exactly as the promotion's does,
-      // and only the session is new. Nothing here is caller-chosen, so this widens no authority —
-      // it spends a session, which is the thing a coordinator-less project costs anyway, only
-      // later and by hand.
-      const delegated = await this.createInWorkspace(ownerId, dto, seed.workspaceId, principal);
-      return {
-        coordinatorInstructions: buildDelegatedCoordinatorNotice(
-          delegated.title,
-          delegated.id,
-          // Non-null by construction: `createInWorkspace` returns only after the bind committed.
-          delegated.coordinatorSessionId as string,
-        ),
-        ...delegated,
-      };
+      throw await this.alreadyCoordinatingRefusal(ownerId, seed.sessionId, dto);
     }
     return {
       // `project_create` runs inside the turn that is being promoted. A prompt attached to a
@@ -2559,6 +2608,72 @@ export class ProjectsService {
     const project = await this.create(ownerId, dto, undefined, principal, credential);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
+  }
+
+  /**
+   * ALREADY_COORDINATING as the acting session receives it: which project it is bound to, and the
+   * whole recovery chain for the project it could not record (docs/recovery-contract.md §9).
+   *
+   * The rule stays: a session coordinates at most one project. What the caller is owed beside it
+   * is what it needs to act without guessing. `coordinatingProject` is the binding it keeps, by
+   * public id and title, so it can reconcile first: the answer to an earlier create may have been
+   * lost, and a project it already recorded is not a second one. (A repeat the receipts can prove
+   * is answered by `RunnerProjectsController` before this reaches the caller.) A project that
+   * really is a second one is the user's to open somewhere else, so the recovery block says a
+   * person confirms first, and `childSessionPrompt` is the self-contained first prompt of the child
+   * session that records it: once the user agrees, `session_create` with that prompt, and the
+   * child's own `project_create` makes the child the new project's coordinator, with
+   * `parentSessionId` keeping where it came from. Without `session_create` the same prompt is the
+   * manual fallback.
+   *
+   * Nothing is opened here any more. Opening a conversation on the caller's behalf, unasked, was
+   * the earlier answer; it spent a session nobody agreed to and kept no link to the one that
+   * planned the work.
+   */
+  private async alreadyCoordinatingRefusal(
+    ownerId: string,
+    sessionId: string,
+    dto: CreateProjectDto,
+  ): Promise<ConflictException> {
+    const current = await this.prisma.project.findFirst({
+      where: { ownerId, coordinatorSessionId: sessionId },
+      select: { id: true, title: true },
+    });
+    const sessionPublicId = uuidToBase62(sessionId);
+    const coordinatingProject = current
+      ? { id: uuidToBase62(current.id), title: current.title }
+      : null;
+    const childSessionPrompt = current
+      ? buildChildCoordinatorPrompt(dto, { sessionId, projectId: current.id, projectTitle: current.title })
+      : null;
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'ALREADY_COORDINATING',
+      message: current
+        ? `this session already coordinates project “${current.title}” (id: ${coordinatingProject!.id}), and a `
+          + 'session coordinates at most one. If that is the project you were creating, it is already recorded. '
+          + 'Otherwise ask the user first; if they agree, call session_create once with childSessionPrompt as its '
+          + 'prompt (the child records the project and becomes its coordinator) and do not follow it with '
+          + 'session_send. Without session_create, the user starts a new session in this workspace and sends '
+          + 'childSessionPrompt as its first message.'
+        : ProjectsService.ALREADY_COORDINATING,
+      requiredAction: 'CREATE_PROJECT_IN_CHILD_SESSION',
+      sessionId: sessionPublicId,
+      coordinatingProject,
+      childSessionPrompt,
+      recovery: {
+        effect: 'NONE',
+        retryPolicy: 'NEVER',
+        actionCode: 'CREATE_PROJECT_IN_CHILD_SESSION',
+        actor: 'CALLER',
+        userConfirmation: 'REQUIRED',
+        resources: [
+          ...(coordinatingProject ? [{ type: 'PROJECT', id: coordinatingProject.id }] : []),
+          { type: 'SESSION', id: sessionPublicId },
+        ],
+      },
+    });
   }
 
   /**
@@ -2760,6 +2875,7 @@ export class ProjectsService {
       standardSetConfirmation,
       mainBranchMemory,
       moveRecord,
+      rulings,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2822,6 +2938,8 @@ export class ProjectsService {
       // follow-up, and where each of its own came from. One statement over the move activity rows,
       // found by 0555's partial indexes and bounded by the moves, not by anything else the project holds.
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
+      // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
+      readLiveRulings(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2874,6 +2992,8 @@ export class ProjectsService {
       })),
       // The criteria this project moved out to a follow-up, in the order they stood here.
       criteriaMovedOut: moveRecord.movedOut,
+      // The owner rulings still live, oldest first; a superseded one is kept but not listed.
+      rulings,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),
@@ -3863,7 +3983,7 @@ export class ProjectsService {
         // Under the lock, so the comparison and the write cannot be separated by another writer.
         // Throwing here rolls the transaction back, which is the whole guarantee a stale write
         // needs: refused AND nothing written, including the team row below.
-        ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision);
+        ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision, id);
 
         // The integration line, under its binding's own lock: rank 55, after the project row above
         // and before any criterion row below.
@@ -4017,6 +4137,11 @@ export class ProjectsService {
       // owner's own read.
       if (held) {
         this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, id);
+        // And translated for the owner in the background, when their translation is on (decision 1A).
+        const { intentId } = held;
+        void translationLanguages(this.prisma, ownerId)
+          .then((langs) => { if (langs) this.queueProposalTranslation(ownerId, id, intentId, langs); })
+          .catch((error: Error) => this.logger.warn(`translating proposal ${intentId} failed to queue: ${error.message}`));
       }
       // The criteria a project states are one of the two facts its `status` is projected from, and
       // this write is the only thing that moves them — when it moves them at all. A HELD edit
@@ -4423,7 +4548,7 @@ export class ProjectsService {
    * this against revision N". If the project has moved on, the edit is refused with both numbers
    * in the body, so the client can re-read, re-decide and retry rather than guess what changed.
    */
-  private static assertConfigRevision(expected: string | undefined, actual: bigint): void {
+  private static assertConfigRevision(expected: string | undefined, actual: bigint, projectId: string): void {
     if (expected === undefined) return;
     if (expected === String(actual)) return;
     throw new ConflictException({
@@ -4437,6 +4562,8 @@ export class ProjectsService {
       requiredAction: 're-read this project, decide against the current settings, and write again',
       expectedConfigRevision: expected,
       configRevision: String(actual),
+      // The project to re-read before deciding again (refusal-recovery.ts, REREAD_AND_DECIDE).
+      projectId,
     });
   }
 
@@ -4606,14 +4733,14 @@ export class ProjectsService {
         if (locked.length === 0) throw new NotFoundException('project not found');
         releasedCoordinatorSessionId = locked[0].coordinator_session_id;
         const tasks = await tx.task.count({ where: { projectId: id } });
-        if (tasks > 0) throw new ConflictException(this.notEmptyMessage(tasks));
+        if (tasks > 0) throw new ConflictException(this.notEmptyRefusal(id, tasks));
         await tx.project.delete({ where: { id } });
       }, loggedRetry(this.logger, 'projects.remove'));
     } catch (e) {
       // The database's own refusal, phrased as the endpoint's. Reached only by a writer that beat
       // the lock — but a 500 there would say "we broke" about a rule working exactly as intended.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
-        throw new ConflictException(this.notEmptyMessage());
+        throw new ConflictException(this.notEmptyRefusal(id));
       }
       throw e;
     }
@@ -4635,11 +4762,15 @@ export class ProjectsService {
     return { ok: true };
   }
 
-  /** One wording for both paths, so the answer does not depend on who noticed. */
-  private notEmptyMessage(tasks?: number): string {
-    return (
+  /** One answer for both paths, so it does not depend on who noticed. Moving or deleting the tasks is
+   *  the owner's decision (refusal-recovery.ts, PROJECT_NOT_EMPTY), never a side effect of the delete. */
+  private notEmptyRefusal(projectId: string, tasks?: number): Record<string, unknown> {
+    return codedRefusal(
+      409,
+      'PROJECT_NOT_EMPTY',
       `This project still holds ${tasks ?? 'one or more'} task(s) and cannot be deleted — ` +
-      'move them to another project or delete them first'
+        'move them to another project or delete them first',
+      { projectId, taskCount: tasks },
     );
   }
 
@@ -4692,7 +4823,20 @@ export class ProjectsService {
     id: string,
     workspaceId?: string,
     intent: CoordinatorIntent = 'open',
-  ): Promise<{ sessionId: string; created: boolean; workspaceId: string | null }> {
+    /**
+     * A handoff this replacement completes (coordinator-handoff.service.ts): the note goes into the
+     * successor's opening, and the handoff row turns COMPLETED in the swap's own transaction, naming
+     * the successor and the waits that moved. Refused 409 when the project's coordinator is no longer
+     * the one the handoff started from. Only with `replace`.
+     */
+    handoff?: CoordinatorHandoffBinding,
+  ): Promise<{
+    sessionId: string;
+    created: boolean;
+    workspaceId: string | null;
+    /** How many of the outgoing coordinator's live (ACTIVE or PAUSED) watches now observe the new one; 0 unless this call swapped. */
+    movedWatches: number;
+  }> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: {
@@ -4713,6 +4857,11 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
+    if (handoff && (intent !== 'replace' || project.coordinatorSessionId !== handoff.fromSessionId)) {
+      throw new ConflictException(
+        'this project’s coordinator changed since the handover started — the handover was not completed',
+      );
+    }
 
     // Trashed, not merely ended: reviving a session out of Trash behind the user's back would undo
     // a deletion they performed deliberately.
@@ -4741,6 +4890,7 @@ export class ProjectsService {
         sessionId: standing.id,
         created: false,
         workspaceId: project.coordinatorWorkspaceId,
+        movedWatches: 0,
       };
     }
 
@@ -4758,7 +4908,9 @@ export class ProjectsService {
     // coordinate, so a swap that left this one open would demote a conversation still being written
     // to — it would go on being talked to and quietly stop being able to act. Already-completed is
     // the no-op case, and the one this call reached through the ordinary route.
-    if (standing && !finished) await this.sessions.complete(ownerId, standing.id);
+    // A handoff's outgoing coordinator leaves its SubAgent runs and bg_run jobs running; their end wakes the
+    // successor (docs/coordinator-handoff-v2-design.md §1).
+    if (standing && !finished) await this.sessions.complete(ownerId, standing.id, { handingOver: handoff != null });
 
     // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
     // sessions.create, which is the only thing that may build a session row. Re-deriving any of
@@ -4771,6 +4923,11 @@ export class ProjectsService {
     // the coordinator is unavailable until its owner rebinds it, which is a different sentence
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
+    // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap.
+    const openingHandoff = handoff
+      ? { note: handoff.note, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+      : null;
     let session: { id: string };
     try {
       session = await this.sessions.create(
@@ -4783,10 +4940,20 @@ export class ProjectsService {
             project.id,
             project.coordinatorEnabled,
             modelRoutingEnabled(project.owner),
+            openingHandoff,
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
-        { source: 'user', titleManagedByProject: true, promptByOrbit: true },
+        {
+          source: 'user',
+          titleManagedByProject: true,
+          promptByOrbit: true,
+          openedBy: 'COORDINATOR',
+          // A re-created or replacing coordinator starts where the one before it ran, not on the
+          // workspace's newest conversation (docs/workspace-default-model-design.md §2.1). Read before
+          // the pointer swap below, so it is the previous coordinator, trashed or completed.
+          anchor: () => previousCoordinatorAnchor(this.prisma, project.id),
+        },
       );
     } catch (e) {
       if (fixed && (e instanceof ForbiddenException || e instanceof BadRequestException)) {
@@ -4829,7 +4996,7 @@ export class ProjectsService {
     // The pointer replacement remains one statement inside the transaction below: only a
     // REPLACEMENT counts, and the trigger's condition is the same one this code applied — a first
     // coordinator is generation 0, "the coordinator this project has always had".
-    let claimed: { count: number };
+    let claimed: { count: number; movedWatches: string[] };
     try {
       claimed = await withTransactionRetry(this.prisma, async (tx) => {
         // Updating the Project pointer re-checks its workspace FK. Hold the landing before any
@@ -4869,14 +5036,14 @@ export class ProjectsService {
            WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`);
         if (!locked || locked.coordinator_session_id !== project.coordinatorSessionId) {
-          return { count: 0 };
+          return { count: 0, movedWatches: [] };
         }
 
         const swapped = await tx.project.updateMany({
           where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
           data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
         });
-        if (swapped.count === 0) return swapped;
+        if (swapped.count === 0) return { count: 0, movedWatches: [] };
 
         // A manual rename can race in the tiny create-before-bind window. It clears the managed
         // bit, so this conditional write honors that choice while still binding the conversation.
@@ -4884,13 +5051,104 @@ export class ProjectsService {
           where: { id: session.id, ownerId, titleManagedByProject: true },
           data: { title: coordinatorSessionTitle(locked.title) },
         });
+        let movedWatches: string[] = [];
         if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
           await tx.session.updateMany({
             where: { id: project.coordinatorSessionId, titleManagedByProject: true },
             data: { titleManagedByProject: false },
           });
+          // The waits the outgoing coordinator set go to its successor, in this transaction: a
+          // completed observer is refused every delivery (OBSERVER_SESSION_COMPLETED), so a
+          // `task_await` left addressed to it would never wake anyone. Live ones only, ACTIVE and
+          // PAUSED — a PAUSED watch keeps its state, since the statement writes only the observer; a
+          // watch that has ended stays with the conversation it ended for. Rank 45, after the project
+          // (40), rows locked in id order in one statement; the new observer's FK check is covered by
+          // the Session lock already held.
+          const moved = await tx.$queryRaw<Array<{ id: string; state: string }>>`
+            UPDATE "watch" SET "observer_session_id" = ${session.id}::uuid, "updated_at" = now()
+             WHERE "id" IN (
+               SELECT "id" FROM "watch"
+                WHERE "observer_session_id" = ${project.coordinatorSessionId}::uuid
+                  AND "owner_id" = ${ownerId}::uuid AND "state" IN ('ACTIVE', 'PAUSED')
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id", "state"`;
+          movedWatches = moved.map((row) => row.id);
+          // Then the outgoing coordinator's scheduled wakeups and its wakeup loop (design v2 §1), still in
+          // this transaction: a wakeup filed onto a completed session is dropped, and a loop's ticks would
+          // stop. The loop first and its PENDING tick after it — the order the wakeup worker takes them in
+          // (settleLoopTick: session, loop, tick) — each FOR UPDATE in id order in one statement. Only
+          // `session_id` changes, so a loop keeps its schedule, and its tick its due time. A wakeup already
+          // DELIVERED stays with the turn it was filed onto. Their new session FK check takes the candidate
+          // Session FOR KEY SHARE, already held.
+          const movedLoops = await tx.$queryRaw<Array<{ id: string }>>`
+            UPDATE "session_wakeup_loop" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_wakeup_loop"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'ACTIVE'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id"`;
+          const movedWakeups = await tx.$queryRaw<Array<{ id: string; loop_id: string | null }>>`
+            UPDATE "session_scheduled_wakeup" SET "session_id" = ${session.id}::uuid
+             WHERE "id" IN (
+               SELECT "id" FROM "session_scheduled_wakeup"
+                WHERE "session_id" = ${project.coordinatorSessionId}::uuid AND "state" = 'PENDING'
+                ORDER BY "id"
+                FOR UPDATE)
+            RETURNING "id", "loop_id"`;
+          // The handoff this replacement completes, in the same transaction as the swap (rank 46,
+          // after the watches): COMPLETED with its successor and the waits that moved, labelled as the
+          // preview read them before the swap. A compare-and-set on HANDING_OVER — the one state a
+          // replacement is run from — so a handoff that is not that any more rolls the swap back.
+          if (handoff) {
+            const preview = new Map(handoff.waits.map((wait) => [`${wait.kind}:${wait.id}`, wait]));
+            // Oldest first, as the preview lists them (RETURNING has no order); one created since
+            // the preview, last.
+            const rank = new Map(handoff.waits.map((wait, index) => [`${wait.kind}:${wait.id}`, index]));
+            const rows: CoordinatorPendingWait[] = [
+              ...moved.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WATCH',
+                label: preview.get(`WATCH:${row.id}`)?.label ?? pendingWaitLabel(null, []),
+                paused: row.state === 'PAUSED',
+              })),
+              ...movedLoops.map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'LOOP',
+                label: preview.get(`LOOP:${row.id}`)?.label ?? 'Wakeup loop',
+                paused: false,
+              })),
+              // A loop's tick moves with its loop and is listed as the loop.
+              ...movedWakeups.filter((row) => row.loop_id === null).map((row): CoordinatorPendingWait => ({
+                id: row.id,
+                kind: 'WAKEUP',
+                label: preview.get(`WAKEUP:${row.id}`)?.label ?? 'Scheduled wakeup',
+                paused: false,
+              })),
+              // SubAgent runs and bg_run jobs move no row: their wakes are forwarded when they end
+              // (runner-api/handoff-wake-forward.ts), so the preview's list of them is what moved.
+              ...handoff.waits.filter((wait) => wait.kind === 'SUBAGENT' || wait.kind === 'JOB'),
+            ];
+            const key = (wait: CoordinatorPendingWait) => `${wait.kind}:${wait.id}`;
+            const movedWaits = rows.sort((a, b) =>
+              (rank.get(key(a)) ?? Number.MAX_SAFE_INTEGER) - (rank.get(key(b)) ?? Number.MAX_SAFE_INTEGER)
+              || key(a).localeCompare(key(b)));
+            const completed = await tx.coordinatorHandoff.updateMany({
+              where: { id: handoff.id, fromSessionId: project.coordinatorSessionId, state: 'HANDING_OVER' },
+              data: {
+                state: 'COMPLETED',
+                toSessionId: session.id,
+                movedWaits: movedWaits as unknown as Prisma.InputJsonValue,
+                endedAt: new Date(),
+              },
+            });
+            if (completed.count === 0) {
+              throw new ConflictException('this handover is no longer in progress — the handover was not completed');
+            }
+          }
         }
-        return swapped;
+        return { count: swapped.count, movedWatches };
       }, loggedRetry(this.logger, 'projects.coordinator'));
     } catch (e) {
       // The swap did not happen — it FAILED, which is not the same as losing the race below and is
@@ -4942,11 +5200,13 @@ export class ProjectsService {
         sessionId: winner.coordinatorSession.id,
         created: false,
         workspaceId: winner.coordinatorWorkspaceId,
+        movedWatches: 0,
       };
     }
     if (project.coordinatorSessionId && project.coordinatorSessionId !== session.id) {
       this.sessions?.announceProjectSessionChanged?.(project.coordinatorSessionId);
     }
+    for (const watchId of claimed.movedWatches) this.realtime?.publishWatchChanged(ownerId, watchId);
     this.sessions?.announceProjectSessionChanged?.(session.id);
     // §4.4 X-D4 (2): the conversation this project's open exceptions are owed to is now this one, so
     // everything still waiting is handed over rather than left addressed to the conversation before.
@@ -4956,7 +5216,114 @@ export class ProjectsService {
     // And the evidence revisions waiting for a coordinator: handed to this one, oldest first
     // (projects/coordinator-evidence-queue.service.ts).
     await this.evidenceQueue?.deliverOwed(id);
-    return { sessionId: session.id, created: true, workspaceId: runIn };
+    return { sessionId: session.id, created: true, workspaceId: runIn, movedWatches: claimed.movedWatches.length };
+  }
+
+  /**
+   * The pending work a replacement hands over (see the swap in `coordinator`), oldest first, each with its
+   * kind, for the confirm dialog (docs/coordinator-handoff-v2-design.md §1):
+   *
+   *   WATCH    — every live watch, ACTIVE or PAUSED, whose observer is this project's current coordinator;
+   *   SUBAGENT — its running `delegate` runs that owe it a wake, labelled by their description;
+   *   JOB      — the `bg_run` jobs it has running (`Session.runningBgJobs`), labelled by the description the
+   *              job was started with, else its command;
+   *   WAKEUP   — its pending one-shot `schedule_wakeup`, labelled by its reason;
+   *   LOOP     — its running wakeup loop, labelled by its reason, else its prompt.
+   *
+   * Empty when the project has no coordinator or it is waiting on nothing.
+   */
+  async coordinatorPendingWaits(ownerId: string, id: string): Promise<CoordinatorPendingWait[]> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const sessionId = project.coordinatorSessionId;
+    if (!sessionId) return [];
+    const [watches, runs, coordinator, wakeups, loops] = await Promise.all([
+      this.prisma.watch.findMany({
+        where: { ownerId, observerSessionId: sessionId, state: { in: ['ACTIVE', 'PAUSED'] } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          state: true,
+          predicate: true,
+          createdAt: true,
+          targets: { select: { targetKind: true, targetResourceId: true }, orderBy: { id: 'asc' } },
+        },
+      }),
+      this.prisma.subagentRun.findMany({
+        where: { ownerId, sessionId, status: 'RUNNING', wakeOwed: true, wakeFiledAt: null },
+        select: { id: true, description: true, createdAt: true },
+      }),
+      this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { runningBgJobs: true } }),
+      this.prisma.sessionScheduledWakeup.findMany({
+        where: { sessionId, loopId: null, state: 'PENDING' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+      this.prisma.sessionWakeupLoop.findMany({
+        where: { sessionId, state: 'ACTIVE' },
+        select: { id: true, reason: true, prompt: true, createdAt: true },
+      }),
+    ]);
+    const jobIds = coordinator?.runningBgJobs ?? [];
+    const ids = (kind: string) => [...new Set(watches.flatMap((w) =>
+      w.targets.filter((t) => t.targetKind === kind).map((t) => t.targetResourceId)))];
+    const [tasks, sessions, jobCalls] = await Promise.all([
+      this.prisma.task.findMany({ where: { id: { in: ids('TASK') }, ownerId }, select: { id: true, title: true } }),
+      this.prisma.session.findMany({
+        where: { id: { in: ids('SESSION') }, ownerId },
+        select: { id: true, title: true },
+      }),
+      // The launch the runner recorded for each job (runner-go background_job.go: a Bash tool_use whose id is
+      // the job's), which carries the description bg_run was given.
+      jobIds.length === 0 ? [] : this.prisma.toolCall.findMany({
+        where: { sessionId, toolUseId: { in: jobIds } },
+        select: { toolUseId: true, input: true, startedAt: true },
+      }),
+    ]);
+    const titles = new Map<string, string>([...tasks, ...sessions].map((row) => [row.id, row.title ?? 'Untitled']));
+    const launches = new Map(jobCalls.map((call) => [call.toolUseId, call]));
+    const text = (...values: Array<unknown>) =>
+      values.map((value) => (typeof value === 'string' ? value.trim() : '')).find((value) => value !== '') ?? null;
+    const dated: Array<{ at: number; wait: CoordinatorPendingWait }> = [
+      ...watches.map((w) => ({
+        at: w.createdAt.getTime(),
+        wait: {
+          id: w.id,
+          kind: 'WATCH' as const,
+          label: pendingWaitLabel(w.predicate, w.targets.map((t) => titles.get(t.targetResourceId) ?? null)),
+          paused: w.state === 'PAUSED',
+        },
+      })),
+      ...runs.map((run) => ({
+        at: run.createdAt.getTime(),
+        wait: { id: run.id, kind: 'SUBAGENT' as const, label: text(run.description) ?? 'SubAgent run', paused: false },
+      })),
+      ...jobIds.map((jobId) => {
+        const launch = launches.get(jobId);
+        const input = (launch?.input ?? {}) as { description?: unknown; command?: unknown };
+        return {
+          at: launch?.startedAt?.getTime() ?? Number.MAX_SAFE_INTEGER,
+          wait: { id: jobId, kind: 'JOB' as const, label: text(input.description, input.command) ?? jobId, paused: false },
+        };
+      }),
+      ...wakeups.map((wakeup) => ({
+        at: wakeup.createdAt.getTime(),
+        wait: {
+          id: wakeup.id,
+          kind: 'WAKEUP' as const,
+          label: text(wakeup.reason, wakeup.prompt) ?? 'Scheduled wakeup',
+          paused: false,
+        },
+      })),
+      ...loops.map((loop) => ({
+        at: loop.createdAt.getTime(),
+        wait: { id: loop.id, kind: 'LOOP' as const, label: text(loop.reason, loop.prompt) ?? 'Wakeup loop', paused: false },
+      })),
+    ];
+    // Stable: watches keep the (created_at, id) order they were read in.
+    return dated.sort((a, b) => a.at - b.at).map((entry) => entry.wait);
   }
 
   /**
@@ -5086,6 +5453,8 @@ export class ProjectsService {
     replacedSessionId?: string;
     /** Why the conversation it left behind could not be handed a message. */
     replaceReason?: SessionReceiveBlockedReason;
+    /** How many waits moved to the new conversation, when this call opened or replaced one. */
+    movedWatches?: number;
   }> {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
@@ -5099,7 +5468,7 @@ export class ProjectsService {
     const assertMayOpen = () => this.sessions.assertMayStartAtAccountDefault(
       ownerId,
       actingSessionId,
-      { workspaceId: project.coordinatorWorkspaceId },
+      { workspaceId: project.coordinatorWorkspaceId, anchor: () => previousCoordinatorAnchor(this.prisma, project.id) },
       "A project's coordinator opens in the account default. A person can open it from the project's " +
         'page, or switch this session to Auto.',
     );
@@ -5129,6 +5498,47 @@ export class ProjectsService {
     return replaced.created
       ? { ...replaced, replacedSessionId: standing, replaceReason: blockedReason }
       : replaced;
+  }
+
+  /**
+   * After a person or an agent moves a session to Trash: when it was the coordinator of an OPEN
+   * project, open the next one at once (account owner, 2026-11-14). A project with no live
+   * coordinator has nowhere to draw its decision cards — crossings, criteria — and nobody to carry
+   * its work; DONE and CANCELLED projects are left without one. The trashed conversation is not
+   * revived: `coordinator` treats a trashed pointer as unbound and swaps it on what it read.
+   *
+   * An agent that trashes another project's coordinator opens the next one through
+   * `ensureCoordinator`, so the account-default gate applies to it as to any agent opening one.
+   * Best effort: the delete has already happened and stands. A failure is logged, and the project
+   * page lists the crossings no conversation can answer until someone opens the coordinator.
+   */
+  async reopenTrashedCoordinator(
+    ownerId: string,
+    sessionId: string,
+    actingSessionId?: string,
+  ): Promise<{ projectId: string; sessionId: string } | null> {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        ownerId,
+        coordinatorSessionId: sessionId,
+        status: ProjectStatus.OPEN,
+        coordinatorSession: { deletedAt: { not: null } },
+      },
+      select: { id: true },
+    });
+    if (!project) return null;
+    try {
+      const opened = actingSessionId && actingSessionId !== sessionId
+        ? await this.ensureCoordinator(ownerId, project.id, actingSessionId)
+        : await this.coordinator(ownerId, project.id);
+      return { projectId: project.id, sessionId: opened.sessionId };
+    } catch (e) {
+      this.logger.error(
+        `project ${project.id}: could not open a coordinator after ${sessionId} was trashed`,
+        e instanceof Error ? e.stack : String(e),
+      );
+      return null;
+    }
   }
 
   /**

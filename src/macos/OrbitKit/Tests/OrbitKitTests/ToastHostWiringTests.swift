@@ -76,11 +76,15 @@ final class ToastHostWiringTests: XCTestCase {
                        "error, committed and no-change each take the commit's place")
     }
 
-    /// An approval card stands in for a banner, and the approval can be answered anywhere — another
-    /// device included — so the snapshot that notices takes the card down.
-    func testAnAnsweredApprovalComesDown() throws {
+    /// An approval is no toast of its own kind (the owner, 2026-11-15,
+    /// docs/mocks/needs-you-capsule/12-once): it is noticed as a wait like any other, read from the
+    /// needs-you rows, so an approval answered anywhere — another device included — takes its notice
+    /// with it in the snapshot that notices.
+    func testAnApprovalIsNoticedAsAWait() throws {
         let model = code(try source("AppModel.swift"))
-        XCTAssertTrue(model.contains("toasts.clearApprovals(stillWaiting: needsYou)"))
+        XCTAssertFalse(model.contains("awaitsApproval"), "no approval toast is posted")
+        XCTAssertTrue(model.contains(
+            "NeedsYouLogic.newlyWaiting(needsYouSessions, seen: seen, excluding: focusedConsoleSessionID)"))
     }
 
     /// What waits for you is drawn above what passes, its diagnostic can be selected and copied, and a

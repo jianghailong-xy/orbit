@@ -13,7 +13,7 @@ const external = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 export function publicFiles(tracked, guides) {
   return tracked.filter((file) => file.endsWith('.md') && (
     (!file.includes('/') && !['AGENTS.md', 'CLAUDE.md'].includes(file)) ||
-    file.startsWith('.github/') || guides.includes(file)
+    file.startsWith('.github/') || file.startsWith('docs/help/') || guides.includes(file)
   ));
 }
 

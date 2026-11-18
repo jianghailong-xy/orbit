@@ -40,6 +40,7 @@ final class UserTurnRowWiringTests: XCTestCase {
         "EvidenceToReviewCardView(", "EvidenceSentBackCardView(", "RunQuestionCardView(",
         "RunNoticeCardView(", "SessionOpeningRowView(",
         "SessionReplyCardsView(", "WatchWakeCardView(", "BackgroundWakeCardView(",
+        "SubagentFinishedLineView(",
     ]
 
     private func path(_ relative: String) throws -> URL {
@@ -76,7 +77,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     private var rowBody: [String] {
         get throws {
             statements(try section(try source(Self.rowPath),
-                                   from: "var body: some View {", to: "private func attachedRest"))
+                                   from: "var body: some View {", to: "private func told"))
         }
     }
 
@@ -90,7 +91,9 @@ final class UserTurnRowWiringTests: XCTestCase {
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")
         XCTAssertEqual(console.filter { $0.contains("UserTurnRow(") }.count, 2)
-        XCTAssertFalse(console.contains { $0.contains("UserBubbleView(") },
+        // The row alone draws a user turn's bubble. The owner's own words inside a tool card — the
+        // "Chat about this" reply (`owner-chat-…`) — are not a turn; nothing else in the console may be.
+        XCTAssertFalse(console.contains { $0.contains("UserBubbleView(") && !$0.contains("owner-chat-") },
                        "the console draws a user turn's bubble outside the row")
 
         let root = try path(Self.app)
@@ -133,8 +136,9 @@ final class UserTurnRowWiringTests: XCTestCase {
             Range($0.range(at: 1), in: code).map { String(code[$0]) }
         }
         // Each card, then the bubble headed with who outside Orbit sent it (`externalSender`), and the
-        // owner's own bubble last.
-        XCTAssertEqual(values.count, Self.cardViews.count + 2, "a card is drawn with no Cancel while queued")
+        // owner's own bubble last — and once more the job's line a SubAgent's note can carry beside its
+        // own, which then takes the queue's Cancel in the SubAgent line's place.
+        XCTAssertEqual(values.count, Self.cardViews.count + 3, "a card is drawn with no Cancel while queued")
         XCTAssertEqual(Set(values), ["cancel"], "a card is handed a Cancel that is not the queue's")
     }
 
