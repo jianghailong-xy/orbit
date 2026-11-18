@@ -24,7 +24,13 @@ export function ProjectTaskPanel({ projectId, taskId }: { projectId: string; tas
   const openTask = useOpenProjectTask(projectId);
   const close = useCloseProjectTask(projectId);
   // The panel's own read, under its own key: the two are one request and one cache entry.
-  const task = useQuery({ queryKey: ['task', taskId], queryFn: () => api<any>(`/tasks/${taskId}`) });
+  const task = useQuery({
+    queryKey: ['task', taskId],
+    // The panel's own read, shared with TaskDetailPanel and TaskRoute under one cache entry: the
+    // document carries the task's sessions, which is where its Running/Queued state comes from.
+    meta: { entities: ['task', 'session'] },
+    queryFn: () => api<any>(`/tasks/${taskId}`),
+  });
   const remove = useMutation({
     mutationFn: deleteTask,
     onSuccess: async () => {

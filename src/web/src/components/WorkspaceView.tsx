@@ -5046,6 +5046,7 @@ export function WorkspaceView({
   // without it says the seal and the count.
   const confirmedChanges = useQuery({
     queryKey: confirmedChangesProjectKey(coordinatedProjectId ?? ''),
+    meta: { entities: ['project', 'task'] },
     queryFn: (): string | null => null,
     enabled: false,
     staleTime: Infinity,
@@ -7830,6 +7831,7 @@ export function WorkspaceView({
   const shownProviderListed = shownEngineProviders.some((choice) => choice.slug === shownProvider);
   const ownKeys = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
     enabled:
       shownEngine === AgentProvider.ANTIGRAVITY ||
@@ -7888,6 +7890,7 @@ export function WorkspaceView({
   const [retryMessageAskedFor, setRetryMessageAskedFor] = useState<string | null>(null);
   const serverRetry = useQuery({
     queryKey: ['session', selectedId, 'retry-message'],
+    meta: { entities: ['session'] },
     queryFn: () => getSessionRetryMessage(selectedId!),
     enabled: !!selectedId && retryMessageAskedFor === selectedId,
   }).data;
@@ -11838,6 +11841,7 @@ export function SessionComposer({
   const refToken = referenceToken(text);
   const refListsQ = useQuery({
     queryKey: ['task-lists'],
+    meta: { entities: ['task'] },
     queryFn: () => api<Array<{ id: string; title: string }>>('/task-lists'),
     // Only once the user reaches for the menu: most drafts never contain a reference, and the
     // list index is not otherwise needed on this screen.
@@ -11846,6 +11850,7 @@ export function SessionComposer({
   });
   const refTasksQ = useQuery({
     queryKey: ['tasks', 'ref-picker', refToken],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<{ items: Array<{ id: string; title: string }> }>(
         `/tasks/page?limit=8&counts=none&q=${encodeURIComponent(refToken ?? '')}`,

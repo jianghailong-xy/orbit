@@ -110,6 +110,7 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
 
   const viewQ = useQuery({
     queryKey: mainCheckoutQueryKey(ws ?? ''),
+    meta: { entities: ['checkout'] },
     queryFn: ({ signal }) => getMainCheckout(ws!, [], signal),
     enabled: open && !!ws,
     staleTime: 0,
@@ -135,6 +136,7 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
   }, [open, snapshot, path]);
   const diffQ = useQuery({
     queryKey: [...mainCheckoutQueryKey(ws ?? ''), 'diff', path, snapshot?.fingerprint],
+    meta: { entities: ['checkout'] },
     queryFn: ({ signal }) => getMainCheckout(ws!, [path!], signal),
     enabled: open && !!ws && !!path && !!snapshot,
     staleTime: Infinity,

@@ -16,10 +16,11 @@ export const helpAskChoicesQuery = () =>
     staleTime: 15_000,
   });
 
-/** GET /api/help/ask/sessions: /help → Your questions. Under ['sessions'] so a session event refreshes it. */
+/** GET /api/help/ask/sessions: /help → Your questions. It declares `session`, so a session event refreshes it. */
 export const helpAskListQuery = () =>
   queryOptions({
     queryKey: ['sessions', 'help-ask'] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<HelpAskList>('/help/ask/sessions'),
   });
 
