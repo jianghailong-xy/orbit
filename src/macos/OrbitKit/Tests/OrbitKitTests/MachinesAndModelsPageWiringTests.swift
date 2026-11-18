@@ -586,6 +586,42 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "Use again reads the runners again after the write")
     }
 
+    /// Set as default on an added Claude Code account (web RunnerEngines / Android SetDefaultPageTest):
+    /// the long-press menu offers it with what it does under its name, or why it can't be chosen; the
+    /// confirmation is the web's and Make default POSTs …/set-default; while the swap waits the account
+    /// says how many sessions' turns it waits on; a failed swap shows the machine's reason and that both
+    /// logins are as they were.
+    func testSetAsDefaultIsOnTheMenuWithItsQuestionWaitingLineAndResult() throws {
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        let menu = try slice(page, from: "private func accountMenu(", to: "private func addAccountRow(")
+        try assertInOrder(menu, ["if RunnerPageFormat.offersSetDefault(line, engine: engine) {",
+                                 "RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)",
+                                 "pendingSetDefault = line",
+                                 "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
+                                 "blocked ?? RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT",
+                                 ".disabled(blocked != nil)"],
+                          "Set as default is the menu's, with its hint or why it can't be chosen")
+        try assertInOrder(page, [".orbitConfirmation({ _ in setDefaultTitle },",
+                                 "Button(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM) { setDefault(line) }",
+                                 "Text(setDefaultNote(line))"],
+                          "Make default asks first")
+        let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
+        try assertInOrder(row, ["RunnerPageFormat.settingDefaultLine(runner, line: line)",
+                                "RunnerPageFormat.failedSwap(runner, line: line)",
+                                "RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name)",
+                                "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED"],
+                          "the waiting line and a failed swap sit under the account")
+        let press = try slice(page, from: "private func setDefault(", to: "private func restoreDefault(")
+        try assertInOrder(press, ["swapPressing = true",
+                                  "await runners.setDefaultAccount(id, engine: login, account: line.id)",
+                                  "RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name)",
+                                  "swapPressing = false"],
+                          "a refusal is said over the web's failed title; the menu stays busy until it lands")
+        let model = code(try appSource("RunnersModel.swift"))
+        XCTAssertTrue(model.contains("api.setDefaultRunnerAccount(id, engine: engine, account: account)"),
+                      "Make default POSTs …/set-default and reads the runners again")
+    }
+
     /// On a phone an account's row says only where it stands, and its presses are on its left swipe
     /// and its long-press menu (docs/mocks/account-pause-swipe-ios.html): Pause — Resume while it is
     /// paused — inside Remove on the swipe, drawn as the session list's circles on iOS 26; Rename…,
@@ -613,8 +649,10 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                                  "Label(\"Resume Now\", systemImage: \"play.fill\")",
                                  "Label(\"Change Duration…\", systemImage: \"clock\")",
                                  "Label(\"Pause…\", systemImage: \"pause.fill\")",
+                                 "RunnerPageFormat.offersSetDefault(line, engine: engine)",
+                                 "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
                                  "Label(\"Remove…\", systemImage: \"trash\")"],
-                          "the menu holds everything the row and its swipe offer")
+                          "the menu holds everything the row and its swipe offer, and Set as default")
 
         let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
         XCTAssertTrue(row.contains("AccountPauseLine(pausedUntil: line.pausedUntil)"), "Paused stays, as a line")

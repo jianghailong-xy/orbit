@@ -2144,6 +2144,13 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Make an added Claude Code account the Default: the runner swaps its login with ~/.claude after
+    /// any turn in progress on either account ends (docs/claude-default-swap-contract.md).
+    public func setDefaultRunnerAccount(_ id: String, engine: LoginEngine,
+                                        account: String) async throws -> RunnerClaudeAccountSwapState {
+        try await postEmpty("runners/\(id)/accounts/\(engine.rawValue)/\(account)/set-default")
+    }
+
     /// Bring back the Default `removeRunnerAccount` took off Orbit's list: Orbit's own record, as the
     /// removal is, so it works with the runner offline.
     public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {

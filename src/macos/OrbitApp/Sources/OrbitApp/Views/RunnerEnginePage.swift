@@ -60,6 +60,10 @@ private struct RunnerEngineContent: View {
     @FocusState private var newAccountFocused: Bool
     @State private var newAccountRenaming = false
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
+    /// The added Claude Code account whose Set as default confirmation is up.
+    @State private var pendingSetDefault: RunnerPageFormat.AccountLine?
+    /// This page's own Set as default request is on its way: the menu item says busy until it lands.
+    @State private var swapPressing = false
     /// Use again is on its way: the button stays busy until the list read after it carries Default back
     /// and its line goes.
     @State private var restoring = false
@@ -308,6 +312,13 @@ private struct RunnerEngineContent: View {
                     } message: { line in
                         Text(removalNote(line))
                     }
+                    .orbitConfirmation({ _ in setDefaultTitle },
+                                       isPresented: setDefaultAsked, presenting: pendingSetDefault) { line in
+                        Button(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_CONFIRM) { setDefault(line) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { line in
+                        Text(setDefaultNote(line))
+                    }
             }
             if let removed = RunnerPageFormat.removedDefaultLine(health),
                let name = RunnerPageFormat.removedDefaultName(health) {
@@ -482,6 +493,28 @@ private struct RunnerEngineContent: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
             }
+            // Becoming the Default: said under the account, as a removal's move is, until the swap is done.
+            if let setting = RunnerPageFormat.settingDefaultLine(runner, line: line) {
+                Text(setting)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
+            // The machine could not swap the logins, and put both back: its reason, as a refused removal's.
+            if let failed = RunnerPageFormat.failedSwap(runner, line: line) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name))
+                        .font(.orbitLabel)
+                        .foregroundStyle(RunnerInk.red)
+                    if let message = failed.message, !message.isEmpty {
+                        Text(message)
+                            .font(.orbitLabel)
+                            .foregroundStyle(RunnerInk.red)
+                    }
+                    Text(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
+            }
             if let refused = removal?.refused {
                 Text(refused)
                     .font(.orbitLabel)
@@ -652,6 +685,19 @@ private struct RunnerEngineContent: View {
                 Button { pausing = line } label: { Label("Pause…", systemImage: "pause.fill") }
             }
         }
+        // What it does under its name, or why it can't be chosen now (web / Android Set as default).
+        if RunnerPageFormat.offersSetDefault(line, engine: engine) {
+            let blocked = RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)
+            Button { pendingSetDefault = line } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT)
+                    Text(blocked ?? RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(blocked != nil)
+        }
         if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {
             Divider()
             Button(role: .destructive) { pendingRemoval = line } label: {
@@ -773,6 +819,10 @@ private struct RunnerEngineContent: View {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
     }
 
+    private var setDefaultAsked: Binding<Bool> {
+        Binding(get: { pendingSetDefault != nil }, set: { if !$0 { pendingSetDefault = nil } })
+    }
+
     private var renameAsked: Binding<Bool> {
         Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
     }
@@ -782,8 +832,17 @@ private struct RunnerEngineContent: View {
         return removalQuestion(line).title
     }
 
+    private var setDefaultTitle: String {
+        guard let line = pendingSetDefault else { return RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT }
+        return setDefaultQuestion(line).title
+    }
+
     private func removalNote(_ line: RunnerPageFormat.AccountLine) -> String {
         removalQuestion(line).message
+    }
+
+    private func setDefaultNote(_ line: RunnerPageFormat.AccountLine) -> String {
+        setDefaultQuestion(line).message
     }
 
     /// Default's removal in the web's words; an added account's in the page's own, or — while Default is
@@ -791,6 +850,11 @@ private struct RunnerEngineContent: View {
     private func removalQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
         let health = RunnerPageFormat.engines(runner).first { $0.engine == engine } ?? RunnerEngineHealth(engine: engine)
         return RunnerPageFormat.removalQuestion(line, health: health, runner: runner)
+    }
+
+    private func setDefaultQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
+        let health = RunnerPageFormat.engines(runner).first { $0.engine == engine } ?? RunnerEngineHealth(engine: engine)
+        return RunnerPageFormat.setDefaultQuestion(line, health: health, runner: runner)
     }
 
     // MARK: presses
@@ -892,6 +956,20 @@ private struct RunnerEngineContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.removeAccount(id, engine: login, account: line.id) { show(failure) }
+        }
+    }
+
+    /// Make default: the runner swaps this login with ~/.claude. A control-plane refusal is said over
+    /// the web's failed title; a machine failure rides in `claudeAccountSwap` after the list is read.
+    private func setDefault(_ line: RunnerPageFormat.AccountLine) {
+        guard let login = RunnerPageFormat.loginEngine(engine) else { return }
+        let id = runner.id
+        swapPressing = true
+        Task {
+            if let failure = await runners.setDefaultAccount(id, engine: login, account: line.id) {
+                show(RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name) + " — " + failure)
+            }
+            swapPressing = false
         }
     }
 

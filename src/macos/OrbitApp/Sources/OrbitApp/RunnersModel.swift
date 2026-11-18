@@ -216,6 +216,21 @@ final class RunnersModel {
         }
     }
 
+    /// Make an added Claude Code account the Default: POST …/set-default. A control-plane refusal
+    /// (offline, busy, too old) comes back in its own words; a machine failure rides in
+    /// `claudeAccountSwap` after the list is read again.
+    @discardableResult
+    func setDefaultAccount(_ id: String, engine: LoginEngine, account: String) async -> String? {
+        do {
+            _ = try await api.setDefaultRunnerAccount(id, engine: engine, account: account)
+            await load()
+            return nil
+        } catch {
+            await load()
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// Use again: the Default removed from Orbit back in its use. Orbit's own record, as the removal is,
     /// so it works with the runner offline too.
     @discardableResult

@@ -582,6 +582,69 @@ public struct ClaudeRegionCheckRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
 }
 
+/// A Claude process on either folder of a Set as default that is not an Orbit session (a terminal
+/// `claude`) — shared `ClaudeAccountSwapForeignProcess`.
+public struct ClaudeAccountSwapForeignProcess: Codable, Equatable, Sendable {
+    public let pid: Int
+    public let command: String
+
+    public init(pid: Int, command: String) {
+        self.pid = pid
+        self.command = command
+    }
+}
+
+/// Browser-facing view of a runner's Set as default relay for Claude Code (shared
+/// `RunnerClaudeAccountSwapState`): which added account is becoming the Default, and where that stands.
+public struct RunnerClaudeAccountSwapState: Codable, Equatable, Sendable {
+    /// The added account being made the Default, or null when nothing was asked.
+    public let account: String?
+    public let status: String?
+    /// The reason it failed; null otherwise.
+    public let message: String?
+    /// With `pending`: the sessions with a turn in progress the swap waits on. Empty otherwise, and from
+    /// an older server; one entry this build can't read is dropped rather than failing the runner.
+    public let waitingOn: [RunnerAccountRemoveSession]
+    /// With `pending`: Claude processes on either folder that are not Orbit sessions. Empty otherwise.
+    public let foreignProcesses: [ClaudeAccountSwapForeignProcess]
+
+    public init(account: String?, status: String?, message: String?,
+                waitingOn: [RunnerAccountRemoveSession] = [],
+                foreignProcesses: [ClaudeAccountSwapForeignProcess] = []) {
+        self.account = account
+        self.status = status
+        self.message = message
+        self.waitingOn = waitingOn
+        self.foreignProcesses = foreignProcesses
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case account, status, message, waitingOn, foreignProcesses
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        account = try c.decodeIfPresent(String.self, forKey: .account)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+        waitingOn = ((try? c.decodeIfPresent([LossyDecodable<RunnerAccountRemoveSession>].self,
+                                             forKey: .waitingOn)) ?? [])
+            .compactMap(\.value)
+        foreignProcesses = ((try? c.decodeIfPresent([LossyDecodable<ClaudeAccountSwapForeignProcess>].self,
+                                                    forKey: .foreignProcesses)) ?? [])
+            .compactMap(\.value)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(account, forKey: .account)
+        try c.encodeIfPresent(status, forKey: .status)
+        try c.encodeIfPresent(message, forKey: .message)
+        try c.encode(waitingOn, forKey: .waitingOn)
+        try c.encode(foreignProcesses, forKey: .foreignProcesses)
+    }
+}
+
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
 public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
     public let engine: String?
