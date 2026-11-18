@@ -89,6 +89,7 @@ var userModeActions = map[string]string{
 	"session merge-receipt":  "",
 	"session merge-receipts": "",
 	"session end":            "",
+	"session move":           "",
 	"session complete":       "",
 	"session delete":         "",
 	"session create": "the user route that starts a session answers with the whole session rather than the " +
@@ -533,6 +534,7 @@ type sessionTransport interface {
 	listMergeReceipts(id string, limit int) (json.RawMessage, error)
 	endSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 	completeSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
+	moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error)
 	deleteSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 }
 
@@ -642,6 +644,10 @@ func (u *userTransport) endSession(_, _ string, id string) (json.RawMessage, err
 
 func (u *userTransport) completeSession(_, _ string, id string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/sessions", id, "/complete", nil)
+}
+
+func (u *userTransport) moveSession(_, _ string, id string, body interface{}) (json.RawMessage, error) {
+	return u.at(http.MethodPost, "/sessions", id, "/move", body)
 }
 
 func (u *userTransport) deleteSession(_, _ string, id string) (json.RawMessage, error) {

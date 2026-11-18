@@ -994,6 +994,39 @@ func TestMCPSessionCompleteUsesCompleteSessionEndpoint(t *testing.T) {
 	}
 }
 
+// folderId null is sent as null (out of any folder), and a call naming no destination is refused locally.
+func TestMCPSessionMoveSendsItsDestination(t *testing.T) {
+	var gotMethod, gotPath string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"changed":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "runner-token"),
+		sessionID:          "caller-session",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("session_move", map[string]interface{}{"sessionId": "child-session", "workspaceId": "W1", "folderId": nil})
+	if res["isError"] == true {
+		t.Fatalf("session_move returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/sessions/child-session/move" {
+		t.Fatalf("session_move hit %s %s", gotMethod, gotPath)
+	}
+	if want := map[string]interface{}{"workspaceId": "W1", "folderId": nil}; !reflect.DeepEqual(gotBody, want) {
+		t.Fatalf("session_move body = %#v, want %#v", gotBody, want)
+	}
+	gotPath = ""
+	if res := mcp.callTool("session_move", map[string]interface{}{"sessionId": "child-session"}); res["isError"] != true || gotPath != "" {
+		t.Fatalf("session_move with no destination: isError = %#v, request = %q", res["isError"], gotPath)
+	}
+}
+
 func TestMCPSessionDeleteUsesSoftDeleteEndpoint(t *testing.T) {
 	var gotMethod, gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
