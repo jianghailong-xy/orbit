@@ -148,6 +148,14 @@
 // unless set. The upgrade skill sets both. No service, mount, port or environment is added. It reached main without a
 // pin here, which left this file red there. The owner approved these two lines on 2026-11-14 (22:40Z, Orbit item
 // 34xf9Nns4Dnab9eXTNyCa, project 34w2hTuJ3qOR1aQWnyGbS), and the block below pins them.
+//
+// Between 2026-11-16 and 2026-11-18 three commits added six lines to the apiserver's environment, each empty unless the
+// host's .env sets it: ORBIT_RELEASE_REPOSITORY, the repository Help's Report on GitHub opens an issue in (6447f0334,
+// 2026-11-16); VIEWER_STREAMS_MAX, how many live viewer streams an apiserver keeps open (92190ad89, 2026-11-17); and
+// APNS_SANDBOX_KEY, APNS_SANDBOX_KEY_ID, APNS_PRODUCTION_KEY and APNS_PRODUCTION_KEY_ID, an APNs signing key per
+// environment (27cab2729, 2026-11-18). No service, mount or port is added. They reached main without a pin here, which
+// left this file red there. The owner approved these six lines on 2026-11-18 (17:38Z, Orbit item 34zqNo5irwfdfmdXygkkP,
+// project 34tJs8k23brO8Ie2WtMSk), and the blocks below pin them.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -438,6 +446,19 @@ const APPROVED_APISERVER_BLOCKS = [
   [
     '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
   ],
+  // The live viewer streams' cap (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file), empty unless the host's
+  // .env sets it. The line comes right after the proxies', before DeepSeek's.
+  [
+    '      VIEWER_STREAMS_MAX: "${VIEWER_STREAMS_MAX:-}"',
+  ],
+  // APNs signing keys per environment (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file), each empty unless
+  // the host's .env sets it. The lines come right after APNS_KEY_ID's, before APNS_TEAM_ID's.
+  [
+    '      APNS_SANDBOX_KEY: "${APNS_SANDBOX_KEY:-}"',
+    '      APNS_SANDBOX_KEY_ID: "${APNS_SANDBOX_KEY_ID:-}"',
+    '      APNS_PRODUCTION_KEY: "${APNS_PRODUCTION_KEY:-}"',
+    '      APNS_PRODUCTION_KEY_ID: "${APNS_PRODUCTION_KEY_ID:-}"',
+  ],
   // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
   // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
   // Listed before the managed runners' because the lines come before theirs in the file.
@@ -465,6 +486,11 @@ const APPROVED_APISERVER_BLOCKS = [
   // before the managed runners'.
   [
     '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
+  ],
+  // The repository Report on GitHub opens an issue in (2026-11-18, item 34zqNo5irwfdfmdXygkkP, the top of this file),
+  // empty unless the host's .env sets it. The line comes right after the releases', before Orbit Files' store.
+  [
+    '      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"',
   ],
   // Orbit Files' store (2026-11-02, the top of this file): local unless the host's .env says s3, and the S3-compatible
   // bucket's endpoint, bucket, key pair and region, each empty unless .env sets it. It comes after the releases' line in
