@@ -227,10 +227,14 @@ export class SessionsController {
     @Query('since') since?: string,
     @Headers('if-none-match') ifNoneMatch?: string,
     @Res({ passthrough: true }) res?: Response,
+    // `scheduled=1`: a workspace's Scheduled runs folder, the sessions its scheduled runs opened and no other.
+    // Always a plain array: no delta and no version, since a run's start is not on the Open list's version.
+    @Query('scheduled') scheduledParam?: string,
   ) {
     const confinedTo = workspaceConfinement(user);
     const withLanding = includeLanding === '1' && projectId !== undefined;
-    if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
+    const scheduled = scheduledParam === '1';
+    if (!scheduled && since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
       return this.sessions.listOpenSince(
         user.userId,
         { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, includeLanding: withLanding, confinedTo },
@@ -247,6 +251,7 @@ export class SessionsController {
       confinedTo,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+      scheduled,
     };
     // The Open list is polled every few seconds with the last ETag. Answer that from the data
     // version (open-list-version.ts) before building anything: on a hit nothing is read or
@@ -263,7 +268,7 @@ export class SessionsController {
     // page's own) is a few rows too: the account-wide version answered only ~5% of its polls with
     // 304, so it now keeps Express's body-hash ETag like the plain one, and pays no version at all.
     let version: string | undefined;
-    if (res && isOpenListView(view) && projectId === undefined) {
+    if (res && isOpenListView(view) && projectId === undefined && !scheduled) {
       version = await this.sessions.openListVersion(user.userId);
       const etag = openListEtag(version, {
         runnerId: filters.runnerId,

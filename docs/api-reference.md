@@ -357,7 +357,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/session-tags` | body `CreateSessionTagDto` | `SessionTagsController.create` |
 | `DELETE` | `/api/session-tags/:id` | path `id` | `SessionTagsController.remove` |
 | `PATCH` | `/api/session-tags/:id` | body `UpdateSessionTagDto`; path `id` | `SessionTagsController.update` |
-| `GET` | `/api/sessions` | query `agentId`, `includeLanding`, `limit`, `projectId`, `runnerId`, `since`, `tagId`, `view`, `workspaceId` | `SessionsController.list` |
+| `GET` | `/api/sessions` | query `agentId`, `includeLanding`, `limit`, `projectId`, `runnerId`, `scheduled`, `since`, `tagId`, `view`, `workspaceId` | `SessionsController.list` |
 | `POST` | `/api/sessions` | body `Object` | `SessionsController.create` |
 | `DELETE` | `/api/sessions/:id` | path `id` | `SessionsController.remove` |
 | `GET` | `/api/sessions/:id` | path `id` | `SessionsController.get` |
