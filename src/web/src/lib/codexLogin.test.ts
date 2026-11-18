@@ -139,7 +139,7 @@ describe('a pool of one’s own ChatGPT account in the pickers', () => {
     const choice = engineProviders(AgentProvider.CODEX, { configured: poolsAsProviders([drawn]), engineHealth: null, pools: [drawn] }).find(
       (c) => c.slug === 'my-codex',
     );
-    expect(choice).toMatchObject({ unavailable: 'Not signed in', fixHref: '/providers/pools/p1' });
+    expect(choice).toMatchObject({ unavailable: 'Not signed in', fixHref: '/settings/providers/pools/p1' });
   });
 
   it('needs the Codex CLI on the runner, not Claude', () => {

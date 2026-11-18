@@ -182,6 +182,22 @@ describe('the entry drawer', () => {
     expect(html).toContain('Checked again after every commit to main');
   });
 
+  it('says beside a deferred code anchor that nothing checked it yet, and only until its first check (anchorRules.deferred)', () => {
+    const deferred = 'Not checked yet: the code could not be read when this was learned';
+    const html = paint({
+      ...DETAIL,
+      anchors: [
+        { type: 'path', path: 'src/app.go', deferred: true },
+        { type: 'path', path: 'src/runner-go/mcp.go', check: { state: 'verified', ref: 'd'.repeat(40), at: '2026-09-25T00:00:00.000Z' } },
+      ],
+      anchorState: 'unchecked',
+    });
+    expect(html.split(deferred).length - 1).toBe(1);
+    expect(html.indexOf(deferred)).toBeGreaterThan(html.indexOf('src/app.go'));
+    expect(html.indexOf(deferred)).toBeLessThan(html.indexOf('src/runner-go/mcp.go'));
+    expect(paint()).not.toContain(deferred);
+  });
+
   it('names the session an entry was shown to, from the one batched read', () => {
     const session = '0196c000-0000-7000-8000-0000000000cc';
     const html = paint(DETAIL, { [session]: 'runner-go suite hit prod' });

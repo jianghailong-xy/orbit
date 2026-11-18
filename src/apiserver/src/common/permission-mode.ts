@@ -22,6 +22,12 @@ export const DEFAULT_PERMISSION_MODE = PermissionMode.AUTO;
  *
  * Only Orbit's own MCP server is on it: it is injected into every session, and under an
  * ask-me mode its tools would otherwise prompt the user to approve Orbit talking to Orbit.
+ * Every runtime keeps it, each its own way (docs/permission-matrix.md): Claude Code and Kimi are
+ * handed it as an allow rule, Cursor CLI and Antigravity answer their own permission requests from
+ * it, and Codex, which takes no allowlist, has the runner consent to each Orbit tool by its name.
+ * The rule takes the engine's own prompt away and nothing else: what a call may then do is still
+ * Orbit's to say — a write that needs the owner files its own card in every mode, and in Plan every
+ * write is refused by the runner's Plan gate (runner-go plan_gate.go).
  *
  * This used to be `Workspace.allowedTools`, a per-directory column — but in production not one
  * row ever held anything else: every single one was exactly this list, written by the server on
@@ -110,6 +116,24 @@ export function isWiderThanStarter(starter: SessionModeStarter, mode: string, en
   if (!wider) return false;
   if (mode === starter.mode && engine !== null && engine === starter.engine) return false;
   return wider.has(runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode);
+}
+
+/**
+ * A SubAgent's rule (docs/subagent-design.md §5.3): never wider than its parent, with no exemption. The order
+ * is isWiderThanStarter's, but an Auto parent is held to it too — its SubAgent may not run Bypass, nor a mode
+ * that runs as Bypass on the child's engine. Only a Bypass parent's may run anything. Sessions starting
+ * sessions keep isWiderThanStarter's rule.
+ */
+export function isWiderThanParent(parent: SessionModeStarter, mode: string, engine: string | null): boolean {
+  if (parent.mode === PermissionMode.BYPASS) return false;
+  if (parent.mode !== PermissionMode.AUTO) return isWiderThanStarter(parent, mode, engine);
+  if (mode === parent.mode && engine !== null && engine === parent.engine) return false;
+  return (runsAsBypass(mode, engine) ? PermissionMode.BYPASS : mode) === PermissionMode.BYPASS;
+}
+
+/** What a SubAgent of this parent may run in on this engine (isWiderThanParent), in the pickers' order. */
+export function modesASubagentMayRunIn(parent: SessionModeStarter, engine: string | null): PermissionMode[] {
+  return Object.values(PermissionMode).filter((mode) => !isWiderThanParent(parent, mode, engine));
 }
 
 /** What a session may name for one it starts on this engine, in the order the pickers show them. */

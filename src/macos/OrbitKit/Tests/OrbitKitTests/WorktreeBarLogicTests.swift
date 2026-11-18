@@ -25,6 +25,16 @@ final class WorktreeBarLogicTests: XCTestCase {
         )
     }
 
+    func testModeShowsALandingTheWorkFedEvenWithoutChangedFiles() {
+        XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: "orbit/x-abcdef",
+                                             changedFileCount: 0, hasSourceLanding: true), .worktree)
+        XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: nil,
+                                             changedFileCount: 0, hasSourceLanding: true), .hidden)
+        XCTAssertTrue(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "worktree", branch: "orbit/x-abcdef"))
+        XCTAssertFalse(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "worktree", branch: nil))
+        XCTAssertFalse(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "shared-nogit", branch: "orbit/x"))
+    }
+
     func testModeHiddenWhenWorktreeButNoBranch() {
         XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: nil, changedFileCount: 5), .hidden)
     }
@@ -301,11 +311,25 @@ final class WorktreeBarLogicTests: XCTestCase {
                 + " to remove. Then commit the work on this branch with a message that describes it. Do not push.")
     }
 
-    func testManualMergeCommandUsesTargetAndBranch() {
+    /// Word for word web's conflict panel (SessionOutputs.mergeConflict.test.tsx).
+    func testMergeConflictReadsAsWebsPanel() {
         XCTAssertEqual(
-            WorktreeBarLogic.manualMergeCommand(mergeTarget: "develop", branch: "orbit/fix-a1b2c3"),
-            "git rebase develop orbit/fix-a1b2c3 && git checkout develop && git merge --ff-only orbit/fix-a1b2c3"
-        )
+            WorktreeBarLogic.mergeConflict(mergeStatus: "conflict", mergeError: " CONFLICT (content): file.txt \n",
+                                           mergeTarget: "develop", branch: "orbit/fix-a1b2c3"),
+            .init(headline: "Merge conflict with develop",
+                  why: "The merge was aborted and nothing changed. Use Resolve in session, or resolve it by hand:",
+                  steps: [
+                      .init(place: "In the session’s worktree", command: "git rebase develop"),
+                      .init(place: "Then in the repo", command: "git merge --ff-only orbit/fix-a1b2c3"),
+                  ],
+                  gitOutput: "CONFLICT (content): file.txt"))
+        XCTAssertEqual(WorktreeBarLogic.mergeConflict(mergeStatus: "conflict", mergeError: nil, mergeTarget: nil,
+                                                      branch: "b")?.headline, "Merge conflict with main")
+        XCTAssertNil(WorktreeBarLogic.mergeConflict(mergeStatus: "conflict", mergeError: "  ", mergeTarget: nil,
+                                                    branch: "b")?.gitOutput)
+        for status in [nil, "pending", "error", "merged"] {
+            XCTAssertNil(WorktreeBarLogic.mergeConflict(mergeStatus: status, mergeError: "x", mergeTarget: "main", branch: "b"))
+        }
     }
 
     // MARK: diff refresh

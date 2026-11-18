@@ -273,12 +273,35 @@ public struct WikiJob: Codable, Equatable, Sendable, Identifiable {
     public let nextCall: NextCall?
     /// Its newest calls, oldest first.
     public let requests: [WikiJobCall]
+    /// What a maintenance run read of the repository (§7.4); nil for any other kind, before its probe, and from an
+    /// older control plane.
+    public let repo: Repo?
+
+    /// A maintenance run's read of the repository: its tier, why it read less than git, and that reason's sentence.
+    public struct Repo: Codable, Equatable, Sendable {
+        public let tier: WikiRepoTier
+        public let reason: String?
+        public let detail: String?
+
+        public init(tier: WikiRepoTier, reason: String? = nil, detail: String? = nil) {
+            self.tier = tier
+            self.reason = reason
+            self.detail = detail
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tier = (try? c.decodeIfPresent(WikiRepoTier.self, forKey: .tier)) ?? .unknown
+            reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+            detail = try? c.decodeIfPresent(String.self, forKey: .detail)
+        }
+    }
 
     public init(id: String, kind: WikiJobKind, state: WikiJobState, waitingFor: String? = nil, priority: Int = 0,
                 attempts: Int = 0, createdAt: String, updatedAt: String? = nil, startedAt: String? = nil, endedAt: String? = nil,
                 nextAttemptAt: String? = nil, failureKind: String? = nil, error: String? = nil, ahead: Int? = nil,
                 progress: WikiJobProgress? = nil, calls: WikiJobCallCounts = WikiJobCallCounts(), nextCall: NextCall? = nil,
-                requests: [WikiJobCall] = []) {
+                requests: [WikiJobCall] = [], repo: Repo? = nil) {
         self.id = id
         self.kind = kind
         self.state = state
@@ -297,6 +320,7 @@ public struct WikiJob: Codable, Equatable, Sendable, Identifiable {
         self.calls = calls
         self.nextCall = nextCall
         self.requests = requests
+        self.repo = repo
     }
 
     public init(from decoder: Decoder) throws {
@@ -319,6 +343,7 @@ public struct WikiJob: Codable, Equatable, Sendable, Identifiable {
         calls = (try? c.decodeIfPresent(WikiJobCallCounts.self, forKey: .calls)) ?? WikiJobCallCounts()
         nextCall = try? c.decodeIfPresent(NextCall.self, forKey: .nextCall)
         requests = (try? c.decodeIfPresent([WikiJobCall].self, forKey: .requests)) ?? []
+        repo = try? c.decodeIfPresent(Repo.self, forKey: .repo)
     }
 }
 

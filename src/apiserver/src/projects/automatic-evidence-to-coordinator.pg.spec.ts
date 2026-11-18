@@ -911,15 +911,22 @@ test('(10) a revision the coordinator could not decide is only recorded, and the
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
-      // A quote that is not the live criterion: nobody may decide it, so nobody is told.
+      // The criterion the task declares is deleted before it submits: the server binds no standard
+      // (a stale quote no longer can make a revision undecidable — the server ignores it), nobody may
+      // decide it, so nobody is told. The sibling below declares a criterion of its own that stays.
       const w = await world(stack, 'moved');
-      await submit(stack, w, { quote: `${STANDARD}, as it read before somebody reworded it` });
+      const kept = randomUUID();
+      await stack.db.projectAcceptanceCriterionDefinition.create({
+        data: { id: kept, projectId: w.projectId, ordinal: 2, text: STANDARD, verificationMethod: 'the same', contentHash: '0'.repeat(64) },
+      });
+      await stack.db.projectAcceptanceCriterionDefinition.delete({ where: { id: w.definitionId } });
+      await submit(stack, w);
       const [moved] = await evidenceWakes(stack.db, w.taskId);
       assert.equal(moved!.status, 'CONSUMED');
       assert.equal(moved!.consumerType, 'JUDGMENT_REQUEST_DERIVER');
       assert.deepEqual(await messagesOn(stack.db, w.coordinatorSessionId), []);
       // In the same fixture, a revision of another task that CAN be decided is delivered.
-      const sibling = await judgedTask(stack.db, w, 'moved-sibling');
+      const sibling = await judgedTask(stack.db, { ...w, definitionId: kept }, 'moved-sibling');
       await submit(stack, w, { task: sibling });
       const [siblingWake] = await evidenceWakes(stack.db, sibling.taskId);
       assert.equal(siblingWake!.status, 'DELIVERED', `refused with ${siblingWake!.refusalCode}`);

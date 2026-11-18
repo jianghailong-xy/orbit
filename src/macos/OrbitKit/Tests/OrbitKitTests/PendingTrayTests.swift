@@ -116,6 +116,25 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertEqual(r.state.unreadSteers.map(\.id), [id], "the same row, from Sending… to Waiting to be read")
     }
 
+    func testAQueuedSendsRowKeepsWhatTheOwnerWroteOnceTheEngineReadsIt() {
+        // Settings › Translation: the echo carries the English the engine got and the owner's own words.
+        // The row the queued send drew used to be rebuilt without them, so the read message showed the
+        // English with no "Translated · Show original" (production session 34xwWVmkT8h7oUrqaatqD, seq 27).
+        var r = running()
+        r.addOptimisticUser(clientTurnId: "c1", text: "然后推到 main", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", steer: true)
+        let translation: JSONValue = .object(["state": .string("DONE"), "from": .string("zh-Hans"),
+                                              "original": .string("然后推到 main")])
+        r.apply(steer(2, turn: "t1", extra: ["translation": translation]))
+        XCTAssertEqual(r.state.unreadSteers.first?.translation?.original, "然后推到 main")
+
+        r.apply(delivery(3, turn: "t1", "acknowledged"))
+        let read = r.state.items.compactMap(\.asUser).first { $0.turnId == "t1" }
+        XCTAssertEqual(read?.text, "then push it to main")
+        XCTAssertEqual(read?.translation?.state, .done)
+        XCTAssertEqual(read?.translation?.original, "然后推到 main")
+    }
+
     func testTheServersReceiptSettlesOneNoRunnerWillSpeakFor() {
         var r = running()
         r.apply(steer(2, turn: "t1"))
@@ -129,6 +148,29 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertTrue(r.state.queued.isEmpty)
     }
 
+    func testTheQueuedHandoffNoteTurnIsNoRowOfTheTailTheTrayOrTheHead() {
+        // Start a new coordinator confirmed while a turn runs: the platform's note turn waits behind
+        // it (board 02 ②). The listing carries no clientTurnId, only its words.
+        let note = "From Orbit · handoff note\n\nThe owner is handing this project over to a new coordinator conversation."
+        var r = running()
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "q-owner", kind: "prompt", content: "also check the retries", placement: "queued"),
+            QueuedTurnInfo(turnId: "q-note", kind: "prompt", content: note, authoredByOrbit: true, placement: "queued"),
+            QueuedTurnInfo(turnId: "q-wake", kind: "prompt", content: "Orbit wake: a job finished", authoredByOrbit: true,
+                           placement: "queued"),
+        ], knownBefore: [])
+
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["q-owner", "q-wake"])
+        XCTAssertEqual(PendingTray.rows(state: r.state, withdrawing: [], steering: [], steerOffered: true).map(\.bubble.turnId),
+                       ["q-owner"], "the tray keeps the owner's own")
+
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "q-note", kind: "prompt", content: note, authoredByOrbit: true, placement: "accepted"),
+        ], knownBefore: r.state.listedTurnIDs)
+        XCTAssertTrue(r.state.accepted.isEmpty, "nor the accepted head once a runner takes it")
+        XCTAssertTrue(r.state.queued.isEmpty)
+    }
+
     func testAnOlderPageDrawsItsSteersWhereTheyWereSent() {
         var r = TranscriptReducer()
         r.apply(said(10, "the newest reply"))
@@ -139,6 +181,45 @@ final class PendingTrayTests: XCTestCase {
 
         XCTAssertTrue(r.state.unreadSteers.isEmpty)
         XCTAssertEqual(userTexts(r), ["fix the export", "then push it to main"])
+    }
+
+    /// The seam scroll-up paging leaves: the steer's `user` event in an older page, its `acknowledged`
+    /// in the window loaded first. It is drawn where it was read — after the call before the reading —
+    /// as one pass over every event (web's) draws it, not where it was sent.
+    func testAnOlderPageDrawsASteerTheWindowSawReadWhereItWasRead() {
+        var r = TranscriptReducer()
+        r.apply(said(5, "first answer"))
+        r.apply(delivery(6, turn: "t1", "acknowledged"))
+        r.apply(said(7, "second answer"))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, turnId: "t0", payload: .object(["text": .string("fix the export")])),
+            steer(2, turn: "t1"),
+            said(3, "an older answer"),
+        ], hasMore: false))
+
+        let order = r.state.items.compactMap { item -> String? in
+            if case .user(let b) = item { return b.text }
+            if case .assistant(let b) = item { return b.text }
+            return nil
+        }
+        XCTAssertEqual(order, ["fix the export", "an older answer", "first answer", "then push it to main", "second answer"])
+        XCTAssertEqual(r.state.items.compactMap(\.asUser).last?.delivery, "acknowledged")
+        XCTAssertTrue(r.state.unreadSteers.isEmpty)
+    }
+
+    /// …and when both are in the page, the page draws it where it was read too.
+    func testAnOlderPageDrawsASteerItSawReadWhereItWasRead() {
+        var r = TranscriptReducer()
+        r.apply(said(10, "the newest reply"))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, turnId: "t0", payload: .object(["text": .string("fix the export")])),
+            steer(2, turn: "t1"),
+            said(3, "an older answer"),
+            delivery(4, turn: "t1", "acknowledged"),
+        ], hasMore: false))
+
+        XCTAssertEqual(userTexts(r), ["fix the export", "then push it to main"])
+        XCTAssertEqual(r.state.items.firstIndex { $0.asUser?.turnId == "t1" }, 2, "after the answer written before it was read")
     }
 
     func testTheTrayOutlivesASnapshot() throws {
@@ -237,6 +318,35 @@ final class PendingTrayTests: XCTestCase {
         let bubble = UserBubble(id: "a", text: "", attachments: [TurnAttachment(id: "i1", mime: "image/png")],
                                 turnId: "ta", pending: true, queued: true)
         XCTAssertEqual(PendingTray.text(of: bubble), "1 image")
+    }
+
+    /// Settings › Translation: a row says what the reader wrote, as their bubble does, not the
+    /// English the engine is given (web parity: `queuedRow`'s `translation?.original`).
+    func testATranslatedRowSaysWhatTheReaderWrote() {
+        let translation: JSONValue = .object(["state": .string("DONE"), "from": .string("zh-Hans"),
+                                              "original": .string("lfs 属于另一个仓库")])
+        var r = running()
+        r.apply(steer(2, turn: "t1", text: "lfs belongs to another repository", extra: ["translation": translation]))
+        var queued = queuedBubble("q", text: "lfs belongs to another repository")
+        queued.translation = TurnTranslation.parse(translation)
+        var state = r.state
+        state.queued = [queued]
+
+        let rows = PendingTray.rows(state: state, withdrawing: [], steering: [], steerOffered: true)
+        XCTAssertEqual(rows.map(\.text), ["lfs 属于另一个仓库", "lfs 属于另一个仓库"])
+    }
+
+    /// Withdraw hands back the words the reader wrote, as the row shows them, not the English the
+    /// engine was given; and still nothing for a turn nobody typed (`restorableText`).
+    func testWithdrawHandsBackWhatTheReaderWrote() {
+        var translated = queuedBubble("q", text: "lfs belongs to another repository")
+        translated.translation = TurnTranslation(state: .done, from: .zhHans, original: "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: translated), "lfs 属于另一个仓库")
+        XCTAssertEqual(ComposerLogic.withdrawnText(of: queuedBubble("p", text: " and update the changelog ")),
+                       "and update the changelog")
+        var orbit = translated
+        orbit.authoredByOrbit = true
+        XCTAssertNil(ComposerLogic.withdrawnText(of: orbit))
     }
 
     // MARK: - sent the other way

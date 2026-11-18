@@ -149,6 +149,11 @@ export interface ManagedInstance {
   readonly phase: string | undefined;
   /** Up, so a runner in it can report in (Kubernetes: phase Running). */
   readonly running: boolean;
+  /** Not up yet, and its host is still making it with nothing gone wrong: placed, its image being pulled or its
+   *  containers created, no error reported (Kubernetes: Pending on a node, every container waiting as
+   *  ContainerCreating or PodInitializing). A pull can outlast the startup deadline; the runner has not had a
+   *  chance to report in, so the deadline does not fail it. Absent where the backend makes an instance whole. */
+  readonly preparing?: boolean;
   /** Finished, never to start again (Kubernetes: Succeeded or Failed). */
   readonly terminated: boolean;
   /** Terminated, and the host itself reported every process of it ended (Kubernetes: the kubelet's
@@ -162,7 +167,8 @@ export interface ManagedInstance {
    *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
   readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
   /** The image it was made from, when its host says and that is not the one this backend makes instances from
-   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on). Absent otherwise. */
+   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
+   *  container's image against the profile's `runner.image`). Absent otherwise. */
   readonly previousImage?: string;
 }
 
@@ -247,6 +253,24 @@ export interface ManagedRunnerBackend {
   readonly terms: ManagedRunnerBackendTerms;
   /** Where this backend's mappings live: recorded on every new mapping, and the key of its capacity pool. */
   readonly location: { readonly clusterKey: string; readonly namespace: string };
+  /**
+   * In this process, whether the backend's last word from its host was that it cannot be reached: set by
+   * a call that reached nothing, cleared by any answer. Placement skips such a host while another is
+   * reachable (managed-runner-placement.ts). Absent on a backend that does not track it (Kubernetes).
+   */
+  readonly unreachable?: boolean;
+  /**
+   * While `unreachable` is set, ask the host one cheap question so that a host no mapping calls on is
+   * noticed when it comes back: at most once per poll interval, and nothing at all while reachable.
+   * Called by the loop for each host of a several-host runtime only. Absent where `unreachable` is.
+   */
+  recheckReachability?(): Promise<void>;
+  /**
+   * The image a READY instance of a previous image (`previousImage`) is moved onto once it is idle: drained and woken
+   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`. Absent on a
+   * backend whose instances keep their image until they next sleep (Docker).
+   */
+  readonly rollImage?: string;
 
   /** The fixed names of one runner's objects, from its UUID alone. */
   names(runnerId: string): { volume: string; instance: string; credential: string };

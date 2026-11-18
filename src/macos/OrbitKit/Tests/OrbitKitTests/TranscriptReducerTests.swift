@@ -6,6 +6,35 @@ import XCTest
 /// reconciliation. This is the test that de-risks the whole native-console bet.
 final class TranscriptReducerTests: XCTestCase {
 
+
+    func testLegacySecretPatchNoticesFoldOnlyConsecutiveTemporaryNotices() {
+        var r = TranscriptReducer()
+        let pending = "Orbit is still checking this runner's checkouts for a secret the owner removed, so it left this diff out of what it reports for now. Nothing in the file is known to hold a secret; its diff shows again with the session's next report."
+        let unreadable = "Orbit could not read its record of files that held a secret's value on this runner, so it left this diff out of what it reports. Nothing in the file is known to hold a secret."
+        func event(_ seq: Int, _ notice: String, subtype: String = "secret_patch_withheld", turn: String = "one") -> RunEvent {
+            RunEvent(seq: seq, type: .system, turnId: turn, payload: .object([
+                "subtype": .string(subtype), "path": .string("file"), "notice": .string(notice)
+            ]))
+        }
+        r.apply(event(1, "file: \(pending)"))
+        r.apply(event(2, "file: \(unreadable)"))
+        r.apply(event(3, "file holds the value of a secret"))
+        r.apply(event(4, "Unknown notice"))
+        r.apply(event(5, "Record summary", subtype: "secret_patches_withheld"))
+        r.apply(event(6, "file: \(pending)"))
+        r.apply(event(7, "file: \(pending)", turn: "two"))
+        let messages = r.state.items.compactMap { item -> String? in
+            if case .notice(_, let message, _) = item { return message }
+            return nil
+        }
+        XCTAssertEqual(messages, [
+            "Orbit held back the diffs of 2 files while it checked this runner for a removed secret. No secret was found in them.",
+            "file holds the value of a secret", "Unknown notice", "Record summary",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it.",
+            "Orbit held back the diff of 1 file while it checked this runner for a removed secret. No secret was found in it."
+        ])
+    }
+
     /// A representative turn: user → streamed assistant text → tool call+result → more text →
     /// a resolved approval → a background process → a DUPLICATE durable event → turn end.
     private func recordedSession() -> [RunEvent] {
@@ -546,7 +575,7 @@ final class TranscriptReducerTests: XCTestCase {
         r.apply(RunEvent(seq: 7, type: .interrupt, payload: .object([:])))
 
         let marks = r.state.items.compactMap { item -> String? in
-            guard case .interrupt(_, let seq, let runnerRestart) = item else { return nil }
+            guard case .interrupt(_, let seq, let runnerRestart, _) = item else { return nil }
             return "\(seq):\(runnerRestart ? "runner restart" : "stop")"
         }
         XCTAssertEqual(marks, ["2:stop", "5:runner restart", "7:stop"])
@@ -782,7 +811,7 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.count, 1, "must reconcile, not duplicate")
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
         XCTAssertEqual(r.state.items[0].asUser?.text, typed)
-        XCTAssertEqual(r.state.items[0].asUser?.attached?.kind, "referenced list")
+        XCTAssertEqual(r.state.items[0].asUser?.note, refListBlock)
     }
 
     // The shapes the server appends at delivery (background-jobs-context.ts, list-events.service.ts).
@@ -824,29 +853,27 @@ final class TranscriptReducerTests: XCTestCase {
         return RunEvent(seq: seq, type: .user, turnId: turnId, payload: .object(payload))
     }
 
-    /// The bubble keeps what was typed; what delivery appended rides alongside it as the one entry the
-    /// view names, and a snapshot keeps it. Where the typed words end is the note the apiserver
+    /// The bubble keeps what was typed; what delivery appended is kept apart as the note, and a
+    /// snapshot keeps it. Where the typed words end is the note the apiserver
     /// recorded when it stored the event — the only thing that tells these two blocks apart at all.
     func testDurableUserEventSplitsAppendedContextOutOfTheBubble() throws {
-        for (typed, block, kind) in [("已经部署，请帮我测试", backgroundJobsBlock, "background jobs"),
-                                     ("这个列表现在什么情况？", listConditionsBlock, "list conditions")] {
+        for (typed, block) in [("这个列表现在什么情况？", listConditionsBlock)] {
             var r = TranscriptReducer()
 
             r.apply(userEvent(seq: 1, "\(typed)\n\n\(block)", note: "\n\n\(block)"))
 
             let bubble = r.state.items[0].asUser
             XCTAssertEqual(bubble?.text, typed, "only what was typed is the person's own")
-            XCTAssertEqual(bubble?.attached?.kind, kind)
-            XCTAssertEqual(bubble?.attached?.text, block, "the entry opens to the block verbatim")
+            XCTAssertEqual(bubble?.note, block, "the block is kept verbatim, out of the bubble")
 
             let restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
-            XCTAssertEqual(restored.state.items[0].asUser?.attached?.text, block,
-                           "a session rehydrated from its snapshot still draws the entry")
+            XCTAssertEqual(restored.state.items[0].asUser?.note, block,
+                           "a session rehydrated from its snapshot keeps it apart too")
         }
     }
 
     /// Without a note nothing tells a block apart from words: someone who typed one sees it in their
-    /// bubble exactly as typed, and no entry is drawn for it, however much it looks like one.
+    /// bubble exactly as typed, however much it looks like one.
     func testWithoutANoteATypedBlockStaysInTheBubbleAsTyped() {
         for block in [backgroundJobsBlock, listConditionsBlock] {
             var r = TranscriptReducer()
@@ -855,14 +882,14 @@ final class TranscriptReducerTests: XCTestCase {
             r.apply(userEvent(seq: 1, typed))
 
             XCTAssertEqual(r.state.items[0].asUser?.text, typed)
-            XCTAssertNil(r.state.items[0].asUser?.attached)
+            XCTAssertNil(r.state.items[0].asUser?.note)
         }
     }
 
     /// The blocks Orbit's own delivery also uses for a `#`-reference and a promoted coordinator's
     /// standing role, pasted at the end of a message the person typed themselves. Nothing records
-    /// anything appended to that event, so the paste is their own words: shown as typed, uncut, and
-    /// drawn as nothing — Orbit's entry is only ever what the apiserver recorded (`controlPlaneNote`).
+    /// anything appended to that event, so the paste is their own words: shown as typed and uncut —
+    /// Orbit's note is only ever what the apiserver recorded (`controlPlaneNote`).
     func testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped() {
         for block in [refListBlock, refTaskBlock, coordinatorBlock] {
             var r = TranscriptReducer()
@@ -872,7 +899,7 @@ final class TranscriptReducerTests: XCTestCase {
 
             XCTAssertEqual(r.state.items[0].asUser?.text, typed,
                            "an event with no note is shown exactly as it was echoed")
-            XCTAssertNil(r.state.items[0].asUser?.attached, "and nothing is drawn as Orbit's own")
+            XCTAssertNil(r.state.items[0].asUser?.note, "and nothing is taken as Orbit's own")
         }
     }
 
@@ -893,7 +920,7 @@ final class TranscriptReducerTests: XCTestCase {
             XCTAssertEqual(idle.state.items.count, 1, "must reconcile, not duplicate")
             XCTAssertEqual(idle.state.items[0].asUser?.pending, false, "no longer Sending…")
             XCTAssertEqual(idle.state.items[0].asUser?.text, typed)
-            XCTAssertEqual(idle.state.items[0].asUser?.attached?.text, block)
+            XCTAssertEqual(idle.state.items[0].asUser?.note, block)
 
             var queued = TranscriptReducer()
             queued.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("on it")])))
@@ -903,15 +930,14 @@ final class TranscriptReducerTests: XCTestCase {
             XCTAssertTrue(queued.state.queued.isEmpty, "leased → no Queued placeholder left behind")
             XCTAssertEqual(queued.state.items.count, 2, "[assistant, user] — no duplicate")
             XCTAssertEqual(queued.state.items.last?.asUser?.pending, false)
-            XCTAssertEqual(queued.state.items.last?.asUser?.attached?.text, block)
+            XCTAssertEqual(queued.state.items.last?.asUser?.note, block)
         }
     }
 
-    /// A promoted coordinator's standing role reaches the bubble as the one entry any other recorded
-    /// note does: the person's own words, and what delivery appended named and opening to its text.
+    /// A promoted coordinator's standing role is kept off the bubble, as any recorded note is.
     /// An event with no note is shown as it was echoed instead — a pasted coordinator block stays in
     /// the bubble it was typed into (`testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped`).
-    func testCoordinatorContextIsOneEntry() {
+    func testCoordinatorContextIsKeptOffTheBubble() {
         let typed = "把这个项目协调起来"
         var r = TranscriptReducer()
         r.apply(userEvent(seq: 1, "\(typed)\n\n\(coordinatorBlock)", note: "\n\n\(coordinatorBlock)"))
@@ -919,14 +945,11 @@ final class TranscriptReducerTests: XCTestCase {
         let bubble = r.state.items[0].asUser
         XCTAssertEqual(bubble?.note, coordinatorBlock)
         XCTAssertEqual(bubble?.text, typed)
-        XCTAssertEqual(bubble?.attached?.kind, "project coordinator context")
-        XCTAssertEqual(bubble?.attached?.text, coordinatorBlock)
     }
 
-    /// A wiki chat's first message (board 42 ①, C15): the entry under the owner's words is named for the page and the
-    /// selection they sent, not for the chat's words to its agent, and still opens to every block the agent read.
-    /// Sent with neither, the note names nothing and no entry is drawn (web parity: `UserBubble`).
-    func testAWikiChatsFirstMessageNamesOnlyWhatTheOwnerAttached() {
+    /// A wiki chat's first message (board 42 ①, C15): every block the agent read — the chat's words to
+    /// its agent, the page and the selection — is kept off the owner's words.
+    func testAWikiChatsFirstMessageKeepsEveryBlockOffTheBubble() {
         let rules = "<orbit_wiki_chat>\nYou are chatting beside a page of this repository's Orbit wiki.\n</orbit_wiki_chat>"
         let page = "<orbit_wiki_page of=\"doc\" doc=\"3.1\" slug=\"sessions-runtime\" section=\"3\" key=\"turn-delivery\">\n"
             + "§3 Turn delivery\n</orbit_wiki_page>"
@@ -938,15 +961,13 @@ final class TranscriptReducerTests: XCTestCase {
 
         let bubble = sent.state.items[0].asUser
         XCTAssertEqual(bubble?.text, "Record this as a decision.")
-        XCTAssertEqual(bubble?.attached?.kind, "Wiki page · 3.1 §3, Wiki selection · 3.1 §3 · 1 sentence · 2 sources")
-        XCTAssertEqual(bubble?.attached?.text, "\(rules)\n\n\(page)\n\n\(selection)", "it opens to every block the agent read")
+        XCTAssertEqual(bubble?.note, "\(rules)\n\n\(page)\n\n\(selection)", "every block the agent read is the note")
 
         var bare = TranscriptReducer()
         bare.apply(userEvent(seq: 1, "Is this still true?\n\n\(rules)", note: "\n\n\(rules)"))
 
         XCTAssertEqual(bare.state.items[0].asUser?.text, "Is this still true?")
         XCTAssertEqual(bare.state.items[0].asUser?.note, rules, "the note is recorded")
-        XCTAssertNil(bare.state.items[0].asUser?.attached, "but names nothing, so no line is drawn")
     }
 
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
@@ -1362,6 +1383,57 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(bubble?.ts, "2026-06-26T10:00:00Z")
     }
 
+    /// A send guessed idle that the server `queued` (a turn was in flight that this end's status had
+    /// not caught up with) leaves the transcript for the queued tail: "Queued" with a Cancel, not
+    /// "Sending…" until its turn comes. Web parity: the receipt's placement alone decides.
+    func testServerQueuedPlacementMovesInlineSendToQueue() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "queued")
+        XCTAssertTrue(r.state.items.isEmpty)
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.queued[0].turnId, "t1")
+        XCTAssertEqual(r.state.queued[0].queued, true)
+        XCTAssertEqual(r.state.queued[0].pending, true)
+    }
+
+    /// A send the server accepted is stamped with when it was accepted, the time its bubble shows until
+    /// the echo brings the runner's own, rather than "Sending…" (web: `acceptedAt`).
+    func testAnAcceptedSendIsStampedWithItsAcceptance() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted",
+                              acceptedAt: "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.ts, "2026-11-16T12:00:00Z")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
+    }
+
+    /// A first message held for its translation comes back `queued` with nothing ahead of it: that is
+    /// the translation hold, not a place in the queue, so it stays in the conversation (web parity).
+    func testTranslationHeldSendStaysInlineDespiteQueuedPlacement() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "先给我效果图")
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1",
+                              translation: TurnTranslation(state: .translating, from: .zhHans, original: "先给我效果图"),
+                              placement: "queued")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
+    /// The other way round: a send guessed queued that the server `accepted` is delivered now, so it
+    /// is drawn inline and offers no Cancel.
+    func testServerAcceptedPlacementMovesQueuedSendInline() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "hi", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", placement: "accepted")
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "t1")
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
     /// An optimistic image bubble (id-only, mime unknown) reconciles to the durable event, which
     /// supplies the real mime + a timestamp — without duplicating the bubble.
     func testOptimisticBubbleAdoptsDurableAttachmentsAndTs() {
@@ -1497,6 +1569,24 @@ final class TranscriptReducerTests: XCTestCase {
 
     // MARK: - scroll-up history paging (prependOlder — the "can't reach the top" fix)
 
+    /// A call whose result is in the window loaded first and whose `tool_use` is in an older page:
+    /// paging the call in settles it with that result, instead of leaving it "running" for good.
+    func testAnOlderPageSettlesACallWhoseResultTheWindowAlreadyHad() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 5, type: .toolResult, payload: .object(["toolUseId": .string("t1"),
+                                                                     "content": .string("a.txt")])))
+        r.apply(RunEvent(seq: 6, type: .assistant, payload: .object(["text": .string("Done.")])))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 4, type: .toolUse, payload: .object(["toolUseId": .string("t1"), "name": .string("Bash"),
+                                                               "input": .object(["command": .string("ls")])])),
+        ], hasMore: false))
+
+        guard case .toolCall(let card) = r.state.items.first else { return XCTFail("the call comes first") }
+        XCTAssertEqual(card.status, .ok)
+        XCTAssertEqual(card.result, "a.txt")
+        XCTAssertEqual(card.resultSeq, 5)
+    }
+
     func testApplyTailPageTracksHistoryWindow() {
         var r = TranscriptReducer()
         r.applyTailPage(EventPage(events: [
@@ -1544,6 +1634,56 @@ final class TranscriptReducerTests: XCTestCase {
 
         XCTAssertNil(r.state.oldestSeq)
         XCTAssertFalse(r.state.hasMoreOlder, "never render a spinner whose before= cursor is nil")
+    }
+
+    /// Every tail page failed (an apiserver restart), so the stream's cursor-less replay filled the
+    /// window, starting mid-conversation. Its first event is the older edge, with history above it;
+    /// the window used to say "nothing older" and the transcript stopped there for good.
+    func testCursorlessReplayStartingMidConversationOffersOlderHistory() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 435, type: .user, payload: .object(["text": .string("mid question")])))
+        r.apply(RunEvent(seq: 436, type: .assistant, payload: .object(["text": .string("mid reply")])))
+        XCTAssertEqual(r.state.oldestSeq, 435)
+        XCTAssertTrue(r.state.hasMoreOlder, "events 1–434 are on the server")
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])),
+        ], hasMore: false))
+        XCTAssertEqual(r.state.items.first?.asUser?.text, "first question")
+        XCTAssertFalse(r.state.hasMoreOlder)
+    }
+
+    func testCursorlessReplayFromTheFirstEventHasNothingOlder() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "a new session's replay starts at its beginning")
+    }
+
+    func testATailPageDecidesTheEdgeEvenAfterAReplayWasExpected() {
+        var r = TranscriptReducer()
+        r.expectReplayToSetOlderEdge()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("hi")])),
+        ], hasMore: false))
+        r.apply(RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hello")])))
+        XCTAssertFalse(r.state.hasMoreOlder, "the page said history starts here")
+    }
+
+    /// A snapshot the replay path wrote before the fix: a window from seq 35 claiming nothing older.
+    func testARestoredWindowThatStartsLateReopensItsOlderEdge() throws {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 35, type: .user, payload: .object(["text": .string("late start")])))
+        XCTAssertFalse(r.state.hasMoreOlder)
+        var restored = try JSONDecoder().decode(TranscriptReducer.self, from: JSONEncoder().encode(r))
+        restored.reopenUnsettledOlderEdge()
+        XCTAssertTrue(restored.state.hasMoreOlder)
+
+        var complete = TranscriptReducer()
+        complete.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first")])))
+        complete.reopenUnsettledOlderEdge()
+        XCTAssertFalse(complete.state.hasMoreOlder, "a window holding the first event is whole")
     }
 
     func testPrependOlderGraftsHistoryInFront() {
@@ -2589,7 +2729,7 @@ extension TranscriptItem {
     var asAssistant: AssistantBubble? { if case .assistant(let b) = self { return b }; return nil }
     var asTool: ToolCard? { if case .toolCall(let c) = self { return c }; return nil }
     var asError: String? { if case .error(_, let m) = self { return m }; return nil }
-    var asNotice: String? { if case .notice(_, let m) = self { return m }; return nil }
+    var asNotice: String? { if case .notice(_, let m, _) = self { return m }; return nil }
     var asDiagnostic: DiagnosticRead? {
         guard case .diagnostic(let d) = self else { return nil }
         return DiagnosticRead(label: d.label, text: d.text, message: d.message, repeats: d.repeats)

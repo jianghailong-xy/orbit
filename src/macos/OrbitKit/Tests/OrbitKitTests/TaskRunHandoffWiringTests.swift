@@ -242,7 +242,9 @@ final class TaskRunHandoffWiringTests: XCTestCase {
                                  to: "private func runDisabledHint")
         XCTAssertTrue(detail.contains("TaskRunHandoff.entry(for: task)"))
         XCTAssertTrue(detail.contains("TaskDetailLogic.actionRow("), "one rule lays the presses out")
-        XCTAssertTrue(detail.contains("model.route(to: .session(sessionID))"),
+        // `openRoute`: the same route everywhere, plus closing the wide shells' task sheet first
+        // where the detail is drawn over a page (owner decision 2026-11-12).
+        XCTAssertTrue(detail.contains("openRoute(.session(sessionID))"),
                       "the detail carries the sessions, so it links to the run itself")
         // The live run's press already says where it goes; the sentence that stood under it said the
         // same thing again (the owner's redesign, 2026-09-26). A press that cannot be taken says why;

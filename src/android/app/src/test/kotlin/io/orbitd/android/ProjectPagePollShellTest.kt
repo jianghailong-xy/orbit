@@ -136,7 +136,7 @@ class ProjectPagePollShellTest {
     }
     private fun openPage() {
         await { exists(hasTestTag("project-row:${ProjectShell.LAUNCH}")) }
-        compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
+        compose.openProjectSessionsPage(ProjectShell.LAUNCH)
         await { exists(hasTestTag("project-sessions")) }
         await { integrationReads() > 0 && ProjectShell.calls.any { it.startsWith("GET sessions?view=completed&projectId=") } }
     }

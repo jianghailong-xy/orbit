@@ -26,6 +26,13 @@ final class LandingViewsWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
+    func testCheckOutputRendersLogTextWithoutApplyingTimelineCopy() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        let log = try XCTUnwrap(page.components(separatedBy: "private struct LandingCheckLogView: View {").last)
+        XCTAssertTrue(log.contains("Text(entry.text)"), "Check output remains verbatim log text")
+        XCTAssertFalse(log.contains("LandingCheckCopy.timelineText(entry)"), "Log entries are not timeline entries")
+    }
+
     /// A LANDING session draws its project's Landings window, focused on it, in the console frame —
     /// the same `.console` node, so pushes, `orbit-session:` links and `/sessions/<id>` still reach it
     /// (owner 2026-10-27, contract §2.9 LS6 revision 28).
@@ -42,7 +49,7 @@ final class LandingViewsWiringTests: XCTestCase {
         for part in ["struct LandingStatusCardView: View {",
                      "struct LandingTimelineView: View {",
                      "struct LandingLineView: View {",
-                     "LandingSteps.steps(section.entries, kind: section.kind)",
+                     "LandingSteps.steps(LandingCheckCopy.scopedEntries(section.entries, landing: landing, jobID: section.jobId), kind: section.kind)",
                      "LandingPageCopy.attemptCard(landing, now: now, updatedAt: readAt,",
                      "LandingPageCopy.outcomeCard(landing, promotion: promotion)",
                      "LandingPageCopy.gates(landing, now: now, updatedAt: readAt, failed: readFailed)",
@@ -223,8 +230,10 @@ final class LandingViewsWiringTests: XCTestCase {
         let card = code(try appSource("Views/ProjectLandingCard.swift"))
         XCTAssertTrue(card.contains("if card.timedOut, let detail = card.detail {"),
                       "a timed-out card says where its runner stopped")
-        XCTAssertTrue(card.contains("} else if !card.timedOut && (several || !card.mergeJob) {"),
-                      "the task-landing sentence is not said under a lone merge job")
+        XCTAssertTrue(card.contains("} else if !card.timedOut && (several || !card.mergeJob) && actionError == nil {"),
+                      "the task-landing sentence is not said under a lone merge job, nor above a refusal")
+        XCTAssertTrue(card.contains("} else if !card.timedOut && !several && !card.mergeJob, let note = card.skipNote {"),
+                      "a skip under way is said in the sentence's place")
         XCTAssertTrue(card.contains("Text(ProjectPage.landingNothingToDo)"))
     }
 
@@ -237,7 +246,7 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(job.landingSessionId))"))
         XCTAssertTrue(card.contains("if let lead {"), "one job's way in is the card's foot")
         XCTAssertTrue(card.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(lead.landingSessionId))"))
-        XCTAssertTrue(card.contains("if card.retryJobId != nil || onOpenJobs != nil || lead != nil {"))
+        XCTAssertTrue(card.contains("if card.retryJobId != nil || card.skipTaskId != nil || onOpenJobs != nil || lead != nil {"))
 
         let sheet = code(try appSource("Views/ProjectLandingJobsSheet.swift"))
         XCTAssertTrue(sheet.contains("LandingEntryLink(entry: LandingPageCopy.landingEntry(row.landingSessionId))"),
@@ -292,6 +301,13 @@ final class LandingViewsWiringTests: XCTestCase {
         let chip = code(try appSource("Views/LandingEntryLink.swift"))
         XCTAssertTrue(chip.contains("SessionProjectLandings.sourceLabel(console.worktree.detail?.sourceLanding)"))
         XCTAssertTrue(chip.contains("orbit-session:"))
+        // Where the worktree card is, it says the landing and the chip stands down
+        // (docs/mocks/session-landing-slot-ios).
+        XCTAssertTrue(chip.contains("if !carriedByWorktreeBar, let label"))
+        let bar = code(try appSource("Views/WorktreeBar.swift"))
+        XCTAssertTrue(bar.contains("SessionProjectLandings.sourceSlot(d.sourceLanding, membership: d.projectMembership)"))
+        XCTAssertTrue(bar.contains("hasSourceLanding: d?.sourceLanding != nil"))
+        XCTAssertTrue(bar.contains("SourceLandingRow(slot: landing)"))
     }
 
     /// Each Re-run the check door names its own sentence, as web's two doors do: the merge card on

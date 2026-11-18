@@ -1,4 +1,4 @@
-import type { WikiJobCallView, WikiJobKind, WikiJobView, WikiSystemModelReadState } from '@orbit/shared';
+import { wikiRepoReasonNeedsAttention, type WikiJobCallView, type WikiJobKind, type WikiJobView, type WikiRepoTier, type WikiSystemModelReadState } from '@orbit/shared';
 import { wikiActivityPath } from './wiki';
 import { wikiCount } from './wikiArticles';
 import { wikiAgo } from './wikiHealth';
@@ -181,6 +181,36 @@ export function wikiRunRow(job: WikiJobView, now: number): WikiRunRow {
     default:
       return { kind, mark: 'none', tone: 'muted', state: WIKI_RUN_CANCELLED, text: '', when: wikiAgo(job.endedAt ?? job.updatedAt, now) };
   }
+}
+
+/**
+ * What a maintenance run read of the repository, as a tag on its row (docs/wiki-repo-tiers-design.md §7.4, mock 44 ⑤):
+ * `git`, `folder` or `sessions only` — a run that found another repository's folder read the sessions alone too — and,
+ * when it read the sessions alone, why. Null for a run that names no tier: any other kind, or one before its probe.
+ */
+export const WIKI_RUN_TIER_WORDS: Record<WikiRepoTier, string> = {
+  git: 'git',
+  folder: 'folder',
+  sessions: 'sessions only',
+  wrong_repository: 'sessions only',
+};
+
+export interface WikiRunTier {
+  tier: string;
+  /** plain: git; muted: the folder; warn: amber, the code checks wait; error: red, somebody has to set the folder right. */
+  tone: 'plain' | 'muted' | 'warn' | 'error';
+  reason: string | null;
+}
+
+export function wikiRunTier(job: Pick<WikiJobView, 'repo'>): WikiRunTier | null {
+  const repo = job.repo;
+  if (!repo) return null;
+  const tier = WIKI_RUN_TIER_WORDS[repo.tier];
+  if (!tier) return null;
+  if (repo.tier === 'git') return { tier, tone: 'plain', reason: null };
+  if (repo.tier === 'folder') return { tier, tone: 'muted', reason: null };
+  const red = repo.tier === 'wrong_repository' || wikiRepoReasonNeedsAttention(repo.reason);
+  return { tier, tone: red ? 'error' : 'warn', reason: repo.detail ?? null };
 }
 
 /** The line under a run's call log: its calls and their tokens, `so far` while it is not over, and how many are listed. */

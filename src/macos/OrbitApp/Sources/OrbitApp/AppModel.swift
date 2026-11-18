@@ -49,11 +49,6 @@ final class AppModel {
     var user: User? {
         didSet { refreshAvatar() }
     }
-    private var pendingDefaultModels: [String: String] = [:]
-    @ObservationIgnored private var defaultModelWrite: Task<Void, Never>?
-    var defaultModels: [String: String] {
-        (user?.preferences?.defaultModels ?? [:]).merging(pendingDefaultModels) { _, picked in picked }
-    }
     /// The account's profile photo, once fetched — drawn wherever the account's avatar is
     /// (`AccountAvatar`). Nil while the account has none, or before it has arrived; the name's first
     /// letter stands in.
@@ -65,12 +60,10 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
-    #if os(iOS)
-    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the Move
-    /// panel lists the ones in the session's own workspace. iOS only, as the panel is: macOS shows no
-    /// folders (docs/session-folders-move-design.md §1). See `loadSessionFolders`.
+    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the list's
+    /// folder rows, and on iOS the Move panel, which lists the ones in the session's own workspace.
+    /// See `loadSessionFolders`.
     var sessionFolders: [SessionFolder] = []
-    #endif
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -123,6 +116,11 @@ final class AppModel {
             if newValue { nav.openSettings() } else { nav.settingsPresented = false }
         }
     }
+    /// The task shown over the page on a wide shell — a task link pressed in a conversation, a wiki
+    /// footnote or a watch card (owner decision 2026-11-12). It is not a frame of any section's
+    /// stack: the page under it keeps its section, its stack and its scroll, and closing the task
+    /// is clearing this. Nil on a phone, which pushes the task over the console instead.
+    var taskOverPageID: String?
     /// The task whose detail fills the pane — and, in the three-column shell, the row drawn as
     /// selected. Kept under its old name so its readers (the pane, the deep-link route, the
     /// delete/404 guards, the scope switch) needed no change, with the difference that it is read
@@ -321,11 +319,22 @@ final class AppModel {
     /// re-scan the whole Open list once per row per pass. `needsYouSessions` holds whole records (not
     /// ids) because the banner needs the target's agent name and id to navigate; it is the handful of
     /// blocked rows, not the list.
-    private(set) var needsYouSessions: [Session] = []
+    private(set) var needsYouSessions: [Session] = [] { didSet { noticeNewlyWaiting() } }
     private(set) var agentNeedsYou: [String: Int] = [:]
-    #if os(iOS)
+    /// The notices of conversations that have just started waiting on the reader (iOS; the owner,
+    /// 2026-11-15, docs/mocks/needs-you-capsule/12-once): one per wait, shown once by the toast host,
+    /// gone on their own after `needsYouToastSeconds`. At most `needsYouToastLimit` at once; the ones
+    /// past it are counted in `needsYouToastsMore`.
+    private(set) var needsYouToasts: [NeedsYouToast] = []
+    private(set) var needsYouToastsMore = 0
+    static let needsYouToastLimit = 3
+    static let needsYouToastSeconds: TimeInterval = 6
+    /// The waits already looked at (`NeedsYouLogic.waitKey`), so each is noticed once. Nil until the
+    /// next look takes them as they stand — at launch, and on coming back to the foreground: what was
+    /// already waiting then is the lists' to show, not news.
+    private var needsYouSeen: Set<String>?
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
-    /// `agentNeedsYou` so the iPhone drawer and iPad sidebar never rescan Open once per row/render.
+    /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
     /// Workspace ids with a background job in flight and nobody generating — read off the same
     /// glyph, so the two marks can never disagree about one row. Drawn quieter than the spinner.
@@ -333,7 +342,6 @@ final class AppModel {
     /// Each project's coordinator conversation as the Open list shows it, by project — what the
     /// drawer's project rows read beside their fetched summaries (`ProjectCoordinatorPulse`).
     private(set) var projectCoordinators: [String: ProjectCoordinatorPulse] = [:]
-    #endif
 
     let tokenStore: TokenStore
     let notifications = NotificationManager()
@@ -399,9 +407,9 @@ final class AppModel {
     /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
     /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
     private var filedSessions: Set<String> = []
-    /// Sessions being moved to Trash from this device. Delete takes the row out of every loaded list
-    /// on the tap (`hideTrashedSession`), and these stay out of every list written until the move has
-    /// settled — a read that left before the server had the move would put the row back for a beat,
+    /// Sessions being moved to Trash, or completed, from this device. Delete and Complete take the
+    /// row out of every loaded list on the tap (`hideTrashedSession`), and these stay out of every
+    /// list written until the move has settled — a read that left before the server had the move would put the row back for a beat,
     /// and so would the re-read the delete before it started, when rows are deleted one after
     /// another. Released (`revealTrashedSession`) once the lists have been read again behind the
     /// move, at once if the server refuses it, and by an Undo that brings the row back.
@@ -447,6 +455,13 @@ final class AppModel {
     private var sessionsLoadPending = false
     private var sessionsLoadSucceeded = false
     private var sessionsLoadGeneration = 0
+    /// Whether the Open list on screen is known to be the server's since a cold launch or a return
+    /// from the background, and what the line under the iPhone list's workspace name says about it
+    /// (`OpenListFreshness`; docs/mocks/ios-launch-updating). `openListStatus` is what is drawn; the
+    /// task redraws it when the clock alone moves it.
+    @ObservationIgnored private var openListFreshness = OpenListFreshness()
+    private(set) var openListStatus: OpenListFreshness.Status?
+    @ObservationIgnored private var openListStatusTask: Task<Void, Never>?
     /// How a poll reads the Open list: the delta against the last list fetched where the server has
     /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
     /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
@@ -489,7 +504,7 @@ final class AppModel {
 
     /// Per-section shared stores (list + detail observe the same instance). Rebuilt per instance.
     private(set) var tasks: TasksModel?
-    /// The account's managed runner: its state in a managed workspace's console, and on Infrastructure
+    /// The account's managed runner: its state in a managed workspace's console, and on Machines & models
     /// for an account with no runner yet. Inert without the server's capability.
     private(set) var managedRunner: ManagedRunnerModel?
     private(set) var agents: AgentsModel?
@@ -500,7 +515,9 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
-    /// The shared pools the account is in: Infrastructure's Account pools, and each pool's page.
+    /// Settings → Terminals: the terminals approved on this account, with Revoke.
+    private(set) var terminals: TerminalsModel?
+    /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
     private(set) var watches: WatchesModel?
@@ -511,6 +528,9 @@ final class AppModel {
     private(set) var projects: ProjectsModel?
     /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
     private(set) var wiki: WikiModel?
+    /// The account's scheduled tasks: the Scheduled section, the drawer's Scheduled row, the cards a
+    /// conversation asks and the Waiting on you items (docs/scheduled-tasks-design.md §9.2).
+    private(set) var scheduled: ScheduledModel?
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
@@ -558,6 +578,9 @@ final class AppModel {
                                                                 maxAge: OrbitLinkCards.maxAge))
         let tasksModel = TasksModel(baseURL: url, tokenStore: tokenStore)
         tasksModel.onSelectedDetailMissing = { [weak self] id in
+            // A task deleted under either container closes it: the Tasks page pops the frame, the
+            // task opened over a page takes the sheet down.
+            if self?.taskOverPageID == id { self?.closeTaskOverPage() }
             guard self?.selectedTaskID == id else { return }
             self?.selectedTaskID = nil
         }
@@ -578,12 +601,13 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
+        terminals = TerminalsModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
-        // A managed runner set up from Infrastructure brings its runner and default workspace with it.
+        // A managed runner set up from Machines & models brings its runner and default workspace with it.
         managedRunnerModel.onEnsured = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
         // Its default workspace's first session starts where the workspace list says: follow it as the runner comes up.
-        managedRunnerModel.onFirstSessionProviderChanged = { [weak self] in self?.scheduleLibraryRefresh(.agents) }
+        managedRunnerModel.onStatusChanged = { [weak self] status in self?.agents?.adoptManagedStatus(status) }
         managedRunner = managedRunnerModel
         let watchesModel = WatchesModel(baseURL: url, tokenStore: tokenStore)
         #if os(macOS)
@@ -614,6 +638,7 @@ final class AppModel {
         ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
+        scheduled = ScheduledModel(baseURL: url, tokenStore: tokenStore)
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
@@ -635,7 +660,6 @@ final class AppModel {
         consoleRegistry?.rememberDefaultPermissionMode = { [weak self] raw in
             self?.rememberDefaultPermissionMode(raw)
         }
-        consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
         consoleRegistry?.managedRunner = managedRunnerModel
         consoleRegistry?.seedSessionContext = { [weak self] console in
             guard let self, let session = self.session(id: console.sessionID) else { return }
@@ -674,34 +698,6 @@ final class AppModel {
         guard let api else { return }
         do { user = try await api.updatePreferences(req) }
         catch { errorText = "Couldn't save preferences." }
-    }
-
-    /// Keep a model pick available to the next draft immediately, then sync it. Remembered per engine
-    /// and provider — `<engine>:<provider>` (docs/provider-engine-contract.md §6.5): one key's model on
-    /// Claude Code is not its model on DeepSeek Harness. Serialize writes so quickly choosing two models
-    /// cannot leave the account remembering the older choice.
-    func rememberDefaultModel(_ model: String, engine: String, provider: String) {
-        let key = AgentDefaults.defaultModelKey(engine: engine, provider: provider)
-        rememberDefaultModel(model, key: key)
-    }
-
-    private func rememberDefaultModel(_ model: String, key provider: String) {
-        guard let api, defaultModels[provider] != model else { return }
-        pendingDefaultModels[provider] = model
-        let previous = defaultModelWrite
-        let generation = apiGeneration
-        defaultModelWrite = Task {
-            await previous?.value
-            guard generation == apiGeneration else { return }
-            if let updated = try? await api.updatePreferences(
-                UpdatePreferencesRequest(defaultModels: [provider: model])),
-               generation == apiGeneration {
-                user = updated
-                if pendingDefaultModels[provider] == model {
-                    pendingDefaultModels.removeValue(forKey: provider)
-                }
-            }
-        }
     }
 
     /// Persist the composer's last-picked reasoning effort as the account default (synced across
@@ -899,9 +895,11 @@ final class AppModel {
 
     func logout() {
         apiGeneration &+= 1
-        pendingDefaultModels = [:]
-        defaultModelWrite?.cancel()
-        defaultModelWrite = nil
+        #if os(iOS)
+        needsYouSeen = nil
+        needsYouToasts = []
+        needsYouToastsMore = 0
+        #endif
         pollTask?.cancel()
         pollTask = nil
         appPoll = nil
@@ -930,6 +928,9 @@ final class AppModel {
         linkCards = nil
         managedRunner?.reset()
         newAccount = nil
+        github = nil
+        githubLoadError = nil
+        cloneLedger = CloneLedger()
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -944,25 +945,26 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        sharedWithMe = []
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
-        #if os(iOS)
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
-        sessionFolders = []
         projectSessions = []
         projectSessionsAddress = nil
         projectSessionsError = nil
         projectCompletedSessions = [:]
-        #endif
+        sessionFolders = []
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
         openListAnswered = false
         openListIsReaderBase = false
+        openListFreshness = OpenListFreshness()
+        redrawOpenListStatus()
         eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
@@ -986,6 +988,7 @@ final class AppModel {
         nav = NavState()               // then clears every section's stack with it
         didResolveDefaultLanding = false
         provisionalLandingAgentID = nil
+        taskOverPageID = nil
         selectedTaskID = nil
         selectedAgentID = nil
     }
@@ -994,18 +997,6 @@ final class AppModel {
     func bootstrap() {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
-        #if os(iOS)
-        // An approval that arrives while you're in the app shows as Orbit's own card rather than a
-        // system banner (see `NotificationManager.willPresent`). A `.warning`, so it stays until
-        // it's dealt with — that's the whole point of it, and it's what a banner's persistence in
-        // Notification Center was doing before. Tapping it opens the session it's blocking on.
-        // The push names the session by its stored UUID; the card takes the lists' spelling, or its
-        // title lookup and the needs-you check that takes it down both miss the row.
-        notifications.onForegroundApproval = { [weak self] sessionID, line in
-            self?.showToast(line, sessionID: PublicID.toPublic(sessionID), tone: .warning,
-                            icon: "bell.badge.fill", awaitsApproval: true)
-        }
-        #endif
         #if os(macOS)
         // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
         // itself; rewrite it once, at launch.
@@ -1079,6 +1070,7 @@ final class AppModel {
     /// and while that read fails (offline), the floors wait too.
     func startPolling() {
         guard pollTask == nil else { return }
+        beginOpenListRound()
         startControlPlane()
         // The always-mounted drawer or sidebar performs the initial Workspace + Runner load. Start the
         // lightweight refresh one interval later instead of duplicating that request.
@@ -1090,7 +1082,7 @@ final class AppModel {
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
             // the real name and the preferences are this run's. A failed read keeps what is there.
-            if let self, let me = try? await self.api?.me() { self.user = me }
+            if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
             while !Task.isCancelled {
                 guard let self else { return }
                 await poll.tick(at: Date(), visible: self.appVisible, live: self.controlPlaneLive)
@@ -1109,6 +1101,7 @@ final class AppModel {
         await refreshFocusedSessionDetailIfNeeded()
         await refreshWatchesIfDue()
         await refreshOwnerRequestsIfDue()
+        await refreshScheduledIfDue()
         await projects?.refreshIfDue(live: controlPlaneLive)
         await managedRunner?.refreshIfDue()
     }
@@ -1151,6 +1144,52 @@ final class AppModel {
         await ownerRequests.load()
     }
 
+    /// The schedules' floor: no event names them, so they ride the owner requests' cadence; the drawer's count
+    /// is what it keeps true while the page is not showing.
+    private var scheduledRefreshNotBefore = Date.distantPast
+
+    private func refreshScheduledIfDue(now: Date = Date()) async {
+        guard now >= scheduledRefreshNotBefore, let scheduled else { return }
+        scheduledRefreshNotBefore = now.addingTimeInterval(
+            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
+        await scheduled.load()
+    }
+
+    /// One schedule's detail panel, over the Scheduled page, from anywhere: a change line's Open, a Waiting on
+    /// you card, a push that names the schedule.
+    func openSchedule(_ id: String) {
+        settingsPresented = false
+        ownerRequests?.inboxPresented = false
+        selectedSection = .scheduled
+        nav.path = []
+        scheduled?.draftPanel = nil
+        scheduled?.inspectedID = id
+    }
+
+    /// Take a run's session off the Scheduled page: on the Mac a row or a sentence chosen in the timeline puts its
+    /// panel in the right-hand column, where the run was.
+    func closeScheduleRun() {
+        guard selectedSection == .scheduled, !nav.path.isEmpty else { return }
+        nav.path = []
+    }
+
+    /// A run's session, over the Scheduled page: run sessions are in no list (§7.4), so the back swipe returns to
+    /// the schedule they ran for.
+    func openScheduleRun(sessionID: String, scheduleID: String?) {
+        settingsPresented = false
+        ownerRequests?.inboxPresented = false
+        scheduled?.inspectedID = nil
+        scheduled?.draftPanel = nil
+        selectedSection = .scheduled
+        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push. On the Mac
+        // the same frame is the Scheduled section's right-hand column (`ScheduledMacDetail`), with Scheduled lit in
+        // the sidebar and the timeline beside it (web board 02 ⑤): never a row of a workspace's list.
+        nav.path = [.console(sessionID: sessionID, origin: .list)]
+        // A run's session is in no list, so its own record is read as a link's is: the console's state band and
+        // its toolbar read that record.
+        refreshUnlistedSession(sessionID, adoptingAgent: false)
+    }
+
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
     func openOwnerRequest(_ id: String) {
         settingsPresented = false
@@ -1185,6 +1224,7 @@ final class AppModel {
     /// (the watchdog would catch it, but a relaunch is immediate). No-op when signed out.
     func kickControlPlane() {
         guard controlTask != nil else { return }
+        beginOpenListRound()
         controlTask?.cancel()
         controlTask = nil
         controlPlaneLive = false
@@ -1258,10 +1298,8 @@ final class AppModel {
         } else if let wiki, wiki.spacesState.hasLoaded {
             Task { await wiki.loadSpaces() }
         }
-        #if os(iOS)
         // Nor has `folder.changed`: a workspace's list draws its folders, and the Move panel offers them.
         Task { await loadSessionFolders() }
-        #endif
         // Runners has neither push nor poll: a list that failed while offline
         // would otherwise stay on its error until someone pulls to refresh.
         if let runners, runners.loadState.lastLoadFailed {
@@ -1318,6 +1356,14 @@ final class AppModel {
             nudgeProjects()
         default:
             break
+        }
+        // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is heard
+        // here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what the
+        // server stored: the open conversations of that workspace read their detail again, and the lists below.
+        if let (workspaceID, clone) = WorkspaceClone.event(type: ev.type.rawValue, data: ev.data,
+                                                           envelopeAgentID: ev.agentId) {
+            guard cloneLedger.hear(workspaceID, clone) else { return }
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
         }
         switch ControlEventRoute.of(ev) {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
@@ -1376,23 +1422,26 @@ final class AppModel {
             wiki?.nudge()
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
+        // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
+        // requests and Settings → Terminals are read again, and nothing else.
+        case .terminals:
+            Task {
+                await ownerRequests?.loadTerminalRequests()
+                await terminals?.load()
+            }
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
-        // so this refetches no list. The Mac draws no folders, so there it reads nothing at all.
+        // so this refetches no list.
         case .folders:
-            #if os(iOS)
             Task { await loadSessionFolders() }
-            #else
-            break
-            #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providers:
             scheduleLibraryRefresh(.agents)
             scheduleControlRefresh()
             // A shared pool's people are told of every change to it — a key going in, a rule — so a
-            // pool page that is open shows it. Read only once Infrastructure has asked for the list —
+            // pool page that is open shows it. Read only once Machines & models has asked for the list —
             // and the account's own keys likewise, which only that page reads.
             if sharedPools?.loadState.hasLoaded == true {
                 Task { await sharedPools?.load() }
@@ -1491,7 +1540,26 @@ final class AppModel {
     /// the caller should nudge a refresh.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         patchSessionProjectRelation(summary)
-        return applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        let merged = applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        patchCoordinatorHandoff(summary)
+        return merged
+    }
+
+    /// The coordinator handoff (docs/coordinator-handoff.md) on every loaded copy of the row, by the
+    /// project relation's rule: the outgoing coordinator leaves Open as its handoff completes, and its
+    /// open console still has to show the banner that leads to the successor. A row held nowhere is
+    /// read again when a console has it open.
+    private func patchCoordinatorHandoff(_ summary: ControlSessionSummary) {
+        guard summary.coordinatorHandoff != nil || summary.coordinatorHandoffReceived != nil else { return }
+        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
+            let merged = sessions[index].applyingCoordinatorHandoff(summary)
+            if merged != sessions[index] { applySessionRow(.replace(index: index, row: merged)) }
+        }
+        if let cached = sessionDetails.resolve(summary.id) {
+            sessionDetails.store(cached.applyingCoordinatorHandoff(summary))
+        } else if consoleRegistry?.peek(summary.id) != nil {
+            refreshUnlistedSession(summary.id, adoptingAgent: false)
+        }
     }
 
     /// Relation metadata has a different membership rule from run/lifecycle state: a Project can
@@ -1691,6 +1759,11 @@ final class AppModel {
     /// once a fetch that started after it has finished: true when that fetch adopted a list.
     @discardableResult
     func loadSessions() async -> Bool {
+        let freshnessRound = openListFreshness.round
+        defer {
+            openListFreshness.finish(round: freshnessRound, ok: sessionsLoadSucceeded, at: Date())
+            redrawOpenListStatus()
+        }
         sessionsLoadPending = true
         if sessionsLoadTask == nil {
             let generation = sessionsLoadGeneration
@@ -1704,6 +1777,32 @@ final class AppModel {
         }
         await sessionsLoadTask?.value
         return sessionsLoadSucceeded
+    }
+
+    /// The Open list in hand may be stale from now: the previous run's (a cold launch) or from
+    /// before a trip to the background. The read that answers is the poll's or the reconnect's own.
+    private func beginOpenListRound() {
+        openListFreshness.begin(at: Date())
+        redrawOpenListStatus()
+    }
+
+    /// "Offline · Tap to retry": read the Open list now.
+    func retryOpenList() {
+        beginOpenListRound()
+        Task { await loadSessions() }
+    }
+
+    private func redrawOpenListStatus() {
+        let now = Date()
+        let status = openListFreshness.status(at: now)
+        if status != openListStatus { openListStatus = status }
+        openListStatusTask?.cancel()
+        guard let next = openListFreshness.nextChange(after: now) else { openListStatusTask = nil; return }
+        openListStatusTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, next.timeIntervalSinceNow) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.redrawOpenListStatus()
+        }
     }
 
     private func fetchOpenSessions() async -> Bool {
@@ -1799,6 +1898,10 @@ final class AppModel {
             // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
             // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
             if case .needsApproval = event { continue }
+            // A settled run likewise (PushService.notifySessionSettled), which also honours the
+            // session's mute and the account's switch; this banner would be a second, differently
+            // worded alert for the same run.
+            if case .finished = event { continue }
             #endif
             notifications.post(Notifications.content(for: event))
         }
@@ -1815,10 +1918,6 @@ final class AppModel {
             lastNeedsYou = needsYou
             // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
             NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })
-            // The foreground card standing in for one of those banners has to come down with them.
-            // It's persistent by design, so an approval answered on web or macOS would otherwise
-            // leave a card asking for something that's already been decided.
-            toasts.clearApprovals(stillWaiting: needsYou)
         }
     }
     #endif
@@ -1852,13 +1951,9 @@ final class AppModel {
         // The ids are the same, so `filedSessions` keeps every entry it had.
         sessionDetails.reconcile(with: [row])
 
-        #if os(iOS)
         let activity = OpenListDerived.Activity(runningWorkspaceIDs: runningWorkspaceIDs,
                                                 jobWorkspaceIDs: jobWorkspaceIDs,
                                                 coordinatorPulses: projectCoordinators)
-        #else
-        let activity: OpenListDerived.Activity? = nil
-        #endif
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
                                       menu: menuSummary, activity: activity)
         derived.replace(old, with: row, in: sessions)
@@ -1868,13 +1963,11 @@ final class AppModel {
         #endif
         if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
         if derived.agentNeedsYou != agentNeedsYou { agentNeedsYou = derived.agentNeedsYou }
-        #if os(iOS)
         if let marks = derived.activity {
             if marks.runningWorkspaceIDs != runningWorkspaceIDs { runningWorkspaceIDs = marks.runningWorkspaceIDs }
             if marks.jobWorkspaceIDs != jobWorkspaceIDs { jobWorkspaceIDs = marks.jobWorkspaceIDs }
             if marks.coordinatorPulses != projectCoordinators { projectCoordinators = marks.coordinatorPulses }
         }
-        #endif
         agents?.applyOpenRow(sessions, workspaceIDs: [old.agent?.id ?? old.agentId, row.agent?.id ?? row.agentId])
         if old.confirmationUnderReview?.dueAt != row.confirmationUnderReview?.dueAt {
             scheduleReviewDueRefresh(sessions)
@@ -1911,11 +2004,9 @@ final class AppModel {
         sessions = list
         needsYouSessions = SessionGrouping.group(list).needsYou
         agentNeedsYou = NeedsYouLogic.byAgent(list)
-        #if os(iOS)
         runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
         jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
         projectCoordinators = ProjectAttention.coordinatorPulses(list)
-        #endif
         // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
         // here instead of leaving it to fetch the identical payload on its own timer.
         agents?.applyOpenSnapshot(list)
@@ -2022,6 +2113,12 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
+    /// A schedule's Change… (board 01 ③ 1): no form — a new conversation in the schedule's workspace, where the
+    /// change is said and its card or record comes back.
+    func openChangeConversation(for schedule: ScheduleView) {
+        show(.compose(agentID: schedule.workspaceId, folderID: nil), agent: schedule.workspaceId)
+    }
+
     private func newSessionWithNoWorkspace() {
         switch newSessionTarget {
         case .machine(let id)?: openMachineDraft(id)
@@ -2051,6 +2148,83 @@ final class AppModel {
         newAccount = answer
     }
 
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §8)
+
+    /// `GET /integrations/github` as last read: whether the deployment has Orbit's GitHub App, and the account's
+    /// connection. Nil until read.
+    private(set) var github: GithubIntegration?
+    /// Why the last read failed; nil after one that answered.
+    private(set) var githubLoadError: String?
+    /// What the realtime stream said about each GitHub workspace's clone: git's percentage lives only here.
+    private(set) var cloneLedger = CloneLedger()
+
+    /// Read the connection again: Settings → GitHub and the setup card ask as they appear, and again when the app
+    /// comes back from GitHub's sign-in in the browser.
+    func loadGithub() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        do {
+            let view = try await api.githubIntegration()
+            guard generation == apiGeneration else { return }
+            github = view
+            githubLoadError = nil
+        } catch {
+            guard generation == apiGeneration else { return }
+            githubLoadError = APIClient.failureReason(error)
+        }
+    }
+
+    /// Where to sign in to GitHub. The callback comes back to Settings → GitHub on the web; the app reads the
+    /// connection again as it comes back to the front.
+    func githubSignInURL() async throws -> URL {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubStart(returnTo: GithubFlow.returnPath)
+    }
+
+    /// Disconnect, and keep what the server answers. Nil on success, else why not.
+    func disconnectGithub() async -> String? {
+        guard let api else { return nil }
+        do {
+            github = try await api.disconnectGithub()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
+    func showGithubSettings() {
+        #if os(iOS)
+        nav.openSettings(at: .github)
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubRepositories(query: query)
+    }
+
+    func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubBranches(repoID: repoID)
+    }
+
+    /// Retry a failed clone (POST /workspaces/:id/clone/retry): heard as PENDING at once, and the conversations of that
+    /// workspace read their detail again. Nil on success, else why not.
+    func retryClone(workspaceID: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            _ = try await api.retryClone(workspaceID: workspaceID)
+            cloneLedger.hear(workspaceID, CloneHeard(state: .pending))
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     // MARK: a machine with no workspace (board rules 1–12)
 
     /// Each machine's new session page as it has been left, for this run of the app. Mutated by
@@ -2066,6 +2240,45 @@ final class AppModel {
         nav.openMachineDraft(runnerID: runnerID)
     }
 
+    // MARK: Shared with me — the sessions other people invited this account to reply in
+    // (docs/session-guests-design.md §4; web SharedWithMe.tsx)
+
+    /// The rows of the sidebar's / drawer's Shared with me group, newest invitation first. No group is
+    /// drawn while it is empty (`SharedWithMe.showsGroup`).
+    private(set) var sharedWithMe: [GuestSessionSummary] = []
+
+    /// The shared session whose guest view the Agents stack shows, if any.
+    var guestSessionID: String? { selectedSection == .agents ? nav.guestSessionOnTop : nil }
+
+    /// Read Shared with me once.
+    func loadSharedWithMe() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        guard let sessions = try? await api.guestSessions(),
+              apiGeneration == generation, self.api === api else { return }
+        if sessions != sharedWithMe { sharedWithMe = sessions }
+    }
+
+    /// Read Shared with me now and every minute while the app is seen: a session can be shared with
+    /// you, or stop being, at any time. Bound to the rail's lifetime (`.task`).
+    func followSharedWithMe() async {
+        while !Task.isCancelled {
+            await loadSharedWithMe()
+            await VisibilityGate.app.pause(SharedWithMe.refreshInterval)
+        }
+    }
+
+    /// Open a shared session's guest view: the Shared with me row's own page, over nothing.
+    func openGuestSession(_ id: String) {
+        settingsPresented = false
+        closeTaskOverPage()
+        selectedSection = .agents
+        nav.openGuestSession(PublicID.toPublic(id))
+    }
+
+    /// The client the guest view reads and writes through — this account's, as every other read.
+    var guestDoor: APIClient? { api }
+
     /// Start a session on a machine, whatever it holds: its first workspace's draft once it has one.
     func startSession(onMachine runnerID: String) {
         if let workspace = agents?.firstWorkspace(onRunner: runnerID) {
@@ -2077,48 +2290,37 @@ final class AppModel {
 
     /// That page's model, made the first time and kept (`MachineSetupModel`). Call from a `.task` or an
     /// event handler, never a view `body`.
-    func machineSetup(for runner: Runner) -> MachineSetupModel? {
+    func machineSetup(for runner: Runner) -> MachineSetupModel {
         let key = PublicID.storageKey(runner.id)
         if let kept = machineSetups[key] { return kept }
-        guard let agents, let consoleRegistry else { return nil }
-        let standIn = Agent.machineDraft(runnerID: runner.id, name: RunnerPageFormat.displayName(runner),
-                                         engine: MachineSetup.firstEngineOn(runner.engines))
-        let draft = consoleRegistry.draftModel(
-            for: standIn, defaultModel: agents.effectiveDefaultModel(for: standIn),
-            configuredProviders: agents.configuredProviders,
-            configuredProvidersLoaded: agents.configuredProvidersLoaded,
-            providerPools: agents.providerPools, sharedPools: agents.sharedPools,
-            modelCatalog: agents.modelCatalog(for: runner.id),
-            accountDefaultEffort: user?.preferences?.defaultEffort) { [weak self] session in
-                self?.openCreatedMachineSession(session, runnerID: runner.id)
-            }
-        let setup = MachineSetupModel(runner: runner, draft: draft)
+        let setup = MachineSetupModel(runner: runner)
         machineSetups[key] = setup
         return setup
     }
 
-    /// The first message made the workspace: the page you are on becomes the conversation, in the
-    /// workspace it made, and the Set up row turns into that workspace's row.
-    private func openCreatedMachineSession(_ session: Session, runnerID: String) {
-        registerCreatedAgentSession(session)
-        machineSetups[PublicID.storageKey(runnerID)] = nil
-        if machineDraftRunnerID == runnerID {
-            show(.console(sessionID: session.id, origin: .list), agent: session.agent?.id ?? session.agentId)
+    /// The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+    /// name the card was given (POST /workspaces). The list then says the machine has one, and the page moves
+    /// on to the new workspace's new session page. Why it was refused, or nil.
+    func createMachineWorkspace(runnerID: String, folder: PickedFolder, name: String) async -> String? {
+        guard let api else { return "Not signed in." }
+        do {
+            let made = try await api.createAgent(MachineSetup.createRequest(folder: folder, name: name,
+                                                                            runnerID: runnerID))
+            await agents?.load()
+            machineSetups[PublicID.storageKey(runnerID)] = nil
+            if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
         }
-        Task { await agents?.load() }
     }
 
     /// The machine got a workspace some other way (another device, the web's form): the page moves on
-    /// to it, and what was being set up here no longer applies. What was waiting comes back in that
-    /// workspace's composer rather than vanishing.
+    /// to it, and what was being set up here no longer applies.
     func machineGotWorkspace(_ runnerID: String) {
         guard machineDraftRunnerID == runnerID, let workspace = agents?.firstWorkspace(onRunner: runnerID)
         else { return }
-        let key = PublicID.storageKey(runnerID)
-        if let held = machineSetups[key]?.handOff() {
-            consoleRegistry?.queueDraftMessage(agentID: workspace.id, message: held)
-        }
-        machineSetups[key] = nil
+        machineSetups[PublicID.storageKey(runnerID)] = nil
         show(.compose(agentID: workspace.id, folderID: nil), agent: workspace.id)
     }
 
@@ -2174,7 +2376,7 @@ final class AppModel {
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent pops
     /// that section's stack, so its pane opens on the session list (the console and the draft on it
-    /// belong to the agent you just left) — on iOS, on the folder page that list was left on
+    /// belong to the agent you just left) — on the folder page that list was left on
     /// (`NavState.switchWorkspace`); re-selecting the current agent keeps the stack — a pushed
     /// console stays pushed.
     ///
@@ -2183,23 +2385,73 @@ final class AppModel {
     func openAgent(_ id: String) {
         selectedSection = .agents
         if selectedAgentID != id {
-            #if os(iOS)
             nav.switchWorkspace(from: selectedAgentID, to: id, folders: sessionFolders)
-            #else
-            nav.popToRoot()
-            #endif
             selectedAgentID = id
         } else if nav.machineDraftOnTop != nil {
             nav.popToRoot()
         }
     }
 
-    /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
-    /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
-    /// the Open list, which `applySessionSnapshot` already narrowed.
-    func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    /// A look at what waits: each wait not seen before becomes one notice (iOS). The first look after
+    /// launch or a return to the foreground only takes stock. Called whenever `needsYouSessions` moves.
+    private func noticeNewlyWaiting() {
+        #if os(iOS)
+        guard openListAnswered else { return }
+        let keys = Set(needsYouSessions.map(NeedsYouLogic.waitKey))
+        defer { needsYouSeen = keys }
+        guard let seen = needsYouSeen else { return }
+        for notice in NeedsYouLogic.newlyWaiting(needsYouSessions, seen: seen, excluding: focusedConsoleSessionID) {
+            showNeedsYouToast(notice)
+        }
+        // A notice whose conversation stopped waiting has nothing left to say.
+        needsYouToasts.removeAll { !keys.contains($0.id) }
+        if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
+        #endif
     }
+
+    #if os(iOS)
+    /// Back in the foreground: what waits now is taken as it stands, not announced.
+    func retakeNeedsYouStock() { needsYouSeen = nil }
+
+    private func showNeedsYouToast(_ notice: NeedsYouToast) {
+        guard needsYouToasts.count < Self.needsYouToastLimit else {
+            needsYouToastsMore += 1
+            return
+        }
+        needsYouToasts.append(notice)
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.needsYouToastSeconds * 1_000_000_000))
+            self?.dismissNeedsYouToast(notice.id)
+        }
+    }
+
+    /// Swiped away, or its time is up.
+    func dismissNeedsYouToast(_ id: String) {
+        needsYouToasts.removeAll { $0.id == id }
+        if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
+    }
+
+    /// A press on a notice: the conversation it names, at the card it waits on. An owner request's
+    /// card is opened in the "Waiting on you" inbox, as its push opens it: in the conversation it sits
+    /// where it was asked, under every turn taken since, so landing at the tail showed nothing.
+    func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
+        dismissNeedsYouToast(notice.id)
+        if let item = notice.ownerItem {
+            openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else if notice.target.waitingKind == .ownerRequest, let requests = ownerRequests {
+            if let request = OwnerRequests.oldestPending(requests.known, sessionID: notice.target.id) {
+                openOwnerRequest(request.id)
+            } else {
+                // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+                settingsPresented = false
+                requests.tab = .open
+                requests.inboxPresented = true
+            }
+        } else {
+            openNeedsYouSession(notice.target)
+        }
+    }
+    #endif
 
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
     /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
@@ -2322,7 +2574,7 @@ final class AppModel {
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
     /// no pushed page needs the edge for the system back-swipe. Every section that pushes reads its
     /// own stack — Tasks (a detail, then the list directory), Agents (a draft, then a console),
-    /// Infrastructure, Following, Admin, and Settings (a page, then what that page pushes).
+    /// Machines & models, Following, Admin, and Settings (a page, then what that page pushes).
     var sectionAtRoot: Bool {
         switch selectedSection {
         // Nothing pushed on the Tasks stack: not a task's detail, not the list directory — one
@@ -2335,13 +2587,15 @@ final class AppModel {
         // The sections whose pages are frames of their own stack: one read covers both the
         // three-column selection and the compact push. Skills pushes nothing (always at root); Admin
         // pushes a user's record now, which is what replaced the unconditional `true` this used to
-        // answer with; Settings pushes its pages and what they push in turn (Infrastructure, then a
+        // answer with; Settings pushes its pages and what they push in turn (Machines & models, then a
         // machine's record).
         case .skills, .runners, .following, .admin, .settings: return nav.sectionAtRoot
         // A project's page over the index: the same one read.
         case .projects: return nav.sectionAtRoot
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
+        // A run's session over the Scheduled page: the same one read.
+        case .scheduled: return nav.sectionAtRoot
         }
     }
 
@@ -2364,17 +2618,21 @@ final class AppModel {
             return
         }
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
+                revealTrashedSession(id)
                 errorText = "Couldn't complete the session."
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
             await loadSessions()
+            revealTrashedSession(id)
         }
     }
 
@@ -2406,13 +2664,11 @@ final class AppModel {
         if sessions.contains(where: { $0.id == id }) {
             applySessionSnapshot(SessionFilter.removing(id, from: sessions), notify: false)
         }
-        #if os(iOS)
         if projectSessions.contains(where: { $0.id == id }) {
             projectSessions = SessionFilter.removing(id, from: projectSessions)
         }
         // A poll draws the Completed members from here, so a Completed row has to leave it too.
         projectCompletedSessions = projectCompletedSessions.mapValues { SessionFilter.removing(id, from: $0) }
-        #endif
     }
 
     /// The lists may show the session again. The Open list in hand may lack a row the server still
@@ -2445,9 +2701,7 @@ final class AppModel {
         await loadSessions()
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
-        #if os(iOS)
         if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
-        #endif
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -2466,12 +2720,11 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, undo: (@MainActor () -> Void)? = nil,
-                   awaitsApproval: Bool = false,
                    mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
-                             sessionID: sessionID, canUndo: canUndo || undo != nil, awaitsApproval: awaitsApproval,
+                             sessionID: sessionID, canUndo: canUndo || undo != nil,
                              key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         if let undo { toastUndo = (id, undo) }
@@ -2573,7 +2826,9 @@ final class AppModel {
         }
     }
 
-    /// Complete a session, drop it from any open pane and offer Undo.
+    /// Complete a session, drop it from any open pane and offer Undo. Like Delete, the row leaves
+    /// every list on the tap rather than once the server has answered and the lists have been read
+    /// again (`hideTrashedSession`); a refusal brings it back.
     func completeSession(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canComplete != false else {
@@ -2582,18 +2837,22 @@ final class AppModel {
         }
         let name = toastSessionTitle(id)
         filedSessions.insert(id)
+        hideTrashedSession(id)
+        dropIfOpen(id)
         Task { @MainActor in
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
+                revealTrashedSession(id)
                 showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
+                await reloadSessionLists()
                 return
             }
             sessionDetails.remove(id)
-            dropIfOpen(id)
-            await reloadSessionLists()
             showToast("Session completed", sessionID: id, sessionTitle: name, canUndo: true)
+            await reloadSessionLists()
+            revealTrashedSession(id)
         }
     }
 
@@ -2732,23 +2991,6 @@ final class AppModel {
         }
     }
 
-    /// Write a session's recap again now (`POST /sessions/:id/recap`, the conversation's Recap
-    /// card), then read the lists again so the card and the row show the line it wrote — the server
-    /// publishes the session too, but a list on a stream gap would otherwise wait for its next
-    /// snapshot. Answers with what to tell the reader when the pass wrote nothing
-    /// (`RecapCard.notice`); nil when it wrote, or when another pass wrote first.
-    func refreshRecap(_ sessionID: String) async -> RecapCard.Notice? {
-        guard let api else { return RecapCard.notice(for: "error") }
-        do {
-            let outcome = try await api.refreshRecap(sessionID: sessionID)
-            let notice = outcome.written ? nil : RecapCard.notice(for: outcome.reason ?? "error")
-            if notice == nil { await reloadSessionLists() }
-            return notice
-        } catch {
-            return RecapCard.notice(for: "error")
-        }
-    }
-
     // MARK: session tags
 
     /// Load the owner's tag library (best-effort — an older server without the endpoint leaves it
@@ -2859,6 +3101,37 @@ final class AppModel {
         }
     }
 
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md)
+
+    /// A review model with no console behind it: the worktree isolation dialog's Review files, opened
+    /// from a workspace's settings rather than a session.
+    func makeMainCheckoutModel() -> MainCheckoutModel? {
+        api.map { MainCheckoutModel(sessionID: "", api: $0) }
+    }
+
+    /// Sessions of a workspace still on a worktree of their own, as the Open list knows them: what
+    /// turning worktree isolation off leaves where it is.
+    func worktreeSessionCount(inWorkspace workspaceID: String) -> Int {
+        sessions.filter { ($0.agent?.id ?? $0.agentId) == workspaceID && ($0.branch?.isEmpty == false) }.count
+    }
+
+    /// A new session in a workspace, its composer holding `text` to read, change and send.
+    func openNewSession(inWorkspace workspaceID: String, text: String) {
+        consoleRegistry?.pendingDraftText[workspaceID] = text
+        show(.compose(agentID: workspaceID, folderID: nil), agent: workspaceID)
+    }
+
+    /// Re-read the workspace list a few times after a main checkout action, so the bar follows the
+    /// runner's next heartbeats (60 s apart) without waiting on the list's own refresh.
+    func refreshMainCheckoutSoon() {
+        Task { @MainActor [weak self] in
+            for seconds in [5, 30, 70] as [UInt64] {
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                await self?.agents?.load()
+            }
+        }
+    }
+
     /// Each landing session's job, as the last integration read described it — what a landing page
     /// opened while the server cannot be reached draws its frozen placeholder from instead of a
     /// blank page. Filled by every successful integration read, on both shells.
@@ -2883,9 +3156,8 @@ final class AppModel {
         }
     }
 
-    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+    // MARK: a project's sessions page (iPhone, iPad, and the Mac's session column)
 
-    #if os(iOS)
     private(set) var projectSessions: [Session] = []
     private(set) var projectSessionsLoading = false
     private(set) var projectSessionsError: String?
@@ -2915,11 +3187,13 @@ final class AppModel {
     private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+    var projectSessionsColumnDestination: SessionProjectAddress? { nav.projectSessionsColumnDestination }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
     }
 
+    #if os(iOS)
     /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
     /// any other lands on its destination's root — another workspace's, on the folder page its list
     /// was left on (`NavState.switchWorkspace`). On a phone that is the destination's whole stack;
@@ -2949,13 +3223,17 @@ final class AppModel {
             openProjectSessions(projectID, inColumn: inColumn)
         case .machine(let runnerID):
             openMachineDraft(runnerID)
+        case .guestSession(let sessionID):
+            openGuestSession(sessionID)
         }
     }
+
+    #endif
 
     /// A project's sessions page over its coordinator's workspace (or the one already showing).
     /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
     /// the project's own page, rather than a page pushed over that workspace's list.
-    private func openProjectSessions(_ projectID: String, inColumn: Bool) {
+    func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
             $0.projectMembership?.role == .coordinator
@@ -2970,7 +3248,7 @@ final class AppModel {
         }
         let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
         if inColumn {
-            nav.enterProjectSessions(address)
+            nav.enterProjectSessions(address, asDestination: true)
         } else {
             nav.path = [.sessionProject(address, asDestination: true)]
         }
@@ -3127,6 +3405,13 @@ final class AppModel {
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
     }
 
+    /// "Land without the check" on a landing in flight (§2.4 J-S5), from the landing card. Throws
+    /// what the server answered, for the card to say; the page reads its line again itself.
+    func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.skipLandingCheck(projectID, taskID: taskID)
+    }
+
     /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out
     /// doors and the landing page. The page re-reads what it drew from afterwards.
     func abandonIntegrationJob(_ projectID: String, jobID: String) async throws {
@@ -3206,6 +3491,64 @@ final class AppModel {
         }
     }
 
+    /// A project row whose line says a member is waiting on you (owner 2026-11-14,
+    /// `SessionProjectSheet.RowTap.waitingMember`): that member's conversation, opened at the top of
+    /// its waiting card rather than at the transcript's end. A phone pushes it over the list, as it
+    /// pushes the coordinator; a column shell opens the project's page in its session column and
+    /// selects the member beside it, as the web desktop does.
+    func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {
+        consoleRegistry?.model(for: session.id, agentID: session.agent?.id ?? session.agentId).focusWaitingCard()
+        if !push { openProjectSessions(project) }
+        openProjectMember(session, push: push)
+    }
+
+    // MARK: session folders (docs/session-folders-move-design.md §3–4)
+
+    /// The project's session count, read by both the project sessions button and the page's
+    /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
+    /// answered for this project.
+    func projectSessionCount(_ projectID: String) -> Int? {
+        SessionProjectSheet.sessionCount(
+            projectID: projectID,
+            page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
+            answered: projectSessionsReadAt != nil)
+    }
+
+    /// Whether the project sessions button spins: anything the page it opens shows as active — a
+    /// member or landing session working (the spinner) or with a background job in flight (the
+    /// breathing glyph), a landing job running or queued, or a merge into main being checked or
+    /// landing. False until the page's read holds this project.
+    func projectActive(_ projectID: String) -> Bool {
+        guard let address = projectSessionsAddress,
+              PublicID.storageKey(address.projectID) == PublicID.storageKey(projectID) else { return false }
+        if let integration = projectSessionsIntegration,
+           projectSessionsLandingRunning || integration.integratingCount + integration.queuedCount > 0
+            || integration.inFlight != nil || integration.inFlightJobs?.isEmpty == false {
+            return true
+        }
+        if projectSessionsMerge?.projectID == address.projectID, projectSessionsMergeRunning { return true }
+        return projectSessions.contains { session in
+            let glyph = SessionStatusGlyph.make(for: session, watching: watches?.summary(for: session.id))
+            return glyph.shape == .spinner || glyph.pulse
+        }
+    }
+
+    #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
+    }
+
+    /// The sessions page a conversation's project sessions button reads and opens
+    /// (`SessionProjectSheet.address`).
+    func projectSheetAddress(_ projectID: String, session: Session?) -> SessionProjectAddress {
+        SessionProjectSheet.address(projectID: projectID, shown: projectSessionsAddress,
+                                    agentID: session?.agent?.id ?? session?.agentId ?? selectedAgentID ?? "")
+    }
+    #endif
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
@@ -3227,8 +3570,7 @@ final class AppModel {
     var folderPage: SessionFolderAddress? { nav.folderPage }
 
     /// The folder the wide shells' session column is showing, if one is — the frame the column's
-    /// list draws, with the console the detail pane follows above it. Nil on macOS, which shows no
-    /// folders (§1): nothing there ever puts one on the stack.
+    /// list draws, with the console the detail pane follows above it.
     var folderColumn: SessionFolderAddress? { nav.folderColumn }
 
     /// Open a folder's page from a folder row at the top of a workspace's session list (§3.3). One
@@ -3354,7 +3696,10 @@ final class AppModel {
         agents?.applyMovedSession(id, folderID: folderID)
     }
 
-    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+    // MARK: moving a session to another workspace (docs/session-folders-move-design.md §4, §5)
+    //
+    // The Move panel is iOS's; reading the targets and moving are both platforms', for the project
+    // page's Change (docs/mocks/coordinator-move-workspace/04-change).
 
     /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
     /// move-targets`): each other workspace with whether the session can go there and why not, and
@@ -3373,6 +3718,7 @@ final class AppModel {
         if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
         return folder
     }
+
 
     /// Move a session to another workspace, filed in one of its folders or in none — the
     /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
@@ -3423,7 +3769,6 @@ final class AppModel {
         if let cached = sessionDetails.resolve(id) { sessionDetails.store(moved(cached)) }
         agents?.applyMovedSession(id, toWorkspace: target.workspaceId)
     }
-    #endif
 
     // MARK: routing + notification intents
 
@@ -3580,9 +3925,9 @@ final class AppModel {
         }
     }
 
-    /// One engine's page on one machine, from outside the Infrastructure page — a session picker's way to
+    /// One engine's page on one machine, from outside the Machines & models page — a session picker's way to
     /// the fix for an engine that machine can't run, and a repair card's: the machine's record in the
-    /// Infrastructure section, and its engine's page over it, where signing in and installing live.
+    /// Machines & models section, and its engine's page over it, where signing in and installing live.
     func openRunnerEngine(_ runnerID: String, engine: String) {
         route(to: .runner(runnerID))
         push(.runnerEngine(runnerID: runnerID, engine: engine))
@@ -3656,15 +4001,44 @@ final class AppModel {
     /// What a page opened from inside a conversation does — a link in it, a row of its Watching or
     /// Tasks created here card. On a phone (`overConsole`, which the console's own environment says;
     /// the model is not told its shell) a task or another session is pushed over the console, so the
-    /// back swipe returns to the conversation. Anything else, and every page on the wide shells,
-    /// goes where ``route(to:)`` sends it: their sidebar is the way back.
-    func openFromConversation(_ route: Route, overConsole: Bool) {
-        guard overConsole else { return self.route(to: route) }
-        switch route {
-        case .task(let id):    push(.taskDetail(taskID: id))
-        case .session(let id): pushConsole(id)
-        default:               self.route(to: route)
+    /// back swipe returns to the conversation. On a wide shell (`overPage`, which the shell's
+    /// environment says) a task opens over the page it was pressed on instead of switching
+    /// sections (owner decision 2026-11-12). Anything else goes where ``route(to:)`` sends it.
+    func openFromConversation(_ route: Route, overConsole: Bool, overPage: Bool = false) {
+        if overConsole {
+            switch route {
+            case .task(let id):    push(.taskDetail(taskID: id))
+            case .session(let id): pushConsole(id)
+            default:               self.route(to: route)
+            }
+            return
         }
+        if case .task(let id) = route, overPage { return openTaskOverPage(id) }
+        self.route(to: route)
+    }
+
+    /// Show `id`'s page over the page on screen, on a wide shell (owner decision 2026-11-12): the
+    /// task detail the Tasks section draws, over the conversation (or wiki entry, or watch card) the
+    /// link was pressed in — never a section switch, so closing it is the page as it was. The Tasks
+    /// detail store follows it, because that one slot is what every detail read loads into.
+    func openTaskOverPage(_ id: String) {
+        taskOverPageID = id
+        tasks?.setSelectedDetailID(id)
+    }
+
+    /// Take the task over the page down. The page under it never left, so the detail store goes
+    /// back to naming the stack's own task page.
+    func closeTaskOverPage() {
+        guard taskOverPageID != nil else { return }
+        taskOverPageID = nil
+        syncTaskDetailStore()
+    }
+
+    /// Whether `id`'s detail is the one on screen, in whichever container: the Tasks pane's page or
+    /// the task opened over a page. What the detail page's polls and 404 guards read.
+    func taskDetailIsOpen(_ id: String) -> Bool {
+        selectedTaskID.map(PublicID.storageKey) == PublicID.storageKey(id)
+            || taskOverPageID.map(PublicID.storageKey) == PublicID.storageKey(id)
     }
 
     /// The exact refresh a session opened from outside its list gets. The Open snapshot is already
@@ -3691,6 +4065,15 @@ final class AppModel {
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
+                // No session of yours: it may be one somebody shared with you. The web asks the guest
+                // door before saying not-found (WorkspaceConsole, D9), and so does this.
+                if (try? await api.guestSession(id, limit: 1)) != nil {
+                    guard self.apiGeneration == generation, self.api === api else { return }
+                    self.consoleRegistry?.discardMissing(id)
+                    self.nav.replaceConsoleWithGuest(id)
+                    return
+                }
+                guard self.apiGeneration == generation, self.api === api else { return }
                 self.discardMissingSession(id)
             } catch APIError.unauthorized {
                 guard self.apiGeneration == generation, self.api === api else { return }
@@ -3704,13 +4087,14 @@ final class AppModel {
     /// Load the agent list, then land on the app's home if we're still on the launch default — see
     /// `resolveDefaultLanding`.
     func loadAgentsThenLand() async {
+        await managedRunner?.load()
         await agents?.load()
         resolveDefaultLanding()
     }
 
     /// The one-shot launch landing: the agent you last used (persisted via `selectedAgentID`), else
     /// the first agent, else the first online machine's new session page when the server says there
-    /// are none, else the Infrastructure section — the native parallel of web's runners/register
+    /// are none, else the Machines & models section — the native parallel of web's runners/register
     /// onboarding. A deep link / notification that already chose
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides
@@ -3829,6 +4213,18 @@ final class AppModel {
             openOwnerRequest(id)
         case .snoozeOwnerRequest(let id):
             ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
+        case .openTerminalRequests:
+            settingsPresented = false
+            ownerRequests?.tab = .open
+            ownerRequests?.inboxPresented = true
+            Task { await ownerRequests?.loadTerminalRequests() }
+        case let .openSchedule(scheduleID, sessionID):
+            // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
+            if let sessionID {
+                openScheduleRun(sessionID: PublicID.toPublic(sessionID), scheduleID: PublicID.toPublic(scheduleID))
+            } else {
+                openSchedule(PublicID.toPublic(scheduleID))
+            }
         }
     }
 

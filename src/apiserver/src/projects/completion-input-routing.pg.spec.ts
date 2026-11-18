@@ -147,6 +147,8 @@ suite('OPEN work and AWAITING_INPUT do not gate evidence/request/decision input 
           creatorType: CreatorType.USER,
           creatorId: ownerId,
           completionCriterion: 'EVIDENCE_JUDGMENT',
+          // Evidence for a task that states no standard is refused at submit.
+          acceptanceCriteria: 'the delivery is reviewed',
           status: TaskStatus.IN_PROGRESS,
         },
         {

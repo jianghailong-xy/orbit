@@ -1,0 +1,451 @@
+<!-- DESIGN MOCK (2026-11-14) for task P1-03 (Agent Tools: guide, diagnosis, generated skills).
+     Hand-drawn with the web console's own tokens (src/web/src/index.css :root) and the Settings blocks'
+     rules (src/web/src/components/settings/Settings.css). Product copy is English; the notes are the
+     owner's working language. The numbers are real: 102 Orbit MCP tools with orchestration on and 80 off
+     (catalogue 1.6.0, counted without Claude's permission_prompt bridge), Claude Code 2.1.325 and Codex 0.167.2 as installed on this runner.
+     Render: chromium --headless=new --screenshot (see README.md). -->
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Agent Tools · design board</title>
+<style>
+@font-face { font-family: "MockInter"; font-weight: 400; src: url("file:///root/wikova-develop/node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2"); }
+@font-face { font-family: "MockInter"; font-weight: 500; src: url("file:///root/wikova-develop/node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2"); }
+@font-face { font-family: "MockInter"; font-weight: 600; src: url("file:///root/wikova-develop/node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2"); }
+@font-face { font-family: "MockInter"; font-weight: 700; src: url("file:///root/wikova-develop/node_modules/@fontsource/inter/files/inter-latin-700-normal.woff2"); }
+:root {
+  --bg-base: #ffffff; --bg-raised: #ffffff; --bg-subtle: #fafbfc; --bg-sunken: #f7f8fa; --bg-hover: #f5f6f7;
+  --fill-muted: #f1f1f4; --fill-inset: rgba(0,0,0,.05);
+  --border: #dee0e3; --border-subtle: #eceef1;
+  --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e; --text-4: #a8acb3;
+  --brand: #3370ff; --brand-tint: #eaf1ff; --brand-border: #bcd3ff;
+  --success: #1a7f37; --success-solid: #2ea121; --success-bg: #e8f6ec; --success-border: #b6e7c4;
+  --error: #cf3b35; --error-solid: #d4380d; --error-bg: #fdeceb; --error-border: #ffccc7;
+  --warning: #c2710c; --warning-bg: #fff4e6; --warning-border: #ffd591;
+}
+* { box-sizing: border-box; }
+body { margin: 0; width: fit-content; background: #eef0f3; color: var(--text-1);
+       font: 14px/1.5 "MockInter", "Noto Sans CJK SC", "Liberation Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+.board { width: 1900px; padding: 36px 40px 44px; }
+h1 { font-size: 25px; margin: 0 0 6px; }
+.lede { color: #55555e; margin: 0 0 26px; max-width: 1560px; line-height: 1.7; }
+.lede code, .note code, .notes code { font: 12px "DejaVu Sans Mono", monospace; background: #e6e8ec; padding: 1px 5px; border-radius: 4px; }
+.row { display: flex; gap: 28px; align-items: flex-start; margin-bottom: 34px; }
+.fh { font-weight: 700; font-size: 15px; margin: 0 0 9px; display: flex; gap: 8px; align-items: baseline; }
+.fh small { font-weight: 400; color: #6b6b75; font-size: 12.5px; }
+.note { font-size: 12.5px; color: #55555e; margin: 9px 2px 0; line-height: 1.65; }
+.note b { color: var(--text-1); }
+.callout { outline: 2px dashed var(--brand); outline-offset: 3px; border-radius: 6px; }
+.tag-new { display: inline-block; background: var(--brand); color: #fff; font-size: 10.5px; font-weight: 600; border-radius: 9px; padding: 0 6px; margin-left: 6px; vertical-align: 1px; line-height: 17px; }
+
+/* ── web: the session page behind a drawer ───────────────────────── */
+.page { position: relative; background: var(--bg-base); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 28px rgba(0,0,0,.06); overflow: hidden; }
+.page-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.page-head .t { font-weight: 600; font-size: 14.5px; }
+.page-head .m { color: var(--text-3); font-size: 12px; }
+.page-head .sp { flex: 1; }
+.icon-btn { width: 28px; height: 28px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-2); font-size: 16px; }
+.icon-btn.on { background: var(--bg-hover); }
+.menu { position: absolute; right: 14px; top: 46px; width: 238px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: 5px; font-size: 13.5px; z-index: 2; }
+.menu .it { display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: 6px; color: var(--text-1); }
+.menu .it .ic { width: 16px; text-align: center; color: var(--text-2); font-size: 13px; }
+.menu .it.hl { background: var(--bg-hover); }
+.menu .it .k { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.menu .sep { height: 1px; background: var(--border-subtle); margin: 4px 2px; }
+.menu .it.danger { color: var(--error); }
+.chat { padding: 18px 20px; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.chat .u { margin-left: auto; width: fit-content; max-width: 80%; background: #f0f4ff; border: 1px solid #d6e2ff; border-radius: 12px; padding: 8px 12px; color: var(--text-1); }
+.chat .a { margin-top: 12px; }
+.chat .tool { margin-top: 6px; font: 11.5px "DejaVu Sans Mono", monospace; background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 6px 9px; }
+.composer { margin: 8px 16px 16px; border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; color: var(--text-3); font-size: 13px; }
+.composer .pills { display: flex; gap: 6px; margin-top: 10px; }
+.cpill { font-size: 11.5px; color: var(--text-2); background: var(--fill-muted); border-radius: 999px; padding: 2px 8px; }
+
+/* ── web: the drawer (components/ui Drawer, 520 px) ─────────────────── */
+.drawer { width: 520px; background: var(--bg-base); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 28px rgba(0,0,0,.08); overflow: hidden; }
+.dr-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
+.dr-head .t { font-size: 15.5px; font-weight: 600; }
+.dr-head .x { margin-left: auto; color: var(--text-3); font-size: 16px; }
+.dr-body { padding: 16px 18px 18px; }
+.dr-sub { font-size: 12.5px; color: var(--text-2); margin: -4px 0 14px; }
+.sec { margin-top: 18px; }
+.sec:first-child { margin-top: 0; }
+.sec-t { font-size: 13.5px; font-weight: 600; color: var(--text-1); margin: 0 0 7px; display: flex; align-items: baseline; gap: 8px; }
+.sec-t small { font-weight: 400; color: var(--text-3); font-size: 12px; }
+.card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); padding: 0 14px; }
+.r { display: flex; align-items: flex-start; gap: 12px; padding: 9px 0; }
+.r + .r { border-top: 1px solid var(--border-subtle); }
+.r .txt { flex: 1; min-width: 0; }
+.r .ti { font-size: 13.5px; color: var(--text-1); }
+.r .de { font-size: 12px; color: var(--text-2); margin-top: 1px; line-height: 1.5; }
+.r .ct { flex: none; font-size: 12px; color: var(--text-3); white-space: nowrap; padding-top: 2px; }
+.r code, .de code, .st-line code, .ex code { font: 11px "DejaVu Sans Mono", monospace; background: var(--fill-muted); padding: 0 4px; border-radius: 4px; color: var(--text-2); }
+
+.status { border-radius: 12px; padding: 12px 14px; border: 1px solid var(--success-border); background: var(--success-bg); }
+.status.bad { border-color: var(--error-border); background: var(--error-bg); }
+.st-top { display: flex; align-items: center; gap: 8px; }
+.st-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--success-solid); flex: none; }
+.status.bad .st-dot { background: var(--error-solid); }
+.st-word { font-weight: 600; font-size: 14px; color: var(--success); }
+.status.bad .st-word { color: var(--error); }
+.st-when { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.st-line { font-size: 12.5px; color: var(--text-1); margin-top: 4px; line-height: 1.55; }
+.st-ver { font-size: 11.5px; color: var(--text-2); margin-top: 7px; }
+.st-why { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--fill-inset); font-size: 12px; color: var(--text-1); line-height: 1.55; }
+.st-why .q { font: 11px "DejaVu Sans Mono", monospace; color: var(--error); display: block; margin: 3px 0 4px; white-space: pre-wrap; }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+.p-ok { background: var(--success-bg); color: var(--success); }
+.p-off { background: var(--fill-muted); color: var(--text-2); }
+.p-bad { background: var(--error-bg); color: var(--error); }
+.p-role { background: var(--brand-tint); color: #2546b8; font-size: 11px; padding: 0 7px; }
+.p-role.dev { background: #f3ecff; color: #5b2fb8; }
+.p-role.ctx { background: var(--warning-bg); color: var(--warning); }
+.p-role.dem { background: var(--fill-muted); color: var(--text-2); }
+.p-role.usr { background: var(--success-bg); color: var(--success); }
+
+.ol { counter-reset: n; }
+.ol .r { counter-increment: n; }
+.ol .r .num::before { content: counter(n); }
+.num { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--fill-muted); color: var(--text-2); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+.foot { font-size: 11.5px; color: var(--text-3); margin-top: 7px; line-height: 1.55; }
+.seg { display: inline-flex; background: var(--fill-muted); border-radius: 8px; padding: 2px; gap: 2px; margin-bottom: 8px; }
+.seg span { font-size: 12px; padding: 3px 12px; border-radius: 6px; color: var(--text-2); }
+.seg span.on { background: var(--bg-raised); color: var(--text-1); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+
+.fold { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; color: var(--text-1); }
+.fold + .fold { border-top: 1px solid var(--border-subtle); }
+.fold .chev { color: var(--text-3); font-size: 11px; width: 12px; }
+.fold .h { color: var(--text-3); font-size: 11.5px; margin-left: auto; }
+.open-body { font-size: 12px; color: var(--text-2); line-height: 1.6; padding: 0 0 10px 20px; }
+.ex { border-top: 1px solid var(--border-subtle); padding: 10px 0; }
+.ex:first-child { border-top: 0; }
+.ex .ask { font-size: 13px; color: var(--text-1); font-weight: 500; }
+.ex .ask::before { content: "\201C"; color: var(--text-3); }
+.ex .ask::after { content: "\201D"; color: var(--text-3); }
+.ex .does { font-size: 12px; color: var(--text-2); margin-top: 3px; line-height: 1.55; }
+.ex .proof { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.copy { font-size: 11.5px; color: var(--brand); margin-left: 8px; }
+.btn { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg-raised); font-size: 12.5px; color: var(--text-1); }
+
+
+.fam { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; padding: 6px 0; }
+.fam .f { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: 12.5px; color: var(--text-1); }
+.fam .f .d { width: 7px; height: 7px; border-radius: 50%; background: var(--success-solid); flex: none; }
+.fam .f.off .d { background: var(--dot-idle, #c0c4cc); }
+.fam .f.bad .d { background: var(--error-solid); }
+.fam .f.off, .fam .f.bad { color: var(--text-3); }
+.fam .f .n { margin-left: auto; color: var(--text-3); font-size: 11.5px; }
+.why-list { border-top: 1px solid var(--border-subtle); padding: 8px 0 9px; font-size: 12px; color: var(--text-2); line-height: 1.55; }
+.why-list b { color: var(--text-1); font-weight: 500; }
+
+/* ── web: settings page ─────────────────────────────────────────── */
+.settings { width: 640px; background: var(--bg-base); border-radius: 12px; padding: 20px 24px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.settings-section-title { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+.settings-card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); padding: 0 16px; }
+.settings-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
+.settings-row + .settings-row { border-top: 1px solid var(--border-subtle); }
+.settings-row-text { flex: 1; min-width: 0; }
+.settings-row-title { font-size: 14px; }
+.settings-row-description { margin-top: 2px; font-size: 12.5px; color: var(--text-2); }
+.del { text-decoration: line-through; color: var(--error); }
+.ins { color: var(--success); font-weight: 500; }
+
+/* ── macOS sheet ───────────────────────────────────────────────── */
+.mac { width: 560px; background: #ececec; border-radius: 12px; box-shadow: 0 0 0 .5px rgba(0,0,0,.25), 0 18px 50px rgba(0,0,0,.25); overflow: hidden;
+       font-family: -apple-system, "MockInter", "Noto Sans CJK SC", sans-serif; font-size: 13px; }
+.mac-bar { height: 40px; display: flex; align-items: center; justify-content: center; position: relative; background: #f6f6f6; border-bottom: 1px solid #d9d9d9; font-weight: 600; }
+.mac-bar .lights { position: absolute; left: 12px; display: flex; gap: 8px; }
+.mac-bar .lights span { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.mac-bar .lights span:nth-child(2) { background: #febc2e; } .mac-bar .lights span:nth-child(3) { background: #28c840; }
+.mac-body { padding: 16px 20px 18px; }
+.mac-gh { font-size: 11px; font-weight: 600; color: #6e6e73; text-transform: uppercase; letter-spacing: .03em; margin: 14px 4px 5px; }
+.mac-gh:first-child { margin-top: 0; }
+.mac-grp { background: #fff; border-radius: 8px; box-shadow: 0 0 0 .5px rgba(0,0,0,.12); }
+.mac-r { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; }
+.mac-r + .mac-r { border-top: .5px solid #e2e2e4; }
+.mac-r .l { flex: 1; min-width: 0; }
+.mac-r .v { color: #6e6e73; white-space: nowrap; }
+.mac-r .s { color: #6e6e73; font-size: 11.5px; margin-top: 1px; line-height: 1.45; }
+.mac-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 20px 16px; }
+.mac-btn { padding: 3px 14px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.2), 0 1px 1px rgba(0,0,0,.06); }
+.mac-btn.def { background: #2a7cff; color: #fff; box-shadow: none; }
+.mac-dot { width: 8px; height: 8px; border-radius: 50%; background: #28c840; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+
+/* ── notes ─────────────────────────────────────────────────────── */
+.notes { width: 560px; background: #fff; border-radius: 12px; padding: 18px 22px 20px; font-size: 13px; line-height: 1.75; color: #33363b; }
+.notes h3 { font-size: 14.5px; margin: 16px 0 4px; color: var(--text-1); }
+.notes h3:first-child { margin-top: 0; }
+.notes ul { margin: 0; padding-left: 18px; }
+.notes .dec { background: #f4f7ff; border: 1px solid var(--brand-border); border-radius: 8px; padding: 8px 12px; margin-top: 6px; }
+.notes .rec { color: var(--success); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Agent Tools：会话与工作区里看得到 Orbit 给 agent 的工具、指令和用法</h1>
+  <p class="lede">
+    新增一个只读的 <b>Agent tools</b> 抽屉，不放任何配置开关（agent-first）：会话里看<b>本会话</b>实际连上没有、为什么缺工具、权限模式对 Orbit 调用意味着什么、编排开关实际放开了哪些、agent 读到的指令从哪来、按什么顺序；工作区设置里看这个工作区的会话会拿到什么。下半部分是 <b>How agents use Orbit</b>：由 operation catalogue / guide 生成的用法说明和四个示例，与 <code>docs/agent-tools-guide.md</code>、<code>orbit guide</code> 和托管 skill 同源，有测试保证三者一致。<br>
+    连接状态取自引擎自己的报告：Claude Code 的 <code>system/init</code>（<code>mcp_servers[].status</code>、实际列出的 <code>mcp__orbit__*</code> 工具、已加载的 skill），Codex 的 <code>mcpServer/startupStatus/updated</code>（<code>starting / ready / failed / cancelled</code> + 错误原文）；runner 归一成一条 <code>agent_tools</code> 事件，服务端写到会话上。蓝色虚线框是新加的东西；工具数（编排开 102 个、关 80 个，不算 Claude 的 permission_prompt 桥）是本机 <code>orbit mcp</code> 的 <code>tools/list</code> 实测；目标版本号按本任务要升到的写。
+  </p>
+
+  <div class="row">
+    <div>
+      <div class="fh">① 入口：会话页 More actions <small>Find 之后、Rename 之前；手机宽度同一个菜单</small></div>
+      <div class="page" style="width:420px;height:452px">
+        <div class="page-head"><span class="t">Fix the flaky watch spec</span><span class="m">claude-opus-5-5</span><span class="sp"></span><span class="icon-btn">⌕</span><span class="icon-btn on">⋯</span></div>
+        <div class="menu">
+          <div class="it"><span class="ic">⌕</span>Find in session<span class="k">⌘F</span></div>
+          <div class="it hl callout"><span class="ic">⚙</span>Agent tools<span class="k" style="color:var(--success)">● Connected</span></div>
+          <div class="sep"></div>
+          <div class="it"><span class="ic">✓</span>Complete</div>
+          <div class="it"><span class="ic">✎</span>Rename…</div>
+          <div class="it"><span class="ic">▭</span>Move…</div>
+          <div class="sep"></div>
+          <div class="it"><span class="ic">⛓</span>Copy link</div>
+          <div class="it"><span class="ic">◍</span>Share…</div>
+          <div class="it"><span class="ic">⇩</span>Download HTML</div>
+          <div class="sep"></div>
+          <div class="it danger"><span class="ic">🗑</span>Delete</div>
+        </div>
+        <div class="chat" style="padding-top:22px">
+          <div class="u" style="margin-left:0">File this for later: the watch spec still flakes under load.</div>
+        </div>
+      </div>
+      <p class="note">菜单行右侧直接带一个状态点：<b>● Connected</b> / <b>● Not connected</b> / <b>Not reported</b>，不点开也看得到。<br>没有新的顶栏按钮：会话顶栏已经很挤（手机上只剩 ⋯）。</p>
+    </div>
+
+    <div>
+      <div class="fh">② 会话抽屉 · 已连接 <small>Claude Code，编排开着</small></div>
+      <div class="drawer">
+        <div class="dr-head"><span class="t">Agent tools</span><span class="x">✕</span></div>
+        <div class="dr-body">
+          <div class="dr-sub">What the agent in this session can reach in Orbit, and what it was told.</div>
+          <div class="sec">
+            <div class="status callout">
+              <div class="st-top"><span class="st-dot"></span><span class="st-word">Connected</span><span class="st-when">Reported 3 min ago</span></div>
+              <div class="st-line">Claude Code 2.1.325 started Orbit's MCP server and lists <b>102 Orbit tools</b>.</div>
+              <div class="st-ver">Agent Contract 1.8.0 · Operation catalogue 1.7.0 · Primer 1.2.0 · Guide 1.1.0</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Tools in this session <small>by what they act on</small></div>
+            <div class="card">
+              <div class="fam">
+                <div class="f"><span class="d"></span>Tasks<span class="n">22</span></div>
+                <div class="f"><span class="d"></span>Projects<span class="n">20</span></div>
+                <div class="f"><span class="d"></span>Task lists<span class="n">6</span></div>
+                <div class="f"><span class="d"></span>Waits<span class="n">6</span></div>
+                <div class="f"><span class="d"></span>Files<span class="n">4</span></div>
+                <div class="f"><span class="d"></span>Background jobs<span class="n">5</span></div>
+                <div class="f"><span class="d"></span>Questions for you<span class="n">5</span></div>
+                <div class="f"><span class="d"></span>Wiki<span class="n">5</span></div>
+                <div class="f"><span class="d"></span>Providers<span class="n">4</span></div>
+                <div class="f"><span class="d"></span>Merge receipts<span class="n">2</span></div>
+                <div class="f"><span class="d"></span>Guide<span class="n">1</span></div>
+                <div class="f"><span class="d"></span>Sessions, agents, runners<span class="n">22</span></div>
+              </div>
+              <div class="why-list">Session orchestration is on for this account: the agent may open and steer sessions and manage this account's agents and runners. A sub-session never gets a wider permission mode than this one.</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Permission mode <small>Default</small></div>
+            <div class="card"><div class="r"><div class="txt"><div class="de" style="color:var(--text-1);font-size:12.5px">Orbit's reads and waits run unasked. A create, a batch or a project puts a card in front of you first. A background job asks before it starts. In Plan, Orbit's writes are refused until the plan is approved.</div></div></div></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Instructions <small>in the order Claude Code reads them</small></div>
+            <div class="card ol">
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Claude Code's system prompt <span class="pill p-role">System</span></div><div class="de">The engine's own.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">This workspace's runtime instructions <span class="pill p-role">System · appended</span></div><div class="de">412 characters, from workspace settings.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit's runtime instructions <span class="pill p-role">System · appended</span></div><div class="de">Primer 1.2.0, then the CLI path, files, evidence, progress and waits.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit MCP server instructions <span class="pill p-role">System · MCP</span></div><div class="de">The primer again, under "MCP Server Instructions".</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">CLAUDE.md files <span class="pill p-role ctx">Project context</span></div><div class="de">Read by Claude Code from the checkout. Orbit neither reads nor changes them.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit playbooks · <code>orbit:playbooks</code> <span class="pill p-role dem">On demand</span></div><div class="de">Loaded. Opened only when a task needs a long recipe; nothing depends on it.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Your messages <span class="pill p-role usr">User</span></div><div class="de">With the task or project context Orbit attaches to them.</div></div></div>
+            </div>
+            <div class="foot">Orbit's own instructions are the same words on every engine. A repository's CLAUDE.md or AGENTS.md cannot add to them or take them away.</div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">How agents use Orbit <small>Guide 1.1.0</small></div>
+            <div class="card">
+              <div class="fold"><span class="chev">▸</span>MCP first, the CLI by exception</div>
+              <div class="fold"><span class="chev">▸</span>Your record and the agent's private plan</div>
+              <div class="fold"><span class="chev">▸</span>Which object a request belongs to</div>
+              <div class="fold"><span class="chev">▸</span>Creating is not starting</div>
+              <div class="fold"><span class="chev">▸</span>When the CLI is the right tool</div>
+              <div class="fold"><span class="chev">▸</span>When something is missing<span class="h">9 symptoms</span></div>
+              <div class="fold"><span class="chev">▸</span>Try asking<span class="h">4 examples</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="fh">③ 会话抽屉 · 未连接 <small>Codex，编排关着；不可用的原因逐条写</small></div>
+      <div class="drawer">
+        <div class="dr-head"><span class="t">Agent tools</span><span class="x">✕</span></div>
+        <div class="dr-body">
+          <div class="dr-sub">What the agent in this session can reach in Orbit, and what it was told.</div>
+          <div class="sec">
+            <div class="status bad callout">
+              <div class="st-top"><span class="st-dot"></span><span class="st-word">Not connected</span><span class="st-when">Reported 1 min ago</span></div>
+              <div class="st-line">Codex 0.167.2 could not start Orbit's MCP server:</div>
+              <div class="st-why"><span class="q">MCP client for `orbit` failed to start: handshaking with MCP server failed: connection closed: initialize response</span>Orbit's runtime instructions still reached the agent, so it can use the Orbit CLI by its absolute path, under the same approvals. A new session starts the server again.</div>
+              <div class="st-ver">Agent Contract 1.8.0 · Operation catalogue 1.7.0 · Primer 1.2.0 · Guide 1.1.0</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Tools in this session</div>
+            <div class="card">
+              <div class="fam">
+                <div class="f bad"><span class="d"></span>Tasks<span class="n">22</span></div>
+                <div class="f bad"><span class="d"></span>Projects<span class="n">20</span></div>
+                <div class="f bad"><span class="d"></span>Task lists<span class="n">6</span></div>
+                <div class="f bad"><span class="d"></span>Waits<span class="n">6</span></div>
+                <div class="f bad"><span class="d"></span>Files<span class="n">4</span></div>
+                <div class="f bad"><span class="d"></span>Background jobs<span class="n">5</span></div>
+                <div class="f bad"><span class="d"></span>Questions for you<span class="n">5</span></div>
+                <div class="f off"><span class="d"></span>Wiki<span class="n">off</span></div>
+                <div class="f bad"><span class="d"></span>Providers<span class="n">4</span></div>
+                <div class="f bad"><span class="d"></span>Merge receipts<span class="n">2</span></div>
+                <div class="f bad"><span class="d"></span>Guide<span class="n">1</span></div>
+                <div class="f off callout"><span class="d"></span>Sessions, agents, runners<span class="n">off</span></div>
+              </div>
+              <div class="why-list"><b>Not connected</b> — none of these reach the agent while the MCP server is down.<br><b>Wiki</b> — the wiki is off for this account.<br><b>Sessions, agents, runners</b> — Session orchestration is off for this account, so the agent records a hand-off as a task instead. Turn it on in Settings → Session orchestration.</div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Permission mode <small>Plan</small></div>
+            <div class="card"><div class="r"><div class="txt"><div class="de" style="color:var(--text-1);font-size:12.5px">Orbit's reads, waits and questions for you run. Every other Orbit write is refused with <code>SESSION_IN_PLAN_MODE</code> until the plan is approved; background jobs are refused.</div></div></div></div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Instructions <small>in the order Codex reads them</small></div>
+            <div class="card ol">
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Codex's base instructions <span class="pill p-role">System</span></div><div class="de">The engine's own; a workspace's base instructions would replace them.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit's and this workspace's runtime instructions <span class="pill p-role dev">Developer</span></div><div class="de">Application context, sent with every turn (Codex ≥ 0.135).</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit MCP server instructions <span class="pill p-role dem">Tool list</span></div><div class="de">Codex shows their first 250 characters — and none while the server is down.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">AGENTS.md files <span class="pill p-role ctx">Project context</span></div><div class="de">Read by Codex from the checkout.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit playbooks · <code>orbit-playbooks</code> <span class="pill p-role dem">On demand</span></div><div class="de">Listed by name; read only when needed.</div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Your messages <span class="pill p-role usr">User</span></div><div class="de">Codex's own rule: your message comes before a skill or a repository file.</div></div></div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">When something is missing <small>open</small></div>
+            <div class="card"><div class="r"><div class="txt">
+              <div class="ti">Orbit's tools are not in the agent's list</div>
+              <div class="de">The engine did not start Orbit's MCP server (above), or this session is older than a switch you changed. Ask the agent: <i>"Call guide and tell me which Orbit tools you have and why any are missing."</i> Without the tools it uses <code>orbit guide --json</code> at the absolute path in its instructions.</div>
+            </div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <div class="fh">④ 工作区设置 → Agent environment <small>新增一行；文案 system prompt → runtime instructions</small></div>
+      <div class="settings">
+        <div class="settings-section-title">Agent environment</div>
+        <div class="settings-card">
+          <div class="settings-row"><div class="settings-row-text"><div class="settings-row-title">Environment variables</div><div class="settings-row-description">GOFLAGS, NODE_OPTIONS</div></div><span class="btn">Edit</span></div>
+          <div class="settings-row"><div class="settings-row-text"><div class="settings-row-title">Instructions</div><div class="settings-row-description">Added to <span class="del">this workspace’s system prompt</span> <span class="ins">every run's runtime instructions</span> · 412 characters</div></div><span class="btn">Edit</span></div>
+          <div class="settings-row callout"><div class="settings-row-text"><div class="settings-row-title">Agent tools<span class="tag-new">new</span></div><div class="settings-row-description">What agents here are given: Orbit's tools, the instructions they read and in what order, and the playbooks.</div></div><span class="btn">View</span></div>
+          <div class="settings-row"><div class="settings-row-text"><div class="settings-row-title">Always allowed</div><div class="settings-row-description">3 tools you said “don’t ask again” for</div></div><span class="btn">Manage</span></div>
+        </div>
+      </div>
+      <div class="fh" style="margin-top:22px">工作区模式的抽屉 <small>没有“本会话”状态；引擎用分段切换</small></div>
+      <div class="drawer" style="width:640px">
+        <div class="dr-head"><span class="t">Agent tools · orbit-op</span><span class="x">✕</span></div>
+        <div class="dr-body">
+          <div class="dr-sub">What a session in this workspace is given. Its live connection is on the session: More actions → Agent tools.</div>
+          <div class="sec">
+            <div class="sec-t">Instructions <small>in the order the engine reads them</small></div>
+            <div class="seg"><span class="on">Claude Code</span><span>Codex</span></div>
+            <div class="card ol">
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Claude Code's system prompt <span class="pill p-role">System</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">This workspace's runtime instructions <span class="pill p-role">System · appended</span></div><div class="de">412 characters · <span style="color:var(--brand)">Edit</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit's runtime instructions <span class="pill p-role">System · appended</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit MCP server instructions <span class="pill p-role">System · MCP</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">CLAUDE.md files <span class="pill p-role ctx">Project context</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Orbit playbooks <span class="pill p-role dem">On demand</span></div></div></div>
+              <div class="r"><span class="num"></span><div class="txt"><div class="ti">Your messages <span class="pill p-role usr">User</span></div></div></div>
+            </div>
+          </div>
+          <div class="sec">
+            <div class="sec-t">Try asking <small>what the agent does, and what proves it</small></div>
+            <div class="card">
+              <div class="ex"><div class="ask">File this for later: rotate the staging API key. Nobody should start it.</div><div class="does">One <code>task_create</code> with <code>autoRunWhenReady: false</code>; you answer one card.</div><div class="proof">Proof: the receipt's task id, linked as the task's name. Nothing starts.</div></div>
+              <div class="ex"><div class="ask">Keep that five-step migration plan in Orbit, in order.</div><div class="does">One <code>task_create_batch</code>: five items, each later one <code>dependsOnRefs</code> the one before; one card.</div><div class="proof">Proof: five ids in input order, the edges visible on the project page.</div></div>
+              <div class="ex"><div class="ask">Have someone fix the flaky test right now.</div><div class="does">Recorded work: <code>task_start</code>. New work: <code>task_create</code> with <code>startNow: true</code>. A conversation: <code>session_create</code> — orchestration only; without it, a task.</div><div class="proof">Proof: the started session's id in the receipt.</div></div>
+              <div class="ex"><div class="ask">File the 30 issues in issues.csv as tasks under this project.</div><div class="does">The CLI's bulk door: <code>orbit task create-batch --tasks-file - --dry-run</code>, then the same file without <code>--dry-run</code>; one card for the batch.</div><div class="proof">Proof: <code>--receipt</code> prints every item's id; exit 0 exactly when it wrote.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="fh">⑤ macOS · 会话 ⋯ 菜单 → Agent Tools… <small>sheet；同样的顺序和文案（OrbitKit 读同一份生成的 JSON）</small></div>
+      <div class="mac">
+        <div class="mac-bar"><div class="lights"><span></span><span></span><span></span></div>Agent Tools</div>
+        <div class="mac-body">
+          <div class="mac-gh">This session</div>
+          <div class="mac-grp">
+            <div class="mac-r"><div class="l"><span class="mac-dot"></span><b>Connected</b><div class="s">Claude Code 2.1.325 started Orbit's MCP server and lists 102 Orbit tools.</div></div><span class="v">3 min ago</span></div>
+            <div class="mac-r"><div class="l">Versions</div><span class="v">Contract 1.8.0 · Catalogue 1.7.0 · Primer 1.2.0</span></div>
+            <div class="mac-r"><div class="l">Permission mode</div><span class="v">Default</span></div>
+            <div class="mac-r"><div class="l">Session orchestration<div class="s">Sessions, agents and runners: 22 tools.</div></div><span class="v">On</span></div>
+          </div>
+          <div class="mac-gh">Tools · 102</div>
+          <div class="mac-grp">
+            <div class="mac-r"><div class="l">Tasks 22 · Projects 20 · Task lists 6 · Waits 6 · Files 4 · Background jobs 5 · Questions for you 5 · Wiki 5 · Providers 4 · Merge receipts 2 · Guide 1</div><span class="v">Available</span></div>
+            <div class="mac-r"><div class="l">Sessions, agents, runners · 22</div><span class="v">Available</span></div>
+          </div>
+          <div class="mac-gh">Instructions, in the order Claude Code reads them</div>
+          <div class="mac-grp">
+            <div class="mac-r"><div class="l">1 · Claude Code's system prompt</div><span class="v">System</span></div>
+            <div class="mac-r"><div class="l">2 · This workspace's runtime instructions</div><span class="v">System · appended</span></div>
+            <div class="mac-r"><div class="l">3 · Orbit's runtime instructions</div><span class="v">System · appended</span></div>
+            <div class="mac-r"><div class="l">4 · Orbit MCP server instructions</div><span class="v">System · MCP</span></div>
+            <div class="mac-r"><div class="l">5 · CLAUDE.md files</div><span class="v">Project context</span></div>
+            <div class="mac-r"><div class="l">6 · Orbit playbooks</div><span class="v">On demand</span></div>
+            <div class="mac-r"><div class="l">7 · Your messages</div><span class="v">User</span></div>
+          </div>
+          <div class="mac-gh">How agents use Orbit</div>
+          <div class="mac-grp">
+            <div class="mac-r"><div class="l">▸ MCP first · Your record and the agent's plan · Which object · Creating is not starting · The CLI · When something is missing · Try asking</div></div>
+          </div>
+        </div>
+        <div class="mac-foot"><span class="mac-btn def">Done</span></div>
+      </div>
+      <p class="note">工作区：<code>AgentsView</code> 的设置里加一行 <b>Agent Tools…</b>，打开同一个 sheet 的工作区模式（没有 This session 组，引擎用分段）。<br>iOS / Android 这一轮只改文案（system prompt → runtime instructions），不加入口。</p>
+    </div>
+
+    <div class="notes">
+      <h3>数据从哪来</h3>
+      <ul>
+        <li><b>连接状态 / 原因</b>：引擎自己说的。Claude：<code>system/init</code> 的 <code>mcp_servers</code>（<code>connected / failed / pending / needs-auth</code>）和它实际列出的 <code>mcp__orbit__*</code>；Codex：<code>mcpServer/startupStatus/updated</code>，失败带原文。其他引擎不报这个，显示 <b>Not reported</b> 并写明原因。</li>
+        <li><b>工具族与不可用原因</b>：runner 用 <code>orbit mcp</code> 同一个函数、同一组开关算出本进程拿到的工具；原因用 runner 现成的句子（编排关、Watch / Wiki 未开）。</li>
+        <li><b>版本</b>：本会话 runner 二进制里的 contract / catalogue / primer / guide 版本。</li>
+        <li><b>指令顺序</b>：runner 知道这次用了哪个载体（Claude <code>--append-system-prompt</code>；Codex 按版本是 application context / developer message / turn input），面板按实际载体写角色。</li>
+        <li><b>用法与示例</b>：Go 里生成一份 JSON 给 web 和 OrbitKit，同时生成 <code>docs/agent-tools-guide.md</code> 和 Claude / Codex 托管 skill；测试保证提交的文件和生成结果一致。</li>
+      </ul>
+      <h3>不做什么</h3>
+      <ul>
+        <li>不放开关、不放配置表单：开关仍在原处（Settings → Session orchestration、工作区 Instructions），抽屉只说明并链过去。</li>
+        <li>skill 只放长 playbook（多步计划、批量脚本、委派、排障），primer 和工具描述不依赖它。</li>
+      </ul>
+      <h3>请拍板</h3>
+      <div class="dec">
+        <b>D1 入口位置</b>：会话 More actions 里一项（带状态点）+ 工作区 Agent environment 一行。<span class="rec">推荐</span>。备选：顶栏常驻一个状态图标（只在 Not connected 时出现）。<br>
+        <b>D2 用法说明放哪</b>：抽屉里折叠展示（不出产品、不进源码仓库就能看）<span class="rec">推荐</span>；备选只给 docs 链接。<br>
+        <b>D3 Codex 的 role 词</b>：用 <code>Developer</code> 照 Codex 自己的叫法 <span class="rec">推荐</span>；备选统一叫 “Standing instructions”。
+      </div>
+    </div>
+  </div>
+</div>
+<script>addEventListener("load",()=>{const r=document.body.getBoundingClientRect();document.title="SIZE "+Math.ceil(r.width)+"x"+Math.ceil(r.height)})</script>
+</body>
+</html>

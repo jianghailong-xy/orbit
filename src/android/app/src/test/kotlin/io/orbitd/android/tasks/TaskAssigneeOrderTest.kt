@@ -59,8 +59,11 @@ class TaskAssigneeOrderTest {
     @Test fun theTaskPagesAssigneePickerListsTheWorkspacesWithARunnerFirst() {
         signIn()
         open("orbit-task:${NavShell.TASK}")
+        // The fields are in the Runs with sheet (board 05 D): the line on the page opens it.
+        await { compose.onAllNodesWithTag("task-runs-with").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("task-runs-with").performScrollTo().performClick()
         await { compose.onAllNodesWithTag("task-assignee").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("task-assignee").performScrollTo().performClick()
+        compose.onNodeWithTag("task-assignee").performClick()
         val offered = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()
             .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
         assertEquals(listOf(TaskListCopy.unassigned, "Alpha", "Beta", "Spare"), offered)

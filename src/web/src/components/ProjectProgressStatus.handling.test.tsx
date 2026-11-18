@@ -266,7 +266,7 @@ describe('an item the clock handed to the owner while the coordinator’s rerun 
   it('is the owner’s card — Now yours — and says the rerun is still running, not that it was handled', () => {
     const html = card(ESCALATED_WHILE_HANDLING);
     expect(html).toContain('project-open-item-card is-owner');
-    expect(text(html)).toContain('Now yours — no one acted on this for 2h');
+    expect(text(html)).toContain('Now yours — the coordinator didn’t get to it');
     expect(text(html)).toContain('the rerun of the landing — generation 2 is running');
     expect(html).not.toContain(HANDLED_TAG);
     expect(text(html)).toContain('Ask the coordinator again');

@@ -15,7 +15,7 @@ import type { RunnerEngineHealth } from '@orbit/shared';
  *  from it is a DeepSeek key like any other, and its old connect address leads to DeepSeek's. */
 export const DSH_PRESET_SLUG = 'deepseek-harness';
 /** Where the DeepSeek key Harness runs on is connected. */
-export const DSH_CONNECT_HREF = '/providers/new/deepseek';
+export const DSH_CONNECT_HREF = '/settings/providers/new/deepseek';
 /** The heartbeat capability the server requires before it creates, resumes or hands out a dsh
  *  session (sessions.service, queue.service). */
 export const DSH_RUNNER_CAPABILITY = 'provider:dsh';

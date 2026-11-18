@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { FileUpload } from '../files/file-upload-storage';
-import { FilesService, type FileView, type OpenedFile, type StorageUsage } from '../files/files.service';
+import { FilesService, type FileView, type OpenedFile, type StorageUsage, type StoredFilesPage, type StoredFilesScope } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertEngineSession } from '../sessions/engine-session';
 import { assertValidUpload } from './attachments.media';
@@ -68,6 +68,15 @@ export class AttachmentsService {
   }
 
   /**
+   * Keep a session guest's image (session-guests.service.ts uploadImage, which has read the guest's live invitation
+   * and checked the image): a row of the owner's session, as the owner's own upload to it would be, that names the
+   * guest who uploaded it. The owner's quota counts it, as it counts every file of their sessions.
+   */
+  createForGuest(ownerId: string, sessionId: string, guestId: string, file: FileUpload): Promise<{ id: string }> {
+    return this.files.createAttachment(file, { ownerId, sessionId, uploadedByGuestId: guestId });
+  }
+
+  /**
    * Remove one of the caller's TASK inputs.
    *
    * Task-scoped only, and that is the rule rather than an oversight: a session- or turn-scoped row
@@ -100,6 +109,18 @@ export class AttachmentsService {
   /** What this account keeps (§2.10), for its Settings. */
   usage(ownerId: string): Promise<StorageUsage> {
     return this.files.usage(ownerId);
+  }
+
+  /** The files one of Settings' storage rows counts; a project or task that is not this account's is the same 404 as none. */
+  async storedFiles(ownerId: string, scope: StoredFilesScope, order: 'size' | 'newest', cursor: string | null): Promise<StoredFilesPage> {
+    const page = await this.files.storedFiles(ownerId, scope, order, cursor);
+    if (!page) throw new NotFoundException(`${scope.kind} not found`);
+    return page;
+  }
+
+  /** Delete a file everywhere this account keeps it, from Settings → Storage. */
+  async deleteEverywhere(ownerId: string, id: string): Promise<void> {
+    if (!(await this.files.deleteEverywhere(ownerId, id))) throw new NotFoundException('attachment not found');
   }
 
   /** Pin one of this account's files or take its pin away; another account's is the same 404 as one that is not there. */

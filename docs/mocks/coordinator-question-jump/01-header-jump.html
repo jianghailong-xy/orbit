@@ -1,0 +1,141 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Inter; src: url(/var/tmp/landing-mock-render/fonts/Inter.ttf); }
+@font-face { font-family: NotoSC; src: url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf); }
+/* Tokens copied from src/web/src/index.css (light :root). */
+:root { --bg-base:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --brand:#3370ff; --brand-tint:#eaf1ff;
+  --warning:#c2710c; --warning-solid:#fa8c16; --warning-bg:#fff4e6; --warning-border:#ffd591; --danger:#d83931; }
+* { box-sizing: border-box; }
+body { margin:0; background:#eef0f3; font-family: Inter, NotoSC, sans-serif; color:var(--text-1); }
+.board { width:1460px; padding:36px 40px 40px; }
+h1 { font-size:26px; margin:0 0 6px; }
+.b-lead { color:var(--text-2); font-size:15px; margin:0 0 24px; line-height:1.6; }
+.b-cols { display:flex; gap:28px; }
+.b-col { flex:1; }
+.b-tag { display:inline-block; font-size:14px; font-weight:600; padding:3px 10px; border-radius:6px; margin-bottom:10px; }
+.b-today { background:#fde8e7; color:var(--danger); } .b-new { background:#e6f4ea; color:#1f7a3a; }
+.b-win { background:var(--bg-base); border:1px solid var(--border); border-radius:12px; overflow:hidden; height:640px; position:relative; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+.workspace-header { padding:14px 18px 12px; border-bottom:1px solid var(--border-subtle); }
+.workspace-title-row { display:flex; align-items:center; gap:8px; }
+.workspace-title { font-size:16px; font-weight:600; }
+.coord-badge { font-size:11px; color:var(--brand); background:var(--brand-tint); border-radius:4px; padding:1px 6px; font-weight:600; }
+.workspace-sub { font-size:12.5px; color:var(--text-3); margin-top:4px; display:flex; align-items:center; gap:6px; }
+.b-waitjump { display:inline-flex; align-items:center; gap:4px; color:var(--warning); background:var(--warning-bg);
+  border:1px solid var(--warning-border); border-radius:999px; padding:1px 9px 1px 7px; font-weight:600; font-size:12.5px; cursor:pointer; }
+.b-waitjump svg { width:12px; height:12px; }
+.b-scroll { position:absolute; top:62px; bottom:64px; left:0; right:0; overflow:hidden; padding:14px 22px; background:var(--bg-base); }
+.b-turn { margin-bottom:14px; font-size:13px; line-height:1.6; color:var(--text-1); }
+.b-user { margin-left:auto; max-width:70%; background:var(--bg-sunken); border-radius:10px; padding:8px 12px; }
+.b-tool { font-size:12px; color:var(--text-3); border:1px solid var(--border-subtle); border-radius:8px; padding:6px 10px; margin-bottom:10px; }
+.workspace-composer { position:absolute; bottom:0; left:0; right:0; height:64px; border-top:1px solid var(--border-subtle); padding:12px 18px; background:var(--bg-base); }
+.b-box { border:1px solid var(--border); border-radius:10px; height:40px; color:var(--text-3); font-size:13px; padding:10px 12px; }
+.approval-card.coordinator-question { border:1px solid var(--warning-border); border-radius:10px; background:#fff; overflow:hidden; }
+.coordinator-question.b-flash { box-shadow:0 0 0 3px rgba(250,140,22,.35); }
+.coordinator-question-head { background:var(--warning-bg); padding:8px 12px; display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; }
+.criteria-provenance { font-size:10.5px; color:var(--brand); background:var(--brand-tint); padding:1px 6px; border-radius:4px; letter-spacing:.3px; }
+.coordinator-question-body { padding:10px 12px; font-size:13px; }
+.coordinator-question-option { display:block; border:1px solid var(--border-subtle); border-radius:8px; padding:6px 10px; margin-top:6px; font-size:12.5px; }
+.coordinator-question-recommended { color:#1f7a3a; font-size:11px; margin-left:6px; font-weight:600; }
+.coordinator-question-actions { padding:8px 12px; border-top:1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center; }
+.b-btn { background:var(--brand); color:#fff; border-radius:6px; padding:4px 12px; font-size:12.5px; }
+.b-asked { color:var(--text-3); font-size:12px; }
+.b-fold { position:absolute; left:0; right:0; border-top:2px dashed var(--danger); }
+.b-foldlabel { position:absolute; right:10px; font-size:12px; color:var(--danger); background:#fff; padding:0 6px; transform:translateY(-50%); }
+.b-mark { position:absolute; width:26px; height:26px; border-radius:50%; background:var(--danger); color:#fff; font-weight:700; font-size:14px;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 3px #fff; z-index:5; }
+.b-mark.g { background:#1f7a3a; }
+.b-ring { position:absolute; border:2px solid var(--danger); border-radius:8px; z-index:4; }
+.b-ring.g { border-color:#1f7a3a; }
+.b-notes { margin-top:14px; font-size:14px; line-height:1.7; color:var(--text-1); }
+.b-notes li { margin-bottom:4px; }
+.b-notes b.r { color:var(--danger); } .b-notes b.g { color:#1f7a3a; }
+.b-dec { margin-top:26px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px 22px; }
+.b-dec h2 { font-size:18px; margin:0 0 10px; }
+.b-dec table { border-collapse:collapse; width:100%; font-size:14px; }
+.b-dec td, .b-dec th { border-top:1px solid var(--border-subtle); padding:9px 10px; vertical-align:top; text-align:left; line-height:1.55; }
+.b-dec th { color:var(--text-2); font-weight:600; border-top:none; }
+.b-rec { color:#1f7a3a; font-weight:600; }
+.b-code { font-family: monospace; font-size:12.5px; background:var(--bg-sunken); padding:0 4px; border-radius:3px; }
+</style></head>
+<body><div class="board">
+<h1>“Question from coordinator” 点得到问题 — 效果图 01</h1>
+<p class="b-lead">来源：用户反馈“显示有 Question From Coordinator，但是我似乎没看见在哪”。外壳为手绘，问题卡与标题行用的是控制台真实类名与 index.css 的颜色。数据取自用户那次的问题（Nacos / RocketMQ）。</p>
+
+<div class="b-cols">
+<!-- TODAY -->
+<div class="b-col">
+  <span class="b-tag b-today">今天</span>
+  <div class="b-win">
+    <div class="workspace-header">
+      <div class="workspace-title-row"><span class="workspace-title">order-service migration</span><span class="coord-badge">Coordinator</span></div>
+      <div class="workspace-sub">Question from coordinator · Parked · 13:48</div>
+    </div>
+    <div class="b-scroll">
+      <div class="b-turn">Task <b>Wire order events to RocketMQ</b> reported back: integration tests could not reach the broker.</div>
+      <div class="b-tool">Bash · curl nacos:8848/nacos/v1/ns/instance/list — connection refused</div>
+      <div class="b-turn">Both Nacos and RocketMQ are down on the shared environment. I can't restore them from here, so I've asked you.</div>
+      <div class="b-turn b-user">Keep going with the payment tasks meanwhile.</div>
+      <div class="b-turn">OK — the two payment tasks don't need the broker. Started both; I'll report when they land.</div>
+      <div class="b-tool">task_start · Refund idempotency key · Payment webhook retries</div>
+      <div class="b-turn">Refund idempotency key landed on main. Webhook retries is still running its checks…</div>
+      <div class="b-turn">…</div>
+    </div>
+    <div class="b-fold" style="top:540px"></div><div class="b-foldlabel" style="top:540px">问题卡在这下面，屏幕外</div>
+    <div class="workspace-composer"><div class="b-box">Message the coordinator…</div></div>
+    <div class="b-ring" style="left:14px; top:34px; width:170px; height:22px"></div>
+    <div class="b-mark" style="left:300px; top:32px">1</div>
+    <div class="b-mark" style="left:400px; top:527px">2</div>
+  </div>
+  <ul class="b-notes">
+    <li><b class="r">①</b> 标题下的 “Question from coordinator” 只是文字，点了没反应；图标也只有 tooltip。</li>
+    <li><b class="r">②</b> 问题卡画在对话最末尾。往上翻过对话、或从项目行打开时，不会自动带到问题卡 —— 11-14 的“打开即定位到等待卡”只在等的是<b>成员会话</b>时生效，coordinator 自己在等时不生效。</li>
+    <li>唯一能直达的是项目页 Needs you 里的 <span class="b-code">?item=</span> 链接。</li>
+  </ul>
+</div>
+
+<!-- PROPOSAL -->
+<div class="b-col">
+  <span class="b-tag b-new">提议</span>
+  <div class="b-win">
+    <div class="workspace-header">
+      <div class="workspace-title-row"><span class="workspace-title">order-service migration</span><span class="coord-badge">Coordinator</span></div>
+      <div class="workspace-sub"><span class="b-waitjump">Question from coordinator<svg viewBox="0 0 12 12"><path d="M6 2v7M2.5 6l3.5 3.5L9.5 6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span> · Parked · 13:48</div>
+    </div>
+    <div class="b-scroll">
+      <div class="b-turn">Refund idempotency key landed on main. Webhook retries is still running its checks…</div>
+      <div class="approval-card coordinator-question b-flash">
+        <div class="approval-head coordinator-question-head">The coordinator has a question <span class="criteria-provenance">FROM COORDINATOR</span></div>
+        <div class="approval-body coordinator-question-body">
+          <div class="coordinator-question-text">Nacos and RocketMQ are unavailable on the shared environment. Can you restore them?</div>
+          <span class="coordinator-question-option">I'll restore both now<span class="coordinator-question-recommended">Recommended</span></span>
+          <span class="coordinator-question-option">Skip broker-dependent tasks for now</span>
+          <span class="coordinator-question-option">Other — say it in my own words</span>
+        </div>
+        <div class="approval-actions coordinator-question-actions"><span class="b-asked">asked 22m ago</span><span class="b-btn">Send answer</span></div>
+      </div>
+    </div>
+    <div class="workspace-composer"><div class="b-box">Message the coordinator…</div></div>
+    <div class="b-ring g" style="left:14px; top:33px; width:206px; height:24px"></div>
+    <div class="b-mark g" style="left:320px; top:32px">1</div>
+    <div class="b-mark g" style="left:640px; top:118px">2</div>
+  </div>
+  <ul class="b-notes">
+    <li><b class="g">①</b> 等你的那个词本身变成按钮（琥珀色胶囊 + ↓），文字不变。点它：滚到问题卡，卡顶停在标题栏下方 —— 复用现有的 <span class="b-code">WAITING_CARD_SELECTOR</span> 定位。</li>
+    <li><b class="g">②</b> 卡片到位后闪一圈琥珀色描边（约 1 秒），告诉你“就是这张”。</li>
+    <li>其它等你的词（Approve merge to main、Escalated to you、Waiting on you …）同样可点，落到各自的卡。</li>
+  </ul>
+</div>
+</div>
+
+<div class="b-dec">
+  <h2>待你决定</h2>
+  <table>
+    <tr><th style="width:26%">问题</th><th style="width:37%">选项</th><th>建议</th></tr>
+    <tr><td>A. 标题里的入口长什么样</td><td>A1 等你的词本身可点（如上图）<br>A2 词不变，后面加一个 “Show” 小按钮</td><td class="b-rec">A1 —— 不加新文案，三端的词保持一致，点的就是让你困惑的那个词。</td></tr>
+    <tr><td>B. 打开会话时是否自动落到等待卡</td><td>B1 只修项目行：coordinator 自己在等时也定位<br>B2 B1 + 会话列表里“等你”的行也定位<br>B3 不自动，只靠 ① 的按钮</td><td class="b-rec">B2 —— 从任何写着“等你”的行进来都看见卡；直接打开链接、正常阅读则保持在对话末尾不变。</td></tr>
+    <tr><td>C. 原生端（iOS / Mac / Android）</td><td>C1 这次一起做<br>C2 先 Web，验收后原生跟进</td><td class="b-rec">C2 —— 先在 Web 上定稿交互，原生按同一张图跟进（Android 跟 iOS）。</td></tr>
+  </table>
+</div>
+</div></body></html>

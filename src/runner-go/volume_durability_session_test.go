@@ -104,14 +104,16 @@ func TestManagedRunnerRefusesTheClaimOfASessionRefusedAtReclaim(t *testing.T) {
 	job := runnerStopJob(t, "sess-refused-reclaim")
 	withManagedInstance(t, "4", testManagedPodUID)
 	recordVolumeSyncs(t)
-	reason := "the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: its HEAD is empty" + repositoryDamagedAdvice
+	reason := "the Git repository at /home/orbit/orbit-repos/default cannot be read: its HEAD is empty" + repositoryDamagedAdvice
 	job.SourceRefusal = &SourcePinRefusal{Code: repositoryDamagedRefusal, Detail: map[string]interface{}{"reason": reason}}
 	api := newRunnerStopControlPlane()
 	api.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "carry on"})
-	sup := superviseUntilRunnerStop(t, job, false, api)
-
+	// Copied before the supervisor starts: its goroutine writes the job (syncJobProvider) as it begins,
+	// and a claim payload is a fresh struct the runner has not touched either.
 	claim := *job
 	claim.SourceRefusal = nil // what a claim payload carries
+	sup := superviseUntilRunnerStop(t, job, false, api)
+
 	if _, ok := sup.pool.activate(&claim); !ok {
 		t.Fatal("the claim did not activate the reclaimed supervisor")
 	}

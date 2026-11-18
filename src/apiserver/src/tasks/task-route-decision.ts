@@ -7,9 +7,11 @@ import {
   spentPlanUsage,
   type AccountEngine,
   type PlanUsage,
+  type PlanUsageSnapshot,
   type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
@@ -26,7 +28,7 @@ import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { blockedRunnerRegion } from '../runners/runner-region';
-import { agentProviderSeed } from '../workspaces/workspace-provider';
+import { taskRunSeed } from '../workspaces/start-anchor';
 import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
@@ -70,7 +72,12 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
         env: true, codexAccount: true, claudeAccount: true,
       },
     })),
-    seed: (workspaceId: string) => once(`seed:${workspaceId}`, () => agentProviderSeed(prisma, workspaceId)),
+    /** What an unpinned run of this task starts on: its project's coordinator, else its workspace's
+     *  seed (start-anchor.ts) — the baseline routing starts from (model-routing-design.md §2). */
+    seed: (workspaceId: string, taskId?: string | null) => once(
+      `seed:${workspaceId}:${taskId ?? ''}`,
+      () => taskRunSeed(prisma, taskId, workspaceId),
+    ),
     runner: (id: string) => once(`runner:${id}`, () => prisma.runner.findFirst({
       where: { id, ownerId },
       select: {
@@ -152,7 +159,7 @@ async function routeEngine(
  */
 async function routeBaseline(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null },
   workspaceId: string,
 ) {
   const pinnedEngine = isEngine(task.engine) ? task.engine : null;
@@ -172,7 +179,7 @@ async function routeBaseline(
       : pinnedEngine;
     providerSource = 'engine-pin';
   } else {
-    const seed = await reads.seed(workspaceId);
+    const seed = await reads.seed(workspaceId, task.id);
     provider = seed.provider;
     providerBuiltin = seed.providerBuiltin;
     seedEngine = seed.engine;
@@ -202,7 +209,7 @@ async function routeBaseline(
  */
 async function routeEnvironment(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null },
   workspaceId: string,
   runnerId: string | null,
 ) {
@@ -223,8 +230,8 @@ async function routeEnvironment(
   };
 }
 
-type RouteAgent = NonNullable<Awaited<ReturnType<TaskRouteReads['workspace']>>>;
-type RouteRunner = NonNullable<Awaited<ReturnType<TaskRouteReads['runner']>>>;
+export type RouteAgent = NonNullable<Awaited<ReturnType<TaskRouteReads['workspace']>>>;
+export type RouteRunner = NonNullable<Awaited<ReturnType<TaskRouteReads['runner']>>>;
 
 /** What reasons call a reported window: by its length, else by the slot it was reported in. */
 function windowName(window: PlanUsageWindow | undefined, slot: string): string {
@@ -233,6 +240,27 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
   if (mins === 7 * 24 * 60) return 'weekly';
   if (mins % (24 * 60) === 0) return `${mins / (24 * 60)}-day`;
   return mins % 60 === 0 ? `${mins / 60}-hour` : slot;
+}
+
+/**
+ * The fullest live window of one account's snapshot, the one that caps the whole engine — a model family's
+ * own window (Opus weekly) is not one. Null when none is live: one past its reset has given its quota back.
+ */
+export function fullestWindow(snapshot: PlanUsageSnapshot | null | undefined, now: Date): ModelRoutingEngineState['quota'] {
+  const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
+    ? [
+      [snapshot.fiveHour, '5-hour'],
+      [snapshot.sevenDay, 'weekly'],
+      [snapshot.primary, windowName(snapshot.primary, 'primary')],
+      [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+    ]
+    : [];
+  let quota: ModelRoutingEngineState['quota'] = null;
+  for (const [window, name] of windows) {
+    if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
+    if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
+  }
+  return quota;
 }
 
 /**
@@ -245,7 +273,7 @@ function windowName(window: PlanUsageWindow | undefined, slot: string): string {
  * Anthropic does not offer Claude in (docs/claude-region-check-contract.md §12) it is ruled out the way a
  * signed-out one is: `sessions.create` would refuse the run there with CLAUDE_REGION_UNSUPPORTED.
  */
-function engineState(
+export function engineState(
   engine: AccountEngine,
   agent: RouteAgent,
   runner: RouteRunner,
@@ -267,22 +295,11 @@ function engineState(
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner, now);
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
-  const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
-    ? [
-      [snapshot.fiveHour, '5-hour'],
-      [snapshot.sevenDay, 'weekly'],
-      [snapshot.primary, windowName(snapshot.primary, 'primary')],
-      [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
-    ]
-    : [];
-  let quota: ModelRoutingEngineState['quota'] = null;
-  for (const [window, name] of windows) {
-    // One past its reset has given its quota back.
-    if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
-    if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
-  }
+  const quota = fullestWindow(snapshot, now);
   const regionBlocked = engine === AgentProvider.CLAUDE && blockedRunnerRegion(runner, now) !== null;
-  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}) };
+  // Only the SubAgent router reads it (routeSubagent); chooseEngine does not.
+  const paused = runnerAccountPausedUntil(runner.accountPauses, engine, account, now) !== null;
+  return { signedOut, quota, ...(regionBlocked ? { regionBlocked } : {}), ...(paused ? { paused } : {}) };
 }
 
 /** The engine a task's newest work run was created on: what a verification looks past (§6). */
@@ -632,7 +649,7 @@ export interface ModelHintOption {
  */
 export async function readModelHintOptions(
   reads: TaskRouteReads,
-  task: { engine?: string | null; provider?: string | null; assigneeId?: string | null },
+  task: { id?: string; engine?: string | null; provider?: string | null; assigneeId?: string | null },
 ): Promise<ModelHintOption[]> {
   const agent = task.assigneeId ? await reads.workspace(task.assigneeId) : null;
   const env = agent ? await routeEnvironment(reads, task, task.assigneeId!, agent.runnerId) : null;

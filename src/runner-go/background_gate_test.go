@@ -681,14 +681,21 @@ func TestBgGateCardThatCannotBeFiled(t *testing.T) {
 	}
 }
 
-// The hosted wait of a call that asks a person is not a job the gate judges: its own operation runs in every mode.
-// It can do nothing else: what it runs is fixed by the runner, for a call that puts a card in front of the owner.
+// The hosted wait of a call that asks a person is not a job the gate judges: its own operation runs in a mode that
+// refuses every job (Don't Ask). It can do nothing else: what it runs is fixed by the runner, for a call that puts a
+// card in front of the owner. Plan is the one mode that refuses it, because Plan refuses the write the card is about
+// (plan_gate.go) — said here too, since the hosted `orbit mcp` has no socket to read the mode from.
 func TestBgOwnerWaitIsItsOwnOperation(t *testing.T) {
 	f := newGateFixture(t, "plan")
+	if _, err := bgSocketCall(f.socket, "tok", "owner_wait", map[string]interface{}{"tool": "task_create", "arguments": map[string]interface{}{"title": "x"}}); err == nil ||
+		!strings.Contains(err.Error(), "this session is in Plan mode") {
+		t.Fatalf("Plan let the hosted wait of a write start: %v", err)
+	}
+	f.setMode("dontAsk")
 	f.svc.agentID, f.svc.taskID = "agent-1", "task-1"
 	raw, err := bgSocketCall(f.socket, "tok", "owner_wait", map[string]interface{}{"tool": "task_create", "arguments": map[string]interface{}{"title": "x"}})
 	if err != nil {
-		t.Fatalf("Plan refused the hosted wait: %v", err)
+		t.Fatalf("Don't Ask refused the hosted wait: %v", err)
 	}
 	var status bgJobStatus
 	if err := json.Unmarshal(raw, &status); err != nil {
@@ -788,13 +795,16 @@ func TestCodexConsentForBgRunIsTheGates(t *testing.T) {
 			t.Fatalf("%s: bg_run's consent = %v/%v, want answered yes", mode, allowed, decided)
 		}
 	}
-	// Another of Orbit's tools still asks in the modes that ask, and Plan still refuses it.
+	// Every other Orbit tool is consented to by its name as well (TestCodexAutomaticApprovalAnswersEveryOrbitToolByName),
+	// and what Plan refuses of one is Orbit's own Plan gate's, which answers the call with what to do instead.
 	other := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer, tool: "task_update"}
-	if _, decided := codexAutomaticApproval("default", other); decided {
-		t.Fatal("another Orbit tool's consent was answered in Default")
+	for _, mode := range []string{"default", "plan"} {
+		if allowed, decided := codexAutomaticApproval(mode, other); !decided || !allowed {
+			t.Fatalf("%s: task_update's consent = %v/%v, want answered yes", mode, allowed, decided)
+		}
 	}
-	if allowed, decided := codexAutomaticApproval("plan", other); !decided || allowed {
-		t.Fatalf("another Orbit tool in Plan = %v/%v, want refused", allowed, decided)
+	if refusal := mcpPlanRefusal("task_update", nil, planModeIs("plan")); refusal == "" {
+		t.Fatal("Plan's gate let task_update through")
 	}
 	// A tool of that name on somebody else's server is not this gate's.
 	foreign := codexApprovalRequest{mcpTool: true, server: "acme", tool: "bg_run"}

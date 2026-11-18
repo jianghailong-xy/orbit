@@ -133,13 +133,23 @@ final class PromptSuggestionTests: XCTestCase {
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("\(path) is not beside this checkout")
+        // Deliberately a failure and not an `XCTSkip`: the touch clients' check reads the web and
+        // Android sources, and one that opts out when they are gone is green on exactly that day.
+        throw MissingFile(path: path)
+    }
+
+    private struct MissingFile: Error, CustomStringConvertible {
+        let path: String
+        var description: String {
+            "\(path) was not found above this test file; if it moved, point this test at it rather than deleting the check"
+        }
     }
 
     func testTheComposerOffersItFillsTheBoxAndSendsNothing() throws {
         let composer = try composerSource()
-        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.promptSuggestion,"),
-                      "the offer is the transcript's suggestion, held to ComposerLogic's rule")
+        XCTAssertTrue(composer.contains("ComposerLogic.offeredPromptSuggestion(\n            console.state.shownPromptSuggestion,"),
+                      "the offer is the transcript's suggestion (translated where the server translated it, "
+                          + "Settings › Translation), held to ComposerLogic's rule")
         XCTAssertTrue(composer.contains("PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)"),
                       "the empty field draws it, on a Mac with Use")
         XCTAssertTrue(composer.contains("if offeredSuggestion != nil { return \"\" }"),

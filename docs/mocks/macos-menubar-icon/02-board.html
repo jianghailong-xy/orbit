@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>macOS menu bar icon · board 02 · more directions</title>
+<style>
+  body { margin: 0; background: #f2f3f5; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; background: #fff;
+    width: 1000px; padding: 28px 32px 32px; box-sizing: border-box; margin: 0 0 16px; }
+  .b-part h2 { font-size: 20px; margin: 0 0 4px; }
+  .b-sub { color: #646a73; margin: 0 0 18px; }
+  .b-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .b-card { border: 1.5px solid #dee0e3; border-radius: 12px; padding: 14px 16px 16px; }
+  .b-card h3 { margin: 0; font-size: 17px; }
+  .b-card h3 b { display: inline-block; width: 26px; height: 26px; line-height: 26px; text-align: center;
+    border-radius: 50%; background: #1f2329; color: #fff; font-size: 14px; margin-right: 8px; vertical-align: 1px; }
+  .b-card p { margin: 2px 0 10px; color: #646a73; font-size: 13.5px; line-height: 1.5; min-height: 40px; }
+  .b-real { position: relative; flex: none; border-radius: 8px; overflow: hidden; }
+  .b-real svg { position: absolute; }
+  .b-line { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+  .b-bar { height: 24px; display: flex; align-items: center; gap: 12px; padding: 0 10px; border-radius: 6px; font-size: 13px; }
+  .b-bar.light { background: #ececec; color: #1d1d1f; }
+  .b-bar.dark { background: #2a2a2c; color: #f5f5f7; }
+  .b-bar svg { display: block; }
+  .b-px { text-align: center; font-size: 11px; color: #8f959e; line-height: 1.2; }
+  .b-px canvas { image-rendering: pixelated; display: block; border-radius: 4px; width: 48px; height: 48px; }
+  .b-cap { font-size: 11px; color: #8f959e; }
+  .b-v { margin-top: 10px; font-size: 13.5px; padding: 6px 10px; border-radius: 6px; background: #f5f6f7; }
+  .b-v.bad { color: #b42318; background: #fef3f2; }
+  .b-v.good { color: #1a56db; background: #f0f4ff; }
+  .b-card.rec { border-color: #3370ff; }
+</style>
+</head>
+<body>
+<script>
+// Template glyphs in a 64-unit box: one colour (currentColor), alpha only, knockouts via masks.
+let uid = 0;
+const M = () => 'm' + (uid++);
+const deg = a => a * Math.PI / 180;
+const onCircle = (cx, cy, r, a) => [cx + r * Math.cos(deg(a)), cy - r * Math.sin(deg(a))];
+const KO_PROMPT = (x, y, s, w) => `
+  <path d="M${x} ${y - 5.5 * s} L${x + 6 * s} ${y} L${x} ${y + 5.5 * s}" stroke="#000" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="${x + 9 * s}" y1="${y + 5.2 * s}" x2="${x + 15 * s}" y2="${y + 5.2 * s}" stroke="#000" stroke-width="${w}" stroke-linecap="round"/>`;
+
+const ICONS = [
+  { key: '1', verdict: ['bad', '画出来像“刷新”按钮：一个带箭头的圆圈，用户会以为点了会重新加载。'], name: '字母 O + 卫星', group: '圆环', note: '一个正圆环，右上角骑着一颗卫星。读起来像 “O”，也像一条轨道；极简，和系统图标同一种笔画。',
+    svg() { const id = M(); const [sx, sy] = onCircle(32, 32, 21, 45);
+      return `<svg viewBox="0 0 64 64" fill="none"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+        <circle cx="${sx}" cy="${sy}" r="11" fill="#000"/></mask></defs>
+        <circle cx="32" cy="32" r="21" stroke="currentColor" stroke-width="5.6" mask="url(#${id})"/>
+        <circle cx="${sx}" cy="${sy}" r="7" fill="currentColor"/></svg>`; } },
+  { key: '2', verdict: ['bad', '像“加载中”的转圈，会让人以为 Orbit 一直卡着。'], name: '彗星弧', group: '圆环', note: '一段由淡到实的圆弧，末端一颗卫星，像正在绕圈。模板图允许半透明，系统会照样染色。',
+    svg() { const segs = 9, a0 = 75, span = 285, r = 21; let out = '';
+      for (let i = 0; i < segs; i++) {
+        const s = a0 + span * i / segs, e = a0 + span * (i + 1) / segs + 1;
+        const [x1, y1] = onCircle(32, 32, r, s), [x2, y2] = onCircle(32, 32, r, e);
+        out += `<path d="M${x1} ${y1} A${r} ${r} 0 0 0 ${x2} ${y2}" stroke="currentColor" stroke-width="5.6" stroke-opacity="${(0.12 + 0.88 * (i + 1) / segs).toFixed(2)}"/>`;
+      }
+      const [sx, sy] = onCircle(32, 32, r, a0 + span + 14);
+      return `<svg viewBox="0 0 64 64" fill="none">${out}<circle cx="${sx}" cy="${sy}" r="7" fill="currentColor"/></svg>`; } },
+  { key: '3', verdict: ['', '干净、好认，但单看就是一个“终端”应用，和 Orbit 关系弱。'], name: '终端方块', group: '终端', note: '圆角方块里镂空出 >_，就是 App 图标的中心。最直接说明 “这是跑 agent 的终端”，但和系统 “终端” 类图标容易撞。',
+    svg() { const id = M();
+      return `<svg viewBox="0 0 64 64"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>${KO_PROMPT(21, 30, 1.25, 5.4)}</mask></defs>
+        <rect x="8" y="11" width="48" height="42" rx="12" fill="currentColor" mask="url(#${id})"/></svg>`; } },
+  { key: '4', verdict: ['good', '建议：方块说明“跑 agent 的终端”，卫星说明“Orbit”，16 px 下两部分都还在。'], name: '终端方块 + 卫星', group: '终端', note: '方块缩小一点让到左下，右上角一颗卫星。方块说 “终端”，卫星说 “Orbit”，两者分开，16 px 也不糊。',
+    svg() { const id = M();
+      return `<svg viewBox="0 0 64 64"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>${KO_PROMPT(15.5, 37.5, 1.05, 5)}
+          <circle cx="52" cy="12" r="12.5" fill="#000"/></mask></defs>
+        <rect x="4" y="18" width="42" height="40" rx="11" fill="currentColor" mask="url(#${id})"/>
+        <circle cx="52" cy="12" r="7.5" fill="currentColor"/></svg>`; } },
+  { key: '5', verdict: ['bad', '实际大小下线条挤在一起，1x 屏上糊成一团；还有点像笑脸。'], name: '圆环里的 >_', group: '混合', note: '圆环当轨道，中间是线条版 >_，环上一颗卫星。比方块轻，和 1 一个家族。',
+    svg() { const id = M(); const [sx, sy] = onCircle(32, 32, 24, 50);
+      return `<svg viewBox="0 0 64 64" fill="none"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>
+        <circle cx="${sx}" cy="${sy}" r="10.5" fill="#000"/></mask></defs>
+        <circle cx="32" cy="32" r="24" stroke="currentColor" stroke-width="5" mask="url(#${id})"/>
+        <path d="M21 25 L28 31.5 L21 38" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="32" y1="38" x2="42" y2="38" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="${sx}" cy="${sy}" r="6.5" fill="currentColor"/></svg>`; } },
+  { key: '6', verdict: ['good', '备选：比 4 圆润、分量更足；但圆盘加卫星在小尺寸下略像一张侧脸。'], name: '实心圆 >_ + 卫星', group: '混合', note: '实心圆盘镂空 >_，右上角一颗卫星。分量和旁边的实心图标接近，轮廓圆，不像系统终端。',
+    svg() { const id = M();
+      return `<svg viewBox="0 0 64 64"><defs><mask id="${id}"><rect width="64" height="64" fill="#fff"/>${KO_PROMPT(17.5, 36, 1.05, 5)}
+          <circle cx="52" cy="12" r="12" fill="#000"/></mask></defs>
+        <circle cx="28" cy="36" r="23" fill="currentColor" mask="url(#${id})"/>
+        <circle cx="52" cy="12" r="7.5" fill="currentColor"/></svg>`; } },
+];
+
+function iconToday() {
+  const d = [[32,32],[46,32],[18,32],[25,20],[39,20],[25,44],[39,44]];
+  return `<svg viewBox="0 0 64 64">${d.map(([x,y]) => `<circle cx="${x}" cy="${y}" r="5.6" fill="currentColor"/>`).join('')}</svg>`;
+}
+const sized = (svg, px, extra = '') => svg.replace('<svg ', `<svg width="${px}" height="${px}" ${extra} `);
+const WIFI = `<svg width="17" height="13" viewBox="0 0 17 13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+  <path d="M1.5 4.6a10 10 0 0 1 14 0"/><path d="M4 7.3a6.3 6.3 0 0 1 9 0"/><circle cx="8.5" cy="10.6" r="1.2" fill="currentColor" stroke="none"/></svg>`;
+const BATT = `<svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" stroke="currentColor" stroke-opacity=".45"/>
+  <rect x="2.2" y="2.2" width="14" height="7.6" rx="1.6" fill="currentColor"/><rect x="22.6" y="4" width="1.6" height="4" rx=".8" fill="currentColor" fill-opacity=".45"/></svg>`;
+
+// Orbit's icon sat at (120.5, 42.5) in the 240x108 retina crop; its glyph box is 16 pt = 32 px there.
+function realBar(svg, k, today) {
+  const w = 240 * k, h = 108 * k, s = 32 * k;
+  const inner = today ? '' : sized(svg, s, `style="left:${120.5 * k - s / 2}px;top:${42.5 * k - s / 2}px;color:#fff"`);
+  return `<div class="b-real" style="width:${w}px;height:${h}px;background:url(${today ? 'menubar-today.png' : 'menubar-erased.png'}) 0 0/${w}px ${h}px">${inner}</div>`;
+}
+const bar = (theme, svg) => `<div class="b-bar ${theme}">${sized(svg, 16)}${WIFI}</div>`;
+const pxSpecs = [];
+function px(svg) {
+  const id = 'cv' + pxSpecs.length; pxSpecs.push({ id, svg });
+  return `<div class="b-px"><canvas id="${id}" width="16" height="16"></canvas>1x 屏</div>`;
+}
+window.drawCanvases = async () => {
+  for (const s of pxSpecs) {
+    const c = document.getElementById(s.id), g = c.getContext('2d');
+    g.fillStyle = '#2a2a2c'; g.fillRect(0, 0, 16, 16);
+    const svg = s.svg.replaceAll('currentColor', '#f5f5f7').replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" ');
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    g.drawImage(img, 0, 0, 16, 16);
+  }
+};
+function card(key, name, note, svg, today, verdict) {
+  const v = verdict ? `<div class="b-v ${verdict[0]}">${verdict[1]}</div>` : '';
+  return `<div class="b-card${verdict && verdict[0] === 'good' ? ' rec' : ''}"><h3><b>${key}</b>${name}</h3><p>${note}</p>
+    ${realBar(svg, 1.75, today)}
+    <div class="b-line">${realBar(svg, 0.5, today)}${bar('light', svg)}${bar('dark', svg)}${px(svg)}</div>${v}</div>`;
+}
+</script>
+
+<section class="b-part" id="part-1">
+  <h2>换个方向：6 个候选，都放进你的菜单栏</h2>
+  <p class="b-sub">A、B 两版都去掉了。这次按三条思路各画两个：圆环（1–2）、终端（3–4）、两者混合（5–6）。每张卡片上面是你的截图放大，下面依次是实际大小、浅色栏、深色栏、外接 1x 屏的像素，最底下是我看完实际效果后的判断。</p>
+  <div class="b-cards">
+    <script>
+      document.write(card('今', '今天', 'SF Symbol <code>circle.hexagongrid</code>，作对照。', iconToday(), true));
+      for (const ic of ICONS) document.write(card(ic.key, ic.name, ic.note, ic.svg(), false, ic.verdict));
+    </script>
+  </div>
+</section>
+</body>
+</html>

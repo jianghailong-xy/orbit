@@ -50,7 +50,7 @@ const CONTENT = `reply-text-${RUN}`;
  *  by their seq range and read back. */
 const BULK = 'x'.repeat(1_000);
 /** Each apiserver's connections are named so (PGAPPNAME), and its listener is the one whose last statement is this. */
-const LAST_LISTEN = 'LISTEN orbit_runner_wake';
+const LAST_LISTEN = 'LISTEN orbit_viewer';
 
 /**
  * Loaded into the holder. Its listener's first LISTEN goes through; each one after it — the connect after a lost

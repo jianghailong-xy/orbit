@@ -8,6 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocView, WikiDocsDirectory } from '@orbit/shared';
 import { wikiChatQuoteCounts, type WikiChatList, type WikiChatWorkspace } from '../lib/wikiChat';
+import { readSidebarFolded } from '../lib/sidebarFold';
 
 // A section's diagram is drawn by Mermaid, which jsdom cannot lay out.
 const mermaid = vi.hoisted(() => ({ initialize: vi.fn(), render: vi.fn() }));
@@ -441,12 +442,17 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     );
   });
 
-  it('still docks from 1200, folding the directory into Contents; lies over the page from 640; is a sheet below', async () => {
+  it('is a column from 1200, the app sidebar its icon rail and the directory where it was; lies over the page from 640; is a sheet below', async () => {
     windowWidth(1300);
     await open('/wiki/orbit/d/session-runtime?chat=new');
     expect(host().className).toMatch(/is-docked/);
-    expect(host().className).toMatch(/is-fold/);
+    // Board docs/mocks/wiki-rail 03 Ⓑ C2: a column beside the page, which keeps its directory; the sidebar gives the width.
+    expect(host().className).not.toMatch(/is-fold/);
+    expect(host().parentElement!.className).toBe('wk-chat-frame is-columned');
+    expect(panel()!.parentElement).toBe(host().parentElement);
     expect(panel()!.style.width, 'a third of 1300').toBe('433px');
+    expect(panel()!.style.top, 'a column has no top of its own').toBe('');
+    expect(readSidebarFolded()).toBe(true);
 
     windowWidth(900);
     await act(async () => window.dispatchEvent(new Event('resize')));
@@ -455,6 +461,7 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     expect(host().className).not.toMatch(/is-docked/);
     expect(host().className).toMatch(/is-fold/);
     expect(panel()!.className).toContain('is-over');
+    expect(readSidebarFolded(), 'over the page, the sidebar keeps its width').toBe(false);
 
     windowWidth(500);
     await act(async () => window.dispatchEvent(new Event('resize')));
@@ -488,26 +495,6 @@ describe('the panel (design §4.1, board 42 ①)', () => {
     expect(css).toContain('.wk-chat-host.is-open:not(.is-sheet) .wk-drawer,\n.wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim { right: var(--wk-chat-w, 400px); }');
     await open('/wiki/orbit/e/0196f000-0000-7000-8000-0000000000e1?chat=new');
     expect(document.querySelector('.wk-chat-host.is-open .wk-drawer')).toBeTruthy();
-  });
-
-  it('shows a message’s attachment line whole: a line of its own under the bubble, wrapped, the copy and time under it (C15)', () => {
-    // jsdom lays nothing out, so the rule is read as text; the C15 screenshots measure it in a browser at 400 wide.
-    const css = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
-    const rule = (selector: string): string => {
-      const at = css.indexOf(`${selector} {`);
-      expect(at, selector).toBeGreaterThanOrEqual(0);
-      return css.slice(at, css.indexOf('}', at));
-    };
-    // The session page keeps its one line, run out into the free gutter left of the bubble.
-    expect(rule('.chat-user-meta')).toContain('white-space: nowrap');
-    // The panel's body is a scroll box, which cuts off what runs past its left edge: there the row wraps…
-    const row = rule('.wk-chat-body .chat-user-meta');
-    for (const part of ['flex-wrap: wrap', 'height: auto', 'min-height: 18px']) expect(row).toContain(part);
-    // …the attachment line first, on a line of its own, its words wrapping…
-    const line = rule('.wk-chat-body .chat-user-meta > .chat-injected-head');
-    for (const part of ['order: -1', 'flex: 1 1 100%', 'white-space: normal']) expect(line).toContain(part);
-    // …and the dot that led from the time into it goes with it.
-    expect(rule('.wk-chat-body .chat-user-meta > .chat-meta-sep:has(+ .chat-injected-head)')).toContain('display: none');
   });
 
   it('lists the space’s chats under its title and switches to one', async () => {

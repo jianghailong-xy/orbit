@@ -49,8 +49,12 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), prisma, profile);
   const clock = { ms: Date.now() };
   const now = () => new Date(clock.ms);
+  // Every world in a spec file shares one database, each at a cluster key, pool and fake cluster of
+  // its own. Its managers drive that location only, as each would on a host with several: an
+  // unscoped one would also scan and admit another world's waiters — into this world's pool, on a
+  // clock and a cluster that are not theirs.
   const manager = (holder: string, delayMs = 0) =>
-    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: options.log ?? quiet });
+    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: options.log ?? quiet, ownLocationOnly: true });
   const primary = manager('replica-a');
   const runtime: ManagedRunnerRuntime = { available: true, profile, manager: primary, worker: new ManagedRunnerWorker(primary, 60_000, quiet) };
   const service = new ManagedRunnerService(prisma, ON, runtime);
@@ -59,10 +63,13 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   const mappingOf = async (ownerId: string): Promise<ManagedRunner> => (await db.managedRunner.findUnique({ where: { ownerId } }))!;
 
   /**
-   * The runner's heartbeat as the route records it for its authorized instance: fresh, a runtime
-   * signed in, the managed capabilities declared and `workload` reported by the instance recorded
+   * The runner's heartbeat as the route records it for its authorized instance: fresh, its runtimes
+   * as `runnerSide` says (one signed in by default), the managed capabilities declared and `workload` reported by the instance recorded
    * now. `sleep: false` plays a runner too old to sleep (no capability, no report).
    */
+  /** What the runner's runtimes are, as its heartbeats say: one signed in, unless a spec says otherwise. */
+  const runnerSide: { engines: unknown[] } = { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] };
+
   async function heartbeat(runnerId: string, workload: Partial<typeof IDLE> = {}, opts: { sleep?: boolean; draining?: boolean } = {}) {
     const mapping = (await db.managedRunner.findUnique({ where: { runnerId } }))!;
     const sleep = opts.sleep !== false;
@@ -71,7 +78,7 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
       data: {
         status: 'ONLINE',
         lastHeartbeatAt: now(),
-        engines: [{ engine: 'claude', installed: true, auth: 'yes' }],
+        engines: runnerSide.engines as Prisma.InputJsonValue,
         capabilities: sleep ? [MANAGED_RUNNER_INSTANCE_CAPABILITY, MANAGED_RUNNER_SLEEP_CAPABILITY] : [MANAGED_RUNNER_INSTANCE_CAPABILITY],
         managedWorkload: sleep && mapping.podUid
           ? (storedWorkloadFor({ ...IDLE, ...workload }, { mappingId: mapping.id, generation: mapping.generation, podUid: mapping.podUid }, opts.draining === true, now()) as unknown as Prisma.InputJsonValue)
@@ -169,7 +176,7 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
     };
   }
 
-  return { db, prisma, profile, cluster, clock, now, advance, manager, primary, runtime, service, mappingOf, heartbeat, drive, makeUser, readyRunner, putToSleep, ledger };
+  return { db, prisma, profile, cluster, clock, now, advance, manager, primary, runtime, service, runnerSide, mappingOf, heartbeat, drive, makeUser, readyRunner, putToSleep, ledger };
 }
 
 export type ManagedRunnerWorld = ReturnType<typeof managedRunnerWorld>;

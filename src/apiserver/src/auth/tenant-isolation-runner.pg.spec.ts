@@ -267,6 +267,12 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const runningTaskSessionId = await open('session running a task', { status: 'RUNNING', taskId: runningTaskId });
     const allowedApprovalId = randomUUID();
     await db.approval.create({ data: { id: allowedApprovalId, sessionId: machineSessionId, toolName: 'Bash', input: { command: 'true' }, status: 'ALLOWED' } });
+    // A SubAgent run of the machine's session that ran on a workspace and runner of the account's and has ended: what
+    // a delegate call's `resumeOf` names. Remote, so that the account's own resume is answered past the lookup.
+    const { id: subagentRunId } = await db.subagentRun.create({ data: {
+      ownerId, sessionId: machineSessionId, toolUseId: 'toolu_census_resumable', type: 'general',
+      definitionSource: 'builtin', decision: {}, status: 'DONE', workspaceId: of.workspaceId, targetRunnerId: of.runnerId,
+    }, select: { id: true } });
     // The owner's yes, in the calling session, to deleting the spare runner and the spare workspace:
     // the cards the delete doors go through on (runner-api/runner-delete-approval.ts).
     for (const [toolName, input] of [
@@ -424,6 +430,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // ── the wiki: a workspace bound to the space, a session in it, and an import job of the space's ──
     ok(await as('POST', `/wiki/spaces/${of.wikiSpaceId}/workspaces`, { workspaceId: of.workspaceId }), 'binding the space');
     const wikiSessionId = await open('wiki session');
+    // ── an Ask: a session of the machine's in no workspace, made an Ask by its INSERT (0850's guard refuses an UPDATE) ──
+    const helpAskSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: helpAskSessionId, title: `${name} help ask`, prompt: 'Why is my machine offline?', ownerId, creatorId: ownerId,
+        assignedRunnerId: of.runnerId, engine: 'claude', helpAsk: { page: null },
+      },
+    });
     const wikiImportJobId = randomUUID();
     await db.wikiJob.create({
       data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
@@ -451,11 +465,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, inboxLeaseGeneration, turnSessionId, shellTurnId,
       finalizeSessionId, sessionAttachmentId, uploadedFileId, evidenceRevisionId, runningTaskId, runningTaskSessionId, allowedApprovalId,
-      artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
+      subagentRunId, artifactRequestId, integrationJobId, landingTaskId, secretGrantId, removingSecretGrantId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
-      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,
+      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, helpAskSessionId,
       wikiImportJobId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
@@ -718,6 +732,32 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     assert.ok(![401, 403, 404].includes(reply.status), `answered ${reply.status}: ${reply.text.slice(0, 600)}`);
     assert.notEqual(answerOf(reply), answerOf(nothing), `answered as an id that names nothing: ${reply.text.slice(0, 600)}`);
   };
+  /**
+   * The three writes the control plane cards by caller (`tasks/task-write-approval.ts`): on the
+   * machine credential they require the acting session and its answered card, so a request that
+   * names no session is refused by POLICY before the route reads any id — for the owner and for a
+   * stranger alike. Their tenancy is still held here: (1) proves B's request writes nothing of A's
+   * and is answered exactly as B's own request naming nothing, and this branch proves the owner's
+   * uncarded request is that same policy refusal rather than an id-dependent answer. The owner's
+   * legitimate path — its session plus its answered card — is
+   * `tasks/task-write-approval.pg.spec.ts`'s.
+   */
+  const CARDED_WRITES = new Set([
+    'POST /runner/tasks',
+    'POST /runner/tasks/batch-create',
+    'POST /runner/task-lists/:id/dag-apply',
+  ]);
+  const answeredByThePolicy = (route: string, reply: Reply, nothing: Reply) => {
+    assert.equal(reply.status, 403, `${route} answered ${reply.status}: ${reply.text.slice(0, 600)}`);
+    assert.equal(reply.json?.code, 'TASK_WRITE_NEEDS_OWNER_CARD', `${route}: ${reply.text.slice(0, 600)}`);
+    // The same code for an id that names nothing: the refusal turns on the caller's credential, not
+    // on whether the id exists, so no id-dependent answer leaks through it.
+    assert.deepEqual(
+      [nothing.status, nothing.json?.code],
+      [reply.status, reply.json?.code],
+      `${route} was answered differently for an id that names nothing`,
+    );
+  };
   const depth = (route: string) => route.split('/').length;
   const ordered = [...cases].sort(([x], [y]) => {
     const dx = methodOf(x) === 'DELETE' ? 1 : 0;
@@ -729,17 +769,28 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       const controls: Array<[string, Holder, RunnerTenant]> = [['A on its own', holderA, a]];
       if (kase.nested) controls.push(['B on its own', holderB, b]);
       for (const [what, who, own] of controls) {
-        await t.test(`${route} as ${as}: ${what} is answered by the route`, async () => {
+        await t.test(`${route} as ${as}: ${what} is ${
+          CARDED_WRITES.has(route) ? 'refused by the write policy, as an id that names nothing is' : 'answered by the route'
+        }`, async () => {
           const nothing = await send(who, as, route, kase.request(nobody(), own));
-          answeredByTheRoute(await send(who, as, route, kase.request(own, own)), nothing);
+          const reply = await send(who, as, route, kase.request(own, own));
+          if (CARDED_WRITES.has(route)) answeredByThePolicy(route, reply, nothing);
+          else answeredByTheRoute(reply, nothing);
         });
       }
     }
   }
   for (const [key, kase] of fieldCases) {
     for (const as of kase.as) {
-      await t.test(`${key} as ${as}: B's own request with its own in it is answered by the route`, async () => {
+      await t.test(`${key} as ${as}: B's own request with its own in it is ${
+        CARDED_WRITES.has(routeOfField(key)) ? 'refused by the write policy' : 'answered by the route'
+      }`, async () => {
         const reply = await send(holderB, as, routeOfField(key), kase.request(b, b));
+        if (CARDED_WRITES.has(routeOfField(key))) {
+          const nothing = await send(holderB, as, routeOfField(key), kase.request(nobody(), b));
+          answeredByThePolicy(routeOfField(key), reply, nothing);
+          return;
+        }
         assert.ok(![401, 403, 404].includes(reply.status), `answered ${reply.status}: ${reply.text.slice(0, 600)}`);
       });
     }

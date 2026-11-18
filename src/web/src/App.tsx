@@ -1,23 +1,37 @@
+import { managedSetupState } from '@orbit/shared';
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
-import { encodeId } from './lib/idCodec';
+import { encodeId, routeId } from './lib/idCodec';
 import { useManagedRunner } from './lib/managedRunner';
 import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { HelpDrawerProvider } from './lib/helpDrawer';
+import { AdminLayout } from './components/settings/AdminLayout';
+import { SettingsLayout } from './components/settings';
+import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
+import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
+import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
+import { ManagedRunnerSetupPage } from './components/settings/ManagedRunnerSetupPage';
+import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { Spinner } from './components/ui/Spinner';
 import { ProfilePage } from './pages/ProfilePage';
-import { SettingsPage } from './pages/SettingsPage';
+import { GeneralSettingsPage } from './pages/settings/GeneralPage';
+import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
+import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
+import { StorageSettingsPage } from './pages/settings/StoragePage';
+import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
+import { AdminGithubPage } from './pages/AdminGithubPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
-import { InfrastructurePage } from './pages/InfrastructurePage';
+import { AdminHelpFeedbackPage } from './pages/AdminHelpFeedbackPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
 import { CliLoginPage } from './pages/CliLoginPage';
@@ -26,19 +40,27 @@ import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { SetupPage } from './pages/SetupPage';
-import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
+import { GithubIntegrationPage } from './pages/GithubIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
+import { GuestLinkRedirect } from './pages/GuestSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
+import { HelpLayout } from './pages/help/HelpLayout';
+import { HelpHomePage } from './pages/help/HelpHomePage';
+import { HelpArticlePage } from './pages/help/HelpArticlePage';
+import { HelpCategoryPage, HelpPlaceholderPage } from './pages/help/HelpCategoryPage';
+import { HelpQuestionPage, HelpQuestionsPage } from './pages/help/HelpQuestionsPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -53,14 +75,73 @@ function LegacySessionRedirect() {
   return <Navigate to={to} replace />;
 }
 
-// Runners and Providers are one page now, Infrastructure, and their addresses land on it
-// with the query they carried: older macOS/iOS clients open `/providers` with
-// `?runner=<id>&engine=<engine>` to sign an engine in, and that card still opens on that engine.
-// Bare `/providers` meant the keys, so it lands on them.
-function InfrastructureRedirect({ keys = false }: { keys?: boolean }) {
+// `/runners` lands on /infrastructure with the query it carried, which opens a machine's Settings page:
+// older macOS/iOS clients open `/runners` and `/providers` with `?runner=<id>&engine=<engine>` to sign an
+// engine in, and that machine's page still opens on that engine.
+function InfrastructureRedirect() {
   const { search } = useLocation();
-  const hash = keys && !new URLSearchParams(search).has('runner') ? '#keys' : '';
-  return <Navigate to={{ pathname: '/infrastructure', search, hash }} replace />;
+  return <Navigate to={{ pathname: '/infrastructure', search }} replace />;
+}
+
+// The API keys and account pools are Settings' Providers pages now (docs/mocks/settings-redesign,
+// board-4), and the addresses they had land there: /providers and /admin/providers on the keys,
+// /providers/new[/:slug] on connecting one, /providers/:id on editing it, /providers/pools[/:id] on the
+// pools. A `?runner=` (an engine to sign in, above) still goes to Infrastructure.
+function ProvidersRedirect() {
+  const { pathname, search } = useLocation();
+  if (new URLSearchParams(search).has('runner')) return <InfrastructureRedirect />;
+  const rest = pathname.replace(/^\/(admin\/)?providers\/?/, '');
+  const to = rest === '' || /^(new|pools)(\/|$)/.test(rest) ? rest : `keys/${rest}`;
+  return <Navigate to={{ pathname: `/settings/providers${to ? `/${to}` : ''}`, search }} replace />;
+}
+
+// /settings/machines/:id, drawn afresh for each machine so nothing typed on one carries to the next.
+function SettingsMachineRoute() {
+  const { id } = useParams();
+  return <MachineSettingsPage key={id} />;
+}
+
+// A machine's old page, /runners/:id, is its Settings page now. `?workspace=<id>` opened that
+// workspace's editor there, which is the workspace's own Settings address now.
+function RunnerRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const workspace = params.get('workspace');
+  if (workspace) return <Navigate to={`/settings/workspaces/${routeId(workspace)}`} replace />;
+  return <Navigate to={{ pathname: `/settings/machines/${routeId(id)}`, search }} replace />;
+}
+
+// /infrastructure's machines live in Settings now: a link that named a machine (and an engine on it to
+// sign in, `?runner=<id>&engine=<engine>`) opens that machine's page; otherwise the first machine's,
+// or General when there is none. Its #keys and #pools are Settings' Providers pages.
+function InfrastructureRoute() {
+  const { search, hash } = useLocation();
+  const runners = useQuery(runnersQuery());
+  if (hash === '#keys') return <Navigate to="/settings/providers" replace />;
+  if (hash === '#pools') return <Navigate to="/settings/providers/pools" replace />;
+  const params = new URLSearchParams(search);
+  const runner = routeId(params.get('runner'));
+  if (runner) {
+    const engine = params.get('engine');
+    return (
+      <Navigate
+        to={{ pathname: `/settings/machines/${runner}`, search: engine ? `?engine=${encodeURIComponent(engine)}` : '' }}
+        replace
+      />
+    );
+  }
+  if (runners.isPending) {
+    return (
+      <main className="app-main">
+        <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
+          <Spinner aria-busy="true" />
+        </div>
+      </main>
+    );
+  }
+  const first = (runners.data ?? [])[0] as { id: string } | undefined;
+  return <Navigate to={first ? `/settings/machines/${first.id}` : '/settings/general'} replace />;
 }
 
 // Signed out on an in-app page: log in first, then come back to it. The page (path + query) rides
@@ -78,16 +159,9 @@ function LoginRedirect() {
 // The default landing (bare root, and where login/setup bounce to): the first workspace's session
 // list — the same destination as clicking that workspace in the sidebar. Resolving "the first workspace"
 // needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
-// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; the first
-// machine online → its new session page, where its first workspace is made in the conversation
-// (board rule 11); every machine offline → Infrastructure, which says so. BootGate pre-warms both
-// queries, so on a fresh load these read straight from cache and redirect in one shot.
-//
-// An account with no runner at all, while the server offers managed runners
-// (docs/managed-runner-design.md), is shown its managed runner's state there instead — Set up, or
-// why there is none — with the registration guide a link away. That is the only landing that asks:
-// every other one makes exactly the requests it made before, and with the capability missing or
-// off this one still ends at the registration guide.
+// yet, open the first machine ready for setup: one online, or the managed runner accepting queued work.
+// Other offline machines open Settings. With no machine, show managed setup when offered, otherwise
+// the registration guide. BootGate pre-warms the workspace and runner lists.
 function DefaultLanding() {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
@@ -97,9 +171,9 @@ function DefaultLanding() {
       : undefined;
   const listed = workspaces.isFetched && runners.isFetched;
   const runnerList = runners.data ?? [];
-  const managed = useManagedRunner(listed && !first && runnerList.length === 0);
+  const managed = useManagedRunner(listed && !first);
   if (first) return <Navigate to={`/workspaces/${encodeId(first.id)}`} replace />;
-  if (!listed || (runnerList.length === 0 && !managed.settled)) {
+  if (!listed || (!first && !managed.settled)) {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
@@ -115,19 +189,24 @@ function DefaultLanding() {
       <Navigate to="/runners/register" replace />
     );
   }
-  const online = runnerList.find((runner) => runner.online);
+  const online = runnerList.find((runner) => runner.online || managedSetupState(runner.id, managed.managed?.status) !== null);
   if (online) return <Navigate to={machineDraftPath(online.id)} replace />;
-  return <Navigate to="/infrastructure" replace />;
+  return <Navigate to={`/settings/machines/${runnerList[0].id}`} replace />;
 }
 
 export function App() {
   const authed = !!getToken();
+  // Where Settings' Back to Orbit returns to.
+  useRememberOutsideSettings();
   const notFound = (
     <DocView>
       <NotFoundPage />
     </DocView>
   );
   return (
+    // The help drawer's state spans every signed-in window — the app, Settings, /help — so it stays open from one to
+    // the next. Signed out it opens for nothing.
+    <HelpDrawerProvider enabled={authed}>
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
           page is drawn for what the link opens; a conversation the link opens besides its root (a
@@ -137,9 +216,33 @@ export function App() {
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
       <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/s/:token/d/:slug" element={<SharedWikiDocRoute />} />
+      {/* The guest page's first address. A session shared with you now opens at the same /sessions/<id> its owner
+          opens (board docs/mocks/share-links/11-guest-one-link, D8); signed out, that address asks for a sign-in. */}
+      <Route path="/g/:sessionId" element={<GuestLinkRedirect />} />
       {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
           same page signed out or in. */}
       <Route path="/privacy" element={<PrivacyPage />} />
+      {/* The help center (docs/mocks/help-center board 01 §3–4): its own window, drawn as Settings is, and public —
+          an article reads signed out (the sign-in page's "Can't sign in?" links to one), with no in-app buttons. */}
+      <Route path="/help" element={<HelpLayout />}>
+        <Route index element={<HelpHomePage />} />
+        <Route
+          path="whats-new"
+          element={<HelpPlaceholderPage title="What's new" text="What changed in each Orbit release will be listed here." />}
+        />
+        <Route
+          path="questions"
+          element={
+            authed ? <HelpQuestionsPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />
+          }
+        />
+        <Route
+          path="questions/:id"
+          element={authed ? <HelpQuestionPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />}
+        />
+        <Route path=":category" element={<HelpCategoryPage />} />
+        <Route path=":category/:slug" element={<HelpArticlePage />} />
+      </Route>
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}
@@ -180,148 +283,79 @@ export function App() {
               workspace's session list — the bare root resolves it via <DefaultLanding>, and login
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
+          {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
+              of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+              Workspaces open the pages that manage them today until each has its own. */}
+          {/* Admin is drawn as Settings is: its own window, a nav of its pages, the page in a centred column. */}
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminUsersPage />} />
+            <Route path="sign-in" element={<AdminSignInPage />} />
+            <Route path="email" element={<AdminEmailPage />} />
+            <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="help-feedback" element={<AdminHelpFeedbackPage />} />
+            <Route path="integrations/github" element={<AdminGithubPage />} />
+          </Route>
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="/settings/general" replace />} />
+            <Route path="general" element={<GeneralSettingsPage />} />
+            <Route path="notifications" element={<NotificationsSettingsPage />} />
+            <Route path="appearance" element={<AppearanceSettingsPage />} />
+            <Route path="storage" element={<StorageSettingsPage />} />
+            <Route path="storage/:kind/:id" element={<StorageFilesPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            {/* Old account-settings link, now Profile. Keep the redirect so existing
+                bookmarks/deep links don't 404. */}
+            <Route path="account" element={<Navigate to="/settings/profile" replace />} />
+            {/* Every public link this account has made: Active / Paused / Ended. */}
+            <Route path="shared-links" element={<SharedLinksPage />} />
+            {/* The personal access tokens this account has issued: issue, list, revoke. */}
+            <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
+            <Route path="terminals" element={<TerminalsPage />} />
+            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
+            <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
+            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
+            <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
+            {/* The account's GitHub connection (docs/github-workspace-design.md §8). */}
+            <Route path="integrations/github" element={<GithubIntegrationPage />} />
+            {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
+            <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
+            <Route path="machines/managed" element={<ManagedRunnerSetupPage />} />
+            <Route path="machines/:id" element={<SettingsMachineRoute />} />
+            {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
+                API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
+                and edit pages, all in Settings' right-hand column. */}
+            <Route path="providers" element={<SettingsProvidersHome />} />
+            <Route path="providers/new" element={<ProviderPickPage />} />
+            <Route path="providers/new/:slug" element={<ProviderConnectPage />} />
+            <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
+            <Route path="providers/pools" element={<SettingsPoolsPage />} />
+            <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
+            <Route path="providers/:vendor" element={<SettingsKeysPage />} />
+            <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
+          </Route>
           <Route element={<AppShell />}>
             <Route index element={<DefaultLanding />} />
             {/* One element for all three, so the list is one instance across them (TaskRoute). */}
             <Route path="tasks" element={<TaskRoute />} />
             <Route path="tasks/:id" element={<TaskRoute />} />
             <Route path="lists/:key" element={<TaskRoute />} />
+            {/* Machines are Settings' now: /infrastructure opens one (InfrastructureRoute), its #keys and
+                #pools, and the old /providers addresses, land on Settings' Providers pages. */}
+            <Route path="infrastructure" element={<InfrastructureRoute />} />
+            <Route path="providers" element={<ProvidersRedirect />} />
+            <Route path="providers/*" element={<ProvidersRedirect />} />
+            <Route path="admin/providers" element={<ProvidersRedirect />} />
+            {/* Scheduled tasks: a timeline with the inspector beside it, full-bleed so the inspector reaches the edge.
+                `?id=` opens one schedule, `?draft=` one draft. */}
             <Route
-              path="settings/profile"
+              path="scheduled"
               element={
-                <DocView>
-                  <ProfilePage />
-                </DocView>
+                <FlushView>
+                  <ScheduledPage />
+                </FlushView>
               }
             />
-            {/* Old account-settings link, now Profile. Keep the redirect so existing
-                bookmarks/deep links don't 404. */}
-            <Route path="settings/account" element={<Navigate to="/settings/profile" replace />} />
-            <Route
-              path="settings"
-              element={
-                <DocView>
-                  <SettingsPage />
-                </DocView>
-              }
-            />
-            {/* Every public link this account has made: Active / Paused / Ended. */}
-            <Route
-              path="settings/shared-links"
-              element={
-                <DocView>
-                  <SharedLinksPage />
-                </DocView>
-              }
-            />
-            {/* The personal access tokens this account has issued: issue, list, revoke. */}
-            <Route
-              path="settings/access-tokens"
-              element={
-                <DocView>
-                  <AccessTokensPage />
-                </DocView>
-              }
-            />
-            {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
-            <Route
-              path="settings/integrations/feishu"
-              element={
-                <DocView>
-                  <FeishuIntegrationPage />
-                </DocView>
-              }
-            />
-            {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
-            <Route
-              path="settings/integrations/feishu/connect-group"
-              element={
-                <DocView>
-                  <FeishuConnectGroupPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="admin"
-              element={
-                <DocView>
-                  <AdminUsersPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
-            <Route
-              path="admin/sign-in"
-              element={
-                <DocView>
-                  <AdminSignInPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
-            <Route
-              path="admin/email"
-              element={
-                <DocView>
-                  <AdminEmailPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
-            <Route
-              path="admin/integrations"
-              element={
-                <DocView>
-                  <AdminIntegrationsPage />
-                </DocView>
-              }
-            />
-            {/* Machines, API keys and account pools, for everyone (each user's own). Connecting a
-                key is its own two-page flow — pick a vendor, then paste a key — so
-                "/providers/new/anthropic" can be linked to directly; the pages under /providers and
-                /runners keep their addresses. Keep the old admin-only path as a redirect. */}
-            <Route
-              path="infrastructure"
-              element={
-                <DocView>
-                  <InfrastructurePage />
-                </DocView>
-              }
-            />
-            <Route path="providers" element={<InfrastructureRedirect keys />} />
-            <Route
-              path="providers/new"
-              element={
-                <DocView>
-                  <ProviderPickPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/new/:slug"
-              element={
-                <DocView>
-                  <ProviderConnectPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/:id"
-              element={
-                <DocView>
-                  <ProviderConnectPage />
-                </DocView>
-              }
-            />
-            <Route
-              path="providers/pools/:id"
-              element={
-                <DocView>
-                  <ProviderPoolPage />
-                </DocView>
-              }
-            />
-            <Route path="admin/providers" element={<InfrastructureRedirect keys />} />
             {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
             <Route
               path="waiting"
@@ -509,14 +543,7 @@ export function App() {
                 </FlushView>
               }
             />
-            <Route
-              path="runners/:id"
-              element={
-                <DocView>
-                  <RunnerDetailPage />
-                </DocView>
-              }
-            />
+            <Route path="runners/:id" element={<RunnerRedirect />} />
             {/* Both workspace paths share one WorkspaceConsole layout route, so WorkspaceView
                 survives navigation between them without remounting. These children render no view
                 of their own — the layout draws it from the address — so each says `element={null}`
@@ -540,5 +567,6 @@ export function App() {
       </Route>
       {!authed && <Route path="*" element={notFound} />}
     </Routes>
+    </HelpDrawerProvider>
   );
 }

@@ -36,6 +36,7 @@ import {
   REPORTABLE_JOB_PHASES,
   REPORTABLE_JOB_STATES,
   checkSawTheFinishedBranch,
+  checkTimeoutSeconds,
   checksFor,
   enqueueForDoneTask,
   integrationDedupeKey,
@@ -52,6 +53,7 @@ import {
   pushBoundaryPassed,
   queueLandingBehindTheWork,
   queueBaselineHeld,
+  queueSkippedLandingAfterStop,
   shortBranchName,
   timedOutErrorCode,
   workBranchEndedOn,
@@ -667,6 +669,18 @@ async function claimOne(
          -- the runner. With both tips in it, the source lands by J-S4 MERGE and that landing closes
          -- the item. Without them, it meets the same conflict and opens another item, and every
          -- other task's landing waits as before.
+         --
+         -- And except the landings of a task filed to fix that item (fixes_open_item_id). That is
+         -- the other way the absorb reaches the line, and the one task_create documents: a separate
+         -- task whose source branch is the merge commit. Held here, it would wait on the item it
+         -- exists to close, and the line would never move again. Only that item is passed over: a
+         -- fix for any other item, and every other landing, is held as before. Its landing does
+         -- not close the item, because the item is also the record that the conflicted task's own
+         -- work is not on the line, and whether the fix carried it is not something the server can
+         -- read; the landing hands the item back to the coordinator instead (X-D4 (5),
+         -- rearmItemFixedBy). Without both tips, it meets the same conflict and opens an item of
+         -- its own, on the fix task and assigned as any landing's failure is, which the fix's next
+         -- landing is exempt from as the conflicted task's is.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -674,7 +688,10 @@ async function claimOne(
               AND f."phase" = 'MAIN_SYNC'
               AND i."kind" = 'INTEGRATION_CONFLICT'
               AND i."state" = 'OPEN'
-              AND f."task_id" IS DISTINCT FROM c."task_id")
+              AND f."task_id" IS DISTINCT FROM c."task_id"
+              AND NOT EXISTS (
+                SELECT 1 FROM "task" fix
+                 WHERE fix."id" = c."task_id" AND fix."fixes_open_item_id" = i."id"))
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
@@ -2229,6 +2246,18 @@ export async function applyIntegrationJobResult(
       if (nowDone?.status !== 'DONE') return;
       await enqueueForDoneTask(tx, job.ownerId, job.taskId);
     };
+    /**
+     * The owner skipped the landing check of this generation while it ran (§2.4 J-S5, in flight):
+     * the stop was asked so the generation without the check could take J3's one place. Queued once
+     * this row is terminal, from what the stop's own line asked — and not for an abandon, which ends
+     * a generation nobody will run again (J-T10).
+     */
+    const queueSkippedLanding = async (endedAs: string): Promise<void> => {
+      if (!stoppedLanding || !cancelRequested || platformEnd !== undefined || job.taskId == null) return;
+      await queueSkippedLandingAfterStop(tx, {
+        id: job.id, ownerId: job.ownerId, projectId: job.projectId, taskId: job.taskId,
+      }, endedAs);
+    };
 
     // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
     // reference with no foreign key (0423), so it may name a task that is no longer there — the
@@ -2315,6 +2344,7 @@ export async function applyIntegrationJobResult(
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
       await queueReopenedDone();
+      if (cancelRequested) await queueSkippedLanding('CANCELLED');
       // §4.6 X-E5: the claim is over either way — cleared for a requeue, ended for a stop that was
       // asked — so the item about its silence is answered in this transaction like every other edge.
       await resolveLeaseExpiredItems(tx, job.id);
@@ -2687,6 +2717,7 @@ export async function applyIntegrationJobResult(
     // own route (it consumes the marker), so the new generation is exactly the one that DONE would
     // have queued.
     await queueReopenedDone();
+    await queueSkippedLanding(effectiveState);
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
@@ -2796,6 +2827,11 @@ export async function applyIntegrationJobResult(
             select: { sessionId: true },
           }))?.sessionId ?? null
         : null;
+      // A check the platform stopped at its budget: the limit it was stopped at, recorded on the item
+      // so its text can say it without reading a project setting that may have changed since (G6).
+      const stoppedCheckTimeoutSeconds = state === 'CHECK_FAILED' && checks.some((check) => check.timedOut)
+        ? await checkBudgetsOf(tx, job)
+        : null;
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -2830,6 +2866,7 @@ export async function applyIntegrationJobResult(
             targetSha: body.targetShaBefore ?? null,
             conflicts: body.conflicts ?? [],
             checks,
+            checkBudgets: stoppedCheckTimeoutSeconds,
             baselineRed: body.baselineRed === true,
             errorCode: body.errorCode ?? null,
             errorDetail,
@@ -3549,7 +3586,7 @@ function fullyAppliedComment(input: {
     + where;
 }
 
-/** What a person is shown about a failure (§4.2's payload column). */function failurePayload(
+/** What a person is shown about a failure (§4.2's payload column). */export function failurePayload(
   state: string,
   detail: {
     kind: string;
@@ -3559,6 +3596,8 @@ function fullyAppliedComment(input: {
     targetSha: string | null;
     conflicts: string[];
     checks: IntegrationCheckResult[];
+    /** The budgets the checks were given, read only when one of them was stopped at its budget. */
+    checkBudgets: CheckBudgets | null;
     errorCode: string | null;
     errorDetail: Record<string, unknown> | null;
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
@@ -3624,9 +3663,11 @@ function fullyAppliedComment(input: {
   if (state === 'CHECK_FAILED') {
     const failed = detail.checks.find((check) => !check.skipped && check.exitCode !== check.expectedExitCode)
       ?? detail.checks[detail.checks.length - 1];
+    // A check stopped at its budget carries that budget, so its item says the limit it hit.
+    const budget = failed?.timedOut && detail.checkBudgets ? checkTimeoutSeconds(failed.name, detail.checkBudgets) : null;
     return {
       jobKind: detail.kind,
-      check: failed ?? null,
+      check: failed ? { ...failed, ...(budget != null ? { timeoutSeconds: budget } : {}) } : null,
       branchUnchanged: true,
       ...classified,
     };
@@ -3639,6 +3680,27 @@ function fullyAppliedComment(input: {
     ...(detail.outdatedRunner ? { outdatedRunner: detail.outdatedRunner } : {}),
     ...classified,
   };
+}
+
+type CheckBudgets = Parameters<typeof checkTimeoutSeconds>[1];
+
+/**
+ * The budgets the job's checks run under, from the same columns the claim's command reads them from
+ * (`HELD_CLAIM_COLUMNS`): the task of the job's session, and the job's codebase.
+ */
+async function checkBudgetsOf(
+  tx: Prisma.TransactionClient,
+  job: { sessionId: string | null; codebaseId: string },
+): Promise<CheckBudgets | null> {
+  const rows = await tx.$queryRaw<CheckBudgets[]>(Prisma.sql`
+    SELECT t."acceptance_timeout_seconds" AS "acceptanceTimeoutSeconds",
+           cb."landing_check_timeout_seconds" AS "landingCheckTimeoutSeconds",
+           cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds"
+      FROM "project_codebase" cb
+      LEFT JOIN "session" s ON s."id" = ${job.sessionId}::uuid
+      LEFT JOIN "task" t ON t."id" = s."task_id"
+     WHERE cb."id" = ${job.codebaseId}::uuid`);
+  return rows[0] ?? null;
 }
 
 /**

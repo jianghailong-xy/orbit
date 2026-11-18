@@ -1,0 +1,49 @@
+Printing with useUnmergedTree = 'true'
+Node #71 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #123 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #168 at (l=16.0, t=16.0, r=395.0, b=875.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #169 at (l=16.0, t=16.0, r=395.0, b=332.0)px, Tag: 'schedule-envelope-card'
+          |-Node #173 at (l=56.0, t=30.0, r=381.0, b=74.0)px
+          | Text = '[Let Ceph capacity guard check with a new command?]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #176 at (l=30.0, t=84.0, r=102.0, b=102.0)px
+          | Text = '[Now]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #178 at (l=114.0, t=84.0, r=381.0, b=131.0)px
+          | Focused = 'false'
+          | Actions = [RequestFocus]
+          |  |-Node #180 at (l=124.0, t=91.0, r=371.0, b=124.0)px, Tag: 'condition-command'
+          |    Text = '[ceph df -f json | jq .stats.total_used_raw_ratio]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #182 at (l=30.0, t=139.0, r=102.0, b=157.0)px
+          | Text = '[Asked]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #184 at (l=114.0, t=139.0, r=381.0, b=204.0)px
+          | Focused = 'false'
+          | Actions = [RequestFocus]
+          |  |-Node #186 at (l=124.0, t=146.0, r=371.0, b=197.0)px, Tag: 'condition-command'
+          |    Text = '[ceph df -f json | jq '.stats.total_used_raw_bytes / .stats.total_bytes * 100']'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #187 at (l=30.0, t=214.0, r=381.0, b=247.0)px
+          | Text = '[It runs on its own, without a model, every time the condition is checked. Read it before you allow it.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #190 at (l=16.0, t=262.0, r=205.0, b=332.0)px, Tag: 'schedule-envelope-q-cmd-decline'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |  |-Node #192 at (l=16.0, t=273.0, r=205.0, b=321.0)px
+          |    Text = '[Keep the approved command]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #193 at (l=205.0, t=262.0, r=395.0, b=332.0)px, Tag: 'schedule-envelope-q-cmd-allow'
+            Focused = 'false'
+            Role = 'Button'
+            Actions = [OnClick, RequestFocus]
+            MergeDescendants = 'true'
+             |-Node #195 at (l=279.0, t=285.0, r=321.0, b=309.0)px
+               Text = '[Allow]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

@@ -1,0 +1,69 @@
+# TEMPORARY evidence probe (never merged). Builds the REAL macOS app from the shared sources and
+# its real entry point (OrbitApp.swift), plus a UI-test target that signs in to `stub.py` and
+# drives the sidebar. Nothing here replaces the app's own shell: the process under test is Orbit.
+name: SidebarCrashProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  OrbitKit:
+    path: ../../../../src/macos/OrbitKit
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.6.0
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # The driver runs on this Mac only; a Release build otherwise compiles arm64 + x86_64.
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+targets:
+  Orbit:
+    type: application
+    platform: macOS
+    sources:
+      # The probe's own entry point and in-process click driver replace `OrbitApp.swift`.
+      - path: probe
+      - path: ../../../../src/macos/OrbitApp/Sources/OrbitApp
+        excludes:
+          - "OrbitApp.swift"
+          # The menu-bar item's "Manage…" opens OrbitApp's window id; the probe has no menu bar.
+          - "Views/MenuBarContent.swift"
+      - path: ../../../../src/macos/Assets.xcassets
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+      - package: Sparkle
+        product: Sparkle
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.macos
+        PRODUCT_NAME: Orbit
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_HARDENED_RUNTIME: NO
+  OrbitUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [UITests]
+    dependencies:
+      - target: Orbit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.sidebarprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_HARDENED_RUNTIME: NO
+schemes:
+  Orbit:
+    build:
+      targets:
+        Orbit: all
+        OrbitUITests: [test]
+    test:
+      targets:
+        - OrbitUITests

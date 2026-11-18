@@ -12,6 +12,7 @@ import {
 import { Prisma, ProjectStatus, RunStatus } from '@prisma/client';
 import {
   CONTINUE_MESSAGE,
+  RUNNER_UPDATE_INTERRUPT_REASON,
   RunEventType,
   isAccountEngine,
   isAuthErrorText,
@@ -25,6 +26,7 @@ import {
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
+import { buildUpdateResumeContinuation } from '../runner-api/resume-continuation';
 import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
 import {
   TaskCompletionPolicyValue,
@@ -59,7 +61,7 @@ import { withActiveSessions } from '../providers/active-sessions';
 import { ACCOUNT_RESET_WAIT_MS, accountAfterUsageLimitAt, runAccount } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
-import { isBuiltinProvider } from '../providers/custom-provider';
+import { engineBaseEnv, isBuiltinProvider } from '../providers/custom-provider';
 import { recordedEngine } from '../providers/session-engine';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import {
@@ -390,6 +392,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         antigravityAccountPinned: true,
         kimiAccountPinned: true,
         cursorAccountPinned: true,
+        env: true,
         workspace: {
           select: {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
@@ -408,7 +411,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const place = `${runnerId}:${engine}`;
       if (released.has(place)) continue;
       const column = ACCOUNT_CHOICE[engine];
-      const account = runAccount(engine, session.workspace?.env, { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
+      const account = runAccount(engine, engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env), { [column]: session[column] ?? session.workspace?.[column] }, runner, now);
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       if (!planUsageBlockedUntil(usage, engine, now, account)) continue;
       const elsewhere = accountAfterUsageLimitAt(
@@ -528,6 +531,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         kimiAccountPinned: true,
         cursorAccountPinned: true,
         providerBuiltin: true,
+        // The session's own env, laid over the workspace's as dispatch lays it (engineBaseEnv).
+        env: true,
         workspace: {
           select: {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
@@ -695,7 +700,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               now,
               runAccount(
                 session.provider,
-                session.workspace?.env,
+                engineBaseEnv(session.workspace?.env as Record<string, string> | null, session.env),
                 {
                   codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
                   claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
@@ -1470,6 +1475,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         ? { clientTurnId: openingTurnKey(sessionId), content }
         : null;
     const orbit = source && !senderSessionId && await this.wroteByOrbit(sessionId, source);
+    // A turn the owner's Update Now cut (the runner marked it interrupt {reason: runner_update}) whose
+    // runner then never came back in time: the reaper ended the run as 'runner offline', and this is
+    // its retry once the runner is back. The engine already worked on that message, so it is not
+    // re-sent as the person's words — that would run its side effects again — but as the update's
+    // continuation, as the reclaim would have handed it back (dequeueTurn, D4). Orbit's words.
+    const updateCut = chosenDurable ? await this.updateCutOf(chosenDurable.id) : undefined;
+    if (updateCut !== undefined) {
+      content = buildUpdateResumeContinuation(chosenDurable!.content, updateCut);
+    }
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -1483,8 +1497,21 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       senderSessionId,
       // ...and so is the request those words were, when they were one: it sits on that turn.
       turnId: chosenDurable?.id ?? null,
-      ...(orbit ? { orbit: true as const } : {}),
+      ...(orbit || updateCut !== undefined ? { orbit: true as const } : {}),
     };
+  }
+
+  /** The release the owner's Update Now cut this turn for (its runner_update interrupt), null when the
+   *  runner named none; undefined when no Update Now cut it. */
+  private async updateCutOf(turnId: string): Promise<string | null | undefined> {
+    const cut = await this.prisma.runEvent.findFirst({
+      where: { turnId, type: 'interrupt', payload: { path: ['reason'], equals: RUNNER_UPDATE_INTERRUPT_REASON } },
+      select: { payload: true },
+      orderBy: { seq: 'desc' },
+    });
+    if (!cut) return undefined;
+    const target = (cut.payload as { targetVersion?: unknown } | null)?.targetVersion;
+    return typeof target === 'string' && target ? target : null;
   }
 
   /**

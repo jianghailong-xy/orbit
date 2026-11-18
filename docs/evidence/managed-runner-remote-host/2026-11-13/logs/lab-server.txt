@@ -1,0 +1,187 @@
+==> 2026-11-13T01:01:04Z tunnels
+SERVER_URL=https://moderators-refer-attract-technological.trycloudflare.com
+FAKE_URL=https://ver-emotional-looks-literacy.trycloudflare.com
+==> 2026-11-13T01:01:11Z the server's images
+Loaded image: mrrh-apiserver:local
+Loaded image: mrrh-web:latest
+==> 2026-11-13T01:01:38Z install-server.sh --no-managed-runners --public-origin https://moderators-refer-attract-technological.trycloudflare.com --no-start
+==> Building the link gateway from src/link-gateway (orbit-link-gateway:local, local, never pushed)
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 1.12kB 0.0s done
+#1 DONE 0.2s
+
+#2 [internal] load metadata for docker.io/library/golang:1.27.3-alpine
+#2 DONE 0.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 80B 0.0s done
+#3 DONE 0.1s
+
+#4 [internal] load build context
+#4 DONE 0.0s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 resolve docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 resolve docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 0.2s done
+#5 ...
+
+#4 [internal] load build context
+#4 transferring context: 669.00kB 0.1s done
+#4 DONE 0.9s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 DONE 1.5s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17
+#5 extracting sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17 0.4s done
+#5 DONE 1.9s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357
+#5 extracting sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357 1.0s done
+#5 DONE 2.9s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b
+#5 extracting sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 4.0s done
+#5 DONE 6.8s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:3f6fea6449ae0cdc0aa3243e118dd884d76a5a908c6e37b868632ec1dde4363f 0.1s done
+#5 DONE 7.0s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0.1s done
+#5 DONE 7.1s
+
+#6 [build 2/6] WORKDIR /src
+#6 DONE 4.0s
+
+#7 [build 3/6] COPY go.mod go.sum ./
+#7 DONE 0.5s
+
+#8 [build 4/6] RUN go mod download && go mod verify
+#8 5.315 all modules verified
+#8 DONE 7.2s
+
+#9 [build 5/6] COPY . .
+#9 DONE 0.3s
+
+#10 [build 6/6] RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=2784a6e217b4d641aafec43fc98b270c164a1782" -o /link-gateway .
+#10 DONE 7.8s
+
+#11 [stage-1 1/2] COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+#11 DONE 0.3s
+
+#12 [stage-1 2/2] COPY --from=build /link-gateway /link-gateway
+#12 DONE 0.8s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 1.4s done
+#13 exporting manifest sha256:dc94d00447a6ee376114d8cf9bc50890ec8088a1660ed9401285588b620b2ace
+#13 exporting manifest sha256:dc94d00447a6ee376114d8cf9bc50890ec8088a1660ed9401285588b620b2ace 0.2s done
+#13 exporting config sha256:c12d5fc77f1cc18742b1ec00d9770815a92c5be1b66bb5f3179adb3a0fa174be
+#13 exporting config sha256:c12d5fc77f1cc18742b1ec00d9770815a92c5be1b66bb5f3179adb3a0fa174be 0.1s done
+#13 naming to docker.io/library/orbit-link-gateway:local
+#13 naming to docker.io/library/orbit-link-gateway:local 0.0s done
+#13 unpacking to docker.io/library/orbit-link-gateway:local
+#13 unpacking to docker.io/library/orbit-link-gateway:local 0.4s done
+#13 DONE 2.2s
+==> Writing .env
+✓ Configuration written. Start the stack with: docker compose up -d --build --wait
+==> 2026-11-13T01:02:12Z managed runners on, on the channel machine alone
+121:ORBIT_MANAGED_RUNNERS_ENABLED=true
+140:COMPOSE_PROFILES=runner-link
+141:ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+total 16
+drwx------    2 root     root          4096 Nov 13 01:02 .
+drwx------    3 root     root          4096 Nov 13 01:02 ..
+-rw-------    1 root     root            65 Nov 13 01:02 orbit-lab-chan.token
+-rw-------    1 root     root           962 Nov 13 01:02 profile.json
+==> 2026-11-13T01:02:13Z the fake model (not a model), on the server machine's port 18089
+==> 2026-11-13T01:02:13Z the stack, from the loaded images
+ Network orbit_default Creating 
+ Volume orbit_pg-socket Creating 
+ Network orbit_default Creating 
+ Volume orbit_pg-socket Creating 
+ Volume orbit_pg-socket Created 
+ Volume orbit_pg-socket Created 
+ Network orbit_default Created 
+ Network orbit_default Created 
+ Container orbit-postgres Creating 
+ Container orbit-nats Creating 
+ Container orbit-nats Created 
+ Container orbit-postgres Created 
+ Container orbit-pgbackup Creating 
+ Container orbit-apiserver Creating 
+ Container orbit-apiserver Created 
+ Container orbit-web Creating 
+ Container orbit-link-gateway Creating 
+ Container orbit-wiki-worker Creating 
+ Container orbit-pgbackup Created 
+ Container orbit-link-gateway Created 
+ Container orbit-wiki-worker Created 
+ Container orbit-web Created 
+ Container orbit-gateway Creating 
+ Container orbit-gateway Created 
+ Container orbit-postgres Starting 
+ Container orbit-nats Starting 
+ Container orbit-postgres Started 
+ Container orbit-postgres Waiting 
+ Container orbit-postgres Waiting 
+ Container orbit-nats Started 
+ Container orbit-postgres Healthy 
+ Container orbit-pgbackup Starting 
+ Container orbit-postgres Healthy 
+ Container orbit-apiserver Starting 
+ Container orbit-pgbackup Started 
+ Container orbit-apiserver Started 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+ Container orbit-link-gateway Starting 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Starting 
+ Container orbit-apiserver Healthy 
+ Container orbit-wiki-worker Starting 
+ Container orbit-link-gateway Started 
+ Container orbit-web Started 
+ Container orbit-web Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-wiki-worker Started 
+ Container orbit-apiserver Healthy 
+ Container orbit-web Healthy 
+ Container orbit-gateway Starting 
+ Container orbit-gateway Started 
+ Container orbit-gateway Waiting 
+ Container orbit-link-gateway Waiting 
+ Container orbit-web Waiting 
+ Container orbit-postgres Waiting 
+ Container orbit-pgbackup Waiting 
+ Container orbit-wiki-worker Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-nats Waiting 
+ Container orbit-nats Healthy 
+ Container orbit-web Healthy 
+ Container orbit-apiserver Healthy 
+ Container orbit-link-gateway Healthy 
+ Container orbit-pgbackup Healthy 
+ Container orbit-wiki-worker Healthy 
+ Container orbit-postgres Healthy 
+ Container orbit-gateway Healthy 
+apiserver: Up About a minute (healthy)
+gateway: Up 5 seconds (healthy)
+link-gateway: Up 12 seconds (healthy)
+nats: Up 2 minutes (healthy)
+pgbackup: Up About a minute
+postgres: Up 2 minutes (healthy)
+web: Up 11 seconds (healthy)
+wiki-worker: Up 11 seconds
+orbit-apiserver  | [Nest] 338  - 11/13/2026, 1:04:06 AM     LOG [ManagedRunners] managed runners are enabled in mrrh-lab (Docker instance orbit-lab-chan (remote))
+==> 2026-11-13T01:04:24Z server done

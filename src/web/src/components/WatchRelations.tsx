@@ -89,7 +89,7 @@ function WatchRowList({ watches }: { watches: readonly WatchView[] }) {
  * A task's Followed by: the live watches that name it, and the way to follow it. Ended ones are only
  * counted here; their history is read on the Following page.
  */
-export function TaskFollowedBy({ taskId }: { taskId: string }) {
+export function TaskFollowedBy({ taskId, hideWhenEmpty = false }: { taskId: string; hideWhenEmpty?: boolean }) {
   const watchesQ = useQuery(watchesQuery());
   const [following, setFollowing] = useState(false);
   const related = useMemo(
@@ -99,6 +99,9 @@ export function TaskFollowedBy({ taskId }: { taskId: string }) {
   const live = related.filter(isLiveWatch);
   const ended = related.filter((w) => !isLiveWatch(w));
   const endedTab = ended.some((w) => watchBucket(w) === 'attention') ? 'attention' : 'history';
+  // The task page asks for nothing when nothing follows the task: it offers Follow task in its own
+  // menu, and an empty block saying so is noise there.
+  if (hideWhenEmpty && !following && (watchesQ.isPending || watchesQ.isError || related.length === 0)) return null;
   return (
     <section className="tdp-section watch-relations" aria-label="Followed by">
       <div className="tdp-section-title watch-relations-title">

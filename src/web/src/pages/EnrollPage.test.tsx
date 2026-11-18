@@ -235,7 +235,7 @@ describe('/enroll', { timeout: 30_000 }, () => {
     const link = (name: string) => [...page.querySelectorAll('a')].find((a) => a.textContent === name);
     expect(link('Start a session')?.getAttribute('href')).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);
     expect(link('Start a session')?.className).toContain('enroll-submit-link');
-    expect(link('Open machine instead')?.getAttribute('href')).toBe(`/runners/${encodeId(RUNNER_ID)}`);
+    expect(link('Open machine instead')?.getAttribute('href')).toBe(`/settings/machines/${encodeId(RUNNER_ID)}`);
     expect(link('Open machine instead')?.getAttribute('href')).not.toContain(RUNNER_ID);
     expect(button(page, 'Approve')).toBeUndefined();
   });

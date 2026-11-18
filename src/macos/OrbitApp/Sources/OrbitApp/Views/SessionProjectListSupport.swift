@@ -1,4 +1,3 @@
-#if os(iOS)
 import OrbitKit
 
 extension SessionProjectEntry {
@@ -26,4 +25,3 @@ struct SessionListGrouping {
     let timeSections: [SessionTimeSection]
     let projectRows: [String: SessionProjectRow]
 }
-#endif

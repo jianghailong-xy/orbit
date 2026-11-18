@@ -160,6 +160,10 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
             ("BLOCK", BackgroundWakeText.blockPattern),
             ("JOB_HEAD", BackgroundWakeText.jobHeadPattern),
             ("TRIGGER", BackgroundWakeText.triggerPattern),
+            ("STALL_TRIGGER", BackgroundWakeText.stallTriggerPattern),
+            ("RUNNING_FOR", BackgroundWakeText.runningForPattern),
+            ("QUIET_FOR", BackgroundWakeText.quietForPattern),
+            ("WROTE_NOTHING", BackgroundWakeText.wroteNothingPattern),
             ("EXIT_CODE", BackgroundWakeText.exitCodePattern),
             ("KILL_REASON", BackgroundWakeText.killReasonPattern),
             ("REASON_GLOSS", BackgroundWakeText.reasonGlossPattern),
@@ -191,6 +195,8 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
             ("ScheduledWakeup", ScheduledWakeup(askedAt: nil, delaySeconds: nil, dueAt: nil,
                                                 reason: nil, prompt: "")),
             ("BackgroundWake", BackgroundWake(jobs: [], wakeups: [], text: "", rest: "")),
+            ("BackgroundJobStall", BackgroundJobStall(runningForMs: nil, quietForMs: nil, lastOutputAt: nil,
+                                                      wroteNothing: false)),
         ]
         for (name, value) in mine {
             let body = try section(web, from: "export interface \(name) {", to: "\n}", Self.webWake)
@@ -223,6 +229,45 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
         XCTAssertEqual(BackgroundWakeCard.title(wake(jobs: [job(), job()])), "2 background jobs finished")
         assertBuilt(titles, "${jobs.length} background jobs finished",
                     "the title several jobs share", Self.webCard)
+
+        // A quiet job's titles (docs/mocks/background-job-stall-line).
+        let quiet = job(status: "running", ended: false, exitCode: nil, stall: stall())
+        assertWritten(titles, BackgroundWakeCard.title(wake(jobs: [quiet])),
+                      "the title of a job that went quiet", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.title(wake(jobs: [quiet, quiet])), "2 background jobs went quiet")
+        assertBuilt(titles, "${jobs.length} background jobs went quiet",
+                    "the title several quiet jobs share", Self.webCard)
+        assertBuilt(titles, "jobs.every((job) => job.stall)", "when several jobs are all quiet", Self.webCard)
+    }
+
+    /// How long a quiet job has been quiet, on the line, and how it stood, in its row in the fold.
+    func testAQuietJobIsSaidInTheSameWords() throws {
+        let web = try flat(Self.webCard)
+        let status = try section(web, from: "function status(", to: "\n}", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.status(job(status: "running", ended: false, exitCode: nil,
+                                                     stall: stall())), "quiet 15m")
+        assertBuilt(status, "`quiet ${formatSpan(job.stall.quietForMs)}`", "how long a job has been quiet",
+                    Self.webCard)
+        assertWritten(status, "quiet", "a quiet job whose block named no span", Self.webCard)
+
+        let line = try section(web, from: "function stallLine(", to: "\n}", Self.webCard)
+        assertWritten(line, "Still running", "how a quiet job's row opens", Self.webCard)
+        assertBuilt(line, "`${formatSpan(stall.runningForMs)} in`", "how long it has run", Self.webCard)
+        assertWritten(line, "has written nothing yet", "a quiet job that never wrote", Self.webCard)
+        assertBuilt(line, "`last wrote ${relTime(stall.lastOutputAt)}`", "when it last wrote", Self.webCard)
+        assertBuilt(line, "parts.join(' · ')", "what parts the row apart", Self.webCard)
+        XCTAssertEqual(BackgroundWakeCard.stallLine(BackgroundJobStall(runningForMs: 60_000, quietForMs: 60_000,
+                                                                       lastOutputAt: nil, wroteNothing: true)),
+                       "Still running · 1m in · has written nothing yet")
+    }
+
+    /// A turn that is only a note is never an empty bubble on either end. The web draws it as the
+    /// generic From Orbit line (`orbitOnlyTurn` → `OrbitEventLine`, owner rule 2026-11-16), which
+    /// replaced the bare note; the clauses of `orbitOnlyTurn` are pinned in OrbitEventCopyParityTests.
+    func testATurnThatIsOnlyANoteIsDrawnAloneWhereTheWebDrawsIt() throws {
+        let transcript = try flat(Self.webTranscript)
+        assertBuilt(transcript, "if (orbitOnlyTurn(node)) {", "when a turn is only a note", Self.webTranscript)
+        assertBuilt(transcript, "<OrbitEventLine", "the note drawn as the From Orbit line", Self.webTranscript)
     }
 
     func testHowAJobCameOutIsSaidInTheSameWords() throws {
@@ -279,16 +324,17 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     /// The bar pinned to the top of the transcript does not point at this turn: it is a line inside
     /// the answer, so the bar keeps naming the question (`StickySummary.isAnchor`, which
-    /// `StickySummaryTests` holds). The browser's half of that rule is the attribute pair its scanner
-    /// reads, which the line must never stamp.
+    /// `StickySummaryTests` holds). The browser's half of that rule is the round mark its scanner
+    /// reads, which the line must never carry.
     func testTheLineIsNoTurnTheStickyBarPointsAt() throws {
         let web = try flat(Self.webCard)
         let root = try section(web, from: "className={`bgwake ", to: "data-seq={seq}>", Self.webCard)
 
-        XCTAssertFalse(root.contains("data-sticky"), "the line's root stamps what the bar's scanner reads")
-        XCTAssertFalse(web.contains("data-sticky-label=") || web.contains("data-sticky-text="),
-                       "\(Self.webCard) stamps an attribute the bar's scanner reads, so the bar points "
-                           + "at the line and the question leaves it")
+        XCTAssertFalse(root.contains("data-orbit-round"), "the line's root carries what the bar's scanner reads")
+        // The attribute, not a comment naming it in backticks.
+        XCTAssertNil(web.range(of: "data-orbit-round(?!`)", options: .regularExpression),
+                       "\(Self.webCard) carries the round mark the bar's scanner reads, so the bar hides "
+                           + "over the line and the question leaves it")
     }
 
     func testTheCardsOwnLinesMatchTheWebCard() throws {
@@ -383,9 +429,14 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
     }
 
     private func job(status: String = "completed", ended: Bool = true, exitCode: Int? = 0,
-                     killReason: String? = nil, description: String? = nil) -> BackgroundWakeJob {
+                     killReason: String? = nil, description: String? = nil,
+                     stall: BackgroundJobStall? = nil) -> BackgroundWakeJob {
         BackgroundWakeJob(id: "bgj_1", kind: "job", command: "bash a.sh", description: description,
                           status: status, ended: ended, exitCode: exitCode, killReason: killReason,
-                          outputPath: nil, outputFrom: nil, outputTo: nil, outputTail: "")
+                          outputPath: nil, outputFrom: nil, outputTo: nil, outputTail: "", stall: stall)
+    }
+
+    private func stall() -> BackgroundJobStall {
+        BackgroundJobStall(runningForMs: 15 * 60_000, quietForMs: 15 * 60_000, lastOutputAt: nil, wroteNothing: false)
     }
 }

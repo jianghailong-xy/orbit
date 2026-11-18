@@ -33,7 +33,7 @@ export function CursorKeyCheckLine({ row }: { row: ProviderRow }) {
       <div className="prov-runtime dsb-row">
         <div className="dsb-line fail">
           Rejected by Cursor{when} <span className="dsb-sep">·</span>{' '}
-          <Link className="re-link" to={`/providers/${row.id}`}>
+          <Link className="re-link" to={`/settings/providers/keys/${row.id}`}>
             Paste a new key
           </Link>
         </div>

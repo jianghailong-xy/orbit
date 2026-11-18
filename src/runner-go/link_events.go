@@ -60,10 +60,11 @@ import (
 // session sends it first and numbers after it. A crash loses what was only in memory, at most linkSessionMemoryBytes
 // per session.
 
+// linkEventCadence is how often a session's durable events are sent when nothing sends them sooner (§5.8: about every
+// one to three seconds); a boundary goes at once. A variable only so that tests can lengthen it.
+var linkEventCadence = time.Second
+
 const (
-	// linkEventCadence is how often a session's durable events are sent when nothing sends them sooner (§5.8: about
-	// every one to three seconds); a boundary goes at once.
-	linkEventCadence = time.Second
 	// The memory unacknowledged events may take before newer ones go to the spool on disk.
 	linkSessionMemoryBytes = 8 << 20
 	linkTotalMemoryBytes   = 256 << 20

@@ -32,7 +32,6 @@ final class ConsoleRegistry {
     /// reason: a `ConsoleModel` needn't know about `AppModel`.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
-    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     /// Apply the app's cached session and catalog before a new console can be rendered.
     @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
     /// The account's managed runner (docs/managed-runner-design.md), set once by `AppModel` and handed
@@ -61,18 +60,6 @@ final class ConsoleRegistry {
     func takeDraftAccount(agentID: String) -> (engine: String, account: String)? {
         pendingDraftAccounts.removeValue(forKey: agentID)
     }
-
-    /// What waited on a machine that got a workspace some other way: the next draft there starts with
-    /// it in the composer, rather than it vanishing with the page.
-    private var pendingDraftMessages: [String: HeldMessage] = [:]
-
-    func queueDraftMessage(agentID: String, message: HeldMessage) {
-        pendingDraftMessages[agentID] = message
-    }
-
-    func takeDraftMessage(agentID: String) -> HeldMessage? {
-        pendingDraftMessages.removeValue(forKey: agentID)
-    }
     /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
     /// followed here, not in the console: its poll stops with its focus, so leaving the session
     /// meant the result card never came — or came late, the next time the session was opened. From
@@ -89,6 +76,12 @@ final class ConsoleRegistry {
         self.attachments = AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore)
         self.lru = LRUOrder(capacity: capacity)
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+    }
+
+    /// The image store of a guest view: one session's files, read through the guest door. Its own, not
+    /// `attachments`, so a guest's ids never sit in the owner-route cache as files it won't serve.
+    func guestAttachments(_ sessionID: String) -> AttachmentImageStore {
+        AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore, guestSessionID: sessionID)
     }
 
     /// Application Support/Orbit/Transcripts/<host> — scoped per instance so two servers never
@@ -117,6 +110,10 @@ final class ConsoleRegistry {
     /// instantly once that console opens. Not added to `models` — there's no sessionID to key it by.
     /// `folderID` is the folder whose page opened this draft (a folder page's ✎): the session it
     /// creates is filed in that folder as it is created (design §3.3). Nil from a list.
+    /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
+    /// Open in a new session). Taken by that draft, once.
+    var pendingDraftText: [String: String] = [:]
+
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
@@ -128,10 +125,10 @@ final class ConsoleRegistry {
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
         let configured = configuredProviders
             + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools)
-        // The model last picked for what the workspace last ran on — its engine and its provider.
+        // The model of the session a person last opened in the workspace, on what it ran on.
         let seed = AgentDefaults.newSessionModel(
             engine: agent.defaultEngine(configured: configured), provider: agent.defaultProvider,
-            accountModels: accountDefaultModels(), fallback: defaultModel,
+            workspace: agent, fallback: defaultModel,
             catalog: modelCatalog, configured: configured)
         let model = ConsoleModel(draftFor: agent, defaultModel: seed,
                                  configuredProviders: configuredProviders,
@@ -141,6 +138,7 @@ final class ConsoleRegistry {
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  folderID: folderID,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
+        if let text = pendingDraftText.removeValue(forKey: agent.id) { model.composerText = text }
         model.onSessionCreated = { [weak self, weak model] session in
             if let self, let model {
                 // A machine's first draft names no workspace: its session says which one it made.
@@ -219,6 +217,14 @@ final class ConsoleRegistry {
         for model in models.values {
             guard let own = model.projectID, key == nil || PublicID.storageKey(own) == key else { continue }
             Task { await model.refreshRulerQuestions(force: true) }
+        }
+    }
+
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// read their detail again, which carries the state the server stored and, for a failure, why.
+    func cloneStateMoved(workspaceID: String) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+            Task { await model.refreshMadeWorkspace() }
         }
     }
 
@@ -314,7 +320,6 @@ final class ConsoleRegistry {
     /// Hand a console the account's permission default (read late — the `user` payload primes
     /// asynchronously) and the write-back for a Mode picked when starting a session.
     private func wireAccountDefaults(_ model: ConsoleModel) {
-        model.accountDefaultModels = { [weak self] in self?.accountDefaultModels() ?? [:] }
         model.accountDefaultPermissionMode = { [weak self] in
             guard let self else { return nil }
             return self.accountDefaultPermissionMode()

@@ -1133,4 +1133,29 @@ final class ProjectAPIClientTests: XCTestCase {
             "DELETE /api/projects/p1",
         ])
     }
+    /// Start a new coordinator names the workspace only when one was picked (Change workspace's
+    /// Start a new one there); the plain press still sends no body, as before.
+    func testReplacingTheCoordinatorNamesTheWorkspaceOnlyWhenOneIsPicked() async throws {
+        let log = ProjectRequestLog()
+        ProjectAPIURLProtocol.handler = { request in
+            log.record(request)
+            guard request.httpMethod == "POST", request.url?.path == "/api/projects/p1/coordinator/replace" else {
+                return (404, "")
+            }
+            return (201, #"{"sessionId":"s2","created":true,"workspaceId":"w2"}"#)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ProjectAPIURLProtocol.self]
+        let api = APIClient(baseURL: URL(string: "https://orbit.test")!, tokenStore: InMemoryTokenStore(),
+                            session: URLSession(configuration: configuration))
+
+        _ = try await api.replaceProjectCoordinator("p1")
+        let elsewhere = try await api.replaceProjectCoordinator("p1", workspaceID: "w2")
+
+        XCTAssertEqual(elsewhere, ProjectCoordinatorOpened(sessionId: "s2", created: true, workspaceId: "w2"))
+        XCTAssertEqual(log.all, [
+            "POST /api/projects/p1/coordinator/replace",
+            #"POST /api/projects/p1/coordinator/replace {"workspaceId":"w2"}"#,
+        ])
+    }
 }

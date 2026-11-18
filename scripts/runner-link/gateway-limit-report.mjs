@@ -13,7 +13,7 @@
 // evidence 15; the rerun took 0.791), its memory with the rerun's 2,298 MiB over a full hour, 157 KiB a connection
 // (c2b-full-1h-r2, evidence 25). The first run's 3,556 MiB is an outlier nothing measured the cause of (README.md, "The
 // gateway alone").
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const C2B = { connections: 15000, cores: 0.801, coresRun: 'c2b-full-1h, evidence 15', memMiB: 2298, memRun: 'c2b-full-1h-r2, evidence 25' };
@@ -30,6 +30,25 @@ if (!dir) {
 const has = (name) => existsSync(join(dir, name));
 const read = (name) => readFileSync(join(dir, name), 'utf8');
 const json = (name) => JSON.parse(read(name));
+// eachLine calls fn with each line of a file read a chunk at a time: gateway.log passes V8's longest string (about
+// 512 MiB) in long runs, which read() cannot hold.
+const LINE_CHUNK = Number(process.env.GATEWAY_LIMIT_REPORT_CHUNK_BYTES) || 64 << 20;
+function eachLine(name, fn) {
+  const fd = openSync(join(dir, name), 'r');
+  try {
+    const buf = Buffer.alloc(LINE_CHUNK);
+    let rest = Buffer.alloc(0);
+    for (let n; (n = readSync(fd, buf, 0, buf.length, null)) > 0;) {
+      const data = Buffer.concat([rest, buf.subarray(0, n)]);
+      let start = 0;
+      for (let nl; (nl = data.indexOf(10, start)) >= 0; start = nl + 1) fn(data.toString('utf8', start, nl));
+      rest = Buffer.from(data.subarray(start));
+    }
+    if (rest.length) fn(rest.toString('utf8'));
+  } finally {
+    closeSync(fd);
+  }
+}
 const jsonl = (name) => (has(name) ? read(name).split('\n').filter((l) => l.trim()).flatMap((l) => {
   try { return [JSON.parse(l)]; } catch { return []; }
 }) : []);
@@ -173,12 +192,19 @@ function cores(series, field = 'cpuUsec', spanMs = 10_000) {
   }
   return { mean: rate(series[0], series.at(-1)), peak };
 }
+// worstUnit is the highest mean of field's rate among the units whose name matches, each over its own samples: CPU
+// pressure and throttling are shares of each unit's own time, so adding them over 20 shards would judge 20 times too
+// strictly.
+function worstUnit(match, from, to, field) {
+  const names = new Set(inWindow(samples, from, to).flatMap((p) => Object.keys(p.cgroups ?? {}).filter(match)));
+  return maxOf([...names].map((u) => cores(cgSeries((v) => v === u, from, to), field).mean).filter((v) => v != null));
+}
 function part(match, from, to) {
   const s = cgSeries(match, from, to);
   if (s.length === 0) return null;
   const c = cores(s);
-  const psi = cores(s, 'psiSomeUsec', 60_000);
-  const thr = cores(s, 'throttledUsec');
+  const psi = { mean: worstUnit(match, from, to, 'psiSomeUsec') };
+  const thr = { mean: worstUnit(match, from, to, 'throttledUsec') };
   return { raw: { meanCores: c.mean, maxBytes: maxOf(s.map((p) => p.memBytes)), meanBytes: meanOf(s.map((p) => p.memBytes)) },
     meanCores: round(c.mean, 3), peak10sCores: round(c.peak, 3), maxMiB: round(maxOf(s.map((p) => p.memBytes)) / 2 ** 20, 0),
     meanMiB: round(meanOf(s.map((p) => p.memBytes)) / 2 ** 20, 0), anonMaxMiB: round(maxOf(s.map((p) => p.anonBytes)) / 2 ** 20, 0),
@@ -226,17 +252,26 @@ function kernelFigures(from, to) {
   };
 }
 
+// sourcePorts checks the connections of each source address against the odd ports of the host's ephemeral range.
+function sourcePorts(bySource) {
+  const [lo, hi] = String(run.host?.settings?.['net.ipv4.ip_local_port_range'] ?? '').split(/\s+/).map(Number);
+  const oddPorts = Number.isFinite(lo) && Number.isFinite(hi) && hi >= lo ? Math.floor((hi - (lo % 2 ? lo : lo + 1)) / 2) + 1 : null;
+  const perSourceMax = maxOf(Object.values(bySource ?? {}).map((c) => c.max));
+  return { sources: Object.keys(bySource ?? {}).length, connectionsPerSourceMax: perSourceMax, oddPortsPerSource: oddPorts,
+    sourcesKeptToOddPorts: oddPorts == null || perSourceMax == null ? null : perSourceMax <= oddPorts };
+}
+
 // --- GC: GODEBUG=gctrace=1's line for each cycle, timed from the gateway's start. --------------------------------------
 const gcs = [];
 if (has('logs/gateway.log') && run.gatewayStartMs) {
   const re = /^gc (\d+) @([\d.]+)s (\d+)%: ([\d.]+)\+([\d.]+)\+([\d.]+) ms clock, .*?(\d+)->(\d+)->(\d+) MB, (\d+) MB goal/;
-  for (const line of read('logs/gateway.log').split('\n')) {
+  eachLine('logs/gateway.log', (line) => {
     const m = re.exec(line);
     if (m) {
       gcs.push({ t: run.gatewayStartMs + Number(m[2]) * 1000, pauseMs: Number(m[4]) + Number(m[6]), concurrentMs: Number(m[5]),
         liveMB: Number(m[9]), goalMB: Number(m[10]) });
     }
-  }
+  });
 }
 function gcFigures(from, to) {
   const g = gcs.filter((x) => x.t >= from && x.t <= to);
@@ -409,7 +444,14 @@ for (const n of levelDirs) {
     stubAnsweredP99Ms: answeredP99, stubDelayMs: delayMs, stubWorkP99Ms: workP99,
     stubKeptUp: answeredP99 != null && answeredP99 <= delayMs * 1.1 + 1 && (workP99 ?? 0) < delayMs,
     gatewayBackendCallP99Ms: gateway.backendCallDuration?.p99Ms ?? null,
+    // The worst single shard's wait for a CPU, under 10% of its time.
     loadgenCpuPressurePct: loadgen?.cpuPressurePct ?? null, loadgenKeptUp: (loadgen?.cpuPressurePct ?? 0) < 10,
+    // The shards and the gateway share the host. The shards bind each connection to its source address with port 0,
+    // which takes odd ports first, and a port bound on any address is passed over by every connect() that picks its own:
+    // the gateway's own calls to the stubs. While no source address holds more connections than there are odd ports,
+    // the even ones stay to the gateway; past that, its calls ran out of ports (task 34paLvEDFObkoBxYLAJSN: about
+    // 14,000 a source address at the default range, so a level needs level / 14,000 of them).
+    ...sourcePorts(gateway.connectionsBySource),
     // The gateway's own histogram is too coarse for a p99 (its buckets), so the means are compared: what the runners wait
     // beyond what the gateway took is the network and the shards' own loop.
     eventAckMeanRunnerMs: runners.eventAckBatch.meanMs, eventAckMeanGatewayMs: gateway.eventAckDuration?.meanMs ?? null,
@@ -554,7 +596,9 @@ for (const l of levels) {
   md.push('', `Rig check: the stubs answered p99 ${c.stubAnsweredP99Ms} ms against their ${c.stubDelayMs} ms delay, their own work p99 ` +
     `${c.stubWorkP99Ms} ms: ${c.stubKeptUp ? 'they kept up' : '**they did not keep up: the stub may be the limit**'}. The gateway saw its backend calls ` +
     `answered p99 ≈ ${c.gatewayBackendCallP99Ms} ms. The shards waited for CPU ${c.loadgenCpuPressurePct}% of the time: ` +
-    `${c.loadgenKeptUp ? 'they kept up' : '**the loadgen may be the limit**'}; EventAck took ${c.eventAckMeanRunnerMs} ms on average at the runners ` +
+    `${c.loadgenKeptUp ? 'they kept up' : '**the loadgen may be the limit**'} (the worst shard). The most connections from one source address ` +
+    `were ${c.connectionsPerSourceMax} against ${c.oddPortsPerSource} odd ephemeral ports: ` +
+    `${c.sourcesKeptToOddPorts === false ? "**past them: the shards took ports the gateway's own calls to the stubs need; add --sources**" : 'within them'}; EventAck took ${c.eventAckMeanRunnerMs} ms on average at the runners ` +
     `and ${c.eventAckMeanGatewayMs} ms at the gateway, from a batch's arrival to its EventAck.`);
 }
 process.stdout.write(dash(md.join('\n')) + '\n');

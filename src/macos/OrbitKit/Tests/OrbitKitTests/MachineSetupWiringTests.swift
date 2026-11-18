@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold a machine's first
-/// workspace to the source: which entries lead to the machine's new session page, what a composer's send
-/// does there, and that nothing is left greyed out or sending anyone to the web. The behaviour is
+/// workspace to the source: which entries lead to the machine's new session page, that its card alone makes
+/// the workspace there, and that nothing is left greyed out or sending anyone to the web. The behaviour is
 /// `MachineSetupTests`' and the pictures' (docs/evidence/first-workspace-native); this is that the shells
 /// reach it. Each check reads the slice of the file it is about.
 final class MachineSetupWiringTests: XCTestCase {
@@ -53,32 +53,41 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheDrawerDrawsTheRowAfterEveryWorkspace() throws {
         let shell = try app("Views/CompactShell.swift")
         let rows = try slice(shell, from: "private var agentsRows: some View {", to: "private func unreachableRow(")
-        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine)"],
+        try assertInOrder(rows, ["ForEach(agents.orderedItems)", "ForEach(agents.machinesToSetUp)", "setUpRow(machine, separates:"],
                           "the Set up rows come last")
         try assertInOrder(rows, ["model.drawerDestination == .machine(runnerID: machine.id)",
-                                 "open(.machine(runnerID: machine.id))", "Image(systemName: \"folder.badge.plus\")",
+                                 "open(.machine(runnerID: machine.id))", "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")",
                                  "MachineSetupCopy.setupTitle(machine: machine.name)", ".foregroundStyle(Color.accentColor)"],
                           "the row is board 03's")
     }
 
-    /// The Mac: a group per machine, an empty one with its header and this row, selected through the
-    /// source list's one selection.
-    func testTheMacsSidebarGroupsByMachine() throws {
+    /// The Mac: the drawer's flat order, the Set up rows after every workspace, selected through the
+    /// source list's one selection (docs/mocks/macos-sidebar, 01).
+    func testTheMacsSidebarListsTheSetUpRowsLast() throws {
         let main = try app("Views/MainView.swift")
-        let sidebar = try slice(main, from: "private func agentsDisclosure(", to: "struct AccountFooter")
-        try assertInOrder(sidebar, ["!agents.groups.isEmpty", "ForEach(agents.groups)", "agents.runnerLabel(group.runnerId)",
-                                    "ForEach(group.agents)", "if let machine = group.setUp", "setUpRow(machine)",
-                                    ".tag(SidebarSelection.machine(machine.id))"],
-                          "the group and its row")
-        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
+        let sidebar = try slice(main, from: "private func workspaceRows(", to: "struct AccountFooter")
+        // One flat ForEach over `AgentListLogic.sidebarRows` (whose order AgentListLogicTests pins): an
+        // if/else or a second ForEach under the section is the row shape the outline list's reload aborted on.
+        let rows = try slice(sidebar, from: "private func workspaceRows(", to: "private func setUpRow(")
+        try assertInOrder(rows, ["ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? []))",
+                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine, separates:",
+                                 ".tag(SidebarSelection.machine(machine.id))", "case .placeholder:"],
+                          "the workspaces, then the machines to set up")
+        XCTAssertEqual(rows.components(separatedBy: "ForEach(").count - 1, 1, "one ForEach under the section")
+        XCTAssertFalse(rows.contains("} else {"), "no if/else swapping the placeholder for the rows")
+        let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
-                                "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
+                                "MachineSetupCopy.setupTitle(machine: machine.name)",
+                                "Image(systemName: machine.isManaged ? \"cloud\" : \"folder.badge.plus\")"],
                           "tinted, until it is the row selected")
-        XCTAssertTrue(main.contains("if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }"),
-                      "the selection reads the page on screen")
-        XCTAssertTrue(main.contains("case .machine(let runnerID):\n                    model.openMachineDraft(runnerID)"))
-        let model = try app("AgentsModel.swift")
-        XCTAssertTrue(model.contains("AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)"))
+        // The selection is ONE stored value; its actions run in `.onChange`, after the List's update.
+        XCTAssertTrue(main.contains("SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,"),
+                      "the stored value reads the page on screen")
+        let onChange = try slice(main, from: ".onChange(of: selection) { _, now in", to: ".onChange(of: modelSelection")
+        try assertInOrder(onChange, ["case .machine(let runnerID):", "model.openMachineDraft(runnerID)"],
+                          "the machine row's one action")
+        XCTAssertTrue(main.contains(".onChange(of: modelSelection, initial: true)"),
+                      "a deep link or shortcut brings the list's stored value along")
     }
 
     /// The page is the same one on every shell.
@@ -120,22 +129,42 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(landing.contains("case .machine(let id): openMachineDraft(id)"))
     }
 
-    // MARK: what a send does
+    // MARK: Create workspace (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name)
 
-    func testTheComposersSendAsksTheCardFirst() throws {
-        let model = try app("ConsoleModel.swift")
-        let create = try slice(model, from: "private func createDraftSession() async {", to: "func sendHeld(")
-        try assertInOrder(create, ["switch machineSetup.composerSend() {", "case .alreadyWaiting:", "case .hold:",
-                                   "machineSetup.hold(heldMessage(text, shell: shell))", "composerText = \"\"",
-                                   "pendingAttachments = []", "return", "case .create(let folder):", "newWorkspace = folder",
-                                   "api.createSession(draftRequest("],
-                          "the composer's send on a machine's page")
-        let request = try slice(model, from: "private func draftRequest(", to: "private func draftSessionCreated(")
-        for piece in ["agentId: newWorkspace == nil ? agent.id : nil", "assignedRunnerId: newWorkspace == nil ? nil : agent.runnerId",
-                      "engine: newWorkspace == nil ? draftPick?.engine : engine",
-                      "provider: newWorkspace == nil ? draftPick?.provider : provider", "newWorkspace: newWorkspace)"] {
-            XCTAssertTrue(request.contains(piece), "the create lost \(piece)")
+    /// The page is the card alone: no composer under it, no message waiting there, no sign-in on it.
+    func testThePageIsTheCardAlone() throws {
+        let page = try app("Views/MachineSetupCard.swift")
+        let content = try slice(page, from: "private struct MachineDraftContent: View {", to: "private struct MachineSetupCard: View {")
+        XCTAssertTrue(content.contains("MachineSetupCard(setup: setup, welcome: welcome)"))
+        for gone in ["ComposerView", "ComposerBand", "HeldFirstMessageView", "WelcomeExamplesStep"] {
+            XCTAssertFalse(content.contains(gone), "the page still draws \(gone)")
         }
+        for gone in ["RunnerSignInView", "SETUP_USE_FOLDER", "SETUP_FOOT", "setupReady(", "HeldMessage", "SETUP_CHANGE"] {
+            XCTAssertFalse(page.contains(gone), "the card still has \(gone)")
+        }
+        let console = try app("ConsoleModel.swift")
+        XCTAssertFalse(console.contains("machineSetup"), "a composer's send no longer asks a card")
+        let request = try slice(console, from: "private func draftRequest(", to: "private func draftSessionCreated(")
+        XCTAssertFalse(request.contains("newWorkspace"), "no session makes its workspace from these clients")
+    }
+
+    /// Create workspace makes the workspace alone, then the page moves on to its new session page; a refusal
+    /// stays on the card.
+    func testCreateWorkspaceMakesItAloneAndMovesOn() throws {
+        let model = try app("AppModel.swift")
+        let create = try slice(model, from: "func createMachineWorkspace(", to: "func machineGotWorkspace(")
+        try assertInOrder(create, ["api.createAgent(MachineSetup.createRequest(folder: folder, name: name,",
+                                   "await agents?.load()",
+                                   "if machineDraftRunnerID == runnerID { show(.compose(agentID: made.id, folderID: nil), agent: made.id) }",
+                                   "return nil", "return APIClient.failureReason(error)"],
+                          "the create, the list, the new session page")
+        let setup = try app("MachineSetupModel.swift")
+        let press = try slice(setup, from: "func create(", to: "\n    }\n")
+        try assertInOrder(press, ["guard !creating else { return }", "creating = true", "createError = nil",
+                                  "await app.createMachineWorkspace(runnerID: runnerID, folder: pick,",
+                                  "name: name.name(folder: followed))", "creating = false", "createError = why"],
+                          "one at a time, and a refusal kept")
+        XCTAssertTrue(setup.contains("var busy: Bool { creating }"), "the page doesn't move on under a create still out")
     }
 
     // MARK: the card while its machine connects, and the folder questions
@@ -144,44 +173,81 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheCardWaitsForAMachineStillConnectingAndReadsItMoreOften() throws {
         let page = try app("Views/MachineSetupCard.swift")
         let notice = try slice(page, from: "private var notice: String? {", to: "private func noticeLine(")
-        try assertInOrder(notice, ["if offline {", "MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnecting(machine: machine)",
-                                   ": MachineSetupCopy.setupOffline(machine: machine)", "guard !probes else { return nil }",
-                                   "MachineSetupCopy.setupUpdating(machine: machine)"],
+        try assertInOrder(notice, ["if offline {", "MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnectingCreate(machine: machine)",
+                                   ": MachineSetupCopy.setupOfflineCreate(machine: machine)", "guard !checksFolders else { return nil }",
+                                   "MachineSetupCopy.setupUpdatingCreate(machine: machine)",
+                                   "MachineSetupCopy.setupNeedsUpdate(machine: machine)"],
                           "connecting before offline, and only a machine that is here is said to update itself")
         let loop = try slice(page, from: ".task(id: runnerID) {", to: ".onChange(of: runner, initial: true)")
         XCTAssertTrue(loop.contains("try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))"))
         XCTAssertFalse(loop.contains(".seconds(5)"), "a fixed beat would hold a connecting machine's folder step back")
     }
 
-    /// A new folder's name is asked about where it would go, and the register directory's question, taken by
-    /// another, is asked again.
-    func testTheFolderQuestionsShareTheMachinesOneSlot() throws {
+    /// The folder is one name in the machine's home: asked about where it would go, and made into the workspace's
+    /// folder on the answer. The name follows it until it is edited, and Create workspace stands beside the name.
+    func testTheCardIsAFolderAndANameAskedAboutWhereItWouldGo() throws {
         let page = try app("Views/MachineSetupCard.swift")
-        let options = try slice(page, from: "private struct FolderOptions: View {", to: "private func row(")
-        try assertInOrder(options, ["case .new:", "case .answered(let probe)? = newAnswer",
-                                    "MachineSetup.newFolderPick(probe, name: name, reposRoot: runner.reposRoot ?? \"\", machine: machine)"],
-                          "a new folder is picked on the machine's answer")
-        XCTAssertTrue(options.contains("return MachineSetup.newFolderPath(reposRoot: runner.reposRoot ?? \"\", name: name)"))
-        try assertInOrder(options, ["attempt: online ? 1 + registerAttempt : 0)) {",
-                                    ".onChange(of: DirProbeRelay.asksAgain(registered, online: online, otherWaiting: waiting)) { _, again in",
-                                    "if again { registerAttempt += 1 }",
-                                    ".task(id: Question(path: newFolderQuestion, attempt: newAttempt)) {",
-                                    "await app.probeDir(runnerID: runner.id, path: asked, ask: true)"],
-                          "the register question asked again, and the name's own")
-        let line = try slice(page, from: "@ViewBuilder private var newFolderLine: some View {", to: "private var otherRow: some View {")
-        try assertInOrder(line, ["MachineSetupCopy.SETUP_NEW_FOLDER_INVALID", "MachineSetup.newFolderVerdict(probe, machine: machine)",
-                                 "noAnswer { newAttempt += 1 }", "checking"],
-                          "what the name says as it is checked")
+        let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
+        XCTAssertTrue(card.contains("private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }"))
+        XCTAssertTrue(card.contains("private var disabled: Bool { managedState == nil && (offline || !checksFolders) }"),
+                      "a machine that can't make a folder can't be typed into")
+        try assertInOrder(card, ["guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
+                                 "return MachineSetup.newFolderPath(root: root, name: folder)"],
+                          "the name's question")
+        try assertInOrder(card, ["guard let answer, let question, answer.path == question else { return nil }",
+                                 "case .answered(let probe)? = current",
+                                 "MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)",
+                                 "MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: followed), online: !offline,"],
+                          "the folder is picked on the machine's answer to this name")
+        try assertInOrder(card, [".task(id: Question(path: question, attempt: attempt)) {",
+                                 "await app.probeDir(runnerID: runner.id, path: asked, ask: true)",
+                                 "Text(MachineSetup.newFolderPath(root: root, name: \"\"))",
+                                 ".onSubmit { create() }", ".accessibilityLabel(MachineSetupCopy.SETUP_FOLDER)",
+                                 ".disabled(disabled || setup.creating)",
+                                 "MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,",
+                                 "noAnswer { attempt += 1 }"],
+                          "the field after its fixed root, and what it says")
+        try assertInOrder(card, ["Text(MachineSetupCopy.SETUP_NAME)", "WorkspaceNameField.placeholder(folder: followed)",
+                                 "setup.name.shown(folder: followed)", "setup.name.edit($0, folder: followed)",
+                                 ".onSubmit { create() }", ".accessibilityLabel(MachineSetupCopy.SETUP_NAME)",
+                                 ".disabled((fromGithub ? offline : disabled) || setup.creating)", "Button(action: create)",
+                                 "if setup.creating { ProgressView()", "Text(MachineSetupCopy.SETUP_CREATE)",
+                                 ".disabled(!canCreate)", "setup.name.line(folder: followed)"],
+                          "the name, with Create workspace beside it")
+        for gone in ["SETUP_REGISTER_DIR", "setupOtherFolder", "FolderChoice", "registerDir", "FolderName("] {
+            XCTAssertFalse(page.contains(gone), "the card still has \(gone)")
+        }
     }
 
-    func testTheWaitingMessageGoesByItselfAndARefusalStaysOnIt() throws {
+    /// Board 04 A on the one-field card: under the folder and its Name, an "or" rule and the From GitHub row, locked only
+    /// offline; pressing it swaps the folder field for the repository picker, whose pick the Name follows and Create
+    /// workspace sends; "Type a folder name instead" swaps back. Which is open is kept with the page.
+    func testFromGithubIsARowUnderTheNameThatSwapsTheFolderFieldForThePicker() throws {
         let page = try app("Views/MachineSetupCard.swift")
-        try assertInOrder(page, [".onChange(of: Send(ready: ready, held: setup.state.held, busy: draft.sending), initial: true)",
-                                 "setup.sendHeldIfReady()"], "both steps done, it goes")
+        XCTAssertTrue(page.contains("private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }"),
+                      "offered only where the deployment has a GitHub App")
+        let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
+        try assertInOrder(card, ["if fromGithub { return setup.repository }", "checksFolders: fromGithub || checksFolders"],
+                          "the picked repository is what Create workspace makes, locked only offline")
+        try assertInOrder(card, ["if let github, setup.githubOpen { githubField(github) } else { folderField }", "nameField",
+                                 "if github != nil, !setup.githubOpen {", "githubRow"],
+                          "the picker in the folder field's place, and the row under the Name")
+        let row = try slice(card, from: "@ViewBuilder private var githubRow: some View {", to: "private func githubField(")
+        try assertInOrder(row, ["MachineSetupCopy.SETUP_OR", "setup.githubOpen = true", "MachineSetupCopy.SETUP_FROM_GITHUB",
+                                "SetupNewTag()", "MachineSetupCopy.SETUP_GITHUB_META", ".disabled(offline || setup.creating)"],
+                          "the or rule, then the row")
+        let field = try slice(card, from: "private func githubField(", to: "private func noAnswer(again:")
+        try assertInOrder(field, ["MachineSetupCopy.SETUP_FOLDER", "MachineSetupCopy.SETUP_FROM_GITHUB", "SetupNewTag()",
+                                  "GithubFolderOption(runner: runner, integration: integration,",
+                                  "onCandidate: { setup.repository = $0 }, onEnter: { create() })",
+                                  "MachineSetupCopy.setupGithubDonePath(", "MachineSetupCopy.SETUP_GITHUB_DONE",
+                                  "MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD", "setup.githubOpen = false", "setup.repository = nil"],
+                          "the picker, what it makes, and the way back")
+        XCTAssertFalse(page.contains("SETUP_USE_REPOSITORY"), "Create workspace sends the clone: no Use button of its own")
         let model = try app("MachineSetupModel.swift")
-        let send = try slice(model, from: "func sendHeldIfReady() {", to: "func retryHeld()")
-        try assertInOrder(send, ["state.takeHeldToSend(ready: ready, busy: draft.sending)", "await draft.sendHeld(message, folder: folder)",
-                                 "state.failHeld(why)"], "once, and a refusal stays")
+        XCTAssertTrue(model.contains("var githubOpen = false"), "kept with the page, so GitHub's sign-in comes back to it")
+        try assertInOrder(model, ["var followed: String {", "if case .github(let pick)? = repository { return pick.name }",
+                                  "name: name.name(folder: followed)"], "the Name follows the picked repository's folder")
     }
 
     // MARK: the line a created workspace opens with
@@ -191,8 +257,8 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine)"))
         XCTAssertTrue(view.contains("case .createdWorkspace(let line):\n            CreatedWorkspaceLineView(line: line, console: console)"))
         let model = try app("ConsoleModel.swift")
-        XCTAssertTrue(model.contains("if session.createdWorkspace == true { madeWorkspace = session.agent }"),
-                      "only the detail moves it: a list row's nil says nothing")
+        XCTAssertTrue(model.contains("if session.createdWorkspace == true {\n            madeWorkspace = session.agent\n            madeWorkspaceReadAt = Date()"),
+                      "only the detail moves it: a list row's nil says nothing; when it was read weighs a clone frame against it")
         let line = try slice(try app("Views/MachineSetupCard.swift"), from: "struct CreatedWorkspaceLineView: View {", to: "private var made: AttributedString")
         try assertInOrder(line, ["if line.live {", "MachineSetupCopy.CREATED_RENAME", "MachineSetupCopy.CREATED_SETTINGS"],
                           "Rename and Settings, while there is a workspace to change")

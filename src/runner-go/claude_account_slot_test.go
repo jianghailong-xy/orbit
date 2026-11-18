@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 )
@@ -167,8 +168,12 @@ func TestClaudeAccountSlotALiveSessionIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := claudeAccountKind.remove(work.ID, map[string]bool{work.Dir: true}); err == nil {
+	err = claudeAccountKind.remove(work.ID, accountDirSessions{work.Dir: {"s-live"}})
+	if err == nil {
 		t.Fatal("removed a slot a live session is in")
+	}
+	if got := accountInUseSessions(err); !reflect.DeepEqual(got, []string{"s-live"}) {
+		t.Fatalf("refusal names sessions %v, want the one in the slot", got)
 	}
 	if _, err := os.Lstat(work.Dir); err != nil {
 		t.Fatalf("the refused slot is gone: %v", err)
@@ -263,8 +268,8 @@ func TestClaudeSessionAccountDirsReadTheSessionsRecord(t *testing.T) {
 	writeSessionRecordForTest(t, runDir("s-without"), sessionMeta{Provider: providerClaude})
 
 	dirs := claudeSessionAccountDirs([]string{"s-with", "s-without"})
-	want := map[string]bool{filepath.Clean(work.Dir): true}
-	if len(dirs) != len(want) || !dirs[filepath.Clean(work.Dir)] {
+	want := accountDirSessions{filepath.Clean(work.Dir): {"s-with"}}
+	if !reflect.DeepEqual(dirs, want) {
 		t.Fatalf("live dirs = %#v, want %#v", dirs, want)
 	}
 }
@@ -290,7 +295,7 @@ func TestClaudeSessionMoveToDefaultReleasesThePreviousAccountAfterSpawn(t *testi
 	// remain protected during that gap so a removal cannot take the conversation out from under it.
 	job.Agent.Env = nil
 	writeSessionMeta(scratch, job, execDir)
-	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); !dirs[filepath.Clean(work.Dir)] {
+	if dirs := claudeSessionAccountDirs([]string{job.SessionID}); len(dirs[filepath.Clean(work.Dir)]) == 0 {
 		t.Fatalf("old account was released before the Default engine started: %#v", dirs)
 	}
 

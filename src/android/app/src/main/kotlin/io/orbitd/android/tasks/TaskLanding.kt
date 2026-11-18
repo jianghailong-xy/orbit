@@ -1,5 +1,7 @@
 package io.orbitd.android.tasks
 
+import io.orbitd.android.core.cards.LandingCheckCopy
+
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.navigation.Destination
@@ -92,6 +94,7 @@ internal data class LandTaskView(
     val finishedAt: String? = null,
     /** `blockingReason.summary`: why the attempt waits or where it stopped, in the server's words. */
     val blockingReason: String? = null,
+    val blockingCode: String? = null,
     /** The landing session of this generation (§2.9 LS6); absent on a server that predates the field. */
     val landingSessionId: String? = null,
 ) {
@@ -111,6 +114,7 @@ internal data class LandTaskView(
                 startedAt = job.text("startedAt"),
                 finishedAt = job.text("finishedAt"),
                 blockingReason = job.obj("blockingReason")?.text("summary"),
+                blockingCode = job.obj("blockingReason")?.text("code"),
                 landingSessionId = job.text("landingSessionId")?.takeIf { it.isNotEmpty() },
             )
         }
@@ -188,7 +192,8 @@ internal object TaskLandingLogic {
             if (integration.state == "ON_UPSTREAM") TaskLandingCopy.receiptOn(main) else TaskLandingCopy.receiptOnBranch
         } else null
         // A task on a line whose landing has not been queued yet says so, as the web does.
-        val reason = job?.blockingReason
+        val reason = if (job?.blockingCode == "WAITING_BASELINE") listOf(
+            LandingCheckCopy.waiting, job.blockingReason.orEmpty(), LandingCheckCopy.resumes).joinToString("\n") else job?.blockingReason
             ?: if (job == null && integration.state == "QUEUED") TaskLandingCopy.waitingNotQueued else null
         return TaskLandingStatus(
             badge = badge,

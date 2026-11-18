@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # A05d device journey on emulator-5554 (API 36): a workspace's list draws a project's sessions as one row, the row opens the
-# project's sessions page and Back returns, and the drawer's project row opens that page as its root (ProjectSessionsDeviceTest),
+# coordinator's conversation, whose bar's button opens the project's sessions in a bottom sheet (owner 2026-11-11), a member picked
+# there takes the conversation's place and Back returns, and the drawer's project row opens that page as its root (ProjectSessionsDeviceTest),
 # over the test's own controlled HTTP fixture — not a deployment. It runs twice in one hold of the device lock, light then dark
 # (`cmd uimode night`), and puts the night mode back. Screenshots and the requests made land in EVIDENCE_DIR/a05d/{light,dark}.
 set -euo pipefail

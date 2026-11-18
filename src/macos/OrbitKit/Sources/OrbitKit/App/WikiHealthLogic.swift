@@ -33,6 +33,20 @@ public enum WikiHealthCopy {
     public static let reasonUnreachable = "System model unreachable"                  // WIKI_REASON_UNREACHABLE
     public static let reasonRunnerOffline = "Waiting for the runner to come online"   // WIKI_REASON_RUNNER_OFFLINE
     public static let reasonRunnerUpgrade = "Upgrade the runner to read the repository"   // WIKI_REASON_RUNNER_UPGRADE
+
+    // MARK: the repository's part (docs/wiki-repo-tiers-design.md §7.2, mock 44 ⑤)
+
+    public static let repoFolder = "Reading the folder, not git"                  // WIKI_REPO_FOLDER
+    public static let repoFolderShort = "Reading the folder"                      // WIKI_REPO_FOLDER_SHORT
+    public static let repoPaused = "Code checks paused"                           // WIKI_REPO_PAUSED
+    public static let repoWrongShort = "Wrong folder"                             // WIKI_REPO_WRONG_SHORT
+    public static let repoFix = "Fix in Settings"                                 // WIKI_REPO_FIX
+    public static let repoCommitAnchors = "Commit anchors are not checked"        // WIKI_REPO_COMMIT_ANCHORS
+    public static func repoPaused(_ detail: String) -> String { "\(repoPaused): \(detail)" }          // wikiRepoPaused
+    public static func repoFolderHint(_ detail: String?) -> String {                                  // wikiRepoFolderHint
+        if let detail, !detail.isEmpty { return "\(repoCommitAnchors): \(detail)." }
+        return "\(repoCommitAnchors)."
+    }
 }
 
 /// One part of the status line: its words, how it is coloured and marked, and where it leads when it is a
@@ -50,13 +64,17 @@ public struct WikiStatusPart: Equatable, Sendable {
     public let mark: Mark
     public let link: Link
     public let strong: Bool
+    /// What a pointer resting on it is told (the folder tier's cost); nil when there is nothing more to say.
+    public let hint: String?
 
-    public init(_ text: String, tone: Tone = .plain, mark: Mark = .none, link: Link = .none, strong: Bool = false) {
+    public init(_ text: String, tone: Tone = .plain, mark: Mark = .none, link: Link = .none, strong: Bool = false,
+                hint: String? = nil) {
         self.text = text
         self.tone = tone
         self.mark = mark
         self.link = link
         self.strong = strong
+        self.hint = hint
     }
 }
 
@@ -134,6 +152,8 @@ public enum WikiHealthLogic {
         default:                 break
         }
         guard let repo = health.repo, health.maintenance.enabled || repo.pending > 0 else { return nil }
+        // The repository part says it already: the latest run read nothing for this very reason (`repoParts`).
+        if !repoParts(health, narrow: false).isEmpty, repo.reason == repo.look.rawValue { return nil }
         switch repo.look {
         case .runnerOffline: return reason(WikiHealthCopy.reasonRunnerOffline, .warn)
         case .runnerUpgrade: return reason(WikiHealthCopy.reasonRunnerUpgrade, .warn)
@@ -141,13 +161,44 @@ public enum WikiHealthLogic {
         }
     }
 
-    /// The status line's whole maintenance part: the look's parts, and the server's reason before their links —
-    /// the web's `wikiStatusParts`.
-    public static func parts(_ health: WikiSpaceHealth, now: Date) -> [WikiStatusPart] {
+    /// The repository's part of the line (see `WikiHealthCopy.repoFolder`) — the web's `wikiRepoParts`: its words
+    /// first, and on a wide screen `Fix in Settings` after them when somebody has to act. Nothing while maintenance
+    /// is off, on git, and from a read that names no tier.
+    public static func repoParts(_ health: WikiSpaceHealth, narrow: Bool) -> [WikiStatusPart] {
+        guard health.maintenance.enabled, let repo = health.repo, let tier = repo.tier,
+              tier != .git, tier != .unknown else { return [] }
+        if tier == .folder {
+            return narrow
+                ? [WikiStatusPart(WikiHealthCopy.repoFolderShort, tone: .muted, link: .settings)]
+                : [WikiStatusPart(WikiHealthCopy.repoFolder, tone: .muted, link: .settings,
+                                  hint: WikiHealthCopy.repoFolderHint(repo.detail))]
+        }
+        let wrong = tier == .wrongRepository
+        let tone: WikiStatusPart.Tone = wrong || WikiRepoTier.reasonNeedsAttention(repo.reason) ? .error : .warn
+        let detail = (repo.detail?.isEmpty == false) ? repo.detail : nil
+        let said: String
+        if narrow {
+            said = wrong ? WikiHealthCopy.repoWrongShort : WikiHealthCopy.repoPaused
+        } else if wrong {
+            said = detail ?? WikiHealthCopy.repoWrongShort
+        } else {
+            said = detail.map { WikiHealthCopy.repoPaused($0) } ?? WikiHealthCopy.repoPaused
+        }
+        let words = WikiStatusPart(said, tone: tone, mark: .dot, strong: true)
+        return narrow ? [words] : [words, WikiStatusPart(WikiHealthCopy.repoFix, link: .settings)]
+    }
+
+    /// The status line's whole maintenance part — the web's `wikiStatusParts`: the look's parts, then the server's
+    /// reason and the repository's words before their links, and `Fix in Settings` last. `narrow` is a phone's line,
+    /// which says the repository's short words.
+    public static func parts(_ health: WikiSpaceHealth, now: Date, narrow: Bool = false) -> [WikiStatusPart] {
         let parts = parts(health.maintenance, now: now)
-        guard let reason = serverReason(health) else { return parts }
-        guard let link = parts.firstIndex(where: { $0.link != .none }) else { return parts + [reason] }
-        return Array(parts[..<link]) + [reason] + Array(parts[link...])
+        let repo = repoParts(health, narrow: narrow)
+        let said = (serverReason(health).map { [$0] } ?? [])
+            + repo.filter { $0.link == .none || $0.text != WikiHealthCopy.repoFix }
+        let fix = repo.filter { $0.text == WikiHealthCopy.repoFix }
+        guard let link = parts.firstIndex(where: { $0.link != .none }) else { return parts + said + fix }
+        return Array(parts[..<link]) + said + Array(parts[link...]) + fix
     }
 
     /// The parts as one line of text: `●` before a dot, `✓` after a check, ` · ` between — the web's

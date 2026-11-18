@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,7 +45,7 @@ internal class WikiNav(private val push: (OrbitRoute) -> Unit,
     fun job(id: String) = push(OrbitRoute(Destination.WIKI_JOB, id))
     fun project(id: String) = push(OrbitRoute(Destination.PROJECT, id, origin = Origin.LINK))
     fun runner(id: String) = push(OrbitRoute(Destination.RUNNER, id, origin = Origin.LINK))
-    /** The runners' own page, Infrastructure: a runner route that names none. */
+    /** The runners' own page, Machines & models: a runner route that names none. */
     fun runners() = push(OrbitRoute(Destination.RUNNER, origin = Origin.LINK))
     /** A web page — a repository host at a commit — in the browser. */
     fun url(raw: String) = external(raw)

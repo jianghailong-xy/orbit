@@ -15,9 +15,10 @@
 export type SourceState = 'UNBOUND' | 'SELECTED' | 'PINNED' | 'REFUSED';
 
 /**
- * §4.1's five selector kinds — which of the priority table's rows produced this selector — and SR54's
+ * §4.1's five selector kinds — which of the priority table's rows produced this selector — SR54's
  * sixth, `CHAT_UPSTREAM`: a wiki chat's origin/main, frozen by the chat's create rather than resolved
- * from the table, and the one kind with no project codebase behind it.
+ * from the table, and SR55's seventh, `SESSION_FORK`: row PF, the snapshot commit of the session a task
+ * was forked from. The last two are the kinds with no project codebase behind them.
  */
 export type SourceKind =
   | 'VERIFICATION_SUBJECT'
@@ -25,7 +26,8 @@ export type SourceKind =
   | 'TASK_KNOWN_GOOD'
   | 'DEPENDENCY_CLOSURE'
   | 'PROJECT_UPSTREAM'
-  | 'CHAT_UPSTREAM';
+  | 'CHAT_UPSTREAM'
+  | 'SESSION_FORK';
 
 /**
  * Where a ref → SHA resolution COUNTS (§2). Not "which machine runs it": authority is what decides
@@ -48,6 +50,8 @@ export const SOURCE_REFUSAL_CODES = [
   'SOURCE_PROTOCOL_UNSUPPORTED',
   'SOURCE_PIN_IMMUTABLE',
   'CODEBASE_AUTHORITY_INVALID',
+  'FORK_SOURCE_NOT_REACHABLE',
+  'FORK_IN_BOUND_PROJECT',
 ] as const;
 
 export type SourceRefusalCode = (typeof SOURCE_REFUSAL_CODES)[number];
@@ -63,7 +67,9 @@ export type SourceFixAction =
   | 'ENABLE_ISOLATION'
   | 'UPGRADE_RUNNER'
   | 'START_NEW_RUN'
-  | 'FIX_CODEBASE_CONFIG';
+  | 'FIX_CODEBASE_CONFIG'
+  | 'ASSIGN_ON_FORK_RUNNER'
+  | 'FORK_OUTSIDE_PROJECT';
 
 /** Code → the one executable next step §10.1 pairs it with. */
 export const SOURCE_FIX_ACTIONS: Readonly<Record<SourceRefusalCode, SourceFixAction>> = {
@@ -81,6 +87,12 @@ export const SOURCE_FIX_ACTIONS: Readonly<Record<SourceRefusalCode, SourceFixAct
   SOURCE_PROTOCOL_UNSUPPORTED: 'UPGRADE_RUNNER',
   SOURCE_PIN_IMMUTABLE: 'START_NEW_RUN',
   CODEBASE_AUTHORITY_INVALID: 'FIX_CODEBASE_CONFIG',
+  // SR55: a forked task starts from a commit that exists only in the forking session's repository,
+  // on that session's machine, so the step is to hand it to a workspace there.
+  FORK_SOURCE_NOT_REACHABLE: 'ASSIGN_ON_FORK_RUNNER',
+  // SR55: a project with a code binding starts every task from its own line (SR1), so the step is to
+  // file the fork outside that project, or to land the forking session's work first.
+  FORK_IN_BOUND_PROJECT: 'FORK_OUTSIDE_PROJECT',
 };
 
 /**
@@ -110,20 +122,30 @@ export interface SessionSourceSnapshot {
    * wiki chat (`CHAT_UPSTREAM`, SR54), which resolves against none.
    */
   codebaseId?: string;
-  /** Repository identity (§7.1), denormalised and frozen: editing the binding cannot reach here. */
-  repoUrl: string;
+  /**
+   * Repository identity (§7.1), denormalised and frozen: editing the binding cannot reach here. Absent
+   * for a forked task (`SESSION_FORK`, SR55): its commit lives in the forking session's repository on
+   * that session's machine, and the control plane holds no identity for it.
+   */
+  repoUrl?: string;
   /** Second half of the identity. Absent when the repository's root commit is not observed yet. */
   rootCommitSha?: string;
   /** Full-name ref for a ref-valued selector. Exactly one of `ref` / `revisionSha` is present. */
   ref?: string;
-  /** The commit for a SHA-valued selector (`VERIFICATION_SUBJECT`, `TASK_KNOWN_GOOD`, a pinned SHA). */
+  /**
+   * The commit for a SHA-valued selector (`VERIFICATION_SUBJECT`, `TASK_KNOWN_GOOD`, a pinned SHA, and
+   * `SESSION_FORK`'s snapshot commit).
+   */
   revisionSha?: string;
   /** The binding's configuration version at resolution — a counter, never a git object (SR6). */
   configRevision: string;
   refAuthority: SourceRefAuthority;
   /** Remote to ask when `refAuthority` is `REMOTE`. */
   remoteName?: string;
-  /** The machine whose local checkout is authoritative when `refAuthority` is `RUNNER_LOCAL`. */
+  /**
+   * The machine whose local checkout is authoritative when `refAuthority` is `RUNNER_LOCAL`: the
+   * binding's, or for `SESSION_FORK` the forking session's runner, recorded on the task at creation.
+   */
   authorityRunnerId?: string;
   /** Commits the baseline MUST contain (gate G5). Empty until the dependency closure fills it. */
   requiredContains: string[];
@@ -158,8 +180,11 @@ export interface TaskDispatchRefusal {
   /** §10.1's pairing, carried with the code for the reason `sourceRefusalDetail` carries it. */
   fixAction: SourceFixAction;
   refusedAt: string;
-  /** The run that was refused. */
-  sessionId: string;
+  /**
+   * The run that was refused. Null for a forked task's start refused before any run existed
+   * (FORK_SOURCE_NOT_REACHABLE / FORK_IN_BOUND_PROJECT, decided by the session create door).
+   */
+  sessionId: string | null;
   /**
    * The commit the run was pinned to, which is what it failed to contain. Null when no pin froze:
    * a refusal at resolution stops before one exists, and a selector that named a SHA has nothing
@@ -177,6 +202,19 @@ export interface TaskDispatchRefusal {
   missing: Array<{ sha: string; taskId: string | null }>;
   /** The runner's own words, after the code. */
   reason: string;
+  /**
+   * For a forked task's refusal only: the facts it was decided on. The automatic starters do not
+   * offer the task again while all four still hold, and offer it once any of them changes.
+   */
+  placement?: TaskForkRefusalPlacement;
+}
+
+/** What a fork refusal was decided on: the task's assignee and that workspace's machine, its project and that project's code binding. */
+export interface TaskForkRefusalPlacement {
+  assigneeId: string | null;
+  runnerId: string | null;
+  projectId: string | null;
+  codebaseId: string | null;
 }
 
 /**

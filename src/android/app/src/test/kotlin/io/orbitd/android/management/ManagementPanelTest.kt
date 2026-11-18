@@ -33,7 +33,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The pool page, Infrastructure's machines and the share panel over the controlled server: what they say after a failed read, and what
+/** The pool page, Machines & models' machines and the share panel over the controlled server: what they say after a failed read, and what
  * they offer each role. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ManagementShellApplication::class)
@@ -58,7 +58,7 @@ class ManagementPanelTest {
     }
     private fun pool(record: String) {
         val api = api()
-        compose.setContent { InfrastructureSettings(api, revision, record, {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, record, {}, {}) }
     }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
     private fun reread() { revision++; compose.waitForIdle() }
@@ -114,11 +114,11 @@ class ManagementPanelTest {
         compose.onNode(hasText("Leave pool") and hasClickAction()).performScrollTo().assertIsNotEnabled()
     }
 
-    /** Infrastructure's footers say what the web's page says (iOS 33e0e2e09): the machines' line and the keys' replace the Providers
+    /** Machines & models' footers say what the web's page says (iOS 33e0e2e09): the machines' line and the keys' replace the Providers
      * page's, whose "On your runners" section is gone with it (A13-17). */
-    @Test fun infrastructuresFootersSayWhatTheWebSaysNow() {
+    @Test fun machinesAndModelsFootersSayWhatTheWebSaysNow() {
         val api = api()
-        compose.setContent { InfrastructureSettings(api, revision, null, {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, null, {}, {}) }
         await("Account pools")
         compose.onNodeWithText("Subscriptions signed in here are spent only by sessions on that machine.").performScrollTo()
         compose.onNodeWithText("Several accounts under one name.").assertExists()
@@ -132,7 +132,7 @@ class ManagementPanelTest {
     @Test fun aRunnerIsMovedByDraggingItsHandleWithNoEditMode() {
         fixture.secondRunner = true
         val api = api()
-        compose.setContent { InfrastructureSettings(api, revision, null, {}, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, null, {}, {}) }
         await("Spare box")
         compose.onAllNodes(hasText("Edit") and hasClickAction()).assertCountEquals(0)
         // The machines sit under what needs you and what each engine runs on: the handle is brought on screen first.
@@ -147,13 +147,41 @@ class ManagementPanelTest {
         assertEquals("One order goes out per drag", 1, fixture.calls.count { it == "POST runners/reorder" })
     }
 
+    @Test fun orbitCloudStaysFirstAndADragMovesOnlyTheOtherMachines() {
+        fixture.secondRunner = true
+        fixture.runnerOrder = listOf(fixture.RUNNER, fixture.RUNNER_TWO, fixture.CLOUD_RUNNER)
+        val api = api()
+        compose.setContent { MachinesAndModelsPage(api, revision, {}, part = MachinesAndModelsPart.MACHINES) }
+        await("Orbit Cloud")
+        fun row(name: String) = compose.onNode(hasText(name) and hasClickAction())
+        fun top(name: String) = row(name).fetchSemanticsNode().positionInRoot.y
+        assertTrue(top("Orbit Cloud") < top("Old alias"))
+        assertTrue(top("Old alias") < top("Spare box"))
+        compose.onNodeWithTag("managed-runner-icon", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("managed-runner-divider").assertExists()
+        compose.onNodeWithTag("runner-handle:${fixture.CLOUD_RUNNER}").assertDoesNotExist()
+        row("Orbit Cloud").assert(!hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))
+        row("Old alias").assert(!hasCustomAction("Move up"))
+
+        compose.onNodeWithTag("runner-handle:${fixture.RUNNER_TWO}").performScrollTo().performTouchInput {
+            down(center)
+            repeat(30) { moveBy(androidx.compose.ui.geometry.Offset(0f, -20f)) }
+            up()
+        }
+        // Orbit Cloud leads the order saved, too, for a client that does not pin it.
+        compose.waitUntil(60_000) { fixture.runnerOrder == listOf(fixture.CLOUD_RUNNER, fixture.RUNNER_TWO, fixture.RUNNER) }
+        assertEquals(listOf(listOf(fixture.CLOUD_RUNNER, fixture.RUNNER_TWO, fixture.RUNNER)), fixture.reorderRequests.toList())
+        compose.waitUntil(60_000) { top("Spare box") < top("Old alias") }
+        assertTrue(top("Orbit Cloud") < top("Spare box"))
+    }
+
     /** Each row opens its runner, TalkBack moves it with the row's own actions, and Remove… is in its ⋯ menu, asked
      * first with Cancel beside it — all without an Edit mode. */
     @Test fun aRunnerRowOpensMovesForTalkBackAndRemovesFromItsMenu() {
         fixture.secondRunner = true
         val api = api()
         val opened = mutableListOf<OrbitRoute>()
-        compose.setContent { InfrastructureSettings(api, revision, null, { opened += it }, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, null, { opened += it }, {}) }
         await("Spare box")
         compose.onNode(hasText("Old alias") and hasClickAction()).assert(hasCustomAction("Move down")).assert(!hasCustomAction("Move up"))
         compose.onNode(hasText("Spare box") and hasClickAction()).assert(hasCustomAction("Move up")).assert(!hasCustomAction("Move down"))
@@ -238,6 +266,26 @@ class ManagementPanelTest {
         assertTrue(listed.size >= 2)
     }
 
+    /** Board 13 (web's row buttons): a press on an active link's row opens its share page, a copy icon stays out, and the rest is
+     * in its ⋯, Turn off… last — which still asks first. */
+    @Test fun aSharedLinksRowOpensItsSharePageAndKeepsTheRestInItsMore() {
+        val api = api()
+        val opened = mutableListOf<OrbitRoute>()
+        compose.setContent { SharingSettings(api, revision) { opened += it } }
+        await("Fixture session")
+        compose.onNode(hasContentDescription("Copy Link") and hasClickAction()).assertExists()
+        compose.onAllNodes(hasText("Turn off") and hasClickAction()).assertCountEquals(0)
+        compose.onNodeWithText("Fixture session").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("share" to "SESSION:${fixture.SESSION}"), opened.map { it.id to it.recordId })
+        compose.onNode(hasContentDescription("More for Fixture session") and hasClickAction()).performClick()
+        await("Turn off…")
+        assertEquals(listOf("Copy Link", "Share Link…", "Settings…", "Turn off…"),
+            listOf("Copy Link", "Share Link…", "Settings…", "Turn off…").filter { compose.onAllNodes(hasText(it) and hasAnyAncestor(isPopup())).fetchSemanticsNodes().isNotEmpty() })
+        compose.onNode(hasText("Turn off…") and hasAnyAncestor(isPopup())).performClick()
+        await("Turn off this link?")
+    }
+
     /** A page that hosts the panel (a task's or a project's ⋯ → Share…) hears the server's answer to each read and change,
      * in the shape its menu reads: what the menu then says is what the server last said. */
     @Test fun theSharePanelReportsEachAnswerInTheShapeTheMenuReads() {
@@ -264,20 +312,19 @@ class ManagementPanelTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun atTwiceTheFontSizeNoButtonOrChipBreaksItsWords() {
         val api = api()
         fixture.poolLabel = "Team Codex for the whole studio"
-        var page by mutableStateOf("links")
+        var page by mutableStateOf("share")
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
                 when (page) {
-                    "links" -> SharingSettings(api, revision)
+                    // Shared links' rows carry no worded button since board 13 (an icon, a ⋯): only the panel's are measured.
                     "share" -> ShareResourcePanel(api, revision, "SESSION", fixture.SESSION)
-                    else -> InfrastructureSettings(api, revision, null, {}, {})
+                    else -> MachinesAndModelsSettings(api, revision, null, {}, {})
                 }
             }
         }
         val broken = mutableListOf<String>()
-        await("Turn off"); listOf("Copy Link", "Share Link…", "Turn off").forEach { broken += lines(it) }
-        page = "share"; await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
-        page = "infrastructure"; await("SHARED"); broken += lines("SHARED")
+        await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
+        page = "machines-and-models"; await("SHARED"); broken += lines("SHARED")
         assertEquals("Broken across lines at 200%", emptyList<String>(), broken)
     }
 
@@ -303,7 +350,7 @@ class ManagementPanelTest {
         fixture.secondRunner = true
         val api = api()
         var round by mutableStateOf(0)
-        compose.setContent { key(round) { InfrastructureSettings(api, revision, null, {}, {}) } }
+        compose.setContent { key(round) { MachinesAndModelsSettings(api, revision, null, {}, {}) } }
         val names = mapOf(fixture.RUNNER to "Old alias", fixture.RUNNER_TWO to "Spare box")
         for (order in listOf(listOf(fixture.RUNNER, fixture.RUNNER_TWO), listOf(fixture.RUNNER_TWO, fixture.RUNNER))) {
             fixture.runnerOrder = order; fixture.removedRunners = emptySet()

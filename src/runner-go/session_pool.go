@@ -89,6 +89,13 @@ type liveSession struct {
 	// follow-up does not start here (waitActive) and is not a turn in flight: it stays RUNNING for
 	// the updated runner to reclaim, as a claim that races closeForUpdate does.
 	heldForUpdate bool
+	// completingTurn: this permit's turn has ended and its /turn-complete is out
+	// (beginTurnCompletion), so the control plane may already have handed the permit to a queued
+	// follow-up and woken the inbox before its answer arrives. startedWhileCompleting: in that window
+	// the follow-up passed waitActive and went to the engine, so it is a turn in flight and is not
+	// held for an update (holdFollowUpForUpdate).
+	completingTurn         bool
+	startedWhileCompleting bool
 
 	resident         bool // an engine is starting/running/being reaped
 	engineGeneration uint64
@@ -113,6 +120,10 @@ type liveSession struct {
 	// pool. It is called under p.mu, and the tailer calls into the pool from under its own
 	// lock (bgTailer.holdFor), so it must be lock-free on the tailer's side.
 	monitorProbe func() bool
+	// subagentProbe is this run's "is a SubAgent of this session still running" query
+	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
+	// monitorProbe, because it is called under p.mu.
+	subagentProbe func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -122,6 +133,10 @@ type heartbeatSupervisorSnapshot struct {
 	supervisor       *liveSession
 	permitGeneration uint64
 	cancel           context.CancelFunc
+	// reclaiming says a reclaim's background start of this session had not ended when the request
+	// was made (reclaimStarter): its takeover fence may still be up, and its supervisor may not exist
+	// yet (supervisor nil). A merge or commit the answer delivers for it is left for a later beat.
+	reclaiming bool
 }
 
 // worktreeOperationState serializes heartbeat-delivered Commit/Merge work with
@@ -194,7 +209,13 @@ type sessionPool struct {
 	// records before any supervisor started (background_job_handoff.go). The pool keeps them because it
 	// outlives supervisors, and a session that stays cold has none.
 	hostless map[string][]*bgJob
-	changed  chan struct{}
+	// reclaiming is sessionID → whether its reclaim starts it active: the sessions a reclaim has taken
+	// over whose supervisor its background start (reclaimStarter) has not made yet. Such a session has
+	// no supervisor to advertise, and its takeover's fence keeps every merge and commit out of its
+	// checkout until the start ends; what this map adds is that a RUNNING one already holds its slot
+	// (admissionIdleCapacity) and that its checkout is live (ids).
+	reclaiming map[string]bool
+	changed    chan struct{}
 	// closedForUpdate is set once, by closeForUpdate, when this runner has decided to re-execute
 	// into a newer release; from then on no turn begins here (waitActive).
 	closedForUpdate bool
@@ -202,6 +223,13 @@ type sessionPool struct {
 	// selfUpdateDeferralLimit: this runner claims nothing more (admissionIdleCapacity) and tells
 	// the control plane it is draining, so the turns in flight run out and the update can follow.
 	drainingForUpdate bool
+	// lastActivityAt is when a turn last ended or a session or turn was last claimed here
+	// (markActivityLocked). An automatic update waits until it is selfUpdateQuietWindow behind
+	// (closeForUpdate): the gap between two turns of a conversation is not idle.
+	lastActivityAt time.Time
+	// updateAskedByOwner: the owner pressed Update Runner Now. Their update waits only for the turns
+	// in flight, not for the quiet window (updateWhenNoTurnInFlight).
+	updateAskedByOwner bool
 }
 
 func newSessionPool(max int) *sessionPool {
@@ -218,8 +246,31 @@ func newSessionPoolWithClock(max int, clock poolClock) *sessionPool {
 		sessions:    map[string]*liveSession{},
 		worktreeOps: map[string]*worktreeOperationState{},
 		bgJobs:      map[string]map[string]bgHold{},
+		reclaiming:  map[string]bool{},
 		changed:     make(chan struct{}),
 	}
+}
+
+// markReclaiming records a session a reclaim has taken over and not started yet (reclaiming).
+func (p *sessionPool) markReclaiming(id string, active bool) {
+	p.mu.Lock()
+	p.reclaiming[id] = active
+	p.mu.Unlock()
+}
+
+// unmarkReclaiming ends that record once the session's start has ended, started or not.
+func (p *sessionPool) unmarkReclaiming(id string) {
+	p.mu.Lock()
+	delete(p.reclaiming, id)
+	p.mu.Unlock()
+}
+
+// isReclaiming reports whether a reclaim's start of id has yet to end.
+func (p *sessionPool) isReclaiming(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.reclaiming[id]
+	return ok
 }
 
 // sessionIDs is every session this process supervises right now, in whatever state: a cold
@@ -233,6 +284,16 @@ func (p *sessionPool) sessionIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// isCold reports whether the pool holds session id with no engine of it starting, running or being
+// reaped, no turn permit, and no takeover or reclaim under way: a session whose conversation only its
+// next claim would touch (carryColdSessionsOff).
+func (p *sessionPool) isCold(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s := p.sessions[id]
+	return s != nil && !s.resident && !s.active && !s.detaching && !p.reclaiming[id]
 }
 
 func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
@@ -249,16 +310,15 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // manual operation that has already linearized. It says who is there, not who may
 // proceed — the fence and `running` decide that (beginHeartbeatWorktreeOperation).
 //
-// The turn's engine and a running operation are what refuse a merge or commit, and
-// the refusal names them (worktreeOperationRefusal). A background job refuses
-// nothing: a merge replays committed work in a scratch worktree and a commit writes
-// only the index and refs, so both run beside a live job and name it in their
-// receipt (beginManualWorktreeOperation). The worktree GC, which deletes the
-// directory, is the one thing a live job holds off (ids).
+// The turn's engine and a running operation are what refuse a commit, and the refusal
+// names them (worktreeOperationRefusal). A background job refuses nothing: a commit runs
+// beside it and names it in its receipt (beginManualWorktreeOperation). None of them
+// holds a merge, which replays committed work in a scratch worktree (heartbeatMerge).
+// The worktree GC, which deletes the directory, is the one thing a live job holds off (ids).
 //
 // A parked engine is no holder at all, whatever it left running: between turns
 // neither it nor its MCP servers — Orbit's own, or any the agent configured — are
-// waited on or stopped for a merge or commit.
+// waited on or stopped for a commit.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -322,25 +382,47 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // and not per job — several jobs of one session share one checkout, and a session is
 // the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
+	idle, _ := p.admissionOccupancy()
+	return idle
+}
+
+// admissionOccupancy is the one count admission and the heartbeat both read: the idle
+// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// through background jobs of their own — no turn permit, no reclaim under way — which
+// the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
+// as running (sorted). A draining runner offers no capacity, and its job holders still
+// hold their slots.
+func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.drainingForUpdate {
-		return 0
-	}
 	occupied := make(map[string]bool, len(p.sessions))
-	for sessionID := range p.backgroundJobCountsLocked() {
-		occupied[sessionID] = true
-	}
 	for id, s := range p.sessions {
 		if s.active {
 			occupied[id] = true
 		}
 	}
+	// A RUNNING session still being reclaimed takes its slot the moment it starts.
+	for id, active := range p.reclaiming {
+		if active {
+			occupied[id] = true
+		}
+	}
+	var backgroundOnly []string
+	for sessionID := range p.backgroundJobCountsLocked() {
+		if !occupied[sessionID] {
+			occupied[sessionID] = true
+			backgroundOnly = append(backgroundOnly, sessionID)
+		}
+	}
+	sort.Strings(backgroundOnly)
+	if p.drainingForUpdate {
+		return 0, backgroundOnly
+	}
 	idle := p.max - len(occupied)
 	if idle < 0 {
 		idle = 0
 	}
-	return idle
+	return idle, backgroundOnly
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
@@ -559,8 +641,8 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	// A live background job is deliberately not asked about: a merge or commit runs
-	// beside it (beginManualWorktreeOperation).
+	// A live background job is deliberately not asked about: a commit runs beside it
+	// (beginManualWorktreeOperation).
 	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
@@ -583,16 +665,16 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 	}, true
 }
 
-// beginManualWorktreeOperation is how merge and commit enter a checkout. It admits the
-// operation exactly as beginHeartbeatWorktreeOperation does, and nothing else running in
-// the checkout comes into that: a merge replays the branch's commits in a scratch worktree
-// and never touches the checkout, and a commit writes only the index and refs. So a live
-// background job holds neither up, and a parked engine is not stopped for either, whatever
-// MCP servers it runs.
+// beginManualWorktreeOperation is how a commit (or a discard) enters a checkout. It admits the
+// operation exactly as beginHeartbeatWorktreeOperation does — no turn in the checkout, the epoch
+// the heartbeat advertised — and nothing else running in the checkout comes into that. A live
+// background job is a test run, a build or a dev server, not an edit of the work, so it holds no
+// commit up; the receipt names it instead. A parked engine is not stopped for it, whatever MCP
+// servers it runs. A merge does not come through here at all (heartbeatMerge).
 //
-// Admitted, it returns the release func and the operation's receipt note, which names the
-// live background jobs it runs beside ("" when there are none). Refused, it returns a nil
-// release and the refusal itself.
+// Admitted, it returns the release func and the operation's receipt note, which names the live
+// background jobs it ran beside ("" when there are none). Refused, it returns a nil release and
+// the refusal itself.
 func (p *sessionPool) beginManualWorktreeOperation(
 	id string,
 	expected *liveSession,
@@ -616,14 +698,8 @@ func (p *sessionPool) beginManualWorktreeOperation(
 	if len(jobs) == 0 {
 		return release, "", true
 	}
-	beside := "this " + operation + " ran while background jobs were still running in the checkout (" +
-		strings.Join(jobs, ", ") + ")"
-	if operation == "commit" {
-		// A commit reads the checkout as it stands, so whoever reads this receipt has to be
-		// able to tell that a file those jobs were writing may have gone in half-written.
-		return release, beside + ": a file one of them was still writing is committed as it stood at that moment", true
-	}
-	return release, beside + ": a merge takes only what the branch had already committed", true
+	return release, "this " + operation + " ran while background jobs were still running in the checkout (" +
+		strings.Join(jobs, ", ") + ")", true
 }
 
 // appendWorktreeReceipt puts an operation's receipt note after the operation's own message,
@@ -671,6 +747,20 @@ func (p *sessionPool) turnsInFlightLocked() int {
 	return n
 }
 
+// turnRunning reports whether a turn is running in the session id names (an Orbit or a public id)
+// right now, counted as turnsInFlightLocked counts it. A Move into its worktree is refused while one
+// is (TARGET_BUSY): the agent would be writing the same files.
+func (p *sessionPool) turnRunning(id string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, key := range []string{id, decodeSessionID(id)} {
+		if s := p.sessions[key]; s != nil && ((s.active && !s.heldForUpdate) || s.selfDrivenTurn) {
+			return true
+		}
+	}
+	return false
+}
+
 // turnsInFlight is turnsInFlightLocked for a caller that does not hold the lock: the managed
 // workload report (managed_sleep.go).
 func (p *sessionPool) turnsInFlight() int {
@@ -708,14 +798,63 @@ func (p *sessionPool) backgroundJobTotal() int {
 // stops. A claim that lands after this gets its permit, but waitActive holds its turn back until
 // the stop that follows, and the turn stays RUNNING for the updated runner to reclaim — the path
 // a claim racing any runner stop already takes. It never starts, so there is nothing to tear down.
-func (p *sessionPool) closeForUpdate() (turnsInFlight int) {
+//
+// quiet is the quiet window an automatic update also waits for (selfUpdateQuietWindow): while the
+// last turn end or claim here (lastActivityAt) is less than quiet ago, it refuses and reports how
+// much of the window is left. A conversation between two turns has nothing in flight, but its next
+// message is seconds away. A zero quiet asks only about the turns in flight: the owner's update and
+// a drain past selfUpdateDeferralLimit.
+func (p *sessionPool) closeForUpdate(quiet time.Duration) (turnsInFlight int, quietLeft time.Duration) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if n := p.turnsInFlightLocked(); n > 0 {
-		return n
+		return n, 0
+	}
+	if quiet > 0 && !p.lastActivityAt.IsZero() {
+		if left := p.lastActivityAt.Add(quiet).Sub(p.clock.Now()); left > 0 {
+			return 0, left
+		}
 	}
 	p.closedForUpdate = true
-	return 0
+	return 0, 0
+}
+
+// closeForUpdateNow is closeForUpdate for the owner's Update Now: the pool closes with the turns in
+// flight, which the stop that follows interrupts at once (stopDrainBudget), and reports how many there
+// were. Only the owner's explicit word gets here; an automatic update still waits (closeForUpdate).
+func (p *sessionPool) closeForUpdateNow() (turnsInFlight int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closedForUpdate = true
+	return p.turnsInFlightLocked()
+}
+
+// markActivityLocked records a turn ending or a session or turn claimed now, for the quiet window
+// an automatic update waits for (closeForUpdate).
+func (p *sessionPool) markActivityLocked() {
+	p.lastActivityAt = p.clock.Now()
+}
+
+// askForUpdateNow records that the owner pressed Update Runner Now; it holds until a check finds
+// no release to install (takeUpdateAskedByOwner).
+func (p *sessionPool) askForUpdateNow() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateAskedByOwner = true
+}
+
+// updateIsAskedByOwner is whether the owner's Update Runner Now is still waiting to be served.
+func (p *sessionPool) updateIsAskedByOwner() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.updateAskedByOwner
+}
+
+// forgetUpdateAskedByOwner drops the owner's request once a check found no release: it was answered.
+func (p *sessionPool) forgetUpdateAskedByOwner() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateAskedByOwner = false
 }
 
 // drainForUpdate stops this runner taking new work so that the turns in flight can run out: from
@@ -729,18 +868,84 @@ func (p *sessionPool) drainForUpdate() {
 	p.drainingForUpdate = true
 }
 
+// endDrainForUpdate undoes drainForUpdate: the owner put the release off (selfUpdateGate.postpone).
+// The claim loop claims again at once, and every follow-up held for the update starts now — its
+// permit is still this runner's, so waitActive lets it through.
+func (p *sessionPool) endDrainForUpdate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.drainingForUpdate = false
+	for _, s := range p.sessions {
+		if s.heldForUpdate {
+			s.heldForUpdate = false
+			close(s.wake)
+			s.wake = make(chan struct{})
+		}
+	}
+	p.signalLocked(nil) // the claim loop waiting for capacity looks again
+}
+
 // holdFollowUpForUpdate is what a turn's completion does instead of parking when the control plane
 // kept its permit for a queued follow-up (retainsTurnPermit): while the pool drains for an update,
 // the follow-up is held back (heldForUpdate), so that a session with a message queued at the end of
 // every turn cannot keep the drain going for ever. Otherwise, and for any permit but the one the
 // turn ran under, it changes nothing.
+//
+// A follow-up the engine already took is not held: the control plane wakes the inbox before it
+// answers the /turn-complete, so the follow-up can pass waitActive while that answer is still on its
+// way (startedWhileCompleting). Held, it would be a turn the engine runs that the update does not
+// count, and closeForUpdate could stop the runner in the middle of it.
 func (p *sessionPool) holdFollowUpForUpdate(s *liveSession, expectedPermit uint64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !p.drainingForUpdate || p.sessions[s.id] != s || !s.active || s.permitGeneration != expectedPermit {
 		return
 	}
+	if s.completingTurn && s.startedWhileCompleting {
+		return
+	}
 	s.heldForUpdate = true
+}
+
+// beginTurnCompletion is permitGeneration for a turn whose /turn-complete is about to be sent: it
+// also marks the window in which the answer may hand the permit to a follow-up that has already
+// started (holdFollowUpForUpdate). endTurnCompletion closes it once the answer has been acted on.
+func (p *sessionPool) beginTurnCompletion(s *liveSession) uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.sessions[s.id] != s || !s.active || s.detaching {
+		return 0
+	}
+	s.completingTurn = true
+	s.startedWhileCompleting = false
+	return s.permitGeneration
+}
+
+// endTurnCompletion closes the window beginTurnCompletion opened, whatever the answer was.
+func (p *sessionPool) endTurnCompletion(s *liveSession) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	s.completingTurn = false
+	s.startedWhileCompleting = false
+}
+
+// liveEngineTurnSessionIDs are the sessions whose engine is running a turn in this process right now:
+// one Orbit handed it (a permit not held for an update) or one the engine started by itself
+// (selfDrivenTurn). While the pool drains for an update these are the only sessions it claims
+// (drainClaimScope): such a session's queued message moved its row to PENDING although its engine is
+// at work, and a claim is what makes the row RUNNING again. A session with no engine at work is new
+// work, and the drain takes none.
+func (p *sessionPool) liveEngineTurnSessionIDs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var ids []string
+	for id, s := range p.sessions {
+		if s.resident && !s.detaching && (s.selfDrivenTurn || (s.active && !s.heldForUpdate)) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // isDrainingForUpdate is whether drainForUpdate is in force, for the heartbeat's draining flag.
@@ -786,6 +991,28 @@ func (p *sessionPool) setMonitorProbe(s *liveSession, probe func() bool) func() 
 		}
 		p.mu.Unlock()
 	}
+}
+
+// setSubagentProbe installs one session run's SubAgent liveness query and returns the
+// deregistration func, under the same epoch rule as setMonitorProbe.
+func (p *sessionPool) setSubagentProbe(s *liveSession, probe func() bool) func() {
+	p.mu.Lock()
+	if p.sessions[s.id] == s {
+		s.subagentProbe = probe
+	}
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.sessions[s.id] == s {
+			s.subagentProbe = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// subagentRunningLocked reports whether a SubAgent of this session is still running.
+func subagentRunningLocked(s *liveSession) bool {
+	return s.subagentProbe != nil && s.subagentProbe()
 }
 
 // monitorPinDeadlineLocked returns the instant after which this warm engine stops being held
@@ -931,6 +1158,7 @@ func (p *sessionPool) register(job *ClaimedSession, cancel context.CancelFunc, a
 	}
 	if active {
 		s.permitGeneration = 1
+		p.markActivityLocked()
 	}
 	p.sessions[s.id] = s
 	if active {
@@ -1099,6 +1327,11 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		cancels = append(cancels, p.requestEvictLocked(s))
 	}
 	s.active = true
+	p.markActivityLocked()
+	// A claim taken while the pool drains for an update is one for a session whose engine is already
+	// running a turn here (drainClaimScope): its message waits for the update, as a held follow-up
+	// does, and the row stays RUNNING for the updated runner to reclaim.
+	s.heldForUpdate = p.drainingForUpdate
 	p.fenceWorktreeOperationLocked(s.id)
 	s.permitGeneration++
 	s.idleGeneration++
@@ -1139,7 +1372,9 @@ func (p *sessionPool) park(s *liveSession, expectedPermit uint64) {
 		return
 	}
 	s.active = false
+	s.heldForUpdate = false // the mark belongs to the permit that just ended
 	s.lastOrbitTurnAt = p.clock.Now()
+	p.markActivityLocked()
 	p.releaseWorktreeFenceLocked(s.id, s)
 	p.armWarmTimerLocked(s)
 	p.signalLocked(s)
@@ -1176,8 +1411,12 @@ func (p *sessionPool) rewarmLocked(s *liveSession) {
 // tool_result are output only a generating engine produces; a turn_end, or a system
 // init/resumed handshake, says no turn is running. A Bash pair the runner ran itself — a
 // `!cmd`, an EXECUTABLE acceptance (shell.go) — wears the engine's tool shape under a
-// `shell-` id, and says nothing about the engine.
+// `shell-` id, and says nothing about the engine. Nor does a SubAgent's event (subagent.go): its child engine
+// writes into the parent's stream nested under the delegate call, while the parent's own engine sits idle.
 func engineTurnSignal(eventType string, payload map[string]interface{}) (generating, ended bool) {
+	if id, _ := payload["subagentRunId"].(string); id != "" {
+		return false, false
+	}
 	switch eventType {
 	case evAssistant, evThinking:
 		return true, false
@@ -1227,6 +1466,7 @@ func (p *sessionPool) engineTurnEvent(s *liveSession, eventType string, payload 
 		return
 	}
 	s.selfDrivenTurn = false
+	p.markActivityLocked()
 	if !s.active {
 		p.armWarmTimerLocked(s)
 	}
@@ -1248,7 +1488,7 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 // turn the engine is running on its own does — requestEvictLocked declines — and the end
 // of that turn winds the next timer. A Monitor still running inside the engine does too,
 // and is the one deferral that has to re-arm the timer here: the engine is genuinely idle,
-// so nothing else will come along to wind it.
+// so nothing else will come along to wind it. So does a SubAgent of the session still running.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
@@ -1256,7 +1496,9 @@ func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 		p.mu.Unlock()
 		return
 	}
-	if !p.monitorPinDeadlineLocked(s).IsZero() {
+	// A SubAgent still running defers the idle park outright, with no cap (docs/subagent-design.md §5.2, §9 C):
+	// the session is still at work, and its end wakes the parent, which this engine is then still here to take.
+	if !p.monitorPinDeadlineLocked(s).IsZero() || subagentRunningLocked(s) {
 		p.rewarmLocked(s)
 		p.mu.Unlock()
 		return
@@ -1282,6 +1524,9 @@ func (p *sessionPool) waitActive(s *liveSession, sessionCtx, shutdown context.Co
 			return false
 		}
 		if s.active && !p.closedForUpdate && !s.heldForUpdate {
+			if s.completingTurn {
+				s.startedWhileCompleting = true
+			}
 			p.mu.Unlock()
 			return true
 		}
@@ -1410,6 +1655,9 @@ func (p *sessionPool) remove(s *liveSession) {
 			s.warmTimer.Stop()
 			s.warmTimer = nil
 		}
+		if s.active || s.selfDrivenTurn {
+			p.markActivityLocked() // a turn ends with its supervisor
+		}
 		delete(p.sessions, s.id)
 		p.signalLocked(s)
 	}
@@ -1425,6 +1673,9 @@ func (p *sessionPool) finish(s *liveSession) {
 		if s.warmTimer != nil {
 			s.warmTimer.Stop()
 			s.warmTimer = nil
+		}
+		if s.active || s.selfDrivenTurn {
+			p.markActivityLocked() // a turn ends with its supervisor
 		}
 		delete(p.sessions, s.id)
 		// A detached supervisor's fence is the takeover's to lower — but only while there is
@@ -1502,6 +1753,13 @@ func (p *sessionPool) heartbeatSnapshot() (map[string]heartbeatSupervisorSnapsho
 			})
 		}
 	}
+	// A session still being reclaimed is in the snapshot too, flagged, under the same lock as the
+	// supervisors: what the answer hands out for it is judged by what was true when it was asked for.
+	for id := range p.reclaiming {
+		snap := supervisors[id]
+		snap.reclaiming = true
+		supervisors[id] = snap
+	}
 	return supervisors, targets
 }
 
@@ -1516,6 +1774,10 @@ func (p *sessionPool) ids() map[string]bool {
 	// directory. A checkout with a live writer is never a candidate, supervisor
 	// or no supervisor.
 	for id := range p.bgJobs {
+		ids[id] = true
+	}
+	// Nor is the checkout of a session whose reclaimed supervisor is still being started.
+	for id := range p.reclaiming {
 		ids[id] = true
 	}
 	return ids

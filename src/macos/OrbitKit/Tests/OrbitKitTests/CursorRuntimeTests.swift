@@ -232,26 +232,26 @@ final class CursorRuntimeTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.toStartOn(accounts, usage: usage, now: now), "default")
     }
 
-    // MARK: - Infrastructure (board iOS 2 ①)
+    // MARK: - Machines & models (board iOS 2 ①)
 
     func testWhatNeedsAPersonAndAMachinesLine() throws {
         let ready = try readyRunner()
         // Counted beside the other engines this machine signs in (Claude Code, Codex and Kimi Code here).
-        XCTAssertEqual(Infrastructure.machineLine(ready, now: now), "2 of 4 signed in")
+        XCTAssertEqual(MachinesAndModels.machineLine(ready, now: now), "2 of 4 signed in")
 
         // Signed out on a machine that runs it: no line in Needs you, as the web's card draws it nothing, and
         // the machine's line says where its engines stand.
         let signedOut = try runner(cursor: cursorHealth(auth: "no", accounts: false))
-        XCTAssertEqual(Infrastructure.attention(runners: [signedOut], workspaces: [], memberPools: [], ownPools: [], now: now), [])
-        XCTAssertEqual(Infrastructure.machineLine(signedOut, now: now), "1 of 4 signed in")
+        XCTAssertEqual(MachinesAndModels.attention(runners: [signedOut], workspaces: [], memberPools: [], ownPools: [], now: now), [])
+        XCTAssertEqual(MachinesAndModels.machineLine(signedOut, now: now), "1 of 4 signed in")
         // A machine that can't run it at all says so on its row instead, and is not counted against.
         let older = try runner(id: "old", name: "mac-studio", caps: [])
-        XCTAssertEqual(Infrastructure.attention(runners: [older], workspaces: [], memberPools: [], ownPools: [], now: now), [])
-        XCTAssertEqual(Infrastructure.summary(older, now: now), "1 of 3 signed in")
+        XCTAssertEqual(MachinesAndModels.attention(runners: [older], workspaces: [], memberPools: [], ownPools: [], now: now), [])
+        XCTAssertEqual(MachinesAndModels.summary(older, now: now), "1 of 3 signed in")
         // A runner that knows it but has none installed counts it, as every engine its row can sign in.
         let missing = try runner(caps: [], cursor: cursorHealth(installed: false, auth: "unknown",
                                                                 error: "CURSOR_NOT_INSTALLED: x", accounts: false))
-        XCTAssertEqual(Infrastructure.summary(missing, now: now), "1 of 4 signed in")
+        XCTAssertEqual(MachinesAndModels.summary(missing, now: now), "1 of 4 signed in")
     }
 
     /// A Cursor CLI sign-in signed out under a workspace whose sessions run on it is a machine's Needs

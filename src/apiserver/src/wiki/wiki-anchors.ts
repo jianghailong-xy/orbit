@@ -14,6 +14,7 @@ import {
   type WikiDueAnchor,
   type WikiFieldError,
   type WikiGitAnchorType,
+  type WikiRepoSnapshotSource,
 } from '@orbit/shared';
 
 /**
@@ -59,14 +60,18 @@ export function symbolBaseline(anchor: WikiAnchor): string | null {
   return anchor.regionSha256 ?? anchor.check?.baselineSha256 ?? null;
 }
 
-/** The git anchors of one entry, each with its place in the entry's list, as the runner is handed them. */
-export function dueAnchors(anchors: readonly WikiAnchor[]): WikiDueAnchor[] {
+/**
+ * The git anchors of one entry, each with its place in the entry's list, as the runner is handed them. On a folder
+ * (docs/wiki-repo-tiers-design.md §5.1) a commit anchor is not among them: a folder keeps no history to check it in, and
+ * it keeps its last check.
+ */
+export function dueAnchors(anchors: readonly WikiAnchor[], source: WikiRepoSnapshotSource = 'git'): WikiDueAnchor[] {
   const due: WikiDueAnchor[] = [];
   anchors.forEach((anchor, index) => {
     if (anchor.type === 'path') due.push({ index, type: 'path', path: anchor.path });
     else if (anchor.type === 'symbol') {
       due.push({ index, type: 'symbol', path: anchor.path, symbol: anchor.symbol, regionSha256: symbolBaseline(anchor) });
-    } else if (anchor.type === 'commit') due.push({ index, type: 'commit', sha: anchor.sha });
+    } else if (anchor.type === 'commit' && source === 'git') due.push({ index, type: 'commit', sha: anchor.sha });
   });
   return due;
 }
@@ -85,9 +90,10 @@ export function dueAnchors(anchors: readonly WikiAnchor[]): WikiDueAnchor[] {
  * anchor tells a Re-confirm's write from a plain check's: `rebaselinedAnchors` leaves exactly the shape
  * the check leaves. So that anchor is re-checked rather than trusted, as the contract says.
  */
-export function anchorCheckedAt(anchor: WikiAnchor, ref: string): boolean {
+export function anchorCheckedAt(anchor: WikiAnchor, ref: string, source: WikiRepoSnapshotSource = 'git'): boolean {
   const check = anchor.check;
-  if (!check || check.ref !== ref) return false;
+  // A folder's check is of the files at one tree hash, a git check of one commit: neither stands for the other.
+  if (!check || check.ref !== ref || (check.source ?? 'git') !== source) return false;
   if (anchor.type !== 'symbol') return true;
   return baselineIsTheChecks(anchor);
 }
@@ -104,8 +110,10 @@ function baselineIsTheChecks(anchor: WikiAnchor): boolean {
  * to it from each commit the run diffed, keyed by that commit.
  */
 export interface WikiAnchorProof {
-  /** The commit the run checks at: the snapshot's. */
+  /** The commit the run checks at: the snapshot's — on a folder, its tree hash. */
   sha: string;
+  /** What the snapshot was read from: git (absent), or a folder, which has no commits and no diffs. */
+  source?: WikiRepoSnapshotSource;
   /** Every commit `sha` reaches: the snapshot's `commits`, `git rev-list <sha>`. */
   reaches: ReadonlySet<string>;
   /** By commit `c`: what `git diff --name-status -M <c> <sha>` names (`anchorDiffNames`). */
@@ -172,9 +180,16 @@ export function anchorGitPath(path: string): string | null {
  * check from a commit the run has no diff from, and a symbol that names its own baseline (`anchorCheckedAt`).
  */
 export function anchorHoldsAt(anchor: WikiAnchor, proof: WikiAnchorProof): boolean {
+  if (proof.source === 'folder') {
+    // On a folder (docs/wiki-repo-tiers-design.md §5.1): a commit anchor is not checked and keeps its last check, and a
+    // path's or a symbol's holds only when it was checked on a folder at this very tree hash.
+    return anchor.type === 'commit' || anchorCheckedAt(anchor, proof.sha, 'folder');
+  }
   if (anchorCheckedAt(anchor, proof.sha)) return true;
   const check = anchor.check;
   if (!check || check.state !== 'verified' || typeof check.ref !== 'string' || !COMMIT_SHA.test(check.ref)) return false;
+  // A folder's check names a tree hash, which no diff starts from and no commit reaches.
+  if (check.source === 'folder') return false;
   if (anchor.type === 'commit') return proof.reaches.has(anchor.sha);
   if (anchor.type !== 'path' && !baselineIsTheChecks(anchor)) return false;
   const path = anchorGitPath((anchor as { path: string }).path);
@@ -191,7 +206,7 @@ export function anchorHoldsAt(anchor: WikiAnchor, proof: WikiAnchorProof): boole
 export function anchorsDueAt(anchors: readonly WikiAnchor[], proof: WikiAnchorProof): WikiDueAnchor[] {
   const held = anchors.filter((anchor) => GIT_TYPES.has(anchor.type));
   if (held.length > 0 && held.every((anchor) => anchorHoldsAt(anchor, proof))) return [];
-  return dueAnchors(anchors);
+  return dueAnchors(anchors, proof.source ?? 'git');
 }
 
 /**
@@ -227,20 +242,23 @@ export function anchorsChecked(
   checks: readonly WikiAnchorCheckInput[],
   ref: string,
   at: string,
+  /** A folder's checks say so (`check.source`), and their ref is its tree hash. */
+  source: WikiRepoSnapshotSource = 'git',
 ): WikiAnchor[] {
+  const from = source === 'folder' ? { source: 'folder' as const } : {};
   const next = anchors.map((anchor) => ({ ...anchor }) as WikiAnchor);
   for (const reported of checks) {
     const anchor = next[reported.index];
     if (!anchor || !anchorIdentityMatches(anchor, reported)) continue;
     let check: WikiAnchorCheck;
     if (anchor.type !== 'symbol') {
-      check = { state: reported.state === 'verified' ? 'verified' : 'missing', ref, at };
+      check = { state: reported.state === 'verified' ? 'verified' : 'missing', ref, at, ...from };
     } else {
       // Kept only while the baseline is one a check adopted: an anchor that names its own is held to that.
       const adopted = anchor.regionSha256 ? null : (anchor.check?.baselineSha256 ?? null);
       const found = reported.state !== 'missing' ? reported.regionSha256 ?? null : null;
       if (found === null) {
-        check = { state: 'missing', ref, at, ...(adopted ? { baselineSha256: adopted } : {}) };
+        check = { state: 'missing', ref, at, ...(adopted ? { baselineSha256: adopted } : {}), ...from };
       } else {
         const baseline = anchor.regionSha256 ?? adopted ?? found;
         check = {
@@ -249,12 +267,35 @@ export function anchorsChecked(
           at,
           regionSha256: found,
           ...(anchor.regionSha256 ? {} : { baselineSha256: baseline }),
+          ...from,
         };
       }
     }
-    next[reported.index] = { ...anchor, check } as WikiAnchor;
+    // Checked on a tree at last: no longer deferred (`anchorRules.deferred`).
+    const { deferred: _deferred, ...held } = anchor as WikiAnchor & { deferred?: true };
+    next[reported.index] = { ...held, check } as WikiAnchor;
   }
   return next;
+}
+
+/** A code anchor learned when no code could be read and not checked on any tree since (contract `anchorRules.deferred`). */
+export function anchorDeferred(anchor: WikiAnchor): boolean {
+  return GIT_TYPES.has(anchor.type) && (anchor as { deferred?: unknown }).deferred === true && anchor.check === undefined;
+}
+
+/** The challenge's words when the first check of an entry's deferred code anchors finds none of them (`anchorRules.deferred`). */
+export const WIKI_DEFERRED_NONE_EXIST = 'None of its code anchors exist in this repository';
+
+/**
+ * Whether this check is the first of an entry whose code anchors were all deferred, and found every one of them
+ * missing: the knowledge is another repository's, as the extraction would have said had it read the code. The owner
+ * already accepted it, so it is challenged, never dropped.
+ */
+export function deferredAnchorsAllMissing(before: readonly WikiAnchor[], after: readonly WikiAnchor[]): boolean {
+  const code = before.map((anchor, index) => ({ anchor, index })).filter(({ anchor }) => GIT_TYPES.has(anchor.type));
+  return code.length > 0
+    && code.every(({ anchor }) => anchorDeferred(anchor))
+    && code.every(({ index }) => after[index]?.check?.state === 'missing');
 }
 
 /**
@@ -301,7 +342,10 @@ export function rebaselinedAnchors(anchors: readonly WikiAnchor[]): { anchors: W
       kept.push({
         ...anchor,
         regionSha256: check.regionSha256,
-        check: { state: 'verified', ref: check.ref, at: check.at, regionSha256: check.regionSha256 },
+        check: {
+          state: 'verified', ref: check.ref, at: check.at, regionSha256: check.regionSha256,
+          ...(check.source === 'folder' ? { source: 'folder' as const } : {}),
+        },
       });
       continue;
     }
@@ -322,11 +366,12 @@ export function anchorsWithoutChecks(anchors: unknown): WikiAnchorInput[] {
  * Why a system challenge was filed, as Review shows it beside the entry: each anchor that no longer
  * holds, and the commit it was checked on.
  */
-export function anchorChallengeReason(anchors: readonly WikiAnchor[], ref: string): string {
+export function anchorChallengeReason(anchors: readonly WikiAnchor[], ref: string, source: WikiRepoSnapshotSource = 'git'): string {
   const broken = anchors
     .filter((anchor) => anchor.check?.state === 'changed' || anchor.check?.state === 'missing')
     .map((anchor) => `${describeAnchor(anchor)} ${anchor.check?.state === 'changed' ? 'has changed' : 'is missing'}`);
-  const text = `Anchor re-verification on the repository's default branch at ${ref}: ${broken.join('; ')}. `
+  const where = source === 'folder' ? `the repository's folder at tree ${ref}` : `the repository's default branch at ${ref}`;
+  const text = `Anchor re-verification on ${where}: ${broken.join('; ')}. `
     + 'Agents stop getting this entry until it is re-confirmed, amended or retired.';
   const chars = [...text];
   return chars.length <= WIKI_LIMITS.fieldTextMaxChars ? text : `${chars.slice(0, WIKI_LIMITS.fieldTextMaxChars - 1).join('')}…`;
@@ -358,18 +403,23 @@ export interface AnchorReportEntry {
  * The report as a whole: the ref every check was made on, and the entries, at most
  * `rules.reportEntriesMax` of them. Anything else is refused before an entry is read.
  */
-export function anchorReportShape(body: unknown): { ref: string; entries: unknown[] } | { errors: WikiFieldError[] } {
+export function anchorReportShape(body: unknown): { ref: string; entries: unknown[]; source: WikiRepoSnapshotSource } | { errors: WikiFieldError[] } {
   const value = (body ?? {}) as Record<string, unknown>;
   const errors: WikiFieldError[] = [];
   if (typeof value.ref !== 'string' || !COMMIT_SHA.test(value.ref)) {
     errors.push({ path: 'ref', message: 'is required: the 40-character sha the default branch named when the anchors were checked' });
+  }
+  if (value.source !== undefined && value.source !== 'git' && value.source !== 'folder') {
+    errors.push({ path: 'source', message: 'is git or folder: what the anchors were checked on' });
   }
   if (!Array.isArray(value.entries) || value.entries.length === 0) {
     errors.push({ path: 'entries', message: 'must hold at least one entry' });
   } else if (value.entries.length > WIKI_ANCHOR_RULES.reportEntriesMax) {
     errors.push({ path: 'entries', message: `must hold at most ${WIKI_ANCHOR_RULES.reportEntriesMax}: report the rest in another` });
   }
-  return errors.length > 0 ? { errors } : { ref: value.ref as string, entries: value.entries as unknown[] };
+  return errors.length > 0
+    ? { errors }
+    : { ref: value.ref as string, entries: value.entries as unknown[], source: value.source === 'folder' ? 'folder' : 'git' };
 }
 
 /** One entry of a report, checked for the shape the contract gives it; every failing field is named. */

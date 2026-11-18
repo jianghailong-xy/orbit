@@ -110,8 +110,9 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	// This binary as the `orbit` CLI itself, when a shell turn runs `orbit task …`, `orbit token …` or
-	// `orbit whoami` (runner_child_identity_test.go). `go test` never starts it with a subcommand.
-	if len(os.Args) > 1 && (os.Args[1] == "task" || os.Args[1] == "token" || os.Args[1] == "whoami") {
+	// `orbit whoami` (runner_child_identity_test.go), or any command at all for an agent-contract eval's session
+	// (evalCLIEnv, agent_eval_session_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && (os.Args[1] == "task" || os.Args[1] == "token" || os.Args[1] == "whoami" || evalCLIDispatch(os.Args[1])) {
 		main()
 		os.Exit(0)
 	}
@@ -132,7 +133,7 @@ func TestMain(m *testing.M) {
 // a `!` shell inherits too, and which passes over the login the CLI tests save.
 var callingSessionEnv = []string{
 	"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth, envMCPOrchestration,
-	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envBgSocket, envBgToken, envBgJobID,
+	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envScheduleRun, envScheduledCheckOnly, envBgSocket, envBgToken, envBgJobID,
 	envRunnerChild,
 }
 
@@ -213,7 +214,13 @@ type fakeSpawn struct {
 	PID  int      `json:"pid"`
 	Argv []string `json:"argv"`
 	Cwd  string   `json:"cwd"`
+	// Probe is fakeSpawnProbeEnv as this process saw it: which environment a spawn was given.
+	Probe string `json:"probe,omitempty"`
 }
+
+// fakeSpawnProbeEnv is a variable a test puts in the session's env to read back, per spawn, which
+// environment the engine was started with.
+const fakeSpawnProbeEnv = "ORBIT_FAKE_SPAWN_PROBE"
 
 // ---------------------------------------------------------------------------
 // child side: the fake CLI itself
@@ -230,7 +237,7 @@ func runFakeClaude(dir string) int {
 		return 0
 	}
 	cwd, _ := os.Getwd()
-	appendJSONL(filepath.Join(dir, "spawns.jsonl"), fakeSpawn{PID: os.Getpid(), Argv: argv, Cwd: cwd})
+	appendJSONL(filepath.Join(dir, "spawns.jsonl"), fakeSpawn{PID: os.Getpid(), Argv: argv, Cwd: cwd, Probe: os.Getenv(fakeSpawnProbeEnv)})
 
 	// A `--resume` is a continuation of a conversation this machine is supposed to hold, and the
 	// real CLI refuses one it cannot find ("No conversation found with session ID") instead of

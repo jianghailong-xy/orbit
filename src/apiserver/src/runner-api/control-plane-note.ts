@@ -4,6 +4,7 @@ import type {
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
   ExternalMessageFrom,
+  MessageSentFrom,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -12,7 +13,7 @@ import type {
   TaskStartCard,
 } from '@orbit/shared';
 
-import { buildResumeContinuation } from './resume-continuation';
+import { buildResumeContinuation, buildUpdateResumeContinuation, updateContinuationVersion } from './resume-continuation';
 
 /**
  * The part of a delivered message the control plane appended, recorded beside the runner's echo.
@@ -35,7 +36,11 @@ import { buildResumeContinuation } from './resume-continuation';
 export function controlPlaneNoteOf(echoed: string, authored: string | null): string | null {
   // The continuation first: an empty authored text is a prefix of every echo, while the
   // continuation's head is nothing a person types.
-  for (const delivered of [buildResumeContinuation(authored), authored ?? '']) {
+  const version = updateContinuationVersion(echoed);
+  const continuations = version === undefined
+    ? [buildResumeContinuation(authored)]
+    : [buildUpdateResumeContinuation(authored, version)];
+  for (const delivered of [...continuations, authored ?? '']) {
     if (!echoed.startsWith(delivered)) continue;
     const note = echoed.slice(delivered.length);
     return note.trim() ? note : null;
@@ -187,6 +192,23 @@ export function withExternalSender(
   const stored = { ...payload };
   delete stored.externalSender;
   if (card !== null) stored.externalSender = card;
+  return stored;
+}
+
+/**
+ * And which client sent the turn (`sentFrom`, sessions/turn-sender-client.ts): the app, the terminal and its machine,
+ * Feishu, another session or the runner's own credential, read off the turn when the echo is stored — what `orbit` in a
+ * terminal draws "· from iPhone" with. Absent when the turn records none, and one arriving from the runner is dropped
+ * for the reason above.
+ */
+export function withSentFrom(
+  payload: Record<string, unknown>,
+  card: MessageSentFrom | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.sentFrom;
+  if (card !== null) stored.sentFrom = card;
   return stored;
 }
 

@@ -174,6 +174,8 @@ struct ToolCardView: View {
     /// pair (`manualOpen ?? defaultOpen`) for the same reason.
     @State private var manualOpen: Bool?
     @State private var scriptExpanded = false
+    /// A SubAgent's Why opened to every reason and every removed candidate (web's `Details`).
+    @State private var whyExpanded = false
     // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
@@ -217,18 +219,34 @@ struct ToolCardView: View {
         }
     }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
-    private var hasDetail: Bool { d.hasBody || hasResult || !nestedItems.isEmpty || taskProgress != nil }
+    private var hasDetail: Bool {
+        if isDelegate { return subagentResultText != nil || !nestedItems.isEmpty || subagent?.why != nil }
+        return d.hasBody || hasResult || !nestedItems.isEmpty || taskProgress != nil
+    }
 
     // MARK: background agents and workflows
 
     /// The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow.
     private var isBackgroundTask: Bool { ["Agent", "Task", "Workflow"].contains(card.name) }
+    /// Orbit's own SubAgent (`mcp__orbit__delegate`), drawn as the same purple block as Agent
+    /// (docs/subagent-design.md §6.4) with the run's tier, model, duration and Why.
+    private var isDelegate: Bool { card.name == SubagentBlock.toolName }
+    private var subagentRun: SubagentRunView? { isDelegate ? taskActivity?.subagentRun(card.id) : nil }
+    private var subagent: SubagentBlock? {
+        guard isDelegate else { return nil }
+        return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status,
+                                      parentEngine: taskActivity?.parentEngine,
+                                      result: SubagentResult.text(callResult: result, run: subagentRun))
+    }
     private var taskProgress: TaskProgress? { isBackgroundTask ? taskActivity?.progress(card.id) : nil }
     /// The call returned the moment its work started, so its own ✓ would sit on work just begun.
-    private var taskRunning: Bool { isBackgroundTask && (taskActivity?.isRunning(card.id) ?? false) }
+    private var taskRunning: Bool {
+        if isDelegate { return subagent?.running ?? false }
+        return isBackgroundTask && (taskActivity?.isRunning(card.id) ?? false)
+    }
     /// A sub-agent's own transcript, nested under this call (TranscriptState.subagentItems).
     private var nestedItems: [TranscriptItem] {
-        guard isBackgroundTask else { return [] }
+        guard isBackgroundTask || isDelegate else { return [] }
         let items = taskActivity?.subagentItems(card.id) ?? []
         // Workflow progress rows open these same agents. Keep the ordinary Agent cards as a
         // fallback when replay has their calls but no progress snapshot yet.
@@ -238,6 +256,21 @@ struct ToolCardView: View {
             return true
         }
     }
+    /// What the opened block ends with: the text the SubAgent handed back. A background call's own
+    /// result is only its receipt, so its result comes from the run once that has ended — and it is
+    /// left out when the child's last message already says it (web parity: `DelegateResult`).
+    private var subagentResultText: String? {
+        guard isDelegate else { return nil }
+        guard let text = SubagentResult.text(callResult: result, run: subagentRun) else { return nil }
+        if case .assistant(let last)? = nestedItems.last,
+           last.text.trimmingCharacters(in: .whitespacesAndNewlines) == text.trimmingCharacters(in: .whitespacesAndNewlines) {
+            return nil
+        }
+        return text
+    }
+    /// What the opened card's result panel draws: a SubAgent's resolved hand-back, anything else's
+    /// own result as it came.
+    private var displayResult: String? { isDelegate ? subagentResultText : result }
     /// A result that only says the work STARTED: an async agent's ack (internal metadata it is told
     /// never to quote) or a workflow's receipt. What the work did is drawn instead.
     private var isLaunchReceipt: Bool {
@@ -248,7 +281,8 @@ struct ToolCardView: View {
     /// The folded row of a background task still running says what it is on right now: the last
     /// thing the sub-agent's transcript relayed. Web parity: Transcript.tsx's ToolCard live line.
     private var liveActivity: String? {
-        guard isBackgroundTask, !isOpen, card.status == .running || taskRunning else { return nil }
+        guard (isBackgroundTask || isDelegate), !isOpen else { return nil }
+        guard taskRunning || card.status == .running else { return nil }
         for item in nestedItems.reversed() {
             switch item {
             case .toolCall(let child):
@@ -389,10 +423,16 @@ struct ToolCardView: View {
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
             row
-            if let liveActivity {
+            if let subagent {
+                // An Agent's second and third lines (board docs/mocks/subagent-ios-highlight ①): who did
+                // the work and where, then what came of it — or, while it runs, what it is on.
+                AgentBlockLines(block: subagent, live: liveActivity,
+                                steps: SubagentBlock.steps(taskActivity?.subagentItems(card.id) ?? []))
+                    .padding(.leading, 42)
+            } else if let liveActivity {
                 // Indented to the row's label; folded BackgroundTaskViews draw this same line.
                 Text(liveActivity)
-                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .font(.orbitMonoFine).italic().foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail)
                     .padding(.leading, 42)
             }
@@ -509,6 +549,26 @@ struct ToolCardView: View {
         // pager below, and a screenshot is expensive enough that decoding it twice a body pass shows.
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
+            // A SubAgent opens on its router's reasons, then its steps, then the result (board 03).
+            // The server's one-line Why, at most two lines; the full reasons sit behind Details.
+            if let why = subagent?.why {
+                (Text("Why").fontWeight(.semibold) + Text(" · \(why)"))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(2).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let details = subagent?.details, !details.isEmpty {
+                    DisclosureGroup("Details", isExpanded: $whyExpanded) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(details.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
             // A workflow opens to its progress; a sub-agent's totals close its transcript instead.
             if card.name == "Workflow", let taskProgress {
                 TaskProgressView(progress: taskProgress, fullPayload: fullPayload)
@@ -518,12 +578,16 @@ struct ToolCardView: View {
                     if scriptExpanded { ToolBodyView(kind: d.body) }
                 }
                 .font(.orbitLabel).foregroundStyle(.secondary)
+            } else if isDelegate {
+                // The SubAgent opens to its steps and result; the delegate call's own input is the
+                // prompt, which web does not draw in this block either.
             } else if !questions.isEmpty {
                 QuestionReplayView(questions: questions, outcome: questionOutcome)
             } else {
                 ToolBodyView(kind: d.body)
             }
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
+            if let files = subagent?.changedFiles, !files.isEmpty { AgentChangedFiles(paths: files) }
             if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
@@ -549,8 +613,9 @@ struct ToolCardView: View {
             }
             // A launch receipt says only that the work started: hidden once the progress speaks for
             // the work, and always for an agent's ack. A workflow before any progress keeps it. A
-            // question's result, once read, is only the replay above said again.
-            if let result, !result.isEmpty,
+            // question's result, once read, is only the replay above said again. A SubAgent's own
+            // receipt is a receipt too; `displayResult` already resolved it to the run's result.
+            if let result = displayResult, !result.isEmpty,
                !(isLaunchReceipt && (taskProgress != nil || card.name != "Workflow")),
                questionOutcome == nil {
                 let isErr = card.status == .error
@@ -918,10 +983,12 @@ struct StepsRowView: View {
     @State private var expanded = false
     private let summary: StepsSummary
 
-    init(items: [TranscriptItem], fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
+    /// `live`: whether the turn is still running — only then is a call without its answer drawn under
+    /// the line as in flight (`StepsSummary.make`).
+    init(items: [TranscriptItem], live: Bool = true, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.items = items
         self.fullPayload = fullPayload
-        self.summary = StepsSummary.make(items)
+        self.summary = StepsSummary.make(items, live: live)
     }
 
     var body: some View {

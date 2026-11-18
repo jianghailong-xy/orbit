@@ -305,6 +305,14 @@ private struct CompactSections: View {
                             // A machine's own new session page: the page of its Set up row, so it
                             // leads like the session list it stands in for — the drawer's hamburger,
                             // not a back button (board 03).
+                            // A shared session's guest view: its Shared with me row's own page, so it
+                            // leads like the list it stands in for — the drawer's hamburger, not back.
+                            case .guestSession(let sessionID):
+                                GuestSessionView(sessionID: sessionID)
+                                    .id(sessionID)
+                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                    .navigationBarBackButtonHidden()
+                                    .drawerToggle(open: openDrawer)
                             case .machineDraft(let runnerID):
                                 MachineDraftPage(runnerID: runnerID)
                                     .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
@@ -341,7 +349,7 @@ private struct CompactSections: View {
                             case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
                             case .watches:                      FollowingListView(rowNavigation: .push)
                             case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
-                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID)
+                            case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
                             // The other sections' pages ride their own stacks, not this one.
                             default:                         EmptyView()
                             }
@@ -377,7 +385,10 @@ private struct CompactSections: View {
                     .drawerToggle(open: openDrawer)
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
+                        case .wikiEntry(let entryID): WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        // A task cited by an entry's source or a document's footnote is pushed over
+                        // the page that cited it, so the back swipe returns to that page.
+                        case .taskDetail(let taskID): TaskDetailPage(taskID: taskID)
                         case .wikiReview:             WikiReviewView()
                         case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
@@ -389,7 +400,7 @@ private struct CompactSections: View {
                         case .wikiBrowse:             WikiBrowseScreen()
                         case .wikiIndex:              WikiIndexScreen()
                         case .wikiDoc(let slug, let section):
-                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))
+                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section), rowNavigation: .push)
                         case .wikiPlan(let version):
                             WikiPlanScreen(address: WikiPlanAddress(version: version))
                         case .wikiPlanDoc(let slug, let version):
@@ -404,12 +415,36 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // SCHEDULED — the timeline (board 01 ②); a row's detail is the page's own bottom panel, and a run's
+        // session is pushed over the page, so back returns to the schedule it ran for.
+        case .scheduled:
+            NavigationStack(path: $model.nav.path) {
+                ScheduledPage()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.scheduled?.load() }
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .console(let sessionID, _):
+                            AgentConsolePage(sessionID: sessionID)
+                                .environment(\.opensPagesOverConsole, true)
+                        // What a console opens over itself, as on the Agents stack.
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
+                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                        case .watches:                      FollowingListView(rowNavigation: .push)
+                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        default:                            EmptyView()
+                        }
+                    }
+            }
+
+        // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
         // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
         // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
-        // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
+        // selection in this shell. Settings › Machines & models is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
                 // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
@@ -739,43 +774,32 @@ struct NavigationDrawer: View {
 
     var body: some View {
         return VStack(alignment: .leading, spacing: 0) {
-            if !inSidebarColumn {
-                HStack {
-                    drawerTitle
-                    Spacer()
-                    searchButton {
-                        DrawerCircleGlyph(systemName: "magnifyingglass")
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.trailing, DrawerMetrics.hInset)
-                .padding(.top, 14)
-                .padding(.bottom, 8)
-            }
-
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
-                // and Recents used to be. Infrastructure lives under Settings, Settings is the action bar's
+                // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
-                ForEach(AppSection.workSections) { section in
-                    if section == .projects {
-                        projectsRow
-                    } else if section == .wiki {
-                        // No row at all for an account the server has not switched the wiki on for
-                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
-                        // would be worse than none.
-                        if model.wiki?.shown == true { wikiRow }
-                    } else {
-                        sectionRow(section)
+                // The rows are one array (`DrawerWorkLogic`), drawn by one ForEach: an `if` or a
+                // second ForEach under it is the shape the source list's reload aborted on.
+                ForEach(DrawerWorkLogic.rows(
+                    AppSection.workSections,
+                    wiki: model.wiki?.shown == true,
+                    // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
+                    // the server predates scheduled tasks.
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false,
+                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    switch row {
+                    case .projects:       projectsRow
+                    case .wiki:           wikiRow
+                    case .scheduled:      scheduledRow
+                    case .section(let section): sectionRow(section)
+                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
+                    case .workspacesHeader: workspacesHeader
+                    case .agents:         agentsRows
+                    case .openProjects:   projectRows
+                    case .sharedWithMe:   sharedWithMeRows
                     }
                 }
-                // What agents have asked the owner to do: the inbox, with how many are waiting.
-                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
-                workspacesHeader
-                agentsRows
-                projectRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -795,14 +819,34 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Scheduled's number — the schedules failing or held — read with the drawer like the others.
+            .task { await model.scheduled?.load() }
+            // Shared with me, the rail's last group: read with the drawer, then every minute.
+            .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
             .contentMargins(.bottom, 60, for: .scrollContent)
+            // The header floats over the rail rather than sitting above it, so the rows run on up to
+            // the top of the screen and fade under it instead of being cut at its lower edge (the
+            // owner, 2026-11-12, board docs/mocks/ios-header-soft-edge/03-board.html).
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !inSidebarColumn { drawerHeader }
+            }
             .overlay(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 8) {
                     newSessionBlockedNote
                     actionBar
+                }
+                // The same soft edge under the action bar, from the bottom of the screen up: rows
+                // fade out behind the buttons rather than reading through around them.
+                .background {
+                    if !inSidebarColumn {
+                        SoftEdgeLayer(solidAt: .bottom, color: drawerSurface)
+                            .padding(.top, -16)
+                            .ignoresSafeArea(edges: .bottom)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
@@ -827,6 +871,30 @@ struct NavigationDrawer: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// The phone drawer's header: title and search, standing on a soft edge of the drawer's own
+    /// colour that runs up behind the status bar and fades out just past the header, over the rows
+    /// scrolled under it. The iPad column has none: its title rides the column's bar (`columnBar`).
+    private var drawerHeader: some View {
+        HStack {
+            drawerTitle
+            Spacer()
+            searchButton {
+                DrawerCircleGlyph(systemName: "magnifyingglass")
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, DrawerMetrics.textLeading)
+        .padding(.trailing, DrawerMetrics.hInset)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+        .background {
+            SoftEdgeLayer(solidAt: .top, color: drawerSurface)
+                .padding(.bottom, -12)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+        }
+    }
+
     private var drawerTitle: some View {
         Text("Orbit")
             .font(.title2.weight(.bold))
@@ -847,14 +915,15 @@ struct NavigationDrawer: View {
 
     /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
     /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
-    /// sidebar toggle.
+    /// sidebar toggle. `.fixedSize()` because iOS 26 proposes a leading item far less than its width,
+    /// which drew the title as "Or…" (see `WorkspaceTitleSwitcher`).
     @ToolbarContentBuilder
     private var columnBar: some ToolbarContent {
         if #available(iOS 26.0, *) {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+            ToolbarItem(placement: .topBarLeading) { drawerTitle.fixedSize() }
         }
         ToolbarItem(placement: .topBarTrailing) {
             searchButton { Image(systemName: "magnifyingglass") }
@@ -1004,7 +1073,14 @@ struct NavigationDrawer: View {
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
     /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
+    @ViewBuilder
+    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
+        if let requests {
+            waitingOnYouButton(requests)
+        }
+    }
+
+    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
         let waiting = requests.waitingCount
         return Button {
             requests.tab = .open
@@ -1054,6 +1130,39 @@ struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    /// Scheduled (board 01 ①): under Tasks, with the number of schedules that need the owner — failing or held —
+    /// in red, written and said the way the Projects row writes its own, and nothing at zero.
+    private var scheduledRow: some View {
+        let selected = model.drawerDestination == .section(.scheduled)
+        let needs = model.scheduled?.needsYouCount ?? 0
+        return Button {
+            open(.section(.scheduled))
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.scheduled.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.scheduled.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if needs > 0 {
+                        Text("\(needs)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Color.red, in: Circle())
+                            .accessibilityLabel("\(needs) need you")
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-scheduled")
     }
 
     /// The rule and the group label that set the Workspaces apart from the work above them.
@@ -1124,6 +1233,51 @@ struct NavigationDrawer: View {
         .drawerRow()
     }
 
+    // MARK: Shared with me
+
+    /// The sessions other people invited this account to reply in (docs/session-guests-design.md §4),
+    /// closing the rail. No group while there is none.
+    @ViewBuilder
+    private var sharedWithMeRows: some View {
+        let shared = model.sharedWithMe
+        if SharedWithMe.showsGroup(shared) {
+            drawerGroupLabel(GuestCopy.sharedWithMe, count: shared.count)
+            ForEach(shared) { session in
+                sharedWithMeRow(session)
+            }
+        }
+    }
+
+    /// The session's title, who shared it and how it stands; selected while its guest view is showing.
+    private func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        let selected = model.drawerDestination == .guestSession(sessionID: session.id)
+        return Button {
+            open(.guestSession(sessionID: session.id))
+        } label: {
+            pill(selected: selected) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(SharedWithMe.title(session))
+                            .lineLimit(1)
+                            .fontWeight(selected ? .semibold : .regular)
+                            .foregroundStyle(.primary)
+                        Text(SharedWithMe.subtitle(session))
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Text(SharedWithMe.ago(session))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
     private func drawerGroupLabel(_ title: String, count: Int) -> some View {
         HStack(spacing: 8) {
             Text(title).font(.subheadline.weight(.semibold))
@@ -1151,7 +1305,7 @@ struct NavigationDrawer: View {
                 agentRow(agent, agents: agents)
             }
             ForEach(agents.machinesToSetUp) { machine in
-                setUpRow(machine)
+                setUpRow(machine, separates: machine.isManaged && agents.machinesToSetUp.count > 1)
             }
         }
     }
@@ -1159,20 +1313,24 @@ struct NavigationDrawer: View {
     /// An online machine with no workspace, after every workspace: its new session page, where its first
     /// one is made (board 03 ①, rule 9). In the tint, since it asks for something the rest of the rail
     /// doesn't.
-    private func setUpRow(_ machine: MachineToSetUp) -> some View {
+    private func setUpRow(_ machine: MachineToSetUp, separates: Bool) -> some View {
         let selected = model.drawerDestination == .machine(runnerID: machine.id)
         return Button {
             open(.machine(runnerID: machine.id))
         } label: {
-            pill(selected: selected) {
-                HStack(spacing: 12) {
-                    Image(systemName: "folder.badge.plus")
-                        .frame(width: 24)
-                    Text(MachineSetupCopy.setupTitle(machine: machine.name))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                pill(selected: selected) {
+                    HStack(spacing: 12) {
+                        Image(systemName: machine.isManaged ? "cloud" : "folder.badge.plus")
+                            .frame(width: 24)
+                        Text(MachineSetupCopy.setupTitle(machine: machine.name))
+                            .fontWeight(machine.isManaged ? .semibold : nil)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(Color.accentColor)
                 }
-                .foregroundStyle(Color.accentColor)
+                if separates { Divider().padding(.horizontal, DrawerMetrics.textLeading) }
             }
         }
         .buttonStyle(.plain)
@@ -1259,14 +1417,60 @@ private extension View {
     /// Adds the leading hamburger that opens the nav drawer. Applied to a section's *root* view so it
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
-        toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: open) {
-                    Image(systemName: "line.3.horizontal")
+        modifier(DrawerToggle(open: open))
+    }
+}
+
+/// The hamburger's toolbar item. On iOS 26 the count is the item content's badge, which the system
+/// draws outside the item's glass; earlier versions overlay it on the glyph.
+private struct DrawerToggle: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) {
+                    DrawerToggleButton(open: open).badge(model.needsYouSessions.count)
                 }
-                .accessibilityLabel("Open navigation")
+            } else {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
             }
         }
+    }
+}
+
+/// The hamburger, carrying how many are waiting on you (the owner, 2026-11-15,
+/// docs/mocks/needs-you-capsule/12-once): the resident count, now that a notice of each says it once.
+private struct DrawerToggleButton: View {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    var body: some View {
+        let waiting = model.needsYouSessions.count
+        Button(action: open) {
+            Image(systemName: "line.3.horizontal")
+                .overlay(alignment: .topTrailing) {
+                    if overlaidCount > 0 {
+                        Text("\(overlaidCount)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Color.orange, in: Capsule())
+                            .offset(x: 10, y: -10)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .accessibilityLabel("Open navigation")
+        .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
+    }
+
+    /// The count drawn on the glyph: on iOS 26 the toolbar item's badge carries it instead.
+    private var overlaidCount: Int {
+        if #available(iOS 26.0, *) { return 0 }
+        return model.needsYouSessions.count
     }
 }
 

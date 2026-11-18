@@ -57,7 +57,7 @@ final class SessionRequestWiringTests: XCTestCase {
     func testTheTranscriptDrawsReplyCardsForATurnThatHandedOutcomesBack() throws {
         // The row the transcript and the queue both draw a user turn with (`UserTurnRow`).
         let view = try section(try source(Self.rowPath),
-                               from: "struct UserTurnRow: View", to: "private func attachedRest")
+                               from: "struct UserTurnRow: View", to: "private func told")
         let user = statements(try section(view, from: "var body: some View {",
                                           to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)\n"))
         let branch = try XCTUnwrap(user.firstIndex(of: "} else if let replies = b.sessionReplies, !replies.isEmpty {"),
@@ -67,9 +67,9 @@ final class SessionRequestWiringTests: XCTestCase {
         let watch = try XCTUnwrap(user.firstIndex(where: { $0.hasPrefix("} else if let wake = WatchWakeText.parse(") }))
         XCTAssertTrue(started < branch && branch < watch, "the reply-card branch moved out of its place")
         let body = user[branch..<watch].joined(separator: "\n")
-        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),"))
-        // The owner's own words, when the turn had any, stay theirs — without the note the cards drew.
-        XCTAssertTrue(body.contains("UserBubbleView(bubble: withoutNote(b))"))
+        XCTAssertTrue(body.contains("SessionReplyCardsView(replies: replies, ts: b.ts,"))
+        // The owner's own words, when the turn had any, stay in their bubble.
+        XCTAssertTrue(body.contains("UserBubbleView(bubble: b)"))
         XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the cards are drawn on one platform only")
     }
 
@@ -87,6 +87,16 @@ final class SessionRequestWiringTests: XCTestCase {
                       "the state is no longer read again when the request's session moves")
         XCTAssertTrue(status.contains { $0.contains("model.session(id: $0.toSessionId)") })
         XCTAssertTrue(status.contains { $0.contains("owesReplyTo") })
+    }
+
+    func testTheRunQuestionCardIsReadLiveUntilItSaysWhoAnswered() throws {
+        let file = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/OrbitTurnCardViews.swift")
+        let view = statements(try section(file, from: "struct RunQuestionCardView: View", to: "struct RunNoticeCardView"))
+        XCTAssertTrue(view.contains("private var card: RunQuestionCard { RunQuestionCard.drawn(stored: stored, live: live) }"))
+        XCTAssertTrue(view.contains("if let fresh = try? await api.sessionRequest(stored.requestId) { live = fresh }"))
+        XCTAssertTrue(view.contains(".task(id: refreshKey) { if stored.readsLive { await load() } }"))
+        XCTAssertTrue(view.contains("if RunQuestionCard.keepsReading(live) { await load() }"))
+        XCTAssertTrue(view.contains { $0.contains("model.session(id: $0.toSessionId)") })
     }
 
     func testTheReplyCardOpensTheOriginalRequestAndOffersNothingToAnswer() throws {

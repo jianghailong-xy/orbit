@@ -18,7 +18,8 @@ function read(relative: string): string {
   return readFileSync(path.join(ROOT, relative), 'utf8');
 }
 
-const MCP = read('src/runner-go/mcp.go');
+const MCP = read('src/runner-go/mcp.go') + '\n' + read('src/runner-go/operation_catalog.go');
+const CATALOG = read('src/runner-go/operation_catalog.go');
 const CLI = read('src/runner-go/task_cli.go');
 const TRANSPORT = read('src/runner-go/transport.go');
 
@@ -41,9 +42,9 @@ test('the two declaration flags are untouched on every door', () => {
   for (const field of ['acceptanceCommand', 'acceptanceExpectedExitCode']) {
     assert.ok(MCP.includes(field), `the MCP tool schema lost ${field}`);
   }
-  // The capability document is generated from the same table the CLI dispatches from, so a
+  // The capability table lives in the operation catalogue, which the CLI is projected from, so a
   // surviving entry there would be a tool with no handler.
-  const capabilities = CLI.slice(CLI.indexOf('{Tool: "task_create"'));
+  const capabilities = CATALOG.slice(CATALOG.indexOf('{Tool: "task_create"'));
   assert.doesNotMatch(capabilities, /Tool: "task_judge"/u);
   assert.match(capabilities, /Tool: "task_update"/u);
 });

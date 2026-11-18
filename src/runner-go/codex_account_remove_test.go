@@ -160,7 +160,7 @@ func TestCodexAccountSlotRemoveRefusesASlotALiveSessionIsIn(t *testing.T) {
 	const sessionID = "019fc086-c7c7-7c92-8215-778ad8a6280a"
 	writeSessionInCodexHome(t, orbitHome, sessionID, work.Dir)
 	liveHomes := codexSessionAccountHomes([]string{sessionID})
-	if !liveHomes[work.Dir] {
+	if len(liveHomes[work.Dir]) == 0 {
 		t.Fatalf("the live session's CODEX_HOME is not %q: %+v", work.Dir, liveHomes)
 	}
 
@@ -472,5 +472,27 @@ func writeSessionInCodexHome(t *testing.T, orbitHome, sessionID, codexHome strin
 	}
 	if err := os.WriteFile(filepath.Join(dir, "meta.json"), meta, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A refused removal says first how to keep the sessions — switch them to another account, which
+// carries their conversations there — then that ending them frees the account too. A Cursor CLI
+// session can only be ended.
+func TestAccountInUseErrorSaysWhatFreesTheAccount(t *testing.T) {
+	cases := []struct {
+		err  accountInUseError
+		want string
+	}{
+		{accountInUseError{engine: providerClaude, id: "5dd14473", Sessions: []string{"a"}},
+			"claude account 5dd14473 is in use by a session on this machine — to keep the session, switch it to another account, or end it; then remove the account"},
+		{accountInUseError{engine: providerCodex, id: "1a2b3c4d", Sessions: []string{"a", "b", "c"}},
+			"codex account 1a2b3c4d is in use by 3 sessions on this machine — to keep them, switch each to another account, or end them; then remove the account"},
+		{accountInUseError{engine: providerCursor, id: "1a2b3c4d", Sessions: []string{"a"}},
+			"cursor account 1a2b3c4d is in use by a session on this machine — end it, then remove the account"},
+	}
+	for _, c := range cases {
+		if got := c.err.Error(); got != c.want {
+			t.Errorf("Error() = %q\nwant      %q", got, c.want)
+		}
 	}
 }

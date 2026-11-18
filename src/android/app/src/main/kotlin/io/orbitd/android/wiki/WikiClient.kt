@@ -67,6 +67,14 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
             body = buildJsonObject { putJsonArray("ops") { add(op) }; put("rationale", rationale); put("idempotencyKey", idempotencyKey) }))
     /** `PATCH /wiki/spaces/:id`: a key left out is left as it is. */
     suspend fun updateSpace(id: String, update: JsonObject): JsonElement = json(spacePath(id), method = HttpMethod.PATCH, body = update)
+    /** Which tier the workspace's folder would be read on (docs/wiki-repo-tiers-design.md §7.3); the server's words. */
+    suspend fun probeMaintenance(spaceId: String, workspaceId: String): WikiRepoProbeAnswer? = WikiRepoProbeAnswer.read(
+        json(spacePath(spaceId, "maintenance", "probe"), method = HttpMethod.POST, body = buildJsonObject { put("workspaceId", workspaceId) }))
+    /** Check again and run now — Use this folder with [acceptFolder]: a run at once, counted against the day. */
+    suspend fun runMaintenanceNow(spaceId: String, acceptFolder: Boolean) {
+        raw(spacePath(spaceId, "maintenance", "run"), method = HttpMethod.POST,
+            body = buildJsonObject { if (acceptFolder) put("acceptFolder", true) })
+    }
     /** `POST /wiki/spaces`, the owner's: the wiki, with maintenance on and its plan's first draft asked for in the one request.
      * Its answer is the space. */
     suspend fun createSpace(request: JsonObject): WikiSpace = Wire.json.decodeFromJsonElement(WikiSpace.serializer(),

@@ -1,5 +1,7 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy } from 'class-validator';
-import { PermissionMode } from '@orbit/shared';
+import {
+  ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy,
+} from 'class-validator';
+import { PermissionMode, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 
 export class CreateUserDto {
   @IsEmail()
@@ -142,6 +144,55 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   recaps?: boolean;
+
+  /**
+   * Settings › Translation (@orbit/shared translation.ts): whether the owner's messages are translated
+   * into English before the engine gets them. Default OFF (absent = off). Read on every send, so it
+   * applies from the next message; nothing is backfilled. Without the server's DeepSeek key it does
+   * nothing (`translationAvailable` on `me`).
+   */
+  @IsOptional()
+  @IsBoolean()
+  translationEnabled?: boolean;
+
+  /** The language the owner writes and reads in: one of TRANSLATION_LANGUAGES. Absent = zh-Hans. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationLanguage?: TranslationLanguage;
+
+  /** The language agents work in ("Agents work in"): one of TRANSLATION_LANGUAGES, the same list as
+   *  the owner's. Absent = English. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationAgentLanguage?: TranslationLanguage;
+
+  /** "Show both languages": each translated message also shows the words the agent read or wrote,
+   *  in the agent language.
+   *  Display only, read by every client; absent = off. */
+  @IsOptional()
+  @IsBoolean()
+  translationBilingual?: boolean;
+
+  /**
+   * Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers ✦ Optimize,
+   * which has DeepSeek improve the draft before it is sent. Default ON (absent = on;
+   * only `false` turns it off). Without the
+   * server's DeepSeek key it does nothing (`promptOptimizerAvailable` on `me`).
+   */
+  @IsOptional()
+  @IsBoolean()
+  promptOptimizer?: boolean;
+
+  /**
+   * The provider slugs this account's SubAgents are never routed onto (docs/subagent-design.md §4.2, §6.2).
+   * Absent = none blocked; the whole list is replaced on each write, so [] unblocks everything.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  subagentBlockedProviders?: string[];
 }
 
 /** Set a user's access role (admin area). */

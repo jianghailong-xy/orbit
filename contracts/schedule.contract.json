@@ -1,0 +1,998 @@
+{
+  "name": "orbit.schedule",
+  "contractVersion": 1,
+  "design": "docs/scheduled-tasks-design.md",
+  "boards": [
+    "docs/mocks/scheduled-tasks/web/01-board.png",
+    "docs/mocks/scheduled-tasks/web/02-board.png",
+    "docs/mocks/scheduled-tasks/02-agent-first.png"
+  ],
+  "source": "src/shared/src/schedule.ts",
+  "doc": "Scheduled tasks on the clients (§9.2): the closed sets the REST doors answer with, every line the boards put on screen (`copy`, placeholders `{name}`), and the board phrases the display rules must produce word for word (`boardPhrases`). OrbitKit and Android pin this file; src/shared/src/scheduleContract.spec.ts holds src/shared/src/schedule.ts to it.",
+  "closedSets": {
+    "scheduleStates": [
+      "ACTIVE",
+      "PAUSED",
+      "HELD",
+      "ENDED"
+    ],
+    "accessLevels": [
+      "CHECK_ONLY",
+      "OPEN_PR",
+      "LAND"
+    ],
+    "changedBy": [
+      "USER",
+      "SESSION",
+      "RUN"
+    ],
+    "endedReasons": [
+      "DELETED",
+      "END_REACHED",
+      "GOAL_REACHED"
+    ],
+    "runTriggers": [
+      "SCHEDULED",
+      "CATCH_UP",
+      "MANUAL",
+      "CONDITION"
+    ],
+    "runStates": [
+      "QUEUED",
+      "RUNNING",
+      "AWAITING_APPROVAL",
+      "NO_CHANGE",
+      "CHANGED",
+      "FAILED",
+      "SKIPPED",
+      "MISSED",
+      "HELD",
+      "CANCELLED"
+    ],
+    "failureReasons": [
+      "RUNNER_UNAVAILABLE",
+      "QUOTA",
+      "ENGINE_CRASHED_BEFORE_START",
+      "REPORTED_FAILED",
+      "NO_REPORT",
+      "ENGINE_CRASHED",
+      "APPROVAL_TIMEOUT",
+      "RUN_LIMIT",
+      "CANCELLED_BY_OWNER",
+      "OVER_BUDGET",
+      "LANDING_FAILED"
+    ],
+    "heldReasons": [
+      "WORKSPACE_NOT_OWNED",
+      "WORKSPACE_DELETED",
+      "WORKSPACE_DISABLED",
+      "AGENT_MISSING",
+      "AGENT_DISABLED",
+      "OUTSIDE_ENVELOPE",
+      "ACCESS_NOT_ENFORCEABLE",
+      "MODE_WIDER_THAN_ACCOUNT_DEFAULT",
+      "NO_REPOSITORY",
+      "SESSION_REFUSED",
+      "WORKTREE_DISABLED"
+    ],
+    "envelopeParts": [
+      "WORKSPACE",
+      "ACCESS_LEVEL",
+      "RUNS_PER_WEEK",
+      "RUN_LIMIT",
+      "PROBE_COMMAND"
+    ],
+    "requestKinds": [
+      "CREATE",
+      "UPDATE"
+    ],
+    "requestStates": [
+      "PENDING",
+      "ALLOWED",
+      "DECLINED",
+      "SUPERSEDED"
+    ],
+    "waitingKinds": [
+      "SCHEDULE_FAILED",
+      "SCHEDULE_HELD",
+      "SCHEDULE_APPROVAL",
+      "SCHEDULE_WIDEN"
+    ],
+    "runSessionStates": [
+      "OPEN",
+      "COMPLETED",
+      "TRASH",
+      "GONE"
+    ],
+    "staleReasons": [
+      "REVISION_MOVED",
+      "WORKSPACE_GONE"
+    ],
+    "weekdays": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI",
+      "SAT",
+      "SUN"
+    ],
+    "controlRefusals": [
+      "SCHEDULE_NOT_FOUND",
+      "SCHEDULE_ENDED",
+      "SCHEDULE_NOT_ACTIVE",
+      "SCHEDULE_NOT_PAUSED",
+      "SCHEDULE_START_CHECK_FAILED",
+      "SCHEDULE_LIMIT",
+      "SCHEDULE_UNDO_STALE",
+      "SCHEDULE_ALREADY_UNDONE",
+      "SCHEDULE_UNDO_CREATION",
+      "SCHEDULE_REVISION_NOT_FOUND",
+      "SCHEDULE_RUN_NOT_FOUND",
+      "SCHEDULE_RUN_NOT_ACTIVE",
+      "SCHEDULE_RUN_ENDED",
+      "SCHEDULE_OVER_BUDGET"
+    ],
+    "circles": [
+      "open",
+      "running",
+      "done",
+      "new",
+      "failed",
+      "held",
+      "draft",
+      "paused",
+      "muted"
+    ]
+  },
+  "copy": {
+    "nav": {
+      "scheduled": "Scheduled"
+    },
+    "page": {
+      "title": "Scheduled",
+      "allWorkspaces": "All workspaces",
+      "showPastRuns": "Show past runs"
+    },
+    "groups": {
+      "NEEDS_YOU": "Needs you",
+      "TODAY": "Today",
+      "TOMORROW": "Tomorrow",
+      "LATER": "Later",
+      "PAUSED": "Paused"
+    },
+    "weekdays": {
+      "MON": "Monday",
+      "TUE": "Tuesday",
+      "WED": "Wednesday",
+      "THU": "Thursday",
+      "FRI": "Friday",
+      "SAT": "Saturday",
+      "SUN": "Sunday"
+    },
+    "weekdaysPlural": {
+      "MON": "Mondays",
+      "TUE": "Tuesdays",
+      "WED": "Wednesdays",
+      "THU": "Thursdays",
+      "FRI": "Fridays",
+      "SAT": "Saturdays",
+      "SUN": "Sundays"
+    },
+    "weekdaysShort": {
+      "MON": "Mon",
+      "TUE": "Tue",
+      "WED": "Wed",
+      "THU": "Thu",
+      "FRI": "Fri",
+      "SAT": "Sat",
+      "SUN": "Sun"
+    },
+    "months": [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ],
+    "dates": {
+      "dayWithWeekday": "{weekday}, {month} {day}",
+      "day": "{month} {day}",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "todayLower": "today",
+      "tomorrowLower": "tomorrow",
+      "at": "{day} {time}"
+    },
+    "rules": {
+      "short": {
+        "daily": "Daily {time}",
+        "weekday": "{weekdays} {time}",
+        "weekdays": "Weekdays at {time}",
+        "days": "{days} {time}",
+        "once": "Once"
+      },
+      "long": {
+        "daily": "Every day at {time}",
+        "weekday": "Every {weekday} at {time}",
+        "weekdays": "Weekdays at {time}",
+        "days": "Every {days} at {time}",
+        "once": "Once"
+      },
+      "daysSeparator": ", "
+    },
+    "separator": " · ",
+    "access": {
+      "CHECK_ONLY": {
+        "label": "Check only",
+        "detail": "reads and reports, edits nothing",
+        "brief": "reads and reports"
+      },
+      "OPEN_PR": {
+        "label": "Open a PR",
+        "detail": "edits in its own worktree and opens a PR. It can't merge or deploy.",
+        "brief": "edits in its own worktree and opens a PR. It can't merge or deploy."
+      },
+      "LAND": {
+        "label": "Edit and land on main",
+        "detail": "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy.",
+        "brief": "edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."
+      }
+    },
+    "costs": {
+      "upTo": "Up to {runs}, {minutes} min each",
+      "upToLower": "up to {runs}, {minutes} min each",
+      "runsOnly": "up to {runs}",
+      "runs": {
+        "one": "{count} run a week",
+        "other": "{count} runs a week"
+      },
+      "allowed": "Allowed: {costs}"
+    },
+    "row": {
+      "runningFor": "running for {minutes} min",
+      "pausedOn": "paused {date}",
+      "draft": "draft, waiting for you",
+      "notified": "you were notified",
+      "notNotified": "not notified",
+      "runningShort": "running {minutes} min",
+      "draftShort": "draft"
+    },
+    "tags": {
+      "failedInARow": "Failed {count} in a row",
+      "held": "Held",
+      "failed": "Failed",
+      "known": "Known",
+      "new": "New"
+    },
+    "runStates": {
+      "QUEUED": "Queued",
+      "RUNNING": "Running",
+      "AWAITING_APPROVAL": "Waiting for you",
+      "NO_CHANGE": "No change",
+      "CHANGED": "Changed",
+      "FAILED": "Failed",
+      "SKIPPED": "Skipped",
+      "MISSED": "Missed",
+      "HELD": "Held",
+      "CANCELLED": "Cancelled"
+    },
+    "failureReasons": {
+      "RUNNER_UNAVAILABLE": "found no runner online",
+      "QUOTA": "hit the engine's usage limit",
+      "ENGINE_CRASHED_BEFORE_START": "stopped before its engine started",
+      "REPORTED_FAILED": "reported a failure",
+      "NO_REPORT": "ended without a report",
+      "ENGINE_CRASHED": "ended when its engine stopped",
+      "APPROVAL_TIMEOUT": "waited 2 hours for an approval with no answer",
+      "RUN_LIMIT": "ran past its run limit",
+      "CANCELLED_BY_OWNER": "was stopped by you",
+      "OVER_BUDGET": "was over what you allowed this week",
+      "LANDING_FAILED": "could not land on main"
+    },
+    "runReasonTexts": {
+      "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed."
+    },
+    "failureReasonsWithSummary": {
+      "REPORTED_FAILED": "reported a failure: {summary}",
+      "LANDING_FAILED": "could not land on main: {summary}"
+    },
+    "heldReasons": {
+      "WORKSPACE_NOT_OWNED": {
+        "clause": "the workspace {workspace} is no longer yours",
+        "until": "it is yours again"
+      },
+      "WORKSPACE_DELETED": {
+        "clause": "the workspace {workspace} was deleted",
+        "until": "it runs in another workspace"
+      },
+      "WORKSPACE_DISABLED": {
+        "clause": "the workspace {workspace} is disabled",
+        "until": "it is enabled"
+      },
+      "AGENT_MISSING": {
+        "clause": "the agent \"{agent}\" no longer exists",
+        "until": "it has an agent"
+      },
+      "AGENT_DISABLED": {
+        "clause": "the agent \"{agent}\" is disabled",
+        "until": "it is enabled"
+      },
+      "OUTSIDE_ENVELOPE": {
+        "clause": "it no longer fits what you allowed",
+        "until": "you allow it"
+      },
+      "ACCESS_NOT_ENFORCEABLE": {
+        "clause": "the engine it would run on cannot enforce its access level",
+        "until": "it runs on an engine that can"
+      },
+      "MODE_WIDER_THAN_ACCOUNT_DEFAULT": {
+        "clause": "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)",
+        "until": "your default mode allows it"
+      },
+      "NO_REPOSITORY": {
+        "clause": "the workspace {workspace} has no repository",
+        "until": "it has one"
+      },
+      "SESSION_REFUSED": {
+        "clause": "its run's session could not be opened",
+        "until": "that is fixed"
+      },
+      "WORKTREE_DISABLED": {
+        "clause": "the workspace {workspace} has worktrees disabled",
+        "until": "worktrees are enabled"
+      }
+    },
+    "heldWhere": " in workspace {workspace}",
+    "heldShort": {
+      "WORKSPACE_NOT_OWNED": "workspace not yours",
+      "WORKSPACE_DELETED": "workspace deleted",
+      "WORKSPACE_DISABLED": "workspace disabled",
+      "AGENT_MISSING": "agent missing",
+      "AGENT_DISABLED": "agent disabled",
+      "OUTSIDE_ENVELOPE": "outside what you allowed",
+      "ACCESS_NOT_ENFORCEABLE": "access not enforceable",
+      "MODE_WIDER_THAN_ACCOUNT_DEFAULT": "wider than your default mode",
+      "NO_REPOSITORY": "no repository",
+      "SESSION_REFUSED": "session refused",
+      "WORKTREE_DISABLED": "worktrees disabled"
+    },
+    "endedReasons": {
+      "DELETED": "deleted",
+      "END_REACHED": "its end time passed",
+      "GOAL_REACHED": "goal reached"
+    },
+    "inspector": {
+      "nextRun": "Next run",
+      "last": "Last",
+      "whatItDoes": "What it does",
+      "whatWasAsked": "What was asked",
+      "yourWordsIn": "Your words in {session}, {date}",
+      "notesForNextRun": "Notes for the next run",
+      "leftByRunOf": "Left by the run of {date}",
+      "thisMonth": "This month",
+      "usage": {
+        "one": "{runs} run · {minutes} min",
+        "other": "{runs} runs · {minutes} min"
+      },
+      "history": "History",
+      "session": "session",
+      "late": "late",
+      "draftMeta": "Draft · set up by the agent in {workspace} from what you typed"
+    },
+    "actions": {
+      "runNow": "Run now",
+      "pause": "Pause",
+      "resume": "Resume",
+      "change": "Change…",
+      "delete": "Delete",
+      "undo": "Undo",
+      "open": "Open",
+      "create": "Create",
+      "notNow": "Not now",
+      "openConversation": "Open conversation",
+      "allow": "Allow",
+      "openRun": "Open run",
+      "pauseSchedule": "Pause schedule",
+      "openSchedule": "Open schedule",
+      "openAgentSettings": "Open agent settings",
+      "alwaysAllow": "Always allow",
+      "allowOnce": "Allow once",
+      "deny": "Deny"
+    },
+    "deleteConfirm": {
+      "title": "Delete “{title}”?",
+      "body": "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
+    "keep": {
+      "ACCESS_LEVEL": "Keep check only",
+      "RUNS_PER_WEEK": "Keep weekly",
+      "RUN_LIMIT": "Keep {minutes} min",
+      "WORKSPACE": "Keep in {workspace}",
+      "other": "Keep as it is"
+    },
+    "history": {
+      "who": {
+        "USER": "You",
+        "SESSION": "Session",
+        "RUN": "Run",
+        "ALLOWED": "You allowed"
+      },
+      "fields": {
+        "title": "Name",
+        "prompt": "Prompt",
+        "intent": "What was asked",
+        "rule": "Time",
+        "timezone": "Time zone",
+        "endAt": "Ends",
+        "accessLevel": "Access",
+        "runLimitMinutes": "Run limit",
+        "workspaceId": "Workspace",
+        "readBack": "Read-back"
+      },
+      "change": "{field} {before} → {after}",
+      "changeTo": "{field} → {after}",
+      "changeText": "{field}: {after}",
+      "ruleChange": "{before} → {after}",
+      "created": "Created · {access} · {runs}",
+      "paused": "Paused",
+      "resumed": "Resumed",
+      "ended": "Ended: {reason}",
+      "minutes": "{minutes} min",
+      "noEnd": "no end"
+    },
+    "record": {
+      "changed": "Changed {title}: {change}",
+      "ended": "Ended {title}: {reason} · {by}",
+      "byThisRun": "by this run",
+      "byYou": "by you",
+      "byASession": "by a session"
+    },
+    "createCard": {
+      "title": "Create scheduled task?",
+      "when": "When",
+      "runsIn": "Runs in",
+      "may": "May",
+      "costs": "Costs",
+      "today": "Today",
+      "firstRun": "First run {day}",
+      "firstRunInline": "first run {day}",
+      "runsInEngine": "{workspace} · {engine} agent",
+      "zoneFromDevice": "your time zone",
+      "notice": "You'll hear about new findings and failures only.",
+      "noticeAbout": "You'll hear about new {findings} and failures only."
+    },
+    "envelopeCard": {
+      "titles": {
+        "ACCESS_LEVEL": "Let {title} open PRs?",
+        "RUNS_PER_WEEK": "Let {title} run more often?",
+        "RUN_LIMIT": "Let {title} run longer?",
+        "PROBE_COMMAND": "Let {title} check with a new command?",
+        "WORKSPACE": "Let {title} run in {workspace}?"
+      },
+      "now": "Now",
+      "asked": "Asked",
+      "accessJoin": " — ",
+      "appliesFromNextRun": "Applies from the next run.",
+      "checkedEachRun": "Each run checks this again before it starts.",
+      "landTitle": "Let {title} land on main?"
+    },
+    "sessionPreview": {
+      "create": "Waiting for you to confirm",
+      "envelope": "Waiting for you to allow"
+    },
+    "waiting": {
+      "title": "Waiting on you",
+      "kinds": {
+        "schedule": "Scheduled",
+        "run": "Scheduled run"
+      },
+      "failed": {
+        "title": "{title} failed",
+        "titleInARow": "{title} failed {count} runs in a row",
+        "body": "The last run {reason} ({when}). It keeps running on schedule until you pause it. Open the run to see where it stopped, or ask a session to fix the prompt."
+      },
+      "held": {
+        "title": "{title} is held",
+        "body": "It could not start on {when}: {reason}. Nothing runs until {until} and you resume."
+      },
+      "approval": {
+        "title": "{title} wants to run a command",
+        "body": "If nobody answers by {deadline} this run fails; the next one starts {next}.",
+        "alwaysAllow": "Always allow covers {pattern} in {workspace}: later runs won't ask for this."
+      },
+      "widen": {
+        "body": "{reason} Now: {now}. Asked: {asked}"
+      }
+    },
+    "push": {
+      "failedBody": "The last run {reason}. It keeps running until you pause it.",
+      "goalReachedTitle": "{title} ended itself"
+    },
+    "empty": {
+      "lead": "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.",
+      "examples": [
+        "Every day at 10:00, check the Codex stable release against our pinned version",
+        "Every Monday at 9, list dependencies with known vulnerabilities",
+        "At 18:00 today, check that the deploy is healthy and tell me"
+      ]
+    },
+    "quickAdd": {
+      "placeholder": "Describe a scheduled task…",
+      "hint": "↵ to ask"
+    },
+    "runSession": {
+      "crumb": "Scheduled",
+      "runOf": "run of {date}",
+      "strip": "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list",
+      "reported": "Reported: {state}",
+      "agent": "{engine} agent",
+      "duration": "{minutes} min"
+    },
+    "landing": {
+      "landed": "Landed on main: {sha}.",
+      "failed": "Could not land on main: {reason}"
+    }
+  },
+  "boardPhrases": {
+    "doc": "Each phrase as a board shows it, with the input that must produce it. `board` names the frame: 1/2 is web/01-board.png, 2/2 is web/02-board.png, iOS is 02-agent-first.png. `phoneRows` are the iPhone timeline rows (iOS 01-board.png ②, ⑧), schedulePhoneRowLine.",
+    "rules": [
+      {
+        "rule": {
+          "kind": "DAILY",
+          "time": "10:00"
+        },
+        "form": "short",
+        "text": "Daily 10:00",
+        "board": "2/2 ① create card When; iOS create card"
+      },
+      {
+        "rule": {
+          "kind": "WEEKLY",
+          "time": "10:00",
+          "weekdays": [
+            "MON"
+          ]
+        },
+        "form": "short",
+        "text": "Mondays 10:00",
+        "board": "2/2 ② change line and Now"
+      },
+      {
+        "rule": {
+          "kind": "WEEKLY",
+          "time": "09:00",
+          "weekdays": [
+            "MON",
+            "TUE",
+            "WED",
+            "THU",
+            "FRI"
+          ]
+        },
+        "form": "short",
+        "text": "Weekdays at 09:00",
+        "board": "1/2 ④ draft card When"
+      },
+      {
+        "rule": {
+          "kind": "ONCE",
+          "at": "2026-11-14T18:00"
+        },
+        "form": "short",
+        "text": "Once",
+        "board": "1/2 ① row 6"
+      },
+      {
+        "rule": {
+          "kind": "DAILY",
+          "time": "02:00"
+        },
+        "form": "long",
+        "text": "Every day at 02:00",
+        "board": "1/2 ① Nightly pg spec sweep"
+      },
+      {
+        "rule": {
+          "kind": "WEEKLY",
+          "time": "09:00",
+          "weekdays": [
+            "MON"
+          ]
+        },
+        "form": "long",
+        "text": "Every Monday at 09:00",
+        "board": "1/2 ① Weekly dependency audit"
+      },
+      {
+        "rule": {
+          "kind": "WEEKLY",
+          "time": "17:00",
+          "weekdays": [
+            "FRI"
+          ]
+        },
+        "form": "long",
+        "text": "Every Friday at 17:00",
+        "board": "1/2 ① Release notes draft"
+      },
+      {
+        "rule": {
+          "kind": "WEEKLY",
+          "time": "09:00",
+          "weekdays": [
+            "MON",
+            "TUE",
+            "WED",
+            "THU",
+            "FRI"
+          ]
+        },
+        "form": "long",
+        "text": "Weekdays at 09:00",
+        "board": "1/2 ④ draft row"
+      },
+      {
+        "rule": {
+          "kind": "ONCE",
+          "at": "2026-11-14T18:00"
+        },
+        "form": "long",
+        "text": "Once",
+        "board": "1/2 ① Deploy health check"
+      }
+    ],
+    "costs": [
+      {
+        "runsPerWeek": 7,
+        "runLimitMinutes": 30,
+        "text": "Up to 7 runs a week, 30 min each",
+        "emphasis": "7 runs a week",
+        "board": "2/2 ① Costs"
+      },
+      {
+        "runsPerWeek": 5,
+        "runLimitMinutes": 30,
+        "text": "Up to 5 runs a week, 30 min each",
+        "emphasis": "5 runs a week",
+        "board": "1/2 ④ Costs"
+      }
+    ],
+    "allowed": [
+      {
+        "runsPerWeek": 7,
+        "runLimitMinutes": 30,
+        "text": "Allowed: up to 7 runs a week, 30 min each",
+        "board": "1/2 ② This month"
+      }
+    ],
+    "usage": [
+      {
+        "runs": 14,
+        "minutes": 41,
+        "text": "14 runs · 41 min",
+        "board": "1/2 ② This month"
+      }
+    ],
+    "may": [
+      {
+        "accessLevel": "CHECK_ONLY",
+        "text": "Check only · reads and reports, edits nothing",
+        "board": "1/2 ④, 2/2 ① May"
+      },
+      {
+        "accessLevel": "LAND",
+        "text": "Edit and land on main · edits in its own worktree, then Orbit merges it into main after the run. It can't release or deploy."
+      }
+    ],
+    "envelope": [
+      {
+        "board": "2/2 ② run more often",
+        "widens": [
+          "RUNS_PER_WEEK"
+        ],
+        "now": {
+          "workspaceId": "ws-apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "runsPerWeek": 1,
+          "runLimitMinutes": 30
+        },
+        "asked": {
+          "workspaceId": "ws-apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "runsPerWeek": 7,
+          "runLimitMinutes": 30
+        },
+        "ruleNow": {
+          "kind": "WEEKLY",
+          "time": "10:00",
+          "weekdays": [
+            "MON"
+          ]
+        },
+        "ruleAsked": {
+          "kind": "DAILY",
+          "time": "10:00"
+        },
+        "title": "Let Codex stable check run more often?",
+        "nowText": "Mondays 10:00 · up to 1 run a week",
+        "askedText": "Daily 10:00 · up to 7 runs a week, 30 min each",
+        "askedLead": "Daily 10:00",
+        "keep": "Keep weekly",
+        "note": "Applies from the next run."
+      },
+      {
+        "board": "2/2 ③ open PRs",
+        "widens": [
+          "ACCESS_LEVEL"
+        ],
+        "now": {
+          "workspaceId": "ws-apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "runsPerWeek": 7,
+          "runLimitMinutes": 30
+        },
+        "asked": {
+          "workspaceId": "ws-apiserver",
+          "accessLevel": "OPEN_PR",
+          "runsPerWeek": 7,
+          "runLimitMinutes": 30
+        },
+        "ruleNow": {
+          "kind": "DAILY",
+          "time": "09:00"
+        },
+        "ruleAsked": null,
+        "title": "Let Codex stable check open PRs?",
+        "nowText": "Check only — reads and reports",
+        "askedText": "Open a PR — edits in its own worktree and opens a PR. It can't merge or deploy.",
+        "askedLead": "Open a PR",
+        "keep": "Keep check only",
+        "note": "Applies from the next run. Each run checks this again before it starts.",
+        "waitingReason": "Its run of Nov 13 found 0.49.0 and asks to open the upgrade PR itself from now on.",
+        "waitingBody": "Its run of Nov 13 found 0.49.0 and asks to open the upgrade PR itself from now on. Now: Check only. Asked: Open a PR · edits in its own worktree and opens a PR. It can't merge or deploy."
+      }
+    ],
+    "history": [
+      {
+        "board": "1/2 ② history",
+        "changedBy": "SESSION",
+        "before": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "10:00"
+          }
+        },
+        "after": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "09:00"
+          }
+        },
+        "text": "Time 10:00 → 09:00",
+        "who": "Session",
+        "line": "Changed Codex stable check: time 10:00 → 09:00"
+      },
+      {
+        "board": "1/2 ② history",
+        "changedBy": "SESSION",
+        "before": {
+          "accessLevel": "CHECK_ONLY",
+          "envelope": {
+            "workspaceId": "ws-apiserver",
+            "accessLevel": "CHECK_ONLY",
+            "runsPerWeek": 7,
+            "runLimitMinutes": 30
+          }
+        },
+        "after": {
+          "accessLevel": "OPEN_PR",
+          "envelope": {
+            "workspaceId": "ws-apiserver",
+            "accessLevel": "OPEN_PR",
+            "runsPerWeek": 7,
+            "runLimitMinutes": 30
+          }
+        },
+        "text": "Access → Open a PR",
+        "who": "You allowed"
+      },
+      {
+        "board": "1/2 ② history",
+        "changedBy": "RUN",
+        "before": {
+          "prompt": "check the changelog"
+        },
+        "after": {
+          "prompt": "check the releases page, not the changelog"
+        },
+        "text": "Prompt: check the releases page, not the changelog",
+        "who": "Run"
+      },
+      {
+        "board": "2/2 ② change line",
+        "changedBy": "SESSION",
+        "before": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "10:00"
+          }
+        },
+        "after": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "10:00",
+            "weekdays": [
+              "MON"
+            ]
+          }
+        },
+        "text": "Daily → Mondays 10:00",
+        "who": "Session",
+        "line": "Changed Codex stable check: Daily → Mondays 10:00"
+      },
+      {
+        "board": "iOS history",
+        "changedBy": "SESSION",
+        "before": {
+          "title": "Codex check"
+        },
+        "after": {
+          "title": "Codex stable check"
+        },
+        "text": "Name: Codex check → Codex stable check",
+        "who": "Session"
+      },
+      {
+        "board": "iOS history",
+        "changedBy": "USER",
+        "revision": 1,
+        "before": null,
+        "after": {
+          "accessLevel": "CHECK_ONLY",
+          "envelope": {
+            "workspaceId": "ws-apiserver",
+            "accessLevel": "CHECK_ONLY",
+            "runsPerWeek": 7,
+            "runLimitMinutes": 30
+          }
+        },
+        "text": "Created · Check only · up to 7 runs a week",
+        "who": "You"
+      },
+      {
+        "board": "2/2 ⑤ ended line",
+        "title": "Release 2.0 freeze watch",
+        "changedBy": "RUN",
+        "before": {
+          "state": "ACTIVE"
+        },
+        "after": {
+          "state": "ENDED",
+          "endedReason": "GOAL_REACHED"
+        },
+        "text": "Ended: goal reached",
+        "who": "Run",
+        "line": "Ended Release 2.0 freeze watch: goal reached · by this run"
+      }
+    ],
+    "phoneRows": [
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "02:00"
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Daily 02:00 · apiserver",
+        "board": "iOS 01 ② Nightly pg spec sweep"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "09:00",
+            "weekdays": [
+              "MON"
+            ]
+          },
+          "workspaceName": "web",
+          "accessLevel": "CHECK_ONLY",
+          "state": "HELD",
+          "heldReason": "AGENT_DISABLED"
+        },
+        "opts": {},
+        "text": "Mondays 09:00 · agent disabled",
+        "board": "iOS 01 ② Weekly dependency audit"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "12:00"
+          },
+          "workspaceName": "web",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {
+          "runningMinutes": 21
+        },
+        "text": "Daily 12:00 · web · running 21 min",
+        "board": "iOS 01 ② Docs link check"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "17:00",
+            "weekdays": [
+              "FRI"
+            ]
+          },
+          "workspaceName": "Orbit baseline",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Fridays 17:00 · Orbit baseline",
+        "board": "iOS 01 ② Release notes draft"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "09:00"
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "OPEN_PR",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Daily 09:00 · apiserver · Open a PR",
+        "board": "iOS 01 ② Codex stable check"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "09:00",
+            "weekdays": [
+              "MON",
+              "TUE",
+              "WED",
+              "THU",
+              "FRI"
+            ]
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {
+          "draft": true
+        },
+        "text": "Weekdays at 09:00 · apiserver · draft",
+        "board": "iOS 01 ⑧ Weekday issue summary"
+      }
+    ]
+  }
+}

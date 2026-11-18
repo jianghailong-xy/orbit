@@ -171,11 +171,11 @@ describe('a sidebar Workspace row’s menu', () => {
     expect(location).toBe(`/workspaces/${A}`);
   });
 
-  it('Configure opens the workspace’s editor on its machine’s page', async () => {
+  it('Configure opens the workspace’s Settings page', async () => {
     await visit(`/workspaces/${A}`);
     await openMenu('bravo');
     await click(menuItem('Configure'));
-    expect(location).toBe(`/runners/${RUNNER}?workspace=${B}`);
+    expect(location).toBe(`/settings/workspaces/${B}`);
   });
 
   it('a workspace with no machine has no page to configure it on, so only Delete', async () => {

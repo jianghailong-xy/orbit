@@ -173,7 +173,7 @@ export function minutesText(seconds: number | null | undefined): string {
 }
 
 /** What queued an attempt, which the enqueue event's own text says. */
-export type EnqueueCause = 'DONE' | 'RETRY' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
+export type EnqueueCause = 'DONE' | 'RETRY' | 'SKIP_CHECK' | 'BACKFILL' | 'BEHIND_WORK' | 'BASELINE_HELD' | 'DECISION' | 'AUTOMATIC';
 
 export function enqueuedText(input: {
   kind: IntegrationJobKind;
@@ -195,6 +195,8 @@ export function enqueuedText(input: {
   switch (input.cause) {
     case 'RETRY':
       return `Queued again to land on ${target}`;
+    case 'SKIP_CHECK':
+      return `Queued again to land on ${target} · without the landing check`;
     case 'BACKFILL':
       return `Queued to land on ${target} · the project started integrating`;
     case 'BASELINE_HELD':
@@ -406,8 +408,10 @@ export function retryText(input: {
   return input.reason ? `${head} · ${input.reason}` : head;
 }
 
+/** A skip is only ever of a task landing's check, which since §11 K1 is the landing check (the
+ *  project's `landing_check_command`, or its merge check where that is unset). */
 export function skippedCheckText(reason: string | null): string {
-  return reason ? `Merge check skipped · ${reason}` : 'Merge check skipped';
+  return reason ? `Landing check skipped · ${reason}` : 'Landing check skipped';
 }
 
 export function handlingText(itemState: 'OPEN' | 'CLOSED'): string {

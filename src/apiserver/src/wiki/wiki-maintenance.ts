@@ -6,6 +6,9 @@ import {
   WIKI_MAINTENANCE_HEALTH,
   WIKI_MAINTENANCE_RULES,
   wikiMaintenanceSettings,
+  wikiRepoDetail,
+  wikiRepoReasonNeedsAttention,
+  type WikiRepoTierReason,
   type WikiCursorFactKind,
   type WikiCursorOutcome,
   type WikiCursorState,
@@ -241,6 +244,8 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       FROM "session" s
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       -- v1 feeds no scheduled task's run to the wiki (docs/scheduled-tasks-design.md §12.1).
+       AND s."run_source" <> 'SCHEDULE'
        AND s."last_turn_at" IS NOT NULL
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND ${ours(Prisma.sql`s."id"`)}
@@ -266,6 +271,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = a."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND a."decided_at" IS NOT NULL AND ${ours(Prisma.sql`s."id"`)}
        AND ((a."tool_name" = 'AskUserQuestion' AND a."status" = 'ALLOWED')
          OR (a."tool_name" = 'ExitPlanMode' AND a."status" IN ('ALLOWED', 'DENIED'))
@@ -277,6 +283,7 @@ export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.S
       JOIN "session" s ON s."id" = r."session_id"
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE r."owner_id" = ${owner}::uuid AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND ${ours(Prisma.sql`s."id"`)}
        AND ${notMaintenance(Prisma.sql`t."list_id"`)} ${onOrAfter(Prisma.sql`r."created_at"`)}
     UNION ALL
@@ -317,6 +324,7 @@ export async function wikiSessionsOfSpace(reader: DossierReader, scope: SpaceSco
       LEFT JOIN "task" t ON t."id" = s."task_id"
      WHERE s."owner_id" = ${scope.ownerId}::uuid AND s."id" = ANY(${[...sessionIds]}::uuid[])
        AND s."workspace_id" = ANY(${scope.workspaceIds}::uuid[]) AND s."deleted_at" IS NULL
+       AND s."run_source" <> 'SCHEDULE'
        AND s."status"::text IN ('AWAITING_INPUT', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED')
        AND s."id" <> ALL(${scope.foreignSessionIds}::uuid[])
        AND (${scope.maintenanceListId}::uuid IS NULL OR t."list_id" IS NULL OR t."list_id" <> ${scope.maintenanceListId}::uuid)`;
@@ -1048,6 +1056,44 @@ export class WikiMaintenance {
       void this.push?.notifyWikiMemoryWritesQuiet({ ownerId, spaceId, title: space?.title ?? '', runs });
     } catch (error) {
       this.logger.warn(`the owner was not told that memory writes went quiet: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * A maintenance run ended: whether its repository was read for a reason somebody has to set right, counted on the
+   * cursor row (contract `maintenance.health.notifyRepository`, docs/wiki-repo-tiers-design.md §6). A red reason
+   * (`WIKI_REPO_ATTENTION_REASONS`) counts one more, and the run whose count reads exactly the threshold tells the owner
+   * once, in the reason's words; a run that read the repository (`git`, `folder`) sets the count back to 0; a run that
+   * could not tell — no probe, or a reason that is not red — leaves it where it was. One UPDATE … RETURNING, so of ends
+   * racing only one reads the threshold. Best-effort: no run fails for it.
+   */
+  async noteRepoAttention(ownerId: string, spaceId: string, jobId: string): Promise<void> {
+    try {
+      const run = await this.prisma.wikiMaintenanceRun.findFirst({
+        where: { ownerId, spaceId, jobId },
+        select: { repoTier: true, repoReason: true, repoDetail: true },
+      });
+      if (!run?.repoTier) return;
+      if (run.repoTier === 'git' || run.repoTier === 'folder') {
+        await this.prisma.wikiCursor.updateMany({ where: { spaceId, ownerId, source: 'facts', repoAttentionRuns: { gt: 0 } }, data: { repoAttentionRuns: 0 } });
+        return;
+      }
+      if (!wikiRepoReasonNeedsAttention(run.repoReason)) return;
+      const [counted] = await this.prisma.$queryRaw<Array<{ runs: number }>>`
+        UPDATE "wiki_cursor" SET "repo_attention_runs" = "repo_attention_runs" + 1, "updated_at" = now()
+         WHERE "space_id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid AND "source" = 'facts'
+        RETURNING "repo_attention_runs" AS "runs"`;
+      if (counted?.runs !== WIKI_MAINTENANCE_HEALTH.notifyRepositoryAfterRuns) return;
+      const space = await this.prisma.wikiSpace.findFirst({ where: { id: spaceId, ownerId }, select: { title: true } });
+      void this.push?.notifyWikiRepositoryAttention({
+        ownerId,
+        spaceId,
+        title: space?.title ?? '',
+        runs: counted.runs,
+        detail: run.repoDetail ?? wikiRepoDetail(run.repoReason as WikiRepoTierReason),
+      });
+    } catch (error) {
+      this.logger.warn(`the owner was not told that the repository needs attention: ${(error as Error).message}`);
     }
   }
 

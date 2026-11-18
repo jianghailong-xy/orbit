@@ -130,13 +130,13 @@ class CoordinatorDeliveryLineTest {
         val reply = payload("CRITERIA_REJECTED", revision = null, count = null, taskJson = null)
         val run = CoordinatorDeliveryLine.parse(card(reply.dropLast(1) + ""","toCoordinator":false}"""))!!
         assertEquals(CoordinatorDelivery("CRITERIA_REJECTED", null, null, null, "2026-10-31T11:30:00.000Z", toCoordinator = false), run)
-        assertEquals("Sent to this session · 19:30", CoordinatorDeliveryLine.sent(run, now, zone))
+        assertEquals("Sent to this session · 7:30\u202FPM", CoordinatorDeliveryLine.sent(run, now, zone))
         assertEquals("What this session was told", CoordinatorDeliveryLine.told(run))
         assertEquals("Criteria proposal rejected", CoordinatorDeliveryLine.sentence(run))
 
         val coordinator = CoordinatorDeliveryLine.parse(card(reply.dropLast(1) + ""","toCoordinator":true}"""))!!
         assertTrue(coordinator.toCoordinator)
-        assertEquals("Sent to the coordinator · 19:30", CoordinatorDeliveryLine.sent(coordinator, now, zone))
+        assertEquals("Sent to the coordinator · 7:30\u202FPM", CoordinatorDeliveryLine.sent(coordinator, now, zone))
         assertEquals(OwnerAnswerLine.told, CoordinatorDeliveryLine.told(coordinator))
         assertEquals("What the coordinator was told", CoordinatorDeliveryLine.told(coordinator))
     }
@@ -154,8 +154,8 @@ class CoordinatorDeliveryLineTest {
     @Test fun theLineSaysSentToTheCoordinatorAndWhen() {
         val parsed = CoordinatorDeliveryLine.parse(card(payload("LOOKS_FINISHED")))!!
         val zone = ZoneId.of("Asia/Shanghai")
-        assertEquals("Sent to the coordinator · 19:30", CoordinatorDeliveryLine.sent(parsed, Instant.parse("2026-10-31T12:00:00Z"), zone))
-        assertEquals("Sent to the coordinator · 10/31 19:30", CoordinatorDeliveryLine.sent(parsed, Instant.parse("2026-11-02T12:00:00Z"), zone))
+        assertEquals("Sent to the coordinator · 7:30\u202FPM", CoordinatorDeliveryLine.sent(parsed, Instant.parse("2026-10-31T12:00:00Z"), zone))
+        assertEquals("Sent to the coordinator · 10/31 7:30\u202FPM", CoordinatorDeliveryLine.sent(parsed, Instant.parse("2026-11-02T12:00:00Z"), zone))
         assertEquals(CoordinatorQueue.sentLine(OwnerReview.receiptTime("2026-10-31T11:30:00.000Z", Instant.parse("2026-10-31T12:00:00Z"), zone)),
             CoordinatorDeliveryLine.sent(parsed, Instant.parse("2026-10-31T12:00:00Z"), zone))
     }

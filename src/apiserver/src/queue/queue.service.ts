@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
+import { helpAskMarkerOf } from '../help/help-ask-marker';
 import {
   AgentProvider,
   isAccountEngine,
@@ -10,12 +11,20 @@ import {
   credentialEngines,
   credentialIsAnthropicBound,
   fastModeAvailable,
+  HELP_ASK_V1,
   openCodeKeyOf,
   type AnthropicBoundCredential,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { anthropicGatewayEnabled, engineTableOptions, withKeyGatewayToken } from '../providers/key-gateway';
+import {
+  claudeCodexLoginEnabled,
+  codexLoginClaudeExecRow,
+  isOwnCodexLoginPool,
+  poolTableOptions,
+} from '../providers/codex-login-claude';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
@@ -23,6 +32,7 @@ import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
   builtinSessionEngine,
+  engineBaseEnv,
   ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
@@ -70,6 +80,8 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { sessionDiskHoldSql } from '../common/runner-disk-gate';
+import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
@@ -101,14 +113,23 @@ import {
 } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerHints } from '../realtime/runner-hints';
-import { sessionSourceSnapshot } from '../projects/session-source';
+import { forkAuthorityBindings, sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
+import { codelessClaimFields } from '../sessions/codeless-checkout';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { openingTurnId } from '../sessions/orbit-authored-turn';
+import {
+  runAccessLevel,
+  scheduleRunAgentFields,
+  scheduleRunPermissionMode,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from '../schedules/schedule-access';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -135,6 +156,12 @@ export interface ClaimingRunner {
    * claims no other (trySessionClaim).
    */
   claimRequestId?: string;
+  /**
+   * The only sessions this claim may take: a runner draining for an update claims for the sessions whose
+   * engine is running a turn on it right now, and for nothing new (runner-go drainClaimScope). Absent, the
+   * claim takes any session as it always has; an empty list takes none.
+   */
+  onlySessionIds?: readonly string[];
 }
 
 /**
@@ -286,7 +313,13 @@ export class QueueService {
           unavailableError = ADMIN_ONLY_PROVIDER_ERROR;
         }
         if (!unavailable && engine) {
-          const engines = provider ? credentialEngines(keyCredential(provider)) : [poolEngine!];
+          const engines = provider
+            ? credentialEngines(keyCredential(provider), engineTableOptions(provider.baseUrl))
+            : credentialEngines({
+                kind: 'pool',
+                engine: poolEngine!,
+                ownLogin: poolEngine === AgentProvider.CODEX && (await isOwnCodexLoginPool(this.prisma, session.ownerId, slug)),
+              }, poolTableOptions());
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
         }
         const key = `${session.ownerId}:${slug}`;
@@ -428,6 +461,7 @@ export class QueueService {
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.
         const runnerId = Prisma.sql`${runner.id}::uuid`;
+        const scopedClaim = runner.onlySessionIds !== undefined;
         const claimed = await tx.$queryRaw<Array<{
           id: string; engine: string | null; provider: string; providerBuiltin: boolean; ownerId: string;
         }>>(Prisma.sql`
@@ -470,7 +504,9 @@ export class QueueService {
           -- previous run's engine happened to be doing when it stopped.
           "engine_phase" = NULL,
           -- The wait this claim starts is measured from here (0254). Unlike last_turn_at, which
-          -- ingest moves on every event carrying a turn id, nothing else writes it.
+          -- ingest moves on every event carrying a turn id, nothing else writes it, save the
+          -- re-delivery of a turn a runner stop cut before its engine spoke (dequeueTurn), where the
+          -- run's wait starts again.
           "run_claimed_at" = now(),
           -- Which link request made this claim (the replay above); NULL for one made over HTTPS, so a
           -- request id an earlier claim of this session recorded can never answer for this one.
@@ -486,8 +522,22 @@ export class QueueService {
             -- been answered is one every later claim sees.
             AND NOT ${DISPATCH_PAUSED}
             AND NOT (s.id = ANY(${paused}::uuid[]))
+            -- A runner draining for an update names the sessions whose engine it is running a turn for
+            -- (ClaimingRunner.onlySessionIds): a message queued to one of those moved its row to PENDING,
+            -- and this claim makes it RUNNING again. No other session is claimed while it drains.
+            AND (${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[] IS NULL
+              OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
+            -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only
+            -- work is the owner's message, HELD while it is translated or after its translation failed,
+            -- waits for that message. Releasing it wakes the queue again.
+            AND NOT (
+              EXISTS (SELECT 1 FROM "conversation_turn" held
+                       WHERE held."session_id" = s.id AND held."status" = 'HELD')
+              AND NOT EXISTS (SELECT 1 FROM "conversation_turn" work
+                               WHERE work."session_id" = s.id AND work."status" IN ('PENDING', 'IN_FLIGHT'))
+            )
             -- An unresolved/disabled configured identity must never become a Claude job. A shared
             -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
             --
@@ -512,7 +562,9 @@ export class QueueService {
                             SELECT a.provider_id FROM "provider_slug_alias" a WHERE a.slug = s.provider))
                       AND mp.enabled
                       AND mp.runtime = ANY(CASE s."engine"
-                        WHEN 'claude' THEN ARRAY['claude', 'dsh']
+                        -- Claude Code also runs an OpenAI key, through /api/gw/anthropic, with the deployment flag on.
+                        WHEN 'claude' THEN CASE WHEN ${anthropicGatewayEnabled()}
+                          THEN ARRAY['claude', 'dsh', 'codex'] ELSE ARRAY['claude', 'dsh'] END
                         WHEN 'dsh' THEN ARRAY['claude', 'dsh']
                         WHEN 'opencode' THEN ARRAY['claude', 'codex', 'kimi', 'antigravity', 'dsh']
                         ELSE ARRAY[s."engine"]
@@ -520,13 +572,17 @@ export class QueueService {
                       AND ${usableProviderSql('mp', Prisma.raw('s.owner_id'))}
                   ) OR EXISTS (
                     SELECT 1 FROM "provider_pool" pp
-                    WHERE pp.slug = s.provider AND pp.engine = s."engine" AND (
+                    WHERE pp.slug = s.provider AND ((pp.engine = s."engine" AND (
                       (pp.owner_id = s.owner_id AND NOT pp.shared)
                       OR (pp.engine = 'codex' AND EXISTS (
                         SELECT 1 FROM "provider_pool_person" person
                         WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
                       ))
-                    )
+                    ))
+                    -- Claude Code on a Codex pool of the owner's own, never a shared one, through /api/gw/anthropic,
+                    -- with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on.
+                    OR (${claudeCodexLoginEnabled()} AND s."engine" = 'claude' AND pp.engine = 'codex'
+                      AND pp.owner_id = s.owner_id AND NOT pp.shared))
                   )
                 ))
               ))
@@ -580,6 +636,15 @@ export class QueueService {
                   AND 'provider:cursor' = ANY(r.capabilities)
               ))
             )
+            -- An Ask (migration 0850) only to a runner whose heartbeat declares help-ask/v1: one that does not would
+            -- start it in its default folder with every tool, instead of read-only among the help articles.
+            AND (
+              s."help_ask" IS NULL
+              OR EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND ${HELP_ASK_V1} = ANY(r.capabilities)
+              )
+            )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
             -- rows to a pre-0.1.82 process during a rolling release: a session recorded on
@@ -613,24 +678,30 @@ export class QueueService {
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
-            -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
-            -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-            AND ${runnerActiveTurns(runnerId)}
-                  < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
-            -- Batch-run cap, independent of the runner cap above: a closed set the user
-            -- dispatched together, with the cap they chose for it.
-            AND (
-              s."batch_id" IS NULL
-              OR ${batchActiveTurns('s')} < s."batch_max_concurrent"
-            )
-            -- Spawn-tree cap, independent of both caps above. Where a batch run is closed and
-            -- user-capped, a tree grows on its own and is capped by the server. See
-            -- session-tree-sql.ts for why the ceiling is a share of the runner and why a
-            -- supervisor is exempt from the count.
-            AND (
-              s."root_session_id" IS NULL
-              OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
-            )
+            -- The capacity caps below hold back new work. A drain-scoped claim (ClaimingRunner.onlySessionIds)
+            -- starts none: it is for a session whose engine is already running a turn on this runner, and the
+            -- runner holds the message it brings until its update. Refused here, its row would read PENDING
+            -- while that engine runs, so it is exempt from all three; an unscoped claim never is.
+            AND (${scopedClaim}::boolean OR (
+              -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
+              -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
+              ${runnerActiveTurns(runnerId)}
+                < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
+              -- Batch-run cap, independent of the runner cap above: a closed set the user
+              -- dispatched together, with the cap they chose for it.
+              AND (
+                s."batch_id" IS NULL
+                OR ${batchActiveTurns('s')} < s."batch_max_concurrent"
+              )
+              -- Spawn-tree cap, independent of both caps above. Where a batch run is closed and
+              -- user-capped, a tree grows on its own and is capped by the server. See
+              -- session-tree-sql.ts for why the ceiling is a share of the runner and why a
+              -- supervisor is exempt from the count.
+              AND (
+                s."root_session_id" IS NULL
+                OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
+              )
+            ))
             -- A message may be queued behind a merge/commit still executing on this
             -- session's checkout (createTurn enqueues it PENDING rather than rejecting).
             -- Don't hand it a slot until that git operation settles off 'pending', or the
@@ -640,6 +711,13 @@ export class QueueService {
             -- runner also fails it via failAbandonedWorktreeOperations). Shared with the
             -- session list, which names this gate to the user, so the two cannot drift.
             AND NOT ${worktreeOperationFenceSql('s')}
+            -- A GitHub workspace's sessions wait for its clone (docs/github-workspace-design.md §6): until the runner
+            -- reports it READY the work dir is not there, and an engine started in it would fail. Shared with the
+            -- session list, which names this gate (WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED) to the person waiting.
+            AND NOT ${workspaceCloneHoldSql(Prisma.sql`s."workspace_id"`)}
+            -- Keep Free (runner-disk-gate.ts): a session that has never run waits while its workspace's disk is below the
+            -- runner's floor; one that has run takes its next message. Shared with the session list (disk_below_floor).
+            AND NOT ${sessionDiskHoldSql('s')}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use
@@ -749,6 +827,7 @@ export class QueueService {
     kimiAccountPinned: boolean;
     cursorAccount: string | null;
     cursorAccountPinned: boolean;
+    env: unknown;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: (AccountRunner & { accountNames: unknown; capabilities: string[] }) | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -770,7 +849,8 @@ export class QueueService {
       session.assignedRunnerId!,
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
-      workspace,
+      // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
+      workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
       runner,
       new Date(),
     );
@@ -801,6 +881,8 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
             codeless: true,
@@ -900,6 +982,8 @@ export class QueueService {
         });
         const turn = await tx.conversationTurn.create({
           data: {
+            // The id the active view listed the opening under while no runner had it (`openingTurnId`).
+            id: openingTurnId(session.id),
             sessionId: session.id,
             seq: (last?.seq ?? 0) + 1,
             clientTurnId: seedClientTurnId,
@@ -962,10 +1046,12 @@ export class QueueService {
       { ownerId: session.ownerId, provider: declared, providerBuiltin: session.providerBuiltin },
       workspace?.env,
     );
+    // Claude Code on an OpenAI key runs on a token minted for this claim, never the key (key-gateway.ts).
+    const keyRow = await withKeyGatewayToken(this.prisma, session, engine, configuredRow);
     const customRow = declaredIsBuiltin
-      ? configuredRow
-      : (configuredRow ??
-        (await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
+      ? keyRow
+      : (keyRow ??
+        (await this.resolveLoginPool(this.prisma, session, declared!, true, engine)) ??
         (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
         (await this.resolveSharedPool(this.prisma, session, declared!, true)));
     // A Claude pool of the owner's own that none of its members can run still dispatches, on the Claude
@@ -989,6 +1075,8 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
+        // The session's own env (Settings panel), laid over the workspace's.
+        sessionEnv: session.env,
         // The account picked for this session, else its workspace's (accountsForClaim).
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
@@ -1025,6 +1113,13 @@ export class QueueService {
       }
     }
     const provider = exec.provider;
+    // The engine this claim starts is handed the session's env as it stands now (exec.env): the
+    // Settings panel owes no restart for it (sessionSettingsOf). Only while the env is still the one
+    // read: a PATCH landing since then is not in this engine, and stays owed.
+    await this.prisma.session.updateMany({
+      where: { id: session.id, envChangedAt: session.envChangedAt },
+      data: { envAppliedAt: new Date() },
+    });
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
@@ -1065,9 +1160,16 @@ export class QueueService {
     // §6.3 step 1: hand the runner the frozen SOURCE snapshot. `undefined` for a Legacy session —
     // and that absence is the compatibility guarantee, not an omission: it is exactly the payload
     // every runner has always received, so nothing about their behaviour changes (SR46).
-    const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob).
-    const naming = engineNamingJob(session, provider, configuredRow);
+    // A fork (SR55) has no binding; its authority is the machine its task's snapshot is on.
+    const source = sessionSourceSnapshot(
+      session,
+      session.sourceKind === 'SESSION_FORK'
+        ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
+        : await this.sourceBinding(session.sourceCodebaseId),
+    );
+    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
+    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
+    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
@@ -1077,9 +1179,18 @@ export class QueueService {
       prompt: session.prompt,
       // The project directory the runtime runs in comes from the session's workspace.
       workDir: workspace?.workDir ?? undefined,
+      // An Ask (migration 0850): the runner starts it read-only in a scratch folder of help articles, never in a
+      // workDir (help/help-ask.ts). Only when set, so every other claim keeps the shape it had.
+      ...(session.helpAsk != null ? { helpAsk: helpAskMarkerOf(session.helpAsk) ?? { page: null } } : {}),
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
+      // The folder below workDir a no-worktree session runs in (POST /sessions `workSubdir`); the runner refuses
+      // one that is missing or leaves workDir. Only when set, so every other claim keeps the shape it had.
+      ...(session.workSubdir ? { workSubdir: session.workSubdir } : {}),
+      // A codeless task's run with no branch yet (design §3, B2): a detached checkout, and the branch to
+      // make only if the run changes something — or, for a runner too old for that, the branch up front.
+      ...codelessClaimFields(session, workspace, session.assignedRunner?.capabilities),
       // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: workspace?.autoInitGit ?? undefined,
       // A workspace made in a new folder under the runner's reposRoot (POST /sessions `newFolder`): the runner makes
@@ -1122,6 +1233,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // A scheduled task's run (docs/scheduled-tasks-design.md §7.1): the runner spawns it with ORBIT_SCHEDULE_RUN=1,
+      // which is what lists schedule_run_report in its `orbit mcp`. Absent for every other session.
+      ...(session.scheduleRunId ? { scheduleRun: true } : {}),
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,
@@ -1132,12 +1246,22 @@ export class QueueService {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: dispatchAllowedTools(
+        // A scheduled run is held to the level it started with (runAccessLevel, design §6.2).
+        allowedTools: scheduleRunAllowedTools(
+          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
+          runAccessLevel(session.scheduleRun),
           provider,
-          ALWAYS_ALLOWED_TOOLS,
           workspace?.permissionRules ?? [],
+          session.assignedRunner?.capabilities,
         ),
-        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+        disallowedTools: scheduleRunDisallowedTools(
+          (workspace?.disallowedTools as string[] | null) ?? [],
+          runAccessLevel(session.scheduleRun),
+          provider,
+          session.assignedRunner?.capabilities,
+        ),
+        // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
+        ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
@@ -1146,7 +1270,10 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
+          ),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,
@@ -1622,6 +1749,11 @@ export class QueueService {
    * Every door that builds such a session's engine environment resolves it here — the claim, a restarted
    * runner's reclaim, a provider-switch reload (RunnerApiController) — and each mints its own token.
    * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
+   *
+   * A Claude Code session (`engine` claude) on such a pool, with ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY on, is chosen
+   * an account the same way, among the accounts its owner signed in themselves and never the pool's API keys
+   * (decision D4: no other person's account), and dispatches as codexLoginClaudeExecRow: /api/gw/anthropic with
+   * the same pool session token. With the switch off it dispatches as before, which Claude Code cannot run.
    */
   async resolveLoginPool(
     db: Prisma.TransactionClient | PrismaService,
@@ -1634,16 +1766,18 @@ export class QueueService {
     },
     slug: string,
     atClaim = false,
+    engine?: AgentProvider | null,
   ): Promise<ModelProviderRow | null> {
     const pool = await this.accountPool(session.ownerId, slug, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
+    const claude = engine === AgentProvider.CLAUDE && claudeCodexLoginEnabled();
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
     const { chosen, next, notice } = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        accounts: pool.logins,
-        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        accounts: claude ? pool.logins.filter((login) => login.userId === session.ownerId) : pool.logins,
+        keys: claude ? [] : await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
       },
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
@@ -1675,7 +1809,7 @@ export class QueueService {
     if (atClaim && (notice || session.poolSwitchNotice)) {
       await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
     }
-    return sharedPoolExecRow(token);
+    return claude ? codexLoginClaudeExecRow(token) : sharedPoolExecRow(token);
   }
 
   /**

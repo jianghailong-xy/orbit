@@ -217,7 +217,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
 }
 
 /// PATCH /runners/:id — `displayName` empty string clears the alias (falls back to machine name);
-/// nil omits. `maxConcurrent` 1…64. `minFreeDiskMb` is three-state because omitting it leaves the
+/// nil omits. `maxConcurrent` 1 or more. `minFreeDiskMb` is three-state because omitting it leaves the
 /// reserve alone while an explicit JSON null turns the reserve off.
 public struct UpdateRunnerRequest: Encodable, Sendable {
     public var displayName: String?
@@ -314,6 +314,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// OpenCode only: its CLI listed no provider key, stored or in its environment. `auth` stays
+    /// unknown — OpenCode's free models need none. Absent otherwise, and from an older runner.
+    public let openCodeNoKey: Bool?
     /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
     /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
     /// Present only while the runner reports another account of this engine: Default is then left out
@@ -329,8 +332,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
                 installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
-                removedDefault: RunnerRemovedDefault? = nil) {
+                removedDefault: RunnerRemovedDefault? = nil, openCodeNoKey: Bool? = nil) {
         self.engine = engine
+        self.openCodeNoKey = openCodeNoKey
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
@@ -480,11 +484,92 @@ public struct RunnerSelfUpdate: Codable, Equatable, Sendable {
     public let lastUpdatedAt: String?
     public let lastUpdatedFrom: String?
     public let lastUpdatedTo: String?
+    /// Where a release the runner is behind stands, for the runner page's Update card: `available`,
+    /// `draining`, `restarting` or `postponed`, raw like `state`. Nil when none is waiting, and from a
+    /// runner too old to say, which keeps the page's wording from before it.
+    public var phase: String? = nil
+    public var targetVersion: String? = nil
+    public var availableSince: String? = nil
+    public var drainingSince: String? = nil
+    public var postponedUntil: String? = nil
+    /// While draining: the turns still in flight, and how many there were when the drain began.
+    public var turnsInFlight: Int? = nil
+    public var turnsAtDrain: Int? = nil
+    /// While restarting for the owner's Update Now: how many turns it interrupted, which continue once
+    /// it is back. Nil for an update that waited for idle.
+    public var interruptedTurns: Int? = nil
+    /// The last update's restart: seconds from the stop to the new image starting, and how many turns
+    /// an Update Now interrupted for it. Nil when the runner did not measure them (an older one).
+    public var lastUpdateSeconds: Int? = nil
+    public var lastUpdateInterruptedTurns: Int? = nil
+    /// How long, in seconds, the runner must have been quiet before an automatic update installs.
+    /// Nil from a runner that doesn't wait for one, which keeps the page's wording from before.
+    public var quietWindowSeconds: Int? = nil
+}
+
+/// One of the reader's turns a draining runner waits for (shared `RunnerUpdateTurn`): its session,
+/// title, and when the current run was claimed.
+/// What of the reader's waits on a runner draining for its self-update (shared `RunnerDrainWaiting`):
+/// sessions that have not started, and messages sent to sessions that had.
+public struct RunnerDrainWaiting: Codable, Equatable, Sendable {
+    public let sessions: Int
+    public let messages: Int
+    /// The runner drains because its process is stopping, not for a release: "is stopping", and no
+    /// Later or Update Now. False from a server that predates the field.
+    public let stopping: Bool
+
+    public init(sessions: Int, messages: Int, stopping: Bool = false) {
+        self.sessions = sessions
+        self.messages = messages
+        self.stopping = stopping
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessions = try c.decode(Int.self, forKey: .sessions)
+        messages = try c.decode(Int.self, forKey: .messages)
+        stopping = (try? c.decodeIfPresent(Bool.self, forKey: .stopping)) ?? false
+    }
+}
+
+public struct RunnerUpdateTurn: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String?
+    public let startedAt: String?
 }
 
 /// POST /runners/:id/self-update (Update Runner Now) acknowledges when the check was requested.
 public struct RunnerSelfUpdateRequest: Codable, Equatable, Sendable {
     public let requestedAt: String?
+}
+
+/// POST /runners/:id/self-update/now (Update Now, shared `RunnerSelfUpdateNowRequest`): the owner's
+/// explicit "interrupt these turns".
+public struct RunnerSelfUpdateNowRequest: Codable, Equatable, Sendable {
+    public let interruptTurns: Bool
+    public init(interruptTurns: Bool = true) { self.interruptTurns = interruptTurns }
+}
+
+/// Its answer: when it was asked, and how many of the owner's turns were running then.
+public struct RunnerSelfUpdateNowResponse: Codable, Equatable, Sendable {
+    public let requestedAt: String?
+    public let turns: Int?
+}
+
+/// POST /runners/:id/self-update/postpone (Later, shared `RunnerSelfUpdatePostponeRequest`): until when,
+/// and the reader's zone the server caps it in.
+public struct RunnerSelfUpdatePostponeRequest: Codable, Equatable, Sendable {
+    public let until: String
+    public let timeZone: String?
+    public init(until: String, timeZone: String?) {
+        self.until = until
+        self.timeZone = timeZone
+    }
+}
+
+/// Its answer: the time the runner was asked to wait until, after the cap.
+public struct RunnerSelfUpdatePostponeResponse: Codable, Equatable, Sendable {
+    public let until: String
 }
 
 /// POST /runners/:id/region-check (Check again, docs/claude-region-check-contract.md §7) answers when
@@ -499,6 +584,63 @@ public struct RunnerAccountRemoveState: Codable, Equatable, Sendable {
     public let account: String?
     public let status: String?
     public let message: String?
+    /// With `failed` because the account is in use: the sessions the machine named as running in it,
+    /// oldest first. Empty otherwise, and from an older server that sends none; one entry this build
+    /// can't read is dropped rather than failing the runner.
+    public let sessions: [RunnerAccountRemoveSession]
+    /// With `pending`: how many sessions the removal moved to another account and waits on to leave
+    /// it. Nil while it waits on none, and from an older server.
+    public let moving: Int?
+
+    public init(engine: String?, account: String?, status: String?, message: String?,
+                sessions: [RunnerAccountRemoveSession] = [], moving: Int? = nil) {
+        self.engine = engine
+        self.account = account
+        self.status = status
+        self.message = message
+        self.sessions = sessions
+        self.moving = moving
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case engine, account, status, message, sessions, moving
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        engine = try c.decodeIfPresent(String.self, forKey: .engine)
+        account = try c.decodeIfPresent(String.self, forKey: .account)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        message = try c.decodeIfPresent(String.self, forKey: .message)
+        sessions = ((try? c.decodeIfPresent([LossyDecodable<RunnerAccountRemoveSession>].self, forKey: .sessions)) ?? [])
+            .compactMap(\.value)
+        moving = try? c.decodeIfPresent(Int.self, forKey: .moving)
+    }
+}
+
+/// A session that keeps an account from being removed (shared `RunnerAccountRemoveSession`): what the
+/// runner's page lists and opens. A status this build has never heard of decodes as nil.
+public struct RunnerAccountRemoveSession: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let status: RunStatus?
+
+    public init(id: String, title: String, status: RunStatus?) {
+        self.id = id
+        self.title = title
+        self.status = status
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, status
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        status = (try? c.decodeIfPresent(String.self, forKey: .status)).flatMap { $0 }.flatMap(RunStatus.init(rawValue:))
+    }
 }
 
 /// Where a runner's sign-in relay has got to (shared `RunnerLoginState`).
@@ -661,6 +803,15 @@ public struct RunnerRepoHealth: Codable, Equatable, Sendable {
     public let state: String?
     public let branch: String?
     public let paths: [String]?
+    // The main checkout counts a runner with `main-checkout-git/v1` adds (docs/main-checkout-git-contract.md §4).
+    // Counts and the fingerprint only; nil from an older runner, which the Main checkout bar reads as unknown.
+    public var head: String? = nil
+    public var upstream: String? = nil
+    public var ahead: Int? = nil
+    public var behind: Int? = nil
+    public var fileCount: Int? = nil
+    public var truncated: Bool? = nil
+    public var fingerprint: String? = nil
 }
 
 /// Last word from the repo-cleanup relay attached to a GET /workspaces row.

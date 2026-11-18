@@ -51,6 +51,13 @@ export interface SourceResolutionInput {
     attemptGeneration: bigint;
     inheritedKnownGoodSha: string | null;
     dependsOnTaskIds: readonly string[];
+    /**
+     * Row PF's input (SR55): the snapshot this task was forked from, a fact written on the task when
+     * it was created, or null. The forking session's title rides along for SR18's reason only. The
+     * machine the snapshot is on is deliberately NOT here — it is the authority, read beside the
+     * selector the way a binding's `authorityRunnerId` is, and SR17 keeps every runner out of this type.
+     */
+    fork: { sessionId: string; sessionTitle: string | null; sha: string; includesUncommitted: boolean } | null;
   };
   codebase: SourceCodebaseInput | null;
   /**
@@ -69,7 +76,7 @@ export interface SourceResolutionInput {
 
 /** Which row of §4.1 won, and on what evidence (SR18). */
 export interface SourceReason {
-  rank: "P0'" | 'P1' | 'P2' | 'P3' | 'P4' | 'P5';
+  rank: 'PF' | "P0'" | 'P1' | 'P2' | 'P3' | 'P4' | 'P5';
   /** One sentence a person can read in the UI: why this run starts where it starts. */
   because: string;
 }
@@ -77,13 +84,16 @@ export interface SourceReason {
 /** The nine create-frozen columns, as values (SR11's create-frozen set). */
 export interface SourceSelector {
   kind: SourceKind;
-  codebaseId: string;
-  repoUrl: string;
+  /** Null for row PF alone (SR55): a fork resolves against no binding. */
+  codebaseId: string | null;
+  /** Null for row PF alone: the snapshot's repository is the forking session's, on its machine. */
+  repoUrl: string | null;
   rootCommitSha: string | null;
   /** Exactly one of `ref` / `revisionSha` is non-null — §4.1's selector-type column. */
   ref: string | null;
   revisionSha: string | null;
-  configRevision: bigint;
+  /** Null for row PF alone: there is no binding whose configuration could be frozen. */
+  configRevision: bigint | null;
   refAuthority: SourceRefAuthority;
   requiredContains: string[];
 }
@@ -132,6 +142,49 @@ export function classifyPinnedRevision(
  */
 export function resolveSource(input: SourceResolutionInput): SourceResolution {
   const { task, codebase } = input;
+
+  // PF — a task forked from the session that created it starts from that session's snapshot, and
+  // from nothing else (SR55). Ahead of P0' because the fork is a stated starting point and P0' is the
+  // absence of one: a forked task outside any project, or a codeless one, would otherwise start from
+  // whatever the workspace's checkout has checked out, which is the very thing the fork replaces.
+  //
+  // In a project with a code binding the predicate does not hold, and the answer is a refusal rather
+  // than P1–P5 (SR19): a fork's baseline is the forking session's work, and a project's is its own line
+  // (SR1), so resolving it there would either drop the fork or let unlanded work onto the line.
+  if (task.fork !== null) {
+    if (codebase !== null) {
+      throw new SourceResolutionRefusal(
+        'FORK_IN_BOUND_PROJECT',
+        { taskId: task.id, projectId: task.projectId, forkSessionId: task.fork.sessionId },
+        `this task was forked from a session’s snapshot, and its project has a code binding: a task in that project `
+          + `starts from the project’s own line, so a fork cannot run there. File the fork outside the project, or land `
+          + `the session’s work and file the task without a fork.`,
+      );
+    }
+    const sha = task.fork.sha.trim().toLowerCase();
+    if (!FULL_SHA.test(sha)) {
+      throw new SourceResolutionRefusal(
+        'BASE_SHA_UNAVAILABLE',
+        { sourceKind: 'SESSION_FORK', sha: task.fork.sha },
+        `the snapshot this task was forked from is not a full commit SHA: "${task.fork.sha}"`,
+      );
+    }
+    return {
+      state: 'SELECTED',
+      selector: {
+        kind: 'SESSION_FORK',
+        codebaseId: null,
+        repoUrl: null,
+        rootCommitSha: null,
+        ref: null,
+        revisionSha: sha,
+        configRevision: null,
+        refAuthority: 'RUNNER_LOCAL',
+        requiredContains: [],
+      },
+      reason: { rank: 'PF', because: forkReason(task.fork.sessionTitle, sha, task.fork.includesUncommitted) },
+    };
+  }
 
   // P0' — no binding, or a task that opted out. SR5's escape hatch, and the ONLY way a session is
   // Legacy: a stored state, never an inference from "does it have a projectId".
@@ -296,6 +349,17 @@ export function resolveSource(input: SourceResolutionInput): SourceResolution {
         : `it is an ordinary task of this project's code line, which starts from ${ref} until something lands on ${codebase.integrationRef}`,
     },
   };
+}
+
+/**
+ * SR18's sentence for row PF, in the words design §2.3 gives it: "Forked from session «title» at
+ * abc1234 (includes uncommitted changes)". A session with no title is named as "a session" rather
+ * than by an empty pair of quotes.
+ */
+export function forkReason(sessionTitle: string | null, sha: string, includesUncommitted: boolean): string {
+  const title = sessionTitle?.trim();
+  const from = title ? `Forked from session «${title}»` : 'Forked from a session';
+  return `${from} at ${sha.slice(0, 7)}${includesUncommitted ? ' (includes uncommitted changes)' : ''}`;
 }
 
 /**

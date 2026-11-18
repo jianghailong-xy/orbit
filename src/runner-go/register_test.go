@@ -367,3 +367,14 @@ func TestAwaitDeviceApprovalEndsOnTheBrowsersDecision(t *testing.T) {
 		})
 	}
 }
+
+// A runner registered without --max-concurrent runs one session per CPU core.
+func TestDefaultMaxConcurrentIsCPUCount(t *testing.T) {
+	want := runtime.NumCPU()
+	if got := getInt(map[string]string{}, "max-concurrent", defaultMaxConcurrent()); got != want {
+		t.Fatalf("default max-concurrent = %d, want %d", got, want)
+	}
+	if got := getInt(map[string]string{"max-concurrent": "3"}, "max-concurrent", defaultMaxConcurrent()); got != 3 {
+		t.Fatalf("--max-concurrent 3 gave %d", got)
+	}
+}

@@ -45,7 +45,7 @@ test('every event run_event never holds but the approval card rides its notifica
   const userScoped = [
     RunEventType.TASK_LIST_CHANGED, RunEventType.TAG_CHANGED, RunEventType.FOLDER_CHANGED, RunEventType.PROVIDER_CHANGED,
     RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED, RunEventType.PROJECT_CHANGED, RunEventType.WATCH_CHANGED,
-    RunEventType.WIKI_CHANGED,
+    RunEventType.WIKI_CHANGED, RunEventType.TERMINALS_CHANGED,
   ];
   const publishers: Array<[string, Array<() => void>]> = [
     ['session_created', [() => realtime.publishSessionCreated(SESSION)]],

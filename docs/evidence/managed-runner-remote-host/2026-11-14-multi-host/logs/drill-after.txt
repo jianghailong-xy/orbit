@@ -1,0 +1,15 @@
+--- 2026-11-14T14:23:35Z after
+B channel.json image: sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553
+B checkout: d29ffe5254e7da381a880bcc16ae20c68f7dfeee
+B /v1/info from the server machine: {"instanceId":"orbit-lab-b","image":"sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553"}
+A /v1/info from the server machine: {"instanceId":"orbit-lab-a","image":"sha256:7f66c5f869231dc15e23dfc66018aef49001e48ba2388e81f48f3541caba5216"}
+apiserver container started at: 2026-11-14T14:06:48.292822556Z image sha256:1f1e4f76ffd57682170ae6efbccc7355c69941663f68be15497e2e935e6bc854
+profile.json sha256: 146a8edb0890143b, runner.image "channel"
+B services: orbit-docker-channel Up 19 seconds (healthy);orbit-managed-runner-firewall Up 30 seconds (healthy);
+B runner containers:
+mr-01a1da64-d6b6-75e8-8a89-de62633fedae gen=1 image=61e1370ab959 Up 13 minutes
+mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=2 image=61e1370ab959 Up 15 minutes
+mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=2 image=61e1370ab959 Up 15 minutes
+/mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f d29ffe5254e7da381a880bcc16ae20c68f7dfeee
+/mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f a76a31cdb2480b48e74fdaa04ec72fda76436e63
+apiserver at the end: 2026-11-14T14:06:48.292822556Z restarts=0, profile 146a8edb0890143b

@@ -852,6 +852,60 @@ func TestProjectUpdateRefusesAnUnknownDeliveryMode(t *testing.T) {
 	}
 }
 
+func TestProjectUpdateSendsTheNonCodeMarkAsTheOwner(t *testing.T) {
+	for _, tc := range []struct {
+		flag string
+		want bool
+	}{{"true", true}, {"false", false}} {
+		var body map[string]interface{}
+		sawSessionHeader := true
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_, _ = w.Write([]byte(projectDetailJSON))
+		}))
+		configureCLITestRunner(t, srv.URL)
+		var out bytes.Buffer
+		err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", tc.flag, "--json"}, strings.NewReader(""), &out)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("project update --non-code %s: %v", tc.flag, err)
+		}
+		if len(body) != 1 || body["nonCode"] != tc.want {
+			t.Fatalf("project update --non-code %s body = %#v", tc.flag, body)
+		}
+		if sawSessionHeader {
+			t.Fatal("`orbit project update --non-code` sent a session header")
+		}
+	}
+	err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", "yes"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--non-code must be true or false") {
+		t.Fatalf("project update --non-code yes = %v", err)
+	}
+}
+
+func TestProjectUpdateSendsTheNonCodeReasonOnlyWithTheMark(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	err := cmdProjectCLI([]string{"update", "proj-1", "--non-code", "true", "--non-code-reason", "Vendor accounts only.", "--json"},
+		strings.NewReader(""), &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("project update --non-code-reason: %v", err)
+	}
+	if len(body) != 2 || body["nonCode"] != true || body["nonCodeReason"] != "Vendor accounts only." {
+		t.Fatalf("project update --non-code-reason body = %#v", body)
+	}
+	err = cmdProjectCLI([]string{"update", "proj-1", "--non-code-reason", "alone"}, strings.NewReader(""), &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--non-code-reason goes with --non-code") {
+		t.Fatalf("project update --non-code-reason alone = %v", err)
+	}
+}
+
 func TestProjectUpdatePreservesStructuredAcceptanceIdentity(t *testing.T) {
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1628,12 +1682,13 @@ func TestProjectSendPostsTheCoordinatorMessagesRouteAsTheCallingSession(t *testi
 	if token != "session-token" {
 		t.Fatalf("project send credential header = %q", token)
 	}
-	// The body carries the message and nothing else: an id here would be a conversation named by the
-	// caller, which is exactly the snapshot this door refuses to take.
+	// The body carries the message and the key drawn for this call, nothing else: an id here would
+	// be a conversation named by the caller, which is exactly the snapshot this door refuses to take.
 	var body map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &body); err != nil {
 		t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
 	}
+	takeDrawnKey(t, body)
 	if len(body) != 1 || body["message"] != "the shard is red" {
 		t.Fatalf("project send body = %#v", body)
 	}
@@ -1737,11 +1792,10 @@ func TestProjectSendCarriesTheClientTurnId(t *testing.T) {
 	}
 }
 
-// Without a key the request is the one this command always sent — the message alone — and the
-// server mints the key itself. An empty or blank --client-turn-id is no key either, exactly as for
-// `session send`: the route floors the field at one character, so an empty string sent for "none"
-// would be refused where the caller asked for nothing.
-func TestProjectSendSendsNoClientTurnIdWhenNoneIsGiven(t *testing.T) {
+// Without a key the command draws one for this call and prints it, so a lost answer can be replayed
+// under it. An empty or blank --client-turn-id is no key either, exactly as for `session send`: it
+// is never sent as "", which the route would refuse (it floors the field at one character).
+func TestProjectSendDrawsAClientTurnIdWhenNoneIsGiven(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -1780,11 +1834,12 @@ func TestProjectSendSendsNoClientTurnIdWhenNoneIsGiven(t *testing.T) {
 			if err := json.Unmarshal([]byte(raw), &body); err != nil {
 				t.Fatalf("project send body is not JSON: %v\n%s", err, raw)
 			}
-			if _, present := body["clientTurnId"]; present || len(body) != 1 || body["message"] != "the shard is red" {
+			key := takeDrawnKey(t, body)
+			if key == "" || len(body) != 1 || body["message"] != "the shard is red" {
 				t.Fatalf("project send body = %#v", body)
 			}
-			if out.Len() == 0 || strings.Contains(out.String(), "clientTurnId") {
-				t.Fatalf("project send printed %q", out.String())
+			if !strings.Contains(out.String(), `"clientTurnId":"`+key+`"`) {
+				t.Fatalf("project send printed %q, without the key %s", out.String(), key)
 			}
 		})
 	}

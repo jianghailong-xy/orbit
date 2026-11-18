@@ -58,6 +58,11 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// BackgroundJobSessionIDs are the sessions that occupy a slot of IdleCapacity's count only
+	// through runner-hosted background jobs of their own (sessionPool.admissionOccupancy): no turn
+	// runs, yet the runner takes no work in their place. The control plane counts them as running.
+	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
+	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -103,6 +108,9 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// Resources is the machine's CPU, memory and disk now (machine_resources.go), sent on every beat
+	// by a runner that declares machine-resources/v1.
+	Resources *MachineResources `json:"resources,omitempty"`
 	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
@@ -111,6 +119,50 @@ type HeartbeatRequest struct {
 	// sends it; the control plane stores it only from the instance its manager authorized, and puts
 	// nothing to sleep without a fresh one.
 	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
+	// CloneReports is where each clone the control plane asked for stands (clone_workdir.go). Omitted when there
+	// is none.
+	CloneReports []CloneReport `json:"cloneReports,omitempty"`
+	// ConditionSamples are the condition probes' readings since the last answered beat (condition_probe.go), oldest
+	// first per condition. Only a runner that declares condition-probe/v1 sends them; omitted when there are none.
+	ConditionSamples []ConditionSample `json:"conditionSamples,omitempty"`
+}
+
+// ConditionProbe is one condition whose probe this runner runs (docs/condition-triggers-design.md §4.2), as the
+// heartbeat answer lists it.
+type ConditionProbe struct {
+	// ID is the condition's id.
+	ID string `json:"id"`
+	// Command is the shell command, verbatim as the owner approved it.
+	Command string `json:"command"`
+	// CommandHash is the approved command's hash: the SHA-256 of its exact text, lowercase hex. A command that does
+	// not match it is not run.
+	CommandHash     string `json:"commandHash"`
+	TimeoutSeconds  int    `json:"timeoutSeconds"`
+	IntervalSeconds int    `json:"intervalSeconds"`
+	// WorkDir is the workspace's directory, where the command runs.
+	WorkDir string `json:"workDir"`
+	// Env is the workspace's environment, layered over the runner's as a session's is.
+	Env map[string]string `json:"env,omitempty"`
+}
+
+// ConditionSample outcomes.
+const (
+	conditionOutcomeValue   = "VALUE"
+	conditionOutcomeExit    = "EXIT"
+	conditionOutcomeTimeout = "TIMEOUT"
+	conditionOutcomeError   = "ERROR"
+)
+
+// ConditionSample is one reading of a probe (docs/condition-triggers-design.md §3). Value is the number on the last
+// non-empty line of stdout (VALUE); ExitCode is set whenever the command exited (VALUE, EXIT). StderrTail is the end
+// of stderr, at most 500 bytes; on ERROR it says, in words, why the probe could not run.
+type ConditionSample struct {
+	ConditionID string    `json:"conditionId"`
+	At          time.Time `json:"at"`
+	Outcome     string    `json:"outcome"`
+	Value       *float64  `json:"value,omitempty"`
+	ExitCode    *int      `json:"exitCode,omitempty"`
+	StderrTail  string    `json:"stderrTail,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -131,6 +183,32 @@ type SelfUpdateReport struct {
 	LastUpdatedAt   string `json:"lastUpdatedAt,omitempty"`
 	LastUpdatedFrom string `json:"lastUpdatedFrom,omitempty"`
 	LastUpdatedTo   string `json:"lastUpdatedTo,omitempty"`
+	// Where a release this runner is behind stands, for the runner page's Update card
+	// (docs/runner-update-drain-design.md §4): available | draining | restarting | postponed, the
+	// selfUpdatePhase* constants. Omitted when no release is waiting, as by every runner before it.
+	Phase string `json:"phase,omitempty"`
+	// The release the phase is about.
+	TargetVersion string `json:"targetVersion,omitempty"`
+	// RFC3339: when the release was first found waiting for a busy runner (the deferral clock's
+	// start), when the drain began, and until when the owner postponed it.
+	AvailableSince string `json:"availableSince,omitempty"`
+	DrainingSince  string `json:"drainingSince,omitempty"`
+	PostponedUntil string `json:"postponedUntil,omitempty"`
+	// While draining: the turns still in flight, and how many there were when the drain began (never
+	// fewer than are in flight now), so the page can say "Waiting for 2 of 8 turns".
+	TurnsInFlight int `json:"turnsInFlight,omitempty"`
+	TurnsAtDrain  int `json:"turnsAtDrain,omitempty"`
+	// Restarting for the owner's Update Now: how many turns it interrupted, which continue once the
+	// runner is back.
+	InterruptedTurns int `json:"interruptedTurns,omitempty"`
+	// The last update's restart: seconds from its stop to the new image starting, and the turns an
+	// Update Now interrupted for it (selfUpdateRecord). Omitted when not measured.
+	LastUpdateSeconds          int `json:"lastUpdateSeconds,omitempty"`
+	LastUpdateInterruptedTurns int `json:"lastUpdateInterruptedTurns,omitempty"`
+	// How long, in seconds, this runner must have been quiet (no turn ended, nothing claimed) before
+	// an automatic update installs (selfUpdateQuietWindow). Sent with every report; a runner that
+	// sends none installs at the first check with no turn in flight, and the clients keep that wording.
+	QuietWindowSeconds int `json:"quietWindowSeconds,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -173,6 +251,9 @@ type EngineHealthReport struct {
 	// Kimi only: the site its own login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai).
 	// Omitted when it has none (kimi_region.go).
 	KimiRegion string `json:"kimiRegion,omitempty"`
+	// OpenCode only: `opencode auth list` listed no provider key, neither stored nor in its
+	// environment. Auth stays "unknown" — OpenCode's free models need none. Omitted otherwise.
+	OpenCodeNoKey bool `json:"openCodeNoKey,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -364,6 +445,10 @@ type ModelParameterValue struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// KeepWorkSessionIDs are those of CancelSessionIDs whose end is a coordinator handing over: the session ends,
+	// but its running SubAgent runs and bg_run jobs are left to end by themselves (session_keep_work.go). Absent
+	// from an older control plane, which reads as none.
+	KeepWorkSessionIDs []string `json:"keepWorkSessionIds,omitempty"`
 	// The owner-request secrets this runner may hold (secret_store.go), sent only to a runner that declares
 	// owner-secret/v1. A POINTER because only a present list states anything: absent (an older control plane, or an
 	// answer that reconciled nothing) removes nothing, and [] means hold nothing.
@@ -407,9 +492,21 @@ type HeartbeatResponse struct {
 	// Agent working directories to stat before the next heartbeat; answered via
 	// HeartbeatRequest.AgentDirProbes. Absent on older control planes → nothing to probe.
 	AgentDirs []AgentDirTarget `json:"agentDirs,omitempty"`
+	// The GitHub workspaces to clone (clone_workdir.go), to a runner that declares clone-workdir/v1: every one of
+	// this runner's that is PENDING or CLONING. A POINTER because only a present list states anything: absent (an
+	// older control plane, or an answer that reconciled nothing) stops nothing.
+	CloneRequests *[]CloneRequest `json:"cloneRequests,omitempty"`
+	// The conditions whose probes this runner runs (condition_probe.go), to a runner that declares condition-probe/v1.
+	// A POINTER because only a present list states anything: absent stops nothing, and a probe left out of a present
+	// list (empty included) stops.
+	ConditionProbes *[]ConditionProbe `json:"conditionProbes,omitempty"`
 	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
 	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
 	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
+	// Main checkout reads and actions (docs/main-checkout-git-contract.md §10), each handed out
+	// once and answered at /runner/main-checkout/:id/{snapshot,result}. Only to a runner that
+	// declares main-checkout-git/v1.
+	MainCheckoutRequests []MainCheckoutRunnerRequest `json:"mainCheckoutRequests,omitempty"`
 	// Re-read the runtime CLIs' model lists now instead of waiting for our own periodic pass.
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.
@@ -420,6 +517,20 @@ type HeartbeatResponse struct {
 	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
 	// control planes.
 	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
+	// The control plane takes a claim scoped to named sessions (GET /runner/sessions/claim?drainScope=):
+	// a pool draining for an update claims only for sessions whose engine is running a turn here
+	// (drainClaimScope). False/absent on older control planes, which would ignore the scope, so the
+	// runner claims nothing while it drains, as before.
+	DrainScopedClaims bool `json:"drainScopedClaims,omitempty"`
+	// The owner's Later (RFC3339): stop draining for the waiting release now and put it off until
+	// this time, then wait for idle again under a fresh deferral limit (selfUpdateGate.postpone).
+	// Handed over once and cleared, like CheckSelfUpdate; sent only to a runner that declares
+	// self-update-postpone/v1. Empty on older control planes.
+	PostponeSelfUpdateUntil string `json:"postponeSelfUpdateUntil,omitempty"`
+	// The owner's Update Now: install the waiting release now, interrupting the turns in flight
+	// (selfUpdateGate.updateNow). Handed over once and cleared, like CheckSelfUpdate; sent only to a
+	// runner that declares self-update-now/v1. False on older control planes.
+	SelfUpdateNow bool `json:"selfUpdateNow,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
@@ -475,6 +586,16 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim,
+	// and the ones to stop because their parent session stopped them or ended (subagent_remote.go). Absent when
+	// there are none, and from older control planes.
+	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
+	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
+	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
+	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
+	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
+	// beat, a read that failed) deletes nothing. Sent only to a runner that declares task-fork/v1.
+	ForkSnapshotsOpen *[]string `json:"forkSnapshotsOpen,omitempty"`
 }
 
 // StorageBudget is the storage a runner's checkouts may take where statfs cannot say: a Docker local
@@ -552,6 +673,8 @@ type WikiRepoOpResultRequest struct {
 	State           string                 `json:"state"`
 	Result          map[string]interface{} `json:"result,omitempty"`
 	Error           string                 `json:"error,omitempty"`
+	// Why a failure failed (contract `repoOps.reasons`), beside the words in Error; absent when it is none of them.
+	Reason string `json:"reason,omitempty"`
 }
 
 // WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had
@@ -949,6 +1072,17 @@ type AccountRemoveCommand struct {
 	// Identifies this request (the server's codexAccountRemoveAt), so a report can be matched to the
 	// request it answers.
 	Attempt string `json:"attempt,omitempty"`
+	// While the removal waits on sessions it moved to another account: each one's new account, so a
+	// session with no engine running, which would take that move only at its next claim, is carried
+	// there now (carryColdSessionsOff). Absent from an older control plane.
+	Moves []AccountRemoveMove `json:"moves,omitempty"`
+}
+
+// AccountRemoveMove is one session of a removal under way and the account the control plane moved it
+// to: "default", or the id of a slot this runner added.
+type AccountRemoveMove struct {
+	SessionID string `json:"sessionId"`
+	Account   string `json:"account"`
 }
 
 // AccountRemoveResultRequest is the runner's word on a removal: "done" once the slot's
@@ -962,6 +1096,9 @@ type AccountRemoveResultRequest struct {
 	Status  string `json:"status"` // "done" | "failed"
 	Message string `json:"message,omitempty"`
 	Attempt string `json:"attempt,omitempty"`
+	// With a removal refused because the account is in use: the sessions using it, so the control
+	// plane can name them in Message.
+	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
@@ -1265,6 +1402,26 @@ type RunnerAgent struct {
 	Provider string `json:"provider,omitempty"`
 	AgentKey string `json:"agentKey,omitempty"`
 	WorkDir  string `json:"workDir,omitempty"`
+	// What the workspace's unattended work starts on, as dispatch resolves it (apiserver
+	// SessionsService.taskRunsWith): RunsWith for a task outside any project, Projects for an unpinned
+	// task of each open project with open work here. Absent from an older apiserver.
+	RunsWith *RunsWith         `json:"runsWith,omitempty"`
+	Projects []RunsWithProject `json:"projects,omitempty"`
+}
+
+// RunsWith is the apiserver's TaskRunsWith (workspaces/start-anchor.ts).
+type RunsWith struct {
+	Engine          *string `json:"engine"`
+	Provider        *string `json:"provider"`
+	Source          string  `json:"source"`
+	AnchorSessionID *string `json:"anchorSessionId"`
+	Refusal         *string `json:"refusal"`
+}
+
+type RunsWithProject struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	RunsWith RunsWith `json:"runsWith"`
 }
 
 type AgentExecConfig struct {
@@ -1284,10 +1441,15 @@ type AgentExecConfig struct {
 	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
 	// control plane decides it per session; absent is off, so an older control plane never turns
 	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
-	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
-	MaxTurns          *int                   `json:"maxTurns"`
-	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
-	McpConfig         map[string]interface{} `json:"mcpConfig"`
+	PromptSuggestions bool `json:"promptSuggestions,omitempty"`
+	// ScheduledCheckOnly says the session serves a scheduled CHECK_ONLY run (design §6.2). In Plan,
+	// Codex then runs in its own read-only sandbox with no approvals (codexScheduledCheckOnly), so
+	// it can read the checkout and the OS refuses every write. Absent, as from an older control
+	// plane, Plan is as for every other session: every command is declined.
+	ScheduledCheckOnly bool                   `json:"scheduledCheckOnly,omitempty"`
+	MaxTurns           *int                   `json:"maxTurns"`
+	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
+	McpConfig          map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
@@ -1302,10 +1464,17 @@ type ClaimedSession struct {
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
+	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan on
+	// every engine but Claude, whose child keeps the parent's mode without edit tools; Codex alone reads this too, since its plan mode refuses every command and a shell
+	// is the only way Codex reads a repository (codexPermissionMode).
+	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
-	WorkDir          string `json:"workDir,omitempty"`
-	SessionUUID      string `json:"sessionUuid"`
-	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
+	WorkDir string `json:"workDir,omitempty"`
+	// HelpAsk marks the help center's Ask (help_ask.go): started read-only in a scratch folder of help articles,
+	// never in WorkDir. Sent only to a runner that declares helpAskCapabilityV1.
+	HelpAsk          *HelpAskMarker `json:"helpAsk,omitempty"`
+	SessionUUID      string         `json:"sessionUuid"`
+	RuntimeSessionID string         `json:"runtimeSessionId,omitempty"`
 	// LeaseOwner is the runner process identity observed when the server built this claim.
 	// A fresh process CAS-takes it over before it may activate an inbox generation.
 	LeaseOwner string `json:"leaseOwner,omitempty"`
@@ -1341,6 +1510,9 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
+	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// SpawnDepth is how many spawn links sit above this session (a root is 0), injected as
 	// ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
 	// nested wait always settles inside the wait that is waiting on it.
@@ -1356,11 +1528,21 @@ type ClaimedSession struct {
 	// Branch is the per-session git worktree branch (server-set). When non-empty and
 	// WorkDir is a git repo, the runner isolates the session in its own checkout on it.
 	Branch string `json:"branch,omitempty"`
+	// CodelessCheckout: a codeless task's run with no branch yet (design §3 B2, codelessCheckoutCapabilityV1).
+	// It runs in its own checkout detached at its base; at finalize the checkout is removed when nothing
+	// changed, or CodelessBranch is created there and the run is finalized on it like any other.
+	CodelessCheckout bool `json:"codelessCheckout,omitempty"`
+	// CodelessBranch is the branch a CodelessCheckout run makes at finalize if it changed anything.
+	CodelessBranch string `json:"codelessBranch,omitempty"`
 	// AutoInitGit: agent opted in to auto-`git init` a non-git workDir so it can be isolated.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir: Orbit made this workspace in a new folder, which the runner makes before the
 	// engine starts — only inside its own repos root (create_workdir.go). Absent otherwise.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir is the folder below WorkDir a session with no branch runs in (POST /sessions workSubdir, what
+	// `orbit` in a subfolder sends): relative and normalized. The engine starts in WorkDir/WorkSubdir, and not at
+	// all when that folder is missing or, symlinks followed, lies outside WorkDir (work_subdir.go). Empty: WorkDir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget is the branch this session's work merges INTO (its recorded target, else its
 	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
 	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
@@ -1377,7 +1559,11 @@ type ClaimedSession struct {
 	Source *SessionSource `json:"source,omitempty"`
 	// WT and IsolationStatus are runner-internal, resolved by setupWorktree at start: WT
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
-	WT              *Worktree `json:"-"`
+	WT *Worktree `json:"-"`
+	// Detached is a CodelessCheckout run's checkout while it has no branch: never job.WT, so nothing reports a
+	// branch, a branch tip or a live diff for it. finalizeCodelessCheckout either removes it or turns it into
+	// job.WT on CodelessBranch.
+	Detached        *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
 	// CheckoutCreation is how the runner made the session's checkout, when this process made it: cloned from the
 	// workspace's own checkout (checkoutCloned) or written out by git (checkoutPlain). It is "" for a checkout found
@@ -1581,14 +1767,21 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
 	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.
 	Branch string `json:"branch,omitempty"`
+	// CodelessCheckout and CodelessBranch, cf. ClaimedSession.
+	CodelessCheckout bool   `json:"codelessCheckout,omitempty"`
+	CodelessBranch   string `json:"codelessBranch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir, cf. ClaimedSession.CreateWorkDir.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir, cf. ClaimedSession.WorkSubdir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget, cf. ClaimedSession.MergeTarget.
 	MergeTarget string `json:"mergeTarget,omitempty"`
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session

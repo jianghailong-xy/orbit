@@ -1,4 +1,3 @@
-#if os(iOS)
 import Foundation
 import Observation
 import OrbitKit
@@ -156,4 +155,3 @@ final class ProjectMergeModel: PromotionReviewSource {
         return refused
     }
 }
-#endif

@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentProvider } from '@orbit/shared';
 import { api } from '../api';
 import { currentProviderChoice, engineProviders } from '../lib/sessionProviderChoices';
-import { MachineEngines, RunnerEngines } from './RunnerEngines';
+import { MachineEngines } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import { probeReportsSignedIn } from './RunnerSignIn';
 import { AuthErrorCtx, Transcript } from './Transcript';
@@ -26,7 +27,6 @@ function wrap(child: React.ReactNode, runner: Runner) {
 
 describe('Antigravity Google login across client surfaces', () => {
   beforeEach(() => {
-    localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([fixtures.google.id]));
     vi.mocked(api).mockResolvedValue({ status: null });
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }));
@@ -36,7 +36,7 @@ describe('Antigravity Google login across client surfaces', () => {
 
   function row(state: string) {
     const container = document.createElement('div');
-    container.innerHTML = renderToStaticMarkup(wrap(<RunnerEngines />, fixtures[state]));
+    container.innerHTML = renderToStaticMarkup(wrap(<EngineRows />, fixtures[state]));
     return container.querySelector('[data-engine="antigravity"]')!;
   }
   /** The rows the runner's own page draws (MachineEngines, as RunnerDetailPage holds them), with every
@@ -53,7 +53,11 @@ describe('Antigravity Google login across client surfaces', () => {
   it('offers Google sign-in with a linked terms warning when signed out', () => {
     const rendered = row('signed-out');
     expect(rendered.textContent).toContain('Signed out');
-    expect(rendered.textContent).toContain('Sign in with Google');
+    // Its button reads like every engine's; the panel it opens is the one that names Google.
+    expect([...rendered.querySelectorAll('.re-act button')].map((b) => b.textContent)).toContain('Sign in');
+    expect(rendered.textContent).not.toContain('Sign in with Google');
+    // The terms sit in line with the row's note, at its size (.re-google-terms).
+    expect(rendered.querySelector('.re-login-note.re-google-terms .rsi-hint')).not.toBeNull();
     expect(rendered.textContent).toContain('personal account sign-in through third-party tools; your account may be suspended.');
     expect(rendered.querySelector('a')?.getAttribute('href')).toBe('https://antigravity.google/terms');
   });
@@ -96,7 +100,7 @@ describe('Antigravity Google login across client surfaces', () => {
   it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('preserves the env-key identity and %s Google-login guidance on the runner page', (state, hint) => {
     const runner = structuredClone(fixtures['env-key']);
     runner.antigravity!.googleLogin = fixtures[state].antigravity!.googleLogin;
-    for (const view of [machinePage(runner), <RunnerEngines />]) {
+    for (const view of [machinePage(runner), <EngineRows />]) {
       const html = renderToStaticMarkup(wrap(view, runner));
       expect(html).toContain('env key');
       expect(html).toContain(hint);
@@ -110,7 +114,7 @@ describe('Antigravity Google login across client surfaces', () => {
     const runner = structuredClone(fixtures['signed-out']);
     runner.engines![0].installed = false;
     runner.antigravity!.installed = false;
-    const html = renderToStaticMarkup(wrap(<RunnerEngines />, runner));
+    const html = renderToStaticMarkup(wrap(<EngineRows />, runner));
     const container = document.createElement('div');
     container.innerHTML = html;
     const rendered = container.querySelector('[data-engine="antigravity"]')!;
@@ -128,12 +132,14 @@ describe('Antigravity Google login across client surfaces', () => {
 
   it('keeps the env-key explanation and never treats unknown as signed in', () => {
     expect(row('env-key').textContent).toContain('env key · runs on your Gemini key');
+    // On the machine's Gemini key, naming Google is what tells this sign-in from the key.
+    expect([...row('env-key').querySelectorAll('.re-act button')].map((b) => b.textContent)).toContain('Sign in with Google');
     const unknown = row('unknown');
     expect(unknown.textContent).toContain('Couldn’t check');
     // No sign-in on the row: the check got no answer, so nothing says the account is out. The action
     // stays in More for the case the login really is gone.
     expect([...unknown.querySelectorAll('button')].map((b) => b.textContent?.trim()))
-      .not.toContain('Sign in with Google');
+      .not.toEqual(expect.arrayContaining([expect.stringMatching(/^Sign in/)]));
     expect(unknown.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(unknown.textContent).not.toContain('remaining');
     const machine = machineRow(fixtures.unknown);
@@ -147,11 +153,11 @@ describe('Antigravity Google login across client surfaces', () => {
   it('shows zero remaining as spent, preserves buckets and suppresses signed-out quota', () => {
     const r = structuredClone(fixtures.google);
     r.engines![0].planUsage!.buckets![0].remainingFraction = 0;
-    const html = renderToStaticMarkup(wrap(<RunnerEngines />, r));
+    const html = renderToStaticMarkup(wrap(<EngineRows />, r));
     expect(html).toContain('0% remaining');
     expect(html).toContain('Spent');
     r.engines![0].auth = 'no';
-    expect(renderToStaticMarkup(wrap(<RunnerEngines />, r))).not.toContain('% remaining');
+    expect(renderToStaticMarkup(wrap(<EngineRows />, r))).not.toContain('% remaining');
   });
 
   it('offers the Google account in the selector and blocks a lapsed login while Gemini keys still work', () => {
@@ -190,11 +196,11 @@ describe('Antigravity Google login across client surfaces', () => {
     vi.mocked(api).mockImplementation(async (path, options) => (path.endsWith('/login') || path.endsWith('/login/code')) && options?.method === 'POST'
       ? { status: 'awaiting_code', engine: 'antigravity', url: 'https://example.test/authorize' } : { status: null });
     try {
-      await act(async () => { root.render(wrap(<RunnerEngines />, fixtures[state])); });
+      await act(async () => { root.render(wrap(<EngineRows />, fixtures[state])); });
       const engineRow = container.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
       if (state === 'google') await clickRunnerMenuItem(engineRow, 'Re-sign in');
       // By its words: a runner that keeps Google accounts puts Add account first.
-      else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in with Google')!.click());
+      else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in')!.click());
       await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());

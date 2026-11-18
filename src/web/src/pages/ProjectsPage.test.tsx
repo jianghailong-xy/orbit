@@ -284,20 +284,15 @@ describe('ProjectsPage', () => {
       // the one thing that clears `NO_LANDING_WORKSPACE` — and an empty object otherwise, which is
       // what lets the server borrow the workspace this project's work already runs in.
       "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
-      // The other half of that pair, and a SEPARATE route for the reason the card draws a separate
-      // button: the open above resolves, so pressing it on a completed conversation hands that same
-      // conversation back. This one replaces it. No body at all — where the replacement opens is
-      // the project's to decide, and a `workspaceId` here would be a move wearing a replacement's
-      // name (the rebind below is the move).
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
+      // The other half of that pair — the replace door — moved to components/CoordinatorChange.tsx
+      // with the coordinator's Change, and is held there (below). Its body names a
+      // workspace only when the reader picked one: "start the next coordinator THERE".
       // No Automatic PATCH here any more: the switch moved off the coordinator card into How it
       // runs (`ProjectRunSettings`), which writes `automatic` with the rest of the settings the
       // start card set — asserted over the requests that leave the client in
       // ProjectRunSettings.test.tsx and ProjectsPage.automatic.test.tsx.
-      // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
-      // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
-      // one would be a way to REACH the state it exists to leave.
-      "`/projects/${encodeURIComponent(projectId)}/coordinator/rebind`, { method: 'POST', body: { workspaceId } }",
+      // No rebind here any more: a project whose workspace broke starts its next coordinator in a
+      // workspace the reader picks (the replace door with a workspaceId), in one step.
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -316,6 +311,10 @@ describe('ProjectsPage', () => {
       // down — base62 has nothing to escape, so the escaping itself is held here — and this list
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
+    ]);
+    const startSource = readFileSync(fileURLToPath(new URL('../components/CoordinatorChange.tsx', import.meta.url)), 'utf8');
+    expect([...startSource.matchAll(API_CALL)].map((m) => m[1].trim().replace(/,$/, ''))).toEqual([
+      "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST', body: workspaceId ? { workspaceId } : {} }",
     ]);
     // The status write that moved to lib/projectDone.ts keeps its exact shape there: PATCH, with a
     // body carrying nothing but the status being claimed.

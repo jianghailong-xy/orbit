@@ -130,7 +130,150 @@ export const MANAGED_RUNNER_COPY = {
   ensure: 'Set up',
   signIn: 'Open Machines & models',
   registerOwn: 'Register your own machine',
+  /**
+   * The state as a machine row's short label, in place of the heartbeat's Online/Offline: a managed
+   * runner asleep is Asleep, never Offline (docs/managed-runner-existing-account-entry-design.md, D4).
+   * `notOffered` has no row (D2).
+   */
+  short: {
+    setup: 'Set up',
+    preparing: 'Preparing',
+    waking: 'Waking up…',
+    modelUnavailable: 'Needs a model',
+    waitingCapacity: 'Waiting for capacity',
+    available: 'Ready',
+    unresponsive: 'Not responding',
+    stopping: 'Going to sleep',
+    sleeping: 'Asleep',
+    waitingOperator: 'Waiting for an operator',
+    failed: 'Failed',
+    removing: 'Removing',
+    removed: 'Removed',
+  } satisfies Record<ManagedRunnerRowKind, string>,
+  /** The machine list's entry for an account with no mapping that the server offers one (D1). */
+  entry: {
+    title: 'Managed runner',
+    action: 'Set up',
+    /** The row's subtitle on iPhone and Android. */
+    subtitle: 'Orbit runs a runner for you on this server.',
+    /** The web's Set up page, beside the notice. */
+    page: 'Your own machines are not changed. Setting it up adds one machine and its workspace to this list.',
+    /** On Register a machine, linking to the Set up entry. */
+    register: 'Or let Orbit run one for you',
+  },
+  /** Asked before Set up on an account that already has a runner or a workspace (D3). */
+  confirm: {
+    title: 'Set up a managed runner?',
+    body: 'Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are.',
+    cancel: 'Cancel',
+    confirm: 'Set up',
+  },
+  /** Sleep is not a fault: a sending client wakes it, and nothing warns that it is offline. */
+  asleep: {
+    /** The machine row's detail line beside Asleep. */
+    row: 'Wakes automatically when you start a session',
+    /** Above the composer of a workspace whose managed runner is asleep. */
+    composer: 'Your managed runner is asleep. Sending wakes it (about 10 s).',
+  },
+  /**
+   * A managed runner's setup card while it is not up (`managedSetupState`; board
+   * docs/mocks/managed-runner-no-default-workspace): it has no workspace until the owner makes one there.
+   */
+  setup: {
+    /** The notice over the card, in place of the offline one. */
+    notice: {
+      preparing: 'Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.',
+      asleep: 'Your managed runner is asleep. Your first message wakes it (about 10 s).',
+    },
+    /** Under a typed folder name, which a runner that is not up cannot check. */
+    folderUnchecked: {
+      preparing: 'Not checked until your managed runner is up: used if it’s there, created if not.',
+      asleep: 'Not checked while it’s asleep: used if it’s there, created if not.',
+    },
+  },
 } as const;
+
+/** Every display kind that has a machine row: all but `notOffered` (D2). */
+export type ManagedRunnerRowKind = Exclude<ManagedRunnerDisplayKind, 'notOffered'>;
+
+/**
+ * How a machine row marks the state: `ready` green, `progress` a spinner, `idle` grey (asleep is
+ * neutral, never the colour of a fault), `attention` orange.
+ */
+export type ManagedRunnerRowTone = 'ready' | 'progress' | 'idle' | 'attention';
+
+export const MANAGED_RUNNER_ROW_TONE = {
+  setup: 'idle',
+  preparing: 'progress',
+  waking: 'progress',
+  modelUnavailable: 'attention',
+  waitingCapacity: 'progress',
+  available: 'ready',
+  unresponsive: 'progress',
+  stopping: 'progress',
+  sleeping: 'idle',
+  waitingOperator: 'attention',
+  failed: 'attention',
+  removing: 'progress',
+  removed: 'idle',
+} as const satisfies Record<ManagedRunnerRowKind, ManagedRunnerRowTone>;
+
+/** A machine row's reading of the account's managed runner. */
+export interface ManagedRunnerRow {
+  kind: ManagedRunnerRowKind;
+  /** MANAGED_RUNNER_COPY.short: shown instead of Online/Offline. */
+  label: string;
+  tone: ManagedRunnerRowTone;
+  /** A calm line under the label, where the state has one (asleep); else null. */
+  detail: string | null;
+  /** Sending to it is accepted and wakes or waits for it: no "runner offline" warning. */
+  acceptsWork: boolean;
+  /** Asleep or going to sleep, and a message would wake it. */
+  asleep: boolean;
+}
+
+/**
+ * Whether the runner a client is about to show (a machine row, or a workspace's runner) is the
+ * account's managed runner, and how to show it. Null when it is not, or there is no managed UI for
+ * the status: the client then shows that runner by its heartbeat, as before.
+ */
+export function managedRunnerRow(
+  runnerId: string | null | undefined,
+  status: ManagedRunnerStatus | null | undefined,
+): ManagedRunnerRow | null {
+  if (!runnerId || !status || status.runnerId !== runnerId) return null;
+  const display = managedRunnerDisplay(status);
+  if (!display || display.kind === 'notOffered') return null;
+  const kind = display.kind;
+  const tone = MANAGED_RUNNER_ROW_TONE[kind];
+  return {
+    kind,
+    label: MANAGED_RUNNER_COPY.short[kind],
+    // A spinner only while it moves by itself (not while the environment is unavailable).
+    tone: tone === 'progress' && !display.moving ? 'idle' : tone,
+    detail: kind === 'sleeping' && display.acceptsWork ? MANAGED_RUNNER_COPY.asleep.row : null,
+    acceptsWork: display.acceptsWork,
+    asleep: (kind === 'sleeping' || kind === 'stopping') && display.acceptsWork,
+  };
+}
+
+/**
+ * How a machine's setup card treats the account's managed runner (docs/managed-runner-no-default-workspace.md):
+ * `preparing` while it is not up and was never ready, `asleep` while it is not up after it had been; either way the
+ * card takes a new folder, unchecked, and makes the workspace, and the first message waits for it or wakes it. Null when the
+ * runner is not the managed one, when it is up or unresponsive (the card reads its heartbeat, as for any machine),
+ * or when it is in a state no work is accepted in (failed, an operator awaited, removed, switched off).
+ */
+export type ManagedSetupState = 'preparing' | 'asleep';
+
+export function managedSetupState(
+  runnerId: string | null | undefined,
+  status: ManagedRunnerStatus | null | undefined,
+): ManagedSetupState | null {
+  const row = managedRunnerRow(runnerId, status);
+  if (!row || !row.acceptsWork || row.kind === 'available' || row.kind === 'unresponsive') return null;
+  return status?.initialProvider ? 'asleep' : 'preparing';
+}
 
 /** How often a client reads the status again: soon while it moves by itself, rarely otherwise. */
 export const MANAGED_RUNNER_STATUS_POLL_SECONDS = { moving: 5, settled: 30 } as const;
@@ -205,7 +348,7 @@ export function managedRunnerDisplay(status: ManagedRunnerStatus | null | undefi
 }
 
 /**
- * What a first session in the managed default workspace starts on, as the server says: its
+ * What a first session on the managed runner starts on, as the server says: its
  * `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which the
  * field equals whenever the runner has one).
  */

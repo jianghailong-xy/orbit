@@ -439,7 +439,7 @@ test('link previews: five kinds of card, one answer for everything out of reach,
     assert.ok(row, 'the session is on its owner’s list');
     for (const field of [
       'title', 'status', 'runStatus', 'runState', 'sessionState', 'lifecycleState', 'endReason',
-      'error', 'retryAt', 'engineTurnActive', 'pendingApprovals', 'waitingKind', 'runningBgCount',
+      'error', 'retryAt', 'engineTurnActive', 'activity', 'pendingApprovals', 'waitingKind', 'runningBgCount',
       'runningBgJobCount', 'model', 'numTurns', 'createdAt', 'lastTurnAt', 'projectTitle',
     ] as const) {
       assert.deepEqual(card[field], wire(row[field]), `session.${field} is the list row's`);
@@ -448,6 +448,8 @@ test('link previews: five kinds of card, one answer for everything out of reach,
     assert.equal(card.runState, 'FAILED');
     assert.equal(card.error, 'engine exited with code 1');
     assert.ok(card.retryAt, 'the armed retry is on the card');
+    // FAILED with a retry armed is not parked: the status already says it, so the activity is null.
+    assert.equal(card.activity, null);
     assert.equal(card.runningBgCount, 2);
     assert.equal(card.runningBgJobCount, 1);
     assert.equal(card.numTurns, 12);

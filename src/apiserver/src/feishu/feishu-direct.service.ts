@@ -6,7 +6,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { orbitUrl } from '../push/feishu-transport';
 import { PushService } from '../push/push.service';
+import { ownerWordsForAgent } from '../sessions/reply-translation';
 import { SessionsService } from '../sessions/sessions.service';
+import { isSlashCommand, translationLanguages } from '../sessions/turn-translation';
 import {
   DEFAULT_WORKSPACE_ACTION,
   DIRECT_CARD_MAX_ENTRIES,
@@ -198,7 +200,13 @@ export class FeishuDirectService {
       return;
     }
     try {
+      // Settings › Translation: the owner's reply reaches the session in the agent language. One that cannot be
+      // translated is refused (422 TRANSLATION_FAILED, answered below in the chat) and nothing is written.
+      const langs = await translationLanguages(this.prisma, app.ownerId);
+      const translation = isSlashCommand(text) ? null : await ownerWordsForAgent(text, langs);
       await this.sessions.createTurn(app.ownerId, sessionId, { clientTurnId: feishuTurnKey(app.appId, eventId), content: text }, {
+        ...(translation && langs ? { translated: { content: translation.text, from: langs.owner } } : {}),
+        senderClient: { client: 'feishu' },
         // Written with the turn, so a second handling — a replay of this clientTurnId — records nothing again.
         onTurnWritten: async (tx, turn) => {
           await this.registerChain(tx, app, message.chatId, root, sessionId);
@@ -250,7 +258,7 @@ export class FeishuDirectService {
     if (!session) {
       try {
         // No permissionMode: the account's default applies (§7.2).
-        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential });
+        const made = await this.sessions.create(app.ownerId, { workspaceId: workspace.id, prompt: text }, { id: sessionId, credential: actor.credential, openedBy: 'FEISHU' });
         session = { id: made.id, title: made.title };
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

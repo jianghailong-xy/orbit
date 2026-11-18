@@ -121,7 +121,7 @@ final class OwnerConfirmationBoxesWiringTests: XCTestCase {
                                 to: "private struct OwnerConfirmationIfYouConfirm: View")
         let receipt = try section(file, from: "private struct OwnerDecisionReceiptView: View",
                                   to: "struct PlanCard: View")
-        XCTAssertTrue(card.contains("report: standing.waiting?.report, foldsCriteria: true)"),
+        XCTAssertTrue(card.contains("report: standing.waiting?.report?.shown(owner: owner, showOriginal: showOriginal),\n                                       foldsCriteria: true)"),
                       "the card folds its criteria")
         XCTAssertTrue(receipt.contains("OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,"),
                       "the receipt still opens to the boxes")

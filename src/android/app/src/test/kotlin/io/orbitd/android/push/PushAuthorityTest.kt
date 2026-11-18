@@ -221,6 +221,127 @@ class PushAuthorityTest {
         }
     }
 
+    /** A terminal asking to be approved (docs/terminal-session-design.md): the shared fixture's sample is what notifyTerminalLogin
+     * sends (push.service.spec). It parses, rings on the needs-you channel, opens the Waiting on you inbox, and stands while the
+     * request is still waiting. Without its request or its machine it is not a notification. */
+    @Test fun aTerminalAskingToBeApprovedOpensTheInboxAndStandsWhileItWaits() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "terminal-login" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's terminal-login push is dropped")
+        val request = "019a0000-0000-7000-8000-00000000000b"
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("terminal-login", push.payload.kind)
+        assertEquals("Approve a terminal?", push.payload.title)
+        assertEquals("Terminal on dev-laptop · code 7KQ-4MZ", push.payload.body)
+        assertTrue(push.payload.isTerminalLogin)
+        assertTrue(ObjectId.same(push.payload.terminalLoginId, request))
+        assertEquals(OrbitRoute(Destination.WAITING_ON_YOU, request, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        for (missing in listOf("terminalLoginID", "runnerID")) {
+            val payload = Json.parseToJsonElement(data.getValue("payload")).jsonObject - missing
+            assertNull("terminal-login without $missing", PushMessage.parse(data + ("payload" to JsonObject(payload).toString())))
+        }
+        authorityFixture { authority, server, _ ->
+            var waiting = true
+            server.respond = { r -> when (r.path) {
+                "/api/terminals/requests" -> response(if (waiting) """{"requests":[{"id":"$request","userCode":"7KQ-4MZ",""" +
+                    """"machineName":"dev-laptop","runnerId":"$runnerId","createdAt":"2026-11-12T10:00:00.000Z",""" +
+                    """"expiresAt":"2026-11-12T10:10:00.000Z"}]}""" else """{"requests":[]}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = false
+            assertEquals(PushCheck.STALE, authority.check(push))
+        }
+    }
+
+    /** A cross-project request waiting on the owner (push.service notifyCrossingRequest): it parses, opens the conversation that draws
+     * its card when it names one and the project otherwise, and stands while the project's handoffs list it PENDING. Without its project
+     * or its request it is not a notification. */
+    @Test fun aCrossingRequestOpensItsCardOrItsProjectAndStandsWhileItIsPending() = runBlocking {
+        val withSession = message("crossing-request", "sessionID" to sid, "projectID" to pid, "handoffID" to hid)
+        val withoutSession = message("crossing-request", "projectID" to pid, "handoffID" to hid)
+        assertTrue(withSession.payload.isOwnerDecision)
+        assertFalse(withSession.payload.isReminder)
+        assertTrue(ObjectId.same(withSession.payload.handoffId, hid))
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            withSession.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        val project = OrbitLinks.parse(withoutSession.link!!)!!
+        assertEquals(Destination.PROJECT, project.destination)
+        assertTrue(ObjectId.same(project.id, pid))
+        for (payload in listOf("""{"title":"A","body":"B","kind":"crossing-request","handoffID":"$hid"}""",
+            """{"title":"A","body":"B","kind":"crossing-request","projectID":"$pid"}""")) {
+            assertNull(payload, PushMessage.parse(fixtureData() + ("payload" to payload)))
+        }
+        authorityFixture { authority, server, _ ->
+            var state = "PENDING"
+            server.respond = { r ->
+                assertEquals("/api/projects/$pid/handoffs?state=PENDING", r.path)
+                response(if (state == "PENDING") """[{"id":"$hid","state":"PENDING"}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(withSession))
+            assertEquals(PushCheck.ACTIVE, authority.check(withoutSession))
+            state = "APPROVED"
+            assertEquals(PushCheck.STALE, authority.check(withSession))
+            assertEquals(PushCheck.STALE, authority.check(withoutSession))
+        }
+    }
+
+    /** A coordinator raising a task for the owner's confirmation (push.service notifyConfirmationRaised): it parses, opens the run's
+     * session, and stands while the task's owner confirmation still waits on that session. */
+    @Test fun aRaisedConfirmationOpensItsSessionAndStandsWhileTheOwnerIsStillAsked() = runBlocking {
+        val push = message("confirmation-raised", "sessionID" to sid, "taskID" to tid, "recordID" to rid)
+        assertTrue(push.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull(PushMessage.parse(fixtureData() + ("payload" to
+            """{"title":"A","body":"B","kind":"confirmation-raised","taskID":"$tid","recordID":"$rid"}""")))
+        authorityFixture { authority, server, _ ->
+            var waiting = true
+            var deleted = false
+            server.respond = { r -> when (r.path) {
+                "/api/sessions/$sid" -> response("""{"id":"$sid","status":"AWAITING_INPUT","lifecycleState":"OPEN","deletedAt":${if (deleted) "\"2026-11-01\"" else "null"}}""")
+                "/api/tasks/$tid/owner-confirmation" -> response("""{"taskId":"$tid","waiting":${if (waiting) """{"sessionId":"$sid"}""" else "null"},"decisions":[]}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = false
+            assertEquals(PushCheck.STALE, authority.check(push))
+            deleted = true
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
+    /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and the schedule on the
+     * Scheduled page when it names none. With a session it stands while that session does; without, while its schedule exists.
+     * Without its schedule it is not a notification. */
+    @Test fun aScheduleAlertOpensItsRunsSessionAndStandsWhileItOrItsScheduleDoes() = runBlocking {
+        val run = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "finding", "sessionID" to sid)
+        val bare = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "missed")
+        assertTrue(ObjectId.same(run.payload.scheduleId, scheduleId))
+        assertEquals("finding", run.payload.scheduleKind)
+        assertFalse(run.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            run.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        val scheduled = OrbitLinks.parse(bare.link!!)!!
+        assertEquals(Destination.SCHEDULED, scheduled.destination)
+        assertTrue(ObjectId.same(scheduled.id, scheduleId))
+        assertNull(PushMessage.parse(fixtureData() + ("payload" to """{"title":"A","body":"B","kind":"schedule","sessionID":"$sid"}""")))
+        authorityFixture { authority, server, _ ->
+            var exists = true
+            server.respond = { r -> when {
+                r.path == "/api/sessions/$sid" -> response("""{"id":"$sid","status":"SUCCEEDED","lifecycleState":"OPEN","deletedAt":null}""")
+                r.path == "/api/schedules/$scheduleId" && exists -> response("""{"schedule":{"id":"$scheduleId"}}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(run))
+            assertEquals(PushCheck.ACTIVE, authority.check(bare))
+            exists = false
+            assertEquals(PushCheck.MISSING, authority.check(bare))
+        }
+    }
+
     @Test fun watchNeedsExactMatchGenerationAndConfirmationNeedsActualProblemsRecord() = runBlocking {
         authorityFixture { authority, server, _ ->
             val watch = message("watch-matched", "watchID" to wid, "generation" to 2)
@@ -285,6 +406,71 @@ class PushAuthorityTest {
         }
     }
 
+    /** The server's one push per drain with the owner's work waiting (docs/runner-update-drain-design.md D3): it parses exactly as the
+     * server sends it (the shared fixture's sample), names no engine, opens the runner, and stands while GET /runners lists the runner's
+     * drainWaiting. Without its runner it is no notification. */
+    @Test fun aRunnerUpdatingPushOpensItsRunnerAndStandsWhileWorkWaits() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "runner-updating" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's runner-updating push is dropped")
+        val machine = sample["source"]!!.jsonObject["runnerID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("runner-updating", push.payload.kind)
+        assertEquals("studio-mac is updating to 0.1.254 — 1 session and 1 message are waiting for 2 turns to finish.", push.payload.body)
+        assertTrue(ObjectId.same(push.payload.runnerId, machine))
+        assertNull(push.payload.engine)
+        assertFalse(push.payload.isReminder)
+        assertEquals(Destination.RUNNER, push.link?.let { OrbitLinks.parse(it) }?.destination)
+        assertNull("it names its runner", PushMessage.parse(data + ("payload" to
+            """{"title":"studio-mac","body":"studio-mac is updating.","kind":"runner-updating"}""")))
+        authorityFixture { authority, server, _ ->
+            var waiting = """{"sessions":1,"messages":1}"""
+            var listed = true
+            server.respond = { request ->
+                assertEquals("/api/runners", request.path)
+                response(if (listed) """[{"id":"$machine","drainWaiting":$waiting}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = "null"
+            assertEquals(PushCheck.STALE, authority.check(push))
+            listed = false
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
+    /** The orphan sweep's push to an owner whose project has no coordinator to tell (docs/evidence-always-has-an-addressee-design.md
+     * §4): it parses exactly as the server sends it (the shared fixture's sample), opens its project as project-done does, and stands
+     * while the project is open. Without its project it is no notification. */
+    @Test fun anOrphanReportOpensItsProjectAndStandsWhileTheProjectIsOpen() = runBlocking {
+        val sample = pushFixture()["samples"]!!.jsonArray.map { it.jsonObject }
+            .single { it["name"]!!.jsonPrimitive.content == "project-orphan" }
+        val data = sample["data"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content }
+        val push = PushMessage.parse(data) ?: throw AssertionError("the server's project-orphan push is dropped")
+        val project = sample["source"]!!.jsonObject["projectID"]!!.jsonPrimitive.content
+        assertEquals(PushType.ALERT, push.type)
+        assertEquals("project-orphan", push.payload.kind)
+        assertTrue(ObjectId.same(push.payload.projectId, project))
+        assertFalse(push.payload.isReminder)
+        assertEquals("orbit://project/$project", push.link)
+        assertEquals(OrbitRoute(Destination.PROJECT_SESSIONS, project, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull("it names its project", PushMessage.parse(data + ("payload" to
+            """{"title":"Session translation: nobody has this","body":"Nobody can move it now.","kind":"project-orphan"}""")))
+        authorityFixture { authority, server, _ ->
+            var status = "OPEN"
+            server.respond = { request ->
+                assertEquals("/api/projects/$project", request.path)
+                response("""{"id":"$project","status":"$status"}""")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            status = "DONE"
+            assertEquals(PushCheck.STALE, authority.check(push))
+            server.respond = { response("{}", 404) }
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
     @Test fun headlessMessageHasNoInventedRouteAndChecksCurrentAccountPreference() = runBlocking {
         authorityFixture { authority, server, _ ->
             val push = message("agent-message")
@@ -321,6 +507,8 @@ private val tid = "019a0000-0000-7000-8000-000000000005"
 private val rid = "019a0000-0000-7000-8000-000000000006"
 private val wid = "019a0000-0000-7000-8000-000000000007"
 private val runnerId = "019a0000-0000-7000-8000-000000000008"
+private val hid = "019a0000-0000-7000-8000-00000000000c"
+private val scheduleId = "019a0000-0000-7000-8000-00000000000d"
 
 private fun pushFixture(): JsonObject {
     val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }

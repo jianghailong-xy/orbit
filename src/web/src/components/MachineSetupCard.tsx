@@ -1,79 +1,64 @@
-import { CheckCircleFilled, DesktopOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { DesktopOutlined, GithubOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { LoginEngine } from '@orbit/shared';
-import { queuedTurnEvent } from '../lib/acceptedUserTurn';
-import type { CursorRunnerFacts } from '../lib/cursorRuntime';
+import { MANAGED_RUNNER_COPY, MANAGED_RUNNER_REPOS_ROOT, managedSetupState, type LoginEngine } from '@orbit/shared';
+import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
+import type { ManagedRunner } from '../lib/managedRunner';
 import {
   answersDirProbe,
-  defaultFolderChoice,
-  firstEngineOn,
-  folderName,
-  folderVerdict,
-  installedLogins,
+  homeShortPath,
   isConnecting,
-  isOfferedFolder,
   isValidNewFolder,
   makesNewFolders,
-  machineName,
   newFolderPath,
   newFolderPick,
+  newFolderRootOf,
   newFolderVerdict,
-  registerDirToProbe,
   updatesItself,
-  type FolderChoice,
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
-  HELD_SENDING,
-  HELD_TRY_AGAIN,
-  HELD_WITHDRAW,
-  SETUP_CHANGE,
   SETUP_CHECK_AGAIN,
+  SETUP_CREATE,
   SETUP_FOLDER,
-  SETUP_FOOT,
-  SETUP_LEAD,
-  SETUP_NEW_FOLDER,
-  SETUP_NEW_FOLDER_DONE,
+  SETUP_FOLDER_HINT,
+  SETUP_FOLDER_NAME_INSTEAD,
+  SETUP_FROM_GITHUB,
+  SETUP_GITHUB_DONE,
+  SETUP_GITHUB_META,
+  SETUP_NAME,
+  SETUP_NAME_EDITED,
+  SETUP_NAME_EMPTY,
+  SETUP_NAME_HINT,
+  SETUP_NAME_PLACEHOLDER,
   SETUP_NEW_FOLDER_INVALID,
-  SETUP_NEW_FOLDER_META,
   SETUP_NEW_FOLDER_NAME,
-  SETUP_ON_A_KEY,
-  SETUP_ON_A_POOL,
+  SETUP_NEW_FOLDER_WITH_WORKSPACE,
+  SETUP_NEW_TAG,
   SETUP_OPEN_MACHINE,
-  SETUP_REGISTER_DIR,
-  SETUP_SIGN_IN_HELP,
-  SETUP_USE_FOLDER,
-  heldFailed,
-  heldWaiting,
+  SETUP_OR,
   setupChecking,
-  setupConnecting,
-  setupFolderHelp,
+  setupConnectingCreate,
+  setupCreateFailed,
+  setupGithubDonePath,
   setupNeedsUpdate,
+  setupNewWorkspaceLead,
+  setupNewWorkspaceTitle,
   setupNoAnswer,
-  setupNotInstalled,
-  setupOffline,
-  setupOtherFolder,
-  setupReady,
-  setupSignIn,
-  setupSignedIn,
-  setupTitle,
-  setupUpdating,
-  setupUseEngine,
+  setupOfflineCreate,
+  setupUpdatingCreate,
 } from '../lib/machineSetupCopy';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 import { useDirProbe } from '../lib/useDirProbe';
-import type { HeldMessage } from '../lib/useMachineSetup';
-import { webShowsEngine } from '../lib/runnerEngines';
-import { isLoginProvider } from '../lib/workspaceDefaults';
-import { ENGINE_NAME, probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
+import { GithubFolderOption, takeGithubReturn } from './GithubFolderOption';
+import { probeReportsSignedIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
-import { QueuedUserTurn } from './Transcript';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { Radio, RadioGroup } from './ui/Radio';
-import { WelcomeExamples, WelcomeHead } from './WelcomeCard';
+import { WelcomeHead } from './WelcomeCard';
+import { useMachineName } from '../lib/managedRunner';
 import './MachineSetupCard.css';
 
 const TYPED_PATH_SETTLE_MS = 400;
@@ -101,8 +86,6 @@ export function setupCredentialOf(
   return { step: 'signIn' };
 }
 
-const engineName = (engine: string): string => ENGINE_NAME[engine as LoginEngine] ?? engine;
-
 /** A check the machine gave no answer to, and the way to ask it again. */
 function NoAnswer({ machine, onAgain }: { machine: string; onAgain: () => void }) {
   return (
@@ -125,219 +108,92 @@ function useSettled(value: string): string {
   return settled;
 }
 
-/** Step one before it has an answer: the folder `orbit register` ran in when that is a fair suggestion,
- *  a new folder, or any other, which the machine itself checks as it is typed. */
-function FolderOptions({
-  runner,
-  disabled,
-  onPick,
-}: {
-  runner: Runner;
-  disabled: boolean;
-  onPick: (folder: PickedFolder) => void;
-}) {
-  const machine = machineName(runner);
-  const online = runner.online === true;
-  const probes = answersDirProbe(runner);
-  const registerDir = probes ? registerDirToProbe(runner.registerDir) : undefined;
-  // Offline it can't be asked, and what it last answered is still worth showing.
-  const registered = useDirProbe(runner.id, registerDir, online);
-  const suggested = registered.state === 'answered' && isOfferedFolder(registered.probe) ? registered.probe : null;
-  const offersNewFolder = makesNewFolders(runner);
-  const reposRoot = runner.reposRoot ?? '';
-
-  // Untouched, the choice follows what the machine says: its answer about the register directory can
-  // arrive a heartbeat after the card does.
-  const [touched, setTouched] = useState<FolderChoice | null>(null);
-  const choice = touched ?? defaultFolderChoice(suggested, offersNewFolder);
-  const [newName, setNewName] = useState('');
-  const name = newName.trim();
-  const settledName = useSettled(name);
-  // A new folder's name is asked about where it would go: a folder, or a file, may be there already.
-  const newProbe = useDirProbe(
-    runner.id,
-    choice === 'new' && offersNewFolder && !disabled && isValidNewFolder(settledName)
-      ? newFolderPath(reposRoot, settledName)
-      : undefined,
-    true,
-  );
-  const found = settledName === name && newProbe.state === 'answered' ? newProbe.probe : null;
-  const newVerdict = found ? newFolderVerdict(found, machine) : null;
-  const [typed, setTyped] = useState('');
-  const path = typed.trim();
-  const settled = useSettled(path);
-  const typedProbe = useDirProbe(runner.id, choice === 'other' && !disabled && settled ? settled : undefined, true);
-  const checked = settled === path && typedProbe.state === 'answered' ? typedProbe.probe : null;
-  const verdict = checked ? folderVerdict(checked, machine) : null;
-
-  // The machine holds one question at a time (contract §2): a path asked before it had answered about the
-  // register directory took that question's place, and the suggestion would never come. It is asked again
-  // once nothing else on this card is waiting for an answer.
-  const askRegisteredAgain =
-    registered.state === 'idle' && !!registerDir && online && typedProbe.state !== 'checking' && newProbe.state !== 'checking';
-  const registeredAgain = registered.again;
-  useEffect(() => {
-    if (askRegisteredAgain) registeredAgain();
-  }, [askRegisteredAgain, registeredAgain]);
-
-  let candidate: PickedFolder | null = null;
-  if (choice === 'suggested' && suggested) {
-    candidate = { kind: 'existing', path: suggested.path, note: folderVerdict(suggested, machine).short };
-  } else if (choice === 'new' && offersNewFolder && isValidNewFolder(name) && found) {
-    candidate = newFolderPick(found, name, reposRoot, machine);
-  } else if (choice === 'other' && checked && verdict?.usable) {
-    candidate = { kind: 'existing', path: checked.path, note: verdict.short };
-  }
-
-  // The field's keys stay its own (a radio group takes the arrows), and Enter is the button beside it.
-  const onFieldKey = (e: KeyboardEvent) => {
-    e.stopPropagation();
-    if (e.key === 'Enter' && candidate) onPick(candidate);
-  };
-  const suggestion = suggested && folderVerdict(suggested, machine);
-  return (
-    <>
-      <div className="msc-step-title">{SETUP_FOLDER}</div>
-      <div className="msc-step-help">{setupFolderHelp(machine)}</div>
-      <RadioGroup<FolderChoice> className="msc-options" value={choice} onValueChange={setTouched} disabled={disabled}>
-        {suggested && suggestion && (
-          <Radio value="suggested" className="msc-option">
-            <span className="msc-path">{suggested.path}</span>
-            <span className={`msc-verdict ${suggestion.tone}`}>{suggestion.text}</span>
-            <span className="msc-meta">{SETUP_REGISTER_DIR}</span>
-          </Radio>
-        )}
-        {offersNewFolder && (
-          <Radio value="new" className="msc-option">
-            <span className="msc-option-title">{SETUP_NEW_FOLDER}</span>
-            {choice === 'new' && (
-              <Input
-                className="msc-input"
-                size="small"
-                prefix={<span className="msc-prefix">{newFolderPath(runner.reposRoot ?? '', '')}</span>}
-                placeholder={SETUP_NEW_FOLDER_NAME}
-                aria-label={SETUP_NEW_FOLDER}
-                value={newName}
-                disabled={disabled}
-                autoFocus={touched === 'new'}
-                // Typing here is a choice, which a late answer about the register directory must not undo.
-                onChange={(e) => {
-                  setTouched('new');
-                  setNewName(e.target.value);
-                }}
-                onKeyDown={onFieldKey}
-                invalid={!!name && !isValidNewFolder(name)}
-              />
-            )}
-            {choice !== 'new' || !name ? (
-              <span className="msc-meta">{SETUP_NEW_FOLDER_META}</span>
-            ) : !isValidNewFolder(name) ? (
-              <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
-            ) : newVerdict ? (
-              // Nothing there yet reads as the board draws a new folder; anything there says what it means.
-              <span className={newVerdict.tone === 'ok' ? 'msc-meta' : `msc-verdict ${newVerdict.tone}`}>{newVerdict.text}</span>
-            ) : settledName === name && (newProbe.state === 'unanswered' || newProbe.state === 'idle') ? (
-              <NoAnswer machine={machine} onAgain={newProbe.again} />
-            ) : (
-              <span className="msc-verdict wait">{setupChecking(machine)}</span>
-            )}
-          </Radio>
-        )}
-        <Radio value="other" className="msc-option">
-          <span className="msc-option-title">{setupOtherFolder(machine)}</span>
-          {choice === 'other' && (
-            <>
-              <Input
-                className="msc-input msc-path-input"
-                size="small"
-                placeholder="/path/to/project"
-                aria-label={setupOtherFolder(machine)}
-                value={typed}
-                disabled={disabled}
-                autoFocus={touched === 'other'}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(e) => setTyped(e.target.value)}
-                onKeyDown={onFieldKey}
-              />
-              {path && (verdict ? (
-                <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
-              ) : settled === path && (typedProbe.state === 'unanswered' || typedProbe.state === 'idle') ? (
-                <NoAnswer machine={machine} onAgain={typedProbe.again} />
-              ) : (
-                <span className="msc-verdict wait">{setupChecking(machine)}</span>
-              ))}
-            </>
-          )}
-        </Radio>
-      </RadioGroup>
-      <Button
-        className="msc-use"
-        variant="primary"
-        size="small"
-        disabled={!candidate || disabled}
-        onClick={() => candidate && onPick(candidate)}
-      >
-        {SETUP_USE_FOLDER}
-      </Button>
-    </>
-  );
-}
-
 /**
- * A machine with no workspace, on its new session page, where the engine hero stands for a machine
- * that has one. It asks the two things only the owner can answer: the folder sessions may read and
- * change, and the coding CLI they run on (board rules 1–5). The folder and the engine belong to the
- * page, which sends with them: this card only shows them and takes the answers.
+ * A machine with no workspace, on its new session page, which it fills alone (owner 2026-11-16,
+ * docs/mocks/new-folder-in-home/workspace-card-with-name): the card makes the machine's first workspace and asks
+ * only what that needs. The folder is one name in the machine's home (its Repos Folder on an older runner), which
+ * the machine checks as it is typed: a folder there is used, one that isn't is made with the workspace. The
+ * workspace's name follows the folder's until it is edited. Signing in a coding CLI is not asked here: the new
+ * workspace's sessions ask for it where they need it.
+ *
+ * From GitHub (docs/github-workspace-design.md §8, board 04 A): under the folder and its Name, an "or" rule and a row
+ * that swaps the folder field for P2's repository picker; "Type a folder name instead" swaps it back. A picked
+ * repository is cloned into the Repos Folder (`repo → ~/orbit-repos/<name>`), and the Name follows its folder as it
+ * follows a typed one.
+ *
+ * The account's managed runner while it is being set up or asleep (docs/managed-runner-no-default-workspace.md) is
+ * not offline here: it cannot check the folder, so the name goes unchecked, and the workspace is made all the same.
  */
 export function MachineSetupCard({
   runner,
-  fleet,
-  engine,
-  credential,
-  folder,
-  ready,
-  onFolder,
-  onEngine,
-  onUseApiKey,
+  managed,
+  onCreate,
+  creating,
+  createError,
   welcome,
 }: {
   runner: Runner;
-  /** Every runner of the account, which decides whether Cursor CLI is drawn at all (webShowsEngine). */
-  fleet: readonly CursorRunnerFacts[] | null;
-  /** The engine the draft runs on, which the composer's picks follow too. */
-  engine: string;
-  credential: SetupCredential;
-  folder: PickedFolder | null;
-  /** Both steps are done and the machine is here: the next send makes the workspace. */
-  ready: boolean;
-  onFolder: (folder: PickedFolder | null) => void;
-  /** Run on this engine's own sign-in instead, which is also how a key is left again. */
-  onEngine: (engine: LoginEngine) => void;
-  onUseApiKey: () => void;
-  /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers
-   *  first messages to try, which fill the page's composer. */
-  welcome?: { composerText: string; onExample: (text: string) => void };
+  /** The account's managed runner, read once for the whole page: how the card treats this runner if it is that one. */
+  managed?: ManagedRunner | null;
+  /** Make the workspace in this folder, under this name. */
+  onCreate: (folder: PickedFolder, name: string) => void;
+  /** The workspace is being made: the fields and the button wait. */
+  creating: boolean;
+  /** Why the last Create workspace was refused, said on the card until the next try. */
+  createError: string | null;
+  /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it. */
+  welcome?: boolean;
 }) {
-  const machine = machineName(runner);
-  const offline = runner.online !== true;
+  // Orbit Cloud for the account's managed runner (machineName).
+  const machineNameOf = useMachineName();
+  const machine = machineNameOf(runner);
+  const managedState = managedSetupState(runner.id, managed?.status);
+  const offline = !managedState && runner.online !== true;
   const probes = answersDirProbe(runner);
-  const name = engineName(engine);
-  const others = installedLogins(runner.engines).filter((e) => e !== engine && webShowsEngine(e, fleet));
-  const done = credential.step === 'signedIn' || credential.step === 'onKey';
+  // A managed runner that isn't up makes the folder when its first session is claimed, on any runner version.
+  const usable = !!managedState || (probes && makesNewFolders(runner));
+  const disabled = offline || !usable;
+  const root = managedState && !runner.reposRoot?.trim() ? MANAGED_RUNNER_REPOS_ROOT : newFolderRootOf(runner);
 
-  const alternatives = others.length > 0 && (
-    <div className="msc-alt">
-      {others.map((other, i) => (
-        <span key={other}>
-          {i > 0 && ' · '}
-          <button className="msc-change" type="button" disabled={offline} onClick={() => onEngine(other)}>
-            {setupUseEngine(engineName(other))}
-          </button>
-        </span>
-      ))}
-    </div>
+  const [typed, setTyped] = useState('');
+  const folder = typed.trim();
+  const settled = useSettled(folder);
+  // The name is asked about where it would go: a folder, or a file, may be there already.
+  const probe = useDirProbe(
+    runner.id,
+    !managedState && !disabled && isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined,
+    true,
   );
+  const found = settled === folder && probe.state === 'answered' ? probe.probe : null;
+  const verdict = found ? newFolderVerdict(found, machine) : null;
+  const typedPick: PickedFolder | null = managedState
+    ? isValidNewFolder(folder) ? { kind: 'new', name: folder, path: newFolderPath(root, folder) } : null
+    : found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
+
+  // From GitHub: offered only where the deployment has a GitHub App. A card come back from GitHub's sign-in opens on it.
+  const github = useQuery(githubIntegrationQuery());
+  const offersGithub = github.data?.available === true;
+  const [githubOpen, setGithubOpen] = useState(() => takeGithubReturn(runner.id));
+  const [repository, setRepository] = useState<PickedFolder | null>(null);
+  const fromGithub = offersGithub && !!github.data && githubOpen;
+  const candidate = fromGithub ? repository : typedPick;
+  // Not the folder field's lock: a machine too old to make folders may clone, and the picker says when it can't.
+  const locked = fromGithub ? offline : disabled;
+
+  // The workspace's name: the folder's until it is edited, and from then on what was typed, empty included.
+  const [editedName, setEditedName] = useState<string | null>(null);
+  const followed = fromGithub ? (repository?.kind === 'github' ? repository.name : '') : folder;
+  const shownName = editedName ?? followed;
+  const name = shownName.trim();
+  const nameMissing = editedName !== null && !name;
+
+  const canCreate = !!candidate && !!name && !locked && !creating;
+  const create = () => {
+    if (canCreate && candidate) onCreate(candidate, name);
+  };
+  const onFieldKey = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') create();
+  };
 
   return (
     <div className="msc">
@@ -349,96 +205,162 @@ export function MachineSetupCard({
             <DesktopOutlined aria-hidden="true" />
           </span>
           <div>
-            <div className="msc-title">{setupTitle(machine)}</div>
-            <div className="msc-sub">{SETUP_LEAD}</div>
+            <div className="msc-title">{setupNewWorkspaceTitle(machine)}</div>
+            <div className="msc-sub">{setupNewWorkspaceLead(machine)}</div>
           </div>
         </div>
       )}
 
-      {offline ? (
+      {managedState ? (
+        <div className="msc-notice">{MANAGED_RUNNER_COPY.setup.notice[managedState]}</div>
+      ) : offline ? (
         // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
         // one too old to check folders either.
-        <div className="msc-notice">{isConnecting(runner) ? setupConnecting(machine) : setupOffline(machine)}</div>
+        <div className="msc-notice">{isConnecting(runner) ? setupConnectingCreate(machine) : setupOfflineCreate(machine)}</div>
       ) : (
-        !probes && (
+        !usable && (
           <div className="msc-notice">
             {updatesItself(runner) ? (
-              setupUpdating(machine)
+              setupUpdatingCreate(machine)
             ) : (
               <>
-                {setupNeedsUpdate(machine)} <Link to={`/runners/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
+                {setupNeedsUpdate(machine)} <Link to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
               </>
             )}
           </div>
         )
       )}
 
-      <div className="msc-step" data-step="folder">
-        {folder ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">1</span>}
-        <div>
-          {folder ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{SETUP_FOLDER}</span>
-              <span className="msc-path">{folder.path}</span>
-              <span className="msc-meta">{folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.note}</span>
-              <button className="msc-change" type="button" disabled={offline} onClick={() => onFolder(null)}>
-                {SETUP_CHANGE}
-              </button>
+      <div className="msc-body">
+        {fromGithub && github.data ? (
+          <div className="msc-field msc-github" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <span className="msc-github-title">
+              <GithubOutlined aria-hidden="true" /> {SETUP_FROM_GITHUB}
+              <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+            </span>
+            <GithubFolderOption
+              runner={runner}
+              integration={github.data}
+              disabled={offline || creating}
+              onCandidate={setRepository}
+              onEnter={create}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
+              ) : (
+                repository?.kind === 'github' && (
+                  <span className="msc-done-line">
+                    <span className="msc-path">{setupGithubDonePath(repository.repository, homeShortPath(repository.path))}</span>
+                    <span className="msc-meta">{SETUP_GITHUB_DONE}</span>
+                  </span>
+                )
+              )}
             </div>
-          ) : (
-            <FolderOptions runner={runner} disabled={offline || !probes} onPick={onFolder} />
-          )}
-        </div>
-      </div>
-
-      <div className="msc-step" data-step="engine">
-        {done ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">2</span>}
-        <div>
-          {credential.step === 'signedIn' ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{name}</span>
-              <span className="msc-meta">{setupSignedIn(machine)}</span>
-            </div>
-          ) : credential.step === 'onKey' ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{credential.label}</span>
-              <span className="msc-meta">{credential.pool ? SETUP_ON_A_POOL : SETUP_ON_A_KEY}</span>
+            <div className="msc-back">
               <button
                 className="msc-change"
                 type="button"
-                disabled={offline}
-                // Back to a sign-in: this engine's, or for one that has none, the machine's first.
-                onClick={() => onEngine(isLoginProvider(engine) ? (engine as LoginEngine) : firstEngineOn(runner.engines))}
+                disabled={creating}
+                onClick={() => {
+                  setGithubOpen(false);
+                  setRepository(null);
+                }}
               >
-                {SETUP_CHANGE}
+                {SETUP_FOLDER_NAME_INSTEAD}
               </button>
             </div>
-          ) : (
-            <>
-              <div className="msc-step-title">{setupSignIn(name, machine)}</div>
-              <div className="msc-step-help">{SETUP_SIGN_IN_HELP}</div>
-              {credential.step === 'notInstalled' ? (
-                <div className="msc-step-help msc-not-installed">
-                  {setupNotInstalled(name, machine)}{' '}
-                  <Link to={`/runners/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
-                </div>
-              ) : (
-                !offline && (
-                  <RunnerSignIn key={engine} runnerId={runner.id} engine={engine as LoginEngine} onUseApiKey={onUseApiKey} />
+          </div>
+        ) : (
+          <div className="msc-field" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <Input
+              className="msc-input"
+              size="small"
+              prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
+              placeholder={SETUP_NEW_FOLDER_NAME}
+              aria-label={SETUP_FOLDER}
+              value={typed}
+              disabled={disabled || creating}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={onFieldKey}
+              invalid={!!folder && !isValidNewFolder(folder)}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
+              ) : !folder ? (
+                <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
+              ) : !isValidNewFolder(folder) ? (
+                <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+              ) : managedState ? (
+                <span className="msc-meta">{MANAGED_RUNNER_COPY.setup.folderUnchecked[managedState]}</span>
+              ) : verdict ? (
+                // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
+                found?.exists || found?.error ? (
+                  <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
+                ) : (
+                  <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
                 )
+              ) : settled === folder && (probe.state === 'unanswered' || probe.state === 'idle') ? (
+                <NoAnswer machine={machine} onAgain={probe.again} />
+              ) : (
+                <span className="msc-verdict wait">{setupChecking(machine)}</span>
               )}
-              {alternatives}
-            </>
-          )}
+            </div>
+          </div>
+        )}
+
+        <div className="msc-field" data-field="name">
+          <div className="msc-step-title">{SETUP_NAME}</div>
+          <div className="msc-row">
+            <Input
+              className="msc-input"
+              size="small"
+              placeholder={followed || SETUP_NAME_PLACEHOLDER}
+              aria-label={SETUP_NAME}
+              value={shownName}
+              disabled={locked || creating}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={onFieldKey}
+              invalid={nameMissing}
+            />
+            <Button variant="primary" disabled={!canCreate} loading={creating} onClick={create}>
+              {SETUP_CREATE}
+            </Button>
+          </div>
+          <div className="msc-line">
+            {nameMissing ? (
+              <span className="msc-verdict bad">{SETUP_NAME_EMPTY}</span>
+            ) : (
+              <span className="msc-meta">{editedName !== null ? SETUP_NAME_EDITED : SETUP_NAME_HINT}</span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {welcome && <WelcomeExamples step={3} picked={welcome.composerText} onPick={welcome.onExample} />}
-
-      <div className={`msc-foot${ready ? ' ready' : ''}`}>
-        {ready && folder
-          ? setupReady(folder.kind === 'new' ? folder.name : folderName(folder.path), folder.path)
-          : SETUP_FOOT}
+        {offersGithub && !fromGithub && (
+          <div className="msc-field" data-field="github">
+            <div className="msc-or">{SETUP_OR}</div>
+            <button
+              className="msc-github-row"
+              type="button"
+              disabled={offline || creating}
+              onClick={() => setGithubOpen(true)}
+            >
+              <GithubOutlined className="msc-github-mark" aria-hidden="true" />
+              <span>
+                <span className="msc-github-title">
+                  {SETUP_FROM_GITHUB}
+                  <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+                </span>
+                <span className="msc-meta">{SETUP_GITHUB_META}</span>
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -465,62 +387,5 @@ export function RevealedOnArrival({ className, children }: { className?: string;
     <div ref={arrived} className={className ? `msc-revealed ${className}` : 'msc-revealed'}>
       {children}
     </div>
-  );
-}
-
-/**
- * The first message, waiting under the card for both steps: the bubble it will be, with what it is
- * waiting for beneath it and the way to take it back (board rule 6). It goes by itself; only a refusal
- * stops it, and then it stays here, saying why, until it is tried again or taken back.
- */
-export function HeldFirstMessage({
-  held,
-  machine,
-  sending,
-  onWithdraw,
-  onRetry,
-}: {
-  held: HeldMessage;
-  machine: string;
-  sending: boolean;
-  onWithdraw: () => void;
-  onRetry: () => void;
-}) {
-  const event = useMemo(
-    () =>
-      queuedTurnEvent({
-        turnId: 'held-first-message',
-        content: held.content,
-        shell: held.shell,
-        attachments: held.attachments?.map(({ id, mime }) => ({ id, mimeType: mime })),
-      }),
-    [held],
-  );
-  return (
-    <RevealedOnArrival className="msc-held">
-      <QueuedUserTurn event={event} queued={null} />
-      <div className="msc-held-state">
-        {sending ? (
-          HELD_SENDING
-        ) : (
-          <>
-            {held.error ? (
-              <>
-                <span className="msc-held-error">{heldFailed(held.error)}</span> ·{' '}
-                <button className="msc-change" type="button" onClick={onRetry}>
-                  {HELD_TRY_AGAIN}
-                </button>
-              </>
-            ) : (
-              heldWaiting(machine)
-            )}{' '}
-            ·{' '}
-            <button className="msc-change" type="button" onClick={onWithdraw}>
-              {HELD_WITHDRAW}
-            </button>
-          </>
-        )}
-      </div>
-    </RevealedOnArrival>
   );
 }

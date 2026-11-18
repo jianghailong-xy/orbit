@@ -416,8 +416,8 @@ final class KimiAccountsTests: XCTestCase {
         ])
         let workOut = try hpc([both[0], (work, "Work", "no", "mainland-cn")])
         XCTAssertEqual(SessionProviderChoices.providers(for: "kimi", sources: ChoiceSources(configured: [], engines: workOut.engines, planUsage: workOut.planUsage))
-                        .first { $0.slug == "kimi" }?.accounts?.last,
-                       AccountChoice(id: work, label: "Work", unavailable: "Not signed in"))
+                        .first { $0.slug == "kimi" }?.accounts,
+                       [AccountChoice(id: "default", label: "Default", quota: "Weekly 34%")])
         // One account, or a runner too old to list them, lists none.
         let one = try runner([kimi([both[0]])], planUsage: ["kimi": kimiUsage(defaultUsage)])
         XCTAssertNil(SessionProviderChoices.providers(for: "kimi", sources: ChoiceSources(configured: [], engines: one.engines, planUsage: one.planUsage))

@@ -205,7 +205,8 @@ func TestTaintedCommitIsRefusedAfterTheGrantEnds(t *testing.T) {
 		return recordSecretTaint(repo, "refs/heads/orbit/leak", r, main)
 	}
 	defer func() { secretBeforeForget = old }()
-	store.remove("g")
+	store.remove("g", true)
+	store.waitScans()
 
 	raw, _ := os.ReadFile(secretTaintPath())
 	if strings.Contains(string(raw), testSecretValue) || !strings.Contains(string(raw), "config.env") {
@@ -542,7 +543,8 @@ func TestRemovalRecordsUncommittedFilesHoldingTheValue(t *testing.T) {
 	store := newSecretStore(newFakeSecretAPI(), filepath.Join(home, "ledger.json"))
 	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
 	store.rebuildScrubLocked()
-	store.remove("g")
+	store.remove("g", true)
+	store.waitScans()
 	if path, ok := taintObjectIDs(dir)[want]; !ok || path != "draft.env" {
 		t.Fatalf("recorded = %v", taintObjectIDs(dir))
 	}
@@ -615,7 +617,7 @@ func TestTaintEntryIsKeptWhenGitCannotAnswer(t *testing.T) {
 }
 
 // Review 7, OPEN 1: a removal whose record cannot be written does not forget what the value was in. Until a retry
-// records it, nothing is published from this runner: pushes, patches, uploads and commit-message calls all refuse.
+// records it, patches are checked against the pending value; uploads and commit-message calls still fail closed.
 func TestRemovalWhoseRecordFailsKeepsEverythingRefusedUntilItIsWritten(t *testing.T) {
 	wt := sessionWorktree(t, "sSecretPending")
 	holdTestSecret(t, testSecretValue)
@@ -641,8 +643,8 @@ func TestRemovalWhoseRecordFailsKeepsEverythingRefusedUntilItIsWritten(t *testin
 	if refusal := secretPushRefusal(wt.Path, "HEAD", wt.baseSha()); refusal == "" {
 		t.Fatal("a push was allowed while a removal's record was unwritten")
 	}
-	if patches := withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean\n"}}, "sSecretPending"); len(patches) != 0 {
-		t.Fatalf("patches were sent while a removal's record was unwritten: %+v", patches)
+	if patches := withoutSecretPatches([]FilePatch{{Path: "clean.txt", Patch: "+clean\n"}, {Path: "leak.env", Patch: "+" + testSecretValue}}, "sSecretPending"); len(patches) != 1 || patches[0].Path != "clean.txt" {
+		t.Fatalf("pending patches were not filtered by value: %+v", patches)
 	}
 	if !taintAppliesTo(wt.Path) {
 		t.Fatal("the commit message would go to the model while a removal's record was unwritten")
@@ -787,5 +789,100 @@ func TestUploadRefusesAFilteredHeldBackFileAfterTheGrantEnds(t *testing.T) {
 	defer f.Close()
 	if err := refuseFileHoldingSecret(f, path); !errors.Is(err, errFileHoldsOwnerSecret) {
 		t.Fatalf("the CRLF held-back file was uploadable after its grant ended: %v", err)
+	}
+}
+
+// A removal reads only the files `git add -A` could stage with content other than HEAD's: a clean tracked file is
+// HEAD's blob, already covered by the history scan (or the base, which the taint design leaves out). Everything else
+// a value could be in is still read, the files git is told not to look at included.
+func TestRemovalScanCandidatesSkipOnlyFilesEqualToHead(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	for name, content := range map[string]string{".gitignore": "ignored.env\n", "clean.txt": "clean\n", "edited.txt": "before\n", "staged.txt": "before\n", "hidden.txt": "before\n"} {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-q", "-m", "files")
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("edited.txt", "KEY="+testSecretValue+"\n")
+	write("staged.txt", "KEY="+testSecretValue+"\n")
+	mustGit(t, repo, "add", "staged.txt")
+	mustGit(t, repo, "update-index", "--assume-unchanged", "hidden.txt")
+	write("hidden.txt", "KEY="+testSecretValue+"\n")
+	write("new.env", "KEY="+testSecretValue+"\n")
+	write("ignored.env", "KEY="+testSecretValue+"\n")
+
+	names, err := secretScanCandidates(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, name := range names {
+		got[name] = true
+	}
+	for _, want := range []string{"edited.txt", "staged.txt", "hidden.txt", "new.env"} {
+		if !got[want] {
+			t.Errorf("%s was not read (candidates %v)", want, names)
+		}
+	}
+	for _, skip := range []string{"clean.txt", ".gitignore", "ignored.env"} {
+		if got[skip] {
+			t.Errorf("%s was read though git could not stage anything new from it (candidates %v)", skip, names)
+		}
+	}
+	hits, err := uncommittedObjectsHolding(repo, newSecretRedactor([]string{testSecretValue}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, hit := range hits {
+		found[hit.Path] = true
+	}
+	for _, want := range []string{"edited.txt", "staged.txt", "hidden.txt", "new.env"} {
+		if !found[want] {
+			t.Errorf("%s holds the value and was not recorded (hits %v)", want, hits)
+		}
+	}
+}
+
+func TestUnreadablePatchRecordEmitsOneSummaryPerTurn(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	secretWarned.Range(func(key, _ interface{}) bool { secretWarned.Delete(key); return true })
+	if err := os.MkdirAll(filepath.Dir(secretTaintPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secretTaintPath(), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	turn := "one"
+	var notices []map[string]interface{}
+	defer registerSecretWarnings("sSummary", func(_ string, p map[string]interface{}) { notices = append(notices, p) }, func() string { return turn })()
+	patches := []FilePatch{{Path: "a", Patch: "+clean"}, {Path: "b", Patch: "+clean"}}
+	for i := 0; i < 2; i++ {
+		if got := withoutSecretPatches(patches, "sSummary"); len(got) != 0 {
+			t.Fatalf("sent %+v", got)
+		}
+	}
+	if len(notices) != 1 {
+		t.Fatalf("notices %+v", notices)
+	}
+	n := notices[0]
+	if n["subtype"] != "secret_patches_withheld" || n["reason"] != "record_unreadable" || n["count"] != 2 || n["path"] != nil || n["paths"] != nil {
+		t.Fatalf("summary %+v", n)
+	}
+	raw, _ := json.Marshal(n)
+	if strings.Contains(string(raw), testSecretValue) {
+		t.Fatal("summary contains value")
+	}
+	turn = "two"
+	withoutSecretPatches(patches, "sSummary")
+	if len(notices) != 2 {
+		t.Fatal("next turn did not report")
 	}
 }

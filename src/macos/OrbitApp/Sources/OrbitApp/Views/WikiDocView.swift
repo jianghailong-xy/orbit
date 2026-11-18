@@ -102,6 +102,7 @@ struct WikiDocPage: View {
                 }
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             // Where the page stands, for the reading line the section in view is read against.
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in headingTops.page = frame }
             // Back on the page from one pushed over it: the chat's page chip is this document's section again.
@@ -1032,28 +1033,11 @@ struct WikiDocsBrowsePage: View {
                 .listRowSeparator(.hidden)
             }
             ForEach(directory.categories.filter { !($0.docs ?? []).isEmpty }, id: \.key) { category in
-                Section {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(category.number ?? 0) \(category.title)")
-                            .font(.orbitSubtext.weight(.bold))
-                        Text(WikiDocLogic.categoryLine(category))
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.top, 12)
-                    .listRowSeparator(.hidden)
-                    if let question = category.question, !question.isEmpty {
-                        Text(question)
-                            .font(.orbitListSubtitle)
-                            .foregroundStyle(.secondary)
-                            .listRowSeparator(.hidden)
-                    }
-                    ForEach(category.docs ?? [], id: \.slug) { doc in docRow(doc) }
-                }
+                docsCategorySection(category)
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .navigationTitle("")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -1063,6 +1047,30 @@ struct WikiDocsBrowsePage: View {
                 Button(action: actions.openContents) { Image(systemName: "list.bullet") }
                     .accessibilityLabel(WikiArticleCopy.contents)
             }
+        }
+    }
+
+    /// One category's question and documents. The category is the row the page's ForEach draws, so
+    /// that closure holds no branch or second ForEach of its own.
+    private func docsCategorySection(_ category: WikiDocsDirectory.Category) -> some View {
+        Section {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(category.number ?? 0) \(category.title)")
+                    .font(.orbitSubtext.weight(.bold))
+                Text(WikiDocLogic.categoryLine(category))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.top, 12)
+            .listRowSeparator(.hidden)
+            if let question = category.question, !question.isEmpty {
+                Text(question)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
+            }
+            ForEach(category.docs ?? [], id: \.slug) { doc in docRow(doc) }
         }
     }
 
@@ -1167,35 +1175,11 @@ struct WikiDocsIndexPage: View {
                 .listRowSeparator(.hidden)
             }
             ForEach(groups) { group in
-                Section {
-                    Text(group.letter)
-                        .font(.orbitSubtext.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .listRowBackground(Color.secondary.opacity(0.10))
-                    ForEach(group.items) { item in
-                        Button {
-                            if let key = item.sectionKey, item.kind == "section" { openSection(item.docSlug, key) } else { actions.openDoc(item.docSlug) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title)
-                                    .font(.orbitProse.weight(item.kind == "doc" ? .semibold : .regular))
-                                    .foregroundStyle(Color.primary)
-                                    .lineLimit(1)
-                                Text(WikiDocLogic.indexMeta(item))
-                                    .font(.orbitListSubtitle)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .modifier(WikiDocIndexLetter(letter: group.letter))
+                indexGroupSection(group)
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .modifier(WikiDocIndexShown())
         .navigationTitle("")
         #if os(iOS)
@@ -1207,6 +1191,37 @@ struct WikiDocsIndexPage: View {
                     .accessibilityLabel(WikiArticleCopy.contents)
             }
         }
+    }
+
+    /// One letter's documents and sections. The group is the row the page's ForEach draws, so that
+    /// closure holds no second ForEach of its own.
+    private func indexGroupSection(_ group: WikiDocLogic.IndexGroup) -> some View {
+        Section {
+            Text(group.letter)
+                .font(.orbitSubtext.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.secondary.opacity(0.10))
+            ForEach(group.items) { item in
+                Button {
+                    if let key = item.sectionKey, item.kind == "section" { openSection(item.docSlug, key) } else { actions.openDoc(item.docSlug) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.title)
+                            .font(.orbitProse.weight(item.kind == "doc" ? .semibold : .regular))
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                        Text(WikiDocLogic.indexMeta(item))
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .modifier(WikiDocIndexLetter(letter: group.letter))
     }
 }
 

@@ -20,8 +20,11 @@ import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Select } from '../components/ui/Select';
 import { Spinner } from '../components/ui/Spinner';
 import '../components/ui/Card.css';
+import { SettingsHeader } from '../components/settings';
 import { workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
+import { machineName } from '../lib/machineSetup';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /** `GET /integrations/feishu/chats`, with the ticket the page was opened with (docs/feishu-bot-design.md §8.1). */
 export const feishuChatsQuery = (ticket?: string) =>
@@ -51,9 +54,14 @@ interface WorkspaceRow {
   name: string;
   enabled?: boolean;
   deletedAt?: string | null;
-  runner?: { name?: string | null; displayName?: string | null } | null;
+  runnerId?: string | null;
+  runner?: { id?: string; name?: string | null; displayName?: string | null } | null;
 }
-const runnerName = (w: WorkspaceRow | undefined) => w?.runner?.displayName || w?.runner?.name || 'its runner';
+/** Its machine as the app names it (Orbit Cloud for the managed runner, machineName). */
+const runnerName = (w: WorkspaceRow | undefined, managedRunnerId: string | null) =>
+  (w?.runner
+    ? machineName({ ...w.runner, id: w.runner.id ?? w.runnerId ?? undefined, name: w.runner.name ?? undefined }, managedRunnerId)
+    : '') || 'its runner';
 
 /**
  * Orbit's confirm page for connecting a Feishu group (docs/feishu-bot-design.md §8.1, §8.3), opened from the bot's
@@ -69,8 +77,8 @@ export function FeishuConnectGroupPage() {
 
   if (!ticket || chats.isError || (chats.isSuccess && !chats.data.pending)) {
     return (
-      <div className="feishu-page">
-        <h1 className="page-title">Connect a Feishu group</h1>
+      <div className="settings-page feishu-page">
+        <SettingsHeader title="Connect a Feishu group" />
         <Alert
           type="warning"
           title="This link has expired or was already used"
@@ -84,7 +92,7 @@ export function FeishuConnectGroupPage() {
   }
   if (chats.isPending || workspaces.isPending) {
     return (
-      <div className="feishu-page">
+      <div className="settings-page feishu-page">
         <Spinner />
       </div>
     );
@@ -99,6 +107,7 @@ function ConnectForm({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const message = useToast();
+  const managedRunnerId = useManagedRunnerId();
   const [workspaceId, setWorkspaceId] = useState<string | null>(workspaces.length === 1 ? workspaces[0].id : null);
   const [mode, setMode] = useState<PermissionMode>(PermissionMode.DEFAULT);
   const [who, setWho] = useState<'everyone' | 'listed'>('everyone');
@@ -142,13 +151,17 @@ function ConnectForm({
   };
 
   return (
-    <div className="feishu-page">
-      <h1 className="page-title">Connect a Feishu group</h1>
-      <p className="feishu-intro">
-        Connect <strong>{pending.chatName ?? 'this group'}</strong> to Orbit, so that people in it can start sessions by
-        mentioning the bot. Their messages become instructions to agents on your machine, so choose carefully.
-        {pending.connected && ' This group is already connected: confirming replaces its settings.'}
-      </p>
+    <div className="settings-page feishu-page">
+      <SettingsHeader
+        title="Connect a Feishu group"
+        description={
+          <>
+            Connect <strong>{pending.chatName ?? 'this group'}</strong> to Orbit, so that people in it can start sessions by
+            mentioning the bot. Their messages become instructions to agents on your machine, so choose carefully.
+            {pending.connected && ' This group is already connected: confirming replaces its settings.'}
+          </>
+        }
+      />
       <form className="orbit-card feishu-card" onSubmit={submit} aria-label="Connect this group">
         <div className="orbit-card-body feishu-fields">
           <div className="admin-signin-field">
@@ -159,7 +172,7 @@ function ConnectForm({
               aria-labelledby={ids.workspace}
               value={workspaceId}
               placeholder="Choose a workspace"
-              options={workspaces.map((w) => ({ value: w.id, label: `${w.name} · ${runnerName(w)}` }))}
+              options={workspaces.map((w) => ({ value: w.id, label: `${w.name} · ${runnerName(w, managedRunnerId)}` }))}
               onValueChange={setWorkspaceId}
             />
             <div className="admin-signin-hint">
@@ -181,7 +194,7 @@ function ConnectForm({
             </RadioGroup>
             <Alert
               type={mode === PermissionMode.BYPASS || mode === PermissionMode.AUTO ? 'warning' : 'info'}
-              title={groupConsequence(runnerName(workspace), mode)}
+              title={groupConsequence(runnerName(workspace, managedRunnerId), mode)}
               description="Approvals and agents' questions come to you in Feishu, never to the group. People in the group can't change the mode."
               className="feishu-consequence"
             />

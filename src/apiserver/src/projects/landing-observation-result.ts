@@ -9,7 +9,8 @@ import {
   resolveObservationErrorItems,
 } from './landing-observation';
 import { sessionReportedWork } from './landing-source-branch';
-import { branchName } from './project-criterion-landing';
+import { branchName, taskLandingSql } from './project-criterion-landing';
+import { IN_FLIGHT_JOB_STATES } from './criterion-landing-reason';
 import { appendIntegrationJobEvent, resultText } from './project-integration-event';
 import {
   recordLandedWithoutConfirmation,
@@ -316,6 +317,7 @@ async function planTask(
   },
 ): Promise<TaskPlan | null> {
   const { task, observation } = input;
+  if (await landingStillOwesAnswer(tx, task.id)) return null;
   const work = await tx.session.findMany({
     where: { taskId: task.id, startsTaskWork: true, deletedAt: null },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -347,6 +349,29 @@ async function planTask(
     task,
     reason: observation.fullyApplied === true ? 'APPLIED_AS_OTHER_COMMITS' : 'NOT_ON_LINE',
   };
+}
+
+/**
+ * Whether the task's own landing will answer for it, so an observation must not: a LAND_TASK still
+ * QUEUED or RUNNING, or one that has since written the task a receipt. The observation asks about
+ * the commit the task's identity was frozen as; the landing merges the branch's tip, which is not
+ * the same commit when the identity is wrong. The 0.1.253 bump (task 34vJmfV0DZk5cySoXlB3r,
+ * 2026-11-10) was frozen at a stale tip already on main; its LAND_TASK was merging the real tip
+ * into the project line when an observation found the stale one on main and wrote ALREADY_MERGED
+ * to main, which kept the bump out of every promotion.
+ *
+ * Two reads, the job first: a landing's result writes its job's end and its receipt together, so
+ * a job read as no longer in flight has its receipt visible to the second read.
+ */
+async function landingStillOwesAnswer(tx: Prisma.TransactionClient, taskId: string): Promise<boolean> {
+  const inFlight = await tx.projectIntegrationJob.findFirst({
+    where: { taskId, kind: 'LAND_TASK', state: { in: [...IN_FLIGHT_JOB_STATES] } },
+    select: { id: true },
+  });
+  if (inFlight) return true;
+  const [landing] = await tx.$queryRaw<Array<{ landing: string }>>(Prisma.sql`
+    SELECT (${Prisma.raw(taskLandingSql('t'))}) AS "landing" FROM "task" t WHERE t."id" = ${taskId}::uuid`);
+  return landing !== undefined && landing.landing !== 'NOT_KNOWN';
 }
 
 /**

@@ -29,8 +29,6 @@ data class CoordinatorDelivery(val kind: String, val task: Task?, val revision: 
  * entry by `CoordinatorDeliveryCopyParityTest`. A payload that is not a card is no card, and the turn keeps its old reading.
  */
 object CoordinatorDeliveryLine {
-    /** What the sticky bar calls the turn once it has been scrolled past: the reply under it answers it (web `COORDINATOR_DELIVERY_STICKY_LABEL`). */
-    const val stickyLabel = "From Orbit"
     /** The link at the foot of the opened line, to the task the fact names (web `COORDINATOR_DELIVERY_ITS_TASK`). */
     const val itsTask = "Its task ↗"
     /** Where the line says it was sent when this conversation is not the project's coordinator — the owner's answer to a criteria

@@ -21,6 +21,18 @@ final class EngineAuthTests: XCTestCase {
         XCTAssertFalse(EngineAuth.isAuthErrorText(nil))
     }
 
+    /// A failure of the connection — Cloudflare's block page, a dropped socket — is dressed in the
+    /// runtime's sign-in prefix but is not a sign-in failure: the credentials are intact and it
+    /// clears on its own. Reading it as one offers a remedy that does nothing and moves the session
+    /// off the account it never left.
+    func testAConnectionFailureIsNotASignInFailure() {
+        XCTAssertFalse(EngineAuth.isAuthErrorText(
+            "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"))
+        XCTAssertFalse(EngineAuth.isAuthErrorText(
+            "Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. "
+                + "For more information, pass `verbose: true` in the second argument to fetch()"))
+    }
+
     // MARK: what to do about it
 
     func testRemedyPerProvider() {

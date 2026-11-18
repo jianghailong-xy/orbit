@@ -78,6 +78,7 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 			PlanUsage:         h.planUsage,
 			InstallationError: h.installError,
 			KimiRegion:        h.kimiRegion,
+			OpenCodeNoKey:     h.openCodeNoKey,
 		}
 		if spec.bin == providerDsh {
 			report.Auth = "unknown"

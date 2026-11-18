@@ -90,9 +90,9 @@ class EngineInstallPageTest {
         fixture.runnerExtra = ""","install":{"engine":"opencode","mode":"install","status":"failed","message":"npm ERR! code EACCES"}"""
         page("opencode")
         await("npm ERR! code EACCES")
-        compose.waitUntil(60_000) { compose.onAllNodes(press(Infrastructure.RETRY) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodes(press(MachinesAndModels.RETRY) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(0, shown("Install OpenCode"))
-        compose.onNode(press(Infrastructure.RETRY)).performScrollTo().performClick()
+        compose.onNode(press(MachinesAndModels.RETRY)).performScrollTo().performClick()
         compose.waitUntil(60_000) { fixture.installBodies.isNotEmpty() }
         assertEquals(listOf(buildJsonObject { put("engine", "opencode") }), fixture.installBodies.toList())
     }
@@ -102,9 +102,9 @@ class EngineInstallPageTest {
         fixture.runnerExtra = ""","install":{"engine":"opencode","mode":"install","status":"installing","message":"Installing opencode-ai…"}"""
         page("opencode")
         await("Installing opencode-ai…")
-        await(Infrastructure.INSTALLING)
+        await(MachinesAndModels.INSTALLING)
         assertEquals(0, shown("Install OpenCode"))
-        assertEquals(0, shown(Infrastructure.RETRY))
+        assertEquals(0, shown(MachinesAndModels.RETRY))
     }
 
     @Test fun aRunnerThatNeverMentionsOpenCodeOffersNoInstall() {
@@ -130,7 +130,7 @@ class EngineInstallPageTest {
         page("claude")
         await("2.1.284")
         assertEquals(0, shown("Install Claude Code"))
-        assertFalse(Infrastructure.installsOpenCode(Json.parseToJsonElement("""{"engines":${fixture.runnerEngines}}""").jsonObject))
+        assertFalse(MachinesAndModels.installsOpenCode(Json.parseToJsonElement("""{"engines":${fixture.runnerEngines}}""").jsonObject))
     }
 
     /** Antigravity's own install, where the runner can run it at all; none where it says it can't. */

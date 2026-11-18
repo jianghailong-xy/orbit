@@ -16,9 +16,9 @@ import OrbitKit
 /// checked, and the two answers — or, once the project is recorded done, its receipt.
 ///
 /// The look is the start card's: the same blue surface and header, the same white grouped panels.
-/// It is the whole card wherever it is drawn — in the coordinator conversation, where it arrived,
-/// and over the project page — never a preview that opens a review (`ApprovalReviewLayout`'s
-/// whole-card path: nobody hands it a review target).
+/// In the coordinator conversation it is a preview that opens this whole card in the review sheet
+/// (the row hands `ApprovalReviewLayout` its review target); over the project page nobody does, and
+/// it is drawn whole.
 struct ProjectDoneCard: View {
     let subject: ProjectDoneSubject
     /// The coordinator's request, or nil for a card nobody asked for — the server's done check then
@@ -44,13 +44,27 @@ struct ProjectDoneCard: View {
     var onNotYet: ((String) async -> Bool)? = nil
     /// Reopen project, on the receipt.
     var onReopen: (() async -> Void)? = nil
+    /// Open, Change, Move to a follow-up… and Confirm… (`ProjectDoneFollowUps.swift`).
+    var followUps = ProjectDoneFollowUpActions()
+    /// Settings › Translation: "Translated · Show original" under the coordinator's call, and its press.
+    var translationFoot: [SessionTranslation.FootPart] = []
+    var onFlipTranslation: () -> Void = {}
+    /// The last Not yet… note could not be translated and was not sent: "Couldn't translate, so it
+    /// wasn't sent · Retry · Send as written", Send as written going through `onNotYetAsWritten`.
+    var notYetRefused = false
+    var onNotYetAsWritten: ((String) async -> Bool)? = nil
 
     @Environment(\.inApprovalReview) private var inReview
     @State private var recording = false
     @State private var notYetOpen = false
     @State private var note = ""
     @State private var sending = false
-    @State private var criteriaOpen = false
+    /// Nil until the reader folds or unfolds Done when: it starts open up to twelve criteria.
+    @State private var criteriaOpen: Bool?
+    @State private var moving: MoveCriterionSubject?
+    @State private var confirming: ConfirmCriterionSubject?
+    /// The Done when rows pressed open past their three lines.
+    @State private var openCriteria: Set<String> = []
 
     var body: some View {
         if ProjectDone.recorded(subject, record: record) {
@@ -80,7 +94,7 @@ struct ProjectDoneCard: View {
 
     private var question: some View {
         ApprovalReviewLayout(title: ProjectDone.heading, symbol: "checkmark.circle", tone: .blue,
-                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts, main: subject.main))",
+                             summary: "\(subject.title) · \(ProjectDone.cardTally(subject))",
                              badge: doneQuestionBadge) {
             content
         } actions: {
@@ -94,12 +108,23 @@ struct ProjectDoneCard: View {
                 }
             }
         }
+        .sheet(item: $moving) { moving in
+            if let move = followUps.move {
+                MoveCriterionSheet(subject: moving, move: move, openProjects: followUps.openProjects)
+            }
+        }
+        .sheet(item: $confirming) { confirming in
+            if let confirm = followUps.confirm {
+                ConfirmCriterionSheet(subject: confirming, confirm: confirm, upload: followUps.upload)
+            }
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         Text(ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         if let request {
             DoneSectionHead(title: ProjectDone.coordinatorCall)
@@ -109,6 +134,10 @@ struct ProjectDoneCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .doneRow()
             }
+            TranslationFootView(parts: translationFoot) { _ in onFlipTranslation() }
+        }
+        if subject.nonCode {
+            NonCodeBanner(mark: subject.nonCodeMark, onChange: followUps.openDelivers)
         }
         doneWhen
         if request != nil { ProjectDoneGapList(subject: subject, gaps: gaps) }
@@ -117,29 +146,26 @@ struct ProjectDoneCard: View {
             Text(ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,
                                               openItems: openItems, running: running))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.orbitLabel)
         if request == nil, let findings = doneCheck?.findings, !findings.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ProjectDone.findingsHeading.replacingOccurrences(of: "{n}", with: String(findings.count))).bold()
-                ForEach(Array(findings.enumerated()), id: \.offset) { _, finding in
-                    Text(finding.line(main: subject.main))
-                }
-            }
-            .font(.orbitLabel)
-            .foregroundStyle(Color.red)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3)))
-            Text(ProjectDone.findingsAccepted).font(.orbitLabel).foregroundStyle(.secondary)
+            DoneFindingsView(subject: subject, findings: findings, openTask: followUps.openTask,
+                             onMove: followUps.move == nil ? nil : { finding in
+                                 moving = MoveCriterionSubject(subject: subject, finding: finding)
+                             })
         } else if request != nil {
+            // Wraps rather than truncates: in the transcript's list a Text that may shrink is cut
+            // to one line, and the row comes out short enough to leave the card's buttons below
+            // the list's end, out of the scroll's reach.
             Text(ProjectDone.recordingExplanation).font(.orbitProse)
+                .fixedSize(horizontal: false, vertical: true)
         }
         if let error {
             Text("\(ProjectDone.notRecorded) — \(error)")
                 .font(.orbitLabel).foregroundStyle(Color.red)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         if notYetOpen {
@@ -152,40 +178,104 @@ struct ProjectDoneCard: View {
                 Text(ProjectDone.notYetHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if notYetRefused, let onNotYet {
+                    TranslationFootView(parts: OwnerCardTranslations.refusedFoot) { action in
+                        decline(action == .sendAsWritten ? (onNotYetAsWritten ?? onNotYet) : onNotYet)
+                    }
+                }
             }
         }
     }
 
-    /// Done when: the three counts, and every criterion one toggle away.
+    /// How many criteria Done when shows open before it folds behind Show all (the browser's
+    /// `DONE_WHEN_OPEN_UP_TO`).
+    private static let openUpTo = 12
+
+    /// Done when: the counts, and every criterion — open up to twelve, one toggle away beyond.
     @ViewBuilder
     private var doneWhen: some View {
         let criteria = subject.derivedDone?.criteria ?? []
         let count = counts?.criteria ?? criteria.count
+        let open = criteriaOpen ?? (count <= Self.openUpTo)
         DoneSectionHead(title: ProjectDone.doneWhenHead(count),
-                        aside: count > 0 ? (criteriaOpen ? ProjectDone.showLess : ProjectDone.showAll(count)) : nil,
-                        onAside: { criteriaOpen.toggle() })
-        Text(ProjectDone.cardTally(counts, main: subject.main))
+                        aside: count > Self.openUpTo ? (open ? ProjectDone.showLess : ProjectDone.showAll(count)) : nil,
+                        onAside: { criteriaOpen = !open })
+        Text(ProjectDone.cardTally(subject))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-        if criteriaOpen {
+        if open, !criteria.isEmpty {
             DonePanel {
                 ForEach(Array(criteria.enumerated()), id: \.element.id) { index, criterion in
                     if index > 0 { Divider() }
-                    let item = subject.criterion(criterion.definitionId)
-                    HStack(alignment: .top, spacing: 8) {
-                        DoneOrdinal(text: "\(item?.ordinal ?? index + 1)")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(ProjectDone.criterionState(criterion, main: subject.main))
-                                .font(.orbitLabel).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .doneRow()
+                    criterionRow(criterion, index: index)
                 }
             }
         }
+        if !subject.criteriaMovedOut.isEmpty {
+            MovedOutLines(movedOut: subject.criteriaMovedOut)
+        }
+    }
+
+    /// One Done when row: the number, the words, and — at the trailing edge — met or not, with who
+    /// confirmed it or where its work is (`criterionRowState`); Confirm… on an unmet criterion met
+    /// by confirmation.
+    private func criterionRow(_ criterion: ProjectDoneCriterion, index: Int) -> some View {
+        let item = subject.criterion(criterion.definitionId)
+        let state = ProjectDone.criterionRowState(criterion, nonCode: subject.nonCode, main: subject.main)
+        let confirmed = criterion.satisfiedBy == .confirmation && criterion.satisfied
+            ? ProjectDone.confirmationLine(criterion.confirmation?.current) : nil
+        let canConfirm = criterion.satisfiedBy == .confirmation && !criterion.satisfied
+            && followUps.confirm != nil && item != nil
+        let tint = state.warn ? ProjectPalette.warningInk : criterion.satisfied ? Color.green : Color.red
+        let expanded = openCriteria.contains(criterion.id)
+        // The state goes under the words, not beside them: two wrapping texts side by side
+        // squeezed a long criterion into a narrow column, and their heights came out wrong in the
+        // transcript's list (a blank band above the row, the card drawn over the row above it).
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(item?.ordinal ?? index + 1)")
+                .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
+                .frame(minWidth: 14, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                // Three lines until pressed: a criterion can run to a paragraph, and six of them
+                // pushed the answers screens below the question.
+                Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
+                    .lineLimit(expanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if expanded { openCriteria.remove(criterion.id) } else { openCriteria.insert(criterion.id) }
+                    }
+                Label {
+                    Text(state.text.prefix(1).uppercased() + state.text.dropFirst())
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: state.warn ? "exclamationmark.circle.fill"
+                          : criterion.satisfied ? "checkmark.circle.fill" : "circle")
+                }
+                .labelStyle(DoneStateLabelStyle())
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(tint)
+                if let confirmed {
+                    Text(confirmed).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if canConfirm, let item {
+                    Button(ProjectDone.confirmLabel(criterion.confirmation)) {
+                        confirming = ConfirmCriterionSubject(criterionID: item.id, ordinal: item.ordinal,
+                                                             text: item.text,
+                                                             verificationMethod: item.verificationMethod,
+                                                             revision: item.revision)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("done-confirm-\(item.ordinal)")
+                }
+            }
+        }
+        .doneRow()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("done-criterion-\(item?.ordinal ?? index + 1)")
     }
 
     // MARK: the answers
@@ -201,7 +291,7 @@ struct ProjectDoneCard: View {
                 recording = false
             }
         } label: {
-            Text(ProjectDone.recordLabel(counts, asked: request != nil)).approvalActionLabel()
+            Text(ProjectDone.recordLabel(counts, asked: request != nil, check: doneCheck)).approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .disabled(recording || !sealRead)
@@ -218,18 +308,22 @@ struct ProjectDoneCard: View {
         .disabled(recording)
     }
 
+    private func decline(_ send: @escaping (String) async -> Bool) {
+        guard let text = ProjectDone.declineNote(note), !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await send(text) {
+                note = ""
+                notYetOpen = false
+            }
+            sending = false
+        }
+    }
+
     private func sendButton(_ send: @escaping (String) async -> Bool) -> some View {
         Button {
-            guard let text = ProjectDone.declineNote(note), !sending else { return }
-            PlatformHaptics.tap()
-            sending = true
-            Task {
-                if await send(text) {
-                    note = ""
-                    notYetOpen = false
-                }
-                sending = false
-            }
+            decline(send)
         } label: {
             Text(ProjectDone.sendToCoordinator).approvalActionLabel()
         }
@@ -260,6 +354,7 @@ struct ProjectDoneGapList: View {
         if gaps.isEmpty {
             Text(ProjectDone.noGaps)
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let shown = expanded ? gaps : Array(gaps.prefix(3))
@@ -322,12 +417,15 @@ struct ProjectDoneReceiptCard: View {
                            tone: .green, badge: ProjectDone.provenance)
             Text(ProjectDone.receiptMeta(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptLine(subject, record: record))
                 .font(.orbitProse.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptTally(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if !accepted.isEmpty {
                 Button {
@@ -641,6 +739,16 @@ private struct DoneOrdinal: View {
             .foregroundStyle(Color(light: .white, dark: .black))
             .frame(minWidth: 18, minHeight: 18)
             .background(Color.primary, in: Circle())
+    }
+}
+
+/// A criterion's state line: the glyph beside the first line of its words, tight to them.
+private struct DoneStateLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            configuration.icon
+            configuration.title
+        }
     }
 }
 

@@ -28,6 +28,9 @@ import (
 // commands; every other command acts as the machine, and runs as nobody else (userModeUnported).
 var userModeActions = map[string]string{
 	"login": "", "logout": "", "whoami": "", "api": "",
+	// Reads the catalogue this binary carries and asks no server anything, so it is the person's as much
+	// as anybody's.
+	"guide": "",
 
 	"task list":              "",
 	"task labels":            "",
@@ -86,6 +89,7 @@ var userModeActions = map[string]string{
 	"session merge-receipt":  "",
 	"session merge-receipts": "",
 	"session end":            "",
+	"session move":           "",
 	"session complete":       "",
 	"session delete":         "",
 	"session create": "the user route that starts a session answers with the whole session rather than the " +
@@ -149,6 +153,10 @@ func capabilityAvailability(identity cliIdentity, argv []string) (bool, string) 
 	switch command {
 	case "login", "logout", "whoami":
 		// They look after the login itself, whoever the CLI acts as.
+		return true, ""
+	case "guide":
+		// It reads the catalogue this binary carries and asks the server nothing, so no credential is
+		// needed to run it — and it is how a process with a broken one learns what it cannot do.
 		return true, ""
 	case "api":
 		if err := actingUser(identity); err != nil {
@@ -335,11 +343,13 @@ func (u *userTransport) submitTaskEvidence(id, _, sessionID string, body interfa
 // token they used — so the attribution the runner door takes from headers has nothing to carry here.
 
 func (u *userTransport) createTask(_, _ string, body interface{}) (json.RawMessage, error) {
-	return u.do(http.MethodPost, "/tasks", body)
+	return resendKeyedCreate(body, func() (json.RawMessage, error) { return u.do(http.MethodPost, "/tasks", body) })
 }
 
 func (u *userTransport) createTasksBatch(_, _ string, body interface{}) (json.RawMessage, error) {
-	return u.do(http.MethodPost, "/tasks/batch-create", body)
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		return u.do(http.MethodPost, "/tasks/batch-create", body)
+	})
 }
 
 func (u *userTransport) updateTask(_, id string, body interface{}) (json.RawMessage, error) {
@@ -413,7 +423,7 @@ type projectTransport interface {
 	getProjectHandoffs(id, state string) (json.RawMessage, error)
 	resolveProjectBlocker(projectID, blockerID string, body map[string]interface{}) (json.RawMessage, error)
 	recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error)
-	createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error)
+	createProject(sessionID, orchestrationToken, requestID string, body map[string]interface{}) (json.RawMessage, error)
 	updateProject(sessionID, id string, body map[string]interface{}) (json.RawMessage, error)
 	deleteProject(id string) (json.RawMessage, error)
 	// skipIntegrationMergeCheck queues one landing with its merge check not run (§2.4 J-S5). The two
@@ -497,8 +507,8 @@ func (u *userTransport) skipIntegrationMergeCheck(_, id, taskID, reason, _ strin
 }
 
 // createProject is the owner's own door, where naming a workspace needs no acting session: it is theirs
-// to name.
-func (u *userTransport) createProject(_, _ string, body map[string]interface{}) (json.RawMessage, error) {
+// to name. The user API keeps no create receipts, so a request id is not sent (cliProjectCreate says so).
+func (u *userTransport) createProject(_, _, _ string, body map[string]interface{}) (json.RawMessage, error) {
 	return u.do(http.MethodPost, "/projects", body)
 }
 
@@ -524,6 +534,7 @@ type sessionTransport interface {
 	listMergeReceipts(id string, limit int) (json.RawMessage, error)
 	endSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 	completeSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
+	moveSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error)
 	deleteSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error)
 }
 
@@ -633,6 +644,10 @@ func (u *userTransport) endSession(_, _ string, id string) (json.RawMessage, err
 
 func (u *userTransport) completeSession(_, _ string, id string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/sessions", id, "/complete", nil)
+}
+
+func (u *userTransport) moveSession(_, _ string, id string, body interface{}) (json.RawMessage, error) {
+	return u.at(http.MethodPost, "/sessions", id, "/move", body)
 }
 
 func (u *userTransport) deleteSession(_, _ string, id string) (json.RawMessage, error) {

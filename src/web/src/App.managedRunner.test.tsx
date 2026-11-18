@@ -43,8 +43,11 @@ vi.mock('./components/AppShell', async () => {
   };
 });
 vi.mock('./components/RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p>register a machine</p> }));
-vi.mock('./pages/RunnerDetailPage', () => ({ RunnerDetailPage: () => <p>a machine’s page</p> }));
-vi.mock('./pages/InfrastructurePage', () => ({ InfrastructurePage: () => <p>infrastructure</p> }));
+vi.mock('./components/settings/MachineSettingsPage', () => ({ MachineSettingsPage: () => <p>a machine’s page</p> }));
+vi.mock('./components/settings', async () => {
+  const { Outlet } = await import('react-router-dom');
+  return { SettingsLayout: () => <Outlet /> };
+});
 // The console's own view, reduced to what WorkspaceConsole hands it: whose runner, and what managed state.
 vi.mock('./components/WorkspaceView', () => ({
   WorkspaceView: ({ runner, managed }: { runner: { name: string }; managed?: ManagedRunner | null }) => (
@@ -64,9 +67,9 @@ const fixture = JSON.parse(
 const state = (name: string) => fixture.states.find((c) => c.name === name)!.status;
 const capability = (name: string) => fixture.capabilities.find((c) => c.name === name)!;
 
-// The managed runner and its default workspace, as the status names them (public ids).
+// A managed runner and an ordinary workspace on it (public ids).
 const MANAGED_RUNNER = state('sleeping').runnerId!;
-const MANAGED_WORKSPACE = state('sleeping').workspaceId!;
+const MANAGED_WORKSPACE = '33zx0JhRhJo8rd25d3qAT';
 const MAC = '33zx0JhRhJo8rd25d3qAM';
 const HPC = '33zx0JhRhJo8rd25d3qAN';
 const MAC_WORKSPACE = '33zx0JhRhJo8rd25d3qAP';
@@ -187,18 +190,18 @@ const LANDINGS = [
     shows: 'Mac|no managed state',
   },
   {
-    label: 'one machine offline, no workspace: Infrastructure',
+    label: 'one machine offline, no workspace: its Settings page',
     runners: [runner(MAC, 'Mac', false)],
     workspaces: [],
-    lands: '/infrastructure',
-    shows: 'infrastructure',
+    lands: `/settings/machines/${MAC}`,
+    shows: 'a machine’s page',
   },
   {
-    label: 'every machine offline, no workspace: Infrastructure',
+    label: 'every machine offline, no workspace: the first one’s Settings page',
     runners: [runner(MAC, 'Mac', false), runner(HPC, 'HPC', false)],
     workspaces: [],
-    lands: '/infrastructure',
-    shows: 'infrastructure',
+    lands: `/settings/machines/${MAC}`,
+    shows: 'a machine’s page',
   },
   {
     label: 'a workspace: its console',
@@ -337,6 +340,15 @@ describe('with the capability switched on', () => {
     await vi.waitFor(() => expect(consoleShows()).toBe('Managed runner|sleeping'));
     expect(container.textContent).not.toContain('register a machine');
   });
+
+  for (const name of ['preparing: starting', 'sleeping', 'waking: starting again']) {
+    it(`lands on the managed setup card while ${name}`, async () => {
+      server = { capabilities: on, status: state(name), runners: [runner(MANAGED_RUNNER, 'Managed runner', false)], workspaces: [] };
+      await visit('/');
+      await vi.waitFor(() => expect(addressBar()).toBe(`/runners/${MANAGED_RUNNER}/new`));
+      await vi.waitFor(() => expect(consoleShows()).toContain('Managed runner|'));
+    });
+  }
 
   it('keeps the workspace a person already had first, and hands no managed state to a self-managed console', async () => {
     server = {

@@ -35,6 +35,7 @@ export function SharedProjectTaskRoute() {
   const { token = '', taskId = '' } = useParams();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['shared', token, 't', taskId],
+    meta: { entities: ['task'] },
     queryFn: () => getSharedProjectTask(token, taskId),
     enabled: !!token && !!taskId,
     retry: false,

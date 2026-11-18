@@ -7,6 +7,9 @@ import {
   ZH_SCHEDULED,
   ZH_TWO_JOBS,
   ZH_WAKE_WITH_COORDINATOR_CONTEXT,
+  EN_STALL,
+  EN_STALL_SILENT,
+  EN_TWO_STALLS,
 } from './backgroundWake.fixtures';
 
 /**
@@ -101,6 +104,7 @@ describe('the block a background job’s wake opens a turn with', () => {
       outputFrom: 0,
       outputTo: 16570,
       outputTail: '==> recreating apiserver\n==> apiserver is healthy',
+      stall: null,
     });
     // The block itself is kept whole, to be shown exactly as the agent received it.
     expect(wake.text).toBe(EN_DONE);
@@ -250,6 +254,65 @@ describe('the block a scheduled wakeup opens a turn with', () => {
     expect(wake.wakeups[0].reason).toContain('升级作业的备份验证');
     expect(wake.wakeups[0].prompt).toContain('升级备份唤醒');
     expect(wake.text).toBe(ZH_JOB_AND_SCHEDULED);
+    expect(wake.rest).toBe('');
+  });
+});
+
+describe('the block a quiet job’s wake opens a turn with', () => {
+  it('reads a job still running that has written nothing for a while: how long it ran, how long it has been quiet, when it last wrote', () => {
+    const wake = parseBackgroundWake(EN_STALL)!;
+
+    expect(wake.jobs).toEqual([
+      {
+        id: 'bgj_28a9b17fe75c',
+        kind: 'job',
+        command: './scripts/rebuild-index.sh --workers 6',
+        description: 'Nightly index rebuild (6 workers)',
+        status: 'running',
+        ended: false,
+        exitCode: null,
+        killReason: null,
+        outputPath: '/root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output',
+        outputFrom: 0,
+        outputTo: 21,
+        outputTail: 'entries=32 workers=6',
+        stall: {
+          runningForMs: 15 * 60_000 + 2000,
+          quietForMs: 15 * 60_000,
+          lastOutputAt: '2026-11-15T17:34:10Z',
+          wroteNothing: false,
+        },
+      },
+    ]);
+    expect(wake.text).toBe(EN_STALL);
+    expect(wake.rest).toBe('');
+  });
+
+  it('counts the whole run as quiet for a job that has never written anything', () => {
+    const [job] = parseBackgroundWake(EN_STALL_SILENT)!.jobs;
+
+    expect(job.description).toBeNull();
+    expect(job.command).toBe('pg_dump orbit > /backup/orbit.sql');
+    expect(job.outputTo).toBe(0);
+    expect(job.outputTail).toBe('');
+    expect(job.stall).toEqual({ runningForMs: 30 * 60_000, quietForMs: 30 * 60_000, lastOutputAt: null, wroteNothing: true });
+  });
+
+  it('keeps two quiet jobs apart, hours and all', () => {
+    const { jobs } = parseBackgroundWake(EN_TWO_STALLS)!;
+
+    expect(jobs.map((job) => job.id)).toEqual(['bgj_28a9b17fe75c', 'bgj_91b7c2e0d4f1']);
+    expect(jobs[1].stall?.runningForMs).toBe(3_600_000 + 2 * 60_000 + 5000);
+    expect(jobs[1].outputTail).toBe('✓ 41 passed');
+  });
+
+  it('reads a stall beside a finished job on the same turn, each as what it is', () => {
+    const wake = parseBackgroundWake(`${EN_DONE}\n\n${EN_STALL}`)!;
+
+    expect(wake.jobs.map((job) => [job.id, job.ended, job.stall !== null])).toEqual([
+      ['bgj_13c53745a88a', true, false],
+      ['bgj_28a9b17fe75c', false, true],
+    ]);
     expect(wake.rest).toBe('');
   });
 });

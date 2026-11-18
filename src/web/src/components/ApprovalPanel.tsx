@@ -1,3 +1,4 @@
+import { LANDING_CHECK_COPY, inheritedLandingCommand, inheritedLandingTimeout } from '../lib/landingCheck';
 import { useRef, useState, type JSX } from 'react';
 import Markdown from './Markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,7 +20,11 @@ import {
   OWNER_CONFIRMATION_SHOW_LESS,
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
-import { bashCommandRules } from '@orbit/shared';
+import { bashCommandRules, type ApprovalTranslation } from '@orbit/shared';
+import { shownQuestions } from '../lib/translation';
+import type { HeldDecision } from '../lib/approvalDecisions';
+import { CardTranslationFoot, UntranslatedDecisionFoot } from './TranslationParts';
+import { CONDITION_COPY } from '../lib/conditions';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -118,8 +123,51 @@ interface BatchPreview {
   externalEdges?: number;
   lists?: Array<{ id: string; title: string }>;
   assignees?: Array<{ id: string; name: string; hasRunner: boolean }>;
-  tasks?: Array<{ title: string; dependsOnRefs?: string[]; dependsOnTaskIds?: string[]; ref?: string | null }>;
+  tasks?: Array<{
+    title: string;
+    dependsOnRefs?: string[];
+    dependsOnTaskIds?: string[];
+    ref?: string | null;
+    /** A task that starts when its condition holds: the card's Starts when, Today and If never lines. */
+    startWhen?: StartWhenCardLines;
+  }>;
   titlesTruncated?: number;
+}
+
+/** The server's lines for a startWhen task's card (apiserver tasks/task-start-when.ts startWhenCardLines). */
+interface StartWhenCardLines {
+  startsWhen: string;
+  checked: string;
+  command: string;
+  today: string;
+  ifNever: string;
+  awake?: string | null;
+}
+
+/** A single create's startWhen lines, when the task starts on a condition (condition-triggers ②). */
+function startWhenOf(input: CreateInput | null): StartWhenCardLines | null {
+  if (!input || input.isProject) return null;
+  return input.preview?.tasks?.[0]?.startWhen ?? null;
+}
+
+/** Starts when, Today and If never (condition-triggers ②): the condition, how it is checked and its command. */
+function StartWhenFacts({ lines }: { lines: StartWhenCardLines }): JSX.Element {
+  const K = CONDITION_COPY.facts;
+  return (
+    <dl className="sched-card-facts create-start-when" data-start-when-facts="">
+      <dt>{K.startsWhen}</dt>
+      <dd data-fact="starts-when">
+        <b>{lines.startsWhen}</b>
+        <div className="sched-card-sub">{lines.checked}</div>
+        {lines.awake ? <div className="sched-card-sub" data-fact="awake">{lines.awake}</div> : null}
+        <code className="sched-command">{lines.command}</code>
+      </dd>
+      <dt>{K.today}</dt>
+      <dd data-fact="today">{lines.today}</dd>
+      <dt>{K.ifNever}</dt>
+      <dd data-fact="if-never">{lines.ifNever}</dd>
+    </dl>
+  );
 }
 
 /**
@@ -177,6 +225,16 @@ export function offersCreateAndStart(a: ApprovalInfo): boolean {
   if (!isTaskCreate(a)) return false;
   const input = (a.input ?? {}) as { preview?: BatchPreview; acceptsStartAfterCreate?: unknown };
   return input.acceptsStartAfterCreate === true && input.preview?.needsManualStart === 1;
+}
+
+/**
+ * Whether Create and start is the card's primary answer, Enter included, with Create it beside it:
+ * whenever it is offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a
+ * hold someone asked for, and pressing Enter out of habit should not start what they held.
+ * macOS/iOS: `Approvals.createAndStartLeads`; Android: `ApprovalRules.createAndStartLeads`.
+ */
+export function createAndStartLeads(a: ApprovalInfo): boolean {
+  return offersCreateAndStart(a) && (a.input as { autoRunWhenReady?: unknown }).autoRunWhenReady !== false;
 }
 
 /** Under a new project's criteria: approving the create is not confirming them — the project's
@@ -262,28 +320,14 @@ const isMergeCheckChange = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_project_update_integration';
 
 interface MergeCheckChangeInput {
+  snapshot: Record<string, unknown>;
   projectTitle: string;
-  /** The check as the project stands, or null when it has none. */
-  current: string | null;
-  /** What it would become; null clears it. */
-  next: string | null;
-  /** The budget for the new check, in seconds, when the proposal named one. */
-  timeout: number | null;
 }
 
 function mergeCheckChangeInput(a: ApprovalInfo): MergeCheckChangeInput | null {
   if (!isMergeCheckChange(a)) return null;
-  const obj = (a.input ?? {}) as Record<string, unknown>;
-  const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
-  const timeout = obj.mergeCheckTimeoutSeconds;
-  return {
-    projectTitle: text(obj.projectTitle) ?? '',
-    current: text(obj.currentMergeCheckCommand),
-    next: text(obj.mergeCheckCommand),
-    // Absent means the budget is left as it is, which is not the same as "no budget" — so a
-    // proposal that named none shows no second line rather than a zero.
-    timeout: typeof timeout === 'number' ? timeout : null,
-  };
+  const snapshot = (a.input ?? {}) as Record<string, unknown>;
+  return { snapshot, projectTitle: typeof snapshot.projectTitle === 'string' ? snapshot.projectTitle : '' };
 }
 
 /**
@@ -295,6 +339,79 @@ const isProviderWrite = (a: ApprovalInfo): boolean =>
   a.toolName === 'orbit_provider_create' ||
   a.toolName === 'orbit_provider_update' ||
   a.toolName === 'orbit_provider_delete';
+
+/** What the endpoint speaks, by the `runtime` a provider is written with. */
+const PROVIDER_PROTOCOLS: Record<string, string> = {
+  claude: 'Anthropic Messages',
+  codex: 'OpenAI Responses',
+  kimi: 'Moonshot',
+  antigravity: 'Gemini',
+  cursor: 'Cursor User API Key',
+};
+
+export interface ProviderWriteInput {
+  verb: 'add' | 'change' | 'delete';
+  /** The label on an add, the slug otherwise: what the provider is called where the owner sees it. */
+  name: string;
+  /** The fields the write sets, in a fixed order; the key only as being set. */
+  fields: Array<{ caption: string; value: string; mono: boolean }>;
+  /** The model list it writes, or null when it leaves the list alone. */
+  models: Array<{ value: string; label: string; context: string; isDefault: boolean }> | null;
+}
+
+/** 65536 → "64K", 1048576 → "1M": how a context window is said everywhere else. */
+export function contextSize(tokens: number): string {
+  if (tokens >= 1_048_576 && tokens % 1_048_576 === 0) return `${tokens / 1_048_576}M`;
+  if (tokens >= 1_000_000) return `${+(tokens / 1_000_000).toFixed(1)}M`;
+  if (tokens % 1024 === 0) return `${tokens / 1024}K`;
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+/**
+ * A provider write as the card reads it: the fields by name rather than as the JSON the runner sent.
+ * The runner files only what the write sets (`providerCard`), so an update shows its changes and
+ * nothing it leaves alone.
+ */
+export function providerWriteInput(a: ApprovalInfo): ProviderWriteInput | null {
+  if (!isProviderWrite(a)) return null;
+  const obj = (a.input ?? {}) as Record<string, unknown>;
+  const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const verb = a.toolName === 'orbit_provider_create' ? 'add'
+    : a.toolName === 'orbit_provider_update' ? 'change' : 'delete';
+  const fields: ProviderWriteInput['fields'] = [];
+  const known = new Set(['slug', 'models']);
+  const field = (key: string, caption: string, value: string, mono: boolean): void => {
+    known.add(key);
+    if (key in obj) fields.push({ caption, value, mono });
+  };
+  // On an add the label is the heading; on a change it is one of the things being written.
+  if (verb === 'add') known.add('label');
+  else field('label', 'Label', text(obj.label), false);
+  const runtime = text(obj.runtime);
+  field('runtime', 'Protocol', PROVIDER_PROTOCOLS[runtime] ? `${PROVIDER_PROTOCOLS[runtime]} (${runtime})` : runtime, false);
+  field('baseUrl', 'Base URL', text(obj.baseUrl), true);
+  field('apiKey', 'API key', 'Set — not shown', false);
+  field('defaultModel', 'Default model', text(obj.defaultModel), true);
+  // Anything a later runner sends that this card has no name for is still shown, never dropped.
+  for (const [key, value] of Object.entries(obj)) {
+    if (known.has(key)) continue;
+    fields.push({ caption: key, value: typeof value === 'string' ? value : JSON.stringify(value), mono: true });
+  }
+  const models = Array.isArray(obj.models)
+    ? obj.models.map((m) => {
+        const row = (m ?? {}) as Record<string, unknown>;
+        const value = text(row.value);
+        return {
+          value,
+          label: text(row.label),
+          context: typeof row.contextWindow === 'number' ? `${contextSize(row.contextWindow)} context` : '',
+          isDefault: value !== '' && value === text(obj.defaultModel),
+        };
+      })
+    : null;
+  return { verb, name: verb === 'add' ? text(obj.label) : text(obj.slug), fields, models };
+}
 
 /**
  * Orbit's asks before a session deletes one of the account's runners or workspaces (runner_delete,
@@ -348,7 +465,7 @@ function deleteInput(a: ApprovalInfo, now: number): DeleteInput | null {
 
 /**
  * Orbit's asks before a session writes what decides a workspace's next session (agent_create and
- * agent_update naming its variables, folder, system prompts, runner or worktree setting). The server
+ * agent_update naming its variables, folder, instructions, runner or worktree setting). The server
  * files the card with its own reading of the workspace, and writes only against a card a person
  * answered (`runner-workspace-approval.ts`), so like every ask Orbit raises for itself it is never
  * waived by a rule. It shows each variable's name and its value in full: the owner decides by reading
@@ -394,8 +511,8 @@ function workspaceWriteInput(a: ApprovalInfo): WorkspaceWriteInput | null {
   const written = (v: unknown): string => text(v) || 'Cleared';
   const fields: WorkspaceWriteInput['fields'] = [];
   if (changes.workDir !== undefined) fields.push({ caption: 'Working directory', value: written(changes.workDir) });
-  if (changes.systemPrompt !== undefined) fields.push({ caption: 'System prompt', value: written(changes.systemPrompt) });
-  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Appended system prompt', value: written(changes.appendSystemPrompt) });
+  if (changes.systemPrompt !== undefined) fields.push({ caption: 'Base instructions', value: written(changes.systemPrompt) });
+  if (changes.appendSystemPrompt !== undefined) fields.push({ caption: 'Runtime instructions', value: written(changes.appendSystemPrompt) });
   if (changes.runner !== undefined) fields.push({ caption: 'Runner', value: runnerName(changes.runner) });
   if (changes.enableWorktree !== undefined) {
     fields.push({
@@ -433,7 +550,7 @@ interface BlockerResolveInput {
   subjectTitle: string;
 }
 
-function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
+function blockerResolveInput(a: ApprovalInfo, shown?: ApprovalTranslation): BlockerResolveInput | null {
   if (!isBlockerResolve(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
   const blocker = (obj.blocker ?? {}) as Record<string, unknown>;
@@ -441,13 +558,15 @@ function blockerResolveInput(a: ApprovalInfo): BlockerResolveInput | null {
   return {
     projectTitle: text(obj.projectTitle),
     requiredAction: text(blocker.requiredAction),
-    reason: text(obj.reason),
+    reason: shown?.reason || text(obj.reason),
     kind: text(blocker.kind),
     subjectTitle: text(blocker.subjectTitle),
   };
 }
 
-function createInput(a: ApprovalInfo): CreateInput | null {
+/** `shown`: the card's translation (orbitCardTranslation) while it is drawn translated; each field it
+ *  lacks is the original's. */
+function createInput(a: ApprovalInfo, shown?: ApprovalTranslation): CreateInput | null {
   const project = isProjectCreate(a);
   if (!project && !isTaskCreate(a)) return null;
   const obj = (a.input ?? {}) as Record<string, unknown>;
@@ -455,15 +574,15 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   const items = Array.isArray(obj.acceptanceCriteriaItems) ? obj.acceptanceCriteriaItems : [];
   return {
     isProject: project,
-    title: text(obj.title),
-    prose: text(project ? obj.goal : obj.description),
+    title: shown?.title || text(obj.title),
+    prose: (project ? shown?.goal : shown?.description) || text(project ? obj.goal : obj.description),
     criteria: project
       ? items
-          .map((c) => text((c as { text?: unknown } | null)?.text))
+          .map((c, i) => shown?.acceptanceCriteriaItems?.[i]?.text || text((c as { text?: unknown } | null)?.text))
           .filter(Boolean)
           .map((t) => `- ${t}`)
           .join('\n')
-      : text(obj.acceptanceCriteria),
+      : shown?.acceptanceCriteria || text(obj.acceptanceCriteria),
     // The same key the batch card reads, for the same reason: the counts are the decision and the
     // body is not. A project create has no dispatch to report, so it carries none.
     preview: project ? null : (obj.preview as BatchPreview | undefined) ?? null,
@@ -471,17 +590,43 @@ function createInput(a: ApprovalInfo): CreateInput | null {
   };
 }
 
-function batchPreview(input: unknown): BatchPreview {
+/** `shown`: the card's translation while it is drawn translated; `shown.tasks[i]` is `preview.tasks[i]`. */
+function batchPreview(input: unknown, shown?: ApprovalTranslation): BatchPreview {
   const obj = (input ?? {}) as { preview?: BatchPreview };
-  return obj.preview ?? {};
+  const preview = obj.preview ?? {};
+  if (!shown?.tasks || !preview.tasks) return preview;
+  return { ...preview, tasks: preview.tasks.map((t, i) => ({ ...t, title: shown.tasks?.[i]?.title || t.title })) };
 }
 
-function dagInput(input: unknown): { preview: DagPreview; note: string } {
+function dagInput(input: unknown, shown?: ApprovalTranslation): { preview: DagPreview; note: string } {
   const obj = (input ?? {}) as { preview?: DagPreview; note?: unknown };
   return {
     preview: obj.preview ?? {},
-    note: typeof obj.note === 'string' ? obj.note : '',
+    note: shown?.note || (typeof obj.note === 'string' ? obj.note : ''),
   };
+}
+
+/**
+ * Settings › Translation on Orbit's own cards (board docs/mocks/session-translation/04-owner-cards.html,
+ * part 2): the card's translation when it carries a field this card draws. Undefined when there is
+ * none, it failed (the card is drawn as the agent wrote it), or the card is not one of these five.
+ * macOS/iOS and Android draw the same fields.
+ */
+export function orbitCardTranslation(a: ApprovalInfo): ApprovalTranslation | undefined {
+  const t = a.translation;
+  if (!t || t.failed) return undefined;
+  const has = isTaskCreate(a)
+    ? Boolean(t.title || t.description || t.acceptanceCriteria)
+    : isProjectCreate(a)
+      ? Boolean(t.title || t.goal || t.acceptanceCriteriaItems?.some((c) => c.text))
+      : isBatch(a)
+        ? Boolean(t.tasks?.some((task) => task.title))
+        : isBlockerResolve(a)
+          ? Boolean(t.reason)
+          : isDagChange(a)
+            ? Boolean(t.note)
+            : false;
+  return has ? t : undefined;
 }
 
 function planText(input: unknown): string {
@@ -496,7 +641,7 @@ function planText(input: unknown): string {
 // repeatable. A Bash line yields one rule per distinct sub-command prefix (so `cd x && git
 // add …` remembers both, not just the leading `cd`); other tools get a single tool-wide rule
 // (no ruleContent).
-function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
+export function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // A DAG change joins questions and plans in having no repeatable form. "Always allow
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
@@ -527,6 +672,9 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
       a.input && typeof a.input === 'object'
         ? (a.input as { command?: unknown }).command
         : undefined;
+    if ((a.input as { orbitScheduleCheckOnly?: boolean })?.orbitScheduleCheckOnly === true) {
+      return typeof cmd === 'string' && cmd.trim() ? [{ toolName: 'Bash', ruleContent: cmd }] : [];
+    }
     return typeof cmd === 'string' ? bashCommandRules(cmd) : [];
   }
   return [{ toolName: a.toolName }];
@@ -554,7 +702,35 @@ type OnDecide = (
   rememberRules?: PermissionRule[],
   /** The single-task card's Create and start (`CREATE_AND_START`); every other press leaves it out. */
   startAfterCreate?: boolean,
-) => void;
+  /** Settings › Translation's Send as written, after the decision was refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean,
+) => unknown;
+
+/** "Couldn't translate, so it wasn't sent · Retry · Send as written" under a card whose decision the
+ *  server refused 422 TRANSLATION_FAILED: each press posts the held decision again. */
+function UntranslatedFoot({ id, held, onDecide }: { id: string; held: HeldDecision; onDecide: OnDecide }) {
+  const post = (sendAsWritten: boolean) => async () =>
+    onDecide(id, held.behavior, held.answers, held.message, held.rememberRules, held.startAfterCreate, sendAsWritten || undefined);
+  return <UntranslatedDecisionFoot onRetry={post(false)} onSendAsWritten={post(true)} />;
+}
+
+/** A question form's picks and typed answers seeded from a held decision's answers, so the card
+ *  that comes back after a 422 TRANSLATION_FAILED still shows what the owner answered. */
+function seededAnswers(questions: QItem[], held: HeldDecision | undefined) {
+  const sel: Record<string, string[]> = {};
+  const custom: Record<string, string> = {};
+  if (!held?.answers) return { sel, custom };
+  for (const qq of questions) {
+    const q = qq.question ?? '';
+    const given = held.answers[q];
+    if (!given) continue;
+    const labels = new Set((qq.options ?? []).map((o) => o?.label ?? ''));
+    sel[q] = given.filter((a) => labels.has(a));
+    const typed = given.filter((a) => !labels.has(a));
+    if (typed.length) custom[q] = typed.join(', ');
+  }
+  return { sel, custom };
+}
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
  *  form for AskUserQuestion, otherwise a plain allow/deny (with a rich render for plans). */
@@ -566,9 +742,16 @@ export function ApprovalPanel({
   onChatAbout,
   onDecline,
   rememberable = true,
+  subagent = null,
+  untranslated,
 }: {
   approval: ApprovalInfo;
+  /** For a card a SubAgent asked: its delegate call's description, '' when unknown. Drawn as a grey line above the
+   *  card (docs/subagent-design.md §5.3). Null for a card the session asked itself. */
+  subagent?: string | null;
   onDecide: OnDecide;
+  /** The decision last pressed here, refused 422 TRANSLATION_FAILED (`useApprovalDecisions`). */
+  untranslated?: HeldDecision;
   /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
    *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
   rememberable?: boolean;
@@ -583,6 +766,10 @@ export function ApprovalPanel({
   const isQuestion = approval.toolName === 'AskUserQuestion';
   const narrow = useIsMobile();
   const [reviewOpen, setReviewOpen] = useState(false);
+  // One flip for the whole card (board 04-owner-cards, mark A), never persisted.
+  const cardTranslation = orbitCardTranslation(approval);
+  const [cardOriginal, setCardOriginal] = useState(false);
+  const cardShown = cardOriginal ? undefined : cardTranslation;
   const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
@@ -600,7 +787,13 @@ export function ApprovalPanel({
   const keys = useCardKeyClaim(armed && !isQuestion, anchor);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
-  useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false, anchor });
+  // Where Create and start leads, Enter presses it: the hint and the key go with the filled button.
+  const startLeads = createAndStartLeads(approval);
+  const startAfterCreate = () => onDecide(approval.id, 'allow', undefined, undefined, undefined, true);
+  useApproveHotkey(keys, () => (startLeads ? startAfterCreate() : onDecide(approval.id, 'allow')), {
+    requireMod: false,
+    anchor,
+  });
   useApproveHotkey(keys && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   }, { anchor });
@@ -614,18 +807,23 @@ export function ApprovalPanel({
         onDecide={onDecide}
         answerable={answerable}
         onChatAbout={onChatAbout}
+        untranslated={untranslated}
       />
     );
   }
-  const plan = isPlan(approval) ? planText(approval.input) : '';
-  const dag = isDagChange(approval) ? dagInput(approval.input) : null;
-  const batch = isBatch(approval) ? batchPreview(approval.input) : null;
-  const create = createInput(approval);
-  const blocker = blockerResolveInput(approval);
+  // Settings › Translation (3A): the plan and a tool card's description as the owner reads them.
+  const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
+  const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
+  const translatedDescription = shown?.description;
+  const dag = isDagChange(approval) ? dagInput(approval.input, cardShown) : null;
+  const batch = isBatch(approval) ? batchPreview(approval.input, cardShown) : null;
+  const create = createInput(approval, cardShown);
+  const blocker = blockerResolveInput(approval, cardShown);
   const skipCheck = skipMergeCheckInput(approval);
   const mergeCheck = mergeCheckChangeInput(approval);
   const deleting = deleteInput(approval, Date.now());
   const writing = workspaceWriteInput(approval);
+  const provider = providerWriteInput(approval);
   // What the composer's bar would name as the thing not being done: the proposal's own subject, and
   // never the tool's name, which says nothing about what is not being created. Null for everything
   // that is not one of Orbit's own asks — a plan, a tool call — which keeps its one-press Reject.
@@ -634,7 +832,8 @@ export function ApprovalPanel({
     : batch
       ? `${batch.taskCount ?? 0} new task${batch.taskCount === 1 ? '' : 's'}`
       : create
-        ? create.title
+        // The agent reads this: the title as it wrote it, whichever language the card is in.
+        ? (createInput(approval)?.title ?? create.title)
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : skipCheck
@@ -657,29 +856,47 @@ export function ApprovalPanel({
                   ? `📁 Confirm: create project “${create.title}”?`
                   // A task's own name is the card's first row, where it can wrap to as many lines
                   // as it needs; the header carries the count, exactly as the batch card's does.
-                  : '📝 Confirm: create 1 task?'
+                  : startWhenOf(create)
+                    ? CONDITION_COPY.createTaskHeading
+                    : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
                   : skipCheck
                     ? `⏭ Confirm: land ${skipCheck.taskTitle || 'this task'} without the merge check?`
                     : mergeCheck
-                      ? `🔧 Confirm: change the merge check of ${mergeCheck.projectTitle || 'this project'}?`
+                      ? LANDING_CHECK_COPY.CONFIRM_TITLE
                       : deleting
                         ? `🗑 Confirm: delete ${deleting.noun} “${deleting.name || `this ${deleting.noun}`}”?`
                         : writing
                           ? `⚙️ Confirm: ${writing.creating ? 'create' : 'change'} workspace “${writing.name || 'this workspace'}”?`
-                          : `🔓 Approve tool call: ${approval.toolName}`;
+                          : provider
+                            ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
+                            : `🔓 Approve tool call: ${approval.toolName}`;
+  const createAndStartButton = (tone: 'primary' | 'accent') => (
+    <CardActionButton
+      tone={tone}
+      disabled={!answerable}
+      title="Create the task and start its run now, so you are not asked again to start it."
+      onClick={startAfterCreate}
+    >
+      {CREATE_AND_START}
+      {keys && tone === 'primary' && <span className="approval-kbd">{ENTER_HINT}</span>}
+    </CardActionButton>
+  );
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
       meta={!answerable ? 'No longer waiting for an answer' : undefined}
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
+      {subagent !== null && (
+        <div className="approval-subagent">{subagent ? `Agent · ${subagent}` : 'Agent'}</div>
+      )}
       <div className="approval-head">
         {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
-      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing ? ' is-plan' : ''}`}>
+      <div className={`approval-body${plan || create || blocker || skipCheck || mergeCheck || deleting || writing || provider ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown
             remarkPlugins={[remarkGfm]}
@@ -705,14 +922,24 @@ export function ApprovalPanel({
           <DeleteBody input={deleting} />
         ) : writing ? (
           <WorkspaceWriteBody input={writing} />
+        ) : provider ? (
+          <ProviderWriteBody input={provider} />
         ) : (
-          <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          <>
+            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
+            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          </>
+        )}
+        {cardTranslation && (
+          <CardTranslationFoot flipped={cardOriginal} onFlip={() => setCardOriginal((v) => !v)} />
         )}
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
+        {startLeads && createAndStartButton('primary')}
         <CardActionButton
-          tone="primary"
+          tone={startLeads ? 'accent' : 'primary'}
           disabled={!answerable}
           onClick={() => onDecide(approval.id, 'allow')}
         >
@@ -731,26 +958,18 @@ export function ApprovalPanel({
                     : skipCheck
                       ? 'Land it without the check'
                       : mergeCheck
-                        ? 'Change the check'
+                        ? LANDING_CHECK_COPY.CONFIRM_ACTION
                         : deleting
                           ? 'Delete it'
                           : writing
                             ? (writing.creating ? 'Create it' : 'Save changes')
-                            : 'Approve'}
-          {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
+                            : provider
+                              ? PROVIDER_ACTIONS[provider.verb]
+                              : 'Approve'}
+          {keys && !startLeads && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
-        {/* A second yes, beside the first rather than in its place: the press above stays the
-            plain create it always was, Enter included. */}
-        {offersCreateAndStart(approval) && (
-          <CardActionButton
-            tone="accent"
-            disabled={!answerable}
-            title="Create the task and start its run now, so you are not asked again to start it."
-            onClick={() => onDecide(approval.id, 'allow', undefined, undefined, undefined, true)}
-          >
-            {CREATE_AND_START}
-          </CardActionButton>
-        )}
+        {/* On a held task Create and start is still offered, but second: Create it keeps Enter. */}
+        {offersCreateAndStart(approval) && !startLeads && createAndStartButton('accent')}
         {rules.length > 0 && (
           <CardActionButton
             tone="accent"
@@ -943,19 +1162,82 @@ function WorkspaceWriteBody({ input }: { input: WorkspaceWriteInput }): JSX.Elem
  * state, not as "no check at all".
  */
 function MergeCheckChangeBody({ input }: { input: MergeCheckChangeInput }): JSX.Element {
-  const current = input.current ?? 'no check configured';
-  const next = input.next ?? 'no check — nothing runs on the combined tree';
+  const raw = input.snapshot;
+  const command = (value: unknown): string | null => typeof value === 'string' ? value : null;
+  const seconds = (value: unknown): number | null => typeof value === 'number' ? value : null;
+  const value = (key: string, after: boolean): unknown =>
+    after && Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : raw[`current${key[0].toUpperCase()}${key.slice(1)}`];
   return (
     <div className="dag-approval">
-      <p className="dag-approval-note">
-        Run on the combined tree before this project's work lands. Nothing else about the
-        project's integration line changes.
-      </p>
-      <Command label="now" command={current} />
-      <Command label="after" command={next} />
-      {input.timeout !== null && (
-        <p className="dag-approval-caption">killed after {input.timeout}s</p>
+      {input.projectTitle && <p className="dag-approval-note">{input.projectTitle}</p>}
+      <div className="landing-check-confirmation">
+        {(['landing', 'merge'] as const).map((layer) => (
+          <section key={layer}>
+            <h4>{layer === 'landing' ? LANDING_CHECK_COPY.LABEL : 'Merge check'}</h4>
+            <p className="dag-approval-caption">{layer === 'landing' ? LANDING_CHECK_COPY.HINT : 'Runs before merging into main.'}</p>
+            {[false, true].map((after) => {
+              const check = command(value(`${layer}CheckCommand`, after));
+              const timeout = seconds(value(`${layer}CheckTimeoutSeconds`, after));
+              return <div key={String(after)}>
+                <Command label={after ? 'after' : 'now'} command={check ?? (layer === 'landing'
+                  ? inheritedLandingCommand(command(value('mergeCheckCommand', after))) : 'no check configured')} />
+                <p className="dag-approval-caption">{LANDING_CHECK_COPY.TIMEOUT}: {timeout === null
+                  ? layer === 'landing' ? inheritedLandingTimeout(seconds(value('mergeCheckTimeoutSeconds', after))) : '3600 seconds'
+                  : `${timeout} seconds`}</p>
+              </div>;
+            })}
+          </section>
+        ))}
+      </div>
+      <p className="dag-approval-caption">{LANDING_CHECK_COPY.APPLIES}</p>
+    </div>
+  );
+}
+
+/** The yes on a provider write's card. The native card says the same (`ProviderWritePreview.action`). */
+export const PROVIDER_ACTIONS: Record<ProviderWriteInput['verb'], string> = {
+  add: 'Add it',
+  change: 'Save changes',
+  delete: 'Delete it',
+};
+export const PROVIDER_CHANGE_NOTE = 'Only the fields shown change. Everything else stays as it is.';
+export const PROVIDER_DELETE_NOTE = 'The provider and its key are removed from your account.';
+export const PROVIDER_MODELS_REPLACE = 'Models · replaces the current list';
+
+/** A provider as it would be written: the fields by name, then the model list one model a row. */
+function ProviderWriteBody({ input }: { input: ProviderWriteInput }): JSX.Element {
+  return (
+    <div className="dag-approval">
+      {input.fields.length > 0 && (
+        <dl className="provider-write-fields">
+          {input.fields.map(({ caption, value, mono }) => (
+            <div key={caption}>
+              <dt>{caption}</dt>
+              <dd>{mono ? <code>{value}</code> : value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
+      {input.models && (
+        <>
+          <p className="dag-approval-caption">
+            {input.verb === 'change' ? PROVIDER_MODELS_REPLACE : 'Models'}
+          </p>
+          <ul className="dag-approval-changes provider-write-models">
+            {input.models.map((m) => (
+              <li key={m.value}>
+                <span>
+                  <code>{m.value}</code>
+                  {m.isDefault && <span className="provider-write-default">default</span>}
+                </span>
+                <span className="provider-write-model">{[m.label, m.context].filter(Boolean).join(' · ')}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {input.verb === 'change' && <p className="dag-approval-foot">{PROVIDER_CHANGE_NOTE}</p>}
+      {input.verb === 'delete' && <p className="dag-approval-note">{PROVIDER_DELETE_NOTE}</p>}
     </div>
   );
 }
@@ -978,6 +1260,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const noun = createFoldNoun(input);
   const detail = createDetail(input);
+  const startWhen = startWhenOf(input);
   // A task's criteria is one prose block written as a prompt for the agent that will run it — the
   // field that turns into a wall. Its marks taken off, its lines kept, and folded at the ceiling the
   // owner-confirmation card folds a run's report at, which is the same kind of field read by the
@@ -990,6 +1273,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
       <ImpactPills preview={input.preview} withZeroStarting={false} />
       {detail && <p className="dag-approval-foot">{detail}</p>}
       {!input.isProject && input.title && <p className="create-title">{input.title}</p>}
+      {startWhen && <StartWhenFacts lines={startWhen} />}
       {input.prose && (
         <details
           className="create-fold"
@@ -1259,18 +1543,24 @@ function QuestionForm({
   onDecide,
   answerable,
   onChatAbout,
+  untranslated,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   answerable: boolean;
   onChatAbout?: (id: string, question: string) => void;
+  untranslated?: HeldDecision;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
-  const questions = questionsOf(approval.input);
-  const [sel, setSel] = useState<Record<string, string[]>>({});
+  // Shown in the owner's language once the server has translated the card (Settings › Translation, 3A).
+  // Answers are keyed by what is shown; the server maps them back to the English the engine asked in.
+  const questions = shownQuestions(questionsOf(approval.input), approval.translation);
+  // A card back after its answer could not be translated starts from that answer (1A).
+  const [seed] = useState(() => seededAnswers(questions, untranslated));
+  const [sel, setSel] = useState<Record<string, string[]>>(seed.sel);
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
-  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [custom, setCustom] = useState<Record<string, string>>(seed.custom);
   // "Chat about this": rather than picking an option, the user replies conversationally
   // in the main composer (handled by WorkspaceView via onChatAbout). The reply still rides back
   // as a `deny` message so claude reads it as in-turn feedback instead of a forced option.
@@ -1364,6 +1654,7 @@ function QuestionForm({
         </div>
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
         {/* Unanswered questions cannot be submitted, so the control that would submit them is not
             pressable — the same rule the decision card's Confirm is under. */}

@@ -104,7 +104,7 @@ class LandingObservationShellTest {
     private fun openConversation() {
         signIn()
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         await { exists(hasTestTag("project-sessions")) && exists(hasText("Coordinate launch") and hasClickAction()) }
         compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
     }

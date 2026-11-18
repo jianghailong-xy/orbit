@@ -1,7 +1,6 @@
 import SwiftUI
 import OrbitKit
 
-#if os(iOS)
 /// A workspace opened from the Move panel's second group (docs/session-folders-move-design.md §4,
 /// §5.3; mock 03 ①): pushed in the panel's own stack, the workspace's name over the session's title,
 /// Done at the top right. One group, the folders the session can be filed in there — No Folder, each
@@ -85,17 +84,19 @@ struct SessionMoveTargetPage: View {
             }
         }
         .navigationTitle(current.name)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .navigationBarBackButtonHidden(phase != nil)
         .interactiveDismissDisabled(phase != nil)
         .toolbar {
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button(SessionMoveCopy.done) { close() }
                     .disabled(phase != nil)
             }
         }
-        .alert(SessionMoveCopy.confirmTitle(current), isPresented: confirming, presenting: picked) { pick in
+        .alert(SessionMoveCopy.confirmTitle(current, answer), isPresented: confirming, presenting: picked) { pick in
             Button(SessionMoveCopy.cancel, role: .cancel) {}
             Button(SessionMoveCopy.confirmAction(answer)) { move(pick) }
                 .keyboardShortcut(.defaultAction)
@@ -220,4 +221,3 @@ struct SessionMoveTargetPage: View {
         Binding(get: { createFailure != nil }, set: { if !$0 { createFailure = nil } })
     }
 }
-#endif

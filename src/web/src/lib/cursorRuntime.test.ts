@@ -76,7 +76,7 @@ describe('whether a runner can start Cursor CLI', () => {
       }),
     ).toBe('Orbit runs Cursor CLI 2026.10.14-941492e only on linux/amd64 runners; this runner is darwin/arm64.');
     expect(cursorStateHint('notInstalled')).toBeNull();
-    expect(CURSOR_CONNECT_HREF).toBe('/providers/new/cursor-api');
+    expect(CURSOR_CONNECT_HREF).toBe('/settings/providers/new/cursor-api');
   });
 
   it('counts a session as having talked the way the server does before it moves one (P6b)', () => {

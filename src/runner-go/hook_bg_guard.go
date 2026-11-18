@@ -69,6 +69,15 @@ const bgGuardCronCreateReason = "Orbit holds this session's loops on its server.
 	" and pass delaySeconds and reason. To wait for Orbit tasks or sessions, use" +
 	" mcp__orbit__task_await or mcp__orbit__session_await, which wake you when they finish."
 
+// PushNotification is Claude Code's own alert, sent through the engine's own claude.ai sign-in: on a runner
+// that is the runner's login, not the person this session works for, and in a headless session it may reach
+// nobody at all. Orbit cannot tell which, and neither can the agent, so every call goes to notify, which
+// reaches that person and says in its result whether it did.
+const bgGuardPushNotificationReason = "Orbit tells the person this session works for. Claude's PushNotification is" +
+	" unavailable here: it goes through this coding engine's own sign-in, not through Orbit, so it is not how that" +
+	" person hears from you. Use mcp__orbit__notify instead, with the same one-line message: it arrives on their" +
+	" phone and Mac, they can reply from it into this session, and its result says whether it was delivered."
+
 // A poll of Orbit's own work is refused wherever it is started from — a Bash call in the turn, a background
 // shell, a Monitor, a runner-hosted job — because the wait it keeps is one the control plane holds for nothing:
 // task_await and session_await ask it to. Only while Watch is on for the session (watch_rollout.go): with
@@ -118,6 +127,17 @@ func bgGuardAwaitAdvice(reason string, watches bool) string {
 	return reason
 }
 
+// subagentAsksNobodyReason is what a SubAgent is told when it tries to ask the user a question or to have a plan
+// approved (docs/subagent-design.md §5.3): nobody is there to answer it, so its question goes into its result.
+const subagentAsksNobodyReason = "You are a SubAgent, so you cannot ask the user anything or have a plan approved:" +
+	" no person reads your questions. Decide sensibly and carry on, or stop and put your question (or your plan)" +
+	" in your result, so the agent that sent you can answer it or ask the user."
+
+// isSubagentEngine reports whether this process runs inside an engine started as a SubAgent.
+func isSubagentEngine() bool {
+	return strings.TrimSpace(os.Getenv(envSubagentRunID)) != ""
+}
+
 // hookInput is the PreToolUse payload Claude Code writes on the hook's stdin. PermissionMode is the mode
 // the CLI is in at this call, so a change of mode during the session counts from the next call.
 type hookInput struct {
@@ -150,6 +170,14 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 	decision, reason := "allow", ""
 	watches := watchesEnabledFromEnv()
 	switch in.ToolName {
+	// A SubAgent asks nobody, in every mode: a hook is consulted where the permission prompt is not (Auto,
+	// Bypass). Anywhere else this hook has no say about them — an "allow" would answer a person's question
+	// with nothing.
+	case "AskUserQuestion", "ExitPlanMode":
+		if !isSubagentEngine() {
+			return map[string]interface{}{}
+		}
+		decision, reason = "deny", subagentAsksNobodyReason
 	// Only Bash. run_in_background also appears on sub-agent launches, which are
 	// engine-internal work the runner cannot host — denying those would remove a
 	// working capability to no end.
@@ -177,6 +205,9 @@ func bgGuardDecision(in hookInput) map[string]interface{} {
 	// Every call too: see bgGuardCronCreateReason.
 	case "CronCreate":
 		decision, reason = "deny", bgGuardAwaitAdvice(bgGuardCronCreateReason, watches)
+	// Every call: see bgGuardPushNotificationReason.
+	case "PushNotification":
+		decision, reason = "deny", bgGuardPushNotificationReason
 	// The readers for the engine's own background tasks (old names and new). A
 	// runner-hosted job is not one, and the id says so — the runner issued that
 	// prefix itself, so this is not a guess about who owns what.

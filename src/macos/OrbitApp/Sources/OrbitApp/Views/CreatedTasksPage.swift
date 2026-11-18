@@ -17,29 +17,22 @@ struct CreatedTasksPage: View {
 
     var body: some View {
         List {
-            ForEach(rows) { task in
-                // `Color.primary`, not `.primary`: a button's label resolves the hierarchical style
-                // to its tint on device, which would draw every title blue.
-                Button { app.push(.taskDetail(taskID: task.id)) } label: {
-                    TaskRowView(task: task).foregroundStyle(Color.primary)
-                }
-            }
-            if cursor != nil {
-                Button {
-                    Task { await load(more: true) }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if loading { ProgressView().controlSize(.small) }
-                        Text(loading ? "Loading…" : "Load more")
-                        Spacer()
+            ForEach(CreatedTasksListLogic.rows(rows, hasMore: cursor != nil)) { row in
+                switch row {
+                case .task(let task):
+                    // `Color.primary`, not `.primary`: a button's label resolves the hierarchical style
+                    // to its tint on device, which would draw every title blue.
+                    Button { app.push(.taskDetail(taskID: task.id)) } label: {
+                        TaskRowView(task: task).foregroundStyle(Color.primary)
                     }
+                case .loadMore:
+                    loadMoreRow
                 }
-                .disabled(loading)
             }
         }
         #if os(iOS)
         .listStyle(.plain)
+        .softTopEdgeEffect()
         #endif
         .overlay {
             if !loaded {
@@ -56,8 +49,22 @@ struct CreatedTasksPage: View {
         .refreshable { await load(more: false) }
     }
 
-    private func load(more: Bool) async {
-        if more && loading { return }
+    /// The row that asks for the next page, its spinner while it does.
+    private var loadMoreRow: some View {
+        Button {
+            Task { await load(more: true) }
+        } label: {
+            HStack {
+                Spacer()
+                if loading { ProgressView().controlSize(.small) }
+                Text(loading ? "Loading…" : "Load more")
+                Spacer()
+            }
+        }
+        .disabled(loading)
+    }
+
+    private func load(more: Bool) async {        if more && loading { return }
         loading = true
         defer {
             loading = false

@@ -170,7 +170,6 @@ function moveFacts(over: Partial<SessionMoveFacts> = {}): SessionMoveFacts {
     importSourceCwd: null,
     taskId: null,
     dispatchOrigin: 'USER',
-    coordinatesProject: false,
     cancelRequestedAt: null,
     engineTurnActive: false,
     runningBgShells: [],

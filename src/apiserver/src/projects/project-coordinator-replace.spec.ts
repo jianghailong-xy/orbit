@@ -31,6 +31,8 @@ const STANDING = '00000000-0000-7000-8000-0000000000b1';
 /** The one `sessions.create` hands back. A different id, which is what a replacement means. */
 const OPENED = '00000000-0000-7000-8000-0000000000b2';
 const HOME = '00000000-0000-7000-8000-0000000000c1';
+/** Another of the owner's workspaces, for "start a new coordinator there". */
+const ELSEWHERE = '00000000-0000-7000-8000-0000000000c2';
 
 interface SessionRow {
   id: string;
@@ -56,7 +58,11 @@ function sessionRow(over: Partial<SessionRow> = {}): SessionRow {
   };
 }
 
-function store(standing: SessionRow | null, workspaceUsable = true) {
+function store(
+  standing: SessionRow | null,
+  workspaceUsable = true,
+  elsewhere: { enabled: boolean; runnerId: string | null } = { enabled: true, runnerId: 'runner-2' },
+) {
   const project = {
     id: PROJECT,
     ownerId: OWNER,
@@ -68,6 +74,8 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
   /** Every `data` object a write handed the project row, in order. */
   const writes: Array<Record<string, unknown>> = [];
   const created: Array<{ workspaceId: string; title: string }> = [];
+  /** The watches rows, by observer and state: what the swap re-points. */
+  const watches: Array<{ id: string; observer: string; state: string }> = [];
 
   const find = (id: string | null) => sessions.find((s) => s.id === id) ?? null;
 
@@ -115,10 +123,18 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
       // `lastCoordinatorWorkspace`, with the conditions it really applies. `workspaceUsable`
       // stands in for the landing having been disabled or trashed since the binding.
       findFirst: async ({ where }: any) => {
+        // The workspace a replacement names (`namedReplacementLanding`): usable unless a case says not.
+        if (where.id === ELSEWHERE) return where.ownerId === OWNER ? { id: ELSEWHERE, ...elsewhere } : null;
         if (where.id !== HOME || where.ownerId !== OWNER || !workspaceUsable) return null;
         return { id: HOME };
       },
     },
+    // What a successor's opening digest reads (coordinator-digest.ts): a project with nothing in it.
+    projectAcceptanceCriterionDefinition: { findMany: async () => [] },
+    projectRuling: { findMany: async () => [] },
+    projectOpenItem: { findMany: async () => [] },
+    task: { findMany: async () => [] },
+    projectTaskStatusCount: { findMany: async () => [] },
     $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(prisma),
     // Rendered through the shared helper rather than read off `.strings`/`.values` here: a double
     // that parses Prisma's two calling conventions itself is how a spec comes to disagree with the
@@ -127,11 +143,22 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
       const { text, values: bound } = renderRawQuery(args);
       const values = bound as string[];
       if (text.includes('FROM "workspace"')) {
-        return values[0] === HOME && values[1] === OWNER ? [{ id: HOME }] : [];
+        return [HOME, ELSEWHERE].includes(values[0]) && values[1] === OWNER ? [{ id: values[0] }] : [];
       }
       if (text.includes('FROM "session"')) {
         // The rows the CAS locks, in the order it asked for them.
         return values.map((id) => find(id)).filter(Boolean).map((row) => ({ id: row!.id }));
+      }
+      if (text.includes('UPDATE "watch"')) {
+        // The outgoing coordinator's live watches (ACTIVE, PAUSED), re-pointed at the successor.
+        const [successor, outgoing] = values;
+        const moved = watches.filter((w) => w.observer === outgoing && (w.state === 'ACTIVE' || w.state === 'PAUSED'));
+        for (const w of moved) w.observer = successor;
+        return moved.map((w) => ({ id: w.id, state: w.state }));
+      }
+      if (text.includes('UPDATE "session_wakeup_loop"') || text.includes('UPDATE "session_scheduled_wakeup"')) {
+        // No case here holds a wakeup or a loop (coordinator-handoff-pending-work.pg.spec.ts moves them).
+        return [];
       }
       if (text.includes('FROM "project"')) {
         return values[0] === project.id && values[1] === project.ownerId
@@ -144,13 +171,16 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
 
   /** Every session this call ended, in order. */
   const completed: string[] = [];
+  /** What each of those completions was asked, in the same order. */
+  const completeOpts: Array<{ handingOver?: boolean } | undefined> = [];
 
   const sessionsService = {
     // The real `SessionsService.complete`: it writes `completed_at` and is a no-op on a row that
     // already carries one.
-    complete: async (owner: string, sessionId: string) => {
+    complete: async (owner: string, sessionId: string, opts?: { handingOver?: boolean }) => {
       assert.equal(owner, OWNER);
       completed.push(sessionId);
+      completeOpts.push(opts);
       const row = find(sessionId);
       if (row && row.completedAt == null) row.completedAt = new Date('2026-09-07T10:00:00.000Z');
       return { ok: true };
@@ -175,7 +205,7 @@ function store(standing: SessionRow | null, workspaceUsable = true) {
 
   const acceptance = { criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }) };
   const service = new ProjectsService(prisma as never, acceptance as never, sessionsService as never);
-  return { service, project, sessions, writes, created, completed };
+  return { service, project, sessions, writes, created, completed, completeOpts, watches };
 }
 
 async function thrown(work: () => Promise<unknown>): Promise<unknown> {
@@ -196,7 +226,7 @@ test('a COMPLETED coordinator is replaced, in the workspace it already ran in', 
 
   const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
 
-  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: HOME });
+  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: HOME, movedWatches: 0 });
   // §7.5: the SESSION is replaced; the workspace is not. A replacement that could land anywhere
   // else would be a migration wearing a replacement's name.
   assert.deepEqual(created, [{ workspaceId: HOME, title: 'Ship the coordinator' }]);
@@ -231,7 +261,7 @@ test('a row completed under the legacy mirror alone is just as finished', async 
 // ── A conversation that is still going ───────────────────────────────────────────────────────
 
 test('an OPEN coordinator is completed before the replacement takes its place', async () => {
-  const { service, project, sessions, created, completed } = store(sessionRow());
+  const { service, project, sessions, created, completed, completeOpts } = store(sessionRow());
 
   const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
 
@@ -241,6 +271,9 @@ test('an OPEN coordinator is completed before the replacement takes its place', 
   // reader and is still running to everybody else.
   assert.deepEqual(completed, [STANDING]);
   assert.notEqual(sessions.find((s) => s.id === STANDING)!.completedAt, null);
+  // A replacement that is no handoff ends it the way Complete does: its SubAgents and jobs stop with it
+  // (a handoff's keeps them: coordinator-handoff.pg.spec.ts).
+  assert.deepEqual(completeOpts, [{ handingOver: false }]);
 
   // Only then the replacement, and the pointer with it. A swap that left the old conversation open
   // would leave it being written to while it silently lost the authority to act on this project.
@@ -275,7 +308,7 @@ test('opening a completed coordinator hands back that same conversation', async 
 
   const opened = await service.coordinator(OWNER, PROJECT);
 
-  assert.deepEqual(opened, { sessionId: STANDING, created: false, workspaceId: HOME });
+  assert.deepEqual(opened, { sessionId: STANDING, created: false, workspaceId: HOME, movedWatches: 0 });
   assert.deepEqual(created, []);
   assert.deepEqual(writes, []);
   assert.equal(project.coordinatorSessionId, STANDING);
@@ -292,4 +325,82 @@ test('a project whose conversation is gone still gets one from either press', as
 
   assert.equal(replaced.created, true);
   assert.equal(project.coordinatorSessionId, OPENED);
+});
+
+// ── Starting the next one somewhere else ─────────────────────────────────────────────────────
+
+test('a replacement that names another workspace opens there, and the project goes with it', async () => {
+  const { service, project, sessions, writes, created, completed } = store(sessionRow());
+
+  const replaced = await service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace');
+
+  assert.deepEqual(replaced, { sessionId: OPENED, created: true, workspaceId: ELSEWHERE, movedWatches: 0 });
+  // The outgoing conversation is completed where it is; it does not move.
+  assert.deepEqual(completed, [STANDING]);
+  assert.equal(sessions.find((s) => s.id === STANDING)!.workspaceId, HOME);
+  // The new one opens in the named workspace, and ONE write records both pointers, so the guard
+  // (0126) never sees a project naming one place and coordinated from another.
+  assert.deepEqual(created, [{ workspaceId: ELSEWHERE, title: 'Ship the coordinator' }]);
+  assert.deepEqual(writes, [{ coordinatorSessionId: OPENED, coordinatorWorkspaceId: ELSEWHERE }]);
+  assert.equal(project.coordinatorWorkspaceId, ELSEWHERE);
+});
+
+test('a dead landing is no refusal when the replacement names somewhere that works', async () => {
+  // The Unavailable card's way out: its workspace was disabled, and the owner starts the next
+  // coordinator elsewhere instead of rebinding first.
+  const { service, project, completed } = store(sessionRow(), false);
+
+  const replaced = await service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace');
+
+  assert.equal(replaced.workspaceId, ELSEWHERE);
+  assert.deepEqual(completed, [STANDING]);
+  assert.equal(project.coordinatorSessionId, OPENED);
+  assert.equal(project.coordinatorWorkspaceId, ELSEWHERE);
+});
+
+test('opening, as opposed to replacing, still refuses another workspace', async () => {
+  const { service, project, created, writes } = store(sessionRow());
+
+  const refused = await thrown(() => service.coordinator(OWNER, PROJECT, ELSEWHERE));
+
+  assert.ok(refused instanceof ConflictException);
+  assert.deepEqual(created, []);
+  assert.deepEqual(writes, []);
+  assert.equal(project.coordinatorWorkspaceId, HOME);
+});
+
+test('a replacement named somewhere that cannot take it refuses before ending anything', async () => {
+  for (const [elsewhere, message] of [
+    [{ enabled: false, runnerId: 'runner-2' }, 'This workspace is disabled.'],
+    [{ enabled: true, runnerId: null }, 'This workspace has no runner.'],
+  ] as const) {
+    const { service, project, completed, created, writes } = store(sessionRow(), true, elsewhere);
+
+    const refused = await thrown(() => service.coordinator(OWNER, PROJECT, ELSEWHERE, 'replace'));
+
+    assert.ok(refused instanceof ConflictException);
+    assert.equal((refused as ConflictException).message, message);
+    assert.deepEqual(completed, [], 'the standing conversation is not ended for a press that cannot open its replacement');
+    assert.deepEqual(created, []);
+    assert.deepEqual(writes, []);
+    assert.equal(project.coordinatorSessionId, STANDING);
+  }
+});
+
+// ── The waits the outgoing coordinator set ───────────────────────────────────────────────────
+
+test('a replacement answers how many of the outgoing coordinator\'s live waits it moved, PAUSED included', async () => {
+  const { service, watches } = store(sessionRow());
+  watches.push(
+    { id: 'w1', observer: STANDING, state: 'ACTIVE' },
+    { id: 'w2', observer: STANDING, state: 'MATCHED' },
+    { id: 'w3', observer: 'someone-else', state: 'ACTIVE' },
+    { id: 'w4', observer: STANDING, state: 'PAUSED' },
+  );
+
+  const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
+
+  assert.equal(replaced.movedWatches, 2);
+  assert.deepEqual(watches.map((w) => w.observer), [OPENED, STANDING, 'someone-else', OPENED]);
+  assert.equal(watches[3].state, 'PAUSED');
 });

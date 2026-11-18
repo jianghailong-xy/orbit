@@ -9,10 +9,13 @@ Use one `vX.Y.Z` tag to ship all three clients through `.github/workflows/releas
 
 | Job | Output |
 | --- | --- |
+| `identity` | Refuses the tag unless it is `v` + the root `package.json` version and carries a filled-in `release-notes/<version>.md`; every build job waits for it |
 | `dmg` | Signed and notarized macOS DMG, GitHub Release, and Sparkle appcast |
 | `testflight` | Signed iOS `.ipa` uploaded to TestFlight |
 | `android-build` | Signed Android release APK, from the `android-internal` environment |
 | `android-publish` | The APK, its `.sha256` and `android-update.json` attached to the same GitHub Release, after `dmg` and `android-build` succeed |
+
+**The root `package.json` version is the version of record**, and the tag is that version with `v`. The GitHub Release, the DMG/`.zip` names, the TestFlight marketing version, the Android `versionName`, the runner binaries and `/dl/version.json`, the Sparkle appcast and `android-update.json` all derive from it, and `release.yml` refuses a tag that disagrees with the package.
 
 Interpret tags as follows:
 
@@ -20,17 +23,96 @@ Interpret tags as follows:
 - `vX.Y.Z-beta.N`: macOS beta channel, an iOS TestFlight build and an Android release. iOS uses numeric marketing version `X.Y.Z`; the commit-count build number distinguishes iterations.
 - Android uses the tag without `v` as `versionName` and the same commit count as `versionCode`; installed Android apps update to any higher `versionCode`.
 
+## Who runs it
+
+A release is mostly reading commits for its notes and then waiting 30 to 60 minutes on `release.yml`, which needs
+no expensive model. On one, such as an Opus, Fable or GPT-6.x Sol model, the session keeps only the decisions and
+hands the work to DeepSeek V4.1 Flash with Orbit's `delegate` (`model: "deepseek-flash"`, Orbit's id for it). If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash or mini model from the list the refusal prints. On an
+inexpensive model, follow [Workflow](#workflow) yourself.
+
+The session decides, and no SubAgent does:
+
+- **The version.** `release.sh next` prints it; confirm it with the owner unless they named one.
+- **What reaches `main`.** A SubAgent never pushes to `main` and never tags anything but `origin/main`'s tip. The
+  session lands the release commit on `main` itself (its usual merge, such as Orbit's `session_merge`).
+- **The notes.** They become the GitHub Release body. Read the file before the release commit is merged, and fix
+  anything the SubAgent claimed without evidence (tests it did not see run, a server version it did not check).
+
+Then:
+
+1. **Prepare**, in the foreground (a few minutes): `delegate({ description: "Prepare release <version>", size: "S",
+   prompt: <the prepare brief> })`. It runs in this session's working directory, which must be a branch based on
+   `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
+2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
+   background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
+3. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, and any job that
+   failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
+   session's decision (see Notes).
+
+The prepare brief: fill in `<version>` and `<previous tag>` (the newest `v*` tag, `git describe --tags --abbrev=0
+--match 'v*' origin/main`).
+
+```text
+Prepare Orbit client release <version> in the current working directory, a git branch based on origin/main. Read
+.agents/skills/release/SKILL.md first. Answer in English. Stop and report at the first step that fails; do not
+improvise around a guard. Never push, never tag, never touch main.
+
+1. `git fetch origin` and `git status --porcelain` must print nothing. `git merge-base --is-ancestor origin/main HEAD`
+   must succeed and `git rev-list --count origin/main..HEAD` must print 0; otherwise stop.
+2. `.agents/skills/release/scripts/release.sh bump <version>`. It commits package.json, the lockfile and
+   release-notes/<version>.md.
+3. Fill in every section of release-notes/<version>.md, following docs/release-notes-template.md and the previous
+   release's notes (release-notes/ of <previous tag>) for tone and length. Base it on
+   `git log --no-merges --format='%h %s%n%b' <previous tag>..origin/main` and
+   `git diff --stat <previous tag> origin/main -- src/apiserver/prisma/migrations/`: group what users see per client,
+   name each migration and whether it is additive, and say the runner served at /dl is built from this tag. State
+   only what the commits say; for "Artifacts and verification" name only checks a commit message records, and say
+   plainly where it records none. No TODO may remain.
+4. `git add release-notes/<version>.md && git commit --amend --no-edit`, so the release is one commit.
+5. Hand back: the commit hash, `git show --stat HEAD`, and the notes file in full.
+```
+
+The tag brief: fill in `<version>`.
+
+```text
+Tag and watch Orbit client release <version>. Read .agents/skills/release/SKILL.md first. Answer in English. Stop
+and report at the first step that fails; do not retry, re-run, delete a tag or push anything but this tag.
+
+1. W=/tmp/orbit-release-<version>. `git fetch origin --tags` and `git worktree add --detach "$W" origin/main`.
+   `node -p "require('$W/package.json').version"` must print <version>, and `$W/release-notes/<version>.md` must
+   exist; otherwise stop.
+2. `cd "$W" && .agents/skills/release/scripts/release.sh <version>`. It must end having pushed tag v<version>.
+3. Find the run: `gh run list --workflow release.yml -L 5 --json databaseId,headBranch,event,url` and take the one
+   whose headBranch is v<version>. Wait for it with `gh run watch <id> --exit-status` in steps of under 10 minutes
+   (`timeout 540 gh run watch <id>`; repeat while `gh run view <id> --json status -q .status` is not completed).
+4. `gh run view <id> --json jobs -q '.jobs[] | "\(.name) \(.conclusion)"'`, and
+   `gh release view v<version> --json assets -q '.assets[].name'`. For each failed job, its last 40 log lines
+   (`gh run view <id> --log-failed`).
+5. `git worktree remove --force "$W"`.
+6. Hand back: the tag and its commit, the run URL, each job's conclusion, the release's assets, and the failed jobs'
+   lines.
+```
+
 ## Workflow
 
-1. Resolve the requested version. For `next`, inspect the newest version tag:
+1. Resolve the version. `release.sh next` prints the one tag to cut next, resolved from the package version alone; old tags are never read as a sequence:
 
    ```bash
-   git -c versionsort.suffix=-beta tag --list 'v*' --sort=-v:refname | head -1
+   .agents/skills/release/scripts/release.sh next
    ```
 
-   A beta belongs to the version it precedes. After `X.Y.Z` ships stable, open the next beta at `X.Y.(Z+1)-beta.1`.
+   While the package version has no tag yet (locally or on `origin`), it is the candidate. Once it is tagged, `next` is the next beta in its series, or `X.Y.(Z+1)-beta.1` after a stable `X.Y.Z`: a beta belongs to the version it precedes. `next` only prints. Pass an explicit version for anything else.
 
-2. Verify the release commit is the committed and pushed `main` tip:
+2. If the package version is not the version to release, bump it. This is the release commit: `package.json`, the lockfile and `release-notes/<version>.md` all name the same version.
+
+   ```bash
+   .agents/skills/release/scripts/release.sh bump next          # or: bump 0.2.0-beta.3
+   ```
+
+   Fill in every section of the notes (`docs/release-notes-template.md`) and commit them. `bump next` while the package version is still untagged and its notes exist changes nothing.
+
+3. Verify the release commit is the committed and pushed `main` tip:
 
    ```bash
    git rev-parse --abbrev-ref HEAD
@@ -40,19 +122,17 @@ Interpret tags as follows:
 
    Require `main` and a result of `0`. If a fix exists only on another branch, merge it into `main`; never tag the feature branch.
 
-3. State the exact resolved tag and get explicit user confirmation before running the helper. Creating and pushing the tag is an external, release-triggering action.
+4. State the exact resolved tag and get explicit user confirmation before tagging. Creating and pushing the tag is an external, release-triggering action.
 
-4. Run the helper from the repository:
+5. Tag it with the version `package.json` already carries:
 
    ```bash
-   .agents/skills/release/scripts/release.sh next
-   .agents/skills/release/scripts/release.sh 0.2.0
    .agents/skills/release/scripts/release.sh 0.2.0-beta.3
    ```
 
-   The helper validates the version, refuses tracked uncommitted changes and reused tags, creates an annotated tag, and pushes it to `origin`.
+   The helper runs the same identity gate as CI (`node scripts/release-identity.mjs check-tag vX.Y.Z`): it refuses a tag that disagrees with `package.json`, missing or placeholder notes, tracked uncommitted changes and an already-used tag (local or remote), then creates an annotated tag and pushes it to `origin`.
 
-5. Watch the shared workflow and report every job result:
+6. Watch the shared workflow and report every job result:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
@@ -62,7 +142,8 @@ Interpret tags as follows:
 
 ## Constraints
 
-- Accept only `X.Y.Z` or `X.Y.Z-beta.N`-style versions.
+- Accept only `X.Y.Z` or `X.Y.Z-beta.N` versions, and only the one `package.json` carries.
+- `scripts/release.sh` is `.claude/skills/release/release.sh`, byte for byte, and this skill follows the same rules (`npm run test:release-identity` checks it). Change both together.
 - Every pushed `v*` tag starts all the platform jobs. To build one Apple platform only, dispatch `release.yml` on `main` with `platform=macos` or `platform=ios` instead of creating a tag. Android never runs from a dispatch, and `android-v*` tags start nothing.
 - If `dmg` fails, Android is not attached. After the cause is fixed, re-run the failed jobs of that run (`gh run rerun <run-id> --failed`); it rebuilds the DMG and then attaches the Android build already made. Ask before re-running, as it publishes.
 - Required signing and publishing secrets are documented in `.github/workflows/release.yml`; Android signing lives only in the `android-internal` environment.

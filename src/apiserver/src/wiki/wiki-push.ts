@@ -12,6 +12,7 @@ import {
   type WikiTrust,
 } from '@orbit/shared';
 import { JUDGMENT_DISPATCH_ORIGIN } from '../projects/coordinator-authority';
+import { anchorDeferred, storedAnchors } from './wiki-anchors';
 import { currentWikiRollout, wikiOnFor, type WikiRollout } from './wiki-rollout';
 
 /**
@@ -230,10 +231,13 @@ export async function appendWikiContext(
       stats: true,
     },
   });
-  if (entries.length === 0) return subject.content;
+  // `anchorDeferredNot` in the contract: a code anchor learned with no code to read, and checked on no tree since,
+  // keeps its entry out until the first run that reads the code checks it (`anchorRules.deferred`).
+  const checkedOnce = entries.filter((entry) => !storedAnchors(entry.anchors).some(anchorDeferred));
+  if (checkedOnce.length === 0) return subject.content;
 
   const query = await pushQueryText(tx, subject);
-  const block = buildPushBlock(entries, query);
+  const block = buildPushBlock(checkedOnce, query);
   if (!block) return subject.content;
 
   // One row per line, naming the revision that was sent: this is what a retraction reads to find

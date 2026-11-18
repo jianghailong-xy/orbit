@@ -72,6 +72,9 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// When the task starts by itself, once (`Start at`); on list rows too, for their "Starts …".
     /// Nil = not scheduled.
     public let runAt: String?
+    /// Its startWhen, the peer of `runAt` (docs/condition-triggers-design.md §6.2): what it waits for, the newest
+    /// reading, and "Waiting for: …" while it waits. Detail payload only; nil on a task without one.
+    public var startWhen: TaskStartWhenView? = nil
     /// The grouping labels (a batch, a shard, a topic); a row names its first.
     public let labels: [String]?
     /// The project it is filed under, named — the detail read's. Nil on a task in no project.
@@ -84,6 +87,14 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let supersedes: [TaskRef]?
     /// What replaced this task, oldest first: the last one is the live attempt.
     public let successorChain: [TaskRef]?
+    /// SR18's sentence for a task forked from a session (docs/task-fork-from-session-design.md
+    /// §2.3), finished by the server — "Forked from session «title» at abc1234 (includes
+    /// uncommitted changes)" — and drawn as it is. Detail payload only; nil on a task that was not
+    /// forked, and from an older server.
+    public let forkSource: String?
+    /// What the task's next run resolves to (`TaskRunsWith`): the detail read's `runsWith`, the same
+    /// resolution dispatch makes. Nil on a list row, and from an older server.
+    public let runsWith: TaskRunsWith?
 
     // Computed list-view flags (absent on the detail payload).
     public let running: Bool?
@@ -110,6 +121,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// task in no project, and from a server that predates the read.
     public let integration: TaskIntegrationView?
     public let assignee: TaskAssignee?
+    /// Where a run of this task last said it was (`task_progress_report`). Detail payload only.
+    public let progress: TaskProgressView?
     public let comments: [TaskComment]?
     public let sessions: [SessionRef]?
     public let creatorSession: SessionRef?
@@ -130,14 +143,48 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case completionPolicy, verifiesTaskId, verificationState, verifier
-        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
+        case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, startWhen, attachments
         case labels, project
-        case supersededByTaskIdAbsentReason, supersedes, successorChain
+        case supersededByTaskIdAbsentReason, supersedes, successorChain, forkSource, runsWith
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
         case integration
-        case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
+        case assignee, progress, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
+    }
+}
+
+/// `runsWith` on `GET /tasks/:id` — apiserver workspaces/start-anchor.ts `TaskRunsWith`: the (engine,
+/// provider) a run of the task gets and where that came from — its own pin (`TASK_PIN`), its project's
+/// coordinator session (`PROJECT_COORDINATOR`), the workspace's newest session a person opened
+/// (`WORKSPACE`), or the floor (`DEFAULT`). Read tolerantly: it decorates the page, never fails it.
+public struct TaskRunsWith: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let provider: String?
+    /// The provider is an engine's own sign-in rather than a key or a pool.
+    public let providerBuiltin: Bool
+    public let source: String?
+    public let anchorSessionId: String?
+    public let refusal: String?
+
+    public init(engine: String?, provider: String?, providerBuiltin: Bool, source: String?,
+                anchorSessionId: String? = nil, refusal: String? = nil) {
+        self.engine = engine
+        self.provider = provider
+        self.providerBuiltin = providerBuiltin
+        self.source = source
+        self.anchorSessionId = anchorSessionId
+        self.refusal = refusal
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        engine = try? c.decodeIfPresent(String.self, forKey: .engine)
+        provider = try? c.decodeIfPresent(String.self, forKey: .provider)
+        providerBuiltin = ((try? c.decodeIfPresent(Bool.self, forKey: .providerBuiltin)) ?? nil) ?? false
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+        anchorSessionId = try? c.decodeIfPresent(String.self, forKey: .anchorSessionId)
+        refusal = try? c.decodeIfPresent(String.self, forKey: .refusal)
     }
 }
 
@@ -280,6 +327,8 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     /// says what it used. Nil before it was claimed, and on `creatorSession`.
     public let model: String?
     public let effort: String?
+    /// What the run has cost so far, in US dollars. Nil from a server that does not send it.
+    public let costUsd: Double?
     /// The routing decision this run was planned with (§7.5); nil on any other session.
     public let route: TaskRunRoute?
 

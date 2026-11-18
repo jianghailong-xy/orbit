@@ -86,10 +86,15 @@ final class WikiChatWiringTests: XCTestCase {
         // The chat as a column makes the Wiki directory, page and chat (design §9's third column): the source list
         // folds while it is open, so the page keeps its width, and comes back as it was — never saved as the reader's.
         let shell = try slice(main, from: "struct MainView: View {", to: "private var sidebar: some View {")
-        assertOrder(shell, [".onChange(of: columnVisibility) { _, now in", "if now == .all { foldedForChat = false }",
-                            "if !foldedForChat { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, open in",
-                            "if open, columnVisibility == .all {\n                foldedForChat = true\n                columnVisibility = .doubleColumn",
-                            "} else if !open, foldedForChat {\n                columnVisibility = .all",
+        // An iPad window taller than wide folds it the same way (three columns leave the detail too narrow), and it
+        // comes back on the turn back to landscape — macOS keeps its source list.
+        assertOrder(shell, ["#if os(iOS)\n        .onGeometryChange(for: Bool.self) { $0.size.width < $0.size.height } action: { now in",
+                            "portrait = now\n            refold()\n        }\n        #endif",
+                            ".onChange(of: columnVisibility) { _, now in", "if now == .all { folded = false }",
+                            "if !folded { sidebarVisible = (now == .all) }", ".onChange(of: wikiChatColumn) { _, _ in refold() }",
+                            "let wantsFold = wikiChatColumn || portrait",
+                            "if wantsFold, columnVisibility == .all {\n            folded = true\n            columnVisibility = .doubleColumn",
+                            "} else if !wantsFold, folded {\n            columnVisibility = .all",
                             "guard model.selectedSection == .wiki, let chat = model.wikiChat else { return false }",
                             "return chat.presented && !chat.asSheet"], "the source list beside the chat's column")
     }
@@ -170,7 +175,11 @@ final class WikiChatWiringTests: XCTestCase {
     /// them for — a missing observable object is a crash on screen, not a compile error.
     func testTheConversationIsTheSessionPagesTranscript() throws {
         let views = code(try source("Views/WikiChatViews.swift"))
-        XCTAssertTrue(views.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
+        // The initializer sits beside `TranscriptView` in the file that defines it: an initializer
+        // for that struct declared in another file crashes Xcode 27's IRGen on the private
+        // `HeldScroll` (see ConsoleView.swift's note).
+        let transcript = code(try source("Views/Console/ConsoleView.swift"))
+        XCTAssertTrue(transcript.contains("init(wikiChat console: ConsoleModel) {\n        self.console = console\n        self.hidesStickyQuestion = true"))
         let conversation = try slice(views, from: "private struct WikiChatConversation: View {", to: "struct WikiChatComposer: View {")
         assertOrder(conversation, ["TranscriptView(wikiChat: console)", ".environment(registry.attachments)",
                                    ".environment(console.createdTasks)", ".environment(approvalReviewDrafts)",
@@ -234,7 +243,7 @@ final class WikiChatWiringTests: XCTestCase {
                            "let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)",
                            "let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)",
                            "if isDraft { await createDraftSession(); return }",
-                           "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)",
+                           "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,",
                            "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)", "onAccepted?()"],
                     "a chat's send")
         let create = try slice(console, from: "private func createDraftSession() async {", to: "let (text, shell) = ComposerLogic.parseShell(composerText)")
@@ -245,7 +254,7 @@ final class WikiChatWiringTests: XCTestCase {
                              "model: providerCapabilitiesResolved ? modelID : nil, permissionMode: permissionMode.rawValue,",
                              "effort: effort.rawValue, fastMode: fastMode))", "guard made else { return }",
                              "composerText = \"\"", "pendingAttachments = []"], "a new chat's first message")
-        XCTAssertTrue(console.contains("replyContext == nil && !pendingAttachments.isEmpty && wikiChat?.create == nil"),
+        XCTAssertTrue(console.contains("&& !pendingAttachments.isEmpty && wikiChat?.create == nil"),
                       "a new chat's files never go without words")
         let chat = try slice(code(try source("WikiChatModel.swift")),
                              from: "func create(spaceID: String, workspaceID: String, _ first: WikiChatLogic.FirstMessage) async -> Bool {",
@@ -255,8 +264,8 @@ final class WikiChatWiringTests: XCTestCase {
                     "the create")
         let post = try slice(console, from: "private func postTurn(", to: "private func retryingTransientFailures<T>(")
         XCTAssertTrue(post.contains("stopSessionId: confirmedStopSessionID,\n"))
-        XCTAssertTrue(post.contains("wikiContext: wikiContext)\n        let turnRequest = ComposerLogic.makeTurn("))
-        XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)"))
+        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          skipTranslation: skipTranslation ? true : nil,\n                                          optimizedTranslation: optimizedTranslation)\n        let turnRequest = ComposerLogic.makeTurn("))
+        XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,"))
     }
 
     /// Runs in is a new chat's alone and holds the workspace alone — the model and the mode are the composer's

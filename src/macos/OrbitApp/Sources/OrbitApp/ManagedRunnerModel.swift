@@ -18,14 +18,9 @@ final class ManagedRunnerModel {
     private(set) var acting = false
     /// Why the last Retry or Set up did not go through, in the server's words.
     var errorText: String?
-    /// A Set up was accepted: the mapping brings its runner and default workspace with it.
+    /// A Set up was accepted: the mapping brings its runner with it.
     @ObservationIgnored var onEnsured: () -> Void = {}
-    /// What a first session in the managed default workspace starts on moved while the runner came
-    /// up — the owner added a key, READY recorded what it was found ready with. The workspace list
-    /// says it as a draft's default (`lastProvider`, which the server derives), so it is read again.
-    @ObservationIgnored var onFirstSessionProviderChanged: () -> Void = {}
-    /// The last answer's first-session provider, kept across a failed read; nil before the first answer.
-    @ObservationIgnored private var seenFirstSessionProvider: String??
+    @ObservationIgnored var onStatusChanged: (ManagedRunnerStatus?) -> Void = { _ in }
 
     private let api: APIClient
     private var offered: Bool?
@@ -75,19 +70,26 @@ final class ManagedRunnerModel {
         await act { try await self.api.retryManagedRunner(revision: status.revision) }
     }
 
-    /// Ask for a managed runner where the server offers one.
-    func ensure() async {
-        guard display?.ensure == true, !acting else { return }
-        if await act({ try await self.api.ensureManagedRunner() }) { onEnsured() }
+    /// Ask for a managed runner where the server offers one. `open` gets the runner the answer names,
+    /// once the server has accepted it: Machines & models lands on that machine's page (D1).
+    @discardableResult
+    func ensure(then open: ((String) -> Void)? = nil) async -> Bool {
+        guard display?.ensure == true, !acting else { return false }
+        let accepted = await act { try await self.api.ensureManagedRunner() }
+        if accepted {
+            onEnsured()
+            if let runnerID = status?.runnerId { open?(runnerID) }
+        }
+        return accepted
     }
 
     /// Signed out: nothing of this account's is shown to the next one.
     func reset() {
         status = nil
         display = nil
+        ManagedRunnerIdentity.runnerID = nil
         errorText = nil
         offered = nil
-        seenFirstSessionProvider = nil
         refreshNotBefore = .distantPast
     }
 
@@ -109,11 +111,9 @@ final class ManagedRunnerModel {
     private func adopt(_ answer: ManagedRunnerStatus?) {
         status = answer
         display = ManagedRunnerLogic.display(answer)
+        // Every screen that names a machine says Orbit Cloud for this one (RunnerPageFormat.displayName).
+        ManagedRunnerIdentity.runnerID = display == nil ? nil : answer?.runnerId
         refreshNotBefore = Date().addingTimeInterval(ManagedRunnerLogic.refreshInterval(display))
-        if let answer {
-            let startsOn = ManagedRunnerLogic.firstSessionProvider(answer)
-            if let seen = seenFirstSessionProvider, seen != startsOn { onFirstSessionProviderChanged() }
-            seenFirstSessionProvider = .some(startsOn)
-        }
+        onStatusChanged(answer)
     }
 }

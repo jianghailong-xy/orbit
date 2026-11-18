@@ -2,7 +2,9 @@ import {
   AgentProvider,
   PermissionMode,
   autoAvailable,
+  credentialIsAnthropicBound,
   runnerCatalogRow,
+  type AnthropicBoundCredential,
   type PlanUsage,
   type RunnerModelCatalog,
   type RunnerModelInfo,
@@ -42,6 +44,8 @@ export interface ModelRoutingEngineState {
   regionBlocked?: boolean;
   /** The fullest of that account's windows that cap the whole engine, not one model family. */
   quota?: { utilization: number; window: string } | null;
+  /** That account is paused on the runner. */
+  paused?: boolean;
 }
 
 export interface ModelRoutingSelection {
@@ -396,5 +400,539 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     model: model.value,
     effort,
     reasons,
+  };
+}
+
+// ─────────────────────────── SubAgent routing (docs/subagent-design.md §4.1, §4.2) ───────────────────────────
+
+/** What a recorded SubAgent decision was made under: bump when a rule below changes what it picks. */
+export const SUBAGENT_ROUTING_POLICY_VERSION = 'p3-applied-1';
+
+/** Which row of §4.1 set the tier — or, for the first two, the model. */
+export type SubagentTierSource = 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
+
+/** One row of the tier table: a model on one engine at one effort, its tier and its price (§4.2). */
+export interface SubagentModelRow {
+  model: string;
+  effort: string | null;
+  /** Null: the model has no tier, so routing never picks it. */
+  level: ModelRoutingLevel | null;
+  /** USD per million output tokens, for a metered key; null when nobody knows it. */
+  outputPricePerMTok?: number | null;
+}
+
+/** One engine a provider runs on, as the parent's runner sees it. */
+export interface SubagentProviderEngine {
+  engine: string;
+  /** The rows of a model space of the provider's own. Absent: the engine's runner-reported catalogue,
+   *  which only the built-in tier table (DEFAULT_MODEL_TIER_TABLE) describes. */
+  models?: readonly SubagentModelRow[];
+  /** For a key on that catalogue: USD per million output tokens by model id (models.dev). */
+  prices?: Readonly<Record<string, number>>;
+}
+
+/** One account of an account pool, as its quota and pause stand. */
+export interface SubagentPoolMember {
+  label: string;
+  /** Its fullest live window; null when every window it reported has room again. */
+  quota?: ModelRoutingEngineState['quota'];
+  paused?: boolean;
+  /** The endpoint refused its credential: no run can go to it. */
+  refused?: boolean;
+  /** Its quota could not be read: nothing was reported, or the endpoint will not report on it. */
+  unreadable?: boolean;
+}
+
+/** One provider the owner has, in the owner's order (provider_list). */
+export interface SubagentProvider {
+  slug: string;
+  /** A sign-in that spends a subscription's quota, or a key that is billed per token. */
+  billing: 'subscription' | 'key';
+  /** Inside usableProviderScope: a shared provider is for admins only. */
+  inScope: boolean;
+  engines: readonly SubagentProviderEngine[];
+  /** The credential it spends, as far as the Claude region check asks (credentialIsAnthropicBound, contract §8). */
+  credential: AnthropicBoundCredential;
+  /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
+  account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean } | null;
+  /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
+  pool?: { members: readonly SubagentPoolMember[] };
+}
+
+/** The parent's runner's word on one engine. An engine absent from `SubagentRoutingInput.engines` was not reported. */
+export interface SubagentEngineReport extends ModelRoutingEngineState {
+  installed: boolean;
+}
+
+export interface SubagentRoutingInput {
+  /** `explore`, `general` or a definition's name. */
+  type: string;
+  /** What reasons call the definition: its file name, or the built-in type. */
+  definitionName: string;
+  caller: { model?: string | null; size?: ModelRoutingLevel | null; sizeReason?: string | null };
+  /** The definition's `model` (an id, `inherit` or `auto`) and its `size`. */
+  definition: { model?: string | null; size?: ModelRoutingLevel | null };
+  optimizeFor: ModelRoutingOptimizeFor;
+  /** The parent session's own engine, credential, model and effort. */
+  parent: { engine: string; provider: string; model: string; effort: string | null };
+  providers: readonly SubagentProvider[];
+  /** `UserPreferences.subagentBlockedProviders`. */
+  blockedProviders: readonly string[];
+  /** The parent's runner's report, by engine; null when that runner has reported none. */
+  engines: Readonly<Record<string, SubagentEngineReport>> | null;
+  modelCatalog?: RunnerModelCatalog | null;
+  runtimeDefaultModels?: RuntimeDefaultModels | null;
+  /** The runner `engines` reports on, as the reasons name it; `the parent's runner` when absent. A remote SubAgent
+   *  is routed on its target workspace's runner (§10.3). */
+  runnerLabel?: string;
+  /** A named model only runs where a usable provider offers it (§10.3): every provider × engine that offers it and
+   *  passes the §4.2 filters is a candidate, the rest are removed with their reason, and none left is no pick at
+   *  all — never the parent's model. Absent: the first provider in the owner's order that lists it, else the parent's. */
+  strictNamedModel?: boolean;
+}
+
+/** A candidate taken out of the pool, and why. Null model: the whole provider or engine went. */
+export interface SubagentRemovedCandidate {
+  provider: string;
+  engine: string | null;
+  model: string | null;
+  effort: string | null;
+  reason: string;
+}
+
+export interface SubagentRoutingDecision {
+  level: ModelRoutingLevel | null;
+  tierSource: SubagentTierSource;
+  optimizeFor: ModelRoutingOptimizeFor;
+  /** Null when the pool was empty in the tier: a routed delegate would be refused NO_SUBAGENT_PROVIDER. */
+  engine: string | null;
+  provider: string | null;
+  model: string | null;
+  effort: string | null;
+  reasons: string[];
+  candidates: SubagentRemovedCandidate[];
+  /** The rest of the tier's pool after the pick, in the order it was ranked: where a SubAgent whose account
+   *  hit its limit moves next (§4.3). Empty when the model was named rather than routed. */
+  fallbacks: SubagentFallback[];
+  /** SUBAGENT_ROUTING_POLICY_VERSION. */
+  policyVersion: string;
+  /** Where the tier or model came from, in a few words: the Why line's first clause. */
+  tierNote: string;
+  /** Why the pick, in a few words (its billing and headroom); absent for a model that was named. */
+  note?: string;
+}
+
+/** One candidate a SubAgent may move to after a usage-limit or capacity failure (§4.3). */
+export interface SubagentFallback {
+  engine: string;
+  provider: string;
+  model: string;
+  effort: string | null;
+  /** Its billing and headroom in a few words, as the Why line says it once it runs there. */
+  note?: string;
+}
+
+const levelIndex = (level: ModelRoutingLevel): number => MODEL_ROUTING_LEVELS.indexOf(level);
+const OPTIMIZE_LABEL = { cost: 'Cost', balance: 'Balance', intelligence: 'Intelligence' } as const;
+
+/**
+ * The built-in tier table's rows for an engine's runner-reported catalogue: Claude's families at the
+ * table's efforts, the family's first model by catalogue priority (as routeTaskRun picks it), and Codex's
+ * runner default at each effort. Every other engine's catalogue has no tier, model by model.
+ */
+type SubagentCatalogInput = Pick<SubagentRoutingInput, 'modelCatalog' | 'runtimeDefaultModels'>;
+
+function builtinTierRows(
+  engine: string,
+  input: SubagentCatalogInput,
+  prices?: Readonly<Record<string, number>>,
+): SubagentModelRow[] {
+  return builtinRows(engine, input).map((row) => (prices ? { ...row, outputPricePerMTok: prices[row.model] ?? null } : row));
+}
+
+function builtinRows(engine: string, input: SubagentCatalogInput): SubagentModelRow[] {
+  const catalog = input.modelCatalog?.[engine as AgentProvider] ?? [];
+  if (engine === AgentProvider.CLAUDE) {
+    const family = (prefix: string) => catalog
+      .filter((row) => row.value.startsWith(prefix))
+      .reduce<RunnerModelInfo | undefined>((best, row) =>
+        !best || (row.priority ?? Infinity) < (best.priority ?? Infinity) ? row : best, undefined);
+    return MODEL_ROUTING_LEVELS.flatMap((level) => {
+      const tier = DEFAULT_MODEL_TIER_TABLE.claude[level];
+      const model = family(tier.prefix);
+      return model ? [{ model: model.value, effort: tier.effort, level }] : [];
+    });
+  }
+  if (engine === AgentProvider.CODEX) {
+    const named = input.runtimeDefaultModels?.codex;
+    const model = catalog.find((row) => row.value === named) ?? catalog[0];
+    return model
+      ? MODEL_ROUTING_LEVELS.map((level) => ({ model: model.value, effort: DEFAULT_MODEL_TIER_TABLE.codex[level].effort, level }))
+      : [];
+  }
+  return catalog.map((row) => ({ model: row.value, effort: null, level: null }));
+}
+
+/**
+ * The tier rows routeSubagent reads for one engine of a provider: the provider's own model space, else the
+ * engine's runner-reported catalogue through the built-in tier table. What the Providers page's Tier column
+ * shows (GET /providers/subagent-tiers), so it cannot say a model is routed when the router would skip it.
+ */
+export function subagentEngineRows(engine: SubagentProviderEngine, input: SubagentCatalogInput): SubagentModelRow[] {
+  return engine.models ? [...engine.models] : builtinTierRows(engine.engine, input, engine.prices);
+}
+
+interface SubagentCandidate extends SubagentModelRow {
+  provider: SubagentProvider;
+  providerIndex: number;
+  engine: string;
+  engineIndex: number;
+  /** The highest tier any row of this model reaches on this provider and engine. */
+  ceiling: ModelRoutingLevel;
+  /** For a pool: the quota of its account with the most left, which is its headroom. */
+  quota?: ModelRoutingEngineState['quota'];
+  poolMember?: string;
+}
+
+/** Quota left on a subscription's account, in percent; a key has no quota to run out of. */
+const headroom = (c: SubagentCandidate): number =>
+  c.provider.billing === 'subscription' ? 100 - (c.quota?.utilization ?? 0) : 100;
+/** What one more run costs at the margin: nothing on a subscription, the key's price otherwise. */
+const marginalPrice = (c: SubagentCandidate): number =>
+  c.provider.billing === 'subscription' ? 0 : c.outputPricePerMTok ?? Infinity;
+
+function compareCandidates(mode: ModelRoutingOptimizeFor, a: SubagentCandidate, b: SubagentCandidate): number {
+  let order = 0;
+  if (mode === 'cost') {
+    const subscription = (c: SubagentCandidate) => (c.provider.billing === 'subscription' ? 0 : 1);
+    order = subscription(a) - subscription(b)
+      || (subscription(a) === 0 ? headroom(b) - headroom(a) : marginalPrice(a) - marginalPrice(b));
+  } else if (mode === 'balance') {
+    order = headroom(b) - headroom(a) || marginalPrice(a) - marginalPrice(b);
+  } else {
+    order = levelIndex(b.ceiling) - levelIndex(a.ceiling) || marginalPrice(a) - marginalPrice(b);
+  }
+  // NaN only from Infinity - Infinity: two keys nobody knows the price of, which tie.
+  return (Number.isNaN(order) ? 0 : order) || a.providerIndex - b.providerIndex || a.engineIndex - b.engineIndex;
+}
+
+/** A candidate's billing and headroom, in the few words the Why line gives it. */
+function candidateNote(c: SubagentCandidate): string {
+  if (c.poolMember) return `subscription pool, ${c.poolMember} with ${headroom(c)}% quota left`;
+  if (c.provider.billing === 'subscription') return `subscription with ${headroom(c)}% quota left`;
+  return c.outputPricePerMTok != null ? `key at $${c.outputPricePerMTok}/M output tokens` : 'key, price unknown';
+}
+
+function pickLine(mode: ModelRoutingOptimizeFor, c: SubagentCandidate, level: ModelRoutingLevel): string {
+  // The provider once, and the engine only when it is another name.
+  const what = `${c.model}${c.effort ? ` · ${c.effort}` : ''} on ${c.provider.slug}${c.engine === c.provider.slug ? '' : ` (${c.engine})`}`;
+  const price = c.outputPricePerMTok != null ? `$${c.outputPricePerMTok} per million output tokens` : 'an unknown price';
+  const why = c.poolMember
+    ? `a subscription pool whose account ${c.poolMember} has ${headroom(c)}% of its quota left`
+    : c.provider.billing === 'subscription'
+      ? `a subscription with ${headroom(c)}% of its quota left`
+      : `a metered key at ${price}`;
+  const lead = mode === 'intelligence' ? `the strongest model in tier ${level} (reaches ${c.ceiling}), ${why}`
+    : mode === 'balance' ? `the most quota headroom in tier ${level}, ${why}`
+      : c.provider.billing === 'subscription' ? `${why}, used before any metered key`
+        : `the cheapest in tier ${level}: ${why}`;
+  return `Picked ${what} (${OPTIMIZE_LABEL[mode]}): ${lead}`;
+}
+
+/**
+ * The account an account pool would run on: of the members that can run — not refused, not paused, quota
+ * read and under ENGINE_QUOTA_LIMIT — the one with the most quota left. Otherwise why the pool can't run,
+ * in words that name its accounts.
+ */
+function bestPoolMember(members: readonly SubagentPoolMember[]): { member: SubagentPoolMember } | { reason: string } {
+  if (members.length === 0) return { reason: 'The pool has no account that can run' };
+  const live = members.filter((m) => !m.refused && !m.paused);
+  const eligible = live
+    .filter((m) => !m.unreadable && (m.quota?.utilization ?? 0) < ENGINE_QUOTA_LIMIT)
+    .sort((a, b) => (a.quota?.utilization ?? 0) - (b.quota?.utilization ?? 0));
+  if (eligible.length > 0) return { member: eligible[0] };
+  const unreadable = live.filter((m) => m.unreadable).map((m) => m.label);
+  if (unreadable.length > 0) {
+    return { reason: `The pool's quota cannot be read for ${unreadable.join(', ')}, and no other account in it can run` };
+  }
+  const each = members.map((m) => `${m.label} ${m.refused ? 'refused its key' : m.paused ? 'paused'
+    : `at ${m.quota!.utilization}% of its ${m.quota!.window} quota`}`);
+  return { reason: `Every account in the pool is at or above ${ENGINE_QUOTA_LIMIT}% of its quota or paused: ${each.join('; ')}` };
+}
+
+/** Why a provider is out of every pool (§4.2 filters 1 and 2), or null. */
+function providerRefusal(input: SubagentRoutingInput, provider: SubagentProvider): string | null {
+  if (input.blockedProviders.includes(provider.slug)) return 'Blocked in the SubAgents settings';
+  if (!provider.inScope) return 'A shared provider, which only admins may use';
+  return null;
+}
+
+/**
+ * One engine of a provider against §4.2 filters 3 and 4 on the runner `engines` reports: why it cannot run there,
+ * or the quota (and, for a pool, the account) a run there would spend.
+ */
+function engineVerdict(
+  input: SubagentRoutingInput,
+  provider: SubagentProvider,
+  engine: string,
+): { reason: string } | { quota: ModelRoutingEngineState['quota']; poolMember?: string } {
+  const where = input.runnerLabel ?? "the parent's runner";
+  const report = input.engines?.[engine];
+  // A runner that reported nothing is not judged on it; one that reported others lacks this one.
+  if (input.engines && !report?.installed) return { reason: `${engine} is not installed on ${where}` };
+  // Only Claude Code is gated, and only on a credential that talks to Anthropic: a sign-in, a pool or a key (§8, ⑥).
+  if (engine === AgentProvider.CLAUDE && report?.regionBlocked && credentialIsAnthropicBound(provider.credential)) {
+    return { reason: `${engine} can’t use Anthropic on ${where}` };
+  }
+  if (provider.pool) {
+    // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
+    const best = bestPoolMember(provider.pool.members);
+    if ('reason' in best) return best;
+    return { quota: best.member.quota, poolMember: best.member.label };
+  }
+  const quota = provider.account?.quota;
+  if (provider.billing === 'subscription') {
+    if (report?.signedOut) return { reason: `${engine} is signed out on ${where}` };
+    if (quota && quota.utilization >= ENGINE_QUOTA_LIMIT) {
+      return { reason: `The account is at ${quota.utilization}% of its ${quota.window} quota` };
+    }
+    if (provider.account?.paused) return { reason: 'The account is paused' };
+    if (provider.account?.refused) return { reason: "The endpoint refused the account's key" };
+    if (provider.account?.unreadable) return { reason: "The account's quota cannot be read" };
+  }
+  return { quota };
+}
+
+/**
+ * Why a provider on one engine cannot run a SubAgent on the runner `engines` reports (§4.2 filters 1 to 4), or null
+ * when it can — or when the owner has no such provider, which only building its run can tell. What a remote
+ * SubAgent asks of its target workspace's default engine before running on it (§10.3).
+ */
+export function subagentCandidateRefusal(input: SubagentRoutingInput, providerSlug: string, engine: string): string | null {
+  const provider = input.providers.find((entry) => entry.slug === providerSlug);
+  if (!provider) return null;
+  const refused = providerRefusal(input, provider);
+  if (refused) return refused;
+  const verdict = engineVerdict(input, provider, engine);
+  return 'reason' in verdict ? verdict.reason : null;
+}
+
+/** Whether a provider's engine lists a model: its own model space, else the runner-reported catalogue. */
+function offersModel(input: SubagentRoutingInput, engine: SubagentProviderEngine, model: string): boolean {
+  return engine.models
+    ? engine.models.some((entry) => entry.model === model)
+    : (input.modelCatalog?.[engine.engine as AgentProvider] ?? []).some((entry) => entry.value === model);
+}
+
+/** One provider × engine as the runner `engines` reports on stands toward it (§4.2 filters 1 to 4). */
+export interface SubagentPairVerdict {
+  provider: string;
+  engine: string;
+  /** Why it cannot run there; absent when it can. */
+  reason?: string;
+  /** Every model it lists, tier or no tier: its own model space, else the runner-reported catalogue. */
+  models: string[];
+}
+
+/**
+ * Every provider × engine of `input`, in the owner's order, with why it cannot run on the runner `engines` reports
+ * (§4.2 filters 1 to 4, through providerRefusal and engineVerdict) and the models it lists. What
+ * subagentRunnableModels keeps the usable ones of, and what provider_list's workspace view shows whole.
+ */
+export function subagentPairVerdicts(input: SubagentRoutingInput): SubagentPairVerdict[] {
+  const out: SubagentPairVerdict[] = [];
+  for (const provider of input.providers) {
+    const refused = providerRefusal(input, provider);
+    for (const engine of provider.engines) {
+      const verdict = refused ? { reason: refused } : engineVerdict(input, provider, engine.engine);
+      const models = engine.models
+        ? engine.models.map((entry) => entry.model)
+        : (input.modelCatalog?.[engine.engine as AgentProvider] ?? []).map((entry) => entry.value);
+      out.push({
+        provider: provider.slug,
+        engine: engine.engine,
+        ...('reason' in verdict ? { reason: verdict.reason } : {}),
+        models: [...new Set(models)],
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * What the runner `engines` reports on can run, by provider and engine: every model each usable provider × engine
+ * lists (§4.2 filters 1 to 4; tiers do not matter, since a named model needs none). What a refused named model on
+ * a remote SubAgent lists (§10.3).
+ */
+export function subagentRunnableModels(input: SubagentRoutingInput): Array<{ provider: string; engine: string; models: string[] }> {
+  return subagentPairVerdicts(input)
+    .filter((pair) => pair.reason === undefined && pair.models.length > 0)
+    .map(({ provider, engine, models }) => ({ provider, engine, models }));
+}
+
+/**
+ * Route one SubAgent (docs/subagent-design.md §4.1, §4.2). Pure: no I/O, every decision depends only on
+ * the snapshot passed in. The tier is the first of: the caller's model, the definition's model or
+ * `inherit` (neither routed), the caller's size, the definition's size, the type's default — which alone
+ * Optimize For raises. The pool is every provider × engine × tier row, less what the owner blocked, what is
+ * out of scope, engines the parent's runner lacks or cannot sign in to, accounts at ENGINE_QUOTA_LIMIT or
+ * paused, and models without a tier; each removal is recorded with its reason.
+ */
+export function routeSubagent(input: SubagentRoutingInput): SubagentRoutingDecision {
+  const mode = input.optimizeFor;
+  const base = {
+    optimizeFor: mode, candidates: [] as SubagentRemovedCandidate[], fallbacks: [] as SubagentFallback[],
+    policyVersion: SUBAGENT_ROUTING_POLICY_VERSION,
+  };
+  const parentPick = { engine: input.parent.engine, provider: input.parent.provider, model: input.parent.model, effort: input.parent.effort };
+
+  // Rows 1 and 2: a named model is used as named, at its engine's default effort, on the first provider in
+  // the owner's order that offers it — tier or no tier (§4.2 item 5).
+  const named = (model: string) => {
+    for (const provider of input.providers) {
+      if (!provider.inScope || input.blockedProviders.includes(provider.slug)) continue;
+      for (const engine of provider.engines) {
+        if (offersModel(input, engine, model)) return { engine: engine.engine, provider: provider.slug, model, effort: null };
+      }
+    }
+    return null;
+  };
+  const { caller, definition } = input;
+  if (caller.model && input.strictNamedModel) {
+    // Every provider × engine that lists it and can run on this runner, in the owner's order; never another model.
+    const model = caller.model;
+    const removed: SubagentRemovedCandidate[] = [];
+    const offers: SubagentFallback[] = [];
+    for (const provider of input.providers) {
+      const listing = provider.engines.filter((engine) => offersModel(input, engine, model));
+      if (listing.length === 0) continue;
+      const refused = providerRefusal(input, provider);
+      if (refused) {
+        removed.push({ provider: provider.slug, engine: null, model, effort: null, reason: refused });
+        continue;
+      }
+      for (const engine of listing) {
+        const verdict = engineVerdict(input, provider, engine.engine);
+        if ('reason' in verdict) removed.push({ provider: provider.slug, engine: engine.engine, model, effort: null, reason: verdict.reason });
+        else offers.push({ engine: engine.engine, provider: provider.slug, model, effort: null });
+      }
+    }
+    const [pick, ...rest] = offers;
+    const where = input.runnerLabel ?? "the parent's runner";
+    return {
+      ...base, level: null, tierSource: 'named-model', tierNote: 'Model named by the caller', candidates: removed,
+      ...(pick ?? { engine: null, provider: null, model: null, effort: null }),
+      fallbacks: rest,
+      reasons: [
+        `Model named by the caller: ${model}`,
+        ...(pick ? [] : [`No usable provider on ${where} offers ${model}`]),
+      ],
+    };
+  }
+  if (caller.model) {
+    const found = named(caller.model);
+    return {
+      ...base, level: null, tierSource: 'named-model', tierNote: 'Model named by the caller',
+      ...(found ?? { ...parentPick, model: caller.model }),
+      reasons: [
+        `Model named by the caller: ${caller.model}`,
+        ...(found ? [] : [`No enabled provider lists ${caller.model} — kept on the parent's ${input.parent.provider} (${input.parent.engine})`]),
+      ],
+    };
+  }
+  const definitionModel = definition.model?.trim() || null;
+  const autoNotes: string[] = [];
+  if (definitionModel === 'inherit') {
+    return { ...base, level: null, tierSource: 'definition-model', tierNote: `Model set by ${input.definitionName}: inherit`, ...parentPick,
+      reasons: [`Model set by ${input.definitionName}: inherit, the parent's ${input.parent.model}`] };
+  }
+  if (definitionModel && definitionModel !== 'auto') {
+    const found = named(definitionModel);
+    if (found) {
+      return { ...base, level: null, tierSource: 'definition-model', tierNote: `Model set by ${input.definitionName}`, ...found,
+        reasons: [`Model set by ${input.definitionName}: ${definitionModel}`] };
+    }
+    autoNotes.push(`${input.definitionName} names ${definitionModel}, which no enabled provider lists — routed as auto`);
+  }
+
+  // Rows 3 to 5: the tier.
+  let level: ModelRoutingLevel;
+  let tierSource: SubagentTierSource;
+  let tierNote: string;
+  const reasons: string[] = [...autoNotes];
+  if (caller.size) {
+    level = caller.size;
+    tierSource = 'size';
+    tierNote = `Tier ${level}, set by the caller`;
+    reasons.push(`${tierNote}${caller.sizeReason ? `: ${caller.sizeReason}` : ''}`);
+  } else if (definition.size) {
+    level = definition.size;
+    tierSource = 'definition-size';
+    tierNote = `Tier ${level}, set by ${input.definitionName}`;
+    reasons.push(tierNote);
+  } else {
+    level = input.type === 'explore' ? 'S' : 'M';
+    tierSource = 'type-default';
+    tierNote = `Tier ${level}: default for ${input.type}`;
+    reasons.push(tierNote);
+    const floor = mode === 'balance' ? 'M' : mode === 'intelligence' ? 'L' : null;
+    if (floor && levelIndex(level) < levelIndex(floor)) {
+      level = floor;
+      tierNote = `Tier ${floor}: ${OPTIMIZE_LABEL[mode]} minimum`;
+      reasons.push(`Tier ${floor}: ${OPTIMIZE_LABEL[mode]} minimum for a SubAgent without a size`);
+    }
+  }
+
+  // The pool (§4.2), each removal with its reason.
+  const removed: SubagentRemovedCandidate[] = [];
+  const drop = (provider: string, engine: string | null, model: string | null, effort: string | null, reason: string) =>
+    removed.push({ provider, engine, model, effort, reason });
+  const pool: SubagentCandidate[] = [];
+  input.providers.forEach((provider, providerIndex) => {
+    const slug = provider.slug;
+    const refused = providerRefusal(input, provider);
+    if (refused) return drop(slug, null, null, null, refused);
+    provider.engines.forEach(({ engine }, engineIndex) => {
+      const verdict = engineVerdict(input, provider, engine);
+      if ('reason' in verdict) return drop(slug, engine, null, null, verdict.reason);
+      const { quota, poolMember } = verdict;
+      const rows = subagentEngineRows(provider.engines[engineIndex], input);
+      if (rows.length === 0) return drop(slug, engine, null, null, `No models with a tier on ${engine}`);
+      const ceilings = new Map<string, ModelRoutingLevel>();
+      for (const row of rows) {
+        if (!row.level) continue;
+        const prior = ceilings.get(row.model);
+        if (!prior || levelIndex(row.level) > levelIndex(prior)) ceilings.set(row.model, row.level);
+      }
+      for (const row of rows) {
+        if (!row.level) {
+          drop(slug, engine, row.model, row.effort, 'The model has no tier');
+        } else if (row.level === level) {
+          pool.push({
+            ...row, provider, providerIndex, engine, engineIndex, ceiling: ceilings.get(row.model)!,
+            quota, ...(poolMember ? { poolMember } : {}),
+          });
+        }
+      }
+    });
+  });
+
+  const decision = { ...base, level, tierSource, tierNote, candidates: removed };
+  if (pool.length === 0) {
+    return { ...decision, engine: null, provider: null, model: null, effort: null,
+      reasons: [...reasons, `No provider can run tier ${level}: the SubAgent is refused with NO_SUBAGENT_PROVIDER`] };
+  }
+  const [best, ...rest] = [...pool].sort((a, b) => compareCandidates(mode, a, b));
+  reasons.push(pickLine(mode, best, level));
+  const priceless = new Set(pool
+    .filter((c) => c.provider.billing === 'key' && c.outputPricePerMTok == null)
+    .map((c) => `No price known for ${c.model} on ${c.provider.slug}; ordered after priced keys`));
+  reasons.push(...priceless);
+  if (pool.length > 1) reasons.push(`${pool.length} candidates in tier ${level}; ties go by the owner's provider order`);
+  if (removed.length > 0) reasons.push(`${removed.length} candidate${removed.length === 1 ? '' : 's'} removed, each with its reason`);
+  const fallbacks = rest.map((c) => ({ engine: c.engine, provider: c.provider.slug, model: c.model, effort: c.effort, note: candidateNote(c) }));
+  return {
+    ...decision, engine: best.engine, provider: best.provider.slug, model: best.model, effort: best.effort,
+    note: candidateNote(best), reasons, fallbacks,
   };
 }

@@ -9,6 +9,9 @@ describe('composer default send intent', () => {
     [{ live: true, status: 'AWAITING_INPUT', numTurns: 4 }, 'NEXT_TURN'],
     [{ live: false, status: 'RUNNING', numTurns: 4 }, 'NEXT_TURN'],
     [{ live: false, status: null, numTurns: 0 }, 'NEXT_TURN'],
+    [{ live: true, status: 'RUNNING', numTurns: 4, nextTurnQueued: true }, 'NEXT_TURN'],
+    [{ live: true, status: 'PENDING', numTurns: 0, nextTurnQueued: true }, 'NEXT_TURN'],
+    [{ live: true, status: 'RUNNING', numTurns: 4, nextTurnQueued: false }, 'CURRENT_WORK'],
   ] as const)('maps %o to %s', (input, expected) => {
     expect(defaultSessionTurnIntent(input)).toBe(expected);
   });

@@ -4,12 +4,12 @@ import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { LoadingOutlined } from '@ant-design/icons';
 import {
   fetchSharedArtifactObjectUrl,
-  fetchSharedAttachmentDataUrl,
   fetchSharedAttachmentObjectUrl,
   getSharedEventFull,
   getSharedEventPage,
   getSharedEventsAfter,
   getSharedSession,
+  sharedStreamUrl,
   type SharedEvent,
   type SharedSessionNow,
 } from '../api';
@@ -20,14 +20,16 @@ import {
   EventFullCtx,
   PublicLinkResolverCtx,
   type PublicLinkResolver,
+  StreamingDraftsCtx,
   Transcript,
 } from '../components/Transcript';
 import { memoizeEventFull } from '../lib/eventFull';
 import { routeId } from '../lib/idCodec';
 import { projectLinkResolver, taskLinkResolver } from '../lib/publicLinks';
 import {
-  isSessionBusy,
   isSessionLive,
+  isSessionWorking,
+  sessionActivityOf,
   sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionStateWord,
@@ -35,6 +37,10 @@ import {
   type SessionStateSource,
 } from '../lib/sessionState';
 import { shortDate } from '../lib/shareLinks';
+import { supersedesLiveDrafts } from '../lib/steerDelivery';
+import { streamAnchorAfter } from '../lib/streamAnchor';
+import { settleThinking } from '../lib/thinkingDraft';
+import { openViewerStream, reconnectDelay, type ViewerFrame } from '../lib/viewerStream';
 import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
 
@@ -43,19 +49,18 @@ import { titleFirstLine } from '../lib/title';
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
 const LOAD_OLDER_AT = 400;
-// Download HTML reads the transcript whole, in the largest pages the share serves.
-const EXPORT_PAGE = 500;
 // A live conversation is followed: asked what it has added since the newest event on the page,
 // NEWER_PAGE at a time — every WORKING_POLL_MS while it works or has just moved, and every
 // WAITING_POLL_MS while it waits on its owner, who may answer at any moment.
 const NEWER_PAGE = 200;
-const WORKING_POLL_MS = 4_000;
+export const WORKING_POLL_MS = 4_000;
 const WAITING_POLL_MS = 30_000;
 
 /** How long until a followed conversation is asked again, after an answer that did or did not bring
  *  anything new (`moved`); null once it has stopped and gone quiet — over, or filed Completed. */
-function followDelay(state: SessionStateSource, moved: boolean): number | null {
-  if (moved || isSessionBusy(state)) return WORKING_POLL_MS;
+export function followDelay(state: SessionStateSource, moved: boolean): number | null {
+  // A turn the engine started for itself streams like a dispatched one, so it is followed as closely.
+  if (moved || isSessionWorking(state)) return WORKING_POLL_MS;
   if (isSessionLive(state) && sessionLifecycleStateOf(state) !== 'COMPLETED') return WAITING_POLL_MS;
   return null;
 }
@@ -67,6 +72,7 @@ function followDelay(state: SessionStateSource, moved: boolean): number | null {
  */
 export const sharedRootQuery = (token: string, preview = false) => ({
   queryKey: ['shared', token] as QueryKey,
+  meta: { entities: ['session'] },
   queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, preview }),
   enabled: !!token,
   retry: false,
@@ -74,6 +80,13 @@ export const sharedRootQuery = (token: string, preview = false) => ({
   // again later could have moved on past it and leave a hole between the two.
   staleTime: Infinity,
 });
+
+/** A conversation's header as the follow last stated it: a `head` frame, or an `events?after=` answer. */
+type SharedHead = Omit<SharedSessionNow, 'events' | 'after'>;
+
+/** The reply being typed, as StreamingDraftsCtx carries it. */
+type Drafts = { text: string; think: string; thinkStartedAt?: number };
+const NO_DRAFTS: Drafts = { text: '', think: '' };
 
 /** A session link shares the conversation and nothing it names: a task, project or other session
  *  it links to is outside the link, so each of those links is drawn as its words. */
@@ -101,7 +114,7 @@ export function SharedUnavailable() {
 }
 
 /** The status pill's colour for each run state, as the app's pills use them (index.css `.status-pill`). */
-const RUN_TONE: Record<SessionRunState, string> = {
+export const RUN_TONE: Record<SessionRunState, string> = {
   QUEUED: 'queued',
   RUNNING: 'running',
   AWAITING_INPUT: 'awaiting',
@@ -111,16 +124,20 @@ const RUN_TONE: Record<SessionRunState, string> = {
   ENDED: 'cancelled',
 };
 
-/** Every event of the shared transcript, unclipped: from the newest page back to the first. */
-async function wholeTranscript(token: string, sessionId?: string): Promise<SharedEvent[]> {
-  const pages: SharedEvent[][] = [];
-  let before: number | undefined;
-  for (;;) {
-    const page = await getSharedEventPage(token, { before, limit: EXPORT_PAGE, whole: true, sessionId });
-    pages.unshift(page.events);
-    if (!page.hasMore || page.events.length === 0) return pages.flat();
-    before = page.events[0].seq;
-  }
+/**
+ * The pill's colour for a shared session's header: its run's, except where the run state alone says
+ * the wrong thing. A parked session still working (sessionActivityOf) wears a live colour — the
+ * spinner's for a turn, the in-progress square for a job or a wait — not the amber of a wait on its
+ * reader; and an idle one whose reader cannot reply (`canReply: false`, a public link) is grey.
+ */
+export function sharedStateTone(head: SessionStateSource, canReply: boolean): string {
+  if (sessionLifecycleStateOf(head) === 'COMPLETED') return 'done';
+  const activity = sessionActivityOf(head);
+  if (activity === 'TURN') return 'running';
+  if (activity) return 'ongoing';
+  const state = sessionRunStateOf(head);
+  if (state === 'AWAITING_INPUT' && !canReply) return 'todo';
+  return RUN_TONE[state];
 }
 
 /**
@@ -150,6 +167,7 @@ function SharedConversation() {
     sessionId
       ? {
           queryKey: ['shared', token, 'c', sessionId] as QueryKey,
+          meta: { entities: ['session'] },
           queryFn: () => getSharedSession(token, { limit: TAIL_PAGE, sessionId }),
           enabled: !!token,
           retry: false,
@@ -187,8 +205,6 @@ function SharedConversation() {
           : NOTHING_ELSE_SHARED,
     [token, task, linkScope],
   );
-  const [downloading, setDownloading] = useState(false);
-
   // The pages scrolled in above the tail, oldest first.
   const [older, setOlder] = useState<SharedEvent[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -203,7 +219,13 @@ function SharedConversation() {
   // What the conversation has added since the page opened, oldest first, and its header as the
   // newest answer gave it — both from following it while it is live.
   const [newer, setNewer] = useState<SharedEvent[]>([]);
-  const [now, setNow] = useState<SharedSessionNow | null>(null);
+  const [now, setNow] = useState<SharedHead | null>(null);
+  // The reply being written, as the stream types it out (text_delta / thinking_delta), and the seq
+  // it is drawn after (Transcript's `streamingAfterSeq`).
+  const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
+  const [draftsAfter, setDraftsAfter] = useState<number | null>(null);
+  // The stream said the link no longer opens this conversation.
+  const [gone, setGone] = useState(false);
   // Set when newer events land under a reader who is at the end, so the end stays in view.
   const followRef = useRef(false);
 
@@ -259,7 +281,7 @@ function SharedConversation() {
     if (!el || !followRef.current) return;
     followRef.current = false;
     el.scrollTop = el.scrollHeight;
-  }, [events]);
+  }, [events, drafts]);
   // What is loaded may not reach LOAD_OLDER_AT above the viewport, and then there is nothing to
   // scroll up through: pull the next page in without waiting for a scroll that cannot happen.
   // (No layout at all, as in jsdom, is not a short page.)
@@ -268,59 +290,243 @@ function SharedConversation() {
     if (el && el.clientHeight > 0 && el.scrollTop < LOAD_OLDER_AT) loadOlder();
   }, [events, loadOlder]);
 
-  // Follow a live conversation: ask what it has added since the newest event on the page, put it
-  // below, and redraw the header from the same answer — at once while more are waiting, else on
-  // followDelay's clock. A tab nobody is looking at asks nothing; it catches up when looked at.
+  // Follow a live conversation over its stream (docs/session-viewer-stream-design.md §7): durable
+  // events go below, merged by seq; the reply is drawn as it is typed; `head` frames redraw the
+  // header. A dropped stream is opened again from the newest seq on the page, after a backoff; a tab
+  // nobody is looking at holds none, and opens it again when looked at. A stream that cannot be
+  // opened at all — a server from before it, the anonymous caps, a network that will not carry it —
+  // leaves the page on the polling follow below, as it was before the stream.
   useEffect(() => {
     if (!data) return;
-    let after = data.events.at(-1)?.seq ?? 0;
+    // Events at or before the opening page's newest are already drawn; `after` is the newest drawn.
+    const floor = data.events.at(-1)?.seq ?? 0;
+    let after = floor;
+    const held = new Set<number>();
     let state: SessionStateSource = data;
-    let delay = followDelay(data, false);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let parked = false;
     let stopped = false;
-    const read = () => {
-      if (document.hidden) {
-        parked = true;
-        return;
+    let stopPolling: (() => void) | null = null;
+
+    /** Put durable events below what is drawn, in seq order, each once. */
+    const land = (added: SharedEvent[]): void => {
+      const fresh = added.filter((e) => e.seq > floor && !held.has(e.seq));
+      if (!fresh.length) return;
+      for (const e of fresh) {
+        held.add(e.seq);
+        after = Math.max(after, e.seq);
       }
-      getSharedEventsAfter(token, { after, limit: NEWER_PAGE, sessionId })
-        .then((answer) => {
-          if (stopped) return;
-          const added = answer.events.filter((e) => e.seq > after);
-          if (added.length) {
-            after = added[added.length - 1].seq;
-            const el = scrollRef.current;
-            followRef.current = !!el && sampleTail(el).bottomGap <= NEAR_BOTTOM;
-            setNewer((prev) => [...prev, ...added]);
+      const el = scrollRef.current;
+      followRef.current = !!el && sampleTail(el).bottomGap <= NEAR_BOTTOM;
+      setNewer((prev) => [...prev, ...fresh].sort((a, b) => a.seq - b.seq));
+    };
+
+    // Ask what it has added since the newest event on the page, put it below, and redraw the header
+    // from the same answer — at once while more are waiting, else on followDelay's clock. A tab
+    // nobody is looking at asks nothing; it catches up when looked at.
+    const poll = (): (() => void) => {
+      let delay = followDelay(state, false);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let parked = false;
+      let done = false;
+      const read = () => {
+        if (document.hidden) {
+          parked = true;
+          return;
+        }
+        getSharedEventsAfter(token, { after, limit: NEWER_PAGE, sessionId })
+          .then((answer) => {
+            if (done) return;
+            const added = answer.events.filter((e) => e.seq > after);
+            land(added);
+            // A server from before `after` answers with its tail page alone; the header stands.
+            if (answer.status !== undefined) {
+              state = answer;
+              setNow(answer);
+            }
+            delay = answer.after != null ? 0 : followDelay(state, added.length > 0);
+          })
+          .catch(() => {
+            // Asked again on the same clock, but never at once: a refusal is not more to catch up on.
+            delay = Math.max(delay ?? 0, WORKING_POLL_MS);
+          })
+          .finally(() => {
+            if (done || delay === null) return;
+            if (delay === 0) read();
+            else timer = setTimeout(read, delay);
+          });
+      };
+      const onVisibility = () => {
+        if (document.hidden || !parked) return;
+        parked = false;
+        read();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      if (delay !== null) timer = setTimeout(read, delay);
+      return () => {
+        done = true;
+        clearTimeout(timer);
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
+    };
+
+    // A conversation over and quiet is followed no more, over the stream or otherwise.
+    if (followDelay(data, false) === null) return;
+
+    // The reply being typed. Local, so a delta appends to what the last one left; drawn through
+    // `setDrafts`. `anchor` is where it sits (lib/streamAnchor).
+    let text = '';
+    let think = '';
+    let thinkStartedAt: number | null = null;
+    let anchor: number | null = null;
+    const drawDrafts = () => {
+      setDrafts(text || think ? { text, think, thinkStartedAt: thinkStartedAt ?? undefined } : NO_DRAFTS);
+      setDraftsAfter(anchor);
+    };
+    // A stream that ends mid-reply loses the chunks sent while it was closed, and deltas are never
+    // replayed: what was typed so far goes, and the durable reply (or the next chunks) replace it.
+    const dropDrafts = () => {
+      text = '';
+      think = '';
+      thinkStartedAt = null;
+      anchor = null;
+      drawDrafts();
+    };
+
+    let close: (() => void) | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    // Whether a stream has opened on this page: until one has, a refusal means the stream is not to
+    // be had, and the page polls instead.
+    let streamed = false;
+
+    const fallBack = () => {
+      if (stopped || stopPolling) return;
+      stopStream();
+      stopPolling = poll();
+    };
+    const stopStream = () => {
+      close?.();
+      close = null;
+      clearTimeout(retry);
+      retry = undefined;
+      dropDrafts();
+    };
+    const linkGone = () => {
+      stopStream();
+      stopped = true;
+      setGone(true);
+    };
+    const onFrame = (frame: ViewerFrame) => {
+      attempt = 0;
+      switch (frame.type) {
+        case 'ping':
+          return;
+        case 'head':
+          state = frame.payload as SharedHead;
+          setNow(frame.payload as SharedHead);
+          return;
+        case 'gone':
+          linkGone();
+          return;
+        case 'resync':
+          // The gap since `after` is longer than the stream replays: read it a page at a time, then
+          // open the stream again from its end.
+          stopStream();
+          void catchUp().then(
+            () => connect(),
+            () => fallBack(),
+          );
+          return;
+        case 'text_delta':
+        case 'thinking_delta': {
+          const chunk = frame.payload?.text;
+          if (typeof chunk !== 'string') return;
+          anchor = streamAnchorAfter(anchor, { type: frame.type, seq: frame.seq ?? 0 }, after);
+          if (frame.type === 'text_delta') text += chunk;
+          else {
+            think += chunk;
+            thinkStartedAt ??= Date.now();
           }
-          // A server from before `after` answers with its tail page alone; the header stands.
-          if (answer.status !== undefined) {
-            state = answer;
-            setNow(answer);
-          }
-          delay = answer.after != null ? 0 : followDelay(state, added.length > 0);
-        })
-        .catch(() => {
-          // Asked again on the same clock, but never at once: a refusal is not more to catch up on.
-          delay = Math.max(delay ?? 0, WORKING_POLL_MS);
-        })
-        .finally(() => {
-          if (stopped || delay === null) return;
-          if (delay === 0) read();
-          else timer = setTimeout(read, delay);
-        });
+          const el = scrollRef.current;
+          followRef.current = !!el && sampleTail(el).bottomGap <= NEAR_BOTTOM;
+          drawDrafts();
+          return;
+        }
+        // A running tool's output as it is written: the public transcript draws only its end.
+        case 'tool_output':
+        case 'background_output':
+          return;
+      }
+      if (typeof frame.seq !== 'number' || frame.seq <= 0 || frame.seq === Number.MAX_SAFE_INTEGER) return;
+      let ev = { seq: frame.seq, type: frame.type, payload: frame.payload, turnId: frame.turnId ?? null, ts: frame.ts ?? '' } as SharedEvent;
+      if (frame.truncated) ev.truncated = true;
+      // A block the provider closed with no text keeps what was typed of it (lib/thinkingDraft).
+      if (ev.type === 'thinking') {
+        const patch = settleThinking(ev.payload, think, thinkStartedAt, Date.now());
+        if (Object.keys(patch).length) ev = { ...ev, payload: { ...ev.payload, ...patch } };
+      }
+      land([ev]);
+      // The whole reply, or the end of its turn, replaces what was typed of it.
+      if (supersedesLiveDrafts(ev) || (ev.type === 'system' && ev.payload?.subtype === 'resumed')) {
+        text = '';
+        think = '';
+        thinkStartedAt = null;
+      } else if (ev.type === 'thinking') {
+        think = '';
+        thinkStartedAt = null;
+      }
+      anchor = streamAnchorAfter(anchor, ev, after);
+      drawDrafts();
+    };
+    const catchUp = async (): Promise<void> => {
+      for (;;) {
+        const answer = await getSharedEventsAfter(token, { after, limit: NEWER_PAGE, sessionId });
+        if (stopped) return;
+        const before = after;
+        land(answer.events.filter((e) => e.seq > after));
+        if (answer.status !== undefined) {
+          state = answer;
+          setNow(answer);
+        }
+        if (answer.after == null || after === before) return;
+      }
+    };
+    const connect = () => {
+      if (stopped || stopPolling || close) return;
+      // A hidden tab opens nothing; it opens the stream when it is looked at again.
+      if (document.hidden) return;
+      close = openViewerStream(sharedStreamUrl(token, { sinceSeq: after, sessionId }), {
+        frame: onFrame,
+        end: ({ opened, status }) => {
+          close = null;
+          if (opened) streamed = true;
+          // Never opened, or over the anonymous caps on reopening one that did: the page polls.
+          if (!streamed || (!opened && status === 429)) return fallBack();
+          // A link that opened a stream before and is refused now has been revoked, or no longer
+          // opens this conversation.
+          if (!opened && status === 404) return linkGone();
+          dropDrafts();
+          if (document.hidden) return;
+          retry = setTimeout(connect, reconnectDelay(attempt));
+          attempt += 1;
+        },
+      });
     };
     const onVisibility = () => {
-      if (document.hidden || !parked) return;
-      parked = false;
-      read();
+      if (stopped || stopPolling) return;
+      if (document.hidden) {
+        stopStream();
+        return;
+      }
+      attempt = 0;
+      connect();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    if (delay !== null) timer = setTimeout(read, delay);
+    connect();
     return () => {
       stopped = true;
-      clearTimeout(timer);
+      close?.();
+      clearTimeout(retry);
+      stopPolling?.();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [token, sessionId, data]);
@@ -338,40 +544,10 @@ function SharedConversation() {
     };
   }, [head?.title]);
 
-  // Build the same self-contained HTML the app's export produces, from the whole transcript rather
-  // than the pages scrolled in so far, with images embedded through the public share route so a
-  // logged-out viewer's saved file still shows them.
-  const download = async () => {
-    if (!head || downloading) return;
-    setDownloading(true);
-    try {
-      const [whole, { exportSessionHtml }] = await Promise.all([
-        wholeTranscript(token, sessionId),
-        import('../lib/sessionExport'),
-      ]);
-      await exportSessionHtml(
-        {
-          id: token,
-          title: head.title,
-          status: sessionRunStateOf(head),
-          createdAt: head.createdAt,
-          workspace: { name: head.workspaceName },
-        },
-        whole,
-        (id) => fetchSharedAttachmentDataUrl(token, id),
-        scope,
-      );
-    } catch (e) {
-      console.error('Download failed', e);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   if (isLoading) return <SharedLoading />;
-  if (isError || !head) return <SharedUnavailable />;
-  const tone =
-    sessionLifecycleStateOf(head) === 'COMPLETED' ? 'done' : RUN_TONE[sessionRunStateOf(head)];
+  if (isError || gone || !head) return <SharedUnavailable />;
+  // A public link's reader cannot reply, so an idle session is not waiting on them.
+  const tone = sharedStateTone(head, false);
   return (
     <PublicShell
       crumbs={
@@ -399,39 +575,8 @@ function SharedConversation() {
       status={
         <span className={`status-pill ${tone}`}>
           {tone === 'running' ? <LoadingOutlined spin /> : <span className="status-dot" />}
-          {sessionStateWord(head)}
+          {sessionStateWord(head, { canReply: false })}
         </span>
-      }
-      actions={
-        <button
-          className="share-download"
-          onClick={download}
-          disabled={downloading || events.length === 0}
-          aria-label="Download this conversation as a self-contained HTML file"
-          title="Download this conversation as a self-contained HTML file"
-        >
-          {downloading ? (
-            <span className="share-download-spin" aria-hidden />
-          ) : (
-            <svg
-              className="share-download-icon"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          )}
-          <span className="share-download-label">{downloading ? 'Preparing…' : 'Download HTML'}</span>
-        </button>
       }
       scrollRef={scrollRef}
       onScroll={(e) => {
@@ -447,7 +592,9 @@ function SharedConversation() {
         <AttachmentResolverContext.Provider value={resolve}>
           <ArtifactResolverContext.Provider value={resolveArtifact}>
             <EventFullCtx.Provider value={fetchFull}>
-              <Transcript events={events} />
+              <StreamingDraftsCtx.Provider value={drafts}>
+                <Transcript events={events} streamingAfterSeq={draftsAfter} />
+              </StreamingDraftsCtx.Provider>
             </EventFullCtx.Provider>
           </ArtifactResolverContext.Provider>
         </AttachmentResolverContext.Provider>

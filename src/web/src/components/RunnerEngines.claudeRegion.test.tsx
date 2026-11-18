@@ -5,15 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CLAUDE_REGIONS_SOURCE_URL, type RunnerEngineHealth, type RunnerRegionView } from '@orbit/shared';
-import { runnerAttention } from '../lib/runnerAttention';
-import { machineChipsOf, RunnerEngines } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import type { Runner } from './TasksSidePanel';
 
 /**
  * A machine whose Claude connection comes out where Anthropic doesn't offer Claude, on Machines &
- * models (docs/claude-region-check-contract.md, board 02 A): the card's attention line, no Claude
- * Code chip, the Claude Code row's badge, — for its quota, Check again where Add account was, and the
- * note with the check under it. A runner that reads no region draws what it draws today.
+ * models (docs/claude-region-check-contract.md, board 02 A): the Claude Code row's badge, — for its
+ * quota, Check again where Add account was, and the note with the check under it. A runner that reads no region draws what it draws today.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -77,9 +75,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** The card open, as on the board, with Claude Code's accounts folded under its row unless `open`. */
+/** The machine's engines, as on the board, with Claude Code's accounts folded under its row unless `open`. */
 function mount(runner: Runner, { open = false } = {}) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify([runner.id]));
   localStorage.setItem('orbit:providers-open-accounts', JSON.stringify(open ? [`${runner.id}/claude`] : []));
   apiMock.mockImplementation(async (path: string) => {
     if (path === '/runners') return [runner];
@@ -95,9 +92,7 @@ function mount(runner: Runner, { open = false } = {}) {
     root!.render(
       <MemoryRouter initialEntries={['/infrastructure']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines
-            attentionOf={(r) => runnerAttention({ runner: r, workspaces: [], nowMs: Date.now(), latestVersion: null })}
-          />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -115,16 +110,6 @@ const markup = (el: Element) =>
     .replace(/«[^»]+»|:r[0-9a-z]+:|_r_[0-9a-z]+_/g, 'ID');
 
 describe('a machine blocked for the Claude region', () => {
-  it('says so under the machine’s name, and draws no Claude Code chip', () => {
-    const page = mount(hpc({ region: blocked() }));
-    const attention = page.querySelector('.re-runner-card .runner-attention');
-    expect(text(attention)).toBe('Claude Code can’t use Anthropic here');
-    expect(attention?.classList.contains('warn')).toBe(true);
-    const chips = [...page.querySelectorAll('.mc-chip')].map((chip) => text(chip));
-    expect(chips).toEqual(['Codex']);
-    expect(machineChipsOf(hpc({ region: blocked() })).map((chip) => chip.engine)).toEqual(['codex']);
-  });
-
   it('draws the Claude Code row as board 02 A: the badge, — for its quota, Check again, the note and the check', () => {
     const row = claudeRow(mount(hpc({ region: blocked() })));
     // Its accounts stay where they are, folded under it.
