@@ -1696,7 +1696,6 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
-    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
     /**
      * GitHub workspaces' clones (github/github-workspace.service.ts, docs/github-workspace-design.md §5.4): the reports
      * a heartbeat brings are applied, and every full answer to a runner that declares clone-workdir/v1 lists what it is
@@ -1710,6 +1709,7 @@ export class RunnerApiController {
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
     @Optional() private readonly conditions?: ConditionsService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
