@@ -459,7 +459,7 @@ Agent tools on a session counts each family as that session's engine lists it. T
 | Providers (4) | `provider_create`, `provider_delete`, `provider_list`, `provider_update` |
 | Merge receipts (3) | `merge_receipt`, `merge_receipts`, `project_merge_evidence` |
 | Guide (1) | `guide` |
-| Sessions, agents and runners (22) | `agent_create`, `agent_delete`, `agent_list`, `agent_update`, `project_ensure_coordinator`, `project_send`, `runner_delete`, `runner_engine_install`, `runner_engine_install_status`, `runner_list`, `session_await`, `session_complete`, `session_create`, `session_delete`, `session_end`, `session_get`, `session_interrupt`, `session_list`, `session_merge`, `session_reply`, `session_search`, `session_send` |
+| Sessions, agents and runners (23) | `agent_create`, `agent_delete`, `agent_list`, `agent_update`, `project_ensure_coordinator`, `project_send`, `runner_delete`, `runner_engine_install`, `runner_engine_install_status`, `runner_list`, `session_await`, `session_complete`, `session_create`, `session_delete`, `session_end`, `session_get`, `session_interrupt`, `session_list`, `session_merge`, `session_move`, `session_reply`, `session_search`, `session_send` |
 
 ## The playbooks skill
 

@@ -103,49 +103,93 @@ func (claudeFileCredentials) write(_ context.Context, f claudeLoginFolder, blob 
 	return writeFileAtomically(path, blob, perm)
 }
 
-// claudeKeychainCredentials keeps a folder's credentials in its login-Keychain item (macOS), unless the
-// folder has a .credentials.json, which the CLI reads first and which then is the login.
+// claudeKeychainCredentials is the macOS store. Storage is per folder (contract, "macOS: measured"):
+// a folder whose login-Keychain item (claudeKeychainService) exists keeps its login there, and one
+// without keeps it in <dir>/.credentials.json, Claude Code's plaintext fallback. One Mac can hold both
+// at once, so each read and write looks the folder's storage up again, and a swap moves claudeAiOauth
+// between whatever the two are while each folder keeps its own. An item is only ever updated, never
+// created or removed, so a folder's storage cannot change under a swap.
 type claudeKeychainCredentials struct{}
 
-func (claudeKeychainCredentials) read(ctx context.Context, f claudeLoginFolder) ([]byte, error) {
-	if b, err := os.ReadFile(filepath.Join(f.dir, ".credentials.json")); err == nil {
-		return b, nil
-	}
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+// claudeSecurityBin is the macOS `security` tool; tests point it at a fake.
+var claudeSecurityBin = "security"
+
+// claudeKeychainTimeout bounds every `security` call: one that blocks is a Keychain dialog waiting
+// for a person, and fails the swap (rolled back) rather than holding it.
+var claudeKeychainTimeout = 30 * time.Second
+
+// claudeKeychainNotFound is `security`'s exit status for "the specified item could not be found".
+const claudeKeychainNotFound = 44
+
+var claudeKeychainAccountAttr = regexp.MustCompile(`"acct"<blob>="([^"]*)"`)
+
+// security runs one `security` command with its argv, under claudeKeychainTimeout.
+func (claudeKeychainCredentials) security(ctx context.Context, f claudeLoginFolder, args ...string) ([]byte, int, error) {
+	cctx, cancel := context.WithTimeout(ctx, claudeKeychainTimeout)
 	defer cancel()
-	b, err := keychainCredentials(cctx, claudeKeychainService(f.envDir))
-	if err != nil {
-		if cctx.Err() != nil {
-			return nil, fmt.Errorf("the Keychain did not answer for %s within 30s (a Keychain dialog?)", f.label)
-		}
-		return nil, fmt.Errorf("could not read %s's login from the Keychain: %w", f.label, err)
+	cmd := exec.CommandContext(cctx, claudeSecurityBin, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if cctx.Err() != nil && ctx.Err() == nil {
+		return nil, -1, fmt.Errorf("the Keychain did not answer for %s within %s (a Keychain dialog?)", f.label, claudeKeychainTimeout)
 	}
-	return bytes.TrimRight(b, "\n"), nil
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return out, exit.ExitCode(), fmt.Errorf("%v %s", err, strings.TrimSpace(stderr.String()))
+	}
+	if err != nil {
+		return nil, -1, err
+	}
+	return out, 0, nil
 }
 
-// write updates the item in place with `security -i`, the form Claude Code writes itself: -U keeps the
-// item and its access list, and the password goes in as hex on stdin, never on an argv.
-func (claudeKeychainCredentials) write(ctx context.Context, f claudeLoginFolder, blob []byte) error {
-	if _, err := os.Stat(filepath.Join(f.dir, ".credentials.json")); err == nil {
-		return claudeFileCredentials{}.write(ctx, f, blob)
-	}
-	account := os.Getenv("USER")
-	if account == "" {
-		if u := userHome(); u != "" {
-			account = filepath.Base(u)
-		}
-	}
-	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(cctx, "security", "-i")
-	cmd.Stdin = strings.NewReader(fmt.Sprintf("add-generic-password -U -a %q -s %q -X %q\n",
-		account, claudeKeychainService(f.envDir), hex.EncodeToString(blob)))
-	out, err := cmd.CombinedOutput()
-	if cctx.Err() != nil {
-		return fmt.Errorf("the Keychain did not answer for %s within 30s (a Keychain dialog?)", f.label)
+// item says whether f has a Keychain item and, if so, the account it is filed under: the item a
+// write must update, since `-U` matches on service and account both.
+func (k claudeKeychainCredentials) item(ctx context.Context, f claudeLoginFolder) (account string, found bool, err error) {
+	out, code, err := k.security(ctx, f, "find-generic-password", "-s", claudeKeychainService(f.envDir))
+	if code == claudeKeychainNotFound {
+		return "", false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("the Keychain refused %s's login: %v %s", f.label, err, strings.TrimSpace(string(out)))
+		return "", false, fmt.Errorf("could not look up %s's Keychain item: %w", f.label, err)
+	}
+	m := claudeKeychainAccountAttr.FindSubmatch(out)
+	if m == nil {
+		return "", false, fmt.Errorf("%s's Keychain item names no account", f.label)
+	}
+	return string(m[1]), true, nil
+}
+
+func (k claudeKeychainCredentials) read(ctx context.Context, f claudeLoginFolder) ([]byte, error) {
+	account, found, err := k.item(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return claudeFileCredentials{}.read(ctx, f)
+	}
+	out, _, err := k.security(ctx, f, "find-generic-password", "-s", claudeKeychainService(f.envDir), "-a", account, "-w")
+	if err != nil {
+		return nil, fmt.Errorf("could not read %s's login from the Keychain: %w", f.label, err)
+	}
+	return bytes.TrimSuffix(out, []byte("\n")), nil
+}
+
+// write updates the folder's item in place, or its .credentials.json when it has no item. The blob
+// goes in as hex on the argv (`-X`), not through `security -i`: interactive mode reads lines of at
+// most LINE_MAX bytes and silently cuts a longer one, and a blob carrying mcpOAuth is longer. -U keeps
+// the item and its access list, as Claude Code's own writes do.
+func (k claudeKeychainCredentials) write(ctx context.Context, f claudeLoginFolder, blob []byte) error {
+	account, found, err := k.item(ctx, f)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return claudeFileCredentials{}.write(ctx, f, blob)
+	}
+	if _, _, err := k.security(ctx, f, "add-generic-password", "-U", "-s", claudeKeychainService(f.envDir), "-a", account, "-X", hex.EncodeToString(blob)); err != nil {
+		return fmt.Errorf("the Keychain refused %s's login: %w", f.label, err)
 	}
 	return nil
 }
