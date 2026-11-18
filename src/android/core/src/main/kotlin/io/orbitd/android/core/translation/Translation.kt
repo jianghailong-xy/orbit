@@ -246,8 +246,19 @@ object Translation {
 
     enum class TurnState { TRANSLATING, FAILED, DONE, SENT_AS_WRITTEN }
 
-    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed. */
-    data class Turn(val state: TurnState, val from: String, val original: String) {
+    /** Why translating the owner's words failed (TranslationFailureReason, TRANSLATION_FAILURE_REASONS in shared's order): on a FAILED
+     * turn's `failureReason` and on the 422 TRANSLATION_FAILED answer. A value this client does not know reads as no reason. */
+    enum class FailureReason { TIMEOUT, NETWORK, HTTP, EMPTY, TRUNCATED, MANGLED, NO_KEY, UNAVAILABLE }
+
+    /** A turn's `translation` (TurnTranslation): where the owner's message is, the language it was written in, and what they typed;
+     * on a FAILED one, why ([failureReason]) and, beside HTTP, the translator's status ([httpStatus]). */
+    data class Turn(
+        val state: TurnState,
+        val from: String,
+        val original: String,
+        val failureReason: FailureReason? = null,
+        val httpStatus: Int? = null,
+    ) {
         /** Not delivered to the engine yet: still translating, or failed (1A). */
         val held: Boolean get() = state == TurnState.TRANSLATING || state == TurnState.FAILED
     }
@@ -260,7 +271,19 @@ object Translation {
         val original = (t["original"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
         val from = t.string("from")?.takeIf(::isLanguage) ?: return null
         val state = TurnState.entries.firstOrNull { it.name == t.string("state") } ?: return null
-        return Turn(state, from, original)
+        return Turn(state, from, original, failureReason(t), httpStatus(t))
+    }
+
+    private fun failureReason(t: JsonObject): FailureReason? = FailureReason.entries.firstOrNull { it.name == t.string("failureReason") }
+    private fun httpStatus(t: JsonObject): Int? = (t["httpStatus"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.toInt()
+
+    /** Why a door refused the owner's words untranslated, read off that 422's body (TranslationFailedBody): the reason and, beside HTTP,
+     * the translator's status. Null for any other error, or a refusal from a server that does not say why. */
+    fun refusalReason(error: Throwable?): Pair<FailureReason, Int?>? {
+        if (!refused(error)) return null
+        val body = (error as io.orbitd.android.core.net.ApiError).body as? JsonObject ?: return null
+        val reason = failureReason(body) ?: return null
+        return reason to httpStatus(body)
     }
 
     fun reply(value: JsonElement?): Reply? {

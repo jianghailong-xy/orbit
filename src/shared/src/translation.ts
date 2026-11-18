@@ -39,6 +39,8 @@
  *    announced on the session's event stream with the existing QUEUED_TURNS_CHANGED run event
  *    (RunEventType.QUEUED_TURNS_CHANGED, RealtimeService.publishQueuedTurnsChanged);
  *    a client refetches the turn list on it, exactly as it already does for its queue.
+ *  - A FAILED turn's `translation` says why in `failureReason` (TranslationFailureReason) and, for an
+ *    HTTP answer, `httpStatus`; both are stored on the held turn and cleared when it leaves FAILED.
  *  - Retry: `POST /sessions/:id/turns/:turnId/translation/retry` (FAILED → TRANSLATING).
  *    Send as written: `POST /sessions/:id/turns/:turnId/translation/send-as-written` — delivers the
  *    original untranslated (state SENT_AS_WRITTEN). Both answer TranslationActionResponse. Withdrawing
@@ -82,7 +84,8 @@
  *    the server maps a translated question and a translated label back to the original before the
  *    engine reads it. Any other answer (the owner's own words) and the decision's `message` are
  *    translated into the agent language like a message. If that translation fails the decision is NOT
- *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'`; the client offers Retry (send it again)
+ *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'` (TranslationFailedBody, which says why in
+ *    `failureReason` and `httpStatus`); the client offers Retry (send it again)
  *    and Send as written (send it again with `sendAsWritten: true`).
  */
 
@@ -214,6 +217,42 @@ export interface TurnTranslation {
   /** What the owner typed, as typed. Draw this in the bubble by default; "Show original" on a DONE
    *  message flips to the turn's `content` / the event's `text` (what the agent got). */
   original: string;
+  /** Why the translation failed: present only while `state` is FAILED, and then always (a turn that
+   *  failed before the reason was stored has none: draw the generic failure line). Retry, Send as
+   *  written and a successful translation clear it. */
+  failureReason?: TranslationFailureReason;
+  /** The translator's HTTP status, beside `failureReason: 'HTTP'` only (e.g. 401, 429, 503). */
+  httpStatus?: number;
+}
+
+/**
+ * Why translating the owner's words into the agent language failed (policy board
+ * docs/ux/translation-failure-policy.html, option B). Carried by a FAILED TurnTranslation
+ * (`failureReason`) and by the 422 TRANSLATION_FAILED answer (TranslationFailedBody).
+ *  - TIMEOUT: no answer within TRANSLATION_TIMEOUT_MS (20 s), retries included.
+ *  - NETWORK: the translator could not be reached (after the retries).
+ *  - HTTP: the translator answered an error; `httpStatus` says which (429 and 5xx after the retries).
+ *  - EMPTY: it answered with no text.
+ *  - TRUNCATED: the message is too long: the answer was cut off at its token limit.
+ *  - MANGLED: the answer lost, invented or repeated code or links the message carried.
+ *  - NO_KEY: this server has no translator key.
+ *  - UNAVAILABLE: the translator was skipped because it has been failing (circuit breaker).
+ * A client meets a value it does not know as no reason: the generic failure line.
+ */
+export const TRANSLATION_FAILURE_REASONS = [
+  'TIMEOUT',
+  'NETWORK',
+  'HTTP',
+  'EMPTY',
+  'TRUNCATED',
+  'MANGLED',
+  'NO_KEY',
+  'UNAVAILABLE',
+] as const;
+export type TranslationFailureReason = (typeof TRANSLATION_FAILURE_REASONS)[number];
+
+export function isTranslationFailureReason(value: unknown): value is TranslationFailureReason {
+  return typeof value === 'string' && (TRANSLATION_FAILURE_REASONS as readonly string[]).includes(value);
 }
 
 /** The answer to Retry and to Send as written. */
@@ -383,6 +422,15 @@ export const TRANSLATED_ORBIT_CARDS = [
 
 /** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
+
+/** The body of that 422: the same `failureReason` (and `httpStatus`) a FAILED TurnTranslation carries. */
+export interface TranslationFailedBody {
+  code: typeof TRANSLATION_FAILED_CODE;
+  message: string;
+  failureReason: TranslationFailureReason;
+  /** Beside `failureReason: 'HTTP'` only. */
+  httpStatus?: number;
+}
 
 /**
  * Words the owner typed on an owner card (an answer to a coordinator's question, an owner request's done text or

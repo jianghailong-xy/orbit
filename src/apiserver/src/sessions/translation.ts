@@ -1,6 +1,7 @@
 import {
   TRANSLATION_LANGUAGE_NAMES,
   TRANSLATION_TIMEOUT_MS,
+  type TranslationFailureReason,
   type TranslationLanguage,
 } from '@orbit/shared';
 import { deepSeekCall } from './naming';
@@ -21,13 +22,22 @@ export function translationAvailable(): boolean {
   return Boolean(process.env.DEEPSEEK_API_KEY?.trim());
 }
 
-/** Why a translation did not happen. Its message is English and safe to show or log. */
+/**
+ * Why a translation did not happen (TranslationFailureReason, @orbit/shared translation.ts). Its message is English
+ * and safe to show or log: it never carries the text being translated. UNAVAILABLE is reserved for the circuit breaker
+ * that skips a failing translator; nothing raises it yet.
+ */
 export class TranslationFailed extends Error {
+  /** How long translate() ran before it gave up, retries included; set by translate() on the way out. */
+  durationMs?: number;
+
   constructor(
-    readonly reason: 'NO_KEY' | 'TIMEOUT' | 'HTTP' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | 'NETWORK',
+    readonly reason: TranslationFailureReason,
     message: string,
     /** An HTTP answer worth asking again: 429 or 5xx. */
     readonly transient = false,
+    /** The translator's HTTP status, with reason HTTP only. */
+    readonly httpStatus?: number,
   ) {
     super(message);
     this.name = 'TranslationFailed';
@@ -114,7 +124,8 @@ export async function translate(
   opts: { timeoutMs?: number } = {},
 ): Promise<string> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) throw new TranslationFailed('NO_KEY', 'This server has no DeepSeek key, so it cannot translate.');
+  if (!apiKey) throw Object.assign(new TranslationFailed('NO_KEY', 'This server has no DeepSeek key, so it cannot translate.'), { durationMs: 0 });
+  const startedAt = Date.now();
   const { masked, spans } = protectVerbatim(text);
   // Nothing but code and links: there is nothing to translate.
   if (!masked.replace(PLACEHOLDER_RE, '').trim()) return text;
@@ -139,7 +150,7 @@ export async function translate(
     }
     if (!resp.ok) {
       await resp.body?.cancel().catch(() => undefined);
-      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`, resp.status === 429 || resp.status >= 500);
+      throw new TranslationFailed('HTTP', `The translator answered ${resp.status}.`, resp.status === 429 || resp.status >= 500, resp.status);
     }
     const data = (await resp.json().catch(() => null)) as
       | { choices?: { finish_reason?: unknown; message?: { content?: unknown } }[] }
@@ -173,6 +184,9 @@ export async function translate(
   });
   try {
     return await Promise.race([request, timedOut]);
+  } catch (error) {
+    if (error instanceof TranslationFailed) error.durationMs = Date.now() - startedAt;
+    throw error;
   } finally {
     if (timer) clearTimeout(timer);
   }

@@ -5,7 +5,9 @@ import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, translationAvailable } from './translation';
-import { isSlashCommand, translationLanguages } from './turn-translation';
+import { isSlashCommand, translationLanguages, turnTranslationOf } from './turn-translation';
+import { Logger, UnprocessableEntityException } from '@nestjs/common';
+import { ownerWordsForAgent } from './reply-translation';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
@@ -573,4 +575,200 @@ test('an ordinary translated send leaves a settled merge result where it is', as
   assert.equal(h.turns[0].status, 'HELD');
   assert.equal(h.session.mergeStatus, 'conflict');
   assert.equal(h.session.mergeError, SETTLED_MERGE.mergeError);
+});
+
+// ── why it failed (policy B, criterion 1) ───────────────────────────────────────────────────────
+
+/** A translator that fails one way, every time it is asked. */
+function stubFailure(kind: 'NETWORK' | 'EMPTY' | 'TRUNCATED' | 'MANGLED' | { http: number }): void {
+  globalThis.fetch = (async () => {
+    if (kind === 'NETWORK') throw new TypeError('fetch failed');
+    if (typeof kind === 'object') return { ok: false, status: kind.http, body: null } as Response;
+    const choice = kind === 'EMPTY'
+      ? { finish_reason: 'stop', message: { content: '   ' } }
+      : kind === 'TRUNCATED'
+        ? { finish_reason: 'length', message: { content: 'The Google sign' } }
+        : { finish_reason: 'stop', message: { content: 'check ⟦0⟧ and ⟦7⟧' } };
+    return { ok: true, json: async () => ({ choices: [choice] }) } as Response;
+  }) as typeof fetch;
+}
+
+/** Every warn line the owner-translation logger writes while `run` runs. */
+async function warnLines(run: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  const spy = mock.method(Logger.prototype, 'warn', function (this: Logger, message: unknown) {
+    lines.push(String(message));
+  });
+  try {
+    await run();
+  } finally {
+    spy.mock.restore();
+  }
+  return lines.filter((line) => line.startsWith('owner translation failed:'));
+}
+
+const REASON_CASES: Array<{ reason: string; httpStatus: number | null; arrange: () => void }> = [
+  { reason: 'NETWORK', httpStatus: null, arrange: () => stubFailure('NETWORK') },
+  { reason: 'HTTP', httpStatus: 401, arrange: () => stubFailure({ http: 401 }) },
+  { reason: 'HTTP', httpStatus: 503, arrange: () => stubFailure({ http: 503 }) },
+  { reason: 'EMPTY', httpStatus: null, arrange: () => stubFailure('EMPTY') },
+  { reason: 'TRUNCATED', httpStatus: null, arrange: () => stubFailure('TRUNCATED') },
+  { reason: 'MANGLED', httpStatus: null, arrange: () => stubFailure('MANGLED') },
+];
+
+/** The one line's fields: reason, HTTP status, a duration, the session — and never the owner's words. */
+function assertOneFailureLine(lines: string[], reason: string, httpStatus: number | null, sessionId: string | null): void {
+  assert.equal(lines.length, 1, `one line per failure: ${lines.join(' | ')}`);
+  const [line] = lines;
+  assert.match(line, new RegExp(`\\breason=${reason}\\b`));
+  assert.match(line, new RegExp(`\\bhttpStatus=${httpStatus ?? '-'}(\\s|$)`));
+  assert.match(line, /\bdurationMs=\d+\b/);
+  assert.match(line, new RegExp(`\\bsessionId=${sessionId ?? '-'}(\\s|$)`));
+  for (const words of ['登录', 'signInWithPopup', 'Safari', 'LoginPage']) assert.ok(!line.includes(words), `no message text: ${line}`);
+}
+
+for (const { reason, httpStatus, arrange } of REASON_CASES) {
+  const name = httpStatus ? `${reason} ${httpStatus}` : reason;
+  test(`a held message that fails ${name} stores why, answers it, logs it once, and Retry clears it`, async () => {
+    arrange();
+    const h = harness();
+    let turnId = '';
+    const lines = await warnLines(async () => {
+      ({ turnId } = await h.send());
+      await h.service.translationsSettled();
+    });
+    const [turn] = h.turns;
+    assert.equal(turn.status, 'HELD');
+    assert.equal(turn.translationState, 'FAILED');
+    assert.equal(turn.translationFailureReason, reason);
+    assert.equal(turn.translationHttpStatus, httpStatus);
+    assert.deepEqual(turnTranslationOf(turn), {
+      state: 'FAILED', from: 'zh-Hans', original: ORIGINAL, failureReason: reason, ...(httpStatus ? { httpStatus } : {}),
+    });
+    assertOneFailureLine(lines, reason, httpStatus, SESSION_ID);
+    assert.match(lines[0], new RegExp(`turnId=${turnId}`));
+
+    stubDeepSeek([ENGLISH]);
+    const retried = await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+    assert.deepEqual(retried.translation, { state: 'TRANSLATING', from: 'zh-Hans', original: ORIGINAL });
+    assert.equal(turn.translationFailureReason, null);
+    assert.equal(turn.translationHttpStatus, null);
+    await h.service.translationsSettled();
+    assert.equal(turn.translationState, 'DONE');
+  });
+}
+
+test('a held message that times out stores TIMEOUT with no status, logs it once, and Send as written clears it', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  stubDeepSeek(['hang']);
+  const h = harness();
+  let turnId = '';
+  const lines = await warnLines(async () => {
+    ({ turnId } = await h.send());
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(TRANSLATION_TIMEOUT_MS);
+    await h.service.translationsSettled();
+  });
+  const [turn] = h.turns;
+  assert.equal(turn.translationState, 'FAILED');
+  assert.equal(turn.translationFailureReason, 'TIMEOUT');
+  assert.equal(turn.translationHttpStatus, null);
+  assert.deepEqual(turnTranslationOf(turn), { state: 'FAILED', from: 'zh-Hans', original: ORIGINAL, failureReason: 'TIMEOUT' });
+  assertOneFailureLine(lines, 'TIMEOUT', null, SESSION_ID);
+  assert.match(lines[0], new RegExp(`durationMs=${TRANSLATION_TIMEOUT_MS}\\b`));
+
+  const sent = await h.service.sendTurnAsWritten(OWNER_ID, SESSION_ID, turnId);
+  assert.deepEqual(sent.translation, { state: 'SENT_AS_WRITTEN', from: 'zh-Hans', original: ORIGINAL });
+  assert.equal(turn.translationFailureReason, null);
+  assert.equal(turn.translationHttpStatus, null);
+});
+
+test('a Retry that translates releases the message DONE with the reason cleared', async () => {
+  stubFailure({ http: 401 });
+  const h = harness();
+  const { turnId } = await h.send();
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationFailureReason, 'HTTP');
+  stubDeepSeek([ENGLISH]);
+  await h.service.retryTurnTranslation(OWNER_ID, SESSION_ID, turnId);
+  await h.service.translationsSettled();
+  assert.equal(h.turns[0].translationState, 'DONE');
+  assert.equal(h.turns[0].translationFailureReason, null);
+  assert.equal(h.turns[0].translationHttpStatus, null);
+  assert.deepEqual(turnTranslationOf(h.turns[0]), { state: 'DONE', from: 'zh-Hans', original: ORIGINAL });
+});
+
+test('a reason stored on a turn that is no longer FAILED is not on the wire, nor a status beside another reason', () => {
+  const row = { displayPrompt: 'x', translationLang: 'ja', translationFailureReason: 'HTTP', translationHttpStatus: 500 };
+  assert.deepEqual(turnTranslationOf({ ...row, translationState: 'DONE' }), { state: 'DONE', from: 'ja', original: 'x' });
+  assert.deepEqual(turnTranslationOf({ ...row, translationState: 'FAILED', translationFailureReason: 'EMPTY' }),
+    { state: 'FAILED', from: 'ja', original: 'x', failureReason: 'EMPTY' });
+  // A turn that failed before the reason was stored: FAILED with none (the generic line).
+  assert.deepEqual(turnTranslationOf({ ...row, translationState: 'FAILED', translationFailureReason: null }),
+    { state: 'FAILED', from: 'ja', original: 'x' });
+});
+
+test('NO_KEY and the reserved UNAVAILABLE are reasons the failure carries', async () => {
+  delete process.env.DEEPSEEK_API_KEY;
+  await assert.rejects(translate('x', 'zh-Hans', 'en'), (e: unknown) =>
+    e instanceof TranslationFailed && e.reason === 'NO_KEY' && e.httpStatus === undefined && e.durationMs === 0);
+  const unavailable = new TranslationFailed('UNAVAILABLE', 'The translator is unavailable.');
+  assert.equal(unavailable.reason, 'UNAVAILABLE');
+});
+
+// ── the 422 TRANSLATION_FAILED answer ─────────────────────────────────────────────────────────────
+
+const LANGS = { owner: 'zh-Hans' as const, agent: 'en' as const };
+
+/** The 422 body ownerWordsForAgent refuses `text` with, and the log lines it wrote. */
+async function refusal(text: string, sessionId: string | null): Promise<{ body: Record<string, unknown>; lines: string[] }> {
+  let body: Record<string, unknown> = {};
+  const lines = await warnLines(async () => {
+    await assert.rejects(
+      ownerWordsForAgent(text, LANGS, false, { door: 'test-door', sessionId }),
+      (e: unknown) => {
+        assert.ok(e instanceof UnprocessableEntityException);
+        body = e.getResponse() as Record<string, unknown>;
+        return true;
+      },
+    );
+  });
+  return { body, lines };
+}
+
+for (const { reason, httpStatus, arrange } of REASON_CASES) {
+  const name = httpStatus ? `${reason} ${httpStatus}` : reason;
+  test(`a card answer whose words fail ${name} is refused 422 TRANSLATION_FAILED saying why, logged once`, async () => {
+    arrange();
+    const { body, lines } = await refusal(ORIGINAL, SESSION_ID);
+    assert.deepEqual(body, {
+      code: 'TRANSLATION_FAILED',
+      message: "Couldn't translate, so it wasn't sent.",
+      failureReason: reason,
+      ...(httpStatus ? { httpStatus } : {}),
+    });
+    assertOneFailureLine(lines, reason, httpStatus, SESSION_ID);
+    assert.match(lines[0], /door=test-door/);
+  });
+}
+
+test('a card answer that times out is refused 422 with TIMEOUT, logged once with its duration', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  stubDeepSeek(['hang']);
+  const pending = refusal(ORIGINAL, null);
+  for (let i = 0; i < 10; i++) await new Promise((resolve) => setImmediate(resolve));
+  mock.timers.tick(TRANSLATION_TIMEOUT_MS);
+  const { body, lines } = await pending;
+  assert.deepEqual(body, { code: 'TRANSLATION_FAILED', message: "Couldn't translate, so it wasn't sent.", failureReason: 'TIMEOUT' });
+  assertOneFailureLine(lines, 'TIMEOUT', null, null);
+  assert.match(lines[0], new RegExp(`durationMs=${TRANSLATION_TIMEOUT_MS}\\b`));
+});
+
+test('Send as written on a card answer asks no translator, so there is nothing to refuse or log', async () => {
+  const bodies = stubDeepSeek([]);
+  const lines = await warnLines(async () => {
+    assert.equal(await ownerWordsForAgent(ORIGINAL, LANGS, true, { door: 'test-door' }), null);
+  });
+  assert.equal(bodies.length, 0);
+  assert.deepEqual(lines, []);
 });

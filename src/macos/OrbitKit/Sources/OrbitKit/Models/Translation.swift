@@ -402,6 +402,20 @@ public enum TurnTranslationState: String, Codable, Equatable, Sendable {
     case sentAsWritten = "SENT_AS_WRITTEN"
 }
 
+/// Why translating the owner's words failed (`TranslationFailureReason`, @orbit/shared translation.ts):
+/// on a FAILED turn's `failureReason` and on the 422 TRANSLATION_FAILED answer. A value this client
+/// does not know reads as no reason (the generic failure line).
+public enum TranslationFailureReason: String, Codable, CaseIterable, Equatable, Sendable {
+    case timeout = "TIMEOUT"
+    case network = "NETWORK"
+    case http = "HTTP"
+    case empty = "EMPTY"
+    case truncated = "TRUNCATED"
+    case mangled = "MANGLED"
+    case noKey = "NO_KEY"
+    case unavailable = "UNAVAILABLE"
+}
+
 /// The `translation` of a translated turn — on the queued/active turn list, a send's answer, and
 /// the runner's `user` event. Absent on every message translation was not involved in.
 public struct TurnTranslation: Codable, Equatable, Sendable {
@@ -410,21 +424,44 @@ public struct TurnTranslation: Codable, Equatable, Sendable {
     public var from: TranslationLanguage
     /// What the owner typed, as typed.
     public var original: String
+    /// Why it failed, on a FAILED turn the server stored a reason for.
+    public var failureReason: TranslationFailureReason?
+    /// The translator's HTTP status, beside `failureReason == .http`.
+    public var httpStatus: Int?
 
-    public init(state: TurnTranslationState, from: TranslationLanguage, original: String) {
+    public init(state: TurnTranslationState, from: TranslationLanguage, original: String,
+                failureReason: TranslationFailureReason? = nil, httpStatus: Int? = nil) {
         self.state = state
         self.from = from
         self.original = original
+        self.failureReason = failureReason
+        self.httpStatus = httpStatus
+    }
+
+    private enum CodingKeys: String, CodingKey { case state, from, original, failureReason, httpStatus }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(TurnTranslationState.self, forKey: .state)
+        from = try c.decode(TranslationLanguage.self, forKey: .from)
+        original = try c.decode(String.self, forKey: .original)
+        // An unknown reason, or a stray value, is no reason rather than a failed decode.
+        failureReason = (try? c.decodeIfPresent(String.self, forKey: .failureReason))
+            .flatMap { $0 }.flatMap(TranslationFailureReason.init(rawValue:))
+        httpStatus = (try? c.decodeIfPresent(Int.self, forKey: .httpStatus)) ?? nil
     }
 
     /// Read off a payload's raw `translation`; nil unless every field is one this client knows,
-    /// so a stray value never draws a foot that lies (web: `turnTranslationOf`).
+    /// so a stray value never draws a foot that lies (web: `turnTranslationOf`). An unknown
+    /// `failureReason` is dropped, not refused.
     public static func parse(_ value: JSONValue?) -> TurnTranslation? {
         guard let value,
               let state = value["state"]?.stringValue.flatMap(TurnTranslationState.init(rawValue:)),
               let from = value["from"]?.stringValue.flatMap(TranslationLanguage.init(rawValue:)),
               let original = value["original"]?.stringValue else { return nil }
-        return TurnTranslation(state: state, from: from, original: original)
+        let reason = value["failureReason"]?.stringValue.flatMap(TranslationFailureReason.init(rawValue:))
+        let status = value["httpStatus"]?.intValue
+        return TurnTranslation(state: state, from: from, original: original, failureReason: reason, httpStatus: status)
     }
 
     /// Still waiting on its translation, so not delivered to the engine.
@@ -722,6 +759,19 @@ public enum SessionTranslation {
     public static func refusedUntranslated(_ error: Error) -> Bool {
         guard case APIError.http(let status, let body)? = error as? APIError, status == 422 else { return false }
         return body?.contains("TRANSLATION_FAILED") == true
+    }
+
+    /// Why the server could not translate the owner's words, read off that 422's body
+    /// (`TranslationFailedBody`): the reason and, beside HTTP, the translator's status. Nil for any
+    /// other error, or a refusal from a server that does not say why.
+    public static func refusalReason(_ error: Error) -> (reason: TranslationFailureReason, httpStatus: Int?)? {
+        guard refusedUntranslated(error),
+              case APIError.http(_, let body)? = error as? APIError,
+              let data = body?.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let reason = (object["failureReason"] as? String).flatMap(TranslationFailureReason.init(rawValue:))
+        else { return nil }
+        return (reason, (object["httpStatus"] as? NSNumber)?.intValue)
     }
 
     /// One piece of the line under a translated message.

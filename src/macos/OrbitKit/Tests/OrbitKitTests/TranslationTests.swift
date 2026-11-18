@@ -238,6 +238,45 @@ final class TranslationTests: XCTestCase {
         XCTAssertNil(TurnTranslation.parse(nil))
     }
 
+    func testAFailedTurnAndARefusalSayWhyInSharedsReasons() throws {
+        XCTAssertEqual(TranslationFailureReason.allCases.map(\.rawValue),
+                       ["TIMEOUT", "NETWORK", "HTTP", "EMPTY", "TRUNCATED", "MANGLED", "NO_KEY", "UNAVAILABLE"])
+        let http = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                  "failureReason": .string("HTTP"), "httpStatus": .int(503)]))
+        XCTAssertEqual(http, TurnTranslation(state: .failed, from: .ja, original: "x", failureReason: .http, httpStatus: 503))
+        for reason in TranslationFailureReason.allCases {
+            let t = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                   "failureReason": .string(reason.rawValue)]))
+            XCTAssertEqual(t?.failureReason, reason)
+            XCTAssertNil(t?.httpStatus)
+        }
+        // An unknown reason is no reason (the generic line), not a turn that cannot be read.
+        let unknown = TurnTranslation.parse(.object(["state": .string("FAILED"), "from": .string("ja"), "original": .string("x"),
+                                                     "failureReason": .string("COSMIC_RAY")]))
+        XCTAssertNotNil(unknown)
+        XCTAssertNil(unknown?.failureReason)
+        // The Decodable path (turn list, send answer) reads it the same way.
+        let rows = try decode([QueuedTurnInfo].self, """
+        [{"turnId":"t1","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"TIMEOUT"}},
+         {"turnId":"t2","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"HTTP","httpStatus":401}},
+         {"turnId":"t3","content":"x","translation":{"state":"FAILED","from":"zh-Hans","original":"x","failureReason":"NEW_ONE"}}]
+        """)
+        XCTAssertEqual(rows[0].turnTranslation?.failureReason, .timeout)
+        XCTAssertEqual(rows[1].turnTranslation?.failureReason, .http)
+        XCTAssertEqual(rows[1].turnTranslation?.httpStatus, 401)
+        XCTAssertNotNil(rows[2].turnTranslation)
+        XCTAssertNil(rows[2].turnTranslation?.failureReason)
+        // The 422 says why.
+        let refusal = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","message":"x","failureReason":"HTTP","httpStatus":429}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.reason, .http)
+        XCTAssertEqual(SessionTranslation.refusalReason(refusal)?.httpStatus, 429)
+        let timeout = APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED","failureReason":"TIMEOUT"}"#)
+        XCTAssertEqual(SessionTranslation.refusalReason(timeout)?.reason, .timeout)
+        XCTAssertNil(SessionTranslation.refusalReason(timeout)?.httpStatus)
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 422, body: #"{"code":"TRANSLATION_FAILED"}"#)))
+        XCTAssertNil(SessionTranslation.refusalReason(APIError.http(status: 500, body: #"{"failureReason":"TIMEOUT"}"#)))
+    }
+
     func testTheTurnListAndTheSendAnswerCarryTheHeldMessage() throws {
         let rows = try decode([QueuedTurnInfo].self, """
         [{"turnId":"t1","kind":"message","placement":"queued","content":"再跑一遍",
