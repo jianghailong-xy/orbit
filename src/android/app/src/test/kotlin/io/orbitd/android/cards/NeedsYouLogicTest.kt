@@ -58,6 +58,19 @@ class NeedsYouLogicTest {
         assertTrue("the conversation on screen has its own card", NeedsYouLogic.newlyWaiting(listOf(a, b), seen, "b").isEmpty())
     }
 
+    /** An owner request stops no turn: the turns after it are the same wait, and the notice says the request's words (OrbitKit's
+     * twin). */
+    @Test fun anOwnerRequestIsNoticedOnceWhateverTurnsFollow() {
+        fun filed(lastTurnAt: String) = buildJsonObject {
+            put("id", "t"); put("status", "AWAITING_INPUT"); put("pendingApprovals", 1); put("waitingKind", "OWNER_REQUEST")
+            put("title", "Task: Walkthrough"); put("lastTurnAt", lastTurnAt)
+            putJsonObject("agent") { put("id", "w"); put("name", "orbit-develop") }
+        }
+        assertEquals("Waiting on you · orbit-develop", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:36:15Z")), emptySet()).single().line)
+        val seen = setOf(NeedsYouLogic.waitKey(filed("2026-11-17T22:36:15Z")))
+        assertTrue("a later turn is the same wait", NeedsYouLogic.newlyWaiting(listOf(filed("2026-11-17T22:52:34Z")), seen).isEmpty())
+    }
+
     /** The first look only takes stock; at most three notices, the rest "and N more"; a notice whose wait ended goes. */
     @Test fun theNoticesTakeStockFirstAndShowAtMostThree() {
         val notices = NeedsYouNotices()

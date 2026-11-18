@@ -292,9 +292,15 @@ public enum NeedsYouLogic {
     /// One conversation's wait, keyed by the instant it began — its oldest owner item's, or its last
     /// turn's — so the same wait reads as the same key on every snapshot, and the conversation stopping
     /// again reads as a new one.
+    ///
+    /// A wait the server names a kind for (an owner request, a confirmation, …) is keyed by that kind
+    /// instead: it stops no turn, so the conversation goes on taking turns while it waits, and keying
+    /// it by its last turn announced the same request again after every one of them (the account
+    /// owner's report, 2026-11-18: one MANUAL_STEP request, a notice per wake).
     public static func waitKey(_ session: Session) -> String {
-        let since = oldestOwnerItem([session])?.item.since
-            ?? session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
+        if let since = oldestOwnerItem([session])?.item.since { return "\(session.id)|\(since)" }
+        if let kind = session.waitingKind, kind != .unknown { return "\(session.id)|\(kind.rawValue)" }
+        let since = session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
         return "\(session.id)|\(since)"
     }
 
@@ -308,7 +314,8 @@ public enum NeedsYouLogic {
             let key = waitKey(entry.target)
             guard !seen.contains(key) else { return nil }
             let session = entry.target
-            let what = entry.ownerItem.map(ownerItemWord) ?? replyWord
+            let what = entry.ownerItem.map(ownerItemWord)
+                ?? (session.waitingKind == .ownerRequest ? OwnerRequests.waitingOnYou : replyWord)
             let line = [what, named(session.agent?.name)].compactMap { $0 }.joined(separator: " · ")
             return NeedsYouToast(id: key, target: session,
                                  title: named(session.title) ?? named(session.agent?.name) ?? "A session",

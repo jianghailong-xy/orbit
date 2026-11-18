@@ -532,6 +532,23 @@ final class NeedsYouLogicTests: XCTestCase {
                       "the conversation on screen has its own card in front of the reader")
     }
 
+    /// An owner request stops no turn, so the conversation keeps taking turns while it waits: each
+    /// one is the same wait, not a new notice, and the notice says the request's own words.
+    func testAnOwnerRequestIsNoticedOnceWhateverTurnsFollow() throws {
+        func filed(_ lastTurnAt: String) -> Session {
+            Session(id: "t", title: "Task: Walkthrough", status: .awaitingInput, agentId: "w",
+                    assignedRunnerId: nil, pendingApprovals: 1, waitingKind: .ownerRequest,
+                    branch: nil, updatedAt: nil,
+                    agent: SessionAgentRef(id: "w", name: "orbit-develop", provider: nil, model: nil, effort: nil),
+                    lastTurnAt: lastTurnAt)
+        }
+        let notice = try XCTUnwrap(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:36:15Z")], seen: []).first)
+        XCTAssertEqual(notice.line, "Waiting on you · orbit-develop")
+        let seen = Set([filed("2026-11-17T22:36:15Z")].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([filed("2026-11-17T22:52:34Z")], seen: seen).isEmpty,
+                      "a later turn of the same conversation is the same wait")
+    }
+
     // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)
 
     /// The conversation's own capsule: its cards first, in their words and direction; its approvals

@@ -168,10 +168,13 @@ object NeedsYouLogic {
     }
 
     /** One wait: the conversation, and when it started waiting — its oldest owner item's instant, or its last turn's (OrbitKit
-     * `waitKey`). The same conversation stopping again is a new wait. */
+     * `waitKey`). The same conversation stopping again is a new wait. A wait the server names a kind for (an owner request, a
+     * confirmation, …) is keyed by that kind instead: it stops no turn, so keying it by the last turn announced the same request
+     * again after every turn the conversation took while it waited. */
     fun waitKey(row: JsonObject): String {
-        val since = oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }
-            ?: row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
+        oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }?.let { return "${row.text("id")}|$it" }
+        row.text("waitingKind")?.takeIf { it.isNotEmpty() && it != "UNKNOWN" }?.let { return "${row.text("id")}|$it" }
+        val since = row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
         return "${row.text("id")}|$since"
     }
 
@@ -185,7 +188,9 @@ object NeedsYouLogic {
             val session = entry.target
             val workspace = named(session.obj("agent")?.text("name"))
             NeedsYouToast(key, session, named(session.text("title")) ?: workspace ?: "A session",
-                listOfNotNull(entry.ownerItem?.let(::ownerItemWord) ?: replyWord, workspace).joinToString(" · "), entry.ownerItem)
+                listOfNotNull(entry.ownerItem?.let(::ownerItemWord)
+                    ?: if (session.text("waitingKind") == "OWNER_REQUEST") OwnerRequests.waitingOnYou else replyWord,
+                    workspace).joinToString(" · "), entry.ownerItem)
         }
 
     /** What a blocked tool call waits on, in the push's own words. */
