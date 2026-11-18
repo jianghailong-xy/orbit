@@ -78,6 +78,14 @@ class ScheduleAppTest {
         assertEquals(2, state.needsYouCount)
     }
 
+    @Test fun theDrawerLeavesOutAFailingScheduleWhoseRunIsUnderWay() {
+        val run = ScheduleRunView(id = "r-a", scheduleId = "a", plannedAt = "2026-11-19T02:00:00.000Z", state = "RUNNING")
+        val schedules = listOf(view("a", failures = 3), view("b", state = "HELD"))
+        assertEquals(1, ScheduledStore.State(schedules = schedules, listRuns = listOf(run)).needsYouCount)
+        assertEquals("the run ended failing: counted again", 2,
+            ScheduledStore.State(schedules = schedules, listRuns = listOf(run.copy(state = "FAILED"))).needsYouCount)
+    }
+
     @Test fun aConversationsCardsAndChangesGoWhereTheyHappenedAndARunGetsItsStripAndReport() {
         val card = ScheduleCard(id = "c1", kind = "CREATE", createdAt = "2026-11-14T10:00:30.000Z")
         val record = ScheduleChangeRecord(scheduleId = schedule, title = "Codex stable check", revision = 2, changedBy = "SESSION",
