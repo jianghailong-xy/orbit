@@ -57,6 +57,8 @@ final class TranslationCopyParityTests: XCTestCase {
         let pairs: [(String, String)] = [
             ("translated", TranslationCopy.translated),
             ("showOriginal", TranslationCopy.showOriginal),
+            ("hideOriginal", TranslationCopy.hideOriginal),
+            ("showBoth", TranslationCopy.showBoth),
             ("showTranslation", TranslationCopy.showTranslation),
             ("original", TranslationCopy.original),
             ("translating", TranslationCopy.translating),

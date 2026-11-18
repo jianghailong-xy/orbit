@@ -18,7 +18,7 @@ import { Prisma, Runner, RunStatus } from '@prisma/client';
 import { ProjectsService } from '../projects/projects.service';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
-import { RecordMergeReceiptDto } from '../sessions/dto';
+import { MoveSessionDto, RecordMergeReceiptDto } from '../sessions/dto';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { chargeSessionMessage } from '../sessions/session-message';
 import {
@@ -68,7 +68,7 @@ const RUNNER_CREDENTIAL_SCOPES: readonly ServiceTokenScope[] = [
  *   - the machine's runner token   → get / list / send over the sessions this runner hosts
  *   - a minted service token       → exactly its scopes (which may include create), further
  *                                    narrowed to one workspace when the token is pinned
- * Either way the destructive verbs — interrupt, merge, end, complete — and the owner-wide search
+ * Either way the destructive verbs — interrupt, merge, end, complete, move — and the owner-wide search
  * stay out of reach: those still require a live calling session with orchestration enabled.
  *
  * Registered AFTER RunnerApiController (see runner-api.module.ts) so its static
@@ -660,6 +660,27 @@ export class RunnerSessionsController {
     await this.attempts.assertMayEndSession(
       runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
     return this.sessions.complete(runner.ownerId, id);
+  }
+
+  /**
+   * File a session in one of its workspace's folders, or in none, or move an ended one to another
+   * workspace: the Move panel's door (SessionsService.move), reached from a session. The rules are the
+   * service's, refusals and all — only an ended session changes workspace — so an agent meets the same
+   * 409 and reason the owner's panel does. Nothing here ends a session, so no attempt is asked about.
+   */
+  @Post('sessions/:id/move')
+  async moveSession(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: MoveSessionDto,
+  ) {
+    this.assertNoServiceToken(grant);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    await this.sessions.assertMayReach(runner.ownerId, caller, id, 'move');
+    return this.sessions.move(runner.ownerId, id, dto);
   }
 
   // Soft-delete only: this moves the session to Trash and retains its transcript and other data.

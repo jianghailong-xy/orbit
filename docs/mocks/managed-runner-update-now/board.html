@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit Cloud: new version available and Update Now</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f7f8fa; --border: #dee0e3; --sub: #eceef1;
+    --t1: #1f2329; --t2: #646a73; --t3: #8f959e;
+    --brand: #3370ff; --tint: #eaf1ff; --ok: #2ea121; --warn: #fa8c16; --warn-bg: #fff7e8; --danger: #f54a45;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 36px 40px; width: 1300px; font: 14px/1.45 Inter, "Noto Sans SC", -apple-system, sans-serif; background: #eef0f3; color: var(--t1); }
+  section.b-part { background: #eef0f3; padding: 8px 4px 22px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 12px; color: var(--t2); max-width: 1120px; }
+  .row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+  .cap { font-size: 12px; font-weight: 600; color: var(--t2); margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .cap .pick { color: var(--ok); }
+  .note { font-size: 12px; color: var(--t2); margin-top: 8px; max-width: 560px; }
+  .mk { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: middle; margin-left: 6px; }
+
+  /* diagram */
+  .dg { display: flex; align-items: center; gap: 18px; background: #fff; border-radius: 10px; padding: 18px 20px; }
+  .box { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--panel); min-width: 170px; }
+  .box b { display: block; margin-bottom: 4px; }
+  .box small { color: var(--t2); display: block; line-height: 1.4; }
+  .box.img { background: #f3f0ff; border-color: #d6ccff; }
+  .box.new { background: #eaf7ea; border-color: #b9e2b5; }
+  .box.disk { background: #fff7e8; border-color: #ffd59a; }
+  .arrow { color: var(--t3); font-size: 22px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+
+  /* web machine page */
+  .win { width: 580px; background: var(--bg); border-radius: 10px; border: 1px solid var(--sub); overflow: hidden; }
+  .bar { height: 34px; background: var(--panel); border-bottom: 1px solid var(--sub); display: flex; align-items: center; gap: 7px; padding: 0 14px; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #d4d7dc; }
+  .page { padding: 18px 22px 20px; }
+  .ph { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ph .cl { color: var(--brand); }
+  .ph b { font-size: 18px; }
+  .ph .st { font-size: 12px; color: var(--t2); display: inline-flex; gap: 5px; align-items: center; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .dot.warn { background: var(--warn); }
+  .dot.brand { background: var(--brand); }
+  .card { border: 1px solid var(--sub); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .card h4 { margin: 0 0 6px; font-size: 13px; color: var(--t2); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .kv { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--sub); font-size: 13px; }
+  .kv:last-child { border-bottom: 0; }
+  .kv span:first-child { color: var(--t2); }
+  .up { border-color: #bcd3ff; background: #f5f8ff; }
+  .up .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 4px; background: var(--tint); color: var(--brand); margin-left: 8px; font-weight: 500; }
+  .up .tag.busy { background: #fff1e0; color: #d46b08; }
+  .up .tag.ok { background: #eaf7ea; color: var(--ok); }
+  .up .ttl { font-weight: 600; font-size: 15px; }
+  .up p { margin: 6px 0 10px; color: var(--t2); font-size: 13px; }
+  .btn { display: inline-block; padding: 5px 14px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+  .btn.pri { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .btn.red { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .muted { color: var(--t3); }
+
+  /* dialog */
+  .dlg { width: 470px; background: #fff; border-radius: 12px; box-shadow: 0 8px 30px rgba(31,35,41,.18); padding: 20px 22px; }
+  .dlg h3 { margin: 0 0 8px; font-size: 17px; }
+  .dlg p { margin: 0 0 10px; color: var(--t2); font-size: 13px; }
+  .turns { border: 1px solid var(--sub); border-radius: 8px; margin: 8px 0 10px; }
+  .turns div { display: flex; justify-content: space-between; padding: 8px 12px; font-size: 13px; border-bottom: 1px solid var(--sub); }
+  .turns div:last-child { border-bottom: 0; }
+  .turns span:last-child { color: var(--t3); }
+  .warnline { background: var(--warn-bg); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; color: #8a5300; margin-bottom: 12px; }
+  .acts { display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* list */
+  .nav { width: 280px; background: #fff; border-radius: 10px; border: 1px solid var(--sub); padding: 12px; }
+  .nrow { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px; border-radius: 6px; font-size: 14px; }
+  .nrow .lbl { flex: 1; }
+  .nrow.cloud .lbl { font-weight: 600; }
+  .nrow .meta { font-size: 12px; color: var(--t3); display: inline-flex; align-items: center; gap: 5px; }
+  .nrow .meta.b { color: var(--brand); }
+  .ic { width: 16px; color: var(--t2); display: inline-flex; }
+  .nrow.cloud .ic { color: var(--brand); }
+  .sep { height: 1px; background: var(--sub); margin: 5px 8px; }
+
+  /* phone */
+  .phone { width: 300px; height: 600px; border-radius: 40px; background: #f2f2f7; border: 9px solid #1c1c1e; overflow: hidden; position: relative; font-family: -apple-system, Inter, sans-serif; }
+  .phone .sb { height: 34px; display: flex; justify-content: space-between; padding: 10px 22px 0; font-size: 12px; font-weight: 600; }
+  .phone .nav-t { padding: 4px 16px 8px; font-size: 26px; font-weight: 700; }
+  .phone .grp { margin: 6px 14px 10px; background: #fff; border-radius: 10px; }
+  .phone .grp .r { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 13.5px; border-bottom: 0.5px solid #e5e5ea; }
+  .phone .grp .r:last-child { border-bottom: 0; }
+  .phone .grp .r span:last-child { color: #8e8e93; }
+  .phone .gh { margin: 10px 26px 4px; font-size: 11.5px; color: #8e8e93; text-transform: uppercase; }
+  .phone .upc { margin: 6px 14px 10px; background: #fff; border-radius: 10px; padding: 12px; }
+  .phone .upc .ttl { font-weight: 600; font-size: 14px; }
+  .phone .upc p { margin: 5px 0 9px; font-size: 12.5px; color: #6c6c70; }
+  .phone .upc .btn { font-size: 13px; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 14px 14px 0 0; padding: 16px 16px 26px; box-shadow: 0 -4px 20px rgba(0,0,0,.15); }
+  .sheet h3 { margin: 0 0 6px; font-size: 16px; }
+  .sheet p { margin: 0 0 8px; font-size: 12.5px; color: #6c6c70; }
+  .sheet .big { display: block; text-align: center; padding: 11px; border-radius: 10px; font-weight: 600; font-size: 14px; margin-top: 8px; }
+  .sheet .big.red { background: var(--danger); color: #fff; }
+  .sheet .big.plain { background: #f2f2f7; color: var(--brand); }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
+
+  table.rules { border-collapse: collapse; width: 1180px; background: #fff; border-radius: 8px; overflow: hidden; }
+  table.rules td, table.rules th { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid var(--sub); font-size: 13px; }
+  table.rules th { background: var(--panel); color: var(--t2); font-weight: 600; }
+  table.rules td:first-child { white-space: nowrap; font-weight: 600; width: 190px; }
+  .seq { background: #fff; border-radius: 10px; padding: 14px 18px; width: 1180px; }
+  .seq ol { margin: 0; padding-left: 20px; }
+  .seq li { margin: 4px 0; font-size: 13.5px; }
+  code { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; background: #f2f3f5; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="cloud" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" d="M4.6 12.8h7a3 3 0 0 0 .4-5.97A4.2 4.2 0 0 0 4 6.2a3.3 3.3 0 0 0 .6 6.6z"/></symbol>
+  <symbol id="hdd" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="1.8" width="11" height="12.4" rx="1.2"/><path d="M2.5 6h11M2.5 10h11"/></g></symbol>
+</svg>
+
+<section class="b-part">
+  <h1>Orbit Cloud: "new version available" and Update Now</h1>
+  <p class="lead">Your Orbit Cloud runner was still on the Nov 16 build (<code>95884b1</code>) on Nov 18, 599 commits behind, and nothing on any client said so or let you move it. The change: Orbit Cloud shows the same Update card your own machines show, and <b>Update Now</b> restarts it on the current image. Your files and sign-ins stay where they are.</p>
+  <h2>1 · How Orbit Cloud images work</h2>
+  <p class="lead">An image is a frozen copy of the machine's software. Nothing inside it updates itself, so the only way to a newer runner or newer CLIs is a new container made from a newer image, on the same disk.</p>
+  <div class="dg">
+    <div class="stack">
+      <div class="box img"><b>Image · Nov 16 build</b><small>orbit runner 95884b1<br>Claude Code · Codex · OpenCode 1.19.5<br>Kimi · Antigravity · Cursor · DeepSeek<br>fixed versions, no self-update</small></div>
+      <div class="box img"><b>Image · Nov 18 build</b><small>orbit runner e03e2cd<br>same CLIs, newer pins (OpenCode 1.19.6)<br>built by every Orbit release</small></div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stack">
+      <div class="box"><b>Container · generation 7</b><small>made from the Nov 16 image<br>runs your sessions now</small></div>
+      <div class="box new"><b>Container · generation 8</b><small>made from the Nov 18 image<br>after Update Now (or an idle roll)</small></div>
+    </div>
+    <div class="arrow">⇄</div>
+    <div class="box disk" style="min-width:250px"><b>Your disk · /home/orbit</b><small>checkouts and worktrees · sign-ins (~/.claude, ~/.codex…) · session history · settings<br><br>kept across every container; only one container may use it at a time, so the old one must be proven stopped before the new one starts</small></div>
+  </div>
+  <p class="note" style="max-width:1180px">Today a container changes image only when it sleeps while idle and wakes again, when it crashes, or (very old runners) when it falls silent. On this Docker deployment a runner that is never idle keeps its image forever. Kubernetes rolls idle runners already; Docker does not.</p>
+</section>
+
+<section class="b-part">
+  <h2>2 · Orbit Cloud's machine page (web)</h2>
+  <p class="lead">Today the version line says Orbit keeps it current, which was not true for a busy runner. New: the Update card that self-managed runners have, saying which build it runs and which is current.</p>
+  <div class="row">
+    <div>
+      <p class="cap">Today</p>
+      <div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="page">
+        <div class="ph"><span class="cl"><svg width="20" height="20"><use href="#cloud"/></svg></span><b>Orbit Cloud</b><span class="st"><span class="dot"></span>Ready</span></div>
+        <div class="card"><h4>About</h4>
+          <div class="kv"><span>Version</span><span>Kept up to date by Orbit</span></div>
+          <div class="kv"><span>Updates</span><span>Orbit updates this machine for you.</span></div>
+        </div>
+        <div class="card"><h4>Engines</h4><div class="kv"><span>OpenCode</span><span>1.19.5 · sign-in unknown</span></div></div>
+      </div></div>
+      <p class="note">Nothing here says it is two days behind, and nothing can make it move.</p>
+    </div>
+    <div>
+      <p class="cap">New · <span class="pick">an update is available</span></p>
+      <div class="win"><div class="bar"><i></i><i></i><i></i></div><div class="page">
+        <div class="ph"><span class="cl"><svg width="20" height="20"><use href="#cloud"/></svg></span><b>Orbit Cloud</b><span class="st"><span class="dot"></span>Ready</span></div>
+        <div class="card up"><span class="ttl">The Nov 18 build is available</span><span class="tag">Available</span><span class="mk">1</span>
+          <p>It moves the next time this runner is idle. Update Now restarts it on the new build now — usually under a minute. Your files, sign-ins and sessions stay.</p>
+          <span class="btn pri">Update Now…</span><span class="mk">2</span>
+        </div>
+        <div class="card"><h4>About</h4>
+          <div class="kv"><span>Version</span><span>Build 95884b1 · Nov 16</span></div>
+          <div class="kv"><span>Updates</span><span>Orbit moves it to each new build.</span></div>
+        </div>
+      </div></div>
+      <p class="note"><span class="mk" style="margin:0 4px 0 0">1</span>Shown while the container runs an older image than the one Orbit makes new containers from. No Later button: waiting costs nothing, since it moves by itself once idle. <span class="mk" style="margin:0 4px 0 6px">2</span>Owner only.</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>3 · Update Now… asks first, naming what it interrupts</h2>
+  <p class="lead">Same rule as your own machines (decision 1, confirm-and-interrupt). One difference is said out loud: a new container ends background jobs and services, which a self-update keeps running.</p>
+  <div class="row">
+    <div>
+      <p class="cap">Nothing running</p>
+      <div class="dlg"><h3>Update Orbit Cloud now?</h3>
+        <p>No turn is running. It restarts on the Nov 18 build — usually under a minute. Your files, sign-ins and sessions stay.</p>
+        <div class="acts"><span class="btn">Cancel</span><span class="btn pri">Update Now</span></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap">Two turns running <span class="mk">3</span></p>
+      <div class="dlg"><h3>Update Orbit Cloud now?</h3>
+        <p>It stops these turns and restarts on the Nov 18 build — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.</p>
+        <div class="turns"><div><span>Fix login redirect</span><span>running 18 min</span></div><div><span>Backfill shard rows</span><span>running 1 h 4 min</span></div></div>
+        <div class="warnline">3 background jobs in these sessions stop, and so do the services they started. Waiting work starts once it is back. <span class="mk">4</span></div>
+        <div class="acts"><span class="btn">Cancel</span><span class="btn red">Interrupt 2 Turns and Update</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="max-width:1180px"><span class="mk" style="margin:0 4px 0 0">3</span>The server answers a plain press with the running turns (409 <code>MANAGED_RUNNER_BUSY</code>); the dialog lists them and the red button sends <code>interruptTurns: true</code>. <span class="mk" style="margin:0 4px 0 6px">4</span>Self-update copy says jobs keep running; here they don't, so the copy is Orbit Cloud's own.</p>
+</section>
+
+<section class="b-part">
+  <h2>4 · While it restarts, and after</h2>
+  <div class="row">
+    <div>
+      <p class="cap">Restarting</p>
+      <div class="win" style="width:420px"><div class="page">
+        <div class="card up"><span class="ttl">Restarting on the Nov 18 build…</span><span class="tag busy">Restarting</span>
+          <p>2 interrupted turns continue once it is back. Usually under a minute.</p></div>
+      </div></div>
+      <p class="note">The status reads Waking up… everywhere it is shown, as after a sleep.</p>
+    </div>
+    <div>
+      <p class="cap">Updated (shown for a day)</p>
+      <div class="win" style="width:420px"><div class="page">
+        <div class="card up" style="background:#f4fbf3;border-color:#b9e2b5"><span class="ttl">Updated to the Nov 18 build</span><span class="tag ok">Updated</span>
+          <p>Took 41 s. 2 interrupted turns resumed.</p></div>
+        <div class="card"><h4>About</h4><div class="kv"><span>Version</span><span>Build e03e2cd · Nov 18</span></div></div>
+      </div></div>
+    </div>
+    <div>
+      <p class="cap">Machines list</p>
+      <div class="nav">
+        <div class="nrow cloud"><span class="ic"><svg width="16" height="16"><use href="#cloud"/></svg></span><span class="lbl">Orbit Cloud</span><span class="meta b"><span class="dot brand"></span>Update</span></div>
+        <div class="sep"></div>
+        <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">HPC</span><span class="dot"></span></div>
+        <div class="nrow"><span class="ic"><svg width="16" height="16"><use href="#hdd"/></svg></span><span class="lbl">wikova</span><span class="dot"></span></div>
+      </div>
+      <p class="note" style="max-width:280px">The same update dot your own machines get when a release waits.</p>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>5 · iPhone (Android follows the same layout)</h2>
+  <div class="row">
+    <div>
+      <p class="cap">Machine page</p>
+      <div class="phone"><div class="sb"><span>10:14</span><span>●●● 47</span></div>
+        <div class="nav-t">Orbit Cloud</div>
+        <div class="upc"><div class="ttl">The Nov 18 build is available</div><p>It moves the next time this runner is idle. Update Now restarts it on the new build now.</p><span class="btn pri">Update Now…</span></div>
+        <div class="gh">About</div>
+        <div class="grp"><div class="r"><span>Version</span><span>Build 95884b1 · Nov 16</span></div><div class="r"><span>Updates</span><span>Each new build</span></div></div>
+        <div class="gh">Engines</div>
+        <div class="grp"><div class="r"><span>Claude Code</span><span>2.1.327</span></div><div class="r"><span>OpenCode</span><span>1.19.5</span></div></div>
+      </div>
+    </div>
+    <div>
+      <p class="cap">Update Now… with turns running</p>
+      <div class="phone"><div class="sb"><span>10:14</span><span>●●● 47</span></div>
+        <div class="nav-t">Orbit Cloud</div>
+        <div class="dim"></div>
+        <div class="sheet"><h3>Update Orbit Cloud now?</h3>
+          <p>It stops 2 turns and restarts on the Nov 18 build. Each continues where it stopped.</p>
+          <p>• Fix login redirect · 18 min<br>• Backfill shard rows · 1 h 4 min</p>
+          <p style="color:#8a5300">3 background jobs stop too.</p>
+          <span class="big red">Interrupt 2 Turns and Update</span><span class="big plain">Cancel</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>6 · What happens on Update Now</h2>
+  <div class="seq"><ol>
+    <li><b>Idle</b> (its own fresh report says nothing runs, and Orbit's records show no work): the drain sleep already uses — no new work, it agrees to stop, it exits by itself — then it wakes at once on the current image. Nothing is interrupted.</li>
+    <li><b>Busy</b>, after the red button: the request and the sessions it interrupts are recorded in Activity; Orbit asks Docker to stop the container (SIGTERM, then the stop grace). The runner's ordinary shutdown stops its turns.</li>
+    <li>Docker reports the container exited — the proof that nothing writes to your disk any more. Only then is the next generation made, from the current image, on the same disk and the same runner identity.</li>
+    <li>The new runner comes online and the interrupted turns continue with "interrupted — Orbit Cloud updated" in their transcript. (To verify in the server task on a real container; if they don't resume by themselves, the server re-queues the turns it recorded.)</li>
+    <li>Works on your Nov 16 runner as it is: nothing in steps 2–4 needs the old image to know about this feature.</li>
+  </ol></div>
+</section>
+
+<section class="b-part">
+  <h2>7 · Rules and what is still open</h2>
+  <table class="rules">
+    <tr><th>Rule</th><th>Detail</th></tr>
+    <tr><td>When the card shows</td><td>Only while the container was made from an older image than the current one. A sleeping runner shows nothing: it wakes on the current image anyway.</td></tr>
+    <tr><td>Who can press it</td><td>The account owner. A disabled account, a failed or provisioning runner, or one already current is refused.</td></tr>
+    <tr><td>Busy runner</td><td>Confirm, then interrupt (decision 1, as on your own machines). Activity names every interrupted session.</td></tr>
+    <tr><td>New work arriving</td><td>Never cancels an Update Now you pressed. It does still cancel an automatic idle roll, as today.</td></tr>
+    <tr><td>Idle rolls on Docker</td><td>Added (decision 2): after a release, a runner that goes quiet moves by itself, as on Kubernetes.</td></tr>
+    <tr><td>Your data</td><td>The disk, sign-ins, workspaces and runner identity stay. Background jobs and services stop with the old container.</td></tr>
+    <tr><td>Kubernetes</td><td>No forced stop there: a busy runner's Update Now waits for it to be idle, and the card says so. No Kubernetes deployment exists today.</td></tr>
+    <tr><td>Open: build dates</td><td>The card names builds by date. The current build's date comes from the image's revision label, which the Docker channel starts reporting; without it, the card says "A newer build is available".</td></tr>
+  </table>
+  <h2 style="margin-top:18px">Delivery, by cost</h2>
+  <table class="rules">
+    <tr><td>1 · Server</td><td>Status field, <code>POST /api/managed-runner/update-now</code>, the manager's owner-update step, Docker <code>rollImage</code>; pg specs for idle roll, busy 409, interrupt → stop → next generation on the current image, demand during an update, disabled account.</td></tr>
+    <tr><td>2 · Docker channel</td><td>Report the image's revision label; its own test.</td></tr>
+    <tr><td>3 · Clients</td><td>Web, iOS/macOS, Android: the card, the confirmation, the row dot and the version line, with tests on each.</td></tr>
+    <tr><td>4 · Rollout check</td><td>Update Now on a production Orbit Cloud runner with a busy session: it restarts on the current image and the turn resumes.</td></tr>
+  </table>
+</section>
+</body>
+</html>

@@ -447,7 +447,8 @@ struct RunnerEngineRow: View {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         let status = RunnerPageFormat.engineStatus(health, runner: runner)
         let version = health.installed == true ? RunnerPageFormat.engineVersion(health.version) : nil
-        let head = [version, health.installed == true ? RunnerPageFormat.engineSite(health) : nil].compactMap { $0 }
+        let head = [version, health.installed == true ? RunnerPageFormat.engineSite(health) : nil,
+                    health.installed == true ? RunnerPageFormat.engineKeyNote(health) : nil].compactMap { $0 }
         var line = AttributedString(head.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR))
         if let status {
             if !head.isEmpty { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }

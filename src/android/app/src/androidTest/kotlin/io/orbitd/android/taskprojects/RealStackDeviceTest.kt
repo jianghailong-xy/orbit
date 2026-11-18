@@ -584,6 +584,9 @@ class RealStackDeviceTest {
         val request = row.obj("doneRequest")!!
         signIn(); open("orbit-session:${asked.text("coordinatorSessionId")}")
         awaitScrollTo("transcript-list", hasTestTag("done:$id"), 60_000)
+        // The conversation shows the question as a preview; a press opens the whole card in its review sheet.
+        compose.onNodeWithTag("done:$id:preview").performClick(); compose.waitUntil(20_000) {
+            compose.onAllNodesWithTag("done:$id-judgment").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("done:$id-judgment").assertTextEquals(request.text("judgment")!!)
         compose.onNodeWithTag("done:$id-meta").assertTextContains("${asked.text("title")} · asked by the coordinator · waiting ", substring = true)
         compose.onNodeWithTag("done:$id-meta").performScrollTo(); capture("stack-done-asked-0-card")
@@ -595,6 +598,9 @@ class RealStackDeviceTest {
         record("after Record as done", "status=${done.text("status")} doneBy=${done.text("doneBy")} acceptedGaps=${done.objects("acceptedGaps").map { it.text("criterionKey") }}")
         assertEquals("OWNER", done.text("doneBy"))
         record("GET /projects/$id/open-items → doneRequest after", get("/projects/$id/open-items").jsonObject["doneRequest"])
+        // The review shows the receipt in the question's place; closed, the receipt left in the conversation.
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("done:$id-receipt").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("done:$id:close").performClick(); awaitGone("done:$id:review")
         awaitScrollTo("transcript-list", hasTestTag("done:$id-receipt"))
         compose.onNodeWithTag("done:$id-receipt-line").assertTextContains("You recorded this project done · ", substring = true)
         capture("stack-done-asked-1-receipt")

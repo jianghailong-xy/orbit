@@ -1,6 +1,10 @@
 import { seedPromotionRequest } from '../test-support/promotion-request';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -49,6 +53,7 @@ import { ProjectOpenItemEscalationService } from './open-item-escalation.service
 import { configureProjectIntegration } from './project-integration-line';
 import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
+import { mainSyncMovedMessage } from './project-integration-retry';
 import { ProjectPromotionService } from './project-promotion.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
@@ -951,6 +956,206 @@ test('a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb 
       const [stillOpen] = await itemsOf(stack.db, clash.task.taskId);
       assert.equal(stillOpen?.state, 'OPEN', 'and its item is left for the decision it needs');
     } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/** Run git in a fixture directory, as a script would. */
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', args, {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'fixture', GIT_AUTHOR_EMAIL: 'fixture@retry.invalid',
+      GIT_COMMITTER_NAME: 'fixture', GIT_COMMITTER_EMAIL: 'fixture@retry.invalid',
+      GIT_CONFIG_NOSYSTEM: '1', HOME: cwd,
+    },
+  }).toString().trim();
+}
+
+function commit(work: string, file: string): void {
+  writeFileSync(path.join(work, file), `${file} ${randomUUID()}\n`);
+  git(work, 'add', file);
+  git(work, 'commit', '--quiet', '-m', file);
+}
+
+/**
+ * A MAIN_SYNC conflict over a real repository: a bare `origin`, main and the project line diverged
+ * from one base, and the DONE task's branch on the line's tip with one commit of its own — no main.
+ * Its landing is reported as having stopped at MAIN_SYNC on that very commit (`sourceSha`), and the
+ * session's `branch_sha` holds the same tip, as the runner's heartbeat and turn-complete write it.
+ * `move()` pushes whatever the case did to the branch and records the runner's report of the new tip.
+ */
+async function mainSyncConflictOverGit(stack: Stack, label: string) {
+  const w = await world(stack, label);
+  const codebase = await stack.db.projectCodebase.findFirstOrThrow({
+    where: { projectId: w.projectId, slot: 'primary' },
+    select: { integrationRef: true, upstreamRef: true },
+  });
+  const task = await doneTask(stack, w, label);
+  const root = mkdtempSync(path.join(tmpdir(), `orbit-${label}-`));
+  const origin = path.join(root, 'origin');
+  git(root, 'init', '--quiet', '--bare', origin);
+  const work = path.join(root, 'work');
+  git(root, 'init', '--quiet', work);
+  commit(work, 'base.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.upstreamRef}`, `HEAD:${codebase.integrationRef}`);
+  commit(work, 'line.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.integrationRef}`);
+  const lineTip = git(work, 'rev-parse', 'HEAD');
+  git(work, 'checkout', '--quiet', '-b', 'main-side', 'HEAD~1');
+  commit(work, 'main.txt');
+  git(work, 'push', '--quiet', origin, `HEAD:${codebase.upstreamRef}`);
+  const mainTip = git(work, 'rev-parse', 'HEAD');
+  git(work, 'checkout', '--quiet', '-b', task.branch, lineTip);
+  commit(work, 'task.txt');
+  const move = async (): Promise<string> => {
+    git(work, 'push', '--quiet', '--force', origin, `HEAD:refs/heads/${task.branch}`);
+    const tip = git(work, 'rev-parse', 'HEAD');
+    await stack.db.session.update({ where: { id: task.sessionId }, data: { branchSha: tip } });
+    return tip;
+  };
+  const conflictedTip = await move();
+  const [job] = await claim(stack, w, `lease-${label}`);
+  assert.ok(job, `the DONE queued no landing — ${await jobsOf(stack.db, task.taskId)}`);
+  const answer = await report(stack, w, job!, {
+    ...CONFLICTED, phase: 'MAIN_SYNC', sourceSha: conflictedTip, targetShaBefore: lineTip, upstreamSha: mainTip,
+  });
+  assert.equal(answer.accepted, true);
+  /** Whether the branch, as pushed, contains this commit — what J-S2 asks on the runner. */
+  const contains = (tip: string): boolean => {
+    try {
+      execFileSync('git', ['merge-base', '--is-ancestor', tip, `refs/heads/${task.branch}`], { cwd: origin, stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  return {
+    w, task, job: job!, work, origin, codebase, lineTip, mainTip, conflictedTip, move, contains,
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+/** The door, asked with no git anywhere on PATH: the decision must stand on recorded facts alone. */
+async function withoutGit<T>(run: () => Promise<T>): Promise<T> {
+  const saved = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    assert.throws(() => execFileSync('git', ['--version'], { stdio: 'ignore' }), 'git is out of reach');
+    return await run();
+  } finally {
+    process.env.PATH = saved;
+  }
+}
+
+test('a MAIN_SYNC conflict whose branch now carries the project line and main is rerun with no git on the apiserver, and lands',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const fixture = await mainSyncConflictOverGit(stack, 'retry-main-sync-absorbed');
+    try {
+      const { w, task, job, work } = fixture;
+      // §3.1 M3, done on the task's branch: main merged into a branch already on the line's tip.
+      git(work, 'merge', '--quiet', '--no-ff', '-m', 'absorb main', fixture.mainTip);
+      const absorbed = await fixture.move();
+      assert.ok(fixture.contains(fixture.lineTip) && fixture.contains(fixture.mainTip),
+        'the fixture branch really carries both tips');
+
+      const retried = await withoutGit(() =>
+        retry(stack, w, task.taskId, 'the branch absorbed main and the project line'));
+      assert.equal(retried.message, mainSyncMovedMessage(fixture.conflictedTip, absorbed));
+      assert.match(retried.message!, /^Landing again: the branch has moved since it conflicted at MAIN_SYNC/);
+      assert.match(retried.message!, /If it now contains the project line and main, it lands by a merge/);
+      assert.equal(retried.failureClass, 'CONFLICT');
+      assert.equal(retried.generation, 2);
+      assert.equal(retried.retryOfJobId, job.jobId);
+      const [conflictItem] = await itemsOf(stack.db, task.taskId);
+      assert.deepEqual(retried.handlingItemIds, [conflictItem!.id], 'the conflict item is handled by the rerun');
+      assert.equal(conflictItem?.handlingReason, 'the branch absorbed main and the project line',
+        'who asked and why are kept on the item it handles');
+      const [, second] = await landings(stack.db, task.taskId);
+      assert.equal(second?.state, 'QUEUED');
+      assert.equal(second?.sourceRef, `refs/heads/${task.branch}`);
+      assert.equal(second?.retryFailureClass, null, 'no retry columns: no schema change was needed');
+
+      // The landing proceeds: the heartbeat hands the generation out (M2 does not hold the conflicted
+      // task's own landing), and the runner's LANDED closes the conflict item as HANDLED.
+      const [next] = await claim(stack, w, 'lease-retry-main-sync-absorbed-2');
+      assert.equal(next?.jobId, retried.jobId, 'the rerun is claimed');
+      const landed = await report(stack, w, next!, { ...LANDED, sourceSha: absorbed });
+      assert.equal(landed.accepted, true);
+      assert.equal((await landings(stack.db, task.taskId))[1]?.state, 'LANDED');
+      const [closed] = await itemsOf(stack.db, task.taskId);
+      assert.equal(closed?.state, 'RESOLVED');
+      assert.equal(closed?.resolution, 'HANDLED');
+    } finally {
+      fixture.cleanup();
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a MAIN_SYNC conflict whose branch has not moved is still refused with today\'s wording, with no git on the apiserver',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const fixture = await mainSyncConflictOverGit(stack, 'retry-main-sync-unmoved');
+    try {
+      // The branch is the commit that conflicted: on the line's tip, main never merged in.
+      assert.ok(fixture.contains(fixture.lineTip) && !fixture.contains(fixture.mainTip));
+      const refused = await withoutGit(() =>
+        denied(() => retry(stack, fixture.w, fixture.task.taskId, 'try again')));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+      assert.match(refused.message, /stopped at MAIN_SYNC/);
+      assert.match(refused.message, /running it again meets the same conflict, and so does sending the task back to redo its work/);
+      assert.match(refused.message, /Absorb the upstream on the project line first/);
+      assert.match(refused.message, /lands by J-S4 MERGE/);
+      assert.equal((await landings(stack.db, fixture.task.taskId)).length, 1, 'nothing queued');
+      assert.equal((await itemsOf(stack.db, fixture.task.taskId))[0]?.state, 'OPEN');
+    } finally {
+      fixture.cleanup();
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a MAIN_SYNC conflict whose branch moved but lacks main or the project tip is rerun, and its conflict item comes back',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    const lacksMain = await mainSyncConflictOverGit(stack, 'retry-main-sync-no-main');
+    const lacksLine = await mainSyncConflictOverGit(stack, 'retry-main-sync-no-line');
+    try {
+      // More work on the branch, main still not merged in.
+      commit(lacksMain.work, 'more.txt');
+      await lacksMain.move();
+      assert.ok(!lacksMain.contains(lacksMain.mainTip));
+      // Both merged in — and then the project line moved on: the branch lacks its current tip.
+      git(lacksLine.work, 'merge', '--quiet', '--no-ff', '-m', 'absorb main', lacksLine.mainTip);
+      await lacksLine.move();
+      git(lacksLine.work, 'checkout', '--quiet', '-b', 'line-moves', lacksLine.lineTip);
+      commit(lacksLine.work, 'line-2.txt');
+      git(lacksLine.work, 'push', '--quiet', lacksLine.origin, `HEAD:${lacksLine.codebase.integrationRef}`);
+      assert.ok(!lacksLine.contains(git(lacksLine.work, 'rev-parse', 'HEAD')));
+
+      for (const [fixture, lease] of [[lacksMain, 'no-main'], [lacksLine, 'no-line']] as const) {
+        const retried = await withoutGit(() => retry(stack, fixture.w, fixture.task.taskId, 'the branch moved'));
+        assert.equal(retried.generation, 2);
+        const [first] = await itemsOf(stack.db, fixture.task.taskId);
+        // Whether the move was the absorb is the runner's question (J-S2): here it was not, and the
+        // landing stops at MAIN_SYNC again, exactly as it did before this door existed.
+        const [next] = await claim(stack, fixture.w, `lease-retry-main-sync-${lease}-2`);
+        assert.equal(next?.jobId, retried.jobId);
+        const again = await report(stack, fixture.w, next!, { ...CONFLICTED, phase: 'MAIN_SYNC' });
+        assert.equal(again.accepted, true);
+        const items = await itemsOf(stack.db, fixture.task.taskId);
+        const open = items.filter((item) => item.state === 'OPEN');
+        assert.equal(open.length, 1, 'one conflict item, back for the decision it needs');
+        assert.equal(open[0]?.kind, 'INTEGRATION_CONFLICT');
+        assert.equal(open[0]?.integrationJobId, retried.jobId);
+        assert.equal(items.find((item) => item.id === first!.id)?.state, 'SUPERSEDED');
+      }
+    } finally {
+      lacksMain.cleanup();
+      lacksLine.cleanup();
       await stack.db.$disconnect();
     }
   });

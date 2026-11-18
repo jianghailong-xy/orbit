@@ -304,16 +304,11 @@ final class ScheduledModel {
         }
     }
 
-    /// The server's own sentence for a refusal, else a plain one.
+    /// The server's own sentence for a refusal, else what went wrong in plain words.
     static func refusal(_ error: Error) -> String {
-        if case APIError.http(_, let body?) = error, let data = body.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let message = object["message"] as? String, !message.isEmpty {
-            return message
-        }
-        return unreachable
+        ScheduleDisplay.pressFailure(error)
     }
 
-    static let unreachable = "Couldn't reach Orbit. Try again."
+    static let unreachable = ScheduleDisplay.PressFailure.unreachable
     static let withdrawn = "This card was withdrawn."
 }

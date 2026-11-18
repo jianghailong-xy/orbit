@@ -400,8 +400,10 @@ export function retryText(input: {
   return input.reason ? `${head} · ${input.reason}` : head;
 }
 
+/** A skip is only ever of a task landing's check, which since §11 K1 is the landing check (the
+ *  project's `landing_check_command`, or its merge check where that is unset). */
 export function skippedCheckText(reason: string | null): string {
-  return reason ? `Merge check skipped · ${reason}` : 'Merge check skipped';
+  return reason ? `Landing check skipped · ${reason}` : 'Landing check skipped';
 }
 
 export function handlingText(itemState: 'OPEN' | 'CLOSED'): string {
