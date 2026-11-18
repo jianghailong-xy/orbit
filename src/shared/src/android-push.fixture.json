@@ -279,6 +279,62 @@
         "sentAt": "2026-11-14T02:41:00.000Z",
         "payload": "{\"kind\":\"schedule\",\"scheduleKind\":\"HELD\",\"scheduleID\":\"019a0000-0000-7000-8000-000000000010\",\"ownerRequestID\":\"019a0000-0000-7000-8000-000000000015\",\"title\":\"Weekly dependency audit is held\",\"body\":\"It could not start on Monday 09:00: the agent \\\"auditor\\\" in workspace web is disabled. Nothing runs until it is enabled and you resume.\",\"threadId\":\"schedule-019a0000-0000-7000-8000-000000000010\"}"
       }
+    },
+    {
+      "name": "condition-unknown",
+      "pushType": "alert",
+      "collapseId": "condition-unknown:019a0000-0000-7000-8000-000000000020:2026-11-17T03:40:00.000Z",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Can't read: Root disk below 5%",
+            "body": "The check timed out 3 times in a row. The last reading was 5%, 16 minutes ago."
+          },
+          "sound": "default",
+          "thread-id": "condition-019a0000-0000-7000-8000-000000000020"
+        },
+        "kind": "condition",
+        "conditionID": "019a0000-0000-7000-8000-000000000020",
+        "sessionID": "019a0000-0000-7000-8000-000000000021",
+        "ownerRequestID": "019a0000-0000-7000-8000-000000000022"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-00000000000c",
+        "notificationKey": "condition-unknown:019a0000-0000-7000-8000-000000000020:2026-11-17T03:40:00.000Z",
+        "sentAt": "2026-11-17T03:40:00.000Z",
+        "payload": "{\"kind\":\"condition\",\"conditionID\":\"019a0000-0000-7000-8000-000000000020\",\"sessionID\":\"019a0000-0000-7000-8000-000000000021\",\"ownerRequestID\":\"019a0000-0000-7000-8000-000000000022\",\"title\":\"Can't read: Root disk below 5%\",\"body\":\"The check timed out 3 times in a row. The last reading was 5%, 16 minutes ago.\",\"threadId\":\"condition-019a0000-0000-7000-8000-000000000020\"}"
+      }
+    },
+    {
+      "name": "schedule-finding",
+      "pushType": "alert",
+      "collapseId": "schedule-finding-f874bb3d3af6ae9b87b3bb6a5d37c706",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Ceph capacity guard",
+            "body": "Raw used 90.4%. Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you."
+          },
+          "sound": "default",
+          "thread-id": "schedule-019a0000-0000-7000-8000-000000000023"
+        },
+        "kind": "schedule",
+        "scheduleKind": "FINDING",
+        "scheduleID": "019a0000-0000-7000-8000-000000000023",
+        "sessionID": "019a0000-0000-7000-8000-000000000024"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-00000000000d",
+        "notificationKey": "schedule-finding-f874bb3d3af6ae9b87b3bb6a5d37c706",
+        "sentAt": "2026-11-20T19:24:00.000Z",
+        "payload": "{\"kind\":\"schedule\",\"scheduleKind\":\"FINDING\",\"scheduleID\":\"019a0000-0000-7000-8000-000000000023\",\"sessionID\":\"019a0000-0000-7000-8000-000000000024\",\"title\":\"Ceph capacity guard\",\"body\":\"Raw used 90.4%. Above 90% for 10 min. 14 old RBD snapshots hold 1.1 TiB; one proposal is waiting for you.\",\"threadId\":\"schedule-019a0000-0000-7000-8000-000000000023\"}"
+      }
     }
   ]
 }

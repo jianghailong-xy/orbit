@@ -39,6 +39,7 @@ import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { OwnerRequestsService } from '../owner-requests/owner-requests.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerHints, type HintBus } from '../realtime/runner-hints';
 import { RunnerPresenceService } from '../runners/runner-presence';
@@ -343,6 +344,10 @@ test('three-failures-unknown', { skip }, async () => {
   assert.match(items[0].why, /The last reading was 80%, 15 minutes ago\./, 'the last reading and its age');
   assert.equal(alerts.filter((a) => a.conditionId === c.id).length, 1);
   assert.equal(alerts[0].ownerRequestId, items[0].id);
+  // The owner's read of the item names its condition: what a client opens to offer Pause and Look into it (C6).
+  const listed = (await new OwnerRequestsService(db as unknown as PrismaService, {} as never).list(w.ownerId, 'open'))
+    .requests.find((r) => r.id === items[0].id) as { conditionId?: string | null } | undefined;
+  assert.equal(listed?.conditionId, c.id, 'a CONDITION_UNKNOWN item carries its conditionId');
 
   // A fourth failure, and the silence sweep, tell nobody again.
   await feed(w, failure(c.id, 1200));

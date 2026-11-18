@@ -509,7 +509,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
-        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) }, retry = { retryJob(it) }) {
+        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) },
+            retry = { retryJob(it) }, skipCheck = { taskId -> attempt("") { api.skipLandingCheck(id, taskId) } }) {
             dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
             if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace }, change = { dialog = ProjectDialog.Change })
@@ -901,7 +902,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
 }
 
 private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit,
-    openLanding: (String) -> Unit, retry: suspend (String) -> String?, openJobs: () -> Unit) {
+    openLanding: (String) -> Unit, retry: suspend (String) -> String?, skipCheck: suspend (String) -> String?, openJobs: () -> Unit) {
     val panorama = state.panorama ?: return
     val buckets = panorama.obj("buckets") ?: JsonObject(emptyMap())
     val status = ProjectDoc.status(doc)
@@ -917,7 +918,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
             state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
                 ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
-                    openLanding = openLanding, retry = retry) } }
+                    openLanding = openLanding, retry = retry, skipCheck = skipCheck) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
                     // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).

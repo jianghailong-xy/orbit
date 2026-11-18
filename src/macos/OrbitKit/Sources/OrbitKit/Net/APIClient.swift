@@ -1027,6 +1027,13 @@ public final class APIClient: @unchecked Sendable {
         try await post("owner-requests/\(id)/done", body: body)
     }
 
+    /// A condition's 30-day question answered by its option (0 Keep waiting, 1 Stop). The answer is a kind
+    /// `OwnerRequest` does not read, so it is taken as it comes and the list is read again.
+    @discardableResult
+    public func answerConditionItem(_ id: String, option: Int) async throws -> JSONValue {
+        try await post("owner-requests/\(id)/done", body: OwnerRequestDoneBody(option: option))
+    }
+
     public func declineOwnerRequest(_ id: String, reason: String, sendAsWritten: Bool = false) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/decline",
                        body: OwnerRequestDeclineBody(reason: reason, sendAsWritten: sendAsWritten))
@@ -1264,6 +1271,14 @@ public final class APIClient: @unchecked Sendable {
     /// silent generation ends and the next one is queued. Answers the integration view read again.
     public func retryIntegrationJob(_ projectID: String, jobID: String) async throws -> ProjectIntegrationView {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
+    }
+
+    /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
+    /// and lands it again with the landing check not run, recorded as skipped by the owner. The
+    /// answer is not read: the card redraws from the integration view read again.
+    public func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        try await postRaw("projects/\(projectID)/tasks/\(taskID)/integration/skip-merge-check",
+                          body: ["reason": ProjectPage.landingSkipCheckReason])
     }
 
     /// One page of the project's top-level tasks, newest first.
@@ -2387,6 +2402,11 @@ public final class APIClient: @unchecked Sendable {
     /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.
     public func schedule(_ id: String) async throws -> ScheduleDetailResponse {
         try await get("schedules/\(id)")
+    }
+
+    /// `GET /conditions/:id`: a condition's state, newest samples and events (docs/condition-triggers-design.md §8).
+    public func condition(_ id: String) async throws -> ConditionView {
+        try await get("conditions/\(id)")
     }
 
     public func scheduleRuns(_ id: String, limit: Int = 20) async throws -> [ScheduleRunView] {

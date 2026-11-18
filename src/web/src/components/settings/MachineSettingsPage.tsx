@@ -266,7 +266,11 @@ export function MachineSettingsPage() {
   // Asleep while it waits for a login: opening its page, where it is signed in, wakes it.
   useWakeForSignIn(managed);
 
-  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
+  const workspacesQ = useQuery({
+    queryKey: ['workspaces'],
+    meta: { entities: ['workspace', 'checkout'] },
+    queryFn: () => api<MachineWorkspace[]>('/workspaces'),
+  });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
   // Each workspace's sessions in flight, for its row's "N running" — the sidebar's own tallies.
   const sessionCounts = useQuery(workspaceSessionCountsQuery()).data ?? [];

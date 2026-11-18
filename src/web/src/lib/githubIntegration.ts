@@ -6,6 +6,7 @@ import { api } from '../api';
 export const githubIntegrationQuery = () =>
   queryOptions({
     queryKey: ['integrations', 'github'] as const,
+    meta: { entities: ['workspace'] },
     queryFn: () => api<GithubIntegration>('/integrations/github'),
   });
 

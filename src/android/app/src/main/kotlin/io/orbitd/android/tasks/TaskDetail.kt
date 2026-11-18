@@ -333,6 +333,9 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                     data.notice?.let { Text(it, Modifier.testTag("task-notice"), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.success) }
                     data.conflict?.let { conflict -> TaskRunConflictCard(conflict, { open(OrbitRoute(Destination.SESSION, it)) },
                         conflict.taskId?.let { { patch(buildJsonObject { put("provider", JsonNull); put("model", JsonNull) }) } }) { data.conflict = null } }
+                    // A task that starts when its condition holds says so where a task says why it has not started
+                    // (docs/condition-triggers-design.md §6.2): "Waiting for: 3 or more OSDs are in", and the newest reading.
+                    io.orbitd.android.schedule.TaskWaitingLine(io.orbitd.android.core.schedule.TaskStartWhenView.parse(task["startWhen"]))
                     ActionRow(row, canStart, enabled, task, assigneeHasRunner, open, run = ::runTask,
                         confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } })
                 }

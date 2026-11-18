@@ -8,6 +8,7 @@ export type { ProviderModelTier, ProviderTierRow };
 export const subagentTiersQuery = () =>
   queryOptions({
     queryKey: ['providers', 'subagent-tiers'] as const,
+    meta: { entities: ['provider'] },
     queryFn: () => api<SubagentTiersResponse>('/providers/subagent-tiers'),
   });
 

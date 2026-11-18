@@ -20,11 +20,13 @@ final class ProjectLandingCardTests: XCTestCase {
                      phase: String? = "CHECK", taskId: String? = "t-c5", title: String? = "C5 · 托管 runner",
                      started: TimeInterval = 66, heartbeat: TimeInterval? = 0, runner: String? = "workstation-gpu",
                      timedOut: Bool = false, limit: Int? = 600,
-                     retryable: Bool = false) -> ProjectIntegrationJob {
+                     retryable: Bool = false, skippable: Bool = false,
+                     skipCheck: String? = nil) -> ProjectIntegrationJob {
         ProjectIntegrationJob(jobId: id, kind: kind, state: state, phase: phase, taskId: taskId, taskTitle: title,
                               generation: 1, startedAt: iso(started), queuedAt: iso(started + 32),
                               heartbeatAt: heartbeat.map { iso($0) }, runnerName: runner, retriedBy: nil,
-                              timedOut: timedOut, limitSeconds: limit, retryable: retryable)
+                              timedOut: timedOut, limitSeconds: limit, retryable: retryable,
+                              skippable: skippable, skipCheck: skipCheck)
     }
 
     /// One of the project's landings, as `landTasks` serves it — the branch a job lands on.
@@ -213,5 +215,42 @@ final class ProjectLandingCardTests: XCTestCase {
         // And a landing that names no ref leaves the line off rather than drawing an empty one.
         let empty = running([job("j-c5")], landTasks: [landing("j-c5", targetRef: "")])
         XCTAssertNil(try XCTUnwrap(ProjectPage.landingCard(empty, now: now, updatedAt: now)).target)
+    }
+
+    /// "Land without the check" (§2.4 J-S5): offered for the card's one landing only where the
+    /// server says the skip takes it. Web: `skipTaskId` in `landingCard`.
+    func testTheSkipIsTheServersAnswerForTheCardsOneLanding() throws {
+        let offered = try XCTUnwrap(ProjectPage.landingCard(running([job("j-c5", skippable: true)]),
+                                                            now: now, updatedAt: now))
+        XCTAssertEqual(offered.skipTaskId, "t-c5")
+        XCTAssertNil(offered.skipNote)
+        // An older server says nothing, and nothing is offered.
+        XCTAssertNil(ProjectPage.landingCard(running([job("j-c5")]), now: now, updatedAt: now)?.skipTaskId)
+        // Several jobs: which landing a single press would skip is not the card's to guess.
+        let several = running([job("j-c5", skippable: true),
+                               job("j-t2", state: "QUEUED", taskId: "t-t2", skippable: true)])
+        XCTAssertNil(ProjectPage.landingCard(several, now: now, updatedAt: now)?.skipTaskId)
+    }
+
+    /// Where a skip stands, said in the place of "Nothing to do".
+    func testWhereASkipStandsIsSaidInTheNotesPlace() throws {
+        func note(_ skipCheck: String?) -> String? {
+            ProjectPage.landingCard(running([job("j-c5", skipCheck: skipCheck)]), now: now, updatedAt: now)?.skipNote
+        }
+        XCTAssertEqual(note("STOPPING"), "Stopping — it lands again without the landing check.")
+        XCTAssertEqual(note("SKIPPED"), "Landing without the landing check — you skipped it.")
+        XCTAssertNil(note(nil))
+    }
+
+    /// The two fields decode from the server's job, and an older server's job reads as no skip.
+    func testTheSkipFieldsDecodeAndDefaultToNone() throws {
+        let sent = #"{"jobId":"j","kind":"LAND_TASK","state":"RUNNING","skippable":true,"skipCheck":"STOPPING"}"#
+        let job = try JSONDecoder().decode(ProjectIntegrationJob.self, from: Data(sent.utf8))
+        XCTAssertTrue(job.skippable)
+        XCTAssertEqual(job.skipCheck, "STOPPING")
+        let older = try JSONDecoder().decode(ProjectIntegrationJob.self,
+                                             from: Data(#"{"jobId":"j","kind":"LAND_TASK","state":"RUNNING"}"#.utf8))
+        XCTAssertFalse(older.skippable)
+        XCTAssertNil(older.skipCheck)
     }
 }

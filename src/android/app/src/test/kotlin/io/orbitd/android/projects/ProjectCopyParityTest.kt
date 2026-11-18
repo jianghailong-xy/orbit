@@ -36,7 +36,29 @@ class ProjectCopyParityTest {
         assertTrue("${owner.javaClass.simpleName} strings not in the Swift source: $missing", missing.isEmpty())
     }
 
-    @Test fun projectPageWords() = assertIn(ProjectPage, swift("${kit}ProjectPage.swift", "${kit}ProjectPageSections.swift", "${views}ProjectsView.swift"))
+    private val skipCheckKeys = mapOf(
+        "landingSkipCheck" to "SKIP_CHECK",
+        "landingSkipCheckConfirm" to "SKIP_CHECK_CONFIRM",
+        "landingSkipCheckGo" to "SKIP_CHECK_GO",
+        "landingSkipCheckCancel" to "SKIP_CHECK_CANCEL",
+        "landingSkipCheckFailed" to "SKIP_CHECK_FAILED",
+        "landingSkipCheckReason" to "SKIP_CHECK_REASON",
+        "landingSkipCheckStopping" to "SKIP_CHECK_STOPPING",
+        "landingSkipCheckSkipped" to "SKIP_CHECK_SKIPPED",
+    )
+
+    @Test fun projectPageWords() = assertIn(ProjectPage, swift("${kit}ProjectPage.swift", "${kit}ProjectPageSections.swift", "${views}ProjectsView.swift"),
+        composed = skipCheckKeys.keys)
+    @Test fun landingSkipCheckWordsMatchWeb() {
+        val web = File(root, "src/web/src/components/ProjectPanoramaHeader.tsx").readText()
+            .substringAfter("export const LANDING_WORDS = {").substringBefore("\n};")
+        val words = strings(ProjectPage)
+        for ((androidKey, webKey) in skipCheckKeys) {
+            val copy = words.getValue(androidKey)
+            assertTrue("LANDING_WORDS.$webKey differs from ProjectPage.$androidKey",
+                web.lineSequence().any { it == "  $webKey: '$copy'," || it == "  $webKey: \"$copy\"," })
+        }
+    }
     @Test fun startWords() = assertIn(StartProjectCopy, swift("${kit}StartProject.swift", "${kit}ProjectRunSettings.swift", "${kit}CriteriaDecision.swift"))
     /** The main branch's own words are new on every client at once: MainBranchCopyTest holds them to the web's projectStart.ts,
      * whose words the Swift parity tests hold OrbitKit's to. So are the delivery mode's (R29-12): LandingObservationCopyTest holds

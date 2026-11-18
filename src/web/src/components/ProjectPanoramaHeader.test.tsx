@@ -426,6 +426,29 @@ describe('the landing card', () => {
     expect(html).not.toContain('Retry');
   });
 
+  it('offers "Land without the check" on a checking card only where the server says it takes it', () => {
+    const offered = renderAt(seeded(integration({
+      inFlightJobs: [cardJob({ phase: 'CHECK', skippable: true })], landTasks: [landed('job-t2')],
+    })), '2026-09-25T13:59:20Z');
+    // A quiet link beside the way in, not a primary: the card still says nothing is wanted of the
+    // reader, and the press only asks before it stops anything.
+    expect(offered).toContain('class="spl-link">Land without the check<');
+    expect(offered).not.toContain('spl-confirm');
+    expect(offered).toContain('Nothing to do — it lands on its own.');
+    const withheld = renderAt(seeded(integration({
+      inFlightJobs: [cardJob({ phase: 'CHECK', skippable: false })], landTasks: [landed('job-t2')],
+    })), '2026-09-25T13:59:20Z');
+    expect(withheld).not.toContain('Land without the check');
+  });
+
+  it('draws a skip under way instead of "Nothing to do"', () => {
+    const html = renderAt(seeded(integration({
+      inFlightJobs: [cardJob({ phase: 'CHECK', skipCheck: 'STOPPING' })], landTasks: [landed('job-t2')],
+    })), '2026-09-25T13:59:20Z');
+    expect(html).toContain('class="spl-skip">Stopping — it lands again without the landing check.<');
+    expect(html).not.toContain('Nothing to do');
+  });
+
   it('draws the queued card: still, grey, and counting from the enqueue', () => {
     const html = renderAt(
       seeded(integration({
@@ -891,7 +914,7 @@ describe('landingJobLines', () => {
       startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 10_000),
     });
     expect(landingJobLines(listing([running]), NOW, { updatedAt: NOW })).toEqual([{
-      jobId: 'job-t2', taskId: 'task-t2', detail: null, retryable: false,
+      jobId: 'job-t2', taskId: 'task-t2', detail: null, retryable: false, skippable: false, skipCheck: null,
       landingSessionId: null, mergeJob: false,
       line: { word: 'Landing', what: 'T2', running: true, timedOut: false, state: 'checking', clock: '1m 20s',
         clockLabel: 'Elapsed', updated: 'Updated just now', wait: null },
@@ -906,7 +929,7 @@ describe('landingJobLines', () => {
 
   it('draws a promotion, which lands no task, as its word, state and wait alone', () => {
     expect(landingJobLines(listing([merge()]), NOW, { updatedAt: NOW })).toEqual([{
-      jobId: 'job-merge', taskId: null, detail: null, retryable: false,
+      jobId: 'job-merge', taskId: null, detail: null, retryable: false, skippable: false, skipCheck: null,
       // A round of merging, and a server that names no landing session for it.
       landingSessionId: null, mergeJob: true,
       line: { word: 'Merge to main', what: null, running: false, timedOut: false, state: 'queued', clock: '41m 8s',
@@ -934,7 +957,7 @@ describe('landingJobLines', () => {
     ['PUSH', 'pushing', 'may have been pushed'],
   ] as const)('says where a job that timed out at %s stopped, and whether it may have pushed', (phase, stopped, push) => {
     expect(landingJobLines(listing([job({ phase })]), NOW, { updatedAt: NOW })).toEqual([{
-      jobId: 'job-c5', taskId: 'task-c5', retryable: true,
+      jobId: 'job-c5', taskId: 'task-c5', retryable: true, skippable: false, skipCheck: null,
       // A server that names no landing session for the job: the row draws the sentence instead of
       // a link, and the job's own word is not a merge's.
       landingSessionId: null, mergeJob: false,
@@ -1161,7 +1184,7 @@ describe('landingCard', () => {
       what: C5,
       jobs: [{ jobId: 'job-c5', taskId: 'task-c5', word: 'Landing', landingSessionId: null,
         mergeJob: false, title: C5, state: 'fetching', running: true,
-        timedOut: false, retryable: false, detail: null }],
+        timedOut: false, retryable: false, skippable: false, skipCheck: null, detail: null }],
       target: `project/${PROJECT}`,
       clock: '110m 26s',
       clockLabel: 'Elapsed',
@@ -1169,8 +1192,29 @@ describe('landingCard', () => {
       updated: 'Updated just now',
       detail: null,
       retryJobId: null,
+      skipTaskId: null,
+      skipNote: null,
       mergeJob: false,
     });
+  });
+
+  it('offers "Land without the check" for its one landing only where the server says the skip takes it', () => {
+    const running = job({ phase: 'CHECK', timedOut: false, retryable: false, skippable: true,
+      heartbeatAt: instant(NOW - 10_000) });
+    expect(landingCard(listing([running]), NOW, { updatedAt: NOW })!.skipTaskId).toBe('task-c5');
+    // The server's answer: an older server says nothing, and nothing is offered.
+    expect(landingCard(listing([job({ timedOut: false, retryable: false })]), NOW, { updatedAt: NOW })!
+      .skipTaskId).toBeNull();
+    // Several jobs: which landing a single press would skip is not the card's to guess.
+    expect(landingCard(listing([running, merge()]), NOW, { updatedAt: NOW })!.skipTaskId).toBeNull();
+  });
+
+  it('says where a skip stands in the place of "Nothing to do"', () => {
+    const at = (skipCheck: 'STOPPING' | 'SKIPPED' | null) => landingCard(listing([job({
+      phase: 'CHECK', timedOut: false, retryable: false, skipCheck })]), NOW, { updatedAt: NOW })!.skipNote;
+    expect(at('STOPPING')).toBe('Stopping — it lands again without the landing check.');
+    expect(at('SKIPPED')).toBe('Landing without the landing check — you skipped it.');
+    expect(at(null)).toBeNull();
   });
 
   it('counts several jobs in the head and names each one in the rows', () => {

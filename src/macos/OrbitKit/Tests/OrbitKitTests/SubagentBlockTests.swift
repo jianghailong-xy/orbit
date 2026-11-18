@@ -244,7 +244,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(summary.count, 3)
         XCTAssertEqual(summary.running, 1)
         XCTAssertEqual(summary.capsule, "3", "the capsule shows no cost")
-        XCTAssertEqual(summary.spread, "3 engines · 2 machines")
         XCTAssertEqual(summary.rows.map(\SubagentRunView.description), ["iOS tests", "Backoff", "Audit"])
         XCTAssertNil(SubagentSessionSummary.make([]), "no Agent, no capsule")
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")

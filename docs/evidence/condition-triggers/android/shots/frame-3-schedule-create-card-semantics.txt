@@ -1,0 +1,77 @@
+Printing with useUnmergedTree = 'true'
+Node #71 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+ |-Node #123 at (l=0.0, t=0.0, r=411.0, b=891.0)px
+   IsContainer = 'true'
+    |-Node #124 at (l=16.0, t=16.0, r=395.0, b=875.0)px
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [ScrollBy, ScrollByOffset]
+       |-Node #125 at (l=16.0, t=16.0, r=395.0, b=506.0)px, Tag: 'schedule-create-card'
+          |-Node #129 at (l=56.0, t=30.0, r=233.0, b=50.0)px
+          | Text = '[Create scheduled task?]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #130 at (l=30.0, t=60.0, r=185.0, b=80.0)px
+          | Text = '[Ceph capacity guard]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #131 at (l=30.0, t=90.0, r=381.0, b=150.0)px
+          | Text = '[Whenever Ceph's raw use goes above 90%, I look at what is using the space and propose what to clear. I tell you each time it crosses.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #133 at (l=30.0, t=160.0, r=381.0, b=293.0)px, Tag: 'schedule-create-when-condition'
+          |  |-Node #135 at (l=30.0, t=160.0, r=102.0, b=178.0)px
+          |  | Text = '[When]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #137 at (l=114.0, t=160.0, r=327.0, b=178.0)px
+          |  | Text = '[Raw used above 90% for 10 min]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #138 at (l=114.0, t=180.0, r=381.0, b=240.0)px
+          |  | Text = '[Fires again only after it drops below 85%. Checked every 5 min on workstation-gpu, no model.]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #140 at (l=114.0, t=246.0, r=381.0, b=293.0)px
+          |    Focused = 'false'
+          |    Actions = [RequestFocus]
+          |     |-Node #142 at (l=124.0, t=253.0, r=371.0, b=286.0)px, Tag: 'condition-command'
+          |       Text = '[ceph df -f json | jq .stats.total_used_raw_ratio]'
+          |       Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #144 at (l=30.0, t=301.0, r=102.0, b=319.0)px
+          | Text = '[Runs in]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #146 at (l=114.0, t=301.0, r=243.0, b=319.0)px
+          | Text = '[HPC · Claude agent]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #148 at (l=30.0, t=327.0, r=102.0, b=345.0)px
+          | Text = '[May]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #150 at (l=114.0, t=327.0, r=381.0, b=366.0)px
+          | Text = '[Check only · reads and reports, edits nothing]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #152 at (l=30.0, t=374.0, r=102.0, b=392.0)px
+          | Text = '[Costs]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #154 at (l=114.0, t=374.0, r=335.0, b=392.0)px
+          | Text = '[Up to 3 runs a week, 30 min each]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #156 at (l=30.0, t=400.0, r=102.0, b=418.0)px
+          | Text = '[Today]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #158 at (l=114.0, t=400.0, r=273.0, b=418.0)px
+          | Text = '[6.9%. Nothing to report.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #159 at (l=30.0, t=428.0, r=355.0, b=443.0)px
+          | Text = '[You'll hear when it crosses 90%, and if Ceph can't be read.]'
+          | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #162 at (l=16.0, t=459.0, r=205.0, b=505.0)px, Tag: 'schedule-create-q-cap-decline'
+          | Focused = 'false'
+          | Role = 'Button'
+          | Actions = [OnClick, RequestFocus]
+          | MergeDescendants = 'true'
+          |  |-Node #164 at (l=79.0, t=470.0, r=143.0, b=494.0)px
+          |    Text = '[Not now]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #165 at (l=205.0, t=458.0, r=395.0, b=506.0)px, Tag: 'schedule-create-q-cap-allow'
+            Focused = 'false'
+            Role = 'Button'
+            Actions = [OnClick, RequestFocus]
+            MergeDescendants = 'true'
+             |-Node #167 at (l=275.0, t=470.0, r=325.0, b=494.0)px
+               Text = '[Create]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

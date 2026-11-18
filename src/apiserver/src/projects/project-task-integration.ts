@@ -509,7 +509,8 @@ export async function readTaskIntegrationViews(
          WHERE newest_job."state" = 'QUEUED'
       ) runner_wait ON true
       -- M2: an OPEN item about another task's failed absorb of upstream into the same target holds
-      -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3).
+      -- every later landing on it; the conflicted task's own later generations are exempt (§3.1 M3),
+      -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in claimOne.
       -- Read through the item rather than the failed job, so closing it is what lets the queue move.
       -- H1 does NOT exempt an item a new generation is handling: claimOne reads this same condition
       -- and holds those landings too, so the reader says what the claim does with the row
@@ -528,6 +529,9 @@ export async function readTaskIntegrationViews(
            AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
+           AND NOT EXISTS (
+             SELECT 1 FROM "task" fix
+              WHERE fix."id" = newest_job."task_id" AND fix."fixes_open_item_id" = i."id")
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref.

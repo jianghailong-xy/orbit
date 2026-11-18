@@ -36,8 +36,6 @@ internal data class MainCheckoutState(
     val busy: Boolean = false,
     /** Which sheet is up: the review, or this session's own worktree changes (a Move line's View changes). */
     val sheet: Sheet? = null,
-    /** A push waiting on the managed-branch warning (§5): the project it skips. */
-    val confirmPush: String? = null,
     /** Other worktree sessions of the workspace a Move could go to (board 02②): id, title, branch, running. */
     val targets: List<MoveTarget> = emptyList(),
 ) {
@@ -138,16 +136,11 @@ internal class MainCheckoutModel(private val api: MainCheckoutTransport, val ses
         }
     }
 
-    /** Push from the bar or a Commit line: read the checkout first, for its HEAD and whether the branch is a project's (§5). */
-    fun push(confirmed: Boolean = false) = scope.launch {
-        val view = mutable.value.view?.takeIf { confirmed } ?: loadView() ?: return@launch
-        val managed = view.managedBranch
-        if (!confirmed && managed != null) { mutable.update { it.copy(confirmPush = managed.projectTitle) }; return@launch }
-        mutable.update { it.copy(confirmPush = null) }
+    /** Push from the bar or a Commit line: read the checkout first, for its HEAD. */
+    fun push() = scope.launch {
+        val view = loadView() ?: return@launch
         request({ MainCheckout.push(view.snapshot.root, view.snapshot.fingerprint, it, sessionId) })
     }
-
-    fun dismissPush() = mutable.update { it.copy(confirmPush = null) }
 
     fun cancel(requestId: String) {
         val id = workspaceId ?: return

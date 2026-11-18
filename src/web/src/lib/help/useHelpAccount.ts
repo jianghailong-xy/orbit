@@ -22,6 +22,7 @@ type WorkspaceRow = { id: string; name: string; lastActiveAt?: string | null };
 /** GET /tasks/page with status=DONE and one row: whether the account has any done task. */
 const doneTaskQuery = () => ({
   queryKey: ['help', 'get-started', 'done-task'] as const,
+  meta: { entities: ['task'] },
   queryFn: () => api<{ items: unknown[] }>('/tasks/page?status=DONE&limit=1&counts=none'),
 });
 
@@ -42,6 +43,7 @@ export function useHelpAccount(options: { checklist?: boolean } = {}): {
   const wantChecklist = signedIn && options.checklist === true;
   const keys = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
     enabled: wantChecklist,
   });
