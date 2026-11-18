@@ -843,7 +843,7 @@ export class SessionsController {
     return this.sessions.purge(user.userId, id);
   }
 
-  /** Tool-permission approvals for this session (optionally filtered by status). */
+  /** Tool-permission approvals for this session (optionally filtered by status and tool name). */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @TerminalRoute('SESSION')
   @Get(':id/approvals')
@@ -851,8 +851,9 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Query('status') status?: string,
+    @Query('toolName') toolName?: string,
   ) {
-    return this.sessions.listApprovals(user.userId, id, status);
+    return this.sessions.listApprovals(user.userId, id, status, toolName);
   }
 
   /** Allow or deny a pending tool-permission approval. */

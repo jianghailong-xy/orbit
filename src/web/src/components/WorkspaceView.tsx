@@ -341,7 +341,8 @@ import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
 import { agentLanguageOf, answerRefusedUntranslated, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
-import { RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
+import { QuestionTranslationsCtx, RefusedSendBack, TranslationCtx, type TranslationActions } from './TranslationParts';
+import { useQuestionTranslations } from '../lib/questionTranslations';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -4552,6 +4553,7 @@ export function WorkspaceView({
   const translationIsOn = translationOn(me.data);
   const translationBilingual = bilingualOn(me.data);
   const translationAgentLanguage = agentLanguageOf(me.data);
+  const questionTranslations = useQuestionTranslations(selectedId ?? null, approvals, translationIsOn);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -10645,6 +10647,7 @@ export function WorkspaceView({
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
               <TranslationCtx.Provider value={translationActions}>
+              <QuestionTranslationsCtx.Provider value={questionTranslations}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -11067,6 +11070,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </QuestionTranslationsCtx.Provider>
               </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
