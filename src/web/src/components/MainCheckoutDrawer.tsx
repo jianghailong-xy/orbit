@@ -10,7 +10,6 @@ import {
   mainCheckoutDiscardButton,
   mainCheckoutDiscardTitle,
   mainCheckoutManagedBranchWarning,
-  mainCheckoutPushLabel,
   mainCheckoutResultLine,
   mainCheckoutUncommitted,
   shortSha,
@@ -212,16 +211,8 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
       return;
     }
     const s = fresh.snapshot;
-    const go = () => void run({ kind: 'push', root: s.root, fingerprint: s.fingerprint });
-    if (!fresh.managedBranch) return go();
-    const upstream = s.upstream ?? `origin/${s.branch ?? 'main'}`;
-    void confirm({
-      title: `${mainCheckoutPushLabel(upstream)}?`,
-      description: mainCheckoutManagedBranchWarning(fresh.managedBranch.projectTitle),
-      confirmText: 'Push',
-      onConfirm: go,
-    });
-  }, [ws, qc, run, confirm, message]);
+    void run({ kind: 'push', root: s.root, fingerprint: s.fingerprint });
+  }, [ws, qc, run, message]);
 
   const cancel = useCallback(
     (requestId: string) => {
