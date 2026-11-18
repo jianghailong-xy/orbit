@@ -425,7 +425,7 @@ model FeishuConnectCode {             // feishu_connect_code：短命，用掉�
 2. 机器人回一张 `Connect this group to Orbit` 卡片，按钮打开 Orbit 的确认页（LOGIN）。确认页凭一次性 ticket 进入。
 3. 主人在确认页上选：
    - workspace；
-   - permission mode，并写明后果：「群里的人能让 agent 在 <runner> 上以 <mode> 做事」；
+   - permission mode，并写明后果：「群里的人能让 agent 在 <runner> 上以 <mode> 做事」；确认页默认选 Auto（所有者 2026-11-18）；
    - 谁能派活：群里所有人，或指定的人（主人总是可以）；
    - 上限：同时进行的会话数、每天新开的会话数（同项目的 `sessionBudgetPerDay`）。
 4. 确认是**所有者通道**动作（加进 `pat-owner-channel-routes.ts`，PAT 403），因为它让别人能在你的机器上启动 agent。

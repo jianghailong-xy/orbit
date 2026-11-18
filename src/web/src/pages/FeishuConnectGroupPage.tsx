@@ -109,7 +109,9 @@ function ConnectForm({
   const message = useToast();
   const managedRunnerId = useManagedRunnerId();
   const [workspaceId, setWorkspaceId] = useState<string | null>(workspaces.length === 1 ? workspaces[0].id : null);
-  const [mode, setMode] = useState<PermissionMode>(PermissionMode.DEFAULT);
+  // Auto by default (the owner, 2026-11-18). A model that cannot run Auto still opens the session:
+  // dispatch narrows it to Default (normalizeBuiltinPermissionMode), as for any Auto session.
+  const [mode, setMode] = useState<PermissionMode>(PermissionMode.AUTO);
   const [who, setWho] = useState<'everyone' | 'listed'>('everyone');
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [maxConcurrent, setMaxConcurrent] = useState<number | null>(FEISHU_CHAT_DEFAULT_MAX_CONCURRENT);
