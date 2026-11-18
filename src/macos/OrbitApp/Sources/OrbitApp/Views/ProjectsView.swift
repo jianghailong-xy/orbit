@@ -1163,7 +1163,8 @@ struct ProjectDetailView: View {
                         card: card,
                         onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },
                         onOpenProject: nil,
-                        retry: { jobID in try await store.retryIntegrationJob(jobID) })
+                        retry: { jobID in try await store.retryIntegrationJob(jobID) },
+                        skipCheck: { taskID in try await store.skipLandingCheck(taskID) })
                 }
             }
         }

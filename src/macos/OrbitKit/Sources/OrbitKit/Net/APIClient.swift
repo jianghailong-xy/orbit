@@ -1273,6 +1273,14 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/integration/jobs/\(jobID)/retry")
     }
 
+    /// The owner's "Land without the check" on a landing in flight (§2.4 J-S5): the server stops it
+    /// and lands it again with the landing check not run, recorded as skipped by the owner. The
+    /// answer is not read: the card redraws from the integration view read again.
+    public func skipLandingCheck(_ projectID: String, taskID: String) async throws {
+        try await postRaw("projects/\(projectID)/tasks/\(taskID)/integration/skip-merge-check",
+                          body: ["reason": ProjectPage.landingSkipCheckReason])
+    }
+
     /// One page of the project's top-level tasks, newest first.
     public func projectTaskPage(_ projectID: String, cursor: String? = nil,
                                 limit: Int = 100) async throws -> ProjectTaskPage {
