@@ -1,7 +1,7 @@
-# Orbit operation catalogue v1.8.0
+# Orbit operation catalogue v1.9.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `c49ad808dac758b2f745e624df0eeb0bdc2b17cae00d9aa12aab1d54ae637d8f`.
+> Content hash: `7d732ee46e84dc53051375b88a5afaacfd65ef192b813a29c765d610936cce73`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -37,6 +37,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `bg_list` | background_job | low | no | none | no | read | runs | always | absent | See this session's background jobs. |
 | `bg_output` | background_job | low | no | none | no | read | runs | always | absent | Read a background job's output. |
 | `bg_run` | background_job | high | yes | none | no | none | own_gate | always | absent | Run a command in the background on this runner. |
+| `condition_get` | schedule | low | no | none | no | read | runs | always | absent | Read a task's or a schedule's condition: its state, newest samples and events. |
 | `criterion_check_report` | project | high | yes | none | no | none | refused | always | absent | Report the Agent check this session is running. |
 | `criterion_check_start` | project | high | yes | none | no | none | refused | always | absent | Start a criterion check as the project's coordinator. |
 | `criterion_confirm` | project | high | yes | none | no | none | refused | always | absent | Confirm a project criterion as the project's coordinator. |
@@ -184,6 +185,7 @@ An operation missing from one surface is a declared decision, not drift: the cat
 | `bg_list` | CLI | runner-hosted background jobs: a per-session socket call, not a control-plane API call |
 | `bg_output` | CLI | runner-hosted background jobs: a per-session socket call, not a control-plane API call |
 | `bg_run` | CLI | runner-hosted background jobs: a per-session socket call, not a control-plane API call |
+| `condition_get` | CLI | a condition's reads are served to sessions, like a scheduled task's; the person reads it in the app |
 | `criterion_check_report` | CLI | reports the Agent check the calling session is running: a terminal is no such session |
 | `criterion_check_start` | CLI | starts a check as the project's coordinator session: a terminal outside one is refused by the server |
 | `criterion_confirm` | CLI | confirms as the project's coordinator session: a terminal outside one is refused by the server |

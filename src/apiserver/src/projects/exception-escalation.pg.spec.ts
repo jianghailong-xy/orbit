@@ -941,3 +941,73 @@ for (const ending of ['completed', 'trash'] as const) {
       }
     });
 }
+
+for (const state of ['FAILED', 'retryAt', 'completed', 'trash', 'missing'] as const) {
+  test(`Ask the coordinator again distinguishes temporary unavailability from an ended conversation: ${state}`,
+    { skip, timeout: 180_000 }, async () => {
+      const stack = await connect();
+      try {
+        const w = await world(stack, `ask-again-${state}`);
+        const item = await failedTask(stack, w, state);
+        await stack.openItems.handOver(w.ownerId, w.projectId, item.id,
+          { note: 'The owner should decide the next step.' },
+          { kind: 'SESSION', sessionId: w.coordinatorSessionId });
+        const retryAt = new Date(Date.now() + 60 * MINUTE);
+        if (state === 'completed') await stack.sessions.complete(w.ownerId, w.coordinatorSessionId);
+        else if (state === 'trash') await stack.sessions.remove(w.ownerId, w.coordinatorSessionId);
+        else if (state === 'missing') await stack.db.project.update({
+          where: { id: w.projectId }, data: { coordinatorSessionId: null },
+        });
+        else await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
+          status: state === 'FAILED' ? RunStatus.FAILED : RunStatus.PENDING,
+          endReason: null,
+          retryAt: state === 'retryAt' ? retryAt : null,
+        } });
+
+        if (state === 'completed' || state === 'trash' || state === 'missing') {
+          await assert.rejects(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id),
+            (error: unknown) => {
+              assert.ok(error instanceof HttpException);
+              assert.equal(error.getStatus(), 409);
+              assert.equal((error.getResponse() as { code: string }).code, 'OPEN_ITEM_NO_COORDINATOR');
+              return true;
+            });
+          assert.equal((await reread(stack.db, item)).assignee, 'OWNER');
+          return;
+        }
+
+        const list = await stack.openItems.list(w.ownerId, w.projectId);
+        assert.ok(list.needsYou.find((row) => row.itemId === item.id)?.actions.includes('ASK_COORDINATOR_AGAIN'));
+        const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item.id);
+        assert.equal(returned.assignee, 'COORDINATOR');
+        assert.equal(returned.escalateAt, null);
+        assert.equal((await reread(stack.db, item)).assignee, 'COORDINATOR');
+        assert.equal(await deadline(stack, item.id), null);
+        if (state === 'retryAt') assert.equal(
+          (await stack.db.session.findUniqueOrThrow({ where: { id: w.coordinatorSessionId } })).retryAt?.getTime(),
+          retryAt.getTime(), 'the press preserves the scheduled retry');
+
+        // Recovery uses the existing turn-end drain, including concurrent triggers.
+        await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: {
+          status: RunStatus.AWAITING_INPUT, endReason: null, retryAt: null,
+        } });
+        await Promise.all([
+          stack.openItems.deliverOwedTo(w.coordinatorSessionId),
+          stack.openItems.deliverOwedTo(w.coordinatorSessionId),
+        ]);
+        const assignment = await reread(stack.db, item);
+        const key = `open-item:v1:${item.id}:${assignment.assignedAt.getTime()}`;
+        const turns = await stack.db.conversationTurn.findMany({
+          where: { sessionId: w.coordinatorSessionId, clientTurnId: key },
+        });
+        assert.equal(turns.length, 1, 'the current assignment is queued exactly once');
+        assert.equal(turns[0]!.deliveredAt, null);
+        assert.equal(await stack.db.projectOpenItemDelivery.count({
+          where: { itemId: item.id, clientTurnId: key, returnedAt: null },
+        }), 1);
+        assert.equal(await deadline(stack, item.id), null, 'queueing is not pickup');
+      } finally {
+        await stack.db.$disconnect();
+      }
+    });
+}

@@ -890,6 +890,10 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     + 'another account\'s repository that the caller cannot see on GitHub is answered 404 GITHUB_REPO_NOT_FOUND before '
     + 'GitHub is asked for its branches. The census server has no GitHub; github-connection.pg.spec.ts sends it across '
     + 'two accounts against a fake GitHub',
+  // ── conditions (docs/condition-triggers-design.md §8) ─────────────────────────────────────────────
+  'GET /conditions/:id':
+    "read by (id, the caller) and nothing else, 404 CONDITION_NOT_FOUND for another account's id (conditions/conditions.service.ts:354); "
+    + 'conditions.pg.spec.ts reads one across two accounts',
   // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
   'GET /schedules/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",

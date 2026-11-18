@@ -116,6 +116,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
   'project-orphan': 'Nobody has this',
   schedule: 'Scheduled task',
+  condition: 'Condition',
 };
 
 /**
@@ -867,7 +868,7 @@ export class PushService {
             select: {
               title: true,
               coordinatorSessionId: true,
-              coordinatorSession: { select: SESSION_ENDING_SELECT },
+              coordinatorSession: { select: { ...SESSION_ENDING_SELECT, retryAt: true } },
             },
           },
         },
@@ -1184,6 +1185,45 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `confirmation-problems-${recordId}`);
     } catch (err) {
       this.log.warn(`confirmation problems notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A condition that cannot be read (docs/condition-triggers-design.md §5.3, conditions/condition-attention.ts): sent
+   * once, when it enters UNKNOWN, and never for RUNNER_ASLEEP. The tap opens the conversation it came from;
+   * `ownerRequestID` names its Waiting on you item. Best-effort: a failure is logged, never thrown.
+   */
+  async notifyCondition(alert: {
+    ownerId: string;
+    conditionId: string;
+    /** The conversation the condition was created from, which the tap opens; null for none. */
+    sessionId: string | null;
+    ownerRequestId: string | null;
+    title: string;
+    body: string;
+    collapseId: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(alert.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: alert.title, body: alert.body },
+          sound: 'default',
+          'thread-id': `condition-${alert.conditionId}`,
+        },
+        kind: 'condition',
+        conditionID: alert.conditionId,
+        ...(alert.sessionId ? { sessionID: alert.sessionId } : {}),
+        ...(alert.ownerRequestId ? { ownerRequestID: alert.ownerRequestId } : {}),
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'condition', title: alert.title, body: alert.body, collapseId: alert.collapseId, sessionId: alert.sessionId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', alert.collapseId);
+    } catch (err) {
+      this.log.warn(`condition notify failed: ${(err as Error).message}`);
     }
   }
 

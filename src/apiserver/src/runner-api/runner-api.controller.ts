@@ -3,8 +3,9 @@ import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from
 import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
-import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
+import { CONDITION_PROBE_CAPABILITY, readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
+import { ConditionsService } from '../conditions/conditions.service';
 import { GithubWorkspaceService } from '../github/github-workspace.service';
 import {
   BadRequestException,
@@ -1706,6 +1707,7 @@ export class RunnerApiController {
      * by the handoff sweep instead.
      */
     @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
+    @Optional() private readonly conditions?: ConditionsService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2652,6 +2654,16 @@ export class RunnerApiController {
         unwritten.add('agentDirProbes');
       }
     }
+    // What the runner read for its conditions (docs/condition-triggers-design.md §4.2): stored and evaluated for a
+    // condition whose workspace this runner serves, refused for any other (conditions.service.ts intake).
+    if (this.conditions && Array.isArray(dto?.conditionSamples) && dto.conditionSamples.length > 0) {
+      try {
+        await this.conditions.intake({ id: runner.id, ownerId: updated.ownerId }, dto.conditionSamples);
+      } catch (error) {
+        this.logger.warn(`condition samples of runner ${runner.id} were not taken: ${error instanceof Error ? error.message : String(error)}`);
+        unwritten.add('conditionSamples');
+      }
+    }
     // Where each clone the runner was asked for stands (§5.4): moves this runner's own GitHub workspaces only, before
     // the answer below lists what is still to clone, so a clone reported done is not handed out again.
     if (this.githubWorkspaces && Array.isArray(dto?.cloneReports) && dto.cloneReports.length > 0) {
@@ -2677,6 +2689,7 @@ export class RunnerApiController {
     let accountRemoveRequest: RunnerHeartbeatResponse['accountRemoveRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
+    let conditionProbes: RunnerHeartbeatResponse['conditionProbes'];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let dirProbeRequest: RunnerHeartbeatResponse['dirProbeRequest'];
@@ -2745,6 +2758,11 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
+      // The conditions of this runner's workspaces, the whole list on every full answer, like agentDirs; only to a
+      // runner that declares condition-probe/v1. A read that fails leaves the field out: "keep what you have".
+      if (this.conditions && runnerSupportsCapability(capabilities, CONDITION_PROBE_CAPABILITY)) {
+        conditionProbes = await this.conditions.probesFor(runner.id).catch(() => undefined);
+      }
       // Last, after everything this beat owes the runner anyway. It is the one entry here whose
       // request survives being skipped — the timestamp stays on the row until a beat claims it —
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
@@ -2817,6 +2835,7 @@ export class RunnerApiController {
       accountRemoveRequest,
       installRequest,
       agentDirs,
+      ...(conditionProbes ? { conditionProbes } : {}),
       repoCleanupRequest,
       refreshModelCatalog,
       checkSelfUpdate,

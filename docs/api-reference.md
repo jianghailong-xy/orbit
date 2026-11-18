@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 37 |
-| `user` | 477 |
+| `user` | 478 |
 | `admin` | 31 |
-| `runner` | 200 |
+| `runner` | 201 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **749** |
+| **Total** | **751** |
 
 ## Public routes
 
@@ -132,6 +132,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/auth/google/link` | — | `GoogleAuthController.unlink` |
 | `POST` | `/api/auth/google/link` | body `GoogleLinkDto` | `GoogleAuthController.link` |
 | `POST` | `/api/auth/google/link/confirm` | body `GoogleExchangeDto` | `GoogleAuthController.confirmLink` |
+| `GET` | `/api/conditions/:id` | path `id` | `ConditionsController.get` |
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
@@ -622,6 +623,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/claude-history-result` | body `Object` | `RunnerApiController.claudeHistoryResult` |
 | `POST` | `/api/runner/codex-account-remove-result` | body `Object` | `RunnerApiController.codexAccountRemoveResult` |
 | `POST` | `/api/runner/codex-rate-limit-reset-result` | body `Object` | `RunnerApiController.codexRateLimitResetResult` |
+| `GET` | `/api/runner/conditions/:id` | path `id` | `RunnerConditionsController.get` |
 | `POST` | `/api/runner/criterion-checks/report` | body `ReportCriterionCheckDto` | `RunnerCriterionConfirmationController.report` |
 | `POST` | `/api/runner/cursor-key-check-result` | body `CursorKeyCheckResultDto` | `RunnerApiController.cursorKeyCheckResult` |
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |

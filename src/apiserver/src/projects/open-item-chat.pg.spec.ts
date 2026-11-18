@@ -731,7 +731,7 @@ test('refused with its reason where there is no conversation to take the message
 
 // ── an escalated item whose coordinator cannot be reached ─────────────────────────────────────
 
-test('escalated, coordinator reaped while its runner is away: the sentence stops offering the coordinator and the row says it cannot be reached; reachable, both are as before',
+test('escalated, coordinator reaped while its runner is away: Ask again can queue even while chat is unavailable',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -761,18 +761,20 @@ test('escalated, coordinator reaped while its runner is away: the sentence stops
         data: { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60 * 60_000) },
       });
       read = await rowOf(stack, w, red.itemId);
-      assert.ok(!read.row.actions.includes('ASK_COORDINATOR_AGAIN'), 'no press that asks the coordinator');
+      assert.ok(read.row.actions.includes('ASK_COORDINATOR_AGAIN'), 'the press can queue the item');
       assert.equal(read.row.requiredAction,
-        'This task cannot reach the project branch until its landing check passes — re-run it.');
-      assert.doesNotMatch(read.row.requiredAction ?? '', /coordinator/i);
+        'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.');
       assert.equal(read.row.chat.refusal, 'COORDINATOR_UNAVAILABLE');
-      assert.equal(read.row.coordinatorUnreachable, true, 'the heading names the unreachable coordinator');
+      assert.equal(read.row.coordinatorUnreachable, false);
+      const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, red.itemId);
+      assert.equal(returned.assignee, 'COORDINATOR');
+      assert.equal(returned.escalateAt, null);
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again is drawn, the chat is live, the heading is the ordinary one, and the press revives the conversation',
+test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again is drawn, the chat is live, the heading is the ordinary one, and the press leaves the item owed until recovery',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -800,14 +802,24 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
       assert.equal(read.row.requiredAction,
         'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.');
 
-      // The drawn press is not refused: the item is the coordinator's again, and its message
-      // revived the conversation as a message in "Chat about this" would have.
+      // The press hands the item back without changing the failed session.
       const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, red.itemId);
       assert.equal(returned.assignee, 'COORDINATOR');
       const after = await stack.db.projectOpenItem.findUniqueOrThrow({
         where: { id: red.itemId }, select: { assignee: true, state: true, assignedAt: true },
       });
       assert.deepEqual({ assignee: after.assignee, state: after.state }, { assignee: 'COORDINATOR', state: 'OPEN' });
+      assert.equal(returned.escalateAt, null);
+      const session = await stack.db.session.findUniqueOrThrow({
+        where: { id: w.coordinatorSessionId }, select: { status: true, cancelRequestedAt: true },
+      });
+      assert.equal(session.status, RunStatus.FAILED);
+      assert.ok(session.cancelRequestedAt);
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null, finishedAt: null },
+      });
+      await stack.openItems.deliverOwedTo(w.coordinatorSessionId);
       const delivery = await stack.db.projectOpenItemDelivery.findFirst({
         where: { itemId: red.itemId, sessionId: w.coordinatorSessionId, purpose: 'ITEM', returnedAt: null },
         select: { clientTurnId: true, turnId: true },
@@ -817,17 +829,12 @@ test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again 
         where: { id: delivery!.turnId! }, select: { kind: true, content: true },
       });
       assert.equal(turn.kind, 'message');
-      const session = await stack.db.session.findUniqueOrThrow({
-        where: { id: w.coordinatorSessionId }, select: { status: true, cancelRequestedAt: true },
-      });
-      assert.notEqual(session.status, RunStatus.FAILED, 'the press revived the conversation');
-      assert.equal(session.cancelRequestedAt, null);
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('escalated, coordinator that truly cannot receive — runner away, ended with no revival, in Trash, none at all: Ask again is not drawn, the chat is refused, the row says unreachable, and the press is refused',
+test('escalated, coordinator that truly cannot receive — ended with no revival, in Trash, none at all: Ask again is not drawn, the chat is refused, the row says unreachable, and the press is refused',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
@@ -847,17 +854,11 @@ test('escalated, coordinator that truly cannot receive — runner away, ended wi
         const item = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: red.itemId }, select: { assignee: true } });
         assert.equal(item.assignee, 'OWNER', `${label}: nothing moved`);
       };
-      const runnerAway = { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60 * 60_000) };
-
-      // Reaped while the runner is away: the run is down, and nothing can reach it until it is back.
-      await stack.db.session.update({
-        where: { id: w.coordinatorSessionId },
-        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+      // Ending refuses Ask again. Chat also has no runner on which to reopen it.
+      await stack.db.runner.update({
+        where: { id: w.runnerId },
+        data: { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60 * 60_000) },
       });
-      await stack.db.runner.update({ where: { id: w.runnerId }, data: runnerAway });
-      await expectUnreachable('reaped, runner away', 'COORDINATOR_UNAVAILABLE');
-
-      // Ended and closed, with nothing to revive it on.
       await stack.db.session.update({
         where: { id: w.coordinatorSessionId },
         data: { status: RunStatus.CANCELLED, endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },

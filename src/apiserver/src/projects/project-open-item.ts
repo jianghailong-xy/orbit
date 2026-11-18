@@ -791,27 +791,11 @@ export function sessionHasEnded(session: SessionEnding): boolean {
     || run === SessionRunState.FAILED;
 }
 
-/**
- * Whether a project's coordinator conversation can be reached about an item right now, read once
- * for both of the card's doors so they cannot come to two answers about one conversation:
- *
- *  - `coordinator.receiving` — "Chat about this" is live: a message can be delivered there, alive or
- *    ended in a way a message revives (`receiveBlockedReasonFor`, i.e. `canSend` minus a retired run);
- *  - `askable` — ASK_COORDINATOR_AGAIN is drawn, and `returnToCoordinator` refuses on exactly this:
- *    a message can reach it AND the conversation is not over (`conversationIsOver`). A run that is
- *    only down — FAILED by the reaper while its runner was away, nobody closed it — is askable as
- *    soon as its runner is back, because the press revives it as the chat would (2026-11-15: the
- *    chat was live while Ask-again was hidden). One the owner closed (Completed) still takes a chat
- *    message, which is the owner choosing to reopen THAT conversation, but is not where the platform
- *    puts an item back on its own say.
- *
- * So `askable` implies `receiving`, and "nothing works" is `!receiving` (`coordinatorUnreachable`).
- * The project page and the owner's push both read it here.
- */
+/** Read whether the chat can send now and whether Ask again can queue on this conversation. */
 export async function readCoordinatorReach(
   sessions: { receiveBlockedReasonFor(ownerId: string, sessionId: string): Promise<string | null> },
   ownerId: string,
-  project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null },
+  project: { coordinatorSessionId: string | null; coordinatorSession: (SessionEnding & { retryAt?: Date | null }) | null },
 ): Promise<{ askable: boolean; coordinator: { sessionId: string; receiving: boolean } | null }> {
   const blocked = project.coordinatorSessionId
     ? await sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
@@ -819,20 +803,15 @@ export async function readCoordinatorReach(
   const coordinator = project.coordinatorSessionId && blocked !== 'SESSION_GONE'
     ? { sessionId: project.coordinatorSessionId, receiving: blocked == null }
     : null;
-  const askable = coordinator?.receiving === true
-    && project.coordinatorSession != null
-    && !conversationIsOver(project.coordinatorSession);
+  const session = project.coordinatorSession;
+  const askable = coordinator != null && session != null && !conversationIsOver(session)
+    && (coordinator.receiving || conversationIsDown(session) || session.retryAt != null);
   return { askable, coordinator };
 }
 
-/**
- * Whether the owner's item has no coordinator to turn to right now: no conversation a message can
- * reach, so neither "Chat about this" nor ASK_COORDINATOR_AGAIN works (`askable` implies
- * `receiving`, `readCoordinatorReach`). An escalated item's heading says this instead of "no one
- * acted on this", because the doors under it say it already — and never while the chat is live.
- */
-export function coordinatorUnreachable(reach: { coordinator: { receiving: boolean } | null }): boolean {
-  return !reach.coordinator?.receiving;
+/** Whether neither of the owner's coordinator actions is available. */
+export function coordinatorUnreachable(reach: { askable: boolean; coordinator: { receiving: boolean } | null }): boolean {
+  return !reach.askable && !reach.coordinator?.receiving;
 }
 
 /**
