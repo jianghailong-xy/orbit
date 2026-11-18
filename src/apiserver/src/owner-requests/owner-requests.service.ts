@@ -81,6 +81,9 @@ const VIEW = {
   scheduleRunId: true,
   approvalId: true,
   scheduleChangeRequestId: true,
+  // CONDITION_* items (migration 1030, conditions/condition-attention.ts): the condition a can't-read card or the
+  // 30-day question is about, which a client reads to name its schedule or task.
+  conditionId: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,

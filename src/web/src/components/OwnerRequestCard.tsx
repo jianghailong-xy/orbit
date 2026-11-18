@@ -61,6 +61,7 @@ import { PasswordInput } from './ui/PasswordInput';
 import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
+import { ConditionWaitingCard, isConditionWaitingKind } from './ConditionWaitingCard';
 import './OwnerRequest.css';
 import { useMachineName } from '../lib/managedRunner';
 
@@ -400,6 +401,9 @@ export function OwnerRequestCard(props: {
 }): JSX.Element {
   // A scheduled task's items (failed, held, a run's approval, a run's wider envelope) are answered through the door of
   // what they point at, so they draw their own body in the same frame.
+  if (props.request.state === 'PENDING' && isConditionWaitingKind(props.request.kind)) {
+    return <ConditionWaitingCard request={props.request} now={props.now} />;
+  }
   return isScheduleWaitingKind(props.request.kind) && props.request.state === 'PENDING'
     ? <ScheduleWaitingCard request={props.request} now={props.now} />
     : <AgentRequestCard {...props} />;

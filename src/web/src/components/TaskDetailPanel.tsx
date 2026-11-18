@@ -16,6 +16,7 @@ import {
   SafetyOutlined,
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
+import { GaugeIcon } from './ScheduleCards';
 import { WaitingOnYouTaskBadge } from './OwnerRequestCard';
 import { TaskInputs } from './TaskInputs';
 import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
@@ -1799,6 +1800,14 @@ export function TaskDetailPanel({
           {/* A task forked from a session says where its checkout came from, in the server's own
               words (docs/task-fork-from-session-design.md §2.3). Absent on an older server. */}
           {q.data?.forkSource && <div className="tdp-fork-source">{q.data.forkSource}</div>}
+          {/* A task that starts when its condition holds says what it waits for (condition-triggers design §6.2):
+              "Waiting for: 3 or more OSDs are in", in the server's own words, while the condition has not fired. */}
+          {q.data?.startWhen?.waitingLine && (
+            <div className="tdp-start-when" data-start-when="">
+              <GaugeIcon />
+              <span>{q.data.startWhen.waitingLine}</span>
+            </div>
+          )}
           {/* How this row is judged, which nothing else on the page said: a row whose completion
               is owned by a check has no work of its own, and every other row names the method
               that settles it. */}

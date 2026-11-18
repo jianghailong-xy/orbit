@@ -61,6 +61,9 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit, owner: Owne
                 val list = input.obj("preview")?.objects("lists")?.firstOrNull()?.text("title")?.takeIf { it.isNotBlank() }
                     ?: input.text("listTitle")?.takeIf { it.isNotBlank() }
                 list?.let { Text("Into $it") }
+                // A task that starts on a condition (condition-triggers board frame 2): what it waits for, how it is checked and the
+                // command, what it reads today, and what happens if it never holds.
+                io.orbitd.android.core.schedule.StartWhenCardLines.ofCreateInput(input)?.let { io.orbitd.android.schedule.StartWhenLines(it) }
             }
             CardFields(input, if (isTask) listOf("projectTitle", "completionCriterion") else listOf("projectTitle", "listTitle", "completionCriterion"), open)
             input.text("description")?.let { DetailFold("Description") { MarkdownText(it, open = open) } }

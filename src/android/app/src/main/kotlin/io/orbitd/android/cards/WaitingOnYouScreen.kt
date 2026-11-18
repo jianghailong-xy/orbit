@@ -105,7 +105,9 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
     val terminals = if (tab == WaitingTab.OPEN) state.terminalRequests else emptyList()
     // A scheduled task's items, whole (board 01 ⑥): each answers at the schedule's own doors.
     val scheduleItems = if (tab == WaitingTab.OPEN && scheduled != null) state.scheduleItems else emptyList()
-    val empty = rows.isEmpty() && terminals.isEmpty() && scheduleItems.isEmpty()
+    // A condition's items, whole (condition-triggers board ⑥ ①): the can't-read card and the 30-day question.
+    val conditionItems = if (tab == WaitingTab.OPEN && scheduled != null) state.conditionItems else emptyList()
+    val empty = rows.isEmpty() && terminals.isEmpty() && scheduleItems.isEmpty() && conditionItems.isEmpty()
     Column(Modifier.fillMaxSize().testTag("waiting-on-you")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -125,6 +127,11 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(terminals, key = { "terminal:${it.id}" }) { request -> TerminalApproveCard(request, store, now) }
+            if (scheduled != null) items(conditionItems, key = { "condition:${it.id}" }) { item ->
+                io.orbitd.android.schedule.ConditionWaitingCard(item, scheduled,
+                    openSchedule = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") },
+                    openTask = { id -> open("orbit-task:${ObjectId.canonical(id) ?: id}") }, answered = { store.load(OwnerRequestStore.OPEN) })
+            }
             if (scheduled != null) items(scheduleItems, key = { "schedule:${it.id}" }) { item ->
                 val openSchedule: (String) -> Unit = { id -> open("orbit://schedule/${ObjectId.canonical(id) ?: id}") }
                 ScheduleWaitingCard(item, scheduled, openSession = { open("orbit-session:$it") }, openSchedule = openSchedule,
