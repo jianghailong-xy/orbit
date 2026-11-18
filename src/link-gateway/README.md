@@ -494,10 +494,13 @@ The managed runner browser's viewer reaches x11vnc on the runner through a byte 
 ([docs/runner-browser-design.md](../../docs/runner-browser-design.md) §4; `streams.go`). The apiserver asks for one with
 a NATS request on `rnr.<runnerId>`: a `Frame` with only `stream_open` set (a stream id, a UUID it chose, and kind VNC),
 with a reply subject. The gateway relays it to the newest connection of the runner whose Hello declared
-`link-stream-v1`, and answers the request with the runner's `StreamOpened` or `StreamClose`. It refuses at once, without
-asking the runner, a kind other than VNC (`REFUSED`), a runner with no such connection (`REFUSED`, or `CONNECTION_LOST`
-with no connection at all), and a third stream of a runner (`TOO_MANY_STREAMS`: at most 2 per runner). A runner that does
-not answer within 10s is closed `TIMEOUT`.
+`link-stream-v1` and named a `ManagedInstance`, and whose Welcome offered the browser: the welcome route offers it only
+to a managed runner whose instance matches the manager's record (generation and Pod UID) with the browser switch on, so
+a self-managed runner, or one whose instance the route refused, is never sent `StreamOpen`. It answers the request with
+the runner's `StreamOpened` or `StreamClose`. It refuses at once, without asking the runner, a kind other than VNC
+(`REFUSED`), a runner with no such connection (`REFUSED`, or `CONNECTION_LOST` with no connection at all), and a third
+stream of a runner (`TOO_MANY_STREAMS`: at most 2 per runner). A runner that does not answer within 10s is closed
+`TIMEOUT`.
 
 An open stream's bytes travel on `vnc.<streamId>.down` (from the apiserver) and `vnc.<streamId>.up` (to it), each NATS
 message one binary-encoded `Frame` with only `stream_data`, `stream_credit` or `stream_close` set. Each direction has a
