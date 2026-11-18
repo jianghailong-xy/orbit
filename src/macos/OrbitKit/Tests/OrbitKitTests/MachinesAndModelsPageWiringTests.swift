@@ -88,7 +88,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let page = try XCTUnwrap(try lists().first?.code)
         let body = try slice(page, from: "List(selection:", to: ".orbitRevealSurface()")
         try assertInOrder(body, ["if lists.settled {", "if !attention.isEmpty {", "MachinesAndModelsNeedsYouSection(",
-                                 "ForEach(runners.runners)", "RunnerSectionHeader(MachinesAndModels.machines,",
+                                 "ForEach(movable)", "RunnerSectionHeader(MachinesAndModels.machines,",
                                  "Text(MachinesAndModels.machinesDetail)", "RunnerAddSection { addingRunner = true }",
                                  "MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,",
                                  "MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],"],
@@ -96,7 +96,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains(".navigationTitle(title)"))
         XCTAssertTrue(page.contains("case .all:       return AppSection.runners.title"))
         // iOS Settings shows it in two halves, Machines and Providers, as the web's Settings nav groups them.
-        try assertInOrder(body, ["if part != .providers {", "ForEach(runners.runners)", "RunnerAddSection { addingRunner = true }",
+        try assertInOrder(body, ["if part != .providers {", "ForEach(movable)", "RunnerAddSection { addingRunner = true }",
                                  "if part != .machines {", "MachinesAndModelsPoolsSection("], "the two halves")
         // The machines are read again while the page is up, so a row's Offline and its "N / M running"
         // never come from two different reads' worth of time.
@@ -306,9 +306,11 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     func testListReordersAndRemovesAfterAsking() throws {
         let text = try runners()
         for list in try lists() {
-            XCTAssertTrue(list.code.contains(".onMove { moveRunners(runners, from: $0, to: $1) }"), list.name)
-            XCTAssertTrue(list.code.contains(".onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }"),
-                          "\(list.name): a delete only names the runner to ask about")
+            try assertInOrder(list.code, ["RunnerPageFormat.managedFirst(runners.runners",
+                                          "row(pinned, isManaged: true, separates: !movable.isEmpty)",
+                                          "ForEach(movable)", ".onMove { moveRunners(runners, movable: movable, from: $0, to: $1) }",
+                                          ".onDelete { offsets in", "pendingRemoval = movable[index]"],
+                              list.name)
             XCTAssertTrue(list.code.contains(".modifier(RunnerListEditing("), list.name)
         }
         let editing = try slice(text, from: "private struct RunnerListEditing: ViewModifier {", to: "/// A drag in Edit")
@@ -317,10 +319,15 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         XCTAssertTrue(asked.contains(".orbitConfirmation({ _ in removalTitle },"))
         XCTAssertTrue(asked.contains("Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)"))
         XCTAssertTrue(asked.contains("await runners.delete(runner.id)"))
-        let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// The row a delete"))
+        let move = code(try slice(text, from: "@MainActor private func moveRunners(", to: "/// One machine in the list"))
+        XCTAssertTrue(move.contains("var order = movable"))
         XCTAssertTrue(move.contains("order.move(fromOffsets: source, toOffset: destination)"))
         XCTAssertTrue(move.contains("await runners.reorder(ids)"))
-        XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("runners = try await api.reorderRunners(ids)"))
+        let model = code(try appSource("RunnersModel.swift"))
+        try assertInOrder(model, ["func reorder(", ".filter { !RunnerPageFormat.isManaged($0) }",
+                                  "runners = pinned + ordered + before.filter", "let ids = runners.map(\\.id)",
+                                  "runners = try await api.reorderRunners(ids)"],
+                          "Orbit Cloud stays first in the order sent, and the optimistic list keeps every row")
     }
 
     // MARK: a runner's page (ios-detail.png)

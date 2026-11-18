@@ -13,6 +13,7 @@ import type {
   ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
+  ProjectSignInWait,
 } from '@orbit/shared';
 import { SessionLifecycleState } from '@orbit/shared';
 import { api } from '../api';
@@ -62,6 +63,7 @@ import { TaskRunHandoffNotice } from './TaskRunHandoffNotice';
 import { useOwnerCardTranslation, useOwnerLanguageTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
+import { signInHref } from './TaskSignInHold';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 
@@ -295,6 +297,8 @@ export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
 export const REVIEW_ACTION_LABEL = ACTION_LABEL.REVIEW!;
 export const RETRY_ACTION_LABEL = ACTION_LABEL.RETRY!;
 export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
+/** What Review does on an `EVIDENCE_UNDECIDED` item (1110): it opens the task's evidence, not a merge card. */
+export const EVIDENCE_REVIEW_CONSEQUENCE = 'Open the task’s evidence to confirm it or send it back.';
 export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
 export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
 export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
@@ -342,6 +346,7 @@ function actionConsequence(
   row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind' | 'lease'>,
   action: OpenItemAction,
 ): string {
+  if (action === 'REVIEW' && row.kind === 'EVIDENCE_UNDECIDED') return EVIDENCE_REVIEW_CONSEQUENCE;
   if (action === 'RETRY') {
     // Three doors under one name, each wearing the words for what it actually re-runs: a
     // candidate's check, a task's landing, or — on a failed task — the task itself
@@ -405,6 +410,10 @@ function actionHref(
 ): string | null {
   switch (action) {
     case 'REVIEW':
+      // 1110: undecided evidence is reviewed on its task, whose Evidence section shows the revision.
+      if (row.kind === 'EVIDENCE_UNDECIDED') {
+        return row.taskId ? `/tasks/${encodeURIComponent(encodeId(row.taskId))}` : null;
+      }
       // The merge card, mounted beside this list by both hosts — the same anchor the question's
       // press uses, and for the same reason: one merge, confirmed in one place (§7.5).
       return row.promotionId != null
@@ -3069,6 +3078,31 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
   );
 }
 
+/**
+ * One sign-in the project's held tasks wait for (`signIns`): "2 tasks wait for a sign-in", which engine on
+ * which machine, and Sign in into that machine's sign-in. Derived by the server on each read, so it goes
+ * once the engine is signed in.
+ */
+export function SignInWaitRowView({ wait }: { wait: ProjectSignInWait }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner" data-kind="SIGN_IN_WAIT">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-title" title={wait.title}>{wait.title}</div>
+        <div className="project-open-item-line" title={wait.detailLine}>{wait.detailLine}</div>
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+      </div>
+      <div className="project-open-item-press">
+        <Link className="project-open-item-action is-primary" to={signInHref(wait)}>
+          Sign in
+        </Link>
+      </div>
+    </li>
+  );
+}
+
 /** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
 function DoneRequestRowView({
   row,
@@ -3209,11 +3243,12 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
+  const signIns = items.data?.signIns ?? [];
   const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
+    || (paused.length + needsYou.length + signIns.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -3221,18 +3256,21 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + signIns.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart || ownDone ? (
+      {needsYou.length > 0 || signIns.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
             {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
+            {signIns.map((wait) => (
+              <SignInWaitRowView key={`${wait.runnerId}:${wait.engine}`} wait={wait} />
+            ))}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView

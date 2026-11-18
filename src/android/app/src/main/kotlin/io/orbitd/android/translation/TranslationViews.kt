@@ -63,6 +63,10 @@ object TranslationCopy {
     // The conversation (board frames 4–6).
     const val TRANSLATED = "Translated"
     const val SHOW_ORIGINAL = "Show original"
+    // Both languages on, one message's original hidden and back (docs/mocks/translation-hide-original). Not SHOW_ORIGINAL, which
+    // swaps the translation for the original.
+    const val HIDE_ORIGINAL = "Hide original"
+    const val SHOW_BOTH = "Show both"
     const val SHOW_TRANSLATION = "Show translation"
     const val ORIGINAL = "Original"
     const val TRANSLATING = "Translating…"
@@ -195,6 +199,8 @@ class ShownOriginals(private val keys: SnapshotStateMap<String, Boolean> = mutab
     companion object {
         fun user(seq: Long, turnId: String?) = "user:${turnId ?: seq}"
         fun reply(seq: Long) = "reply:$seq"
+        /** Both languages on: this message's original hidden ("Hide original"). */
+        fun hidden(key: String) = "hidden:$key"
     }
 }
 
@@ -255,6 +261,13 @@ fun AnswerNotTranslated(retry: () -> Unit, sendAsWritten: () -> Unit, enabled: B
     }
 }
 
+/** Both languages on: " · Hide original", or " · Show both" once this message's original is hidden (docs/mocks/translation-hide-original). */
+@Composable
+private fun HideOriginal(hidden: Boolean, onPress: (() -> Unit)?, color: Color) {
+    if (onPress == null) return
+    Sep(color); FootAction(if (hidden) TranslationCopy.SHOW_BOTH else TranslationCopy.HIDE_ORIGINAL, color, onPress)
+}
+
 @Composable
 fun TranslationChip(text: String) {
     Text(text, Modifier.testTag("translation-chip").clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
@@ -268,11 +281,14 @@ fun TranslationChip(text: String) {
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
-    // Both languages on: the English is in the message, so there is nothing to flip to (mark C).
+    // Both languages on: the English is in the message, so there is nothing to flip to (mark C); "Hide original" hides it.
     if (bilingual && turn.state == Translation.TurnState.DONE) {
-        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall) }
+        Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
+        }
         return
     }
     when (turn.state) {
@@ -298,11 +314,13 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
  */
 @Composable
 fun ReplyTranslationFoot(reply: Translation.Reply?, pending: Boolean, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?,
-    modifier: Modifier = Modifier, bilingual: Boolean = false) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false, originalHidden: Boolean = false, onHideOriginal: (() -> Unit)? = null) {
     val muted = footColor()
     when {
-        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot")) {
+        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
             Text(TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+            HideOriginal(originalHidden, onHideOriginal, muted)
         }
         reply?.failed == true -> {
             val error = MaterialTheme.colorScheme.error

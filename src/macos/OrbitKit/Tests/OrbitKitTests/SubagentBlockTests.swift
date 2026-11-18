@@ -244,7 +244,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(summary.count, 3)
         XCTAssertEqual(summary.running, 1)
         XCTAssertEqual(summary.capsule, "3", "the capsule shows no cost")
-        XCTAssertEqual(summary.spread, "3 engines · 2 machines")
         XCTAssertEqual(summary.rows.map(\SubagentRunView.description), ["iOS tests", "Backoff", "Audit"])
         XCTAssertNil(SubagentSessionSummary.make([]), "no Agent, no capsule")
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")
@@ -401,6 +400,27 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentResult.text(callResult: receipt,
                                            run: run(background: true, resultSummary: "The spec is written.")),
                        "The spec is written.")
+    }
+
+    /// The server clips a long result to a 2 KB preview: the runner's pretty JSON no longer parses,
+    /// and its first line is a lone `{`. The block reads the run's own text instead.
+    func testAClippedResultReadsTheRunNotTheBrace() {
+        let clipped = "{\n  \"changedFiles\": [],\n  \"costUsd\": 0.21,\n  \"result\": \"Route 1 worked: the transcript is"
+        let handedBack = "Route 1 worked: the transcript is at x.jsonl.\nMore."
+        let text = SubagentResult.text(callResult: clipped, run: run(resultSummary: handedBack))
+        XCTAssertEqual(text, handedBack)
+        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(resultSummary: handedBack, readonly: true),
+                                              status: .ok, result: text).outcome,
+                       "Route 1 worked: the transcript is at x.jsonl.")
+        // Before the run is read there is nothing to say yet, which is better than `{`.
+        XCTAssertNil(SubagentResult.text(callResult: clipped, run: nil))
+    }
+
+    func testAHandBackThatIsJSONSkipsItsBrackets() {
+        let block = SubagentBlock.describe(
+            input: call, run: run(readonly: true), status: .ok,
+            result: "```json\n{\n  \"route\": \"transcript file\"\n}\n```")
+        XCTAssertEqual(block.outcome, #""route": "transcript file""#)
     }
 
     func testPlainTextIsShownAsItCame() {

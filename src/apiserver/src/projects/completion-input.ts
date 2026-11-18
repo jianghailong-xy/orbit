@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { type CoordinatorWakeEvent, type WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 
 /**
@@ -77,6 +78,24 @@ export function completionEvidenceRevisedFact(input: CompletionEvidenceRevision 
  * `completion-input.spec.ts` holds the two spellings to one key. `movedInto` is the project a moved
  * task's revision was handed over to, as the fact's `projectId` is when `movedFromProjectId` is set.
  */
+/**
+ * `completionEvidenceWakeKey` as SQL, over a task id expression and the `task_completion_evidence` row
+ * aliased `evidence`, with `movedInto` the project expression of a confirmed move's hand-over key.
+ * Built by asking `wakeIdempotencyKey` itself with placeholders, so the SQL and the TypeScript key are
+ * one format. Parameter-free: it splices into a statement as raw text and column references.
+ */
+export function completionEvidenceWakeKeySql(taskId: Prisma.Sql, evidence: string, movedInto?: Prisma.Sql): Prisma.Sql {
+  const shape = wakeIdempotencyKey({
+    event: COMPLETION_EVIDENCE_EVENT, subjectType: 'TASK', subjectId: '\u0000T', subjectVersion: '\u0000V',
+  });
+  const [before, between, after] = shape.split(/\u0000[TV]/);
+  const literal = (text: string) => Prisma.raw(`'${text.replace(/'/g, "''")}'`);
+  const row = Prisma.raw(`"${evidence}"`);
+  const version = Prisma.sql`${row}."revision"::text || ':' || ${row}."criterion_revision" || ':' || ${row}."evidence_digest"`;
+  const moved = movedInto ? Prisma.sql` || ':moved-into:' || ${movedInto}::text` : Prisma.empty;
+  return Prisma.sql`(${literal(before)} || ${taskId}::text || ${literal(between)} || ${version}${moved} || ${literal(after)})`;
+}
+
 export function completionEvidenceWakeKey(
   taskId: string,
   input: CompletionEvidenceRevision,

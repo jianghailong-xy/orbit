@@ -269,13 +269,20 @@ final class RunnersModel {
         return failure
     }
 
-    /// The list in a new order: the rows move at once, and the server's answer — every runner, in the
-    /// order it keeps — settles it.
-    func reorder(_ ids: [String]) async {
+    /// The other machines in a new order, Orbit Cloud kept first in the order saved (as the web sends it, for a
+    /// client that does not pin it): the rows move at once, and the server's answer settles it.
+    func reorder(_ orderedIDs: [String]) async {
         let before = runners
-        runners = ids.compactMap { id in before.first { $0.id == id } }
+        let ordered = orderedIDs.compactMap { id in before.first { $0.id == id } }
+            .filter { !RunnerPageFormat.isManaged($0) }
+        guard !ordered.isEmpty else { return }
+        let moved = Set(ordered.map(\.id))
+        let pinned = before.filter { RunnerPageFormat.isManaged($0) }
+        runners = pinned + ordered + before.filter { !moved.contains($0.id) && !RunnerPageFormat.isManaged($0) }
+        let ids = runners.map(\.id)
         do {
             runners = try await api.reorderRunners(ids)
+            onRead?(runners)
         } catch {
             runners = before
             errorText = APIClient.failureReason(error)

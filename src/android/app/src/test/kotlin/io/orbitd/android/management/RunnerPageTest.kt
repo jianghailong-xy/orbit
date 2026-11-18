@@ -88,11 +88,27 @@ class RunnerPageTest {
         val previous = io.orbitd.android.composer.ManagedRunnerIdentity.runnerId
         io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = null
         try {
-            val setUp = io.orbitd.android.composer.MachineSetup.machinesToSetUp(listOf(flagged, other), emptyList(), managedStatus = null)
+            val setUp = io.orbitd.android.composer.MachineSetup.machinesToSetUp(listOf(other, flagged), emptyList(), managedStatus = null)
             assertEquals(listOf("Orbit Cloud", "build-box"), setUp.map { it.name })
         } finally {
             io.orbitd.android.composer.ManagedRunnerIdentity.runnerId = previous
         }
+    }
+
+    @Test fun managedRunnerFirstKeepsTheOtherMachinesInServerOrder() {
+        fun row(id: String, managed: Boolean? = null) = buildJsonObject {
+            put("id", id)
+            managed?.let { put("managed", it) }
+        }
+        val first = row("b", false)
+        val second = row("a")
+        val id = "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e99"
+        val flagged = row(id, true)
+        val legacy = row(id)
+        assertEquals(listOf(flagged, first, second), RunnerPage.managedRunnerFirst(listOf(first, flagged, second), null))
+        val runners = listOf(first, second, legacy)
+        assertEquals(listOf(legacy, first, second), RunnerPage.managedRunnerFirst(runners, id))
+        assertEquals(runners, RunnerPage.managedRunnerFirst(runners, null))
     }
 
     /** The account's managed runner is Orbit Cloud — told by the managed status's runnerId, never by its stored name — unless its owner

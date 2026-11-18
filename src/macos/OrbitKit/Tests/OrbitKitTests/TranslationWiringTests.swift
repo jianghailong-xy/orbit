@@ -25,7 +25,7 @@ final class TranslationWiringTests: XCTestCase {
     func testTheBubblesDrawTheFootAndTheToggle() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped && !bilingual)"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage,"))
         XCTAssertTrue(bubbles.contains("PlatformPasteboard.copyString(words)"), "copy hands back the words on screen")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,"))
@@ -39,12 +39,14 @@ final class TranslationWiringTests: XCTestCase {
     func testTheBubblesDrawBothLanguagesWhenTheAccountSaysSo() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("private var bilingual: Bool { translationActions?.bilingual == true }"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual && !originalHidden)"))
         XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation,"))
+        // "Hide original" (docs/mocks/translation-hide-original): each bubble hides its own original.
+        XCTAssertEqual(bubbles.components(separatedBy: "case .hideOriginal: originalHidden.toggle()").count - 1, 2)
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual && !originalHidden)"))
         XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)"))
         // A reply whose blocks pair is drawn block by block, its originals under them (03-interleaved.png).
-        XCTAssertTrue(bubbles.contains("SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)"))
         XCTAssertTrue(bubbles.contains("if bubble.isFinalized, let pairs {"))
         XCTAssertTrue(bubbles.contains("InterleavedReplyView(pairs: pairs)"))
         let views = try source(app + "Views/Console/TranslationViews.swift")

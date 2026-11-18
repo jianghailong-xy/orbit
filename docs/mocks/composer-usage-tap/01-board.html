@@ -1,0 +1,163 @@
+<!doctype html>
+<!-- Design mock: on a compact-width iPhone, the composer footer's plan usage bar and context ring
+     (ComposerView.swift PlanUsageIndicator / ContextWindowIndicator) become one 32pt button that opens
+     one "Context and plan usage" sheet, as Android's ComposerUsage.kt already does. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Composer usage · one tap target on iPhone</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-compact" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16M4 15h16"/><path d="M9 4l3 3 3-3M9 20l3-3 3 3"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M3 12h11M10 8l4 4-4 4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+</svg>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">01 · iPhone 输入框底栏：用量条和上下文圆环合成一个按钮（两个都保留）</h1>
+  <p class="m-sub zh">现在手机上两个控件都很小，用量条能点的地方只有 20×4pt。用量条和圆环都要一眼看到，所以两个都保留，只是放进同一个按钮：整块 62×32 都能点（和 + 、发送按钮一样高），点开一个合并的 "Context and plan usage" 面板 —— Android 现在就是这样做的（ComposerUsage.kt）。iPad 和 macOS 不变。</p>
+
+  <div class="m-grid2">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">现在</span><span class="zh">两个控件，红框是实际能点的区域（2 倍放大）</span></div>
+      <div class="zoom">
+        <div class="card">
+          <div class="ph">Message…</div>
+          <div class="tb">
+            <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+            <span class="model"><b>Opus 5.5</b><span>Medium</span></span>
+            <span class="hit" style="width:40px;height:8px"><span class="zbar"><i style="width:10%"></i></span><span class="lab">20×4</span></span>
+            <span class="hit" style="width:32px;height:32px"><span class="ring" style="width:32px;height:32px" data-p="35"></span><span class="lab">16×16</span></span>
+            <span class="send"><svg><use href="#i-up"/></svg></span>
+          </div>
+          <div class="under"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">改为</span><span class="zh">用量条 + 圆环合成一个按钮，绿框是点击区域</span></div>
+      <div class="zoom m-mark" style="outline-offset:3px">
+        <span class="m-n">1</span>
+        <div class="card">
+          <div class="ph">Message…</div>
+          <div class="tb">
+            <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+            <span class="model"><b>Opus 5.5</b><span>Medium</span></span>
+            <span class="hit ok pill" style="width:124px;height:64px"><span class="gp"><span class="gbar"><i style="width:10%"></i></span><span class="ring" data-p="35"></span></span><span class="lab">62×32</span></span>
+            <span class="send"><svg><use href="#i-up"/></svg></span>
+          </div>
+          <div class="under"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage" style="margin-top:20px">
+    <div class="m-stage-l"><span class="m-k state">按钮状态</span><span class="zh">用量条 = 套餐用量，圆环 = 上下文用量；各自的颜色规则和现在一样</span></div>
+    <div class="states m-mark" style="outline-offset:6px">
+      <span class="m-n">2</span>
+      <div class="rs"><span class="gp"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-p="35"></span></span><p><b>正常</b>套餐 12%，上下文 35%</p></div>
+      <div class="rs"><span class="gp"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-p="0"></span></span><p><b>上下文还没有读数</b>新会话，空心实线圆环</p></div>
+      <div class="rs"><span class="gp"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-p="82" data-c="#ff9f0a"></span></span><p><b>上下文 ≥ 75% / ≥ 90%</b>圆环变橙色 / 红色</p></div>
+      <div class="rs"><span class="gp"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="35"></span></span><p><b>套餐 ≥ 90%</b>用量条变橙色</p></div>
+      <div class="rs"><span class="gp"><span class="gbar red"><i style="width:100%"></i></span><span class="ring" data-p="35"></span></span><p><b>套餐用完</b>整条变红色</p></div>
+      <div class="rs"><span class="gp"><span class="ring" data-p="35"></span></span><p><b>没有套餐数据</b>（API key 会话）只有圆环，点击区域仍是 32×32</p></div>
+      <div class="rs"><span class="gp"><span class="gbar"><i style="width:12%"></i></span><span class="ring" data-dash></span></span><p><b>Cursor CLI</b>虚线圆环（没有上下文读数）</p></div>
+    </div>
+  </div>
+
+  <h2 class="m-h2 zh">点开后：一个面板，读数在上，操作在下（顺序同 Android 的对话框）</h2>
+  <div class="m-grid3">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">iOS 1</span><span class="zh">协调会话 · 空闲</span></div>
+      <div class="phone"><div class="screen">
+        <div class="chat" style="padding-top:30px">…Fix login redirect is in review.</div>
+        <div class="dim"></div>
+        <div class="sheet m-mark" style="outline-offset:-3px">
+          <span class="m-n" style="top:6px;right:8px">3</span>
+          <div class="grab"></div>
+          <div class="sh-h"><b>Context and plan usage</b><span>Done</span></div>
+          <div class="sec">Context</div>
+          <div class="grp">
+            <div class="row col"><div class="top">Context window<span class="v amber-t">82%</span></div><div class="bar amber"><i style="width:82%"></i></div><div class="sub">820k / 1M tokens</div></div>
+          </div>
+          <div class="sec">Plan usage</div>
+          <div class="grp">
+            <div class="row">Account<span class="v">work@example.com</span></div>
+            <div class="row col"><div class="top">5-hour<span class="v">12%</span></div><div class="bar"><i style="width:12%"></i></div><div class="sub">Resets Nov 17, 4:00 PM</div></div>
+            <div class="row col"><div class="top">Weekly<span class="v">79%</span></div><div class="bar"><i style="width:79%"></i></div><div class="sub">Resets Nov 20, 9:00 AM</div></div>
+          </div>
+          <div class="grp">
+            <div class="act"><svg><use href="#i-compact"/></svg><span><b>Compact</b><span>Summarize earlier turns and keep going here.</span></span></div>
+            <div class="act"><svg><use href="#i-handoff"/></svg><span><b>Start a new coordinator</b><span>This one writes a handoff note, then the project continues in a fresh conversation.</span></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">iOS 2</span><span class="zh">普通会话 · 运行中 · 套餐快用完</span></div>
+      <div class="phone"><div class="screen">
+        <div class="chat">Working on the retry backoff…</div>
+        <div class="dim"></div>
+        <div class="sheet" style="top:150px">
+          <div class="grab"></div>
+          <div class="sh-h"><b>Context and plan usage</b><span>Done</span></div>
+          <div class="sec">Context</div>
+          <div class="grp">
+            <div class="row col"><div class="top">Context window<span class="v">41%</span></div><div class="bar"><i style="width:41%"></i></div><div class="sub">410k / 1M tokens</div></div>
+          </div>
+          <div class="sec">Plan usage</div>
+          <div class="grp">
+            <div class="row col"><div class="top">5-hour<span class="v amber-t">94%</span></div><div class="bar amber"><i style="width:94%"></i></div><div class="sub">Resets Nov 17, 4:00 PM</div></div>
+          </div>
+          <div class="grp">
+            <div class="act dis"><svg><use href="#i-compact"/></svg><span><b>Compact</b><span>Available when this turn ends.</span></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">iOS 3</span><span class="zh">关闭面板后的底栏（对应 iOS 2）</span></div>
+      <div class="phone"><div class="screen">
+        <div class="chat">Working on the retry backoff…<br><br>Retries now back off 1s, 2s, 4s, capped at 30s. Running the client tests next.</div>
+        <div class="pcomp m-mark" style="outline-offset:3px">
+          <span class="m-n">4</span>
+          <div class="ph">Message…</div>
+          <div class="ptb">
+            <span class="plus">+</span><span>Bypass</span><span class="grow"></span>
+            <span class="model"><b>Opus 5.5</b> Medium</span>
+            <span class="tap wide"><span class="gp"><span class="gbar amber"><i style="width:94%"></i></span><span class="ring" data-p="41"></span></span></span>
+            <span class="send"><svg><use href="#i-up"/></svg></span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>只在 iPhone（compact 宽度）上合并，两个读数都保留。</b>用量条（24×5，比现在的 20×4 稍大，更好看清）和圆环（16pt）并排放在一个按钮里，整块 62×32 都能点，按下时整块显示按下效果。iPad（regular）和 macOS 仍是两个带数字的控件。</span></li>
+    <li><span class="m-n">2</span><span><b>颜色规则不变：</b>用量条按套餐用量（≥90% 橙色，用完红色），圆环按上下文用量（≥75% 橙色，≥90% 红色），一眼就能分别看到两项。没有套餐数据时只剩圆环，点击区域不小于 32×32。无障碍标签同时读出两项："Plan usage 94%, context 41%"。</span></li>
+    <li><span class="m-n">3</span><span><b>合并面板的标题用 "Context and plan usage"</b>，和 Android 一样。分组顺序：Context → Plan usage（Account、各时间窗口、重置时间，以及 Codex 的重置额度卡片）→ 操作。操作的显示条件和 coordinator-context-actions 的 03 一样。没有套餐数据时，不显示 Plan usage 这一组。</span></li>
+    <li><span class="m-n">4</span><span><b>关掉面板后，底栏照常显示两个读数</b>（这里用量条是橙色的 94%），不用打开面板就能看到。</span></li>
+  </ul>
+</div>
+<script>
+// Draw each .ring as UsageRing does: a quaternary track, then the trimmed arc from 12 o'clock.
+for (const el of document.querySelectorAll('.ring')) {
+  const p = Number(el.dataset.p || 0), c = el.dataset.c || '#0a84ff';
+  const track = el.hasAttribute('data-dash')
+    ? '<circle cx="18" cy="18" r="14" fill="none" stroke="#8e8e93" stroke-width="3" stroke-dasharray="4.4 4.4"/>'
+    : `<circle cx="18" cy="18" r="14" fill="none" stroke="#3a3a3c" stroke-width="5"/>` +
+      (p > 0 ? `<circle cx="18" cy="18" r="14" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round" pathLength="100" stroke-dasharray="${p} 100"/>` : '');
+  el.innerHTML = `<svg viewBox="0 0 36 36">${track}</svg>` + (el.dataset.dot ? `<i class="dot" style="background:${el.dataset.dot}"></i>` : '');
+}
+</script>
+</body>
+</html>

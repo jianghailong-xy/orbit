@@ -314,6 +314,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// OpenCode only: its CLI listed no provider key, stored or in its environment. `auth` stays
+    /// unknown — OpenCode's free models need none. Absent otherwise, and from an older runner.
+    public let openCodeNoKey: Bool?
     /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
     /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
     /// Present only while the runner reports another account of this engine: Default is then left out
@@ -329,8 +332,9 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
                 installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
-                removedDefault: RunnerRemovedDefault? = nil) {
+                removedDefault: RunnerRemovedDefault? = nil, openCodeNoKey: Bool? = nil) {
         self.engine = engine
+        self.openCodeNoKey = openCodeNoKey
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
