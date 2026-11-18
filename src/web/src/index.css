@@ -12686,6 +12686,11 @@ button.chat-jump-start:hover {
    like the other two cards Orbit draws into a conversation. */
 /* The receipt wears the same head as the card it replaces, so it takes the same row: the heading,
    and the provenance mark pushed to the trailing edge by its own `margin-left: auto`. */
+/* The receipt is kept to the width of the conversation's other cards (`.crc`), not stretched across
+   the stream, like the evidence receipt. Two classes, because `.approval-card` is written further down. */
+.approval-card.settlement-receipt {
+  max-width: 720px;
+}
 .settlement-card .approval-head,
 .settlement-receipt .approval-head {
   display: flex;
@@ -14249,7 +14254,12 @@ button.chat-jump-start:hover {
   min-width: 0;
 }
 /* The receipt a card answered in this window leaves in its place (`CriteriaDecisionReceipt`): the
-   question's head, then one line saying what was recorded and where the proposing session was told. */
+   question's head, then one line saying what was recorded and where the proposing session was told.
+   The card itself keeps to the width of the conversation's other cards (`.crc`), like the evidence
+   receipt; the open question keeps its full width. */
+.approval-card.criteria-decision.is-answered {
+  max-width: 720px;
+}
 .criteria-decision-receipt {
   margin: 0;
   padding: 8px 14px;
