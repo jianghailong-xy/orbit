@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -304,5 +305,135 @@ func TestBrowserLeaseKeyedByPublicID(t *testing.T) {
 	r.b.Release(uuid)                   // the pool's id
 	if h := r.b.Holder(); h != "" {
 		t.Fatalf("holder = %q: the pool's id did not release the engine's lease", h)
+	}
+}
+
+// Clear saved logins (docs/runner-browser-design.md §5, §6): the browser stops, whoever holds it and whatever viewers
+// are open, its profile is deleted with everything in it, and the next report says when.
+func TestBrowserClearProfileStopsTheBrowserAndDeletesTheProfile(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := r.b.Acquire("sess-a", "Sign in"); err != nil {
+		t.Fatal(err)
+	}
+	closeViewer := r.b.ViewerOpened()
+	defer closeViewer()
+	profile := r.b.ProfileDir()
+	cookies := filepath.Join(profile, "Default", "Cookies")
+	if err := os.MkdirAll(filepath.Dir(cookies), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cookies, []byte("a saved login"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := r.b.Report()
+	if !before.Running || before.HolderSessionID != "sess-a" || before.HolderTitle != "Sign in" || before.Viewers != 1 || before.ProfileClearedAt != "" {
+		t.Fatalf("report before the clear = %+v", before)
+	}
+	reaped := r.starter.reaped
+
+	if err := r.b.ClearProfile(); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if live := r.starter.live(); len(live) != 0 {
+		t.Fatalf("still running after the clear: %v", live)
+	}
+	if r.starter.reaped == reaped {
+		t.Fatal("the clear reaped nothing the browser's programs left")
+	}
+	if _, err := os.Stat(profile); !os.IsNotExist(err) {
+		t.Fatalf("the profile is still there after the clear: %v", err)
+	}
+	if _, err := os.Stat(r.b.stateDir); err != nil {
+		t.Fatalf("the clear deleted more than the profile: %v", err)
+	}
+	after := r.b.Report()
+	if after.Running {
+		t.Fatalf("report after the clear says running: %+v", after)
+	}
+	if want := r.clock.Now().UTC().Format(time.RFC3339Nano); after.ProfileClearedAt != want {
+		t.Fatalf("profileClearedAt = %q, want %q", after.ProfileClearedAt, want)
+	}
+
+	// The holder's next browser call starts a browser on a new, empty profile.
+	if err := r.b.Acquire("sess-a", ""); err != nil {
+		t.Fatalf("acquire after the clear: %v", err)
+	}
+	if got := strings.Join(r.starter.live(), ","); got != "Xvfb,x11vnc,chromium" {
+		t.Fatalf("started after the clear: %s", got)
+	}
+	if _, err := os.Stat(cookies); !os.IsNotExist(err) {
+		t.Fatalf("a saved login came back: %v", err)
+	}
+	if st, err := os.Stat(profile); err != nil || !st.IsDir() {
+		t.Fatalf("no new profile: %v", err)
+	}
+}
+
+// A clear while nothing runs, or while the server does not offer the browser, still deletes the profile.
+func TestBrowserClearProfileWhileStoppedOrNotOffered(t *testing.T) {
+	r := newBrowserRig(t)
+	if err := os.MkdirAll(filepath.Join(r.b.ProfileDir(), "Default"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r.b.SetOffered(false)
+	if err := r.b.ClearProfile(); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, err := os.Stat(r.b.ProfileDir()); !os.IsNotExist(err) {
+		t.Fatalf("the profile is still there: %v", err)
+	}
+	if len(r.starter.started) != 0 {
+		t.Fatalf("the clear started something: %d programs", len(r.starter.started))
+	}
+	// Clearing a profile that is not there is no error.
+	if err := r.b.ClearProfile(); err != nil {
+		t.Fatalf("second clear: %v", err)
+	}
+}
+
+// A runner with no browser reports none and clears nothing.
+func TestBrowserReportAndClearWithoutABrowser(t *testing.T) {
+	var b *browserSupervisor
+	if b.Report() != nil {
+		t.Fatal("a runner with no browser reported one")
+	}
+	if err := b.ClearProfile(); !errors.Is(err, errBrowserUnavailable) {
+		t.Fatalf("clear without a browser: %v", err)
+	}
+	if newRunnerBrowser(noEnv, t.TempDir(), newFakePoolClock(), &fakeBrowserStarter{}, nil) != nil {
+		t.Fatal("a self-managed runner has a browser")
+	}
+}
+
+// The heartbeat carries the report and the clear under the names @orbit/shared gives them, and only a managed runner
+// declares browser-clear/v1, the capability the control plane checks before it asks for a clear.
+func TestBrowserClearWireNamesAndCapability(t *testing.T) {
+	if !declaresBrowserClear(managedEnv) || declaresBrowserClear(noEnv) {
+		t.Fatal("browser-clear/v1 is declared by the wrong runners")
+	}
+	shared, err := os.ReadFile(filepath.Join("..", "shared", "src", "dto.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"BROWSER_CLEAR_V1 = '" + browserClearCapabilityV1 + "'",
+		"clearBrowserProfile?: boolean;",
+		"browser?: RunnerBrowserReport;",
+		"holderSessionId?: string;", "holderTitle?: string;", "profileClearedAt?: string;", "viewers: number;", "running: boolean;",
+	} {
+		if !strings.Contains(string(shared), want) {
+			t.Errorf("@orbit/shared does not say %s", want)
+		}
+	}
+	var resp HeartbeatResponse
+	if err := json.Unmarshal([]byte(`{"clearBrowserProfile":true}`), &resp); err != nil || !resp.ClearBrowserProfile {
+		t.Fatalf("clearBrowserProfile not read: %v %+v", err, resp.ClearBrowserProfile)
+	}
+	body, err := json.Marshal(HeartbeatRequest{Browser: &BrowserReport{Running: true, HolderSessionID: "s", Viewers: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"browser":{"running":true,"holderSessionId":"s","viewers":2}`) {
+		t.Fatalf("heartbeat body: %s", body)
 	}
 }

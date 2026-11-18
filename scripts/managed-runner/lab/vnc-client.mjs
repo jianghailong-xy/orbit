@@ -2,10 +2,12 @@
 // A scripted viewer of the managed runner browser (docs/runner-browser-design.md §4): opens the viewer route's WebSocket,
 // GET /api/runners/:id/browser/vnc, completes the RFB 3.8 handshake with x11vnc on the runner (security None), asks for
 // the whole screen and then for UPDATES incremental updates, and prints what it got as one JSON object. With --ppm, the
-// first full framebuffer is written there as a PPM picture. The access token is read from the environment and never
-// printed.
+// first full framebuffer is written there as a PPM picture. With --keys, before it asks for the screen it types into
+// the browser as the owner would in the viewer: a `|`-separated list of `type:TEXT` (each character as its keysym),
+// a key name (Return, Tab, Escape, BackSpace), `ctrl+X`, or `wait:MS`. The access token is read from the environment
+// and never printed.
 //
-//   ORBIT_ACCESS_TOKEN=... node vnc-client.mjs ws://127.0.0.1:13718 <runnerId> [--updates N] [--ppm out.ppm]
+//   ORBIT_ACCESS_TOKEN=... node vnc-client.mjs ws://127.0.0.1:13718 <runnerId> [--updates N] [--ppm out.ppm] [--keys SPEC]
 import { writeFileSync } from 'node:fs';
 
 const [base, runnerId, ...rest] = process.argv.slice(2);
@@ -19,6 +21,7 @@ const option = (name, fallback) => {
 };
 const updates = Number(option('--updates', '3'));
 const ppm = option('--ppm', '');
+const keys = option('--keys', '');
 const url = `${base.replace(/\/$/, '')}/api/runners/${encodeURIComponent(runnerId)}/browser/vnc`;
 
 const began = Date.now();
@@ -92,6 +95,26 @@ try {
   const name = (await read(init.readUInt32BE(20))).toString('utf8');
   step('server init', { width, height, pixelFormat: pf, name });
   report.handshake = 'complete';
+  if (keys) {
+    const KEYSYMS = { Return: 0xff0d, Tab: 0xff09, Escape: 0xff1b, BackSpace: 0xff08 };
+    const key = (sym, down) => send([4, down ? 1 : 0, 0, 0, (sym >>> 24) & 0xff, (sym >> 16) & 0xff, (sym >> 8) & 0xff, sym & 0xff]);
+    const tap = async (sym) => {
+      key(sym, true);
+      key(sym, false);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    };
+    for (const item of keys.split('|')) {
+      if (item.startsWith('wait:')) await new Promise((resolve) => setTimeout(resolve, Number(item.slice(5))));
+      else if (item.startsWith('type:')) for (const ch of item.slice(5)) await tap(ch.codePointAt(0));
+      else if (item.startsWith('ctrl+')) {
+        key(0xffe3, true);
+        await tap(item.slice(5).codePointAt(0));
+        key(0xffe3, false);
+      } else if (KEYSYMS[item]) await tap(KEYSYMS[item]);
+      else throw new Error(`unknown key ${JSON.stringify(item)}`);
+    }
+    step('keys sent', { items: keys.split('|').length });
+  }
   send([2, 0, ...u16(1), 0, 0, 0, 0]); // SetEncodings: Raw
   const bpp = pf.bitsPerPixel / 8;
   const frame = Buffer.alloc(width * height * bpp);

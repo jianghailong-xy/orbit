@@ -37,6 +37,16 @@ const (
 	browserVNCSocketName = "vnc.sock"
 )
 
+// browserClearCapabilityV1 declares that this runner reports its browser on each heartbeat and honours Clear saved
+// logins (HeartbeatResponse.ClearBrowserProfile): @orbit/shared's BROWSER_CLEAR_V1. Only a managed runner declares it.
+const browserClearCapabilityV1 = "browser-clear/v1"
+
+// declaresBrowserClear: whether this process declares browserClearCapabilityV1, the runners that have a browser.
+func declaresBrowserClear(lookup func(string) (string, bool)) bool {
+	v, ok := lookup(envManagedRunnerGeneration)
+	return ok && v != ""
+}
+
 // errBrowserUnavailable: this runner has no browser now — not a managed runner, or the server does not offer it.
 var errBrowserUnavailable = errors.New("The browser is not available on this runner")
 
@@ -79,12 +89,14 @@ type browserSupervisor struct {
 	// stopAfterTurn: the server stopped offering the browser while a session held it; it stops when the lease ends.
 	stopAfterTurn bool
 	idle          poolTimer
+	// clearedAt is when the owner last cleared the saved logins (zero: not since this process started).
+	clearedAt time.Time
 }
 
 // newRunnerBrowser is this runner's browser supervisor: nil unless the managed image's entrypoint started it
 // (ORBIT_MANAGED_RUNNER_GENERATION set). Every method is safe on nil and acts as "no browser".
 func newRunnerBrowser(lookup func(string) (string, bool), home string, clock poolClock, starter browserProcessStarter, log func(...any)) *browserSupervisor {
-	if v, ok := lookup(envManagedRunnerGeneration); !ok || v == "" {
+	if !declaresBrowserClear(lookup) {
 		return nil
 	}
 	if log == nil {
@@ -278,6 +290,51 @@ func (b *browserSupervisor) Running() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.procs != nil
+}
+
+// ClearProfile is the owner's Clear saved logins (docs/runner-browser-design.md §5, §6; HeartbeatResponse.
+// ClearBrowserProfile): it stops the browser, whoever holds it and whatever viewers are open, and deletes its profile,
+// with every cookie and saved login in it. A session that holds the lease keeps it: its next browser call starts a
+// browser on a new, empty profile. Done whether or not the server offers the browser now.
+func (b *browserSupervisor) ClearProfile() error {
+	if b == nil {
+		return errBrowserUnavailable
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.stopLocked("the owner cleared its saved logins")
+	if err := os.RemoveAll(b.ProfileDir()); err != nil {
+		return fmt.Errorf("The saved logins could not be cleared: %w", err)
+	}
+	b.clearedAt = b.clock.Now()
+	b.log("browser: saved logins cleared,", b.ProfileDir(), "deleted")
+	return nil
+}
+
+// BrowserReport mirrors @orbit/shared RunnerBrowserReport: the browser as each heartbeat reports it.
+type BrowserReport struct {
+	Running          bool   `json:"running"`
+	HolderSessionID  string `json:"holderSessionId,omitempty"`
+	HolderTitle      string `json:"holderTitle,omitempty"`
+	Viewers          int    `json:"viewers"`
+	ProfileClearedAt string `json:"profileClearedAt,omitempty"`
+}
+
+// Report is what the next heartbeat says of the browser: nil on a runner that has none.
+func (b *browserSupervisor) Report() *BrowserReport {
+	if b == nil {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	r := &BrowserReport{Running: b.procs != nil, Viewers: b.viewers}
+	if b.lease != nil {
+		r.HolderSessionID, r.HolderTitle = b.lease.sessionID, b.lease.title
+	}
+	if !b.clearedAt.IsZero() {
+		r.ProfileClearedAt = b.clearedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return r
 }
 
 func (l *browserLease) name() string {
