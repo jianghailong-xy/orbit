@@ -277,6 +277,7 @@ import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import { CoordinatorFactQueueService } from '../projects/coordinator-fact-queue.service';
 import { CoordinatorEvidenceQueueService } from '../projects/coordinator-evidence-queue.service';
 import { EvidenceReviewService } from '../tasks/evidence-review.service';
 import {
@@ -1695,6 +1696,7 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    @Optional() private readonly coordinatorFacts?: CoordinatorFactQueueService,
     /**
      * GitHub workspaces' clones (github/github-workspace.service.ts, docs/github-workspace-design.md §5.4): the reports
      * a heartbeat brings are applied, and every full answer to a runner that declares clone-workdir/v1 lists what it is
@@ -8226,6 +8228,7 @@ export class RunnerApiController {
       // And the evidence revisions that waited for it while it was paused: a coordinator whose turn
       // ended is back, and a paused one is left alone (projects/coordinator-evidence-queue.service.ts).
       await this.tasks?.deliverLooksFinishedOwedTo?.(sessionId);
+      await this.coordinatorFacts?.deliverOwedTo(sessionId);
       await this.evidenceQueue?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverOwedTo(sessionId);
       await this.evidenceReviews?.deliverSendBacksOwedTo(sessionId);
