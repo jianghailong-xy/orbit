@@ -66,6 +66,8 @@ data class OwnerRequest(
     val resolutionNote: String? = null,
     val answer: OwnerRequestAnswer? = null,
     val resolvedClient: String? = null,
+    /** The agent-written fields in the owner's language (Settings › Translation; `OwnerCardTranslation`); absent until translated. */
+    val translation: JsonElement? = null,
     val createdAt: String,
 ) {
     val pending get() = state == OwnerRequests.PENDING
@@ -418,11 +420,14 @@ class OwnerRequestsApi(private val api: OrbitApi, private val handle: SessionHan
     suspend fun get(id: String): OwnerRequest =
         Wire.decode(api.request(handle, ApiRequest(listOf("owner-requests", id))).requireSuccess().body, OwnerRequest.serializer())
 
-    suspend fun done(id: String, option: Int? = null, text: String? = null): OwnerRequest = post(id, listOf("done"), buildJsonObject {
-        option?.let { put("option", it) }; text?.let { put("text", it) }
+    /** [sendAsWritten]: the owner's words again, untranslated, after the door refused them 422 TRANSLATION_FAILED (Settings › Translation). */
+    suspend fun done(id: String, option: Int? = null, text: String? = null, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("done"), buildJsonObject {
+        option?.let { put("option", it) }; text?.let { put("text", it) }; if (sendAsWritten) put("sendAsWritten", true)
     })
 
-    suspend fun decline(id: String, reason: String): OwnerRequest = post(id, listOf("decline"), buildJsonObject { put("reason", reason) })
+    suspend fun decline(id: String, reason: String, sendAsWritten: Boolean = false): OwnerRequest = post(id, listOf("decline"), buildJsonObject {
+        put("reason", reason); if (sendAsWritten) put("sendAsWritten", true)
+    })
 
     /** WIKI_CREATE's Create wiki: the owner's door that makes the wiki with the card's settings and settles the card (design §3.6). */
     suspend fun createWiki(id: String): OwnerRequest = post(id, listOf("create-wiki"), buildJsonObject { })

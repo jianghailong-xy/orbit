@@ -29,7 +29,8 @@ data class ApprovalDecision(val behavior: String, val message: String? = null,
     val answers: Map<String, List<String>>? = null, val rememberRules: List<PermissionRule>? = null,
     val startAfterCreate: Boolean? = null, val sendAsWritten: Boolean? = null)
 @Serializable
-data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null)
+data class EvidenceDecision(val decidingSessionId: String, val evidenceRevision: String, val decision: String, val note: String? = null,
+    val sendAsWritten: Boolean? = null)
 @Serializable
 data class CriteriaDecision(val commitToken: String, val decision: String, val baseSeal: String)
 @Serializable

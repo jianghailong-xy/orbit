@@ -1299,8 +1299,13 @@ private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: B
  * A question offers two presses; the second names the subject and both ends, says what the answer does, shows the crossing key it
  * echoes, and sends it. A refusal stays on its row with the door's own code and reason, the second press still open. */
 @Composable
-private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
+private fun CrossingRow(asked: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
     ask: (Boolean) -> Unit, cancel: () -> Unit, answer: (Boolean) -> Unit) {
+    // Its title and reason in the owner's language (Settings › Translation), flipped whole to the agent's words by the foot; the
+    // answer is pressed with the row as it came.
+    var showOriginal by remember(asked.text("id")) { mutableStateOf(false) }
+    val translated = remember(asked) { OwnerCardTranslation.crossing(asked) }
+    val row = if (translated != null && !showOriginal) translated else asked
     val id = row.text("id")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val mono = SpanStyle(fontFamily = FontFamily.Monospace, color = secondary)
@@ -1334,6 +1339,8 @@ private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, lo
                 ProjectCrossings.moveWithdrawnCriterionNote) }
         }
         row.text("reason")?.let { Text(ProjectCrossings.reasonGiven(it), style = MaterialTheme.typography.labelMedium, color = secondary) }
+        if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal },
+            Modifier.testTag("crossing:$id:translation-foot"))
         refusal?.let { refused ->
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(8.dp)
                 .testTag("crossing:$id:refusal"), verticalArrangement = Arrangement.spacedBy(2.dp)) {

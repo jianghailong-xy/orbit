@@ -55,6 +55,10 @@ object Translation {
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
 
+    /** Whether a door refused the owner's words because they could not be translated: nothing was recorded, and the card offers
+     * Retry and Send as written. */
+    fun refused(error: Throwable?): Boolean = (error as? io.orbitd.android.core.net.ApiError)?.code == FAILED_CODE
+
     fun isLanguage(value: String?): Boolean = LANGUAGES.any { it.first == value }
     fun name(lang: String): String = LANGUAGES.firstOrNull { it.first == lang }?.second ?: lang
     /** The name without its parenthesis: "Chinese (Simplified)" reads "Chinese". */

@@ -50,7 +50,10 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     var batchPage by rememberSaveable(card.key, card.binding) { mutableStateOf<Int?>(null) }
     // Orbit's own cards in the owner's language: one foot flips the whole card to the agent's words and back.
     var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
-    val shown = OrbitCardTranslation.shown(card, showOriginal)
+    // The owner cards outside a session — a coordinator's question, evidence, a criteria change, an owner confirmation — the same
+    // way, drawn from the card's own `translation` (OwnerCardTranslation); their doors and binding stay the card's.
+    val owned = remember(card) { OwnerCardTranslation.card(card) }
+    val shown = if (owned != null) (if (showOriginal) card else owned) else OrbitCardTranslation.shown(card, showOriginal)
     val batchPreview = shown.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
     val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
@@ -86,7 +89,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
                 }, reopen = if (CardVerb.REOPEN_TASK in card.actions && enabled) ({ confirming = CardVerb.REOPEN_TASK }) else null,
                 recorded = recorded != null)
         }
-        if (recorded == null && OrbitCardTranslation.translated(card)) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+        if (recorded == null && (owned != null || OrbitCardTranslation.translated(card))) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         if (card.family == CardFamily.QUESTION && recorded != null) QuestionAnswered(card, recorded)
         if (recorded == null) CardDiscussion.context(card)?.let { context ->
             if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
@@ -112,7 +115,7 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             }
         }
         if (card.family == CardFamily.OWNER_QUESTION && CardVerb.OWNER_ANSWER in card.actions) {
-            val q = card.source.obj("question")
+            val q = shown.source.obj("question")
             q?.objects("options")?.forEachIndexed { index, o ->
                 ChoiceRow(o.text("label") ?: "", o.text("description"), option == index, enabled,
                     recommended = index == q.number("recommendedOption")) { option = index }

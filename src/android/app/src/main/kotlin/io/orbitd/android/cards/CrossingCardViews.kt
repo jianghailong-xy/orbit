@@ -22,11 +22,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.OwnerCardTranslation
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.projects.CrossingBatch
 import io.orbitd.android.projects.CrossingCards
 import io.orbitd.android.projects.CrossingReceipt
 import io.orbitd.android.projects.ProjectCrossings
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.delay
 
@@ -106,7 +108,12 @@ fun CrossingReviewSheet(store: CrossingCardStore, projectId: String?) {
  * receipt in their place once it is answered.
  */
 @Composable
-fun CrossingReview(batch: CrossingBatch, state: CrossingCardStore.State, close: () -> Unit, answer: (Boolean) -> Unit) {
+fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: () -> Unit, answer: (Boolean) -> Unit) {
+    // Each crossing's title and reason in the owner's language (Settings › Translation), the whole review flipped to the agent's
+    // words by one foot; the answer goes by the rows' ids, which a translation does not change.
+    var showOriginal by remember(asked.id) { mutableStateOf(false) }
+    val translated = remember(asked) { asked.rows.map(OwnerCardTranslation::crossing) }
+    val batch = if (translated.any { it != null } && !showOriginal) CrossingBatch(asked.rows.mapIndexed { i, row -> translated[i] ?: row }) else asked
     val tone = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val sending = batch.id in state.sending
@@ -147,6 +154,7 @@ fun CrossingReview(batch: CrossingBatch, state: CrossingCardStore.State, close: 
                     .padding(horizontal = 10.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
             }
             Text(CrossingCards.consequence(batch), Modifier.testTag("$tag:consequence"), style = MaterialTheme.typography.bodySmall, color = secondary)
+            if (translated.any { it != null }) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
         }
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
