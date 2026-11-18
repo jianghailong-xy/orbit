@@ -3733,8 +3733,8 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" way is a child of the engine, so recycling the engine (idle TTL, memory pressure) kills it" +
 				" mid-build. A job started here ends only when it exits, when the session ends, or when you" +
 				" kill it. A merge of this session neither waits for it nor stops it: a merge lands only what" +
-				" the branch has committed. A commit of the checkout is refused while it runs, so a file it is" +
-				" still writing is never committed half-written. Read its output with bg_output. To be woken when it ends or has news, set" +
+				" the branch has committed. A commit of the checkout runs beside it too and names it in its" +
+				" receipt. Read its output with bg_output. To be woken when it ends or has news, set" +
 				" wakeOnExit or wakeOnOutput; to be woken if it goes quiet while still running, set wakeOnStall:" +
 				" Orbit then tells this session what happened, even if this coding-engine process has been" +
 				" recycled in the meantime — so a wait for CI or a deploy can end your turn instead of holding it" +

@@ -51,6 +51,7 @@ import {
   openItemKindForJobState,
   pushBoundaryPassed,
   queueLandingBehindTheWork,
+  queueSkippedLandingAfterStop,
   shortBranchName,
   timedOutErrorCode,
   workBranchEndedOn,
@@ -2223,6 +2224,18 @@ export async function applyIntegrationJobResult(
       if (nowDone?.status !== 'DONE') return;
       await enqueueForDoneTask(tx, job.ownerId, job.taskId);
     };
+    /**
+     * The owner skipped the landing check of this generation while it ran (§2.4 J-S5, in flight):
+     * the stop was asked so the generation without the check could take J3's one place. Queued once
+     * this row is terminal, from what the stop's own line asked — and not for an abandon, which ends
+     * a generation nobody will run again (J-T10).
+     */
+    const queueSkippedLanding = async (endedAs: string): Promise<void> => {
+      if (!stoppedLanding || !cancelRequested || platformEnd !== undefined || job.taskId == null) return;
+      await queueSkippedLandingAfterStop(tx, {
+        id: job.id, ownerId: job.ownerId, projectId: job.projectId, taskId: job.taskId,
+      }, endedAs);
+    };
 
     // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
     // reference with no foreign key (0423), so it may name a task that is no longer there — the
@@ -2309,6 +2322,7 @@ export async function applyIntegrationJobResult(
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
       await queueReopenedDone();
+      if (cancelRequested) await queueSkippedLanding('CANCELLED');
       // §4.6 X-E5: the claim is over either way — cleared for a requeue, ended for a stop that was
       // asked — so the item about its silence is answered in this transaction like every other edge.
       await resolveLeaseExpiredItems(tx, job.id);
@@ -2681,6 +2695,7 @@ export async function applyIntegrationJobResult(
     // own route (it consumes the marker), so the new generation is exactly the one that DONE would
     // have queued.
     await queueReopenedDone();
+    await queueSkippedLanding(effectiveState);
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;

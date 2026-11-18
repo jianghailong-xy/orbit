@@ -52,7 +52,7 @@ import {
 import { ensureLandingSession } from './landing-session';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
 import { configureProjectIntegration } from './project-integration-line';
-import { ProjectOpenItemService } from './project-open-item.service';
+import { IntegrationSkipChecked, ProjectOpenItemService } from './project-open-item.service';
 import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectPromotionService } from './project-promotion.service';
@@ -544,7 +544,7 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
         { userId: w.ownerId, email: `${w.ownerId}@landing.invalid` },
         w.projectId, task.taskId,
         { reason: 'the check cannot run on this machine' },
-      );
+      ) as IntegrationSkipChecked;
       const skippedSubject = await subjectOfJob(stack.db, skipped.jobId);
       assert.equal(skippedSubject.job.state, 'QUEUED', 'the skip is queued, not claimed yet');
       assert.equal(skippedSubject.job.skipMergeCheck, true);
