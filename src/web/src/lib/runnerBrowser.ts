@@ -59,6 +59,8 @@ export const runnerBrowserQuery = (runnerId: string) =>
     // The state comes from the runner's heartbeat; reading it more often than that shows nothing new.
     refetchInterval: 15_000,
     retry: false,
+    // The browser is the runner's: its heartbeat moves the workspace it serves.
+    meta: { entities: ['workspace'] },
   });
 
 /** `POST /runners/:id/browser/clear`: Clear saved logins, carried out at the runner's next heartbeat. */
