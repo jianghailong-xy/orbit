@@ -463,6 +463,14 @@ public struct ReplyTranslation: Codable, Equatable, Sendable {
         if value["failed"]?.boolValue == true { return ReplyTranslation(lang: lang, failed: true) }
         return nil
     }
+
+    /// Whether the translation came back as the reply itself: the agent already wrote in the
+    /// owner's language. Such a reply is drawn as it is, with no foot (web `translationUnchanged`).
+    public func unchanged(from original: String) -> Bool {
+        guard let text else { return false }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            == original.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 /// One AskUserQuestion question as shown in the owner's language, index for index with
