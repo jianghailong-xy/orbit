@@ -8265,6 +8265,15 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+.chat-translate-foot.is-card {
+  display: flex;
+  margin: 6px 0 0;
+}
+/* A send-back the composer finished and the server could not translate: above the composer. */
+.composer-translate-refused {
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
 .chat-translate-foot.is-reply {
   display: flex;
   margin: 2px 0 6px;
@@ -25505,6 +25514,23 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-who-status b {
   color: var(--text-1);
+}
+/* The coordinator's hand-over note, under its caption, in the coordinator row. */
+.project-open-item-handover {
+  margin: 6px 0 0;
+}
+.project-open-item-handover-caption {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.project-open-item-handover-note {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  white-space: pre-wrap;
 }
 .project-open-item-actions.project-open-item-who-presses {
   display: flex;

@@ -21,8 +21,8 @@ public enum OwnerRequestState: String, Codable, Sendable, CaseIterable {
 }
 
 public struct OwnerRequestOption: Codable, Equatable, Sendable {
-    public let label: String
-    public let description: String?
+    public var label: String
+    public var description: String?
     public init(label: String, description: String? = nil) {
         self.label = label
         self.description = description
@@ -30,7 +30,7 @@ public struct OwnerRequestOption: Codable, Equatable, Sendable {
 }
 
 public struct OwnerRequestStep: Codable, Equatable, Sendable {
-    public let text: String
+    public var text: String
     public let command: String?
     public let link: String?
     public init(text: String, command: String? = nil, link: String? = nil) {
@@ -104,18 +104,18 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let kind: OwnerRequestKind
     public let state: OwnerRequestState
-    public let title: String
-    public let why: String
+    public var title: String
+    public var why: String
     public let blocksTaskIds: [String]
-    public let ifUnanswered: String?
-    public let options: [OwnerRequestOption]?
+    public var ifUnanswered: String?
+    public var options: [OwnerRequestOption]?
     public let recommendedOption: Int?
-    public let steps: [OwnerRequestStep]?
+    public var steps: [OwnerRequestStep]?
     public let secretSpec: OwnerRequestSecretSpec?
     /// SECRET: what ends the key — `TASK` or `SESSION` (design §6.1).
     public let secretScope: String?
     public let secretGrant: OwnerRequestSecretGrant?
-    public let verifyHint: String?
+    public var verifyHint: String?
     /// WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from.
     public let repoUrlNorm: String?
     public let workspaceId: String?
@@ -129,6 +129,9 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
     /// The client that ended it, from `X-Orbit-Client`, when the server serves it.
     public let resolvedClient: String?
     public let createdAt: String
+    /// The request's agent-written words in the owner's language (Settings › Translation): title,
+    /// why, ifUnanswered, options, the steps' text and verifyHint. Nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public init(id: String, kind: OwnerRequestKind, state: OwnerRequestState = .pending, title: String,
                 why: String, blocksTaskIds: [String] = [], ifUnanswered: String? = nil,
@@ -139,7 +142,8 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
                 expiresAt: String? = nil, askedBySessionId: String,
                 projectId: String? = nil, resolvedAt: String? = nil, resolvedByUserId: String? = nil,
                 resolutionNote: String? = nil, answer: OwnerRequestAnswer? = nil,
-                resolvedClient: String? = nil, createdAt: String) {
+                resolvedClient: String? = nil, createdAt: String,
+                translation: OwnerCardTranslation? = nil) {
         self.id = id
         self.kind = kind
         self.state = state
@@ -165,12 +169,13 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         self.answer = answer
         self.resolvedClient = resolvedClient
         self.createdAt = createdAt
+        self.translation = translation
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, title, why, blocksTaskIds, ifUnanswered, options, recommendedOption, steps
         case secretSpec, secretScope, secretGrant, verifyHint, repoUrlNorm, workspaceId, expiresAt, askedBySessionId, projectId
-        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt
+        case resolvedAt, resolvedByUserId, resolutionNote, answer, resolvedClient, createdAt, translation
     }
 
     public init(from decoder: Decoder) throws {
@@ -200,6 +205,7 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
         answer = try? c.decodeIfPresent(OwnerRequestAnswer.self, forKey: .answer)
         resolvedClient = try? c.decodeIfPresent(String.self, forKey: .resolvedClient)
         createdAt = try c.decode(String.self, forKey: .createdAt)
+        translation = (try? c.decodeIfPresent(OwnerCardTranslation.self, forKey: .translation)) ?? nil
     }
 }
 
@@ -247,16 +253,24 @@ public struct AccountSecretList: Decodable, Sendable {
 public struct OwnerRequestDoneBody: Encodable, Equatable, Sendable {
     public let option: Int?
     public let text: String?
-    public init(option: Int? = nil, text: String? = nil) {
+    /// `true` delivers `text` untranslated (Send as written); nil is left out of the body.
+    public let sendAsWritten: Bool?
+    public init(option: Int? = nil, text: String? = nil, sendAsWritten: Bool = false) {
         self.option = option
         self.text = text
+        self.sendAsWritten = sendAsWritten ? true : nil
     }
 }
 
 /// `POST /owner-requests/:id/decline`. The reason is required: the asking session acts on it.
 public struct OwnerRequestDeclineBody: Encodable, Equatable, Sendable {
     public let reason: String
-    public init(reason: String) { self.reason = reason }
+    /// `true` delivers the reason untranslated (Send as written); nil is left out of the body.
+    public let sendAsWritten: Bool?
+    public init(reason: String, sendAsWritten: Bool = false) {
+        self.reason = reason
+        self.sendAsWritten = sendAsWritten ? true : nil
+    }
 }
 
 /// `POST /owner-requests/:id/secret`: the key, optionally saved under a label, or a saved secret's id.

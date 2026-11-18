@@ -6975,9 +6975,19 @@ export class SessionsService {
        * `dto`; every platform delivery and every session-to-session door leaves it unset.
        */
       translate?: boolean;
+      /**
+       * The owner's words this turn carries were translated already, by a door that refuses them whole when
+       * translation fails (reply-translation.ts ownerWordsForAgent): `dto.content` is the message as the owner's
+       * words make it — what the transcript shows and what a replay of the key compares — and `content` the same
+       * message in the agent language, which is what the engine receives. Written as a translated turn that was
+       * never held (display_prompt, translation_state DONE, translation_lang `from`). An option of this call and
+       * never a field of `dto`.
+       */
+      translated?: { content: string; from: TranslationLanguage };
     },
   ) {
     assertPromptSize(dto.content, 'message');
+    if (opts?.translated) assertPromptSize(opts.translated.content, 'message');
     if (dto.intent !== undefined && dto.intent !== 'CURRENT_WORK' && dto.intent !== 'NEXT_TURN') {
       throw new BadRequestException('intent must be CURRENT_WORK or NEXT_TURN');
     }
@@ -7281,7 +7291,10 @@ export class SessionsService {
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
-        content: dto.content,
+        content: opts?.translated && dto.content ? opts.translated.content : dto.content,
+        ...(opts?.translated && dto.content
+          ? { displayPrompt: dto.content, translationState: 'DONE', translationLang: opts.translated.from }
+          : {}),
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.

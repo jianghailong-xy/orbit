@@ -13,6 +13,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
+import { replyTranslationsSettled } from '../sessions/reply-translation';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   OPEN_ITEM_HAND_OVER_NOTE_REQUIRED,
@@ -290,4 +291,95 @@ test('open_item_hand_over assigns OWNER/HANDED_OVER, pushes after commit, and li
     assert.ok(listed, 'the handed-over item should be in the owner read model');
     assert.equal(listed.handoverNote, note);
     assert.equal(listed.assigneeReason, 'HANDED_OVER');
+  });
+
+test('a handed-over item\'s note is translated after hand-over, stored failed on failure, untouched with translation off',
+  { skip, concurrency: 1 }, async (t) => {
+    const h = await connect();
+    const w = await world(h.db, 'note-translation');
+    const zh = (text: string) => `ZH[${text}]`;
+    const asked: string[] = [];
+    let failing = false;
+    const realFetch = globalThis.fetch;
+    const realKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (!String(input).startsWith('https://api.deepseek.com/')) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
+      const text = body.messages.find((m) => m.role === 'user')!.content;
+      asked.push(text);
+      if (failing) return { ok: false, status: 500, body: null } as Response;
+      return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: zh(text) } }] }) } as Response;
+    }) as typeof fetch;
+    t.after(() => {
+      globalThis.fetch = realFetch;
+      if (realKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = realKey;
+    });
+    const prefer = (translationEnabled: boolean) => h.db.user.update({
+      where: { id: w.ownerId },
+      data: { preferences: { translationEnabled, translationLanguage: 'zh-Hans' } },
+    });
+    const settle = async () => {
+      // The hand-over reads the owner's languages before it queues, so the queue may be empty for a moment.
+      for (let i = 0; i < 5; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await replyTranslationsSettled();
+      }
+    };
+    const stored = async (id: string) =>
+      (await h.db.projectOpenItem.findUniqueOrThrow({ where: { id }, select: { translation: true } })).translation;
+    const handOver = (id: string, note: string) => h.openItems.handOver(
+      w.ownerId, w.projectId, id, { note }, { kind: 'SESSION', sessionId: w.coordinatorSessionId },
+    );
+    const listed = async (id: string) => {
+      const row = (await h.openItems.list(w.ownerId, w.projectId)).needsYou.find((r) => r.itemId === id);
+      assert.ok(row, 'the handed-over item is in needsYou');
+      return row;
+    };
+    const note = 'The conflict is in your retry policy';
+
+    await t.test('translated after hand-over and served as translation.handoverNote', async () => {
+      await prefer(true);
+      const id = await item(h.db, w);
+      await handOver(id, note);
+      await settle();
+      assert.deepEqual(asked, [note], 'only the note is sent: a TASK_FAILED payload has no agent words');
+      assert.deepEqual(await stored(id), { lang: 'zh-Hans', handoverNote: zh(note) });
+      const row = await listed(id);
+      assert.deepEqual(row.translation, { lang: 'zh-Hans', handoverNote: zh(note) });
+      assert.equal(row.handoverNote, note, 'and the note as the coordinator wrote it beside it');
+    });
+
+    await t.test('a failed translation is stored as failed and the note served as written', async () => {
+      asked.length = 0;
+      failing = true;
+      const id = await item(h.db, w);
+      await handOver(id, note);
+      await settle();
+      failing = false;
+      assert.deepEqual(await stored(id), { lang: 'zh-Hans', failed: true });
+      const row = await listed(id);
+      assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true });
+      assert.equal(row.handoverNote, note);
+      await settle();
+      assert.deepEqual(await stored(id), { lang: 'zh-Hans', failed: true }, 'a read does not try it again');
+    });
+
+    await t.test('translation off: nothing is asked, stored or served; turned on, a read queues it', async () => {
+      await prefer(false);
+      await settle();
+      asked.length = 0;
+      const id = await item(h.db, w);
+      await handOver(id, note);
+      await settle();
+      assert.deepEqual(asked, []);
+      assert.equal(await stored(id), null);
+      assert.equal((await listed(id)).translation, undefined);
+      // Decision 1A: switched on later, reading the still-open item queues it.
+      await prefer(true);
+      await listed(id);
+      await settle();
+      assert.deepEqual((await listed(id)).translation, { lang: 'zh-Hans', handoverNote: zh(note) });
+    });
   });

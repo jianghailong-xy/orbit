@@ -59,6 +59,9 @@ type conn struct {
 	pingTimer  *time.Timer
 	welcomed   bool
 	welcomedAt time.Time
+	// browser is what the connection's Welcome said of the managed runner browser: the welcome route offers it only to a
+	// managed runner whose Hello's ManagedInstance matches the manager's record (streams.go, streamable).
+	browser bool
 
 	chunks reassembler
 	// link is what the connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil on a gateway built
@@ -237,6 +240,7 @@ func (c *conn) handshake() bool {
 	}}}, true)
 	c.welcomed = true
 	c.welcomedAt = time.Now()
+	c.browser = browser
 	c.mu.Unlock()
 	if c.link != nil {
 		c.link.start(credit)

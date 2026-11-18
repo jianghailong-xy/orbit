@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -36,10 +37,11 @@ func streamHello(process string) *linkpb.Frame {
 
 // streamRig is a gateway with a backend that answers heartbeats, NATS, and one runner connection that speaks streams.
 type streamRig struct {
-	t    *testing.T
-	h    *harness
-	nats *natsStandIn
-	tc   *testConn
+	t       *testing.T
+	h       *harness
+	backend *fakeBackend
+	nats    *natsStandIn
+	tc      *testConn
 	// sendMu serializes the runner's writes, which several goroutines of a test make.
 	sendMu sync.Mutex
 }
@@ -48,11 +50,24 @@ func newStreamRig(t *testing.T, hello func(string) *linkpb.Frame) *streamRig {
 	return newStreamRigWith(t, hello, nil)
 }
 
+// welcomeBrowserOffered is the welcome route's answer for a managed runner whose instance matches the manager's record,
+// with the browser switch on: the browser is offered.
+func welcomeBrowserOffered(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": []any{}, "browser": true})
+}
+
 // newStreamRigWith is newStreamRig with the gateway's writes to the runner wrapped by wrap (gateway.wrapWrite).
 func newStreamRigWith(t *testing.T, hello func(string) *linkpb.Frame,
 	wrap func(func(context.Context, []byte) error) func(context.Context, []byte) error) *streamRig {
+	return newStreamRigWelcomed(t, hello, welcomeBrowserOffered, wrap)
+}
+
+// newStreamRigWelcomed is newStreamRigWith with the welcome route answering as welcome does.
+func newStreamRigWelcomed(t *testing.T, hello func(string) *linkpb.Frame, welcome func(http.ResponseWriter, *http.Request, []byte),
+	wrap func(func(context.Context, []byte) error) func(context.Context, []byte) error) *streamRig {
 	t.Helper()
 	backend := newFakeBackend(t, heartbeatAnswer)
+	backend.setWelcome(welcome)
 	h := newLinkHarness(t, []*fakeBackend{backend}, func(c *config) { c.FrameLog = "lifecycle" })
 	h.g.wrapWrite = wrap
 	n := listenNATS(t, "127.0.0.1:0")
@@ -64,7 +79,7 @@ func newStreamRigWith(t *testing.T, hello func(string) *linkpb.Frame,
 	tc.send(hello(processA))
 	tc.expect("welcome", 5*time.Second)
 	eventually(t, 5*time.Second, "the runner's subject is subscribed", func() bool { return n.subscribers("rnr."+runnerA) == 1 })
-	return &streamRig{t: t, h: h, nats: n, tc: tc}
+	return &streamRig{t: t, h: h, backend: backend, nats: n, tc: tc}
 }
 
 func (r *streamRig) send(f *linkpb.Frame) {
@@ -256,6 +271,59 @@ func TestAStreamIsOpenedOnlyOnARunnerThatDeclaresTheCapability(t *testing.T) {
 		t.Fatalf("answered %v", a)
 	}
 	r.tc.quiet(200 * time.Millisecond)
+}
+
+// Only a verified managed runner is sent StreamOpen (docs/runner-browser-design.md §2): one whose Hello names a
+// ManagedInstance that the welcome route found to match the manager's record, and was so offered the browser. A
+// connection that declares link-stream-v1 but whose instance the route refused (a generation or Pod UID other than the
+// recorded one, or none: 403), or that the route did not offer the browser (a self-managed runner, or the switch off),
+// or whose Hello names no instance at all, has the request refused, and the runner never sees it.
+func TestAStreamIsOpenedOnlyOnAVerifiedManagedRunner(t *testing.T) {
+	refusedInstance := func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeJSON(w, http.StatusForbidden, map[string]any{"code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+			"message": "Pod 0190a0b0-0000-7000-8000-0000000000aa is not the instance authorized for generation 7."})
+	}
+	notOffered := func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		writeJSON(w, http.StatusOK, map[string]any{"sessions": []any{}, "browser": false})
+	}
+	noInstance := func(process string) *linkpb.Frame {
+		f := streamHello(process)
+		f.GetHello().ManagedInstance = nil
+		return f
+	}
+	for _, c := range []struct {
+		name    string
+		hello   func(string) *linkpb.Frame
+		welcome func(http.ResponseWriter, *http.Request, []byte)
+	}{
+		{"a ManagedInstance the welcome route refused", streamHello, refusedInstance},
+		{"the browser not offered", streamHello, notOffered},
+		{"no ManagedInstance in the Hello", noInstance, welcomeBrowserOffered},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newStreamRigWelcomed(t, c.hello, c.welcome, nil)
+			r.ask(streamA, "_INBOX.unverified")
+			a := r.answer("_INBOX.unverified").GetStreamClose()
+			if a.GetStreamId() != streamA || a.GetCode() != linkpb.StreamCloseCode_STREAM_CLOSE_CODE_REFUSED {
+				t.Fatalf("answered %v", a)
+			}
+			r.tc.quiet(200 * time.Millisecond)
+			if n := r.nats.subscribers(streamDownSubject(streamA)); n != 0 {
+				t.Fatalf("the refused stream's subject has %d subscribers", n)
+			}
+			if got := r.h.g.metrics.streams.get("refused"); got != 1 {
+				t.Fatalf("refused counted %v", got)
+			}
+		})
+	}
+
+	// The welcome route is asked with the Hello's instance, which is what it checks against the manager's record.
+	r := newStreamRig(t, streamHello)
+	calls := r.backend.welcomeCalls()
+	if len(calls) != 1 || calls[0].Header.Get(managedGenerationHeader) != "7" || calls[0].Header.Get(managedPodUIDHeader) != "pod-1" {
+		t.Fatalf("the welcome route was asked %v", calls)
+	}
+	r.open(streamA)
 }
 
 // A peer that sends past its window has the stream closed FLOW_VIOLATION, and both sides are told.

@@ -15,7 +15,8 @@ import (
 
 // Byte streams (docs/runner-browser-design.md §4; contracts/runner-link/v1, StreamOpen). The apiserver asks for one
 // over NATS: a request on the runner's subject, rnr.<runnerId>, carrying a Frame with only stream_open set. The gateway
-// that holds a connection of the runner whose Hello declared link-stream-v1 relays it to that connection and answers
+// that holds a connection of the runner whose Hello declared link-stream-v1, and that the welcome route found to be a
+// verified managed runner offered the browser (streamable), relays it to that connection and answers
 // the request with the runner's StreamOpened or StreamClose. From then on it relays the stream's bytes: what the
 // apiserver publishes on vnc.<streamId>.down goes to the runner as StreamData and StreamCredit frames, and what the
 // runner sends goes out on vnc.<streamId>.up, each NATS message one binary-encoded Frame.
@@ -136,11 +137,15 @@ func (b *streamBook) open() int {
 	return len(b.byID)
 }
 
-// hasCapability reports whether the connection's Hello declared capability.
-func (c *conn) hasCapability(capability string) bool {
+// streamable reports whether a stream may be opened on the connection: its Hello declared link-stream-v1 and named a
+// ManagedInstance, and its Welcome offered the browser, which the welcome route does only for a managed runner whose
+// instance matches the manager's record (generation and Pod UID) with the browser switch on
+// (runner-link-welcome.controller.ts). A self-managed runner is never streamable, whatever it declares: it has no
+// managed mapping, so it is never offered the browser (docs/runner-browser-design.md §2).
+func (c *conn) streamable() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return slices.Contains(c.hello.GetCapabilities(), capability)
+	return c.browser && c.hello.GetManagedInstance() != nil && slices.Contains(c.hello.GetCapabilities(), streamCapability)
 }
 
 // openStream takes a StreamOpen request from NATS for runner, answered on reply.
@@ -161,12 +166,12 @@ func (g *gateway) openStream(runner string, open *linkpb.StreamOpen, reply strin
 		refuse(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_REFUSED, "unknown stream kind", "refused")
 		return
 	}
-	// The newest connection of the runner that speaks streams.
+	// The newest connection of the runner that may carry a stream.
 	var best *conn
 	var bestAt time.Time
 	conns := g.reg.connsOf(runner)
 	for _, c := range conns {
-		if at := c.welcomeTime(); c.hasCapability(streamCapability) && (best == nil || at.After(bestAt)) {
+		if at := c.welcomeTime(); c.streamable() && (best == nil || at.After(bestAt)) {
 			best, bestAt = c, at
 		}
 	}
@@ -174,7 +179,8 @@ func (g *gateway) openStream(runner string, open *linkpb.StreamOpen, reply strin
 		if len(conns) == 0 {
 			refuse(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_CONNECTION_LOST, "no connection of the runner", "no_connection")
 		} else {
-			refuse(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_REFUSED, "the runner does not declare "+streamCapability, "refused")
+			refuse(linkpb.StreamCloseCode_STREAM_CLOSE_CODE_REFUSED,
+				"the runner is not a verified managed runner offered the browser, or does not declare "+streamCapability, "refused")
 		}
 		return
 	}

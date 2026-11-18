@@ -110,16 +110,16 @@ final class ProjectDoneWiringTests: XCTestCase {
     func testThePressesGoToTheOwnersDoors() throws {
         let console = try source(Self.console)
         let record = code(try section(console, from: "func recordProjectDone() async {",
-                                      to: "func declineDoneRequest(note: String) async -> Bool {"))
+                                      to: "func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {"))
         XCTAssertTrue(record.contains("ProjectDone.body(subject: subject, requestID: doneRequestRow?.itemId,"))
         XCTAssertTrue(record.contains("currentDigest: acceptanceConfirmation?.currentVersion.digest)"),
                       "unasked, the press names the seal standing now")
         XCTAssertTrue(record.contains("doneRecord = try await api.recordProjectDone(projectID: projectID, body) doneRecordAt = Date()"),
                       "the card turns into its receipt from the record the door wrote, and notes when")
         XCTAssertTrue(record.contains("statusMessage = \"\\(ProjectDone.notRecorded) — "))
-        let decline = code(try section(console, from: "func declineDoneRequest(note: String) async -> Bool {",
+        let decline = code(try section(console, from: "func declineDoneRequest(note: String, sendAsWritten: Bool = false) async -> Bool {",
                                        to: "func reopenProject() async {"))
-        XCTAssertTrue(decline.contains("api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note)"))
+        XCTAssertTrue(decline.contains("api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note, sendAsWritten: sendAsWritten)"))
         let reopen = code(try section(console, from: "func reopenProject() async {",
                                       to: "func askCoordinatorAboutDone() async {"))
         XCTAssertTrue(reopen.contains("api.updateProjectStatus(projectID, to: .open) doneRecord = nil doneRecordAt = nil"))
@@ -140,12 +140,12 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(dispatch.contains("case .projectNotDone: ProjectNotDoneCardView(console: console)"))
         let card = code(try section(approvals, from: "private struct ProjectDoneCardView: View {",
                                     to: "private struct ProjectNotDoneCardView: View {"))
-        XCTAssertTrue(card.contains("request: row?.doneRequest,"))
+        XCTAssertTrue(card.contains("request: row?.shownDoneRequest(owner: owner, showOriginal: showOriginal),"))
         XCTAssertTrue(card.contains("onRecord: { await console.recordProjectDone() },"))
         XCTAssertTrue(card.contains("onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },"),
                       "Not yet… is offered only on a card the coordinator asked for")
         XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() },"))
-        XCTAssertTrue(card.contains("followUps: followUps)"),
+        XCTAssertTrue(card.contains("followUps: followUps,"),
                       "Open, Change, Move to a follow-up… and Confirm… are wired at this conversation's doors")
         for door in ["await console.moveCriterion(key, body)", "await console.confirmCriterion(id, body)",
                      "model.openFromConversation(.task($0), overConsole: overConsole)"] {
@@ -249,7 +249,7 @@ final class ProjectDoneWiringTests: XCTestCase {
                      "ProjectDone.body(subject: subject, requestID: row?.itemId,",
                      "openItems: ProjectDone.openItemsCount(store.openItems),",
                      "switch await store.recordDone(body) {",
-                     "store.declineDone(itemID: row.itemId, note: note)", "store.setStatus(.open)"] {
+                     "store.declineDone(itemID: row.itemId, note: note, sendAsWritten: sendAsWritten)", "store.setStatus(.open)"] {
             XCTAssertTrue(sheet.contains(call), "the card over the page no longer \(call)")
         }
         let menu = code(try section(page, from: "private func menu(", to: "Label(\"Record as cancelled\""))
@@ -267,7 +267,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         let record = code(try section(model, from: "func recordDone(", to: "func declineDone("))
         XCTAssertTrue(record.contains("try await api.recordProjectDone(projectID: projectID, body)"))
         XCTAssertTrue(code(try section(model, from: "func declineDone(", to: "func delete()"))
-            .contains("api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)"))
+            .contains("api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note, sendAsWritten: sendAsWritten)"))
     }
 
     /// The two rows a project page draws, in OrbitKit's words.

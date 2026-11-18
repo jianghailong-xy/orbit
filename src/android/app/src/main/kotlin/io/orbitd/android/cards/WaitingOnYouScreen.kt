@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import kotlinx.serialization.json.JsonObject
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -139,7 +140,9 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
                         val key = OwnerRequests.key(request.id)
                         val isOpen = expanded[key] == true
                         val until = snoozes[key] ?: 0
-                        InboxRow("waiting-on-you:row:${request.id}", icon(request.kind), request.title, OwnerRequests.rowDetail(request, now),
+                        // Its title as its card draws it: in the owner's language while the card would be drawn translated.
+                        InboxRow("waiting-on-you:row:${request.id}", icon(request.kind), OwnerRequests.rowTitle(request, LocalTranslation.current.cardLanguage),
+                            OwnerRequests.rowDetail(request, now),
                             if (until > now.toEpochMilli()) OwnerRequests.reminder(OwnerReview.receiptTime(Instant.ofEpochMilli(until).toString(), now))
                             else OwnerRequests.ago(request.createdAt, now),
                             if (isOpen) "Close" else OwnerRequests.inboxAction(request.kind)) { expanded[key] = !isOpen }

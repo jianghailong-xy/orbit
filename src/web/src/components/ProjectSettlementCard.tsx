@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DoneRequest, ProjectDoneCheck, ProjectDoneFinding, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
+import type { DoneRequest, OwnerCardTranslation, ProjectDoneCheck, ProjectDoneFinding, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -65,7 +65,9 @@ import { AppLink } from './AppLink';
 import { ConfirmCriterionDialog, type ConfirmCriterionSubject } from './ConfirmCriterionDialog';
 import { MovedOutLines } from './ProjectAcceptanceCard';
 import { MoveCriterionDialog, type MoveCriterionSubject } from './MoveCriterionDialog';
+import { RefusedAnswerFoot, useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
+import { answerRefusedUntranslated } from '../lib/translation';
 import { Dialog } from './ui/Dialog';
 import { Textarea } from './ui/Textarea';
 import { streamPoll } from '../lib/listBudget';
@@ -776,7 +778,7 @@ export function SessionProjectSettlementCard({
     },
   });
   const decline = useMutation({
-    mutationFn: ({ note }: { note: string }) => api(`/projects/${encodeURIComponent(project)}/done-requests/${encodeURIComponent(doneRequestRow?.itemId ?? '')}/decline`, { method: 'POST', body: { note } }),
+    mutationFn: ({ note, sendAsWritten }: { note: string; sendAsWritten?: boolean }) => api(`/projects/${encodeURIComponent(project)}/done-requests/${encodeURIComponent(doneRequestRow?.itemId ?? '')}/decline`, { method: 'POST', body: { note, ...(sendAsWritten ? { sendAsWritten: true } : {}) } }),
     onSuccess: async () => {
       setDoneDelivered(false);
       await qc.invalidateQueries({ queryKey: ['project', project, 'open-items'] });
@@ -814,6 +816,7 @@ export function SessionProjectSettlementCard({
         ref={anchor}
         project={doneProject}
         doneRequest={doneRequest}
+        translation={doneRequestRow?.translation ?? null}
         requestId={doneRequestRow?.itemId ?? null}
         requestWaitingSince={doneRequestRow?.waitingSince ?? null}
         standing={standing}
@@ -821,7 +824,10 @@ export function SessionProjectSettlementCard({
         keys={keys}
         doneCheck={doneCheckRead.data}
         busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest) || (!doneRequest && !doneCheckRead.data)}
-        error={done.error ?? decline.error ?? doneCheckRead.error}
+        error={done.error ?? (answerRefusedUntranslated(decline.error) ? null : decline.error) ?? doneCheckRead.error}
+        notYetRefused={answerRefusedUntranslated(decline.error) && decline.variables
+          ? (sendAsWritten) => decline.mutateAsync({ note: decline.variables!.note, sendAsWritten })
+          : null}
         notYetBusy={decline.isPending}
         openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
         runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
@@ -866,6 +872,11 @@ export interface ProjectDoneCardProps {
   error?: Error | null;
   keys?: boolean;
   notYetBusy?: boolean;
+  /** The DONE_REQUEST row's `translation` (Settings › Translation): `judgment` and `gaps` in the owner's language. */
+  translation?: OwnerCardTranslation | null;
+  /** The Not yet note the server refused 422 TRANSLATION_FAILED, so nothing was sent: posts it again,
+   *  with `sendAsWritten: true` for Send as written. Null when nothing was refused. */
+  notYetRefused?: ((sendAsWritten: boolean) => Promise<unknown>) | null;
   onRecordDone?: () => void;
   onNotYet?: (note: string) => void;
   onReopen?: () => void;
@@ -1152,6 +1163,8 @@ export function ProjectDoneCard({
   error = null,
   keys = false,
   notYetBusy = false,
+  translation = null,
+  notYetRefused = null,
   onRecordDone,
   onNotYet,
   onReopen,
@@ -1164,7 +1177,19 @@ export function ProjectDoneCard({
   const [note, setNote] = useState('');
   const [moving, setMoving] = useState<MoveCriterionSubject | null>(null);
   const [confirming, setConfirming] = useState<ConfirmCriterionSubject | null>(null);
-  const gaps = doneRequest?.gaps ?? [];
+  // The coordinator's judgment and gaps are the card's agent-written words (board 04-owner-cards.html).
+  const translated = useOwnerCardTranslation(doneRequest ? translation : null);
+  const t = translated.shown;
+  const gaps = (doneRequest?.gaps ?? []).map((gap, i) => {
+    const tg = t?.gaps?.[i];
+    if (!tg) return gap;
+    return {
+      ...gap,
+      ...(gap.title ? { title: tg.title || gap.title } : {}),
+      ...(gap.whyNotProven ? { whyNotProven: tg.whyNotProven || gap.whyNotProven } : {}),
+      ...(gap.coordinatorChecked ? { coordinatorChecked: tg.coordinatorChecked || gap.coordinatorChecked } : {}),
+    };
+  });
   const nonCode = isNonCode(project);
   const items = project.acceptanceCriteriaItems ?? [];
   const startMove = (finding: ProjectDoneFinding) => {
@@ -1257,12 +1282,13 @@ export function ProjectDoneCard({
         {doneRequest ? (
           <div className="project-done-call">
             <div className="project-done-section-title">{DONE_CARD_COORDINATOR_CALL}</div>
-            <p>{doneRequest.judgment}</p>
+            <p>{t?.judgment || doneRequest.judgment}</p>
           </div>
         ) : null}
         {nonCode ? <NonCodeBanner project={project} /> : null}
         <DoneWhenSummary project={project} counts={counts} onConfirm={project.id ? startConfirm : undefined} />
         {doneRequest ? <DoneGaps project={project} gaps={gaps} /> : null}
+        {translated.foot}
         <div className="project-done-orbit-checked">
           <span aria-hidden="true">✓</span>{' '}
           {orbitCheckedText(project, standing, openItemsCount, runningCount)}
@@ -1282,6 +1308,7 @@ export function ProjectDoneCard({
               disabled={notYetBusy}
             />
             <p>{PROJECT_DONE_COPY.notYetHint}</p>
+            {notYetRefused ? <RefusedAnswerFoot resend={notYetRefused} /> : null}
             <div className="project-done-not-yet-actions">
               <button type="button" className="card-action card-action--primary" disabled={notYetBusy || !note.trim()} onClick={() => onNotYet?.(note.trim())}>
                 {PROJECT_DONE_COPY.sendToCoordinator}
@@ -1382,7 +1409,7 @@ export function ProjectDoneDialog({
     },
   });
   const decline = useMutation({
-    mutationFn: (input: { itemId: string; note: string }) => api(`/projects/${encodeURIComponent(projectId)}/done-requests/${encodeURIComponent(input.itemId)}/decline`, { method: 'POST', body: { note: input.note } }),
+    mutationFn: (input: { itemId: string; note: string; sendAsWritten?: boolean }) => api(`/projects/${encodeURIComponent(projectId)}/done-requests/${encodeURIComponent(input.itemId)}/decline`, { method: 'POST', body: { note: input.note, ...(input.sendAsWritten ? { sendAsWritten: true } : {}) } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['project', projectId, 'open-items'] });
       onClose();
@@ -1420,12 +1447,16 @@ export function ProjectDoneDialog({
         <ProjectDoneCard
           project={project}
           doneRequest={request}
+          translation={row?.translation ?? null}
           requestId={row?.itemId ?? null}
           requestWaitingSince={row?.waitingSince ?? null}
           standing={standing}
           receipt={receipt}
           busy={record.isPending || !criteriaDigest || (!request && !doneCheckRead.data)}
-          error={record.error ?? declineError ?? doneCheckRead.error}
+          error={record.error ?? (answerRefusedUntranslated(declineError) ? null : declineError) ?? doneCheckRead.error}
+          notYetRefused={answerRefusedUntranslated(declineError) && decline.variables
+            ? (sendAsWritten) => decline.mutateAsync({ ...decline.variables!, sendAsWritten })
+            : null}
           notYetBusy={decline.isPending}
           doneCheck={doneCheckRead.data}
           ownerInitiated={!request}

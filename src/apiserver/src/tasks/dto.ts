@@ -267,6 +267,8 @@ export class DecideRunnerTaskEvidenceDto {
 export class DecideTaskEvidenceDto extends DecideRunnerTaskEvidenceDto {
   @IsPublicId()
   decidingSessionId!: string;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**
@@ -308,6 +310,8 @@ export class DecideOwnerConfirmationDto {
   @IsOptional()
   @IsArray()
   answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
+  /** Deliver the owner's words untranslated: the "Send as written" of an answer refused 422 TRANSLATION_FAILED. */
+  @IsOptional() @IsBoolean() sendAsWritten?: boolean;
 }
 
 /**

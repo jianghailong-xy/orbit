@@ -316,6 +316,50 @@ func TestALinkStreamIsOpenedOnlyWhenEverythingAllowsIt(t *testing.T) {
 	})
 }
 
+// The runner's own check (docs/runner-browser-design.md §2): a process the managed image's entrypoint did not start has
+// no ORBIT_MANAGED_RUNNER_GENERATION, and refuses every StreamOpen even when the Welcome offered the browser, so that a
+// gateway that relays one anyway, or a self-managed runner offered it by mistake, still never reaches the VNC socket.
+// The same for an identity the entrypoint did not finish: the Pod UID alone, or an empty generation.
+func TestALinkStreamIsRefusedWithoutTheManagedEntrypointsGeneration(t *testing.T) {
+	vnc := listenVNC(t)
+	for _, c := range []struct {
+		name string
+		env  func(t *testing.T)
+	}{
+		{"no managed identity", func(t *testing.T) {}},
+		{"the Pod UID alone", func(t *testing.T) {
+			t.Setenv(envManagedRunnerPodUID, "0190a0b0-0000-7000-8000-0000000000f7")
+		}},
+		{"an empty generation", func(t *testing.T) {
+			t.Setenv(envManagedRunnerGeneration, "")
+			t.Setenv(envManagedRunnerPodUID, "0190a0b0-0000-7000-8000-0000000000f7")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			withoutManagedInstance(t)
+			c.env(t)
+			resetManagedInstanceCache(t)
+			r := newLinkStreamRig(t, true, vnc.path)
+			if !r.m.work.browserOffered() {
+				t.Fatal("the Welcome did not offer the browser")
+			}
+			r.open(streamOne, linkpb.StreamKind_STREAM_KIND_VNC)
+			if code := r.closed(t, streamOne); code != linkpb.StreamCloseCode_STREAM_CLOSE_CODE_REFUSED {
+				t.Fatalf("closed %v", code)
+			}
+			if n := r.m.work.streams.count(); n != 0 {
+				t.Fatalf("%d streams open", n)
+			}
+			select {
+			case conn := <-vnc.conns:
+				conn.Close()
+				t.Fatal("the VNC socket was dialed")
+			case <-time.After(200 * time.Millisecond):
+			}
+		})
+	}
+}
+
 // A viewer's stream starts the browser when it is not running, counts as an open viewer until it ends, and waits for
 // the VNC socket the browser makes a moment after it starts. A browser that cannot start is answered UNAVAILABLE, with
 // the reason.
