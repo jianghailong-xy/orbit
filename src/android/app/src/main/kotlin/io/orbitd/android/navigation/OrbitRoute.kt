@@ -150,8 +150,23 @@ internal object OrbitArrivals {
 
 object ObjectId {
     private const val alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+    private const val CACHED = 4096
+    /** The list and the drawer compare every row's ids on each directory change: a page of the answers, so each spelling is
+     * parsed once. Oldest first out; [NONE] stands for an id with no canonical form. */
+    private val cache = object : LinkedHashMap<String, String>(CACHED, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > CACHED
+    }
+    private const val NONE = ""
+
     fun canonical(value: String): String? {
-        if (value.matches(Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))) return value.lowercase()
+        synchronized(cache) { cache[value] }?.let { return it.ifEmpty { null } }
+        val result = parse(value)
+        synchronized(cache) { cache[value] = result ?: NONE }
+        return result
+    }
+    private fun parse(value: String): String? {
+        if (value.matches(uuid)) return value.lowercase()
         if (value.isEmpty() || value.length > 22 || value.any { it !in alphabet }) return null
         var number = BigInteger.ZERO
         value.forEach { number = number * BigInteger.valueOf(62) + BigInteger.valueOf(alphabet.indexOf(it).toLong()) }
@@ -159,7 +174,7 @@ object ObjectId {
         val hex = number.toString(16).padStart(32, '0')
         return "${hex.take(8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}"
     }
-    fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a) != null && canonical(a) == canonical(b))
+    fun same(a: String?, b: String?): Boolean = a == b || (a != null && b != null && canonical(a)?.let { it == canonical(b) } == true)
     /** OrbitKit `PublicID.toPublic`: a UUID's 16 bytes as Base62, the spelling the deployment's own routes use. */
     fun toPublic(id: String): String {
         val uuid = canonical(id) ?: return id
