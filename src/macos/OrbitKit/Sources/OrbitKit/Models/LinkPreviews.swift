@@ -90,6 +90,8 @@ public struct LinkPreviewSession: Codable, Equatable, Sendable {
     /// When an armed auto-retry re-sends the failed message; null when none is armed.
     public let retryAt: String?
     public let engineTurnActive: Bool?
+    /// What a parked session is still doing (the list row's `activity`).
+    public let activity: String?
     public let pendingApprovals: Int?
     public let waitingKind: SessionWaitingKind?
     public let runningBgCount: Int?

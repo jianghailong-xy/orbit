@@ -60,3 +60,13 @@
 .managed-runner-landing-register {
   font-size: 13px;
 }
+
+/* Above the composer of a workspace whose managed runner is asleep: sleep is not a fault, so one calm line. */
+.managed-runner-composer-line {
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 12.5px;
+}

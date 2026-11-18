@@ -34,7 +34,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[2]
 INSTALL = "scripts/install-server.sh"
 UPGRADES = [".claude/skills/upgrade/upgrade.sh", ".agents/skills/upgrade/scripts/upgrade.sh"]
-COPIED = [INSTALL, *UPGRADES, ".env.example", ".gitignore", "docker-compose.yml", "gateway/nginx.conf", "scripts/pg-backup.sh",
+COPIED = [INSTALL, *UPGRADES, "deploy/managed-runner/host.sh", "deploy/managed-runner/docker-channel/info.js", ".env.example", ".gitignore", "docker-compose.yml", "gateway/nginx.conf", "scripts/pg-backup.sh",
           "scripts/runner-link/door-check.js", "deploy/runner-link/behind-web-gateway.env"]
 IMAGE_ID = "sha256:" + "ab" * 32
 GATEWAY = "172.30.0.1"
@@ -74,6 +74,12 @@ case "$*" in
       '      - type: bind' '        source: /var/run/docker.sock' '        target: /var/run/docker.sock' '        bind:' \
       '          create_host_path: true' '      - type: bind' "        source: $PWD/data/managed-runners" \
       '        target: /var/lib/orbit-managed-runners' '        bind:' '          create_host_path: true' ;;
+  "compose config apiserver")
+    # Its managed runners' directory, where FAKE_APISERVER_MR_DIR says .env names one; otherwise Compose's /dev/null.
+    [ -n "${FAKE_APISERVER_MR_DIR:-}" ] || exit 0
+    printf '%s\n' 'name: orbit' 'services:' '  apiserver:' '    volumes:' '      - type: bind' \
+      "        source: $PWD/data/managed-runners" '        target: /var/lib/orbit-managed-runners' '        read_only: true' ;;
+  "compose exec -T apiserver node -") cat >"$FAKE_DOCKER_LOG.stdin"; echo "    ${FAKE_HOST_LINE:-orbit-far at http://10.66.0.3:7300: image sha256:fixture}" ;;
   "compose ps -q apiserver") cat "$FAKE_DOCKER_LOG.apiserver" 2>/dev/null || echo apiserver-0 ;;
   "compose ps -q pgbackup") echo pgbackup-0 ;;
   "compose ps -q gateway") echo gateway-0 ;;
@@ -363,7 +369,9 @@ class NewDeploymentTest(unittest.TestCase):
 
     # What each copy of /upgrade asked of Docker for a deployment without managed runners before it kept their
     # image current (both copies at c16d115b3, run exactly as below): that path is unchanged, call for call, but for
-    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10).
+    # where the deployment runs from, asked first, and pgbackup, after the other services (2026-11-02, Orbit Files' T10),
+    # and the apiserver's managed runners' directory, read for a profile whose channel hosts are all on other machines
+    # (2026-11-13, docs/self-hosting.md "Managed runners on another host"), which without one is /dev/null.
     DEPLOYMENT_PREFLIGHT = [
         "compose config postgres",
         "inspect --format {{range .Mounts}}{{if eq .Destination \"/archive\"}}{{.Source}}{{end}}{{end}} orbit-postgres",
@@ -390,6 +398,7 @@ class NewDeploymentTest(unittest.TestCase):
             *LINK_LOOKED_AT,
             "inspect --format {{.Image}} orbit-web",
             "compose config --services",
+            "compose config apiserver",
             "compose build apiserver wiki-worker web",
             *WEB_GATEWAY_COMPARED,
             "compose up -d --wait apiserver wiki-worker web gateway",
@@ -401,6 +410,7 @@ class NewDeploymentTest(unittest.TestCase):
             *DEPLOYMENT_PREFLIGHT,
             *LINK_LOOKED_AT,
             "compose config --services",
+            "compose config apiserver",
             "compose build apiserver wiki-worker web",
             *WEB_GATEWAY_COMPARED,
             "compose run --rm --no-deps apiserver /bin/sh -c cd src/apiserver && node "
@@ -583,6 +593,100 @@ class NewDeploymentTest(unittest.TestCase):
                         self.assertFalse((self.checkout / "data").exists())
                     else:
                         self.assertEqual(self.managed_files(), before)
+
+    # ── the upgrade of a deployment whose managed runners are on other hosts ──────────────────────
+
+    def remote_profile(self, channel):
+        """A server whose profile names channel hosts: the runner link's lines, managed runners' profiles as given."""
+        directory = self.checkout / self.DIRECTORY
+        shutil.rmtree(self.checkout / "data", ignore_errors=True)
+        directory.mkdir(parents=True)
+        profile = {"schemaVersion": 1, "valueKind": "actual", "backend": "docker",
+                   "docker": {"hosts": [{"instanceId": "orbit-far", "channel": channel,
+                                         "tokenFile": "/var/lib/orbit-managed-runners/orbit-far.token"},
+                                        {"instanceId": "orbit-farther", "channel": {"url": "http://10.66.0.4:7300"},
+                                         "tokenFile": "/var/lib/orbit-managed-runners/orbit-farther.token"}]},
+                   "runner": {"image": "channel", "serverUrl": "https://orbit.example.test"}}
+        (directory / "profile.json").write_text(json.dumps(profile, indent=2))
+        (directory / "orbit-far.token").write_text("a" * 64)
+        return self.managed_files()
+
+    LINK_ENV = ('JWT_SECRET="kept"\nPROVIDER_SECRET_KEY="kept too"\nRUNNER_LINK_URL=same-origin\n'
+                + "".join(f'RUNNER_LINK_{name}="kept"\n' for name in (
+                    "SIGNING_KEY", "PUBLIC_KEY", "GATEWAY_TOKEN", "NATS_APISERVER_SEED", "NATS_APISERVER_KEY",
+                    "NATS_GATEWAY_SEED", "NATS_GATEWAY_KEY")))
+
+    def test_an_upgrade_of_a_server_whose_channel_hosts_are_all_remote_builds_no_runner_image(self):
+        for upgrade in UPGRADES:
+            for profiles in ("runner-link", "managed-runners-docker,managed-runner-firewall,runner-link"):
+                with self.subTest(upgrade=upgrade, profiles=profiles):
+                    before = self.remote_profile({"url": "http://10.66.0.3:7300"})
+                    (self.checkout / ".env").write_text(self.LINK_ENV + f"COMPOSE_PROFILES={profiles}\n")
+                    run = self.run_script(upgrade, "--no-pull", FAKE_APISERVER_MR_DIR="1", FAKE_IMAGE_ID=self.NEW_IMAGE_ID)
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertEqual(self.managed_files(), before, "profile.json and the token as they were")
+                    calls = self.calls()
+                    self.assertFalse([c for c in calls if "deploy/managed-runner/image" in c or "orbit-managed-runner:local" in c], calls)
+                    self.assertFalse([c for c in calls if "docker-channel" in c and re.match(r"compose (build|up) ", c)], calls)
+                    # Each host's image, asked by the apiserver, last.
+                    self.assertIn("compose exec -T apiserver node -", calls)
+                    self.assertEqual(self.log.with_name(self.log.name + ".stdin").read_text(),
+                                     (REPO / "deploy/managed-runner/docker-channel/info.js").read_text())
+                    self.assertIn("names channel hosts on other machines only", run.stdout)
+                    self.assertIn("orbit-far at http://10.66.0.3:7300: image sha256:fixture", run.stdout)
+
+    def test_a_profile_with_a_channel_on_this_host_is_not_taken_for_a_remote_one(self):
+        for upgrade in UPGRADES:
+            for channel in ({"socketPath": "/var/lib/orbit-managed-runners/channel.sock"}, {"url": "http://127.0.0.1:7300"},
+                            {"url": "http://[::1]:7300"}):
+                with self.subTest(upgrade=upgrade, channel=channel):
+                    self.remote_profile(channel)
+                    (self.checkout / ".env").write_text(self.LINK_ENV + "COMPOSE_PROFILES=runner-link\n")
+                    run = self.run_script(upgrade, "--no-pull", FAKE_APISERVER_MR_DIR="1")
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertNotIn("compose exec -T apiserver node -", self.calls())
+                    self.assertNotIn("other machines", run.stdout)
+
+    def test_the_host_report_reads_every_host_of_the_profile(self):
+        if not shutil.which("node"):
+            self.skipTest("needs node")
+        import http.server
+        import threading
+        token = "b" * 64
+        seen = []
+
+        class Channel(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get("authorization")))
+                body = json.dumps({"schemaVersion": 1, "instanceId": "orbit-far", "image": self.server.image}).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Channel)
+        server.image = self.NEW_IMAGE_ID
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        (self.root / "far.token").write_text(token + "\n")
+        profile = {"docker": {"hosts": [
+            {"instanceId": "orbit-far", "channel": {"url": f"http://127.0.0.1:{server.server_port}"}, "tokenFile": str(self.root / "far.token")},
+            {"instanceId": "orbit-gone", "channel": {"url": "http://127.0.0.1:9"}, "tokenFile": str(self.root / "far.token"), "draining": True}]},
+            "runner": {"image": IMAGE_ID}}
+        (self.root / "profile.json").write_text(json.dumps(profile))
+        run = subprocess.run(["node", "-", str(self.root / "profile.json")], input=(REPO / "deploy/managed-runner/docker-channel/info.js").read_text(),
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        lines = run.stdout.splitlines()
+        self.assertEqual(lines[0], f"    orbit-far at http://127.0.0.1:{server.server_port}: image {self.NEW_IMAGE_ID} "
+                                   f"(the profile pins {IMAGE_ID}: the apiserver makes nothing there until they agree)")
+        self.assertRegex(lines[1], r"^    orbit-gone at http://127.0.0.1:9: not reached: .*; draining$")
+        self.assertEqual(seen, [("/v1/info", f"Bearer {token}")])
+        self.assertNotIn(token, run.stdout + run.stderr)
 
     def test_both_copies_keep_the_managed_runners_section_the_same(self):
         sections = []

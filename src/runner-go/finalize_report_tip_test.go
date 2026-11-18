@@ -55,9 +55,10 @@ func TestFinalizeReportTipIsTheTipOfTheBranchItNames(t *testing.T) {
 }
 
 // A park checkpoint is undone when the session resumes (uncommitParkCheckpoint), so it is not the tip
-// the work ends on and is not reported as one: the last live report's tip stands.
-func TestParkCheckpointFinalizeReportsNoTip(t *testing.T) {
+// the work ends on and is not reported as one: the commit under it is.
+func TestParkCheckpointFinalizeReportsTheTipUnderIt(t *testing.T) {
 	wt := sessionWorktree(t, "sPark")
+	under := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
 
 	var req RunFinalizeRequest
 	finalizeWorktreeReport(&req, wt.Session, wt, stCancelled)
@@ -66,14 +67,45 @@ func TestParkCheckpointFinalizeReportsNoTip(t *testing.T) {
 	if !strings.Contains(message, parkCheckpointTrailer+": "+wt.Session) {
 		t.Fatalf("CONTROL: the park checkpoint was not committed; head message %q", message)
 	}
-	if req.BranchSha != "" {
-		t.Fatalf("a park checkpoint reported branchSha %q", req.BranchSha)
+	if checkpoint := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch); req.BranchSha == checkpoint {
+		t.Fatalf("a park checkpoint reported itself %s as the tip", checkpoint)
+	}
+	if req.BranchSha != under {
+		t.Fatalf("branchSha = %q, want the commit under the park checkpoint %s", req.BranchSha, under)
+	}
+}
+
+// The 0.1.253 bump (task 34vJmfV0DZk5cySoXlB3r, 2026-11-10): the session's checkout started at the
+// project branch's tip, the agent fast-forwarded it to main and committed, the acceptance passed,
+// and the control plane ended the run (`task_done`), which the runner finalizes as a cancel. That
+// finalize sent no tip, so the stored one stayed whatever the last live report had said, a tip
+// from before the agent's commit, and the DONE task's delivered commit was frozen from it. A run
+// ended this way with nothing left uncommitted reports its branch's real tip.
+func TestCancelledFinalizeReportsTheTipTheRunCommitted(t *testing.T) {
+	wt := sessionWorktree(t, "sDone")
+	started := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
+	mustGit(t, wt.Path, "add", "-A")
+	mustGit(t, wt.Path, "commit", "-q", "-m", "chore(release): the run's own commit")
+	committed := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch)
+	if committed == started {
+		t.Fatal("CONTROL: the run's commit did not move its branch")
+	}
+
+	var req RunFinalizeRequest
+	finalizeWorktreeReport(&req, wt.Session, wt, stCancelled)
+
+	if after := mustGit(t, wt.RepoDir, "rev-parse", "refs/heads/"+wt.Branch); after != committed {
+		t.Fatalf("CONTROL: a clean cancelled finalize moved the branch from %s to %s", committed, after)
+	}
+	if req.BranchSha != committed {
+		t.Fatalf("cancelled finalize reported branchSha %q, want the tip the run committed %s (the run started at %s)",
+			req.BranchSha, committed, started)
 	}
 	encoded, err := json.Marshal(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), `"branchSha"`) {
-		t.Fatalf("a park checkpoint's finalize sent a branchSha: %s", encoded)
+	if !strings.Contains(string(encoded), `"branchSha":"`+committed+`"`) {
+		t.Fatalf("the finalize body does not carry the tip: %s", encoded)
 	}
 }

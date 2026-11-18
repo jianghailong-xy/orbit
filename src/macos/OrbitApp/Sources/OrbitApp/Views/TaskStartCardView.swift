@@ -22,9 +22,6 @@ struct TaskStartCardView: View {
     let text: String
     var ts: String?
     var undelivered: Bool = false
-    /// Whatever else delivery appended to the same turn (a `controlPlaneNote`), as its own folded
-    /// entry — the control plane's words stay in the card rather than in a bubble in the owner's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws a resumed run's brief while it is still queued behind the running turn; nil once a
     /// runner has taken it (the queue's own line, drawn at the card's foot as the other cards draw it).
     var onCancelQueued: (() -> Void)?
@@ -33,6 +30,12 @@ struct TaskStartCardView: View {
     /// Where the project row goes: the app's own link door, which reads for the conversation that
     /// coordinates the project and falls back to the deployment's page when there is none.
     @Environment(AppModel.self) private var app: AppModel?
+    /// In a phone's conversation, the task this card names is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation.
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     @State private var showingDetails = false
     @State private var wholeCommand = false
     @State private var showingRaw = false
@@ -89,7 +92,6 @@ struct TaskStartCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             raw
-            if let attached { AttachedNoteEntry(attached: attached) }
             if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
@@ -102,12 +104,13 @@ struct TaskStartCardView: View {
                 .tint.opacity(0.28),
                 style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
         )
+        .orbitCardWidth()
     }
 
     /// The queue's own line at the card's foot, in the words a queued message already uses.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)
@@ -251,11 +254,17 @@ struct TaskStartCardView: View {
             }
             Spacer(minLength: 0)
             if let url = TaskStartCard.taskLink(card) {
-                Button(TaskStartCard.openTask) { openURL(url) }
+                Button(TaskStartCard.openTask) { openTaskLink(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
         }
         .animation(nil, value: showingDetails)
+    }
+
+    /// "Open the task ↗" through the app's own link door, told whether this card is in a phone's
+    /// conversation (the task is pushed over it) or on a wide shell (it opens over the page).
+    private func openTaskLink(_ url: URL) {
+        if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
     }
 
     /// The brief the agent was handed, exactly as it read it — one tap away and folded by default. It

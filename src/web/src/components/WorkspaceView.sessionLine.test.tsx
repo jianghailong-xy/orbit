@@ -157,6 +157,10 @@ describe('sessionLine', () => {
       text: 'Record as done…',
       tone: 'approval',
     });
+    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST' }, true)).toEqual({
+      text: 'Waiting on you',
+      tone: 'approval',
+    });
   });
 
   it('surfaces live state before any reply preview', () => {
@@ -342,6 +346,18 @@ describe('sessionLine names who sent the message it previews', () => {
       .toEqual({ text: 'You: fix it', tone: 'preview' });
   });
 
+  // Somebody the owner invited to reply (ORBIT_GUEST, docs/session-guests-design.md §3): `From <name>`, never You.
+  it('names a guest as From <name>, while the turn runs and after it stopped', () => {
+    const guest = { source: 'ORBIT_GUEST', name: 'Alice Chen' };
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: 'Twice is fine, but CI should fail', lastUserFromExternal: guest }, true))
+      .toEqual({ text: 'From Alice Chen: Twice is fine, but CI should fail', tone: 'preview' });
+    expect(sessionLine({ status: 'AWAITING_INPUT', lastUserText: 'one more', lastUserFrom: null, lastUserFromExternal: guest }, true))
+      .toEqual({ text: 'From Alice Chen: one more', tone: 'preview' });
+    // A guest always has a name; a row from a server that sent none reads as before.
+    expect(sessionLine({ status: 'RUNNING', lastUserText: 'one more', lastUserFromExternal: { source: 'ORBIT_GUEST', name: null } }, true))
+      .toEqual({ text: 'You: one more', tone: 'preview' });
+  });
+
   it('changes nothing above the message, and a sender with no message makes no line', () => {
     expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: report, lastUserFrom: from }, true))
       .toEqual({ text: 'Running Bash…', tone: 'running' });
@@ -521,10 +537,14 @@ describe('sessionLine names the gate holding a queued session', () => {
     });
   });
 
-  it('keeps slot wording when a slot really is what is missing', () => {
+  it('says it waits for a free slot when a slot really is what is missing, and names the gate in the tooltip', () => {
     expect(
       sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
-    ).toEqual({ text: 'Waiting for slot', tone: 'queued' });
+    ).toEqual({
+      text: 'Waiting for a free slot',
+      tone: 'queued',
+      hint: 'Runner full\nThe runner is using all its slots. This message is sent as soon as one frees up.',
+    });
   });
 });
 
@@ -546,6 +566,36 @@ describe('statusLabel over a session parked on a watch', () => {
     // A shell left up is not what the session is waiting on: the wake is.
     expect(statusLabel({ ...parked, runningBgCount: 1 })).toBe('Background process running');
     expect(statusLabel({ ...parked, runningBgCount: 1 }, 'Watching 1 target')).toBe('Watching 1 target');
+  });
+
+  it("names what a running agent is doing when the server knows its title", () => {
+    const one = { ...parked, runningSubagentCount: 1, runningSubagentTitle: 'Deploy dacad7403 to production' };
+    expect(sessionLine(one, true)).toEqual({ text: 'Agent: Deploy dacad7403 to production…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents · Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // The generating branch says the same.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: null }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // A foreground delegate (or synchronous Agent) is still the tool in flight: its work, not the tool.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'mcp__orbit__delegate' }, true)).toEqual({
+      text: 'Agent: Deploy dacad7403 to production…',
+      tone: 'running',
+    });
+    // Any other tool still says itself.
+    expect(sessionLine({ ...one, status: 'RUNNING', lastToolUse: 'Bash' }, true)).toEqual({
+      text: 'Running Bash…',
+      tone: 'running',
+    });
+    // No title (an older server, an undescribed call): the label it always said.
+    expect(sessionLine({ ...one, runningSubagentTitle: '  ' }, true)).toEqual({ text: 'Running Agent…', tone: 'running' });
+    expect(sessionLine({ ...one, runningSubagentTitle: null, runningSubagentCount: 2 }, true)).toEqual({
+      text: 'Running 2 agents…',
+      tone: 'running',
+    });
   });
 
   it('never hides work of its own or a question for the reader behind the wait', () => {
@@ -582,7 +632,12 @@ describe('sessionLine over a session parked on a watch', () => {
   });
 
   it("keeps a background process out of the watch's line", () => {
+    // A process it left up never takes the reply's place (the owner, 2026-11-16): the glyph says it.
     expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
+      text: 'Nothing for you to do until it lands.',
+      tone: 'preview',
+    });
+    expect(sessionLine({ ...parked, lastAssistantText: null, runningBgCount: 1 }, true)).toEqual({
       text: 'Background process running…',
       tone: 'background',
     });
@@ -646,6 +701,12 @@ describe('sessionLine over a session with a recap', () => {
     expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({ text: recapText, tone: 'preview' });
   });
 
+  // A background process the session left up is no news about it (the owner, 2026-11-16): the recap
+  // keeps the line, and the row's glyph is what says a process is up.
+  it('keeps the recap over a background process it left up', () => {
+    expect(sessionLine({ ...parked, runningBgCount: 2 }, true)).toEqual({ text: recapText, tone: 'preview' });
+  });
+
   it('falls back to the reply when there is no recap', () => {
     expect(sessionLine({ ...parked, recapText: null }, true)).toEqual({
       text: 'Committed the row change.',
@@ -681,15 +742,11 @@ describe('sessionLine over a session with a recap', () => {
       ),
     ).toEqual({ text: 'Running Bash…', tone: 'running' });
 
-    // Waiting on you, a background process the session left up, a watch that will resume it, and
-    // the message you sent that has no answer yet — each is newer than the recap.
+    // Waiting on you, a watch that will resume it, and the message you sent that has no answer yet
+    // — each is newer than the recap.
     expect(sessionLine({ ...parked, pendingApprovals: 1 }, true)).toEqual({
       text: 'Waiting for approval',
       tone: 'approval',
-    });
-    expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
-      text: 'Background process running…',
-      tone: 'background',
     });
     expect(
       sessionLine(parked, true, { word: 'Watching 1 target', line: 'Watching Fix the login redirect' }),
@@ -698,5 +755,22 @@ describe('sessionLine over a session with a recap', () => {
       text: 'You: and now the footer?',
       tone: 'preview',
     });
+  });
+});
+
+/** The row's marks beside its time (docs/session-guests-design.md §3): two people when anyone invited can reply. */
+describe('the guests mark on a session row', () => {
+  it('draws two people beside the time when the row has guests, and nothing when it has none', async () => {
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { SessionTitleRow, SESSION_GUESTS_TIP } = await import('./WorkspaceView');
+    const row = (s: Record<string, unknown>) =>
+      renderToStaticMarkup(<SessionTitleRow session={{ title: 'Retry budget for flaky pg specs', lastTurnAt: new Date().toISOString(), ...s }} />);
+    const shown = row({ hasGuests: true, shared: true });
+    expect(shown).toContain(`<span class="session-guests" title="${SESSION_GUESTS_TIP}" aria-label="${SESSION_GUESTS_TIP}">`);
+    // Beside the globe, both before the time.
+    expect(shown.indexOf('session-shared')).toBeLessThan(shown.indexOf('session-guests'));
+    expect(shown.indexOf('session-guests')).toBeLessThan(shown.indexOf('session-time'));
+    expect(row({ hasGuests: false })).not.toContain('session-guests');
+    expect(row({})).not.toContain('session-guests');
   });
 });

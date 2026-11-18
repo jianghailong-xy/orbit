@@ -1,0 +1,2 @@
+idle-light: the transcript's sticky header never showed
+folded-light: pill 9 label="Show the composer" value="Empty, 3598 lines added, 32 removed" frame=(147.66666666666666, 822.0, 106.66666666666669, 30.0) hittable=true value=Empty, 3598 lines added, 32 removed frame=(147.66666666666666, 822.0, 106.66666666666669, 30.0) screen=(0.0, 0.0, 402.0, 874.0) bottom-gap=22.0

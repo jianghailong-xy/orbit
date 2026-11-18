@@ -7,8 +7,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { machineChipsOf, RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
-import { clickRunnerMenuItem, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { tildePath } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { clickRunnerMenuItem, openAccountGroups, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -89,9 +90,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** Mount the section over these runners, their cards open, the way a user who opened them sees it. */
+/** Mount these runners' engine rows, their accounts open, the way a user who opened them sees them. */
 function mount(runners: Runner[]) {
-  openRunnerCards(runners);
+  openAccountGroups(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -108,7 +109,7 @@ function mount(runners: Runner[]) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -317,14 +318,6 @@ describe('a runner with two Codex accounts', () => {
     ]);
   });
 
-  it('lets a folded card say an account still needs signing in', () => {
-    // Every engine's own answer is yes — Default's, for Codex. Folding the card must not turn a
-    // signed-out Work into a Codex that is all signed in: its chip says 1 of 2.
-    const codex = (box: Runner) => machineChipsOf(box).find((chip) => chip.engine === 'codex');
-    expect(codex(runner({ accounts: [DEFAULT, WORK] }))).toEqual({ engine: 'codex', logins: 1, accounts: 2, signedOut: false });
-    expect(codex(runner({ accounts: [DEFAULT, { ...WORK, auth: 'yes' }] }))).toEqual({ engine: 'codex', logins: 2, accounts: 2, signedOut: false });
-    expect(summaryOf(runner({ accounts: [DEFAULT, WORK] }))).toBeNull();
-  });
 });
 
 describe('a runner with one Codex account', () => {

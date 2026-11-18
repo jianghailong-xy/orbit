@@ -697,10 +697,12 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		return result
 	}
 	mergeLock.Lock()
+	unlockCheckout := lockMainCheckout(repoRoot)
 	pushErr := integrationPush(repoRoot, scratch, remote, cmd.TargetRef, tested, targetSha, local)
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.TargetRef, tested)
 	}
+	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
 		result.State, result.Phase = "ERROR", "PUSH"
@@ -1044,6 +1046,7 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		return result
 	}
 	mergeLock.Lock()
+	unlockCheckout := lockMainCheckout(repoRoot)
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
 	// commit both carry the upstream tip as an ancestor. What differs is the commit being pushed, not
 	// the way it travels — and no force, so an upstream that moved underneath is refused (J-S6).
@@ -1051,6 +1054,7 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	if pushErr == nil {
 		advanceLocalRef(repoRoot, cmd.UpstreamRef, tested)
 	}
+	unlockCheckout()
 	mergeLock.Unlock()
 	if pushErr != nil {
 		result.State, result.Phase = "ERROR", "PUSH"

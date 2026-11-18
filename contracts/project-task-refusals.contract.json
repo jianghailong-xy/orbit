@@ -1,0 +1,800 @@
+{
+  "name": "orbit.project-task-refusals",
+  "recoveryContractVersion": 1,
+  "doc": "docs/recovery-contract.md#9-project-and-task-refusals",
+  "note": "The recovery block the API states for each Project and Task refusal listed here, beside the legacy flat fields it keeps. Transcribed from src/apiserver/src/common/refusal-recovery.ts, which serves it; refusal-recovery.spec.ts holds the two equal. requiredAction narrows an entry to one legacy token. resources are [type, body field path], read in order; only ids the body already carries are named.",
+  "refusals": [
+    {
+      "code": "STALE_CONFIG_REVISION",
+      "status": 409,
+      "endpoints": [
+        "PATCH /projects/:id",
+        "PATCH /runner/projects/:id"
+      ],
+      "when": "The write stated expectedConfigRevision and the project has moved past it.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "REREAD_AND_DECIDE",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "projectId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_SCOPE_MISMATCH",
+      "requiredAction": "RE_DERIVE_SCOPE",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "The scope token the write carried does not agree with the server (R2).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "REREAD_AND_DECIDE",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_SCOPE_MISMATCH",
+      "requiredAction": "YIELD_TO_CURRENT_SCOPE",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "This session holds no scope for the project the write is about (R5, or a declaring session that is not this account's).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "STAND_DOWN",
+        "actor": "CALLER",
+        "disposition": "STOP"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_SCOPE_MISMATCH",
+      "requiredAction": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "The write aims at a project this session does not coordinate and declares no crossing (R6, R7).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "COORDINATOR_GENERATION_MOVED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "The coordination scope was handed to a newer coordinator after this write was composed (R3).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "STAND_DOWN",
+        "actor": "SYSTEM",
+        "disposition": "STOP"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "UNMAPPED_PROJECT_WORK",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "The write files work under no project, and a coordinator may not pick one (R4).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_REOPEN_REQUIRED",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create",
+        "POST /projects/:id/handoffs/:handoffId/decision"
+      ],
+      "when": "A settled (DONE or CANCELLED) project stands at an end of the write (R8).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "target.projectId"
+        ],
+        [
+          "PROJECT",
+          "projectId"
+        ],
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "MOVE_TASK_SERVES_SETTLED_CRITERION",
+      "status": 403,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create",
+        "POST /projects/:id/handoffs/:handoffId/decision"
+      ],
+      "when": "The task to move serves an acceptance criterion of a settled project (R8B).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "scope.projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "CROSS_PROJECT_APPROVAL_REQUIRED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "A declared crossing was filed as a request; the account owner's confirmation applies it (R10).",
+      "recovery": {
+        "effect": "NONE",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "userConfirmation": "REQUIRED",
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "resources": [
+        [
+          "CROSSING",
+          "handoffId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ]
+      ]
+    },
+    {
+      "code": "APPROVAL_PENDING",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create"
+      ],
+      "when": "The same crossing is already waiting for the account owner (R11).",
+      "recovery": {
+        "effect": "NONE",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "userConfirmation": "REQUIRED",
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "resources": [
+        [
+          "CROSSING",
+          "handoffId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ]
+      ]
+    },
+    {
+      "code": "APPROVAL_EXPIRED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create",
+        "POST /projects/:id/handoffs/:handoffId/decision"
+      ],
+      "when": "The owner's yes expired before it was applied (R13); only a new request, answered again, moves the task.",
+      "recovery": {
+        "effect": "NONE",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "userConfirmation": "REQUIRED",
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "resources": [
+        [
+          "CROSSING",
+          "handoffId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ]
+      ]
+    },
+    {
+      "code": "APPROVAL_DENIED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create",
+        "POST /projects/:id/handoffs/:handoffId/decision"
+      ],
+      "when": "The account owner refused the crossing (R12): the work stays at home.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+        "actor": "COORDINATOR",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "CROSSING",
+          "handoffId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ]
+      ]
+    },
+    {
+      "code": "APPROVAL_TARGET_MISMATCH",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks",
+        "PATCH /runner/tasks/:id",
+        "POST /runner/tasks/batch-create",
+        "POST /projects/:id/handoffs/:handoffId/decision"
+      ],
+      "when": "The approval named does not answer this write's crossing (R9).",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "FIX_REQUEST",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "CROSSING",
+          "handoffId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "target.projectId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_NOT_EMPTY",
+      "status": 409,
+      "endpoints": [
+        "DELETE /projects/:id",
+        "DELETE /runner/projects/:id"
+      ],
+      "when": "The project still holds tasks. Moving or deleting them is the owner's decision, never a side effect of the delete.",
+      "recovery": {
+        "effect": "NONE",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "USER",
+        "userConfirmation": "REQUIRED",
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "projectId"
+        ]
+      ]
+    },
+    {
+      "code": "DEPENDENCY_SELF",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/dependencies",
+        "POST /runner/tasks/:id/dependencies"
+      ],
+      "when": "The edge names the same task at both ends.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "FIX_REQUEST",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "DEPENDENCY_CYCLE",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/dependencies",
+        "POST /runner/tasks/:id/dependencies",
+        "PATCH /tasks/:id",
+        "PATCH /runner/tasks/:id"
+      ],
+      "when": "The edge (or the replacement prerequisite set) would close a cycle in the owner's graph.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "READ_GRAPH_AND_REPLAN",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "TASK",
+          "dependsOnTaskId"
+        ]
+      ]
+    },
+    {
+      "code": "DEPENDENCY_DUPLICATE",
+      "status": 409,
+      "endpoints": [
+        "POST /tasks/:id/dependencies",
+        "POST /runner/tasks/:id/dependencies"
+      ],
+      "when": "The edge already exists; nothing was written.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "READ_GRAPH_AND_REPLAN",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "TASK",
+          "dependsOnTaskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_RETIRED",
+      "status": 409,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task (or the task it verifies) was superseded or abandoned: its work is done elsewhere or not at all.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "STAND_DOWN",
+        "actor": "CALLER",
+        "disposition": "STOP"
+      },
+      "resources": [
+        [
+          "TASK",
+          "supersededByTaskId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_AGGREGATE_ONLY",
+      "status": 409,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task is completed by its subtasks or its verifier and has no work of its own to run.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "STAND_DOWN",
+        "actor": "CALLER",
+        "disposition": "STOP"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_PREREQUISITES_INCOMPLETE",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "A prerequisite is still open or running.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "SYSTEM",
+        "disposition": "WAIT"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_PREREQUISITE_NOT_LANDED",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "Every prerequisite is DONE, and one has not reached its line yet.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "SYSTEM",
+        "disposition": "WAIT"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_PREREQUISITE_FAILED",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "A prerequisite was cancelled, or a check on one did not pass: waiting changes nothing.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "READ_GRAPH_AND_REPLAN",
+        "actor": "COORDINATOR",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_LIST_PAUSED",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task's list is paused; resuming it is the owner's.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "LIST",
+          "listId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_NO_ASSIGNEE",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task has no responsible agent.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "ASSIGN_AGENT",
+        "actor": "CALLER",
+        "disposition": "AUTOMATIC"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "TASK_ASSIGNEE_NO_RUNNER",
+      "status": 400,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The responsible agent is bound to no runner; binding one is a workspace change the owner makes.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "AGENT",
+          "assigneeId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_PAUSED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task's project is paused by its owner.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": null,
+        "actor": "USER",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "TASK",
+          "taskId"
+        ],
+        [
+          "PROJECT",
+          "projectId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_NOT_STARTED",
+      "status": 409,
+      "endpoints": [
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task's project has not been started by its owner.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "AFTER_STATE_CHANGE",
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "actor": "COORDINATOR",
+        "disposition": "HUMAN"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    },
+    {
+      "code": "PROJECT_CANCELLED",
+      "status": 409,
+      "endpoints": [
+        "POST /tasks/:id/execute",
+        "POST /runner/tasks/:id/execute"
+      ],
+      "when": "The task's project was cancelled.",
+      "recovery": {
+        "effect": "NONE",
+        "userConfirmation": "NOT_REQUIRED",
+        "retryPolicy": "NEVER",
+        "actionCode": "STAND_DOWN",
+        "actor": "USER",
+        "disposition": "STOP"
+      },
+      "resources": [
+        [
+          "PROJECT",
+          "projectId"
+        ],
+        [
+          "TASK",
+          "taskId"
+        ]
+      ]
+    }
+  ]
+}

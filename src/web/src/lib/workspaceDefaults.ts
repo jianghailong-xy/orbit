@@ -166,11 +166,20 @@ export const providerIdentityResolved = (
 // `codex debug models`; Claude: `claude -p "/model <alias>"`). There are no static
 // fallback lists — when no runner catalog is available the picker is empty.
 // Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
-// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as
-// their raw id, same as any other non-current model.
+// Previous models (Opus 4.8, …) stay reachable by pinning the id directly; a Claude id the
+// catalogue has no row for reads as its name (claudeModelName), any other as its raw id.
 // Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
 // model's context window and thinking levels). Its managed default is the one static fallback,
 // for a runner whose CLI predates that probe.
+/** The name Claude Code gives a Claude api id: `claude-opus-5-5` -> "Opus 5.5", `claude-haiku-4-5` ->
+ *  "Haiku 4.5" — the reverse of the runner's claudeModelID. For a model the runner's catalogue has no
+ *  row for (a runner whose probe failed, a pin on a previous model); anything else stays as it is. */
+export const claudeModelName = (id: string): string => {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?$/.exec(id);
+  if (!m) return id;
+  return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
+};
+
 export const KIMI_MODEL_OPTIONS = [
   { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
 ];
@@ -420,47 +429,24 @@ export const livePinnedModel = (
   return retired(model) && (judge !== AgentProvider.CURSOR || retired(decodeCursorModel(model).model)) ? undefined : model;
 };
 
-/** The key a model picked for `engine` on `provider` is remembered under in
- *  `User.preferences.defaultModels` (docs/provider-engine-contract.md §6.5). */
-export const defaultModelKey = (engine: string, provider: string): string => `${engine}:${provider}`;
-
 /**
- * The model last picked for `engine` on `provider`, read in §6.5's order: the pair's own key, then
- * what an older client remembered under the old keys — `opencode/<slug>` (whose value names the key,
- * `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug for the engine a provider runs
- * on by default. Undefined when nothing was picked for it.
+ * The model a new session drafted on `engine` and `provider` starts with: the workspace's `lastModel` —
+ * the model of the session a person last opened there (apiserver workspaces/workspace-provider.ts) —
+ * when the draft runs on that same engine and provider, else the runner's or the key's default. A
+ * retired `lastModel` drops out to the default, as a retired pin does at dispatch. The account-wide
+ * `preferences.defaultModels` memory is retired: nothing reads or writes it
+ * (docs/workspace-default-model-design.md).
  */
-export function rememberedModel(
-  engine: AgentProvider,
-  provider: string,
-  accountModels?: Record<string, string> | null,
-  configured?: ConfiguredProvider[] | null,
-): string | undefined {
-  if (!accountModels) return undefined;
-  const own = accountModels[defaultModelKey(engine, provider)];
-  if (own !== undefined) return own;
-  if (engine === AgentProvider.OPENCODE) {
-    if (provider === AgentProvider.OPENCODE) {
-      const old = accountModels[AgentProvider.OPENCODE];
-      return old !== undefined && !openCodeKeyOf(old) ? old : undefined;
-    }
-    const named = openCodeKeyOf(accountModels[`${AgentProvider.OPENCODE}/${provider}`]);
-    return named && named.slug === provider ? named.model : undefined;
-  }
-  return defaultEngineOf(provider, configured) === engine ? accountModels[provider] : undefined;
-}
-
-/** A new interactive session remembers the last explicit model pick for this engine and provider. */
 export const newSessionModelFor = (
   engine: AgentProvider,
   provider: string,
-  accountModels?: Record<string, string> | null,
+  last?: { engine: AgentProvider; provider: string; model?: string | null } | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string =>
   livePinnedModel(
-    rememberedModel(engine, provider, accountModels, configured),
+    last && last.engine === engine && last.provider === provider ? (last.model ?? undefined) : undefined,
     engine,
     provider,
     modelCatalog,

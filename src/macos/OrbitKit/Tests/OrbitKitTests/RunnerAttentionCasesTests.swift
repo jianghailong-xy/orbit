@@ -100,7 +100,7 @@ final class RunnerAttentionCasesTests: XCTestCase {
                              title: $0.title, actionKind: $0.action?.kind.rawValue)
             }, c.expected.items, c.name)
             XCTAssertEqual(RunnerAttention.listAttentionLine(items), c.expected.listLine, c.name)
-            XCTAssertEqual(RunnerAttention.runnerListSubtitle(c.input.runner, nowMs: c.input.nowMs),
+            XCTAssertEqual(RunnerAttention.runnerListSubtitle(c.input.runner, nowMs: c.input.nowMs, managed: c.input.managed == true),
                            c.expected.subtitle, c.name)
             XCTAssertEqual(RunnerAttention.runnerDisk(c.input.workspaces), c.expected.disk, c.name)
         }
@@ -226,7 +226,7 @@ final class RunnerAttentionCasesTests: XCTestCase {
         let disk = try XCTUnwrap(
             try items("Keep Free 50 GB and 40 GB free: raised, though 20% of the disk is free").first)
         XCTAssertEqual(disk.detail,
-                       "40 GB free of 200 GB, under the 50 GB it keeps free — task runs stop being sent here until space frees up.")
+                       "40 GB free of 200 GB, under the 50 GB it keeps free — new sessions and task runs wait until space frees up.")
         XCTAssertEqual(disk.params["reserveMb"], JSONValue.int(51_200))
     }
 

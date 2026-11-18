@@ -56,6 +56,7 @@ import {
 } from './project-promotion';
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
+import { taskLanding } from './project-criterion-landing';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -314,13 +315,19 @@ export class ProjectPromotionService {
       select: {
         id: true,
         mergeReceipts: {
-          where: { result: { in: ['MERGED', 'ALREADY_MERGED'] }, targetBranch: input.upstreamBranch },
-          take: 1,
-          select: { id: true },
+          where: {
+            result: { in: ['MERGED', 'ALREADY_MERGED'] },
+            targetBranch: { in: [input.integrationBranch, input.upstreamBranch] },
+          },
+          select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true, targetShaAfter: true },
         },
       },
     });
-    return tasks.filter((task) => task.mergeReceipts.length === 0).map((task) => task.id);
+    // The same fold `integration.state` and a criterion's landing read, so a rework landed on the
+    // line after its earlier revision reached the upstream is carried again (F1-4, 2026-11-08).
+    const branches = { upstream: [input.upstreamBranch], integration: [input.integrationBranch] };
+    return tasks.filter((task) => taskLanding(task.mergeReceipts, branches) !== 'ON_UPSTREAM')
+      .map((task) => task.id);
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────
@@ -418,9 +425,24 @@ export class ProjectPromotionService {
     return this.view(after);
   }
 
-  /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
+  /**
+   * The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6).
+   *
+   * A LIVE candidate first, even when a newer one has already ended. A main-line project makes one
+   * candidate per finished task (M-F2), so two can stand at once — and the newest row can be a merge
+   * that happened while an older candidate still asks. Reading only the newest row took that older
+   * one's card off every surface while its item stayed open, so the owner had a row saying "Approve
+   * merge" and nothing to press (2026-11-12, project 34uyniLRpsIAr0qQyv2Jf). Only when nothing is
+   * live does the newest ended row answer, which is the record the project page still draws.
+   */
   async readCurrent(userId: string, projectId: string): Promise<ProjectPromotionView | null> {
     await this.assertOwnProject(userId, projectId);
+    const live = await this.prisma.projectPromotion.findFirst({
+      where: { projectId, ownerId: userId, state: { in: [...LIVE_PROMOTION_STATES] } },
+      orderBy: { createdAt: 'desc' },
+      select: PROMOTION_COLUMNS,
+    });
+    if (live) return this.view(live);
     const row = await this.prisma.projectPromotion.findFirst({
       where: { projectId, ownerId: userId },
       orderBy: { createdAt: 'desc' },
@@ -1291,6 +1313,49 @@ export async function retireCandidatesLandedByReceipt(
 }
 
 /**
+ * M-T14: the assignee closed by hand the last failure item about a BLOCKED task-branch candidate, so
+ * the candidate ends with it — SUPERSEDED, through M-T13's own edge.
+ *
+ * WHAT WAS WRONG (2026-11-13, project 01a1c3c9, branch orbit/task-ai-c49d3a)
+ * -------------------------------------------------------------------------
+ * The coordinator cherry-picked a MAIN-line task's commit onto the upstream by hand and wrote no
+ * receipt. The owner later confirmed the card; the landing replayed the old commit onto a tip that
+ * had moved, conflicted, and blocked the candidate. The coordinator closed the conflict item ("the
+ * work is already on the branch as f72343c"), as the item's own message tells it to — and the card
+ * kept saying "Can't merge into feature/v1.1.1 yet" about work already there. A cherry-pick is a
+ * different commit, so no check can see it landed, and nothing else ends a BLOCKED candidate.
+ *
+ * THE RULE
+ * --------
+ * A BLOCKED candidate's question is "who deals with this failure". Once its assignee has closed every
+ * failure item about it by hand, nobody is left to answer it: the work is on the upstream some other
+ * way, or a fix task carries it as a candidate of its own. Only `TASK_BRANCH` candidates: a project
+ * branch still holds work nothing else will offer. Answers whether it retired the candidate.
+ */
+export async function retireCandidateAfterHandledItem(
+  prisma: PrismaService,
+  input: { projectId: string; promotionId: string },
+): Promise<boolean> {
+  return withTransactionRetry(prisma, async (tx) => {
+    const row = await tx.projectPromotion.findFirst({
+      where: {
+        id: input.promotionId,
+        projectId: input.projectId,
+        sourceKind: 'TASK_BRANCH' satisfies PromotionSourceKind,
+        state: 'BLOCKED' satisfies PromotionState,
+      },
+      select: { id: true, projectId: true, state: true, checkJobId: true, openItemId: true },
+    });
+    if (!row) return false;
+    const stillOpen = await tx.projectOpenItem.count({
+      where: { projectId: row.projectId, promotionId: row.id, state: 'OPEN', kind: { in: [...INTEGRATION_ITEM_KINDS] } },
+    });
+    if (stillOpen > 0) return false;
+    return retireCandidate(tx, row, new Date(), []);
+  }, loggedRetry(logger, 'projectPromotion.retireAfterHandledItem'));
+}
+
+/**
  * M-T13's edge for one candidate a recorded merge answered: SUPERSEDED by a compare-and-set on the
  * state it was read in, its check stopped as J-T8 asks — unless it is one this transaction is writing
  * the answer of — and the owner's card and the failures about it closed `PROMOTION_MOVED_ON`. False
@@ -2052,7 +2117,7 @@ export async function requeuePromotionCheck(
 async function writeUpstreamReceipts(
   tx: Prisma.TransactionClient,
   input: {
-    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null; confirmedAutomatically: boolean };
+    promotion: { id: string; ownerId: string; projectId: string; sourceKind: string; taskId: string | null; sessionId: string | null; includedTaskIds: string[]; sourceRef: string; upstreamRef: string; sourceSha: string | null; createdAt: Date; confirmedAutomatically: boolean };
     jobId: string;
     state: 'LANDED' | 'ALREADY_LANDED';
     mergedSha: string;
@@ -2123,21 +2188,30 @@ async function writeUpstreamReceipts(
 /** The promotion columns that decide which session each of its tasks' M9 receipts is written against. */
 type UpstreamReceiptPromotion = {
   id: string; projectId: string; sourceKind: string; sessionId: string | null; includedTaskIds: string[];
+  sourceSha: string | null; createdAt: Date;
 };
 
 /**
  * Which session each task of a promotion gets its M9 receipt against, and which of those sessions are still there
  * (`liveSessions`) — read, not locked. Its own landing's session for a `PROJECT_BRANCH` candidate, the candidate's
  * session for a `TASK_BRANCH` one (see `writeUpstreamReceipts`).
+ *
+ * A `PROJECT_BRANCH` task's landing is its newest one the candidate's frozen source carries: finished
+ * no later than the landing that left the line at `source_sha` (`candidateIn` froze that tip), or —
+ * when no landing names it — than the candidate itself. A rework that landed on the line while this
+ * merge was in flight is not on the upstream it reached, so its receipt must not name that rework
+ * (`upstreamReceiptCarriesLine` reads the name).
  */
 async function upstreamReceiptWork(tx: Prisma.TransactionClient, promotion: UpstreamReceiptPromotion) {
   const onItsOwnBranch = promotion.sourceKind === 'TASK_BRANCH';
+  const frozenAt = onItsOwnBranch ? null : await sourceFrozenAt(tx, promotion);
   const landings = onItsOwnBranch ? [] : await tx.projectIntegrationJob.findMany({
     where: {
       projectId: promotion.projectId,
       kind: 'LAND_TASK',
       state: 'LANDED',
       taskId: { in: promotion.includedTaskIds },
+      finishedAt: { lte: frozenAt! },
     },
     orderBy: { finishedAt: 'asc' },
     select: { taskId: true, sessionId: true, landedSha: true },
@@ -2153,6 +2227,16 @@ async function upstreamReceiptWork(tx: Prisma.TransactionClient, promotion: Upst
   return { onItsOwnBranch, byTask, sessionFor, liveSessions };
 }
 
+/** When a `PROJECT_BRANCH` candidate's source was frozen, as the landing records say (`upstreamReceiptWork`). */
+async function sourceFrozenAt(tx: Prisma.TransactionClient, promotion: UpstreamReceiptPromotion): Promise<Date> {
+  const source = promotion.sourceSha ? await tx.projectIntegrationJob.findFirst({
+    where: { projectId: promotion.projectId, kind: 'LAND_TASK', state: 'LANDED', landedSha: promotion.sourceSha },
+    orderBy: { finishedAt: 'desc' },
+    select: { finishedAt: true },
+  }) : null;
+  return source?.finishedAt ?? promotion.createdAt;
+}
+
 /**
  * The sessions and tasks this promotion's M9 receipts would name — read, not locked — for
  * `applyIntegrationJobResult`, which locks them ahead of the first receipt of a result that writes J12's receipts
@@ -2165,7 +2249,7 @@ export async function upstreamReceiptSubjects(
 ): Promise<{ sessionIds: string[]; taskIds: string[] }> {
   const promotion = await tx.projectPromotion.findUnique({
     where: { id: promotionId },
-    select: { id: true, projectId: true, sourceKind: true, sessionId: true, includedTaskIds: true },
+    select: { id: true, projectId: true, sourceKind: true, sessionId: true, includedTaskIds: true, sourceSha: true, createdAt: true },
   });
   if (!promotion) return { sessionIds: [], taskIds: [] };
   const { liveSessions } = await upstreamReceiptWork(tx, promotion);

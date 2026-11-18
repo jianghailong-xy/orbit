@@ -7,10 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -264,6 +266,33 @@ class OwnerRequestCardTest {
         compose.onNodeWithTag("$question:action").assertTextContains("Answer").performClick()
         assertEquals(OwnerRequestFixture.QUESTION_ITEM, answered.single().itemId)
         assertEquals(OwnerRequestFixture.PROJECT, answered.single().projectId)
+    }
+
+    /** The task a card holds up opens over the inbox, each page keeping its state by its route as the shell's holder does; Back returns
+     * to the inbox with that card still open, the task's chip where it was pressed (owner, 2026-11-12). */
+    @Test fun aTaskOpenedFromAnInboxCardComesBackToThatCardOpen() {
+        val id = OwnerRequestFixture.STEPS_ID
+        var page by mutableStateOf("inbox")
+        val opened = mutableListOf<String>()
+        compose.setContent {
+            OrbitTheme(darkTheme = false) {
+                val holder = rememberSaveableStateHolder()
+                holder.SaveableStateProvider(page) {
+                    if (page == "inbox") WaitingOnYouScreen(store, emptyList(), null, 0, { link -> opened += link; page = "task" })
+                    else Text("The task's page")
+                }
+            }
+        }
+        compose.onNodeWithTag("waiting-on-you:row:$id:action").assertTextContains("Open steps").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Ship the login page", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Ship the login page") and hasAnyAncestor(hasTestTag("owner-request:$id:holding")), useUnmergedTree = true).performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("orbit-task:${OwnerRequestFixture.TASK}"), opened)
+        text("The task's page").assertExists()
+        compose.runOnIdle { page = "inbox" }  // Back
+        compose.waitForIdle()
+        compose.onNodeWithTag("waiting-on-you:row:$id:action").assertTextContains("Close")
+        compose.onNode(hasText("Ship the login page") and hasAnyAncestor(hasTestTag("owner-request:$id:holding")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun theInboxEndedTabsListResolvedLines() {

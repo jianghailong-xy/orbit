@@ -129,7 +129,8 @@ export function managedLookingClaims(request: PodAdmissionRequest): string[] {
 
 const ORBIT_ANNOTATIONS = [OWNER_ANNOTATION, RUNNER_ANNOTATION, GENERATION_ANNOTATION, PVC_UID_ANNOTATION];
 
-function images(pod: Pod | null | undefined): string[] {
+/** Every image a Pod's init containers and containers name, in order. */
+export function podImages(pod: Pod | null | undefined): string[] {
   return [...containersOf(pod, 'initContainers'), ...containersOf(pod, 'containers')].map((c) => String(c.image ?? ''));
 }
 
@@ -160,7 +161,7 @@ function identityChanged(before: Pod, after: Pod): string | null {
     if (before.metadata?.annotations?.[key] !== after.metadata?.annotations?.[key]) return `annotation ${key}`;
   }
   if (JSON.stringify(volumesOf(before)) !== JSON.stringify(volumesOf(after))) return 'its volumes';
-  if (JSON.stringify(images(before)) !== JSON.stringify(images(after))) return 'its images';
+  if (JSON.stringify(podImages(before)) !== JSON.stringify(podImages(after))) return 'its images';
   if (containersOf(after, 'ephemeralContainers').length > containersOf(before, 'ephemeralContainers').length) return 'its ephemeral containers';
   return null;
 }

@@ -8,13 +8,10 @@ import java.util.Locale
 
 /**
  * The conversation's last row while it is at rest (the owner, 2026-10-22, docs/mocks/session-recap-display/04-decided): the
- * recap its list row reads, here whole, with when it was written and a way to write it again now. A port of OrbitKit's
+ * recap its list row reads, here whole, with when it was written. A port of OrbitKit's
  * `RecapCard` (and the web's `SessionRecapCard`), whose words RecapCardTest holds [RecapCardCopy] to.
  */
 data class RecapCard(val text: String, val whenWritten: String?) {
-    /** What a refresh that wrote nothing says to the reader; [failed] is drawn as a failure the reader may try again. */
-    data class Notice(val text: String, val failed: Boolean)
-
     companion object {
         /** The card for [s], or null while the conversation is not at rest for one ([rests]), in Trash, with no recap, or with
          * the account's Session recaps switch off — the switch that governs the list row's recap governs this too — or when this
@@ -50,16 +47,6 @@ data class RecapCard(val text: String, val whenWritten: String?) {
             val clock = recapClock.format(at)
             return if (at.toLocalDate() == now.atZone(zone).toLocalDate()) clock else "${recapDay.format(at)}, $clock"
         }
-
-        /** The notice for a pass that wrote nothing, by its reason (apiserver sessions/recap.ts `RecapSkipReason`); null when
-         * there is nothing to say — another pass wrote first, and reading the session again shows that one's line. */
-        fun notice(reason: String): Notice? = when (reason) {
-            "cas-lost" -> null
-            "no-events" -> Notice(RecapCardCopy.upToDate, failed = false)
-            "too-few-events" -> Notice(RecapCardCopy.tooLittle, failed = false)
-            "no-key", "disabled" -> Notice(RecapCardCopy.unavailable, failed = false)
-            else -> Notice(RecapCardCopy.failed, failed = true)
-        }
     }
 }
 
@@ -72,14 +59,7 @@ private val recapDay = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 internal object RecapCardCopy {
     /** The card's name, over the recap. */
     const val word = "Recap"
-    /** The ⋮ at the end of the recap that holds Refresh and Hide (2026-11-02, 07-last-line B), as TalkBack reads it. */
-    const val more = "Recap actions"
-    /** The menu's item that writes the recap again now. */
-    const val refresh = "Refresh recap"
-    /** The menu's item that hides this recap in this conversation on this device. */
+    /** The × at the end of the recap that hides this recap in this conversation on this device, as TalkBack reads it. It was a ⋮
+     * menu with Refresh too; the owner, 2026-11-16: just the ×. */
     const val hide = "Hide recap"
-    const val upToDate = "The recap is already up to date."
-    const val tooLittle = "There's too little to recap yet."
-    const val unavailable = "Recaps aren't available on this server."
-    const val failed = "Couldn't refresh the recap. Try again."
 }

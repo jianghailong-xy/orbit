@@ -121,6 +121,8 @@ final class WikiSpaceLogicTests: XCTestCase {
         let project = SessionProjectAddress(projectID: "P1", agentID: "ws-list", view: .open)
         XCTAssertEqual(reader(NavState(section: .agents, stacks: [.agents: [.sessionProject(project, asDestination: true)]])),
                        "ws-coordinator", "a project's sessions page: its coordinator's workspace")
+        XCTAssertEqual(reader(NavState(section: .agents, stacks: [.agents: [.sessionProject(project)]])),
+                       "ws-coordinator", "the same page a session list's coordinator row opened")
         let unknown = SessionProjectAddress(projectID: "P2", agentID: "ws-list", view: .open)
         XCTAssertNil(reader(NavState(section: .agents, stacks: [.agents: [.sessionProject(unknown, asDestination: true)]])),
                      "a coordinator not known yet is nowhere, as the web's sidebar says until the project is read")

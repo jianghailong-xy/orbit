@@ -1,4 +1,7 @@
 import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
+import OrbitKit
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -27,6 +30,32 @@ extension Image {
         self.init(uiImage: platformImage)
         #endif
     }
+}
+
+/// A picked or pasted image as it goes up, named `name` plus its extension. A PNG, JPEG, WebP or GIF
+/// under the inline-image cap goes as it is; anything else (a HEIC camera photo, or one past the cap)
+/// is redrawn upright as a JPEG no wider than `maxPixels` on its long edge. Re-encoding a camera
+/// photo as a full-size PNG, as the pickers used to, made a 12–48 MP shot tens of MB, which the
+/// server refused. nil when the bytes are no image.
+func orbitPhotoUpload(_ data: Data, name: String = "photo",
+                      maxPixels: Int = 2048) -> (data: Data, mimeType: String, filename: String)? {
+    if let ext = AttachmentLink.fileExtension(sniffing: data), ext != "pdf",
+       let mime = UTType(filenameExtension: ext)?.preferredMIMEType,
+       Attachments.rejectReason(mimeType: mime, byteCount: data.count) == nil {
+        return (data, mime, "\(name).\(ext)")
+    }
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+    let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                    kCGImageSourceCreateThumbnailWithTransform: true,
+                                    kCGImageSourceThumbnailMaxPixelSize: maxPixels]
+    guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+    let out = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(destination, image,
+                               [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return (out as Data, "image/jpeg", "\(name).jpg")
 }
 
 extension PlatformImage {
@@ -132,8 +161,8 @@ extension Color {
     /// The editor/text-field surface: macOS's `.textBackgroundColor`, and on iOS a tone that is
     /// deliberately NOT `.systemBackground`.
     ///
-    /// macOS paints `orbitSurface` behind the panes, so a `.textBackgroundColor` field already
-    /// separates from its backdrop. iOS does not — `orbitPaneBackground()` is a no-op there — so the
+    /// macOS paints `orbitSurface` behind the panes — white in light mode, as the web's content is —
+    /// so there the field is set off by its hairline and shadow, as the web composer is. iOS does not — `orbitPaneBackground()` is a no-op there — so the
     /// backdrop behind the composer IS `.systemBackground`, and a field filled with it is the exact
     /// colour of what it sits on. That was survivable only while a `.bar` band was painted behind the
     /// composer; with the band gone (web parity — `.workspace-composer` has no background) the field
@@ -153,17 +182,18 @@ extension Color {
         #endif
     }
 
-    /// The unified content backdrop for the middle + detail panes: a soft off-white (light) / soft
-    /// near-black (dark), deliberately *not* the flat system `windowBackgroundColor` (a colder grey).
-    /// The sidebar keeps its native translucency, so this calm solid tone behind the content lets
-    /// the frosted sidebar read by contrast — the restrained "ChatGPT" look (vibrant rail + soft
-    /// content) rather than a whole-window desktop blur.
+    /// The unified content backdrop for the middle + detail panes: white (light) / soft near-black
+    /// (dark) — the web's `--bg-base` (#ffffff / #202023) — deliberately *not* the flat system
+    /// `windowBackgroundColor` (a colder grey). The sidebar keeps its native translucency, so this
+    /// solid tone behind the content lets the frosted sidebar read by contrast. Light used to be a
+    /// warm off-white (#F6F6F4); between the white window toolbar, the session's white status bar
+    /// and the white composer it read as a grey band that had not been painted over.
     static var orbitSurface: Color {
-        Color(light: Color(red: 0.965, green: 0.965, blue: 0.957),
+        Color(light: .white,
               dark:  Color(red: 0.12,  green: 0.12,  blue: 0.13))
     }
 
-    /// The transcript's floating scroll-to-latest puck. Light: plain white, lifted off the near-white
+    /// The transcript's floating scroll-to-latest puck. Light: plain white, lifted off the white
     /// transcript by its shadow alone. Dark: deliberately *not* the transcript's own near-black — an
     /// opaque black disc on a black backdrop, edged by a black shadow, is invisible — but a raised grey
     /// that reads as a disc unaided. Lighter than both dark backdrops it sits on (iOS's black system
@@ -344,6 +374,8 @@ private struct KeyboardDismissInstaller: UIViewRepresentable {
         // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
         // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            // Every tap: the session search spots a press of its X with this (`BottomSearchMode`).
+            SearchCloseTap.record(touch)
             var view = touch.view
             while let current = view {
                 if current is UITextField || current is UITextView { return false }

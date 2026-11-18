@@ -1,4 +1,3 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
@@ -100,7 +99,9 @@ struct SessionFolderPage: View {
     /// passes nil.
     var searchQuery: Binding<String>? = nil
 
+    #if os(iOS)
     @State private var rowSwipe = RowSwipeState()
+    #endif
     /// The row whose action was tapped — the sheets below are held by the page, as the workspace
     /// list holds its own, so they present reliably from a row's swipe or long-press menu.
     @State private var taggingSession: Session?
@@ -194,7 +195,7 @@ struct SessionFolderPage: View {
             // The phone's back button is the stack's; the wide shell's column has no stack, so the
             // page brings its own (§3.3).
             if rowNavigation == .selection {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: backPlacement) {
                     Button {
                         app.leaveFolder(address.folderID)
                     } label: {
@@ -204,8 +205,8 @@ struct SessionFolderPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { folderMenu }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: actionPlacement) { folderMenu }
+            ToolbarItem(placement: actionPlacement) {
                 Button {
                     app.startComposingSession(inFolder: address.folderID, of: address.agentID)
                 } label: {
@@ -221,7 +222,8 @@ struct SessionFolderPage: View {
         }
         .sheet(item: $sharingSession) { s in
             if let baseURL = app.baseURL {
-                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore,
+                           guests: .of(s, agents: app.agents))
             }
         }
         .sheet(item: $movingSession) { s in
@@ -261,37 +263,17 @@ struct SessionFolderPage: View {
                 searchResults
             } else {
                 ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-                    if index == 0, section.title == "Today" {
-                        // The leading "Today" keeps no title, exactly as the workspace list draws it
-                        // (the first row drops its top separator with the title).
-                        ForEach(section.sessions) { session in
-                            if session.id == section.sessions.first?.id {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                                    .listRowSeparator(.hidden, edges: .top)
-                            } else {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                            }
-                        }
-                    } else if section.title == "Pinned" {
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                            }
-                        } header: {
-                            pinnedSectionHeader(section.title)
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                        } header: {
-                            Text(section.title).textCase(nil)
-                        }
-                    }
+                    folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)
                 }
             }
         }
         .listStyle(.plain)
+        // The Sessions list's soft top edge, not the hard strip iOS 26 picks here (the owner,
+        // 2026-11-12, docs/mocks/ios-header-soft-edge/04-board.html).
+        .softTopEdgeEffect()
+        #if os(iOS)
         .rowSwipeList(rowSwipe)
+        #endif
         .refreshable {
             await app.agents?.loadSessions(agentID: address.agentID, view: address.view)
         }
@@ -327,6 +309,23 @@ struct SessionFolderPage: View {
 
     private var titleText: String { folder?.name ?? "Folder" }
 
+    /// The way back to the workspace's list and the page's actions, where each platform's bar puts
+    /// them (as the project's sessions page places its own).
+    private var backPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+    private var actionPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
+
     /// ⋯ — Rename… and Delete Folder…, the same two the row's long-press menu offers (§3.4).
     private var folderMenu: some View {
         Menu {
@@ -347,6 +346,40 @@ struct SessionFolderPage: View {
         .accessibilityLabel("Folder actions")
     }
 
+    /// One recency section of the page's list. The section is the row the List's ForEach draws;
+    /// which header it takes and whether its rows show is decided here, off the one grouping.
+    @ViewBuilder
+    private func folderSection(index: Int, section: SessionTimeSection,
+                               projects: [String: SessionProjectRow],
+                               marks: [String: SessionProjectMark]) -> some View {
+        if index == 0, section.title == "Today" {
+            // The leading "Today" keeps no title, exactly as the workspace list draws it
+            // (the first row drops its top separator with the title).
+            ForEach(section.sessions) { session in
+                if session.id == section.sessions.first?.id {
+                    listRow(session, projects: projects, marks: marks)
+                        .listRowSeparator(.hidden, edges: .top)
+                } else {
+                    listRow(session, projects: projects, marks: marks)
+                }
+            }
+        } else if section.title == "Pinned" {
+            TitledListSection {
+                if !pinnedCollapsed {
+                    ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+                }
+            } title: {
+                pinnedSectionHeader(section.title)
+            }
+        } else {
+            TitledListSection {
+                ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+            } title: {
+                Text(section.title).textCase(nil)
+            }
+        }
+    }
+
     /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated
     /// here so a folder's page and the list outside behave identically (see `AgentPanes.sessionRow`).
     @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],
@@ -360,8 +393,7 @@ struct SessionFolderPage: View {
 
     /// `mark`: as on the workspace list's rows (`AgentPanes.sessionRow`).
     @ViewBuilder private func sessionRow(_ s: Session, mark: SessionProjectMark?) -> some View {
-        let row = AgentSessionRow(session: s, deleted: address.view == .trash, showsPin: address.view == .open,
-                                  projectMark: mark)
+        let row = AgentSessionRow(session: s, deleted: address.view == .trash, projectMark: mark)
         let onSessions: (() -> Void)? = mark.map { mark in
             { app.openProjectSessions(SessionProjectAddress(projectID: mark.projectId, agentID: address.agentID,
                                                             view: address.view)) }
@@ -393,7 +425,18 @@ struct SessionFolderPage: View {
             case .project: app.openProjectSessions(projectAddress)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
+        // A phone opens the coordinator's conversation, not the project's sessions page, which is
+        // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
+        let onTap = {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
+            case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
+            case .sessions: app.openProjectSessions(projectAddress)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onTap)
         .sessionProjectRowActions(row, view: address.view, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
@@ -422,14 +465,14 @@ struct SessionFolderPage: View {
     /// Search hits, standing in for the sections while the field has text — the workspace list's
     /// own rows and words, since the field is the app's search wherever it is typed.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             Text(contentSearched
                  ? "All sessions"
                  : "Matching names only — type more to search message text.")
@@ -551,4 +594,3 @@ extension View {
         modifier(SessionFolderManagement(renaming: renaming, deleting: deleting))
     }
 }
-#endif

@@ -1,0 +1,429 @@
+{
+ "cli": "claude 2.1.322",
+ "recordedAt": "2026-11-11",
+ "scenario": "Turn 2 answered 400 \"prompt is too long: 250000 tokens > 200000 maximum\": the CLI compacts and retries.",
+ "recipe": "scripts/claude-gateway-recorder/drive.sh toolong-r2",
+ "requests": [
+  {
+   "role": "other",
+   "method": "HEAD",
+   "path": "/api/hello"
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Say something."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Say something."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": "# Environment\nYou have been invoked in the following environ<omitted: 8967 chars of CLI prompt text>"
+     },
+     {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "after compaction"
+       }
+      ]
+     },
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "Say something else.",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "compaction",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,fallback-credit-2026-06-01,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 512 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "[earlier conversation truncated for compaction retry]"
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": "Today's date is 2026-11-11."
+     },
+     {
+      "role": "assistant",
+      "content": [
+       {
+        "type": "text",
+        "text": "after compaction",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     },
+     {
+      "role": "user",
+      "content": "CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.\n\n- <omitted: 6301 chars of CLI prompt text>"
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  },
+  {
+   "role": "main",
+   "method": "POST",
+   "path": "/v1/messages?beta=true",
+   "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "user-agent": "claude-cli/2.1.322 (external, sdk-cli)",
+    "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,thinking-display-updates-2026-08-18",
+    "anthropic-version": "2023-06-01",
+    "x-app": "cli",
+    "x-stainless-retry-count": "0",
+    "x-stainless-timeout": "600",
+    "x-stainless-package-version": "0.128.0",
+    "anthropic-dangerous-direct-browser-access": "true",
+    "authorization": "Bearer orbit-gwk-<redacted>",
+    "x-claude-code-session-id": "00000000-0000-4000-8000-000000000000"
+   },
+   "body": {
+    "model": "gpt-5.5",
+    "messages": [
+     {
+      "role": "user",
+      "content": [
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAs you answer the user's questions, you ca<omitted: 511 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "<system-reminder>\nAttribution for git commits and pull reque<omitted: 516 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "This session is being continued from a previous conversation<omitted: 1257 chars of CLI prompt text>"
+       },
+       {
+        "type": "text",
+        "text": "Say something else."
+       }
+      ]
+     },
+     {
+      "role": "system",
+      "content": [
+       {
+        "type": "text",
+        "text": "Today's date is 2026-11-11.\n\nThe following deferred tools ar<omitted: 8967 chars of CLI prompt text>",
+        "cache_control": {
+         "type": "ephemeral"
+        }
+       }
+      ]
+     }
+    ],
+    "system": [
+     {
+      "type": "text",
+      "text": "x-anthropic-billing-header: cc_version=2.1.322.000; cc_entrypoint=sdk-cli;"
+     },
+     {
+      "type": "text",
+      "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     },
+     {
+      "type": "text",
+      "text": "<omitted: 5541 chars of CLI prompt text>",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ],
+    "tools": "$basic.tools",
+    "metadata": {
+     "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"00000000-0000-4000-8000-000000000000\"}"
+    },
+    "max_tokens": 32000,
+    "thinking": {
+     "type": "adaptive",
+     "display": "updates"
+    },
+    "context_management": {
+     "edits": [
+      {
+       "type": "clear_thinking_20251015",
+       "keep": "all"
+      }
+     ]
+    },
+    "output_config": {
+     "effort": "high"
+    },
+    "stream": true
+   }
+  }
+ ],
+ "outcome": [
+  {
+   "is_error": false,
+   "terminal_reason": "completed",
+   "api_error_status": null,
+   "result": "after compaction",
+   "num_turns": 1
+  },
+  {
+   "compact_boundary": "auto"
+  },
+  {
+   "is_error": false,
+   "terminal_reason": "completed",
+   "api_error_status": null,
+   "result": "after compaction",
+   "num_turns": 2
+  }
+ ]
+}

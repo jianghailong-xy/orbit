@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,12 +30,26 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.OwnerCardTranslation
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequestStep
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
+import io.orbitd.android.core.cards.TerminalRequest
+import io.orbitd.android.directory.rememberDirectoryData
+import io.orbitd.android.management.Terminals
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.text.MarkdownText
+import io.orbitd.android.translation.AnswerNotTranslated
+import io.orbitd.android.translation.CardTranslationFoot
+import io.orbitd.android.wiki.WikiCreateCardCopy
+import io.orbitd.android.wiki.WikiCreateSheet
+import io.orbitd.android.wiki.WikiStartCopy
+import io.orbitd.android.wiki.WikiStartLogic
+import io.orbitd.android.wiki.WikiStore
+import io.orbitd.android.wiki.rememberWikiWorkspaceChoices
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -44,12 +59,19 @@ import kotlinx.coroutines.launch
  * What a session asked the owner to do (web `OwnerRequestCard`), drawn the same in the conversation that asked and in the "Waiting on
  * you" inbox. Pending it is the whole request; once ended it is one line saying how, who and when ([OwnerRequestResolved]). [runner]
  * names a runner by the name the owner knows it by. [focusInput]: opened from a push's action, the card takes the focus on its input —
- * the key's field, the answer's words, or Mark done.
+ * the key's field, the answer's words, or Mark done. [discuss]: the conversation's composer, which Chat about this hands the request
+ * to; the inbox has none, so its cards offer no Chat about this.
  */
 @Composable
-fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
-    now: Instant = Instant.now(), focusInput: Boolean = false) {
-    if (!request.pending) { OwnerRequestResolved(request, store, runner, now); return }
+fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
+    now: Instant = Instant.now(), focusInput: Boolean = false, discuss: ((String) -> Unit)? = null) {
+    if (!asked.pending) { OwnerRequestResolved(asked, store, runner, now); return }
+    // The agent's words in the owner's language (Settings › Translation), flipped whole to its own words by the foot; the doors
+    // take the request's id and option indexes, which a translation does not change.
+    var showOriginal by remember(asked.id) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.ownerRequest(asked, owner) }
+    val request = if (translated != null && !showOriginal) translated else asked
     val state by store.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -66,6 +88,8 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
     var reason by remember(request.id) { mutableStateOf("") }
     var busy by remember(request.id) { mutableStateOf(false) }
     var failure by remember(request.id) { mutableStateOf<String?>(null) }
+    // The owner's words were refused untranslated (422 TRANSLATION_FAILED): the press to send again, as written or not.
+    var untranslated by remember(request.id) { mutableStateOf<((Boolean) -> Unit)?>(null) }
     var later by remember(request.id) { mutableStateOf(false) }
     LaunchedEffect(request.kind) { if (request.kind == OwnerRequests.SECRET) store.loadSavedSecrets() }
 
@@ -76,8 +100,20 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
     val failed = grant?.state == "REMOVED" && grant.endReason == "DELIVERY_FAILED"
     val ready = OwnerRequests.ready(request, value, save, saveAs, savedId, chosen, text)
     fun press(door: suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) {
-        busy = true; failure = null
+        busy = true; failure = null; untranslated = null
         scope.launch { failure = store.act(door); busy = false }
+    }
+    /** A press that carries the owner's words: refused untranslated, it is offered again with Retry and Send as written. */
+    fun pressWords(door: (Boolean) -> suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) {
+        fun send(asWritten: Boolean) {
+            busy = true; failure = null; untranslated = null
+            scope.launch {
+                val error = store.attempt(door(asWritten))
+                if (Translation.refused(error)) untranslated = ::send else failure = error?.let(OwnerRequestStore::message)
+                busy = false
+            }
+        }
+        send(false)
     }
     fun pressPrimary() {
         when (request.kind) {
@@ -87,7 +123,7 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
                 value = ""; save = false; savedId = null
                 press { if (saved != null) provideSaved(request.id, saved) else provide(request.id, typed, name) }
             }
-            OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; press { done(request.id, chosen, words) } }
+            OwnerRequests.DECISION -> { val words = text.trim().takeIf { it.isNotEmpty() }; pressWords { asWritten -> { done(request.id, chosen, words, asWritten) } } }
             else -> press { done(request.id) }
         }
     }
@@ -133,6 +169,7 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             }
         }
 
+        if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateFacts(request, store, tag)
         if (request.kind == OwnerRequests.MANUAL_STEP) Steps(request.steps.orEmpty(), tag, open)
         if (request.kind == OwnerRequests.SECRET) request.secretSpec?.let { spec ->
             when {
@@ -205,12 +242,16 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error) }
+        untranslated?.let { again -> AnswerNotTranslated({ again(false) }, { again(true) }, !busy && !closed, Modifier.testTag("$tag:translation-failed")) }
+        if (translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal }, Modifier.testTag("$tag:translation-foot"))
 
-        if (declining) {
+        if (request.kind == OwnerRequests.WIKI_CREATE) WikiCreateActions(request, store, tag, enabled = !busy && !closed, focus,
+            chat = discuss?.takeIf { !closed }?.let { { it(OwnerRequests.chatContext(request) + "\n\n") } }) { door -> press(door) }
+        else if (declining) {
             OutlinedTextField(reason, { reason = it.take(2000) }, Modifier.fillMaxWidth().testTag("$tag:reason"),
                 placeholder = { Text(OwnerRequests.declineReason) }, minLines = 2, maxLines = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { val why = reason.trim(); press { decline(request.id, why) } }, Modifier.testTag("$tag:decline-send"),
+                Button(onClick = { val why = reason.trim(); pressWords { asWritten -> { decline(request.id, why, asWritten) } } }, Modifier.testTag("$tag:decline-send"),
                     enabled = reason.isNotBlank() && !busy && !closed) { Text(OwnerRequests.decline) }
                 TextButton(onClick = { declining = false }) { Text(OwnerRequests.keepIt) }
             }
@@ -221,6 +262,8 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
                 Modifier.focusRequester(focus) else Modifier).testTag("$tag:primary"), enabled = ready && !busy && !closed && !removing) {
                 Text(OwnerRequests.primary(request.kind))
             }
+            if (discuss != null && !closed) OutlinedButton(onClick = { discuss(OwnerRequests.chatContext(request) + "\n\n") },
+                Modifier.testTag("$tag:chat")) { Text(OwnerRequests.chatAction) }
             TextButton(onClick = { declining = true }, Modifier.testTag("$tag:decline"), enabled = !closed) { Text(OwnerRequests.declineLabel(request.kind)) }
             val choices = OwnerRequests.snoozeChoices(request, now)
             Box {
@@ -240,6 +283,96 @@ fun OwnerRequestCard(request: OwnerRequest, store: OwnerRequestStore, runner: (S
             Text(AnnotatedString(OwnerRequests.ifNobodyAnswers + " " + it), Modifier.testTag("$tag:if-unanswered"),
                 style = MaterialTheme.typography.bodySmall, color = secondary)
         }
+    }
+}
+
+/** What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3; web `WikiCreateFacts`): the
+ * repository, the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with. */
+@Composable
+private fun WikiCreateFacts(request: OwnerRequest, store: OwnerRequestStore, tag: String) {
+    val app = LocalContext.current.applicationContext as OrbitApplication
+    val wiki = remember(store.handle) { WikiStore.of(app.session, store.handle, app.processScope) }
+    val data by rememberDirectoryData(app, store.handle)
+    val choices = rememberWikiWorkspaceChoices(wiki, data).choices
+    val facts = WikiStartLogic.createCardFacts(request.repoUrlNorm, request.workspaceId, choices)
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        facts.repository?.let { Fact(WikiCreateCardCopy.repository, "$tag:repository") { Text(it, style = MaterialTheme.typography.bodySmall) } }
+        Fact(WikiCreateCardCopy.readsFrom, "$tag:reads-from") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(facts.readsFrom ?: "—", style = MaterialTheme.typography.bodySmall)
+                if (facts.offline) Text(WikiStartCopy.workspaceOffline, style = MaterialTheme.typography.bodySmall, color = secondary)
+            }
+        }
+        Fact(WikiCreateCardCopy.maintenance, "$tag:maintenance") { Text(facts.maintenance, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+/** WIKI_CREATE's three answers (design §3.6): Create wiki, which makes it with the card's settings; Change settings…, the Create wiki
+ * form on the asking workspace — a wiki made there settles the card too, so the requests are read again; and Not for this
+ * repository, a decline after which the repository is never asked about again (D4). */
+@Composable
+private fun WikiCreateActions(request: OwnerRequest, store: OwnerRequestStore, tag: String, enabled: Boolean, focus: FocusRequester,
+    chat: (() -> Unit)?, press: (suspend io.orbitd.android.core.cards.OwnerRequestsApi.() -> OwnerRequest) -> Unit) {
+    var changing by remember(request.id) { mutableStateOf(false) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button(onClick = { press { createWiki(request.id) } }, Modifier.focusRequester(focus).testTag("$tag:primary"), enabled = enabled) {
+            Text(OwnerRequests.primary(request.kind))
+        }
+        OutlinedButton(onClick = { changing = true }, Modifier.testTag("$tag:change-settings"), enabled = enabled) { Text(WikiCreateCardCopy.changeSettings) }
+        chat?.let { OutlinedButton(onClick = it, Modifier.testTag("$tag:chat")) { Text(OwnerRequests.chatAction) } }
+        TextButton(onClick = { press { decline(request.id, WikiCreateCardCopy.notHere) } }, Modifier.testTag("$tag:decline"), enabled = enabled) {
+            Text(WikiCreateCardCopy.notHere)
+        }
+    }
+    if (changing) {
+        val app = LocalContext.current.applicationContext as OrbitApplication
+        val wiki = remember(store.handle) { WikiStore.of(app.session, store.handle, app.processScope) }
+        val data by rememberDirectoryData(app, store.handle)
+        WikiCreateSheet(wiki, data, workspaceId = request.workspaceId, created = { store.load(*store.state.value.lists.keys.toTypedArray()) },
+            close = { changing = false })
+    }
+}
+
+/**
+ * A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's frame, header and
+ * buttons — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells the terminal so. Either way the card
+ * leaves once the door answers. iOS `TerminalApproveCard`, web `TerminalApproveCard.tsx`; the words are [Terminals]'.
+ */
+@Composable
+fun TerminalApproveCard(request: TerminalRequest, store: OwnerRequestStore, now: Instant = Instant.now()) {
+    val scope = rememberCoroutineScope()
+    var busy by remember(request.id) { mutableStateOf(false) }
+    var failure by remember(request.id) { mutableStateOf<String?>(null) }
+    val tag = "terminal-request:${request.id}"
+    fun decide(approve: Boolean) {
+        busy = true; failure = null
+        scope.launch { failure = store.decideTerminal(request, approve); busy = false }
+    }
+    val tone = LocalOrbitColors.current.needsYou
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().testTag(tag)
+        .background(tone.copy(alpha = 0.07f), RoundedCornerShape(14.dp)).border(1.dp, tone.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
+        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(50)))
+            Text(OwnerRequests.waitingOnYou, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = tone)
+            Spacer(Modifier.weight(1f))
+            Text("Asked ${OwnerRequests.ago(request.createdAt, now)}", Modifier.testTag("$tag:asked"), style = MaterialTheme.typography.labelSmall,
+                color = secondary)
+        }
+        Text(Terminals.APPROVE_TITLE, Modifier.testTag("$tag:title"), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(Terminals.requestLine(request), Modifier.testTag("$tag:line"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+            Text(Terminals.APPROVE_DETAIL, Modifier.testTag("$tag:detail"), style = MaterialTheme.typography.bodyMedium, color = secondary)
+        }
+        failure?.let { Text("${OwnerRequests.notRecorded}: $it", Modifier.testTag("$tag:error"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { decide(approve = false) }, Modifier.weight(1f).testTag("$tag:deny"), enabled = !busy) { Text(Terminals.DENY) }
+            Button(onClick = { decide(approve = true) }, Modifier.weight(1f).testTag("$tag:approve"), enabled = !busy) { Text(Terminals.APPROVE) }
+        }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     }
 }
 
@@ -341,7 +474,8 @@ fun OwnerRequestSnoozed(request: OwnerRequest, until: Long, now: Instant = Insta
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. */
 @Composable
-fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit) {
+fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, runner: (String?) -> String, open: (String) -> Unit,
+    discuss: ((String) -> Unit)? = null) {
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     // Drawn again when the reminder falls due.
     var due by remember(request.id) { mutableIntStateOf(0) }
@@ -351,6 +485,6 @@ fun OwnerRequestInConversation(request: OwnerRequest, store: OwnerRequestStore, 
     when {
         !request.pending -> OwnerRequestResolved(request, store, runner, now)
         until > now.toEpochMilli() -> OwnerRequestSnoozed(request, until, now)
-        else -> OwnerRequestCard(request, store, runner, open, now)
+        else -> OwnerRequestCard(request, store, runner, open, now, discuss = discuss)
     }
 }

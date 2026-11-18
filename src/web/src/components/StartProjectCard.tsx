@@ -21,6 +21,7 @@ import type {
   ProjectStartRequest,
   ProjectStartSettings,
   StartProjectRequestBody,
+  OwnerCardTranslation,
 } from '@orbit/shared';
 import { api } from '../api';
 import { acceptanceConfirmationKey, acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
@@ -112,6 +113,7 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
 import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
+import { useOwnerCardTranslation } from './TranslationParts';
 import { Alert } from './ui/Alert';
 import { Dialog } from './ui/Dialog';
 import { Drawer } from './ui/Drawer';
@@ -311,6 +313,7 @@ export function StartProjectCard({
   projectTitle,
   askedAt,
   request,
+  translation = null,
   criteria,
   plan,
   graph = null,
@@ -337,6 +340,8 @@ export function StartProjectCard({
   askedAt: string | null;
   /** What the coordinator asked for: the settings it suggests and why. */
   request: ProjectStartRequest;
+  /** The open item's `translation` (Settings › Translation): `why` in the owner's language. */
+  translation?: OwnerCardTranslation | null;
   /** The stated criteria, or null when the project document could not be read. */
   criteria: ConfirmationCriterion[] | null;
   plan: StartPlanView;
@@ -378,7 +383,10 @@ export function StartProjectCard({
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
   const whyText = useRef<HTMLParagraphElement>(null);
   const criteriaList = useRef<HTMLOListElement>(null);
-  const whyHides = useClampHides(whyText, null, request.why);
+  // The coordinator's why is the card's one agent-written field (board 04-owner-cards.html).
+  const translated = useOwnerCardTranslation(translation);
+  const why = translated.shown?.why || request.why;
+  const whyHides = useClampHides(whyText, null, why);
   const criteriaHide = useClampHides(
     criteriaList,
     '.settlement-card-criterion',
@@ -457,13 +465,14 @@ export function StartProjectCard({
           <div className="start-card-quote">
             <div className="start-card-quote-head">{START_COORDINATOR}</div>
             <p ref={whyText} className={whyOpen ? 'start-card-quote-text is-open' : 'start-card-quote-text'}>
-              {request.why}
+              {why}
             </p>
             {whyOpen || whyHides ? (
               <button type="button" className="start-card-link" onClick={() => setWhyOpen((open) => !open)}>
                 {whyOpen ? START_LESS : START_MORE}
               </button>
             ) : null}
+            {translated.foot}
           </div>
         ) : null}
         {stale ? <p className="settlement-card-stale">{stale}</p> : null}
@@ -873,6 +882,7 @@ export function SessionStartProjectCard({
   const standingRead = useQuery({ ...acceptanceConfirmationQuery(project), enabled });
   const documentRead = useQuery({
     queryKey: ['project', project],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(project)}`),
     enabled,
     refetchInterval: streamPoll(20_000),
@@ -1003,6 +1013,7 @@ export function SessionStartProjectCard({
       projectTitle={title}
       askedAt={shown.waitingSince}
       request={request}
+      translation={shown.translation ?? null}
       criteria={criteria}
       plan={startPlanView(graphRead.data ?? null, document?._count?.tasks ?? 0)}
       graph={graphRead.data ?? null}
@@ -1105,6 +1116,7 @@ function OwnerStartProjectCard({
   const standingRead = useQuery(acceptanceConfirmationQuery(projectId));
   const documentRead = useQuery({
     queryKey: ['project', projectId],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<StartProjectDocument>(`/projects/${encodeURIComponent(projectId)}`),
   });
   const integrationRead = useQuery(projectIntegrationQuery(projectId));

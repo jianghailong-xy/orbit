@@ -6,8 +6,8 @@
  *
  * What the task's verification asks, each read back from the doors and from the database:
  *
- *   1. a new space makes its first draft at once, as the wiki-worker's job — and a space a session's proposal
- *      made asks for one too;
+ *   1. a new space makes its first draft at once, as the wiki-worker's job — and a session's call on a repository
+ *      with no wiki makes neither a space nor a draft (docs/wiki-explicit-creation-design.md §3.1);
  *   2. the owner's redraft through the JWT door makes one; with a session header it is refused 403;
  *   3. a space with a draft that has not ended makes no second, one request after another or two at once;
  *   4. a space whose maintenance names no workspace makes none and says why; the workspace supplied makes it;
@@ -387,16 +387,23 @@ test('a new space makes its first draft at once, as the wiki-worker\'s job at th
   assert.equal(state.body.job.attemptsMax, 3);
   assert.equal(state.body.job.held, null);
 
-  // A space a session's proposal made where its workspace's repository had none asks for its draft too —
-  // held, since nobody has set its maintenance up.
+  // A session's call where its workspace's repository has no wiki makes none, and so asks for no draft: only the
+  // owner's creation does (contract `plan.jobs.triggers.space_created`).
   const repoUrl = `https://github.com/spec/implicit-${randomUUID().slice(0, 8)}`;
   const proposing = await session(h, w.owner.id, await workspace(h, w.owner.id, repoUrl), w.machine.id);
-  const implicit = await h.service.resolveSpaceForCall(w.owner.id, proposing);
-  const asked = await jobs(h, implicit);
-  assert.deepEqual(asked.map((row) => [row.kind, row.trigger, row.state, row.held_reason]), [['draft', 'space_created', 'held', 'no_maintenance_workspace']]);
-  // …and only once: the space found again asks for nothing more.
-  await h.service.resolveSpaceForCall(w.owner.id, proposing);
-  assert.equal((await jobs(h, implicit)).length, 1);
+  const counts = async () => Promise.all([
+    h.prisma.wikiSpace.count({ where: { ownerId: w.owner.id } }),
+    h.prisma.wikiPlanJob.count({ where: { ownerId: w.owner.id } }),
+  ]);
+  const before = await counts();
+  for (let call = 0; call < 2; call += 1) {
+    await assert.rejects(h.service.resolveSpaceForCall(w.owner.id, proposing), (error: HttpException) => {
+      assert.equal(error.getStatus(), 409);
+      assert.equal((error.getResponse() as { code: string }).code, 'WIKI_SPACE_UNBOUND');
+      return true;
+    });
+  }
+  assert.deepEqual(await counts(), before, 'no space and no plan job');
 });
 
 // ── 2. the owner's redraft ──────────────────────────────────────────────────────────────────────

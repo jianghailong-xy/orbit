@@ -35,10 +35,12 @@ import {
  *                         it can (`taskHasNothingToLand`), and then this names which kind of landed.
  *   * NO_RECEIPT        — no receipt puts its work on either branch: merged outside Orbit, or not
  *                         merged at all. Absence of evidence, never evidence of absence.
- *   * CODELESS          — its work has no branch to land: declared codeless (LANDED, nothing to
- *                         land), done in another repository than the line's (O-L7, read the same
- *                         way), or never declared and its newest work session took no worktree
- *                         branch — so no landing was ever queued and no receipt will ever come.
+ *   * NO_BRANCH         — its work was never declared codeless, yet its newest work session took no
+ *                         worktree branch and no job or receipt names it: it may have changed code,
+ *                         but no landing was ever queued and Orbit has no evidence either way. Still
+ *                         delivery in the fold — real work whose landing Orbit cannot see.
+ *   * CODELESS          — its work has nothing to land: declared codeless, or done in another
+ *                         repository than the line's (O-L7, read the same way). Only ever LANDED.
  *
  * Null exactly when the criterion is LANDED with work of its own on the upstream — "on main".
  */
@@ -47,6 +49,7 @@ export type CriterionLandingReason =
   | 'ON_PROJECT_BRANCH'
   | 'NOTHING_TO_LAND'
   | 'NO_RECEIPT'
+  | 'NO_BRANCH'
   | 'CODELESS';
 
 /** The landing reasons, in the order a reader is told about them: what is moving first. */
@@ -55,6 +58,7 @@ export const CRITERION_LANDING_REASONS = [
   'ON_PROJECT_BRANCH',
   'NOTHING_TO_LAND',
   'NO_RECEIPT',
+  'NO_BRANCH',
   'CODELESS',
 ] as const satisfies readonly CriterionLandingReason[];
 
@@ -86,6 +90,8 @@ export interface LandingReasonServingTask extends LandingServingTask {
 export interface CriterionLandingReasonFacts {
   landing: CriterionLanding;
   servingTasks: ReadonlyArray<LandingReasonServingTask>;
+  /** A CONFIRMATION criterion has nothing to land (migration 0545). Absent reads as TASKS. */
+  satisfiedBy?: 'TASKS' | 'CONFIRMATION';
 }
 
 /** Precedence when a criterion's held work disagrees: what is moving, then real work waiting, then
@@ -94,6 +100,7 @@ const PRECEDENCE: readonly CriterionLandingReason[] = [
   'IN_FLIGHT',
   'ON_PROJECT_BRANCH',
   'NO_RECEIPT',
+  'NO_BRANCH',
   'CODELESS',
   'NOTHING_TO_LAND',
 ];
@@ -123,7 +130,7 @@ function heldTaskReason(
   const newest = task.sessions[0];
   const ranNoBranch = !newest || newest.isolationStatus !== 'worktree' || !newest.branch;
   if (ranNoBranch && task.integrationJobs.length === 0 && task.mergeReceipts.length === 0) {
-    return 'CODELESS';
+    return 'NO_BRANCH';
   }
   return 'NO_RECEIPT';
 }
@@ -143,6 +150,7 @@ export function criterionLandingReason(
   branches: LandingBranches,
   inFlight: ReadonlyArray<InFlightLandingJob>,
 ): CriterionLandingReason | null {
+  if (criterion.satisfiedBy === 'CONFIRMATION') return 'NOTHING_TO_LAND';
   const delivery = criterion.servingTasks.filter((task) => !taskHasNothingToLand(task));
   if (criterion.landing === 'LANDED') {
     if (delivery.length > 0) return null;
@@ -180,11 +188,16 @@ export async function readCriterionLandingReasonFacts(
   prisma: Pick<PrismaService, 'projectAcceptanceCriterionDefinition' | 'projectIntegrationJob' | 'session'>,
   ownerId: string,
   projectId: string,
-): Promise<Array<{ id: string; servingTasks: LandingReasonServingTask[] }>> {
+): Promise<Array<{
+  id: string;
+  satisfiedBy: 'TASKS' | 'CONFIRMATION';
+  servingTasks: LandingReasonServingTask[];
+}>> {
   const definitions = await prisma.projectAcceptanceCriterionDefinition.findMany({
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
+      satisfiedBy: true,
       servingTasks: { where: { ownerId }, select: LANDING_REASON_SERVING_WORK_SELECT },
     },
   });

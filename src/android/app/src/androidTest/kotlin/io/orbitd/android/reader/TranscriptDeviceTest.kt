@@ -150,7 +150,7 @@ class TranscriptDeviceTest {
 
     /**
      * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question — since A06-18 a
-     * capsule in the bar, off the live tail only — and its jump, the Orbit attached line, engine stderr/notice/transient
+     * capsule in the bar, off the live tail only — and its jump, hidden appended context, engine stderr/notice/transient
      * rows, a workflow's agents, an image file link, the worktree bar's merge and changed files (a binary file's
      * preview), and the tail kept in view when the keyboard rises.
      */
@@ -179,15 +179,9 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Second question: ship the reader").assertIsDisplayed()
         capture("a06c-sticky-jumped")
         measureCapsule("first-question")
-        // A06-9: what delivery appended is one line under the person's words, not part of them — ⊕ shut, ⊖ open
-        // (owner, 2026-10-27).
-        list.performScrollToNode(hasText("⊕ Orbit attached: referenced task"))
-        compose.onNodeWithText("⊕ Orbit attached: referenced task").assertIsDisplayed()
-        capture("a06c-context-card")
-        tap(hasText("⊕ Orbit attached: referenced task"))
-        awaitText("<referenced-task", substring = true)
-        compose.onNodeWithText("⊖ Orbit attached: referenced task").assertIsDisplayed()
-        capture("a06c-context-opened")
+        // Appended context stays out of the transcript (owner, 2026-11-18).
+        compose.onAllNodesWithText("Orbit attached", substring = true, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("<list-conditions", substring = true, useUnmergedTree = true).assertCountEquals(0)
         // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
         list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))
         // The diagnostic is brought into view too: at 360×640 dp over API 29's three-button bar, the stderr row ends just
@@ -273,8 +267,7 @@ class TranscriptDeviceTest {
     }
     /**
      * A06-18 at this script's 360 dp: what the bar leaves the capsule beside back, ⋯, ☰ and refresh, and how much of the line
-     * shows — the line's laid-out width against its whole width — with the room a card's label would leave it, measured in
-     * the device's own font at the capsule's label style (13 sp medium).
+     * shows — the line's laid-out width against its whole width.
      */
     private fun measureCapsule(name: String) {
         val density = app.resources.displayMetrics.density
@@ -289,19 +282,9 @@ class TranscriptDeviceTest {
             val text = node.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
             "text=\"$text\" widthDp=${dp(node.boundsInWindow.width)} wholeDp=${dp(whole)} cut=${node.boundsInWindow.width < kotlin.math.ceil(whole)}"
         }
-        val measurer = androidx.compose.ui.text.TextMeasurer(androidx.compose.ui.text.font.createFontFamilyResolver(app),
-            androidx.compose.ui.unit.Density(app), androidx.compose.ui.unit.LayoutDirection.Ltr)
-        val style = androidx.compose.ui.text.TextStyle(fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-        // The capsule's padding (12 dp a side) and the gap between its label and its line (6 dp) are the rest of its width.
-        val inner = capsule.width - 30f * density
-        val cards = listOf("↑ Task started", "↑ Project started", "↑ Exception item", "↑ From Planner").joinToString("\n") { label ->
-            val width = measurer.measure(label, style).size.width.toFloat()
-            "card label=\"$label\" labelDp=${dp(width)} lineRoomDp=${dp((inner - width).coerceAtLeast(0f))}"
-        }
         File(evidence, "a06f-capsule-$name.txt").writeText(shell("wm size") + shell("wm density") +
             "windowWidthDp=${dp(compose.onRoot().fetchSemanticsNode().boundsInWindow.width)}\ncapsuleLeftDp=${dp(capsule.left)} capsuleWidthDp=${dp(capsule.width)}" +
-            " capsuleHeightDp=${dp(capsule.height)}\n" + lines.joinToString("\n") + "\n" + cards + "\n")
+            " capsuleHeightDp=${dp(capsule.height)}\n" + lines.joinToString("\n") + "\n")
     }
     private fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
@@ -435,23 +418,26 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Close subagent transcript").assertIsDisplayed()
         capture("subagent")
         compose.onNodeWithText("Close subagent transcript").performClick()
-        // Session details are the ⋯ menu's since A06-18 (the session's name under the bar opened them).
+        // What Session details showed is Settings → Info → Worktree and background jobs (docs/mocks/session-settings).
         compose.onNodeWithContentDescription("Session actions").performClick()
-        compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
+        compose.onNode(hasText("Settings") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
+        compose.onNodeWithTag("session-settings").performScrollToNode(hasText("Worktree and background jobs"))
+        compose.onNodeWithText("Worktree and background jobs").performClick()
         compose.onNodeWithText("View changed files and diff").performClick()
         awaitText("reader.kt")
         capture("diff")
         compose.onNodeWithText("Close diff").performClick()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("BUILD SUCCESSFUL", substring = true))
         compose.onNodeWithText("BUILD SUCCESSFUL", substring = true).assertIsDisplayed()
         // An agent is named by its kind and opens to its progress rather than output (iOS's background rows, A06c).
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Review documentation"))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("Review documentation"))
         compose.onNodeWithText("Agent").assertIsDisplayed()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("Show progress"))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("Show progress"))
         compose.onNodeWithText("Show progress").performClick()
-        compose.onNodeWithTag("session-details").performScrollToNode(hasText("No progress reported yet."))
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("No progress reported yet."))
         capture("background-work")
-        compose.onNodeWithText("Close session details").performClick()
+        compose.onNodeWithContentDescription("Back to settings").performClick()
+        compose.onNodeWithContentDescription("Close settings").performClick()
     }
 
     @Test fun longMarkdownTableAndCode() = journey("rich-long") {

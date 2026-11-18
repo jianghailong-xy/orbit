@@ -58,8 +58,6 @@ export interface SessionMoveFacts {
   importSourceCwd: string | null;
   taskId: string | null;
   dispatchOrigin: string;
-  /** It is a project's coordinator conversation (`project.coordinator_session_id`). */
-  coordinatesProject: boolean;
   cancelRequestedAt: Date | null;
   engineTurnActive: boolean;
   runningBgShells: readonly string[];
@@ -100,8 +98,10 @@ export type SessionMoveVerdict =
 export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   const refuse = (reason: string): SessionMoveVerdict => ({ reason, needsEnd: false });
   if (s.deletedAt) return refuse(MOVE_REFUSAL.TRASH);
-  // Where these run is the project's or the task's to say, not the session's.
-  if (s.coordinatesProject || s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
+  // Where these run is the project's or the task's to say, not the session's. A project's coordinator
+  // conversation is not one of them: it moves, and its project's coordination workspace moves with it
+  // (SessionsService.move). A judgment session the project opened for one fact stays where it was opened.
+  if (s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
   if (s.taskId) return refuse(MOVE_REFUSAL.TASK);
   if (s.importSourceCwd != null) return refuse(MOVE_REFUSAL.IMPORTING);
   if (s.runtime === null) return refuse(MOVE_REFUSAL.ENGINE_UNKNOWN);

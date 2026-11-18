@@ -31,6 +31,13 @@ public enum SessionLandingsCopy {
     public static let error = "error"
     public static let queued = "queued"
     public static let running = "running"
+
+    // The same landing as the worktree card's own row says it (owner 2026-11-14, board
+    // docs/mocks/session-landing-slot-ios). Native only until web and Android follow the board.
+    public static let queuedToLand = "Queued to land"
+    public static let landingStopped = "Landing stopped"
+    public static let into = "into"
+    public static let inTarget = "In"
 }
 
 /// The mark a settled row's head carries: ✓ landed, ⇢ merged into main, ◌ nothing to land and every
@@ -393,6 +400,64 @@ public enum SessionProjectLandings {
         return SourceLandingLabel(text: "\(SessionLandingsCopy.landing) · \(step)", tone: "run")
     }
 
+    /// The source session's landing as its worktree card carries it (owner 2026-11-14, board
+    /// docs/mocks/session-landing-slot-ios): one state, one sentence, and the merge control gives way
+    /// to it. Open, it is the card's second row: queued (still), running (the attempt's step) or
+    /// stopped (what stopped it). Settled, it is the chip at the end of the card's first row. The
+    /// project's own line is named by the project's title, never `project/<id>`.
+    public static func sourceSlot(_ landing: SessionSourceLanding?,
+                                  membership: SessionProjectMembership?,
+                                  main: String = "main") -> SourceLandingSlot? {
+        guard let landing else { return nil }
+        let target = targetName(landing.targetRef.isEmpty ? main : landing.targetRef, membership: membership)
+        let into = "\(SessionLandingsCopy.into) \(target)"
+        switch landing.settledAs {
+        case "LANDED", "ALREADY_LANDED":
+            return SourceLandingSlot(kind: .landed, text: "✓ \(SessionLandingsCopy.inTarget) \(target)")
+        case "MERGED":
+            return SourceLandingSlot(
+                kind: .landed, text: "✓ \(SessionLandingsCopy.inTarget) \(RunSettings.mainBranchName(main))")
+        case "NOTHING_TO_LAND":
+            return SourceLandingSlot(kind: .quiet, text: SessionLandingsCopy.sourceNothingToLand)
+        case "HANDLED", "DECLINED", "CANCELLED", "DELETED":
+            return SourceLandingSlot(
+                kind: .quiet,
+                text: "\(SessionLandingsCopy.landing) · \((landing.settledAs ?? "").lowercased())")
+        default:
+            break
+        }
+        switch landing.state {
+        case "CHECK_FAILED":
+            return SourceLandingSlot(kind: .stopped,
+                                     text: "\(SessionLandingsCopy.landingStopped) · \(SessionLandingsCopy.checksFailed)")
+        case "CONFLICT":
+            return SourceLandingSlot(kind: .stopped,
+                                     text: "\(SessionLandingsCopy.landingStopped) · \(SessionLandingsCopy.conflict)")
+        case "ERROR":
+            return SourceLandingSlot(kind: .stopped,
+                                     text: "\(SessionLandingsCopy.landingStopped) · \(SessionLandingsCopy.error)")
+        case "QUEUED":
+            return SourceLandingSlot(kind: .queued, text: SessionLandingsCopy.queuedToLand, into: into)
+        case "RUNNING":
+            let step = landing.phase.flatMap { ProjectPage.integrationPhaseWords(main)[$0] }
+                ?? SessionLandingsCopy.running
+            return SourceLandingSlot(kind: .running, text: "\(SessionLandingsCopy.landing) · \(step)", into: into)
+        default:
+            return SourceLandingSlot(kind: .running,
+                                     text: "\(SessionLandingsCopy.landing) · \(landing.state.lowercased())",
+                                     into: into)
+        }
+    }
+
+    /// A branch as the session's cards name it: the project's title for the project's own line
+    /// (`project/<id>`, in either id spelling, with or without `refs/heads/`), else the branch.
+    public static func targetName(_ ref: String, membership: SessionProjectMembership?) -> String {
+        let branch = branchOf(ref)
+        guard let membership, !membership.projectTitle.isEmpty else { return branch }
+        let ids = [membership.projectId, PublicID.toPublic(membership.projectId)]
+        return ids.contains { branch == "project/\($0)" } ? membership.projectTitle : branch
+    }
+
     private static func branchOf(_ ref: String?) -> String {
         (ref ?? "").replacingOccurrences(of: "refs/heads/", with: "")
     }
@@ -401,6 +466,36 @@ public enum SessionProjectLandings {
         guard let iso, let date = RelativeTime.parse(iso) else { return -.infinity }
         return date.timeIntervalSince1970
     }
+}
+
+/// The source session's landing on its worktree card (`SessionProjectLandings.sourceSlot`).
+public struct SourceLandingSlot: Equatable, Sendable {
+    public enum Kind: String, Sendable {
+        /// Waiting its turn: a still clock, grey.
+        case queued
+        /// An attempt at work: a spinner, blue.
+        case running
+        /// An attempt stopped: amber; the landing session is where it is dealt with.
+        case stopped
+        /// Settled where the work went: a green chip.
+        case landed
+        /// Settled with nothing landed: a grey chip.
+        case quiet
+    }
+
+    public let kind: Kind
+    public let text: String
+    /// Where it lands, while it is on its way: "into Wiki chat".
+    public let into: String?
+
+    public init(kind: Kind, text: String, into: String? = nil) {
+        self.kind = kind
+        self.text = text
+        self.into = into
+    }
+
+    /// Open, it takes the card's second row; settled, the chip at the end of its first.
+    public var isRow: Bool { kind == .queued || kind == .running || kind == .stopped }
 }
 
 /// The source session's derived landing label: its words and the ink they wear.

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -118,43 +119,50 @@ func TestCursorKeyCheckAnswersWhatCursorSaid(t *testing.T) {
 
 // Somebody is waiting: a Cursor API that never answers, or a build slow to say even its version, is
 // answered UNREACHABLE by the deadline, the CLI stopped, its throwaway homes removed, the key left nowhere.
+// The fake CLI is held until the test lets it go, after the answer, so nothing the CLI says can end the wait:
+// the build slow to say its version is still saying it when the answer comes, however slow the host. A Cursor
+// API that never answers is only that once `agent models` is asking it by the deadline, and a build slow to
+// say its version once it was asked: a loaded host can delay either past 500 ms, so a case whose CLI was not
+// yet asked goes again with the deadline doubled.
 func TestCursorKeyCheckAnswersByTheDeadline(t *testing.T) {
 	home := useCursorRealHome(t)
 	r := newFakeCursorRelease(t)
 	installFakeCursor(t)
 	previous := cursorKeyCheckTimeout
-	cursorKeyCheckTimeout = 500 * time.Millisecond
 	t.Cleanup(func() { cursorKeyCheckTimeout = previous })
 	var logs strings.Builder
-	for _, c := range []struct{ name, file, mode string }{
-		{"a Cursor API that never answers", "models-mode", "hang"},
-		{"a build slow to say its version", "version-mode", "slow"},
+	for _, c := range []struct{ name, file, mode, held string }{
+		{"a Cursor API that never answers", "models-mode", "hang", "models"},
+		{"a build slow to say its version", "version-mode", "slow", "--version"},
 	} {
 		r.behave(t, c.file, c.mode)
-		var answers cursorKeyAnswers
-		started := time.Now()
-		logs.WriteString(captureLogs(t, func() {
-			answerCursorKeyCheck(context.Background(), CursorKeyCheckCommand{CheckID: strings.Repeat("a", 32), APIKey: cursorTestKey}, answers.report)
-		}))
-		if took := time.Since(started); took > 1500*time.Millisecond {
-			t.Fatalf("%s: answered after %s, past its %s deadline", c.name, took, cursorKeyCheckTimeout)
-		}
-		if got := answers.all(); len(got) != 1 || got[0].State != "UNREACHABLE" {
-			t.Fatalf("%s: answered %+v, want UNREACHABLE", c.name, got)
-		}
-		deadline := time.Now().Add(15 * time.Second)
-		for {
-			left, err := filepath.Glob(filepath.Join(os.TempDir(), "orbit-cursor-*"))
-			if err != nil {
-				t.Fatal(err)
+		for deadline := 500 * time.Millisecond; ; deadline *= 2 {
+			cursorKeyCheckTimeout = deadline
+			before := len(callsWith(r.calls(t), c.held))
+			var answers cursorKeyAnswers
+			logs.WriteString(captureLogs(t, func() {
+				answerCursorKeyCheck(context.Background(), CursorKeyCheckCommand{CheckID: strings.Repeat("a", 32), APIKey: cursorTestKey}, answers.report)
+			}))
+			held := callsWith(r.calls(t), c.held)
+			asked := len(held) > before
+			if asked && c.mode == "slow" {
+				if p := held[len(held)-1].PID; syscall.Kill(p, 0) != nil {
+					t.Fatalf("%s: answered once the version probe (pid %d) had ended, not by the deadline", c.name, p)
+				}
 			}
-			if len(left) == 0 {
+			if got := answers.all(); len(got) != 1 || got[0].State != "UNREACHABLE" {
+				t.Fatalf("%s: answered %+v, want UNREACHABLE", c.name, got)
+			}
+			r.behave(t, "let-go", "now") // a build still saying its version goes on, and its probe ends
+			waitCursorProbeRootsGone(t, c.name)
+			r.behave(t, "let-go", "")
+			if asked {
 				break
 			}
-			if time.Now().After(deadline) {
-				t.Fatalf("%s: throwaway homes still there: %v", c.name, left)
+			if deadline >= 30*time.Second {
+				t.Fatalf("%s: `agent %s` was never asked by a deadline of %s", c.name, c.held, deadline)
 			}
-			time.Sleep(50 * time.Millisecond)
+			t.Logf("%s: the deadline of %s came before `agent %s` was asked; again with twice that", c.name, deadline, c.held)
 		}
 		r.behave(t, c.file, "")
 	}
@@ -164,6 +172,25 @@ func TestCursorKeyCheckAnswersByTheDeadline(t *testing.T) {
 	}
 	assertKeyNowhere(t, logs.String(), home)
 	assertNoCredentialStore(t, home)
+}
+
+// waitCursorProbeRootsGone waits until no throwaway root of a Cursor CLI the runner started is left.
+func waitCursorProbeRootsGone(t *testing.T, name string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		left, err := filepath.Glob(filepath.Join(os.TempDir(), "orbit-cursor-*"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(left) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: throwaway homes still there: %v", name, left)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // A runner with no pinned Cursor CLI to ask — the control plane's view of it gone stale — answers at once

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Engine update report: only failed lines in red</title>
+<style>
+/* Tokens copied from src/web/src/index.css (:root light, [data-theme=dark]). */
+:root {
+  --bg: #ffffff; --bg-subtle: #fafbfc; --bg-raised: #ffffff;
+  --border: #dee0e3; --border-subtle: #eceef1;
+  --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+  --error: #cf3b35; --error-bg: #fdeceb; --error-border: #ffccc7;
+  --brand: #3370ff;
+}
+.dark {
+  --bg: #202023; --bg-subtle: #252528; --bg-raised: #2b2b2e;
+  --border: #424246; --border-subtle: #343437;
+  --text-1: #c9ced5; --text-2: #a7adb6; --text-3: #8b9099;
+  --error: #f0837b; --error-bg: rgba(245, 74, 69, 0.16); --error-border: rgba(245, 74, 69, 0.38);
+  --brand: #5b8cff;
+}
+body { margin: 0; background: #eef0f3; font-family: Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+.board { width: 1560px; padding: 36px 40px 40px; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.sub { font-size: 14px; color: #646a73; margin: 0 0 26px; line-height: 1.6; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.col h2 { font-size: 16px; margin: 0 0 10px; }
+.col h2 small { font-weight: 400; color: #8f959e; font-size: 13px; margin-left: 8px; }
+.frame { background: var(--bg); border-radius: 12px; padding: 22px 26px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.sec-title { font-size: 17px; font-weight: 600; color: var(--text-1); }
+.sec-note { font-size: 12px; color: var(--text-3); }
+.rows-stub { height: 46px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg); }
+.notes { margin-top: 26px; background: #fff; border-radius: 12px; padding: 18px 24px; font-size: 14px; line-height: 1.75; }
+.notes b { color: #1f2329; }
+.notes code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #f2f3f5; padding: 1px 5px; border-radius: 4px; }
+.diff-old { color: #cf3b35; text-decoration: line-through; }
+.diff-new { color: #1a7f37; }
+
+/* ---- Real rules, copied from src/web/src/index.css ---- */
+.rd-engine-relay { margin-bottom: 12px; padding: 12px 13px; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-subtle); }
+/* before: the whole card */
+.before .rd-engine-relay.bad { background: var(--error-bg); border-color: var(--error-border); }
+.rd-engine-relay-row { font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; }
+.before .rd-engine-relay.bad .rd-engine-relay-row { color: var(--error); font-weight: 500; }
+/* after: only the line */
+.after .rd-engine-relay-row.bad { color: var(--error); font-weight: 500; }
+.rd-engine-relay-hint { margin-top: 7px; font-size: 11.5px; color: var(--text-3); }
+.re-cmd { display: inline-block; margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: var(--bg-raised); border: 1px solid var(--border); font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--text-2); }
+.re-link { border: 0; background: none; padding: 0; color: var(--brand); font-size: 11.5px; font-family: inherit; }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>机器设置 › Engines：「Update engines」结果卡</h1>
+  <p class="sub">只列需要你处理的引擎，失败的标红，卡片本身是中性底色。同时修两处版本号显示。<br>
+  卡片和行用的是真实 class（<code>.rd-engine-relay</code>、<code>.rd-engine-relay-row</code>、<code>.re-cmd</code>、<code>.re-link</code>）和 index.css 的颜色 token；页面外框是手画的。数据取自你截图里的那次运行。</p>
+
+  <div class="cols">
+    <div class="col before">
+      <h2>现在<small>一行超时，整张卡变红</small></h2>
+      <div class="frame">
+        <div class="sec-head"><span class="sec-title">Engines</span><span class="sec-note">Subscriptions signed in here are spent only by sessions on this machine.</span></div>
+        <div class="rd-engine-relay bad">
+          <div class="rd-engine-relay-row">Claude Code — already up to date (2.1.323 (Claude Code))
+Codex — 5 sessions running, it'll update once they finish
+Kimi Code — already up to date ()
+OpenCode — update timed out after 5m0s
+Antigravity — already up to date (1.5.7)
+DeepSeek Harness — fixed supported version 0.2.0-rc.2
+Cursor CLI — pinned version 2026.10.14-941492e</div>
+          <div class="rd-engine-relay-hint">Orbit ran <code class="re-cmd">orbit engine-update</code></div>
+          <div class="rd-engine-relay-hint"><button class="re-link">Dismiss</button></div>
+        </div>
+        <div class="rows-stub"></div>
+      </div>
+    </div>
+
+    <div class="col after">
+      <h2>改后<small>只剩需要你处理的：OpenCode 超时</small></h2>
+      <div class="frame">
+        <div class="sec-head"><span class="sec-title">Engines</span><span class="sec-note">Subscriptions signed in here are spent only by sessions on this machine.</span></div>
+        <div class="rd-engine-relay">
+          <div class="rd-engine-relay-row bad">OpenCode — update timed out after 5m0s</div>
+          <div class="rd-engine-relay-hint">Orbit ran <code class="re-cmd">orbit engine-update</code></div>
+          <div class="rd-engine-relay-hint"><button class="re-link">Dismiss</button></div>
+        </div>
+        <div class="rows-stub"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:28px">
+    <div class="col after">
+      <h2>改后 · 深色 · 没有要处理的时<small>只剩一句话</small></h2>
+      <div class="frame dark">
+        <div class="sec-head"><span class="sec-title">Engines</span><span class="sec-note">Subscriptions signed in here are spent only by sessions on this machine.</span></div>
+        <div class="rd-engine-relay">
+          <div class="rd-engine-relay-row">Nothing here needs your attention.</div>
+          <div class="rd-engine-relay-hint">Orbit ran <code class="re-cmd">orbit engine-update</code></div>
+          <div class="rd-engine-relay-hint"><button class="re-link">Dismiss</button></div>
+        </div>
+        <div class="rows-stub"></div>
+      </div>
+    </div>
+    <div class="col">
+      <h2>改了什么</h2>
+      <div class="notes">
+        <b>1. 只列需要你处理的：</b>失败的（<code>update failed</code>、<code>timed out</code>、<code>does not run</code>，标红），以及 Orbit 无权替换、只能由安装者本人更新的（<code>owned by another user</code>，灰色）。<br>
+        <b>2. 其余都不列：</b>已是最新、刚更新、固定版本、等 session 结束后自动更新（Codex）、下一轮自动重试、版本读不出（Kimi）。这些 Orbit 自己会处理。没有要处理的时只显示 <code>Nothing here needs your attention.</code><br>
+        <b>3. 顺带修正：</b>runner 以前不把 “installed but does not run”（引擎装了但跑不起来）算作失败，现在算，整次运行也会标为失败。<br>
+        <b>4. 版本号：</b><span class="diff-old">(2.1.323 (Claude Code))</span> → <span class="diff-new">(2.1.323)</span>；<span class="diff-old">already up to date ()</span> → <span class="diff-new">updater finished, but its version couldn't be read</span>（网页上不再出现，macOS / iOS / Android 上仍能看到）。<br>
+        <b>不变：</b>macOS / iOS / Android 上这段是灰色小字，仍列出全部引擎，这次没改。
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

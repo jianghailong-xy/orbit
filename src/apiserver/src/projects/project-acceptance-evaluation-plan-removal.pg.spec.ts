@@ -79,11 +79,17 @@ const KEPT_COLUMNS = [
   'verification_method',
 ] as const;
 
-/** The whole table after 0234, in ordinal order. */
+/**
+ * The whole table after 0234, in ordinal order, and after 0545 added `satisfied_by` (owner decision
+ * 2026-11-11): how the criterion is met, TASKS or CONFIRMATION. It is not an evaluation plan — it
+ * says which kind of fact meets the criterion, not how one is to be evaluated — and a TASKS row's
+ * hashes are computed exactly as 0234 left them.
+ */
 const TABLE_SHAPE = [
   'id', 'project_id', 'ordinal', 'text', 'revision', 'content_hash',
   'created_at', 'updated_at', 'verification_method',
   'completion_criterion_override_reason', 'semantic_revision', 'semantic_hash',
+  'satisfied_by',
 ] as const;
 
 /** The lanes that survive, read straight out of the row. */
@@ -163,11 +169,12 @@ test('T6: the criterion evaluation-plan lane is removed, and the contract-level 
     });
 
   // ═══ 2. the whole table, exactly ═══════════════════════════════════════════════════════════════
-  await t.test('the criterion definition is exactly twelve columns, in ordinal order', async () => {
+  await t.test('the criterion definition is exactly thirteen columns, in ordinal order', async () => {
     const columns = await criterionColumns();
     // Exact and ordered rather than a subset: the point of a census is that nobody adds or removes
-    // a column without saying so here. 0233 left fourteen; this removal leaves twelve.
-    assert.equal(columns.length, 12);
+    // a column without saying so here. 0233 left fourteen; this removal leaves twelve, and 0545's
+    // `satisfied_by` (see TABLE_SHAPE) makes thirteen.
+    assert.equal(columns.length, 13);
     assert.deepEqual(columns, [...TABLE_SHAPE]);
   });
 

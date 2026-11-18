@@ -22,7 +22,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Settings → Sessions, as iOS has it since docs/mocks/ios-settings-order (2A, scope 3A): Preferences' first row opens the page, the
+/** Settings → General (once Sessions), as iOS has it since docs/mocks/ios-settings-order (2A, scope 3A) and ios-settings-web-groups:
+ * Personal's first row opens the page, the
  * list itself holds none of the account's five session settings, and the page draws them in iOS's order (SessionSettings), each
  * with the web's hint as its footer. */
 @RunWith(RobolectricTestRunner::class)
@@ -54,20 +55,20 @@ class SessionSettingsPageTest {
 
     private val settings = listOf("Default permission", "Session orchestration", SMART_MODEL_SELECTION, SUGGESTED_REPLIES, SESSION_RECAPS)
 
-    @Test fun preferencesFirstRowOpensTheSessionsPage() {
+    @Test fun personalFirstRowOpensTheGeneralPage() {
         val api = api()
         val opened = mutableListOf<OrbitRoute>()
         compose.setContent {
             SettingsScreen(api, OrbitRoute(Destination.SETTINGS), revision, { opened += it }, {}, logout = {}, changed = {}, workspaceDeleted = {},
                 deviceAlerts = { true }, notifications = {}, about = {})
         }
-        await(SESSIONS)
-        assertTrue("Sessions is Preferences' first row", top("Preferences") < top(SESSIONS) && top(SESSIONS) < top("Notifications") &&
+        await(GENERAL)
+        assertTrue("General is Personal's first row", top(SETTINGS_PERSONAL) < top(GENERAL) && top(GENERAL) < top("Notifications") &&
             top("Notifications") < top("Appearance"))
         settings.forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-        compose.onNode(hasText(SESSIONS) and hasClickAction()).performScrollTo().performClick()
+        compose.onNode(hasText(GENERAL) and hasClickAction()).performScrollTo().performClick()
         compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "sessions")), opened) }
-        assertEquals(SESSIONS, settingsTitle("sessions"))
+        assertEquals(GENERAL, settingsTitle("sessions"))
     }
 
     @Test fun theSessionsPageDrawsTheFiveInIosOrderEachWithItsHintUnderIt() {

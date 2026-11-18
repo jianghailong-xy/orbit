@@ -299,11 +299,12 @@ final class SubagentTranscriptTests: XCTestCase {
 /// the iPhone read as "Waiting for your reply" (web parity: `parkedWorkLabel`, `statusLabel`, `StatusIcon`).
 final class RunningSubagentStatusTests: XCTestCase {
     private func session(_ status: RunStatus, subagents: Int?, bg: Int? = nil,
-                         lastToolUse: String? = nil, engineTurnActive: Bool? = nil) -> Session {
+                         lastToolUse: String? = nil, engineTurnActive: Bool? = nil,
+                         reply: String? = "the last reply", title: String? = nil) -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
-                pendingApprovals: nil, branch: nil, updatedAt: nil, lastAssistantText: "the last reply",
+                pendingApprovals: nil, branch: nil, updatedAt: nil, lastAssistantText: reply,
                 lastToolUse: lastToolUse, runningBgCount: bg, runningSubagentCount: subagents,
-                engineTurnActive: engineTurnActive)
+                runningSubagentTitle: title, engineTurnActive: engineTurnActive)
     }
 
     func testParkedWithAgentsAtWorkReadsAsRunningAgent() {
@@ -318,9 +319,29 @@ final class RunningSubagentStatusTests: XCTestCase {
     }
 
     func testNoAgentsKeepsTheOldReadings() {
-        let idle = session(.awaitingInput, subagents: 0, bg: 2)
+        // A background process never takes the line from the reply (a14ff1775, owner 2026-11-16): it
+        // only fills a row with nothing else to say.
+        XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 0, bg: 2), live: true).text, "the last reply")
+        let idle = session(.awaitingInput, subagents: 0, bg: 2, reply: nil)
         XCTAssertEqual(SessionLine.make(for: idle, live: true).text, "2 background processes running…")
         XCTAssertEqual(SessionHeader.statusWord(for: session(.awaitingInput, subagents: nil)), "Waiting for your reply")
+    }
+
+    func testTheRowNamesWhatTheAgentIsDoing() {
+        let title = "Deploy dacad7403 to production"
+        let one = session(.awaitingInput, subagents: 1, title: title)
+        XCTAssertEqual(SessionLine.make(for: one, live: true), .init(text: "Agent: \(title)…", tone: .running))
+        XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1, title: title), live: true).text, "Agent: \(title)…")
+        XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 2, title: title), live: true).text,
+                       "Running 2 agents · \(title)…")
+        XCTAssertEqual(SessionLine.make(for: session(.awaitingInput, subagents: 1, title: "  "), live: true).text, "Running Agent…")
+        // A foreground delegate is still the tool in flight: the row names its work, not the tool.
+        XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1, lastToolUse: "mcp__orbit__delegate", title: title),
+                                        live: true).text, "Agent: \(title)…")
+        XCTAssertEqual(SessionLine.make(for: session(.running, subagents: 1, lastToolUse: "Bash", title: title),
+                                        live: true).text, "Running Bash…")
+        // The header and the glyph keep the short label.
+        XCTAssertEqual(SessionHeader.statusWord(for: one), "Running Agent")
     }
 
     func testAToolInFlightStillNamesTheTool() {

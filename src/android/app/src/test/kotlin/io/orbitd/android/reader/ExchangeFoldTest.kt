@@ -74,6 +74,47 @@ class ExchangeFoldTest {
         assertEquals(3, shown.count { it.event.type == "user" && it.event.fields["coordinatorDelivery"] != null })
     }
 
+    @Test fun onlyAShortAnswerFolds() {
+        fun job(id: String) = listOf(
+            "<background-job-wake>",
+            "  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:",
+            "    $id｜query｜bash q.sh｜$id",
+            "      ended｜completed｜exit code 0",
+            "  The control plane recorded this for you; the user did not write it.",
+            "</background-job-wake>",
+        ).joinToString("\n").let { wake -> buildJsonObject { put("text", wake); put("controlPlaneNote", wake) } }
+        val watchId = "0195c0de-0000-7000-8000-0000000000c3"
+        val watch = buildJsonObject { put("text", listOf(
+            "Orbit Watch $watchId matched at generation 1: SESSION_IDLE 1/1", "",
+            "This turn was queued by the watch, not typed by a person. What the watch recorded when its condition held:", "",
+            "```json",
+            buildJsonObject {
+                put("watchId", watchId); put("generation", 1)
+                putJsonArray("changedTargets") { addJsonObject { put("kind", "SESSION"); put("id", b1); put("state", "IDLE") } }
+            }.toString(),
+            "```",
+        ).joinToString("\n")) }
+        val reply = buildJsonObject {
+            put("text", ""); putJsonArray("sessionReplies") { addJsonObject { put("requestId", "r"); put("fromSessionId", b1); put("fromTitle", "B1 run"); put("outcome", "REPLIED") } }
+        }
+        val shown = rows(
+            exchange(said("Why is 11-10 not ready?"), "I started a query.", emptyList()),
+            exchange(job("bgj_1"), "Still running.", listOf("mcp__orbit__bg_output")),
+            exchange(job("bgj_2"), "Found it: " + "the job waits on lane 7, which never arrives. ".repeat(2), listOf("mcp__orbit__bg_output")),
+            exchange(watch, "Duplicate wake; " + "nothing new. ".repeat(15)),
+            exchange(watch, "B1 landed. " + "All three gates are green on main. ".repeat(7)),
+            exchange(reply, "Exempt."),
+            exchange(said("ok"), "Done.", emptyList()),
+        )
+        // Each folds alone (14 and 211 characters): the job's answer of 102 stands between them; the watch's 256 and the reply stay.
+        assertEquals(listOf(listOf("job"), listOf("watch")), shown.filter { it.exchanges.isNotEmpty() }.map { r -> r.exchanges.map { it.summary.category } })
+        val drawn = texts(shown)
+        assertTrue(drawn.any { it.startsWith("Found it:") })
+        assertTrue(drawn.any { it.startsWith("B1 landed.") })
+        assertTrue(drawn.contains("Exempt."))
+        assertFalse(drawn.any { it.startsWith("Duplicate wake") })
+    }
+
     @Test fun theNewestTurnNeverFolds() {
         val shown = rows(exchange(said("hi"), "Hello.", emptyList()), exchange(delivery("EVIDENCE_SUBMITTED", b1, "B1", 1), "I confirmed B1."))
         assertTrue(shown.none { it.exchanges.isNotEmpty() })

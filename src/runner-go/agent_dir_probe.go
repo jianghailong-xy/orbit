@@ -60,6 +60,14 @@ func (p *agentDirProbe) trigger(targets []AgentDirTarget) {
 	}
 }
 
+// rescan scans the directories last named again, as soon as the scanner is free.
+func (p *agentDirProbe) rescan() {
+	select {
+	case p.wake <- struct{}{}:
+	default:
+	}
+}
+
 func (p *agentDirProbe) takePending() []AgentDirTarget {
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()

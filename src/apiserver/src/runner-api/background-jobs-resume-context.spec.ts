@@ -169,7 +169,9 @@ function harness(options: {
       updateMany: async () => ({ count: 1 }),
     },
     runEvent: {
-      findFirst: async () => (options.runtimeStarted ? { id: 'event-1' } : null),
+      // The runtime-started read; no turn here was cut by the owner's Update Now (no runner_update interrupt).
+      findFirst: async (args?: { where?: { type?: unknown } }) =>
+        (options.runtimeStarted && args?.where?.type !== 'interrupt' ? { id: 'event-1' } : null),
       findMany: async () => options.events ?? [],
     },
     inboxLeaseGeneration: { findMany: async () => options.retiredGenerations ?? [] },

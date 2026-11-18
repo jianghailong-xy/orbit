@@ -37,10 +37,36 @@ class OwnerRequestsTest {
         assertFalse("saving needs a name", OwnerRequests.ready(secret, "sk", true, " ", null, null, ""))
     }
 
+    /** WIKI_CREATE (docs/wiki-explicit-creation-design.md §3.6): its repository and workspace are read off the card, and a DONE one names
+     * the wiki it made. */
+    @Test fun aWikiCreateCardReadsItsRepositoryAndNamesTheWikiItMade() {
+        val asked = request("""{"id":"w1","kind":"WIKI_CREATE","state":"PENDING","title":"Create a wiki for lfs-builder?","why":"You asked",
+            "repoUrlNorm":"github.com/sample/lfs-builder","workspaceId":"ws1","answer":null,"createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals("github.com/sample/lfs-builder", asked.repoUrlNorm)
+        assertEquals("ws1", asked.workspaceId)
+        assertTrue(OwnerRequests.WIKI_CREATE in OwnerRequests.kinds)
+        assertEquals(listOf("WIKI", "Create wiki", "Review", "Review"), listOf(OwnerRequests.kindTag("WIKI_CREATE"), OwnerRequests.primary("WIKI_CREATE"),
+            OwnerRequests.inboxAction("WIKI_CREATE"), OwnerRequests.pushAction("WIKI_CREATE")))
+        val made = request("""{"id":"w1","kind":"WIKI_CREATE","state":"DONE","title":"Create a wiki for lfs-builder?",
+            "answer":{"spaceId":"sp1","name":"lfs-builder"},"resolvedByUserId":"u","createdAt":"2026-11-10T07:58:00Z"}""")
+        assertEquals("sp1", made.answer?.spaceId)
+        assertEquals("Created the wiki lfs-builder", OwnerRequests.outcomeLine(made, "mini"))
+        assertEquals("Wiki created", OwnerRequests.outcomeLine(made.copy(answer = null), "mini"))
+        assertEquals("Declined: “Not for this repository”",
+            OwnerRequests.outcomeLine(made.copy(state = "DECLINED", answer = null, resolutionNote = "Not for this repository"), "mini"))
+    }
+
+    /** The web's `ownerRequestChatContext`, word for word. */
+    @Test fun chatAboutThisNamesTheRequestAndSaysItIsStillOpen() {
+        assertEquals("Chat about this", OwnerRequests.chatAction)
+        assertEquals("The owner pressed Chat about this on your request “Stripe key” (owner request 34sYUuoSpnReXXn6j28WR). " +
+            "It is still open: not marked done and not declined. Their message:", OwnerRequests.chatContext(secret))
+    }
+
     @Test fun theResolvedLineSaysHowWhoAndWhen() {
         val done = secret.copy(state = "DONE", resolvedAt = "2026-11-10T07:59:00Z", resolvedByUserId = "u", resolvedClient = "android")
         assertEquals("Delivered to mini as STRIPE_API_KEY", OwnerRequests.outcomeLine(done, "mini"))
-        assertEquals("by you · 07:59 · via Android", OwnerRequests.byLine(done, now, ZoneOffset.UTC))
+        assertEquals("by you · 7:59\u202FAM · via Android", OwnerRequests.byLine(done, now, ZoneOffset.UTC))
         val decision = done.copy(kind = "DECISION", options = listOf(OwnerRequestOption("Ship"), OwnerRequestOption("Wait")),
             answer = OwnerRequestAnswer(1, " soon "))
         assertEquals("Wait: “soon”", OwnerRequests.outcomeLine(decision, "mini"))
@@ -48,7 +74,7 @@ class OwnerRequestsTest {
         assertEquals("Expired before anyone answered", OwnerRequests.outcomeLine(done.copy(state = "EXPIRED"), "mini"))
         assertEquals("", OwnerRequests.byLine(done.copy(state = "EXPIRED", resolvedAt = null, resolvedClient = null), now))
         val removing = OwnerRequestSecretGrant("REMOVING", runnerOnline = false, runnerLastSeenAt = "2026-11-10T06:00:00Z")
-        assertEquals("Removal pending: mini has not been online since 06:00", OwnerRequests.grantLine(removing, "mini", now, ZoneOffset.UTC))
+        assertEquals("Removal pending: mini has not been online since 6:00\u202FAM", OwnerRequests.grantLine(removing, "mini", now, ZoneOffset.UTC))
         assertTrue(OwnerRequests.removalToTell(removing))
         assertEquals("Removed: you revoked it", OwnerRequests.grantLine(OwnerRequestSecretGrant("REMOVED", endReason = "REVOKED"), "mini", now))
         assertFalse(OwnerRequests.removalToTell(OwnerRequestSecretGrant("REMOVED", endReason = "REVOKED")))
@@ -68,6 +94,17 @@ class OwnerRequestsTest {
         // Either spelling of an id is one request.
         assertEquals(OwnerRequests.key("34sYUuoSpnReXXn6j28WR"), OwnerRequests.key(OwnerRequests.key("34sYUuoSpnReXXn6j28WR")))
         assertEquals(listOf(secret), OwnerRequests.forSession("s", listOf(secret), listOf(secret.copy(id = OwnerRequests.key(secret.id)))).map { it.copy(id = secret.id) })
+    }
+
+    /** A press on a session's needs-you notice opens the oldest request it asked that is still pending (OrbitKit's twin). */
+    @Test fun aNoticeOpensTheSessionsOldestPendingRequest() {
+        val asked = OwnerRequest(id = "new", kind = "MANUAL_STEP", state = "PENDING", title = "t", askedBySessionId = "s",
+            createdAt = "2026-11-17T22:36:15Z")
+        val older = asked.copy(id = "older", createdAt = "2026-11-17T19:07:30Z")
+        val ended = asked.copy(id = "ended", state = "WITHDRAWN", createdAt = "2026-11-17T14:12:35Z")
+        val elsewhere = asked.copy(id = "other", askedBySessionId = "x", createdAt = "2026-11-17T04:55:08Z")
+        assertEquals("older", OwnerRequests.oldestPending("s", listOf(asked, ended, elsewhere), listOf(older))?.id)
+        assertNull(OwnerRequests.oldestPending("s", listOf(ended, elsewhere)))
     }
 
     /** The inbox's Open tab and its one count (web `WaitingOnYouPage`, `waitingCount`): the coordinators' questions beside the requests. */

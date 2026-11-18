@@ -108,7 +108,8 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('Start a new session');
     expect(html).not.toContain('Orbit remembers who runs it.');
     // Where what it runs on is managed: Infrastructure.
-    expect(html).toMatch(/<a href="\/infrastructure"[^>]*>Manage<\/a>/);
+    expect(html).toContain(`<a href="/settings/machines/${encodeId(RUNNER_ID)}"`);
+    expect(html).toMatch(/<a href="\/settings\/machines\/[^"]*"[^>]*>Manage<\/a>/);
   });
 
   it('shows the current engine as the collapsed identity, its CLI’s name under the mark', () => {
@@ -149,8 +150,8 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('engine=kimi');
     expect(html).not.toContain('runner login');
     // Its fix is that engine's row on this machine's card on the Machines & models page.
-    expect(html).toContain(`<a href="/infrastructure?runner=${encodeId(RUNNER_ID)}&amp;engine=kimi"`);
-    expect(html).toMatch(/<a href="\/infrastructure\?runner=[^"]*"[^>]*>Fix it<\/a>/);
+    expect(html).toContain(`<a href="/settings/machines/${encodeId(RUNNER_ID)}?engine=kimi"`);
+    expect(html).toMatch(/<a href="\/settings\/machines\/[^"]*"[^>]*>Fix it<\/a>/);
   });
 
   it('sends a key’s fix to the engine that runs it, not to its own slug', () => {
@@ -193,7 +194,7 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('<b>Claude Code</b>');
     expect(html).toContain('Region not supported on this runner');
     expect(html).toMatch(
-      new RegExp(`<a href="/infrastructure\\?runner=${encodeId(RUNNER_ID)}&amp;engine=claude"[^>]*>Details</a>`),
+      new RegExp(`<a href="/settings/machines/${encodeId(RUNNER_ID)}\\?engine=claude"[^>]*>Details</a>`),
     );
     expect(html).not.toContain('Fix it');
   });

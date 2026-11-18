@@ -323,7 +323,8 @@ test('(f) no surface promises a confirmation the API cannot return', () => {
   // left both `project_acceptance` descriptions saying the read returns "its confirmation". A
   // description of a field that is not in the payload is the same class of defect the criteria
   // proposal removal called lying copy: a model reads it and reports a fact nobody wrote.
-  for (const relative of ['src/runner-go/mcp.go', 'src/runner-go/project_cli.go']) {
+  for (const relative of ['src/runner-go/mcp.go', 'src/runner-go/project_cli.go',
+    'src/runner-go/operation_catalog.go']) {
     const source = read(relative);
     assert.doesNotMatch(source, /project_criteria_confirm/,
       `${relative} declares a criteria confirmation capability`);

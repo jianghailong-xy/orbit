@@ -16,12 +16,16 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -67,6 +71,11 @@ class RealtimeStore(
     private val mutableState = MutableStateFlow(RealtimeState())
     val state: StateFlow<RealtimeState> = mutableState.asStateFlow()
     private val rest = RealtimeRest(auth, background)
+    private val controlFrames = MutableSharedFlow<ControlEvent>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Every account event the control stream brings but `ping`, as it arrives: what a page reads out of a frame that no list holds
+     * (a GitHub workspace's clone and git's percentage, docs/github-workspace-design.md §5.4). A collector that is behind loses the
+     * oldest it has not taken; nothing here is replayed. */
+    val controlEvents: SharedFlow<ControlEvent> = controlFrames.asSharedFlow()
 
     init {
         owner.launch {
@@ -313,6 +322,7 @@ class RealtimeStore(
                     if (event.type != "ping") {
                         publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
                         if (witness?.enabled == true) witness.account(event.type, event.sessionId)
+                        controlFrames.tryEmit(event)
                         if (event.type == LIST_CHANGED) {
                             hinted = true
                             hints.trySend(Unit)
@@ -475,7 +485,8 @@ class RealtimeStore(
                     // A durable frame the window kept as it was is one it held already (or one older than the trimmed window).
                     if (event.durable && witness?.enabled == true && state.value.session?.accessDenied == false)
                         witness.durable(id, event.seq, state.value.session?.transcript === before, "sse")
-                    if (event.durable) save()
+                    // A translation folded into an event the window holds is part of what the device keeps of it.
+                    if (event.durable || event.type == "translation") save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()
                 })
             } catch (cancelled: CancellationException) { throw cancelled }

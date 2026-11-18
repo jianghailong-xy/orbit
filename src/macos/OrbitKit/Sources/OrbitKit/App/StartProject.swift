@@ -211,7 +211,7 @@ public struct ProjectStartFinding: Codable, Equatable, Sendable {
 /// the server and no longer served.
 public struct ProjectStartRequest: Codable, Equatable, Sendable {
     public let settings: ProjectStartSettings
-    public let why: String
+    public var why: String
     public let criteriaDigest: String
     public let planDigest: String
     /// The repository the check found the project integrating into, or nil for a project with none.

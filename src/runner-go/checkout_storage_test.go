@@ -429,3 +429,37 @@ func TestTheRunLoopKeepsTheStorageBudgetBesideTheFloor(t *testing.T) {
 		t.Error("the room must sweep with the run loop's sweeper, and go with the run loop")
 	}
 }
+
+// The machine page's disk card shows the volume once there is a budget: its limit, and what the sweep judges free.
+func TestDiskResourcesShowTheVolume(t *testing.T) {
+	hostTotal, hostFree := uint64(100*oneGiB), uint64(98*oneGiB)
+	host := func() MachineResources { return MachineResources{DiskTotalBytes: &hostTotal, DiskFreeBytes: &hostFree} }
+
+	r := host()
+	(&checkoutStorage{}).diskResources(&r)
+	if *r.DiskTotalBytes != hostTotal || *r.DiskFreeBytes != hostFree {
+		t.Fatalf("no budget: disk = %d of %d, want the host's", *r.DiskFreeBytes, *r.DiskTotalBytes)
+	}
+
+	storage := budgetStorage(budgetMeasured(2*oneGiB, time.Now().Add(-time.Minute)))
+	r = host()
+	storage.diskResources(&r)
+	if *r.DiskTotalBytes != 20*oneGiB || *r.DiskFreeBytes != 18*oneGiB {
+		t.Fatalf("budget: disk = %d of %d, want 18 GiB of 20 GiB", *r.DiskFreeBytes, *r.DiskTotalBytes)
+	}
+
+	// The host's disk can run out first: free is never more than statfs says.
+	tight := uint64(oneGiB)
+	r = MachineResources{DiskTotalBytes: &hostTotal, DiskFreeBytes: &tight}
+	storage.diskResources(&r)
+	if *r.DiskTotalBytes != 20*oneGiB || *r.DiskFreeBytes != oneGiB {
+		t.Fatalf("host nearly full: disk = %d of %d", *r.DiskFreeBytes, *r.DiskTotalBytes)
+	}
+
+	// No statfs reading at all: the budget alone.
+	r = MachineResources{}
+	storage.diskResources(&r)
+	if r.DiskTotalBytes == nil || *r.DiskFreeBytes != 18*oneGiB {
+		t.Fatalf("no statfs: disk = %v of %v", r.DiskFreeBytes, r.DiskTotalBytes)
+	}
+}

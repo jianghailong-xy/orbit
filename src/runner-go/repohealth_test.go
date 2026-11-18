@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Several agents usually share one checkout (and a workDir is often a subdir of it), so the scan
@@ -130,51 +131,60 @@ func TestCleanupRepoRootCleanIsNoop(t *testing.T) {
 	}
 }
 
-// The nudge exists to reach the author while they're still on the turn that caused it. It must
-// blame only what THIS session added — the shared checkout usually already has somebody else's
-// edits in it — and must not repeat itself once said.
-func TestSharedCheckoutWatchReportsOnlyNewDirt(t *testing.T) {
-	repo := initRepo(t)
-	commitFile(t, repo, "theirs.txt", "v1\n", "add theirs")
-	commitFile(t, repo, "ours.txt", "v1\n", "add ours")
-	// Somebody else was already mid-edit when this session started.
-	if err := os.WriteFile(filepath.Join(repo, "theirs.txt"), []byte("their wip\n"), 0o644); err != nil {
-		t.Fatal(err)
+// A workspace made after the runner started is missing from its agent listing, which repeats only
+// every five minutes, so its main checkout used to be absent from the heartbeat for minutes after its
+// first turn — and the apiserver refused the turn-end card's Move. Its first session starting is
+// enough now: the checkout is scanned and a beat asked for at once.
+func TestSessionOfANewWorkspaceReportsItsMainCheckoutAtOnce(t *testing.T) {
+	known, added := initRepo(t), initRepo(t)
+	var agents runnerAgentList
+	listedAt := time.Now()
+	agents.set([]RunnerAgent{{ID: "ws-old", WorkDir: known}}, listedAt)
+	probe := &repoHealthProbe{dirs: agents.repoDirs}
+	probe.refresh()
+	if got := probe.snapshotNow(); len(got) != 1 || got[0].Root != known {
+		t.Fatalf("startup scan = %+v, want only %s", got, known)
 	}
 
-	w := watchSharedCheckout(&Worktree{RepoDir: repo, Branch: "orbit/feat"})
-	if got := w.newlyDirty(); got != nil {
-		t.Fatalf("pre-existing dirt must not be blamed on this session, got %v", got)
+	beats := make(chan struct{}, 4)
+	beat := func() { beats <- struct{}{} }
+	reportSessionCheckout(&agents, probe, beat, "ws-new", added)
+	select {
+	case <-beats:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no heartbeat was asked for after the new workspace's session started")
 	}
-
-	// This session's turn writes into the shared checkout by accident.
-	if err := os.WriteFile(filepath.Join(repo, "ours.txt"), []byte("stray edit\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got := w.newlyDirty()
-	if len(got) != 1 || got[0] != "ours.txt" {
-		t.Fatalf("newlyDirty = %v, want [ours.txt]", got)
-	}
-	if again := w.newlyDirty(); again != nil {
-		t.Errorf("already-reported dirt must stay quiet, got %v", again)
-	}
-
-	notice := sharedCheckoutNotice(repo, "orbit/feat", got)
-	for _, want := range []string{"ours.txt", repo, "orbit/feat", "worktree"} {
-		if !strings.Contains(notice, want) {
-			t.Errorf("notice should mention %q: %s", want, notice)
+	var entry *RepoHealthReport
+	for _, r := range probe.snapshotNow() {
+		if r.Root == added {
+			r := r
+			entry = &r
 		}
 	}
-}
-
-// A session that isn't isolated works in the shared directory by design — warning about its own
-// normal edits would be pure noise, so there is nothing to watch.
-func TestSharedCheckoutWatchNilWhenNotIsolated(t *testing.T) {
-	if w := watchSharedCheckout(nil); w != nil {
-		t.Fatal("a non-isolated session must have no watch")
+	if entry == nil {
+		t.Fatalf("snapshot = %+v, want an entry for %s", probe.snapshotNow(), added)
 	}
-	var none *sharedCheckoutWatch
-	if got := none.newlyDirty(); got != nil {
-		t.Fatalf("nil watch must be inert, got %v", got)
+	if len(entry.AgentIDs) != 1 || entry.AgentIDs[0] != "ws-new" || entry.Fingerprint == "" {
+		t.Errorf("entry = %+v, want ws-new's main checkout with its fingerprint", *entry)
+	}
+
+	// A second session of the same workspace, or one of a listed workspace, changes nothing.
+	reportSessionCheckout(&agents, probe, beat, "ws-new", added)
+	reportSessionCheckout(&agents, probe, beat, "ws-old", known)
+	select {
+	case <-beats:
+		t.Fatal("a workspace already scanned asked for another beat")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// A listing asked for before the session was noted may predate the workspace: the note stays.
+	agents.set([]RunnerAgent{{ID: "ws-old", WorkDir: known}}, listedAt)
+	if len(agents.repoDirs()) != 2 {
+		t.Errorf("dirs after an older listing = %+v, want the noted one kept", agents.repoDirs())
+	}
+	// One asked for afterwards has it (or the workspace is gone): the note is dropped.
+	agents.set([]RunnerAgent{{ID: "ws-old", WorkDir: known}, {ID: "ws-new", WorkDir: added}}, time.Now())
+	if dirs := agents.repoDirs(); len(dirs) != 2 {
+		t.Errorf("dirs after a fresh listing = %+v, want the two listed agents only", dirs)
 	}
 }

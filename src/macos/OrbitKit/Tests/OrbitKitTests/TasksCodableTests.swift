@@ -31,6 +31,26 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertEqual(t.commentCount, 3)   // from _count
     }
 
+    /// `GET /tasks/:id` of a task forked from a session carries SR18's sentence, drawn as it is
+    /// (docs/task-fork-from-session-design.md §2.3); a task not forked, or an older server, none.
+    func testDetailDecodesForkSourceAndOlderPayloadReadsNone() throws {
+        let forked = try JSONDecoder().decode(TaskItem.self, from: Data("""
+        {"id":"t1","title":"Fork","status":"OPEN",
+         "forkSource":"Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)"}
+        """.utf8))
+        XCTAssertEqual(forked.forkSource,
+                       "Forked from session «Refactor the claim path» at 5555555 (includes uncommitted changes)")
+
+        let notForked = try JSONDecoder().decode(TaskItem.self, from: Data("""
+        {"id":"t2","title":"Plain","status":"OPEN","forkSource":null}
+        """.utf8))
+        XCTAssertNil(notForked.forkSource)
+        let older = try JSONDecoder().decode(TaskItem.self, from: Data("""
+        {"id":"t3","title":"Old","status":"OPEN"}
+        """.utf8))
+        XCTAssertNil(older.forkSource)
+    }
+
     /// `GET /tasks/:id`: adds `comments` (author-resolved), `sessions` (with agent name),
     /// `creatorSession`, and the `dependsOn`/`dependedOnBy` edges (different inner keys).
     func testDetailDecodes() throws {

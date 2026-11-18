@@ -553,12 +553,15 @@ final class OwnerConfirmationDoorTests: XCTestCase {
         let timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
         let now = try XCTUnwrap(RelativeTime.parse("2026-09-16T12:00:00.000Z"))
 
-        XCTAssertEqual(OwnerConfirmations.receiptTime("2026-09-16T08:05:00.000Z", now: now,
-                                                      calendar: calendar, timeZone: timeZone),
-                       "08:05")
-        XCTAssertEqual(OwnerConfirmations.receiptTime("2026-09-15T08:05:00.000Z", now: now,
-                                                      calendar: calendar, timeZone: timeZone),
-                       "9/15 08:05")
+        let locale = Locale(identifier: "en_US")
+        // ICU writes a narrow no-break space before AM/PM; read it as a space.
+        func plain(_ text: String?) -> String? { text?.replacingOccurrences(of: "\u{202F}", with: " ") }
+        XCTAssertEqual(plain(OwnerConfirmations.receiptTime("2026-09-16T08:05:00.000Z", now: now,
+                                                            calendar: calendar, timeZone: timeZone, locale: locale)),
+                       "8:05 AM")
+        XCTAssertEqual(plain(OwnerConfirmations.receiptTime("2026-09-15T08:05:00.000Z", now: now,
+                                                            calendar: calendar, timeZone: timeZone, locale: locale)),
+                       "9/15 8:05 AM")
         XCTAssertNil(OwnerConfirmations.receiptTime("not a time", now: now, calendar: calendar,
                                                     timeZone: timeZone))
     }

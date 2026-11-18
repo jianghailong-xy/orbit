@@ -39,11 +39,16 @@ class SettingsCopyParityTest {
         }
     }
 
-    /** The Sessions row and its page — each setting's name and the hint that is its footer — say what iOS's do (SettingsHome,
-     * SessionSettings), and iOS is held to the web's own Settings page by `SettingsCopyParityTests` (OrbitKit). */
-    @Test fun theSessionsPageSaysWhatIosSays() {
+    /** The list's groups and rows, and the General page — each setting's name and the hint that is its footer — say what iOS's do
+     * (SettingsHome, SessionSettings), and iOS is held to the web's own Settings nav and page by `SettingsCopyParityTests` (OrbitKit). */
+    @Test fun theListAndTheGeneralPageSayWhatIosSays() {
         val source = swift("SettingsHome.swift")
-        listOf(SESSIONS, DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT, SUGGESTED_REPLIES, SUGGESTED_REPLIES_HINT).forEach {
+        assertTrue("iOS heads Personal", source.contains("case .personal:  return \"$SETTINGS_PERSONAL\""))
+        assertTrue("iOS heads neither Machines nor Providers", source.contains("case .machines:  return nil") && source.contains("case .providers: return nil"))
+        assertTrue("iOS's Personal rows", source.contains("case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals]"))
+        assertTrue("iOS names Machines as Machines & models does", source.contains("case .machines:      return MachinesAndModels.machines"))
+        listOf(GENERAL, SETTINGS_PROFILE, SETTINGS_PROVIDERS, "1 needs you", DEFAULT_PERMISSION_HINT, SESSION_ORCHESTRATION_HINT,
+            SUGGESTED_REPLIES, SUGGESTED_REPLIES_HINT).forEach {
             assertTrue("\"$it\" is not in SettingsHome.swift", source.contains("\"$it\""))
         }
     }

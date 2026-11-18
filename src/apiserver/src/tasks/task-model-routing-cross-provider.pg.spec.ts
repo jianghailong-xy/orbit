@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
+import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreatorType, Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
@@ -294,24 +295,29 @@ test('the engines a run may move to are the owner\'s to list: the user API write
         // None of these writes names a field the owner's card covers, so nothing reads this.
         {} as never,
       );
-      const spawned = await agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
+      // Refused by name (HUMAN_ONLY_WORKSPACE_FIELDS), not dropped: the agent learns it cannot, and nothing is written.
+      const humanOnly = async (write: Promise<unknown>) => {
+        const refused = await write.then(() => null, (error: unknown) => error);
+        assert.ok(refused instanceof BadRequestException, 'a 400');
+        const answer = refused.getResponse() as { code: string; fields: string[] };
+        assert.equal(answer.code, 'HUMAN_ONLY_WORKSPACE_FIELD');
+        assert.deepEqual(answer.fields, ['modelRoutingProviders']);
+      };
+      await humanOnly(agents.createWorkspace(runner, 'orchestrating-session', 'credential', {
         name: 'agent-made', modelRoutingProviders: ['codex'],
-      });
-      assert.deepEqual(await listOf(spawned.id), [], 'an agent cannot create an Agent that may change engines');
-      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
+      }));
+      assert.equal(await db.workspace.count({ where: { ownerId: target.ownerId, name: 'agent-made' } }), 0,
+        'an agent cannot create an Agent that may change engines');
+      const before = await db.workspace.findUniqueOrThrow({ where: { id: target.agentId } });
+      await humanOnly(agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
         modelRoutingProviders: ['codex'], description: 'touched by an agent',
-      });
-      assert.deepEqual(
-        await db.workspace.findUniqueOrThrow({
-          where: { id: target.agentId }, select: { modelRoutingProviders: true, description: true },
-        }),
-        { modelRoutingProviders: [], description: 'touched by an agent' },
-        'nor list one for an Agent: the update went through and left the list where the owner put it',
-      );
+      }));
+      assert.deepEqual(await db.workspace.findUniqueOrThrow({ where: { id: target.agentId } }), before,
+        'nor list one for an Agent: the whole write is refused, so neither the list nor the description moved');
       await workspaces.update(target.ownerId, target.agentId, { modelRoutingProviders: ['codex'] });
-      await agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
+      await humanOnly(agents.updateWorkspace(runner, 'orchestrating-session', 'credential', target.agentId, {
         modelRoutingProviders: [],
-      });
+      }));
       assert.deepEqual(await listOf(target.agentId), ['codex'], 'nor take one off');
     } finally {
       await services.db.$disconnect();

@@ -206,8 +206,8 @@ public enum TailPinning {
     /// answer its own question; and it is the same line on the way back, where the band opens as the
     /// tail comes up to the bottom edge and the reader carries on into it.
     ///
-    /// `foldedInset` is the bottom inset the list has with the band folded: the bar and its foot,
-    /// over the screen's own bottom inset.
+    /// `foldedInset` is the bottom inset the list has with the band folded: the pill and its foot,
+    /// which is off the screen's own edge.
     public static func foldsBand(pinned: Bool, sample: TailScrollSample, foldedInset: Double) -> Bool {
         guard !pinned else { return false }
         // How far the last row sits below the list's bottom edge: the gap the pin reads, without

@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, dialogDescription, openDialog, openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { clickRunnerMenuItem, dialogDescription, openDialog, openAccountGroups, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -96,7 +96,7 @@ function renamed(path: string, name: string): RunnerEngineAccount {
 
 function mount(runners: Runner[], { strict = false } = {}) {
   served = runners;
-  openRunnerCards(runners);
+  openAccountGroups(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     if (path === '/runners') return served;
     if (options?.method === 'PATCH') return renamed(path, (options.body as { name: string }).name);
@@ -115,7 +115,7 @@ function mount(runners: Runner[], { strict = false } = {}) {
   const page = (
     <MemoryRouter initialEntries={['/providers']}>
       <QueryClientProvider client={qc}>
-        <RunnerEngines />
+        <EngineRows />
       </QueryClientProvider>
     </MemoryRouter>
   );
@@ -284,14 +284,12 @@ describe('renaming an account on a runner', () => {
     );
   });
 
-  it('says where a removed account’s workspaces go by the name Default goes by', async () => {
+  it('says a removed account’s workspaces switch to Default, whatever name Default goes by', async () => {
     const page = mount([runner([{ ...DEFAULT, name: 'jianghailong.main' }, RD, ORBIT])]);
     const [, rdRow] = accountsOf(page);
 
     await clickRunnerMenuItem(rdRow, 'Remove account');
-    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toContain(
-      'Workspaces set to this account run on jianghailong.main.',
-    );
+    expect(dialogDescription(await openDialog('Remove jianghailong.rd?'))).toBe('Its sessions move to another account first. Workspaces using it switch to Default.');
   });
 });
 

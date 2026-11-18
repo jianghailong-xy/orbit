@@ -1,0 +1,18 @@
+{
+  "about": [
+    "The words of Restart the task on the owner's pending-evidence row (ownerAction RESTART_TASK,",
+    "docs/evidence-always-has-an-addressee-design.md section 3, D2 = A). One copy table all three clients",
+    "are proved against: the web reads this file in `EvidenceRestartAction.test.tsx`, OrbitKit and the",
+    "Android client read it in their own copy-parity tests, so the browser, the Mac and the phone say the",
+    "same words. `refusalCode` is the server's 409 code for a press that is no longer offered."
+  ],
+  "ownerAction": "RESTART_TASK",
+  "refusalCode": "EVIDENCE_RESTART_NOT_OFFERED",
+  "copy": {
+    "action": "Restart the task",
+    "explanation": "No run of this task is live to submit it again, and no coordinator was told to act on it. Restart the task and a new run will submit evidence against the standard it is held to now.",
+    "started": "Restarted: a new run will submit the evidence again.",
+    "refused": "Not restarted",
+    "stale": "Not restarted: this row is out of date"
+  }
+}

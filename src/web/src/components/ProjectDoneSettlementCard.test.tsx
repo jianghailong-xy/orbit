@@ -194,7 +194,7 @@ describe('the done cards, by the project’s main branch', () => {
     expect(landingReasonLabel(null)).toBe('Landed on main');
     for (const doc of [lanes, on('main')]) {
       const card = renderToStaticMarkup(<ProjectDoneCard project={doc} onRecordDone={() => {}} onNotYet={() => {}} />);
-      expect(card).toContain('3 met · 1 landed on main · 0 nothing to land');
+      expect(card).toContain('3 met · 1 landed on main<');
       expect(card).not.toContain('Orbit cannot prove this criterion');
       const why = renderToStaticMarkup(<ProjectWhyNotDoneCard project={doc} />);
       expect(why).toContain('3 criteria · 1 on main · 1 in flight · 1 merged outside Orbit');
@@ -206,15 +206,16 @@ describe('the done cards, by the project’s main branch', () => {
   it('names master in the tallies, the reasons and the details for a project on master', () => {
     const counts = lanes.derivedDone.counts;
     expect(projectDoneTally(counts, 'master')).toBe('3 criteria · 3 met · 1 landed on master · 1 in flight · 1 merged outside Orbit');
-    expect(projectDoneCardTally(counts, 'master')).toBe('3 met · 1 landed on master · 0 nothing to land');
+    expect(projectDoneCardTally(counts, 'master')).toBe('3 met · 1 landed on master');
     expect(projectDoneReceiptTally(counts, 2, 'master')).toBe('3 criteria met · 1 landed on master · 0 nothing to land · 2 gaps accepted');
     expect(projectWhyNotDoneTally(lanes.derivedDone, 'master')).toBe('3 criteria · 1 on master · 1 in flight · 1 merged outside Orbit');
     expect(landingReasonLabel(null, 'master')).toBe('Landed on master');
     expect(landingReasonLabel('IN_FLIGHT', 'master')).toBe('In flight');
     const card = renderToStaticMarkup(<ProjectDoneCard project={on('master')} onRecordDone={() => {}} onNotYet={() => {}} />);
-    expect(card).toContain('3 met · 1 landed on master · 0 nothing to land');
+    expect(card).toContain('3 met · 1 landed on master<');
     expect(card).not.toContain('Orbit cannot prove this criterion');
-    expect(card).not.toContain('on main');
+    // The rows are open now, so the criterion's own words are on the card; nothing else says main.
+    expect(card.replace('The release is on main', '')).not.toContain('on main');
     const receipt = renderToStaticMarkup(<ProjectDoneCard project={{ ...on('master'), status: 'DONE', doneBy: 'OWNER' }} />);
     expect(receipt).toContain('3 criteria met · 1 landed on master · 0 nothing to land · 0 gaps accepted');
     const why = renderToStaticMarkup(<ProjectWhyNotDoneCard project={on('master')} />);

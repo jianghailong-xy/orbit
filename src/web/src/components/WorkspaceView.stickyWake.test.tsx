@@ -238,7 +238,7 @@ afterEach(async () => {
  * turn as the one it names. A wake after the question is the last turn of all, so a bar that still
  * named it would show here.
  */
-async function mountTranscript(drawn: string | null = '.watch-wake'): Promise<void> {
+async function mountTranscript(drawn: string | null = '.watch-wake', barShown = true): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -257,7 +257,7 @@ async function mountTranscript(drawn: string | null = '.watch-wake'): Promise<vo
   });
   await waitForUi(() => {
     if (drawn) expect(mounted().querySelector(drawn), 'the wake is drawn').not.toBeNull();
-    expect(mounted().querySelector('.chat-sticky-question'), 'the bar names a turn').not.toBeNull();
+    if (barShown) expect(mounted().querySelector('.chat-sticky-question'), 'the bar names a turn').not.toBeNull();
   });
 }
 
@@ -326,9 +326,10 @@ describe('the sticky bar over a background job’s news', { timeout: 60_000 }, (
 });
 
 describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000 }, () => {
-  // The opposite rule from the wakes above: a fact Orbit tells the coordinator is the head of a round —
-  // the reply under it answers it — so the bar names it once it is scrolled past. In its own words: it
-  // used to read `↑ Your question` over a screen of protocol the owner never wrote.
+  // A fact Orbit tells the coordinator is the head of a round — the reply under it answers it — so the
+  // question above it no longer heads what is on screen. But nobody typed it, and the owner ruled on
+  // 2026-11-14 that a machine's message never appears on the bar ("↑ Evidence to review" over a
+  // coordinator's reply): over it the bar is hidden.
   const TITLE = 'Wiki model queue: one claim can take more requests than the concurrency room';
   const TOLD = 'From Orbit · project “Runner link v1” has a revision of completion evidence for you to decide\n\n'
     + `Task “${TITLE}” (34nmQgDgyywHNIUtjb9TD) submitted revision 1 of its completion evidence.`;
@@ -353,25 +354,16 @@ describe('the sticky bar over a fact told to the coordinator', { timeout: 60_000
     { seq: 4, type: 'assistant', payload: { text: 'reading revision 1 of the evidence' }, turnId: 'turn-delivery', ts: '2026-09-17T06:00:20Z' },
   ];
 
-  it('names it From Orbit, in its own sentence, and goes back to it when tapped', async () => {
+  it('hides the bar over it instead of naming a machine’s message', async () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: DELIVERY_EVENTS, hasMore: false } as never);
-    await mountTranscript('.coordinator-delivery');
+    await mountTranscript('.coordinator-delivery', false);
 
-    expect(text('.chat-sticky-label')).toBe('↑ From Orbit');
-    expect(text('.chat-sticky-text')).toBe(`Evidence revision 1 submitted: ${TITLE}`);
-    const bar = text('.chat-sticky-question');
-    expect(bar).not.toContain('Your question');
-    expect(bar).not.toContain('has a revision of completion evidence');
-
-    const line = mounted().querySelector<HTMLElement>('.coordinator-delivery[data-seq="3"]')!;
-    expect(line, 'the delivery is drawn as its line').not.toBeNull();
+    expect(mounted().querySelector('.coordinator-delivery[data-seq="3"]'), 'the delivery is drawn as its line').not.toBeNull();
     expect(mounted().querySelector('.chat-user[data-seq="3"]'), 'drawn as the owner’s bubble').toBeNull();
-    await act(async () => {
-      mounted()
-        .querySelector<HTMLElement>('.chat-sticky-question')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(scrolledTo).toEqual([line]);
+    // The owner's question sits above it and is drawn, so a bar would have shown by now if it named anything.
+    expect(mounted().querySelector('.chat-user[data-seq="1"]')).not.toBeNull();
+    await act(async () => {});
+    expect(mounted().querySelector('.chat-sticky-question')).toBeNull();
   });
 
   it('without its card is the bubble it was, and the bar calls it the owner’s question', async () => {

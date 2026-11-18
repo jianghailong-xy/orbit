@@ -1,0 +1,127 @@
+2026-11-13T22:33:13Z watch sync started for 420 s
+
+### First rule of each hook every 0.5 s for 410 s, printed when it changes (2026-11-13T22:33:13Z) a pod started at +60 s, then kube-router's periodic sync
+22:33:13.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j ORBIT-MR-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+2026-11-13T22:34:13Z pod lab-sync-pod started
+pod/lab-sync-pod created
+22:35:03.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j KUBE-ROUTER-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:35:04.  FORWARD: -j KUBE-ROUTER-FORWARD  INPUT: -j KUBE-ROUTER-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+22:35:08.  FORWARD: -j ORBIT-MR-FORWARD  INPUT: -j ORBIT-MR-INPUT  nat: -j ORBIT-MR-PREROUTING  raw: -j ORBIT-MR-RAW  ip6 FORWARD: -j ORBIT-MR-FORWARD  rule1: 1
+
+### Continuous connects from the runner container: sync
+{"start": "22:33:13", "seconds": 420.0, "every": 0.5}
+{"target": "tcp 10.42.0.2:53", "attempts": 88, "EHOSTUNREACH": 1, "TIMEOUT": 87}
+{"target": "tcp 10.42.0.3:53", "attempts": 88, "EHOSTUNREACH": 1, "TIMEOUT": 87}
+{"target": "tcp 10.42.0.4:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.5:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.6:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.3:8181", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.43.0.10:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "udp 10.43.0.10:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "udp 10.42.0.3:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.43.0.1:443", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 172.31.92.20:30053", "attempts": 88, "EHOSTUNREACH": 35, "TIMEOUT": 53}
+{"target": "tcp 172.31.92.20:6443", "attempts": 88, "EHOSTUNREACH": 35, "TIMEOUT": 53}
+{"target": "tcp 10.42.0.1:10250", "attempts": 88, "EHOSTUNREACH": 18, "TIMEOUT": 70}
+{"end": "22:40:16", "reached": 0}
+watch exit 0
+
+### The firewall's check, show and status (2026-11-13T22:40:17Z)
+ Container orbit-channel-host-managed-runner-firewall-run-9315d21920a6 Creating 
+ Container orbit-channel-host-managed-runner-firewall-run-9315d21920a6 Created 
+{"backend": "nft", "enforced": true, "problems": []}
+check: exit 0
+ Container orbit-channel-host-managed-runner-firewall-run-4dfcf12422db Creating 
+ Container orbit-channel-host-managed-runner-firewall-run-4dfcf12422db Created 
+# IPv4, nft backend, Kubernetes shares the host
+-A INPUT -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT  # rule 1 of 6 in INPUT
+-A FORWARD -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD  # rule 1 of 9 in FORWARD
+-A DOCKER-USER -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD  # rule 1 of 1 in DOCKER-USER
+-A ORBIT-MR-INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-INPUT -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-FORWARD -p tcp -m conntrack --ctstate DNAT --ctorigdst 172.18.0.1 --ctorigdstport 2086 -j RETURN
+-A ORBIT-MR-FORWARD -d 10.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 172.16.0.0/12 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.168.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 100.64.0.0/10 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 169.254.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 127.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 0.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.0.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.2.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.18.0.0/15 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.51.100.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 203.0.113.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 224.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-t nat -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING  # rule 1 of 3 in nat PREROUTING
+-t nat -A ORBIT-MR-PREROUTING -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-t nat -A ORBIT-MR-PREROUTING -j ACCEPT
+-t raw -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW  # rule 1 of 2 in raw PREROUTING
+-t raw -A ORBIT-MR-RAW -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-t raw -A ORBIT-MR-RAW -d 10.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 172.16.0.0/12 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 192.168.0.0/16 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 100.64.0.0/10 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 169.254.0.0/16 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 127.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 0.0.0.0/8 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 192.0.0.0/24 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 192.0.2.0/24 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 198.18.0.0/15 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 198.51.100.0/24 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 203.0.113.0/24 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 224.0.0.0/4 -j MARK --set-xmark 0x100000/0x100000
+-t raw -A ORBIT-MR-RAW -d 240.0.0.0/4 -j MARK --set-xmark 0x100000/0x100000
+ip -4 rule: priority 1 iif br-47331a1a866c fwmark 0x100000/0x100000 prohibit
+# IPv6, nft backend, Kubernetes shares the host
+-A INPUT -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT  # rule 1 of 5 in INPUT
+-A FORWARD -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD  # rule 1 of 7 in FORWARD
+-A DOCKER-USER -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD  # rule 1 of 1 in DOCKER-USER
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp6-adm-prohibited
+-A ORBIT-MR-FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+-t nat -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING  # rule 1 of 3 in nat PREROUTING
+-t nat -A ORBIT-MR-PREROUTING -j ACCEPT
+-t raw -A PREROUTING -i br-47331a1a866c -m comment --comment orbit-managed-runners -j ORBIT-MR-RAW  # rule 1 of 1 in raw PREROUTING
+-t raw -A ORBIT-MR-RAW -j MARK --set-xmark 0x100000/0x100000
+ip -6 rule: priority 1 iif br-47331a1a866c fwmark 0x100000/0x100000 prohibit
+{
+  "apiPort": 2086,
+  "backend": "nft",
+  "bootId": "b519c2e2-1152-4338-b996-c2108aeeb937",
+  "bridge": "br-47331a1a866c",
+  "checkedAt": 1794609610,
+  "gateway": "172.18.0.1",
+  "kubernetes": [
+    "IPv4",
+    "IPv6"
+  ],
+  "network": "orbit-managed-runners",
+  "schemaVersion": 1,
+  "state": "enforced",
+  "validUntil": 1794609640
+}
+config.json
+kubernetes-seen
+status.json
+docker-channel: Up 15 minutes (healthy)
+managed-runner-firewall: Up 15 minutes (healthy)
+
+### The firewall service's log
+2026-11-13T22:24:51Z orbit-managed-runner-firewall: network orbit-managed-runners (bridge br-47331a1a866c, gateway 172.18.0.1): only the gateway's port 2086, 0 DNS server(s) and 0 allowed destination(s) besides public addresses; checked every 10 s
+2026-11-13T22:24:51Z orbit-managed-runner-firewall: enforced
+2026-11-13T22:25:32Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-PROXY-FIREWALL, KUBE-NODEPORTS, KUBE-EXTERNAL-SERVICES, KUBE-FIREWALL come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: it is missing; nat chain ORBIT-MR-PREROUTING is missing; nat PREROUTING does not start with the jump for br-47331a1a866c: it is missing; raw chain ORBIT-MR-RAW is missing; raw PREROUTING does not start with the jump for br-47331a1a866c: it is missing; the routing rule refusing what the raw guard marks (priority 1, fwmark 0x100000, iif br-47331a1a866c, prohibit) is missing: writing the rules
+2026-11-13T22:25:32Z orbit-managed-runner-firewall: IPv6: INPUT does not start with the jump for br-47331a1a866c: KUBE-FIREWALL, KUBE-PROXY-FIREWALL, KUBE-NODEPORTS, KUBE-EXTERNAL-SERVICES come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: it is missing; nat chain ORBIT-MR-PREROUTING is missing; nat PREROUTING does not start with the jump for br-47331a1a866c: it is missing; raw chain ORBIT-MR-RAW is missing; raw PREROUTING does not start with the jump for br-47331a1a866c: it is missing; the routing rule refusing what the raw guard marks (priority 1, fwmark 0x100000, iif br-47331a1a866c, prohibit) is missing: writing the rules
+2026-11-13T22:25:32Z orbit-managed-runner-firewall: rules written for IPv4 and IPv6 (nft backend)
+2026-11-13T22:25:42Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it: writing the rules
+2026-11-13T22:25:42Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)
+2026-11-13T22:26:03Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it: writing the rules
+2026-11-13T22:26:03Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)
+2026-11-13T22:30:06Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it: writing the rules
+2026-11-13T22:30:06Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)
+2026-11-13T22:35:08Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it: writing the rules
+2026-11-13T22:35:08Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)
+2026-11-13T22:40:10Z orbit-managed-runner-firewall: IPv4: INPUT does not start with the jump for br-47331a1a866c: KUBE-ROUTER-INPUT come(s) before it; FORWARD does not start with the jump for br-47331a1a866c: KUBE-ROUTER-FORWARD come(s) before it: writing the rules
+2026-11-13T22:40:10Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)

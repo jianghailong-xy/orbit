@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -83,7 +84,7 @@ private fun runStateLine(row: WikiRunRow): AnnotatedString = buildAnnotatedStrin
 /** One run on the Runs band (mock 35 ④): its kind and when on the first line, its state and the sentence after it
  * under them — the whole row one press into the run's page. */
 @Composable
-internal fun WikiRunRowView(row: WikiRunRow, onClick: () -> Unit) {
+internal fun WikiRunRowView(row: WikiRunRow, tier: WikiRunTier? = null, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).heightIn(min = 48.dp)
         .padding(horizontal = 16.dp, vertical = 8.dp).testTag("wiki-job-row"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(12.dp).padding(top = 4.dp), contentAlignment = Alignment.Center) { WikiRunMark(row.mark) }
@@ -93,7 +94,26 @@ internal fun WikiRunRowView(row: WikiRunRow, onClick: () -> Unit) {
                 Text(row.whenText, style = WikiType.label, color = WikiPalette.secondary)
             }
             Text(runStateLine(row), style = WikiType.subtext, color = WikiPalette.secondary)
+            tier?.let { WikiRunTierLine(it) }
         }
+    }
+}
+
+/** What a maintenance run read of the repository (design §7.4, mock 44 ⑤): a small tag — `git`, `folder` or
+ * `sessions only` — and, when it read the sessions alone, why, amber while the code checks wait and red when somebody
+ * has to set the folder right. */
+@Composable
+private fun WikiRunTierLine(tier: WikiRunTier) {
+    val colour = when (tier.tone) {
+        WikiRunTier.Tone.PLAIN -> MaterialTheme.colorScheme.onSurface
+        WikiRunTier.Tone.MUTED -> WikiPalette.secondary
+        WikiRunTier.Tone.WARN -> WikiPalette.amber
+        WikiRunTier.Tone.ERROR -> MaterialTheme.colorScheme.error
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(tier.tier, Modifier.background(colour.copy(alpha = 0.12f), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 1.dp)
+            .testTag("wiki-job-tier"), style = WikiType.label, color = colour, maxLines = 1)
+        tier.reason?.let { Text(it, Modifier.weight(1f, fill = false), style = WikiType.label, color = colour, maxLines = 2, overflow = TextOverflow.Ellipsis) }
     }
 }
 

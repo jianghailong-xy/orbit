@@ -132,13 +132,39 @@ SELECT item."project_id"                                       AS project_id,
            AND owed_task."codeless" = false
            AND (CASE
              WHEN EXISTS (
-               SELECT 1 FROM "session_merge_receipt" landing_receipt
-                 JOIN "project_codebase" receipt_line
-                   ON receipt_line."project_id" = owed_task."project_id"
-                  AND receipt_line."slot" = 'primary'
-                WHERE landing_receipt."task_id" = owed_task."id"
-                  AND landing_receipt."result" IN ('MERGED', 'ALREADY_MERGED')
-                  AND landing_receipt."target_branch" = regexp_replace(receipt_line."upstream_ref", '^refs/heads/', '')
+               SELECT 1 FROM "session_merge_receipt" upstream_receipt
+                 JOIN "project_codebase" upstream_line
+                   ON upstream_line."project_id" = owed_task."project_id"
+                  AND upstream_line."slot" = 'primary'
+                 LEFT JOIN LATERAL (
+                   SELECT newest_line."source_sha", newest_line."created_at"
+                     FROM "session_merge_receipt" newest_line
+                    WHERE newest_line."task_id" = owed_task."id"
+                      AND newest_line."result" IN ('MERGED', 'ALREADY_MERGED')
+                      AND newest_line."target_branch" = regexp_replace(upstream_line."integration_ref", '^refs/heads/', '')
+                      AND regexp_replace(upstream_line."integration_ref", '^refs/heads/', '') <> regexp_replace(upstream_line."upstream_ref", '^refs/heads/', '')
+                    ORDER BY newest_line."created_at" DESC, newest_line."id" DESC
+                    LIMIT 1
+                 ) line_receipt ON true
+                WHERE upstream_receipt."task_id" = owed_task."id"
+                  AND upstream_receipt."result" IN ('MERGED', 'ALREADY_MERGED')
+                  AND upstream_receipt."target_branch" = regexp_replace(upstream_line."upstream_ref", '^refs/heads/', '')
+                  AND (line_receipt."source_sha" IS NULL
+                    OR upstream_receipt."source_sha" = line_receipt."source_sha"
+                    OR (upstream_receipt."detail" -> 'observed' IS DISTINCT FROM 'true'::jsonb
+                      AND NOT EXISTS (
+                        SELECT 1 FROM "session_merge_receipt" named_line
+                          JOIN "session_merge_receipt" later_line
+                            ON later_line."task_id" = named_line."task_id"
+                           AND later_line."target_branch" = named_line."target_branch"
+                           AND later_line."result" = 'MERGED'
+                           AND later_line."target_sha_after" <> upstream_receipt."source_sha"
+                           AND later_line."created_at" > named_line."created_at"
+                         WHERE named_line."task_id" = owed_task."id"
+                           AND named_line."result" IN ('MERGED', 'ALREADY_MERGED')
+                           AND named_line."target_branch" = regexp_replace(upstream_line."integration_ref", '^refs/heads/', '')
+                           AND named_line."target_sha_after" = upstream_receipt."source_sha")
+                      AND upstream_receipt."created_at" > line_receipt."created_at"))
              ) THEN 'ON_UPSTREAM'
              WHEN EXISTS (
                SELECT 1 FROM "session_merge_receipt" landing_receipt

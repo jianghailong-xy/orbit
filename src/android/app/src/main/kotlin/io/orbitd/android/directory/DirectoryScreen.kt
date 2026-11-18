@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
-import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.management.RunnerPage
@@ -129,9 +129,8 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         }
     })
 
-    Column(Modifier.fillMaxSize()) {
-        if (!isFolder) SessionNeedsYouBar(app, handle, null, list, hidden = false, below = null, onBelow = {}, open = open)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
             if (query.isNotBlank()) {
                 SearchResultsList(query, api, open, bottom = SEARCH_FIELD_ROOM)
             } else {
@@ -171,7 +170,15 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 }
                                 if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
-                                    if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+                                    // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
+                                    // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row
+                                    // whose line says a member waits on you opens that member, onto its waiting card (owner 2026-11-14).
+                                    if (project != null) SessionProjectRowView(project, {
+                                        val member = project.waitingMember
+                                        if (member != null) CardFocus.request(member, CardFocus.WAITING)
+                                        open((member ?: project.coordinator?.id)?.let { OrbitRoute(Destination.SESSION, it, workspace, folderId) }
+                                            ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST))
+                                    }) {
                                         projectMenu = project
                                     }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },

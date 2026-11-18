@@ -25,7 +25,13 @@ struct ProjectCrossingRefusal: Equatable {
 /// first. A refusal stays on its row with the door's own code and reason, the second press still
 /// open: a move refused because its task was being landed can be confirmed again once that ends.
 struct ProjectCrossingRow: View {
-    let row: ProjectCrossing
+    /// The crossing as the list published it; `row` below is what the row draws.
+    let source: ProjectCrossing
+    @Environment(AppModel.self) private var app: AppModel?
+    /// Settings › Translation: the title and reason flip back to the asker's words.
+    @State private var showOriginal = false
+    private var owner: TranslationLanguage? { OwnerCardTranslations.ownerLanguage(app?.user) }
+    private var row: ProjectCrossing { source.shown(owner: owner, showOriginal: showOriginal) }
     /// The answer this row's second press would give, when it is showing.
     let confirming: ProjectCrossingDecision?
     /// This row's answer is on its way.
@@ -64,6 +70,9 @@ struct ProjectCrossingRow: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            TranslationFootView(parts: source.translationFoot(owner: owner, showOriginal: showOriginal)) { _ in
+                showOriginal.toggle()
+            }
             if let refusal { refused(refusal) }
             if ProjectCrossings.isAnswerable(row.state) {
                 if let confirming {
@@ -93,7 +102,8 @@ struct ProjectCrossingRow: View {
     private var ends: some View {
         (end(row.fromProject, id: ProjectCrossings.fromID(row))
             + Text(ProjectCrossings.arrow).foregroundColor(.secondary)
-            + end(row.toProject, id: ProjectCrossings.toID(row)))
+            + (row.isToNoProject ? Text(ProjectCrossings.noProject).bold()
+                : end(row.toProject, id: ProjectCrossings.toID(row))))
             .font(.orbitLabel)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)

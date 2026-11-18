@@ -156,7 +156,7 @@ final class OrbitAskPreviewTests: XCTestCase {
              "name":"renamed","description":"builds at night","defaultMergeTarget":"develop"}
             """))
         XCTAssertNil(card.env, "a write that leaves the variables alone says nothing of them")
-        XCTAssertEqual(card.fields.map(\.caption), ["Working directory", "System prompt", "Appended system prompt", "Runner",
+        XCTAssertEqual(card.fields.map(\.caption), ["Working directory", "Base instructions", "Runtime instructions", "Runner",
                                                     "Worktree", "Name", "Description", "Merge target"])
         XCTAssertEqual(card.fields.map(\.value), ["/srv/other", "Answer in French.", "And briefly.", "gpu-2",
                                                   "Sessions run in the shared folder", "renamed", "builds at night", "develop"])
@@ -166,7 +166,7 @@ final class OrbitAskPreviewTests: XCTestCase {
         let card = try XCTUnwrap(workspaceWrite(changes: #"{"env":{},"systemPrompt":""}"#, removed: #"["A","B"]"#))
         XCTAssertEqual(card.env, [])
         XCTAssertEqual(card.envRemoved, ["A", "B"])
-        XCTAssertEqual(card.fields, [.init(caption: "System prompt", value: "Cleared")])
+        XCTAssertEqual(card.fields, [.init(caption: "Base instructions", value: "Cleared")])
     }
 
     func testACreateReadsAsACreate() throws {
@@ -207,6 +207,44 @@ final class OrbitAskPreviewTests: XCTestCase {
         XCTAssertNil(Approvals.workspaceWriteRawInput(toolName: "Bash", from: filed))
         XCTAssertNil(Approvals.workspaceWriteRawInput(toolName: "orbit_agent_update", from: json(#"{"changes":{}}"#)),
                      "the server's own card has its preview")
+    }
+
+    func testAPlainCardShowsTheWholeInput() throws {
+        let filed = json(#"{"slug":"ollama-hpc","defaultModel":"qwen3.8:27b","baseUrl":"https://h/v1"}"#)
+        let raw = try XCTUnwrap(Approvals.rawInput(filed))
+        for words in ["\"slug\" : \"ollama-hpc\"", "qwen3.8:27b", "https://h/v1"] {
+            XCTAssertTrue(raw.contains(words), words)
+        }
+    }
+
+    func testAProviderUpdateReadsAsItsFieldsAndModels() throws {
+        let filed = json(#"""
+        {"slug":"ollama-hpc-responses","defaultModel":"qwen3.8:27b","models":[
+          {"label":"Qwen3.8 27B (Ollama, 64K)","value":"qwen3.8:27b","contextWindow":65536},
+          {"label":"Qwen3 Coder 30B (Ollama, 64K)","value":"qwen3-coder:30b","contextWindow":65536}]}
+        """#)
+        let preview = try XCTUnwrap(Approvals.providerWritePreview(toolName: "orbit_provider_update", from: filed))
+        XCTAssertEqual(preview.heading, "Change this provider?")
+        XCTAssertEqual(preview.name, "ollama-hpc-responses")
+        XCTAssertEqual(preview.action, "Save changes")
+        XCTAssertEqual(preview.fields.map(\.caption), ["Default model"], "nothing the write leaves alone")
+        let models = try XCTUnwrap(preview.models)
+        XCTAssertEqual(models.map(\.isDefault), [true, false])
+        XCTAssertEqual(models[1].detail, "Qwen3 Coder 30B (Ollama, 64K) · 64K context")
+        XCTAssertEqual(preview.modelsCaption, "Models · replaces the current list")
+        XCTAssertNil(Approvals.providerWritePreview(toolName: "Bash", from: filed))
+    }
+
+    func testAProviderAddNamesItsProtocolAndHidesTheKey() throws {
+        let filed = json(#"{"label":"Local vLLM","runtime":"codex","baseUrl":"http://h/v1","apiKey":"(set — not shown)"}"#)
+        let preview = try XCTUnwrap(Approvals.providerWritePreview(toolName: "orbit_provider_create", from: filed))
+        XCTAssertEqual(preview.name, "Local vLLM")
+        XCTAssertEqual(preview.fields.map(\.value), ["OpenAI Responses (codex)", "http://h/v1", "Set — not shown"])
+        XCTAssertNil(preview.models)
+        XCTAssertNil(preview.note)
+        XCTAssertEqual(ProviderWritePreview.contextSize(65536), "64K")
+        XCTAssertEqual(ProviderWritePreview.contextSize(200_000), "200K")
+        XCTAssertEqual(ProviderWritePreview.contextSize(1_048_576), "1M")
     }
 
     // MARK: ending a blocker
@@ -538,6 +576,19 @@ final class OrbitAskPreviewTests: XCTestCase {
         }
     }
 
+    func testCreateAndStartLeadsUnlessTheTaskWasFiledHeld() {
+        XCTAssertTrue(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: forecast("needsManualStart")))
+        // A hold the agent was asked for: offered, but Create it stays the filled answer.
+        let held = json("""
+            {"title":"Write the 2.5 release notes","completionCriterion":"EXECUTABLE","acceptsStartAfterCreate":true,
+             "autoRunWhenReady":false,"preview":{"taskCount":1,"needsManualStart":1,"lists":[]}}
+            """)
+        XCTAssertTrue(Approvals.offersCreateAndStart(toolName: "orbit_task_create", input: held))
+        XCTAssertFalse(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: held))
+        // Not offered, so it cannot lead.
+        XCTAssertFalse(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: forecast("startingNow")))
+    }
+
     func testCreateAndStartSendsTheStartAndCreateItSendsNoStartKeyAtAll() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
@@ -561,32 +612,38 @@ final class OrbitAskPreviewTests: XCTestCase {
         return String(text[lower.lowerBound..<upper.lowerBound])
     }
 
-    /// The card draws Create and start right after Create it, only when the shared rule offers it,
-    /// and the press reaches the console as the choice that sends Create and start's own body. A
-    /// source scan, for the reason the blocker card's is one: SwiftUI does not exist here.
-    func testTheCardOffersCreateAndStartAfterCreateItAndThePressSendsIt() throws {
+    /// The card leads with Create and start where the shared rule says so, Create it bordered beside
+    /// it; on a held task Create it leads and Create and start follows where offered. The press reaches
+    /// the console as the choice that sends Create and start's own body. A source scan, for the reason
+    /// the blocker card's is one: SwiftUI does not exist here.
+    func testTheCardLeadsWithCreateAndStartAndThePressSendsIt() throws {
         let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
 
         let actions = try section(card, from: "private var actions: some View {",
                                   to: "@ViewBuilder private var details: some View")
-        let order = ["allowButton",
+        let order = ["if createAndStartLeads {",
+                     "createAndStartButton(prominent: true)",
+                     "allowButton(prominent: false)",
+                     "} else {",
+                     "allowButton(prominent: true)",
                      "if Approvals.offersCreateAndStart(toolName: approval.toolName ?? \"\", input: approval.input) {",
-                     "createAndStartButton",
+                     "createAndStartButton(prominent: false)",
                      "denyButton"].map { actions.range(of: $0)?.lowerBound }
         XCTAssertFalse(order.contains(nil), "the card's actions lost a part: \(actions)")
         XCTAssertEqual(order.compactMap { $0 }, order.compactMap { $0 }.sorted(),
-                       "Create and start sits right after Create it, offered by the shared rule")
+                       "Create and start leads where the rule says so, and follows Create it otherwise")
+        XCTAssertTrue(card.contains("Approvals.createAndStartLeads(toolName: approval.toolName ?? \"\", input: approval.input)"))
 
-        let button = try section(card, from: "private var createAndStartButton: some View {",
+        let button = try section(card, from: "private func createAndStartButton(prominent: Bool) -> some View {",
                                  to: "private func rememberButton(")
         XCTAssertTrue(button.contains("decide(console, approval, .allow, startAfterCreate: true)"), button)
         XCTAssertTrue(button.contains("Text(Approvals.createAndStartAction)"), button)
-        XCTAssertTrue(button.contains(".buttonStyle(.bordered)") && !button.contains(".borderedProminent"),
-                      "a secondary yes, beside the filled one")
-        // Create it keeps its press, its words and its fill.
-        let allow = try section(card, from: "private var allowButton: some View {", to: "private var allowLabel")
-        XCTAssertTrue(allow.contains("decide(console, approval, .allow) }") && allow.contains(".borderedProminent"),
-                      allow)
+        let fill = "if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }"
+        XCTAssertTrue(button.contains(fill), "filled only where it leads")
+        // Create it keeps its press and its words; its fill follows whether it leads.
+        let allow = try section(card, from: "private func allowButton(prominent: Bool) -> some View {",
+                                to: "private var allowLabel")
+        XCTAssertTrue(allow.contains("decide(console, approval, .allow) }") && allow.contains(fill), allow)
         XCTAssertTrue(card.contains("if create != nil { return \"Create it\" }"))
         let press = try section(card, from: "private func decide(_ console: ConsoleModel,",
                                 to: "private func nonEmpty(")
@@ -597,8 +654,10 @@ final class OrbitAskPreviewTests: XCTestCase {
                                  to: "private(set) var projectID: String?")
         XCTAssertTrue(decide.contains("? Approvals.createAndStartRequest"), decide)
         XCTAssertTrue(decide.contains(
-            ": ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)"),
-                      "every other press keeps the body it always sent")
+            ": ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules,\n"
+                + "                                      sendAsWritten: sendAsWritten ? true : nil)"),
+                      "every other press keeps the body it always sent — sendAsWritten is left out unless "
+                          + "Send as written was pressed (Settings › Translation)")
     }
 
     // MARK: dag preview

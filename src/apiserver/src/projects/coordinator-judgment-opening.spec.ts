@@ -313,6 +313,8 @@ function readingOf(
       revision: 1,
       satisfied,
       unmet: unmet.map((clause) => ({ clause, heldUpBy: [] })),
+      satisfiedBy: 'TASKS',
+      confirmation: null,
     }],
     inFlight: [],
   };

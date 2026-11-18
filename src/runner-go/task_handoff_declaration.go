@@ -37,3 +37,14 @@ func requireHandoffNamesItsDestination(item map[string]interface{}) error {
 	}
 	return nil
 }
+
+// requireMoveRequestNamesItsDestination is the edit door's form of the same check. There an explicit
+// `projectId: null` IS a destination — "out of every project" — and with `handoff` it asks the
+// account owner for exactly that (the server files a MOVE_TASK request with no target project; the
+// owner's confirmation unfiles the task). Only a projectId that is absent or blank names nothing.
+func requireMoveRequestNamesItsDestination(item map[string]interface{}) error {
+	if target, present := item["projectId"]; present && target == nil {
+		return nil
+	}
+	return requireHandoffNamesItsDestination(item)
+}

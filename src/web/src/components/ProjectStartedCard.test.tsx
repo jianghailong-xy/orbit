@@ -115,9 +115,7 @@ describe('a project start told to the coordinator', () => {
     expect(el!.querySelector('details.psc-raw summary')?.textContent).toBe('What the coordinator was told');
     expect(el!.querySelector('details.psc-raw pre')?.textContent).toBe(TOLD);
     expect(container.querySelector('.chat-user')).toBeNull();
-    // What the sticky bar at the top names this turn by.
-    expect(el!.getAttribute('data-sticky-label')).toBe('Project started');
-    expect(el!.getAttribute('data-sticky-text')).toBe(CARD.projectTitle);
+    expect(el!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
   });
 
   // The negative control: the same conversation and the same words, with nothing recorded beside them.
@@ -205,7 +203,6 @@ describe('a project start told to the coordinator', () => {
     expect(el.querySelector('.psc-kind')?.textContent).toBe('Automatic on');
     expect(el.querySelector('.psc-meta')?.textContent).toContain('Switched on by you');
     expect(el.querySelector('.psc-meta')?.textContent).not.toContain('confirming');
-    expect(el.getAttribute('data-sticky-label')).toBe('Project switched on');
   });
 
   it('says so in one line when no task waits on the coordinator', async () => {

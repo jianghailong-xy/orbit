@@ -1,0 +1,667 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { RunnerSelfUpdate, RunnerUpdateTurn } from '@orbit/shared';
+import type { Runner } from '../TasksSidePanel';
+import { runnerAttention, runnerCanUpdateNow, type RunnerAttentionInput } from '../../lib/runnerAttention';
+import cases from '../../lib/runnerAttention.cases.json';
+import { MachineSettingsPage } from './MachineSettingsPage';
+import { ToastViewport } from '../ToastViewport';
+import { clearToasts } from '../../lib/toastStore';
+
+/**
+ * A runner that reports where its updates of itself stand (`selfUpdate`) gets the card its state
+ * calls for, and one too old to report it keeps the card it always had. The states are
+ * runnerAttention.cases.json's own machines — the file OrbitKit runs against its port — so what is
+ * asserted here is what the case file says, plus everything the file cannot carry: each card's
+ * sentence and action, About's line for the states that raise no card, the last update, and
+ * Update Runner Now.
+ */
+
+vi.mock('../../api', async (original) => ({
+  ...(await original<typeof import('../../api')>()),
+  api: vi.fn(),
+}));
+vi.mock('../../lib/clipboard', () => ({ copyText: vi.fn(async () => true) }));
+const { api } = await import('../../api');
+const { copyText } = await import('../../lib/clipboard');
+const apiMock = vi.mocked(api);
+
+interface AttentionCase {
+  name: string;
+  input: RunnerAttentionInput;
+}
+const CASES = cases as unknown as AttentionCase[];
+const caseNamed = (prefix: string): AttentionCase => {
+  const found = CASES.filter((c) => c.name.startsWith(prefix));
+  if (found.length !== 1) throw new Error(`runnerAttention.cases.json has ${found.length} cases starting ${prefix}`);
+  return found[0];
+};
+
+const RUNNER_ID = '33zx0JhRhJo8rd25d3qAM';
+const NOW = caseNamed('selfUpdate failed and behind').input.nowMs;
+
+const inputOf = (prefix: string): RunnerAttentionInput => caseNamed(prefix).input;
+
+/** A case's input with its runner's report replaced — `undefined` removes it, as an older runner
+ *  sends it. */
+function reporting(prefix: string, report: RunnerSelfUpdate | null | undefined): RunnerAttentionInput {
+  const { input } = caseNamed(prefix);
+  const runner = { ...input.runner };
+  if (report === undefined) delete runner.selfUpdate;
+  else runner.selfUpdate = report;
+  return { ...input, runner };
+}
+
+/** The one card a case raises, offline aside. */
+function cardOf(input: RunnerAttentionInput) {
+  const items = runnerAttention(input).filter((item) => item.kind !== 'offline');
+  expect(items).toHaveLength(1);
+  return items[0];
+}
+
+// MARK: the rule
+
+describe('each selfUpdate state, as the rule words it', () => {
+  it('dirNotWritable: the folder it can’t write, and the command that moves the install', () => {
+    const card = cardOf(inputOf('selfUpdate dirNotWritable and behind'));
+    expect(card.title).toBe('Install folder isn’t writable');
+    expect(card.short).toBe('Install folder isn’t writable');
+    // sudo runs the binary by its path in that folder: it looks a bare `orbit` up only on its secure_path.
+    expect(card.detail).toBe(
+      'It can’t write to /usr/local/bin, so it can’t replace its own binary — still on 0.1.190, latest is 0.1.197. ' +
+        'On that machine, run sudo /usr/local/bin/orbit upgrade once; after that it updates itself.',
+    );
+    expect(card.action).toEqual({ kind: 'copyCommand', command: 'sudo /usr/local/bin/orbit upgrade' });
+    expect(card.params).toEqual({
+      version: '0.1.190',
+      latest: '0.1.197',
+      state: 'dirNotWritable',
+      installDir: '/usr/local/bin',
+    });
+    // An account's own copy, by its path the same way.
+    expect(
+      cardOf(
+        reporting('selfUpdate dirNotWritable and behind', { state: 'dirNotWritable', installDir: '/home/lab/.orbit/bin' }),
+      ).action,
+    ).toEqual({ kind: 'copyCommand', command: 'sudo /home/lab/.orbit/bin/orbit upgrade' });
+    // A runner that didn't say which folder: the command as it always was.
+    expect(cardOf(reporting('selfUpdate dirNotWritable and behind', { state: 'dirNotWritable' })).detail).toBe(
+      'It can’t write to its install folder, so it can’t replace its own binary — still on 0.1.190, latest is ' +
+        '0.1.197. On that machine, run sudo orbit upgrade once; after that it updates itself.',
+    );
+  });
+
+  it('disabledByEnv: what turned it off, and how to turn it back on where there is a switch', () => {
+    const card = cardOf(inputOf('selfUpdate disabledByEnv and behind'));
+    expect(card.title).toBe('Updates are turned off');
+    expect(card.short).toBe('Updates are turned off');
+    expect(card.detail).toBe(
+      'ORBIT_NO_SELFUPDATE is set, so it doesn’t update itself — still on 0.1.190, latest is 0.1.197. ' +
+        'To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — ' +
+        'on a Mac, opening the latest Orbit app does this.',
+    );
+    expect(card.action).toBeUndefined();
+    expect(card.params).toEqual({
+      version: '0.1.190',
+      latest: '0.1.197',
+      state: 'disabledByEnv',
+      reason: 'ORBIT_NO_SELFUPDATE is set',
+    });
+    // A development build or a platform with no release has no switch: the reason alone.
+    const off = (reason?: string) =>
+      cardOf(reporting('selfUpdate disabledByEnv and behind', { state: 'disabledByEnv', ...(reason ? { reason } : {}) }))
+        .detail;
+    expect(off('development build')).toBe(
+      'Development build, so it doesn’t update itself — still on 0.1.190, latest is 0.1.197.',
+    );
+    expect(off('no release is published for linux/riscv64')).toBe(
+      'No release is published for linux/riscv64, so it doesn’t update itself — still on 0.1.190, latest is 0.1.197.',
+    );
+    expect(off()).toBe('Its updater is switched off, so it doesn’t update itself — still on 0.1.190, latest is 0.1.197.');
+  });
+
+  it('failed: the runner’s own words, and Update Runner Now', () => {
+    const card = cardOf(inputOf('selfUpdate failed and behind'));
+    expect(card.title).toBe('Runner update failed');
+    expect(card.short).toBe('Runner update failed');
+    expect(card.detail).toBe(
+      'Installing 0.1.197: sha256 mismatch for orbit-linux-amd64.gz. Still on 0.1.190, latest is 0.1.197. ' +
+        'It retries every 10 min — Update Runner Now tries again right away.',
+    );
+    expect(card.action).toEqual({ kind: 'updateRunner' });
+    expect(card.params).toEqual({
+      version: '0.1.190',
+      latest: '0.1.197',
+      state: 'failed',
+      reason: 'installing 0.1.197: sha256 mismatch for orbit-linux-amd64.gz',
+    });
+    // Its own full stop is not doubled, and no reason at all still makes a sentence.
+    const failed = (reason?: string) =>
+      cardOf(reporting('selfUpdate failed and behind', { state: 'failed', ...(reason ? { reason } : {}) })).detail;
+    expect(failed('cannot read the release to install: 502 Bad Gateway.')).toBe(
+      'Cannot read the release to install: 502 Bad Gateway. Still on 0.1.190, latest is 0.1.197. ' +
+        'It retries every 10 min — Update Runner Now tries again right away.',
+    );
+    expect(failed()).toBe(
+      'Its last update didn’t go through. Still on 0.1.190, latest is 0.1.197. ' +
+        'It retries every 10 min — Update Runner Now tries again right away.',
+    );
+  });
+
+  it('waitingForIdle, heldByRollout and enabled: no card, though not root and behind', () => {
+    for (const prefix of [
+      'selfUpdate waitingForIdle and behind',
+      'selfUpdate heldByRollout and behind',
+      'selfUpdate enabled and behind',
+    ]) {
+      const input = inputOf(prefix);
+      expect(input.runner.runsAsRoot, prefix).toBe(false);
+      expect(runnerAttention(input), prefix).toEqual([]);
+    }
+  });
+
+  it('a runner that reports nothing keeps the card it always had', () => {
+    for (const report of [undefined, null]) {
+      const card = cardOf(reporting('selfUpdate dirNotWritable and behind', report));
+      expect(card.title).toBe('Can’t update itself');
+      expect(card.detail).toBe(
+        'It runs as a regular user, so it can’t replace its own binary — still on 0.1.190, latest is 0.1.197. ' +
+          'On that machine, run sudo orbit upgrade.',
+      );
+      expect(card.action).toEqual({ kind: 'copyCommand', command: 'sudo orbit upgrade' });
+      expect(card.params).toEqual({ version: '0.1.190', latest: '0.1.197' });
+    }
+    // …and a root one still gets none: it installs the release itself.
+    const root = reporting('selfUpdate failed and behind', undefined);
+    expect(root.runner.runsAsRoot).toBe(true);
+    expect(runnerAttention(root)).toEqual([]);
+  });
+
+  it('offers Update Runner Now where a check can change something, and only while it is online', () => {
+    const can = (input: RunnerAttentionInput) => runnerCanUpdateNow(input.runner, NOW);
+    expect(can(inputOf('selfUpdate failed and behind'))).toBe(true);
+    expect(can(inputOf('selfUpdate enabled and behind'))).toBe(true);
+    expect(can(inputOf('selfUpdate waitingForIdle and behind'))).toBe(true);
+    expect(can(inputOf('selfUpdate heldByRollout and behind'))).toBe(true);
+    expect(can(inputOf('selfUpdate dirNotWritable and behind'))).toBe(false);
+    expect(can(inputOf('selfUpdate disabledByEnv and behind'))).toBe(false);
+    expect(can(inputOf('selfUpdate failed while offline'))).toBe(false);
+    expect(can(reporting('selfUpdate failed and behind', undefined))).toBe(false);
+    expect(can(reporting('selfUpdate failed and behind', null))).toBe(false);
+  });
+});
+
+// MARK: the page
+
+let root: Root | null = null;
+let host: HTMLDivElement | null = null;
+
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+  // The case's latest release, as /dl/version.json publishes it.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url !== '/dl/version.json') throw new Error(`no ${url} here`);
+      return { ok: true, json: async () => ({ version: '0.1.197' }) };
+    }),
+  );
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+});
+afterAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+afterEach(() => {
+  act(() => {
+    clearToasts();
+    root?.unmount();
+  });
+  host?.remove();
+  root = host = null;
+  apiMock.mockReset();
+  vi.mocked(copyText).mockClear();
+  document.body.innerHTML = '';
+});
+
+/** The runner's page over one case's machine. Every request that changes something is collected;
+ *  `refuse` is what the server says to Update Runner Now instead of taking it. */
+async function mount(input: RunnerAttentionInput, refuse?: string) {
+  const sent: Array<{ method: string; path: string }> = [];
+  const runner = { ...input.runner, id: RUNNER_ID, enrolledAt: '2026-06-18T09:00:00Z' } as Runner;
+  apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
+    const method = options?.method ?? 'GET';
+    if (method !== 'GET') {
+      sent.push({ method, path });
+      if (refuse && path.endsWith('/self-update')) throw new Error(refuse);
+      if (path.endsWith('/self-update/postpone')) return { until: (options as { body?: { until: string } }).body!.until };
+      return path.endsWith('/self-update') ? { requestedAt: new Date(NOW).toISOString() } : {};
+    }
+    if (path === '/runners') return [runner];
+    return [];
+  });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host);
+  act(() =>
+    root!.render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/settings/machines/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/settings/machines/:id" element={<MachineSettingsPage />} />
+          </Routes>
+          <ToastViewport />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  );
+  await settle();
+  return { sent };
+}
+
+async function settle() {
+  for (let i = 0; i < 5; i++) {
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  }
+}
+const $$ = (selector: string, within: ParentNode = document.body) => [
+  ...within.querySelectorAll<HTMLElement>(selector),
+];
+const text = (el: Element | null | undefined) => el?.textContent?.trim() ?? null;
+const click = async (el: HTMLElement) => {
+  await act(async () => el.click());
+  await settle();
+};
+const cards = () =>
+  $$('.rd-attention-card').map((card) => ({
+    tone: card.className.replace('rd-attention-card', '').trim(),
+    title: text(card.querySelector('.rd-attention-title')),
+    detail: text(card.querySelector('.rd-attention-detail')),
+    action: text(card.querySelector('.rd-attention-action button')),
+  }));
+/** About's rows: the label, the value's own text, and the note beside it. */
+const about = () =>
+  $$('.machine-section-about .settings-row').map((row) => {
+    const value = row.querySelector('.machine-about-value')!.cloneNode(true) as HTMLElement;
+    const note = text(value.querySelector('small'));
+    value.querySelectorAll('small, button').forEach((el) => el.remove());
+    return [text(row.querySelector('.settings-row-title')), text(value), note];
+  });
+const aboutRow = (label: string) => about().find(([name]) => name === label) ?? null;
+/** The header's ⋯, open: its items. */
+async function actionsMenu() {
+  await click(document.querySelector<HTMLElement>('.machine-more')!);
+  return $$('[role="menu"] [role="menuitem"]');
+}
+/** Update Runner Now, which sat in About's head and is in the header's ⋯ now (board-3 ①). */
+async function updateRunnerNow() {
+  return (await actionsMenu()).find((item) => text(item) === 'Update Runner Now')!;
+}
+/** Whether the ⋯ offers Update Runner Now; the menu closes again after. */
+async function aboutActions() {
+  const offered = (await actionsMenu()).map(text).filter((label) => label === 'Update Runner Now');
+  await act(async () => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await settle();
+  return offered;
+}
+
+describe('each selfUpdate state on a runner’s page', () => {
+  it('dirNotWritable: the card says which folder, and Copy Command copies the upgrade', async () => {
+    await mount(inputOf('selfUpdate dirNotWritable and behind'));
+    expect(cards()).toEqual([
+      {
+        tone: 'warn',
+        title: 'Install folder isn’t writable',
+        detail:
+          'It can’t write to /usr/local/bin, so it can’t replace its own binary — still on 0.1.190, latest is ' +
+          '0.1.197. On that machine, run sudo /usr/local/bin/orbit upgrade once; after that it updates itself.',
+        action: 'Copy Command',
+      },
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Install folder isn’t writable']);
+    // A check now would find the same folder: nothing to press but the command.
+    expect(await aboutActions()).toEqual([]);
+    await click($$('.rd-attention-action button')[0]);
+    expect(copyText).toHaveBeenCalledWith('sudo /usr/local/bin/orbit upgrade');
+  });
+
+  it('disabledByEnv: the card says what turned it off and how to turn it on, with no button', async () => {
+    await mount(inputOf('selfUpdate disabledByEnv and behind'));
+    expect(cards()).toEqual([
+      {
+        tone: 'warn',
+        title: 'Updates are turned off',
+        detail:
+          'ORBIT_NO_SELFUPDATE is set, so it doesn’t update itself — still on 0.1.190, latest is 0.1.197. ' +
+          'To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — ' +
+          'on a Mac, opening the latest Orbit app does this.',
+        action: null,
+      },
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Updates are turned off']);
+    expect(await aboutActions()).toEqual([]);
+  });
+
+  it('failed: the card gives the reason and Update Runner Now, which asks the runner to check now', async () => {
+    const { sent } = await mount(inputOf('selfUpdate failed and behind'));
+    expect(cards()).toEqual([
+      {
+        tone: 'warn',
+        title: 'Runner update failed',
+        detail:
+          'Installing 0.1.197: sha256 mismatch for orbit-linux-amd64.gz. Still on 0.1.190, latest is 0.1.197. ' +
+          'It retries every 10 min — Update Runner Now tries again right away.',
+        action: 'Update Runner Now',
+      },
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Runner update failed']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
+
+    await click($$('.rd-attention-action button')[0]);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
+    expect(document.body.textContent).toContain(
+      'Checking for a runner release now — a new one installs once no turn is running.',
+    );
+  });
+
+  it('waitingForIdle: no card — About says it installs once no turn is running', async () => {
+    await mount(inputOf('selfUpdate waitingForIdle and behind'));
+    expect(cards()).toEqual([]);
+    expect(document.querySelector('.rd-attention')).toBeNull();
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
+  });
+
+  it('heldByRollout: no card — About says the release hasn’t rolled out to it yet', async () => {
+    await mount(inputOf('selfUpdate heldByRollout and behind'));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'not rolled out to it yet']);
+    expect(await aboutActions()).toEqual(['Update Runner Now']);
+  });
+
+  it('enabled with a quiet window and no phase: About words the wait from the window', async () => {
+    await mount(reporting('selfUpdate enabled and behind', { state: 'enabled', quietWindowSeconds: 900 }));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 15 min']);
+  });
+
+  it('enabled: no card, though it runs as a regular user — it installs the release itself', async () => {
+    await mount(inputOf('selfUpdate enabled and behind'));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+    expect(aboutRow('Runs As')).toEqual(['Runs As', 'regular user', null]);
+  });
+
+  it('failed, offline: only offline — Update Runner Now waits for it to come back', async () => {
+    await mount(inputOf('selfUpdate failed while offline'));
+    expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
+      ['idle', 'Offline for 2 days', null],
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', null]);
+    expect(await aboutActions()).toEqual([]);
+  });
+
+  it('dirNotWritable, offline: still says so — it is as true, and as fixable, while the machine is away', async () => {
+    await mount(inputOf('selfUpdate dirNotWritable while offline'));
+    expect(cards().map(({ tone, title, action }) => [tone, title, action])).toEqual([
+      ['idle', 'Offline for 2 days', null],
+      ['warn', 'Install folder isn’t writable', 'Copy Command'],
+    ]);
+  });
+});
+
+describe('the last update, and Update Runner Now from About', () => {
+  it('shows when the runner last updated itself, and from which version to which', async () => {
+    const input = inputOf('selfUpdate enabled and behind');
+    const at = input.runner.selfUpdate!.lastUpdatedAt!;
+    await mount(input);
+    const when = new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    expect(aboutRow('Last Update')).toEqual(['Last Update', `${when} · 0.1.189 → 0.1.190`, null]);
+    // Right under Version, where the versions are.
+    expect(about().map(([label]) => label).slice(2, 4)).toEqual(['Version', 'Last Update']);
+  });
+
+  it('says none for a runner that reports but has not updated itself yet', async () => {
+    await mount(inputOf('selfUpdate heldByRollout and behind'));
+    expect(aboutRow('Last Update')).toEqual(['Last Update', '—', null]);
+  });
+
+  it('asks the runner to check now, and says what the server said when it would not', async () => {
+    const { sent } = await mount(
+      inputOf('selfUpdate waitingForIdle and behind'),
+      'Runner is offline — it can only update while connected',
+    );
+    await click(await updateRunnerNow());
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
+    expect(document.body.textContent).toContain("Couldn't start the runner update");
+    expect(document.body.textContent).toContain('Runner is offline — it can only update while connected');
+  });
+});
+
+describe('a runner too old to report it', () => {
+  it('keeps the card, the command and About’s line it always had — and offers no Update Runner Now', async () => {
+    await mount(inputOf('selfUpdate null'));
+    expect(cards()).toEqual([
+      {
+        tone: 'warn',
+        title: 'Can’t update itself',
+        detail:
+          'It runs as a regular user, so it can’t replace its own binary — still on 0.1.190, latest is 0.1.197. ' +
+          'On that machine, run sudo orbit upgrade.',
+        action: 'Copy Command',
+      },
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'Can’t update itself']);
+    expect(aboutRow('Last Update')).toBeNull();
+    expect(await aboutActions()).toEqual([]);
+  });
+
+  it('a root one behind still installs when idle, with no card', async () => {
+    await mount(reporting('selfUpdate failed and behind', undefined));
+    expect(cards()).toEqual([]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+    expect(aboutRow('Last Update')).toBeNull();
+    expect(await aboutActions()).toEqual([]);
+  });
+});
+
+// MARK: the Update card (docs/runner-update-drain-design.md §4, board 4)
+
+describe('the Update card, one per phase the runner reports', () => {
+  const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString();
+  const clock = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const updateCard = () => {
+    const card = document.querySelector<HTMLElement>('.rd-update-card');
+    if (!card) return null;
+    const bar = card.querySelector<HTMLElement>('[role="progressbar"]');
+    return {
+      tone: card.className.replace('rd-update-card', '').trim(),
+      title: text(card.querySelector('.rd-update-title')),
+      tag: text(card.querySelector('.rd-update-tag')),
+      body: text(card.querySelector('.rd-update-body')),
+      progress: text(card.querySelector('.rd-update-progress-label')),
+      done: bar ? Number(bar.getAttribute('aria-valuenow')) : null,
+    };
+  };
+  /** The turn rows: title, where it links, and how long it has run. */
+  const turnRows = () =>
+    $$('.rd-update-card .rd-update-turns li').map((li) => [
+      text(li.querySelector('a')),
+      li.querySelector('a')!.getAttribute('href'),
+      text(li.querySelector('span')),
+    ]);
+  const phase = (report: Partial<RunnerSelfUpdate>, updateTurns?: RunnerUpdateTurn[]) => {
+    const input = reporting('selfUpdate waitingForIdle and behind', { state: 'waitingForIdle', targetVersion: '0.1.197', ...report });
+    return updateTurns ? { ...input, runner: { ...input.runner, updateTurns } } : input;
+  };
+
+  it('available: quiet, says when it installs and when it would stop taking work', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
+    expect(updateCard()).toEqual({
+      tone: 'quiet',
+      title: '0.1.197 is available',
+      tag: 'Available',
+      body: 'It installs when no turn is running. If turns keep running for an hour, it stops taking new work so they can finish.',
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  it('available from a runner that reports its quiet window: it installs once idle that long', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3, quietWindowSeconds: 600 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 10 minutes. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 10 min']);
+  });
+
+  it('the quiet window is worded from the value the runner sends, not a fixed 10', async () => {
+    await mount(phase({ phase: 'available', availableSince: at(20), quietWindowSeconds: 60 }));
+    expect(updateCard()?.body).toBe(
+      'It installs once the runner has been idle for 1 minute. If it stays busy for an hour, it stops taking new work so its turns can finish.',
+    );
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when the runner has been idle for 1 min']);
+  });
+
+  it('draining: the turns it waits for, how long, a bar, and About says updating to', async () => {
+    const since = at(98);
+    await mount(
+      phase({ phase: 'draining', availableSince: since, drainingSince: at(38), turnsInFlight: 2, turnsAtDrain: 8 }, [
+        { id: '34w8a1Backfill00000001', title: 'Backfill missing shard rows', startedAt: at(112) },
+        { id: '34w8a1Metrics000000002', title: 'Why are 11-08 metrics zero', startedAt: at(47) },
+        { id: '34w8a1Untitled00000003', title: null, startedAt: null },
+      ]),
+    );
+    expect(updateCard()).toEqual({
+      tone: 'warn',
+      title: 'Updating to 0.1.197',
+      tag: 'Not taking new work',
+      body:
+        `0.1.197 has been waiting since ${clock(since)}. After an hour it stopped taking new work so the turns in ` +
+        'flight can finish; then it installs and restarts.',
+      progress: 'Waiting for 2 of 8 turns · 38 min',
+      done: 75,
+    });
+    // Board 4's rows: each turn the drain waits for, a link to its session, and how long it has run.
+    expect(turnRows()).toEqual([
+      ['Backfill missing shard rows', '/sessions/34w8a1Backfill00000001', 'running 1 h 52 min'],
+      ['Why are 11-08 metrics zero', '/sessions/34w8a1Metrics000000002', 'running 47 min'],
+      ['Untitled session', '/sessions/34w8a1Untitled00000003', null],
+    ]);
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'updating to 0.1.197']);
+    expect($$('.machine-about-value small.warn').map(text)).toEqual(['updating to 0.1.197']);
+  });
+
+  it('draining for over an hour, from a runner that did not count the turns at the start', async () => {
+    // A server too old to send updateTurns: the card, with no rows.
+    await mount(phase({ phase: 'draining', drainingSince: at(112), turnsInFlight: 1 }));
+    expect(turnRows()).toEqual([]);
+    expect(updateCard()).toMatchObject({
+      body: 'It stopped taking new work so the turns in flight can finish; then it installs and restarts.',
+      progress: 'Waiting for 1 turn · 1 h 52 min',
+      done: 0,
+    });
+  });
+
+  it('restarting: amber, no bar, About still says updating to', async () => {
+    await mount(phase({ state: 'enabled', phase: 'restarting', drainingSince: at(40) }));
+    expect(updateCard()).toEqual({
+      tone: 'warn',
+      title: 'Restarting into 0.1.197…',
+      tag: 'Restarting',
+      body: 'Usually under a minute.',
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'updating to 0.1.197']);
+  });
+
+  it('postponed: quiet, says until when and what happens then', async () => {
+    const until = new Date(NOW + 3 * 3_600_000).toISOString();
+    await mount(phase({ phase: 'postponed', postponedUntil: until }));
+    expect(updateCard()).toEqual({
+      tone: 'quiet',
+      title: `0.1.197 postponed until ${clock(until)}`,
+      tag: 'Postponed',
+      body: `Taking work as usual. At ${clock(until)} it waits for the turns in flight again, for up to an hour.`,
+      progress: null,
+      done: null,
+    });
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+
+  // Later ▾ (board 3 ⑦) while draining; Change ▾ and Update Now… once postponed; nothing in the other phases.
+  const actions = () => $$('.rd-update-card .rd-update-actions button').map(text);
+  it('the actions: Later while draining, Change and Update Now… once postponed, none otherwise', async () => {
+    await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    expect(actions()).toEqual(['Later']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    expect(actions()).toEqual(['Change', 'Update Now…']);
+    act(() => root?.unmount());
+    await mount(phase({ phase: 'available', availableSince: at(20), turnsInFlight: 3 }));
+    expect(actions()).toEqual([]);
+    act(() => root?.unmount());
+    await mount(phase({ state: 'enabled', phase: 'restarting' }));
+    expect(actions()).toEqual([]);
+  });
+
+  it('Later → Postpone until tomorrow asks the server to postpone; the toast says until when', async () => {
+    const { sent } = await mount(phase({ phase: 'draining', drainingSince: at(38), turnsInFlight: 2 }));
+    await click($$('.rd-update-card .rd-update-actions button')[0]);
+    const rows = $$('[role="menu"] [role="menuitem"]');
+    expect(rows.map(text)).toEqual([
+      `Postpone 1 houruntil ${clock(new Date(NOW + 3_600_000).toISOString())}`,
+      'Postpone until tonight02:00',
+      'Postpone until tomorrow09:00',
+    ]);
+    await click(rows[2]);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update/postpone` }]);
+    expect(document.body.textContent).toContain('Update postponed until 09:00 — the runner takes work again.');
+  });
+
+  it('postponed → Update Now… confirms, then asks for Update Runner Now, which ends the postponement', async () => {
+    const { sent } = await mount(phase({ phase: 'postponed', postponedUntil: new Date(NOW + 3_600_000).toISOString() }));
+    await click($$('.rd-update-card .rd-update-actions button')[1]);
+    expect(document.body.textContent).toContain('Update to 0.1.197 now?');
+    expect(sent).toEqual([]);
+    const confirmButton = $$('button').find((b) => text(b) === 'Update Now')!;
+    await click(confirmButton);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/self-update` }]);
+  });
+
+  it('a runner that sends no phase: no card, and today’s wording', async () => {
+    await mount(inputOf('selfUpdate waitingForIdle and behind'));
+    expect(updateCard()).toBeNull();
+    expect(aboutRow('Version')).toEqual(['Version', '0.1.190', 'installs when no turn is running']);
+  });
+});

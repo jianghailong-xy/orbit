@@ -13,6 +13,9 @@ import type {
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
+import { meQuery } from '../lib/queries';
+import { TRANSLATION_COPY } from '../lib/translation';
+import { OWNER_LANG, ownerMe } from '../test/ownerCardTranslation';
 import { revealSettlementCard } from './DecisionRail';
 import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
 import {
@@ -1522,5 +1525,41 @@ describe('the delivery mode on the card', () => {
       .not.toHaveProperty('deliveryMode');
     expect(startBody(suggestingMain(), { ...draft, line: 'MAIN', deliveryMode: null }, null))
       .not.toHaveProperty('deliveryMode');
+  });
+});
+
+describe('Start this project? in the owner’s language (board 04-owner-cards.html)', () => {
+  const WHY = 'B and C both build on A — one branch checks them together before main.';
+  const TRANSLATED = 'B et C reposent sur A — une branche les vérifie ensemble avant main.';
+
+  async function drawn(translation: ProjectOpenItemRow['translation'], me = ownerMe()) {
+    server.row = { ...rowOf('item-1'), translation };
+    const { qc, card } = await delivered();
+    await act(async () => { qc.setQueryData(meQuery().queryKey, me); });
+    await turn();
+    await turn();
+    return card;
+  }
+
+  it('quotes the translated why with Translated · Show original, and the toggle shows the original', async () => {
+    const card = await drawn({ lang: OWNER_LANG, why: TRANSLATED });
+    expect(card().textContent).toContain(TRANSLATED);
+    expect(card().textContent).not.toContain(WHY);
+    expect(card().textContent).toContain(`${TRANSLATION_COPY.translated}·${TRANSLATION_COPY.showOriginal}`);
+    const flip = [...card().querySelectorAll('button')].find((b) => b.textContent === TRANSLATION_COPY.showOriginal)!;
+    await act(async () => { flip.click(); });
+    expect(card().textContent).toContain(WHY);
+    expect(card().textContent).not.toContain(TRANSLATED);
+    expect(card().textContent).toContain(`${TRANSLATION_COPY.original}·${TRANSLATION_COPY.showTranslation}`);
+  });
+
+  it.each([
+    ['no translation', undefined, ownerMe()],
+    ['a failed translation', { lang: OWNER_LANG, failed: true as const }, ownerMe()],
+    ['translation switched off', { lang: OWNER_LANG, why: TRANSLATED }, ownerMe({ translationEnabled: false })],
+  ])('quotes the original with %s', async (_, translation, me) => {
+    const card = await drawn(translation, me);
+    expect(card().textContent).toContain(WHY);
+    expect(card().textContent).not.toContain(TRANSLATION_COPY.showOriginal);
   });
 });

@@ -314,6 +314,18 @@ function makeService(
           && (seq?.gt === undefined || (e.seq ?? 0) > seq.gt));
         return matching.slice(-args.take).reverse();
       },
+      // Whether the turn re-sent was cut by the owner's Update Now (`updateCutOf`): its interrupt with
+      // `payload.reason`, matched by `where.payload.path/equals` as Prisma does.
+      findFirst: async (args: { where: { type?: string; turnId?: string | null; payload?: { path: string[]; equals: unknown } } }) => {
+        const all: Array<{ type: string; payload: unknown; turnId?: string; seq?: number }> =
+          opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }];
+        const { type, turnId, payload } = args.where;
+        const hit = all.filter((e) =>
+          (!type || e.type === type)
+          && (turnId === undefined || (e.turnId ?? null) === turnId)
+          && (!payload || (e.payload as Record<string, unknown> | null)?.[payload.path[0]] === payload.equals)).at(-1);
+        return hit ? { payload: hit.payload } : null;
+      },
     },
     conversationTurn: {
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>

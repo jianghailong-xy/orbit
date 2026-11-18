@@ -52,6 +52,12 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(turn.senderSessionId, null);
     assert.match((await appendRunQuestionContext(db, turn.clientTurnId, ''))!, /<orbit-run-question/);
     assert.match((await appendRunQuestionContext(db, turn.clientTurnId, ''))!, /Which port/);
+    // The request read carries the question's card as it stands now, which the clients draw over
+    // the echo's (read before anyone answered).
+    const waiting = (await requests.view(ownerId, request.id)).runQuestion;
+    assert.equal(waiting?.state, 'OPEN');
+    assert.equal(waiting?.answeredBy, null);
+    assert.deepEqual(waiting?.questions, input.questions);
     assert.deepEqual(pushes, []);
     assert.equal(frames.some(args => (args[1] as { type?: string })?.type === 'approval_request'), false);
     assert.deepEqual(await badges.needsYouSessions(ownerId), []);
@@ -88,6 +94,9 @@ test('Automatic run question reaches coordinator, answer reaches runner, same-se
     assert.equal(stored.decidedCredentialKind, 'COORDINATOR');
     assert.equal(stored.decidedById, null);
     assert.equal((await db.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).state, 'REPLIED');
+    const answered = (await requests.view(ownerId, request.id)).runQuestion;
+    assert.equal(answered?.answeredBy, 'SESSION');
+    assert.deepEqual(answered?.answers, { 'Which port?': ['4000'] });
     assert.equal(await db.conversationTurn.count({ where: { sessionId: run.id } }), 0, 'the blocked run reads approval polling, not a queued reply');
     await assert.rejects(requests.reply(ownerId, coordinator.id, request.id, { option: 0 }), /closed/i);
 

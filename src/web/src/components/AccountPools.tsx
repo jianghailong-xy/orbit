@@ -1,16 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  DeleteOutlined,
-  LogoutOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
+import { EllipsisOutlined, PlayCircleOutlined, RightOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
-import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
+import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
 import { encodeId, routeId } from '../lib/idCodec';
@@ -51,13 +45,13 @@ import { ProviderTile } from './ProviderGallery';
 import { PeopleStack, PersonMark, ReplaceKeyModal } from './SharedPool';
 import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
+import { useConfirm } from './ui/ConfirmDialog';
 import { Dialog } from './ui/Dialog';
 import { Input } from './ui/Input';
+import { Menu, type MenuItem } from './ui/Menu';
 import { MultiSelect } from './ui/MultiSelect';
-import { Popconfirm } from './ui/Popconfirm';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Segmented } from './ui/Segmented';
-import { Tooltip } from './ui/Tooltip';
 
 // Which pool cards the user folded or unfolded, by pool id. A card nobody has touched follows the
 // window: open on a desktop, where its rows fit, and folded to its head line on a phone.
@@ -175,12 +169,77 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
 const poolPauseEndpoint = (poolId: string, memberId: string) =>
   `/providers/pools/${encodeId(poolId)}/members/${memberId.startsWith('login:') ? encodeURIComponent(memberId) : encodeId(memberId)}/pause`;
 
-function PoolPauseActions({ pool, member }: { pool: ProviderPool; member: PoolMember }) {
+/** What pausing `member` takes, or null where this reader may not pause it. */
+function pauseOf(pool: ProviderPool, member: PoolMember): PauseTarget | null {
   const permitted = !pool.shared || (member.login
     ? canSignOutAccount(pool.shared, member.login)
     : member.key && canRemoveKey(pool.shared, member.key));
   if (!permitted) return null;
-  return <AccountPauseActions pool shared={!!pool.shared && hasPeople(pool.shared)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />;
+  return { shared: !!pool.shared && hasPeople(pool.shared), until: member.pausedUntil, endpoint: poolPauseEndpoint(pool.id, member.id) };
+}
+
+interface PauseTarget {
+  shared: boolean;
+  until?: string | null;
+  endpoint: string;
+}
+
+/**
+ * A pool row's actions (docs/mocks/settings-buttons, board 02). The way back for an account that needs
+ * one stays a visible button — Resume Now, and the row's `recovery` (Replace key, Re-add key, Sign in
+ * again); everything else sits behind a borderless ⋯: pausing first, then the row's `items`, and taking
+ * it out (`removal`) last, in red, under a line.
+ */
+function PoolRowActions({
+  name,
+  pause,
+  recovery,
+  items = [],
+  removal,
+}: {
+  name: string;
+  pause: PauseTarget | null;
+  recovery?: ReactNode;
+  items?: MenuItem[];
+  removal?: MenuItem;
+}) {
+  const render = (controls?: AccountPauseControls) => {
+    const menu: MenuItem[] = [
+      ...(controls
+        ? [{ key: 'pause', label: controls.paused ? 'Change Duration' : 'Pause…', disabled: controls.pending, onSelect: controls.choose }]
+        : []),
+      ...items,
+    ];
+    if (removal) menu.push(...(menu.length > 0 ? [{ type: 'separator' as const, key: 'sep' }] : []), removal);
+    return (
+      <>
+        {controls?.paused && (
+          <Button size="small" icon={<PlayCircleOutlined />} loading={controls.pending} onClick={controls.resume}>
+            Resume Now
+          </Button>
+        )}
+        {recovery}
+        {menu.length > 0 && (
+          <Menu
+            align="end"
+            items={menu}
+            trigger={<Button size="small" variant="text" className="pool-more" icon={<EllipsisOutlined />} aria-label={`More for ${name}`} />}
+          />
+        )}
+      </>
+    );
+  };
+  return (
+    <div className="re-act">
+      {pause ? (
+        <AccountPauseActions pool shared={pause.shared} name={name} until={pause.until} endpoint={pause.endpoint}>
+          {render}
+        </AccountPauseActions>
+      ) : (
+        render()
+      )}
+    </div>
+  );
 }
 
 /** One account in a pool: who it is, where it stands, its own gauge, and what can be done about it.
@@ -211,7 +270,7 @@ function MemberRow({
           </div>
         </div>
       </div>
-      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
+      <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota">
         {quota ? (
           <>
@@ -227,30 +286,21 @@ function MemberRow({
           <span className="re-quota-none">—</span>
         )}
       </div>
-      <div className="re-act">
-        <PoolPauseActions pool={pool} member={member} />
-        {/* A refused key is final for the key, not for the account: a new one is the way back, and
-            it is pasted on the provider's own page. */}
-        {member.state === 'REFUSED' && (
-          <Button size="small" onClick={() => navigate(`/providers/${encodeId(member.id)}`)}>
-            Re-add key
-          </Button>
-        )}
-        {/* A mark rather than a word: beside Re-add key the pair would outgrow the column, and
-            taking an account out is undone by adding it back. */}
-        {onRemove && (
-          <Tooltip content="Remove from this pool">
-            <Button
-              size="small"
-              variant="text"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={onRemove}
-              aria-label={`Remove ${member.label} from this pool`}
-            />
-          </Tooltip>
-        )}
-      </div>
+      <PoolRowActions
+        name={member.label}
+        pause={pauseOf(pool, member)}
+        recovery={
+          // A refused key is final for the key, not for the account: a new one is the way back, and
+          // it is pasted on the provider's own page.
+          member.state === 'REFUSED' && (
+            <Button size="small" onClick={() => navigate(`/settings/providers/keys/${encodeId(member.id)}`)}>
+              Re-add key
+            </Button>
+          )
+        }
+        // Asks nothing: taking an account out is undone by adding it back.
+        removal={onRemove && { key: 'remove', label: 'Remove from pool', danger: true, onSelect: onRemove }}
+      />
       {refusal && <div className="pool-why">{refusal}</div>}
     </div>
   );
@@ -302,6 +352,7 @@ function KeyRow({
   const replace = invalid && canReplaceKey(pool, key) ? actions.onReplace : undefined;
   const toggle = key.contributor.you ? actions.onSwitch : undefined;
   const remove = canRemoveKey(pool, key) ? actions.onRemove : undefined;
+  const [confirm, confirmHolder] = useConfirm();
   return (
     <div className={`re-row pool-row pool-row-key${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={key.id}>
       <div className="re-id">
@@ -323,7 +374,7 @@ function KeyRow({
           </div>
         </div>
       </div>
-      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
+      <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-key-money">
         {/* Short on purpose: what the others spent on it, against the cap its contributor set — the
             whole sentence is the cell's own title. */}
@@ -343,43 +394,38 @@ function KeyRow({
           </div>
         )}
       </div>
-      <div className="re-act">
-        {canRemoveKey(pool, key) && <AccountPauseActions pool shared={hasPeople(pool)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />}
-        {replace && (
-          <Button size="small" variant="primary" onClick={() => replace(key)}>
-            Replace key
-          </Button>
-        )}
-        {toggle && (
-          <Tooltip content={key.enabled ? 'Disable — no session starts on it until you enable it' : 'Enable'}>
-            <Button
-              size="small"
-              variant="text"
-              icon={key.enabled ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
-              onClick={() => toggle(key, !key.enabled)}
-              aria-label={`${key.enabled ? 'Disable' : 'Enable'} ${key.label}`}
-            />
-          </Tooltip>
-        )}
-        {remove && (
-          <Popconfirm
-            title={`Remove ${key.label}?`}
-            description="It is deleted from the Orbit server, and no session runs on it again."
-            confirmText="Remove"
-            danger
-            onConfirm={() => remove(key)}
-            trigger={
-              <Button
-                size="small"
-                variant="text"
-                danger
-                icon={<DeleteOutlined />}
-                aria-label={`Remove ${key.label} from this pool`}
-              />
-            }
-          />
-        )}
-      </div>
+      <PoolRowActions
+        name={key.label}
+        pause={canRemoveKey(pool, key) ? { shared: hasPeople(pool), until: member.pausedUntil, endpoint: poolPauseEndpoint(pool.id, member.id) } : null}
+        recovery={
+          replace && (
+            <Button size="small" variant="primary" onClick={() => replace(key)}>
+              Replace key
+            </Button>
+          )
+        }
+        items={
+          toggle
+            ? [{ key: 'switch', label: key.enabled ? 'Disable' : 'Enable', onSelect: () => toggle(key, !key.enabled) }]
+            : []
+        }
+        removal={
+          remove && {
+            key: 'remove',
+            label: 'Remove from pool',
+            danger: true,
+            onSelect: () =>
+              void confirm({
+                title: `Remove ${key.label}?`,
+                description: 'It is deleted from the Orbit server, and no session runs on it again.',
+                confirmText: 'Remove',
+                danger: true,
+                onConfirm: () => remove(key),
+              }),
+          }
+        }
+      />
+      {confirmHolder}
       {invalid && (
         <div className="pool-why">
           {canReplaceKey(pool, key)
@@ -431,6 +477,7 @@ function LoginRow({
   // One account the pool: signing it out leaves nothing running on the pool. Holding others, it keeps
   // running on them, and the confirmation says so in the plural when more than one stays.
   const others = pool.members.length - 1;
+  const [confirm, confirmHolder] = useConfirm();
   return (
     <div className={`re-row pool-row pool-row-login${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={member.id}>
       <div className="re-id">
@@ -453,7 +500,7 @@ function LoginRow({
           </div>
         </div>
       </div>
-      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
+      <AccountPauseStatus dot className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-login-quota">
         {windows.length > 0 ? (
           windows.map((row) => (
@@ -475,37 +522,38 @@ function LoginRow({
           <span className="re-quota-none">No quota reported</span>
         )}
       </div>
-      <div className="re-act">
-        <PoolPauseActions pool={pool} member={member} />
-        {signInAgain && (
-          <Button size="small" variant="primary" onClick={() => onSignIn!(login)}>
-            Sign in again
-          </Button>
-        )}
-        {signOut && (
-          <Popconfirm
-            title={`Sign out ${member.label}?`}
-            description={
-              others > 0
-                ? `Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — ${pool.label} keeps running on its other account${others === 1 ? '' : 's'}.`
-                : 'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.'
-            }
-            confirmText="Sign out"
-            danger
-            onConfirm={() => onSignOut!(login)}
-            trigger={
-              <Button
-                size="small"
-                variant="text"
-                danger
-                className="pool-signout"
-                icon={<LogoutOutlined />}
-                aria-label={`Sign out ${member.label}`}
-              />
-            }
-          />
-        )}
-      </div>
+      <PoolRowActions
+        name={member.label}
+        pause={pauseOf(pool, member)}
+        recovery={
+          signInAgain && (
+            <Button size="small" variant="primary" onClick={() => onSignIn!(login)}>
+              Sign in again
+            </Button>
+          )
+        }
+        removal={
+          signOut
+            ? {
+                key: 'signout',
+                label: 'Sign out',
+                danger: true,
+                onSelect: () =>
+                  void confirm({
+                    title: `Sign out ${member.label}?`,
+                    description:
+                      others > 0
+                        ? `Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — ${pool.label} keeps running on its other account${others === 1 ? '' : 's'}.`
+                        : 'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.',
+                    confirmText: 'Sign out',
+                    danger: true,
+                    onConfirm: () => onSignOut!(login),
+                  }),
+              }
+            : undefined
+        }
+      />
+      {confirmHolder}
       {signedOut && (
         <div className="pool-why">
           {signInAgain
@@ -629,12 +677,12 @@ function PoolCard({
           is the toggle's (foldFromAnywhere), and Manage → stays its own. */}
       <div className="re-head" onClick={foldFromAnywhere(onToggle)}>
         <button className="re-toggle" type="button" aria-expanded={!collapsed} onClick={onToggle}>
-          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            ▸
+          <span className={`re-chev pool-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
+            <RightOutlined />
           </span>
           <PoolEngineMark pool={pool} />
           <span className="re-runner">{pool.label}</span>
-          {people && <span className="re-chip pool-shared-chip">SHARED</span>}
+          {people && <span className="re-chip pool-shared-chip">Shared</span>}
           {/* A Codex pool its owner keeps to themselves says so, with how many of its accounts are left to
               run on; shared, it wears SHARED and its people instead. Somebody they added reads whose it
               is and what they can run on there — the pool's ChatGPT accounts and its keys alike. */}
@@ -650,8 +698,11 @@ function PoolCard({
         </button>
         <span className="re-head-sp" />
         {people && !member && <PeopleStack pool={shared!} />}
-        {!member && <PoolGauge pool={pool} />}
-        <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
+        {/* Open, a pool of one account that can run has that account's row right under the head saying
+            the same, so the head leaves its name and bar out; folded, the head is all there is to read,
+            and why nothing can run, or when it frees up, is the head's to say. */}
+        {!member && (collapsed || pool.members.length !== 1 || poolHeadline(pool).kind !== 'next') && <PoolGauge pool={pool} />}
+        <Link className="re-manage" to={`/settings/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
           <span className="pool-wide">Manage </span>→
         </Link>
       </div>
@@ -672,7 +723,16 @@ function PoolCard({
  * key are (NewPoolModal); a key OpenAI refused is replaced from its card, and an account OpenAI signed
  * out is signed in again from it — each taken out on the pool's own page.
  */
-export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refusals: PoolRefusals }) {
+export function AccountPools({
+  pools,
+  refusals,
+  action,
+}: {
+  pools: ProviderPool[];
+  refusals: PoolRefusals;
+  /** On the heading's right: Settings' pools page puts New pool there. */
+  action?: ReactNode;
+}) {
   const isMobile = useIsMobile();
   const [replacing, setReplacing] = useState<{ pool: SharedPool; key: SharedPoolKey } | null>(null);
   /** The dialog for one of these pools: adding an account, or putting back one OpenAI signed out. */
@@ -696,6 +756,7 @@ export function AccountPools({ pools, refusals }: { pools: ProviderPool[]; refus
         <span className="re-sec-sub">
           Several accounts under one name.
         </span>
+        {action && <span className="pool-sec-action">{action}</span>}
       </div>
       {pools.map((pool) => {
         const open = fold[pool.id] ?? !isMobile;
@@ -914,7 +975,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
       else message.success('Pool created');
       onClose();
       // Where its first key goes in — or where its account is signed in, straight away.
-      if (id) navigate(`/providers/pools/${encodeId(id)}`, signIn ? { state: { signIn: true } } : undefined);
+      if (id) navigate(`/settings/providers/pools/${encodeId(id)}`, signIn ? { state: { signIn: true } } : undefined);
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
@@ -1010,7 +1071,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
                 aria-label="People to add"
               />
               <div className="np-field-h">
-                They see it on their Machines & models page and in the session picker, and can start sessions on it.
+                They see it under Account pools in their Settings and in the session picker, and can start sessions on it.
               </div>
               <Checkbox checked={canAdd} onCheckedChange={setCanAdd} className="np-can-add">
                 They can add their own keys

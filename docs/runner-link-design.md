@@ -329,6 +329,7 @@ runner ──WebSocket（TLS，protobuf）──▶ 四层负载均衡 ──▶
 
 - 实时流改走 NATS。
 - 持久事件的跨副本通知，改为写入器提交后按会话发布一次，不再逐条 NOTIFY。
+- **合批调用的通知在提交之后发。** 事务里发了 NOTIFY，提交时就要拿 PostgreSQL 唯一的通知队列锁（`PreCommit_Notify`），一直持有到提交结束、WAL 刷盘也在内，所以所有合批调用只能一个接一个提交；排队超过 `LINK_CALL_LOCK_TIMEOUT_MS`（1 秒）的调用在 COMMIT 上锁超时、整体回滚、每批改为单独发送（C2b 实测一小时 41 次、3,185 批）。现在合批事务里不发 NOTIFY，提交之后用一条只发通知的语句把各批的通知一起发出（`RealtimeService.sendNotices`；这样的事务不写 WAL，只在排进队列的那一刻持锁），发出之后才回答这次调用。进程如果死在提交和通知之间，调用就没有回答：网关把调用重发给另一个 apiserver，或者让各批失败、由 runner 重发；重发的入库发现这些 seq 已经存过，就把它们作为一段 seq 范围重新通知，各个 apiserver（包括接到重发的那个）从 run_event 读回（`restatedBatchNotice`）。单独入库也一样：通知发出之后才回答。见 `runner-link-merged-notify-lock.pg.spec.ts`。
 
 ---
 

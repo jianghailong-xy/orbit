@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import type { Prisma as PrismaTypes } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62, type EvidenceGapClause } from '@orbit/shared';
 import { criterionKeyOf } from '../projects/project-acceptance';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from '../projects/project-open-item';
 import { assertMayEndWorkingRuns, assertSessionMayReach } from '../sessions/session-reach';
@@ -10,6 +10,8 @@ import {
   evidenceCriterionMatch,
   heldToProjectCriterion,
   quotesDeclaredCriterion,
+  rowIdOf,
+  storedEvidenceEnvelope,
 } from './task-evidence-envelope';
 import { taskOfRunBehind } from './verifier-write-authority';
 
@@ -26,9 +28,10 @@ import { taskOfRunBehind } from './verifier-write-authority';
  *     revision 3 while revision 4 exists is an answer to a question nobody is asking any more, and
  *     accepting it would let a run submit a weak version, collect a decision, and then submit the
  *     one it actually wanted judged.
- *  2. **The criterion has not moved.** The envelope quotes the task's stated criterion — the
- *     project criterion it declares, or else its own acceptance criteria — by key AND by text,
- *     and the text is what is checked — bind to content, never to the identifier, exactly as
+ *  2. **The criterion has not moved.** The revision carries the task's stated criterion — the
+ *     project criterion it declares, or else its own acceptance criteria — by key AND by text, as
+ *     the server bound it at submit time (or, before it did, as the submitter quoted it), and the
+ *     text is what is checked — bind to content, never to the identifier, exactly as
  *     `criterionRevision` already does on the evidence row. A criterion whose wording was rewritten
  *     after the evidence was submitted is a different standard under the same key, so a decision
  *     made against the old wording would be recorded as if it had been made against the new one.
@@ -68,8 +71,14 @@ export const RUN_MAY_NOT_DECIDE_CODE = 'EVIDENCE_JUDGMENT_FROM_RUN_REFUSED';
 export const RUN_MAY_NOT_DECIDE_ACTION = 'ASK_THE_COORDINATOR_OR_THE_OWNER';
 export const SEND_BACK_NOTE_CODE = 'EVIDENCE_JUDGMENT_SEND_BACK_REQUIRES_NOTE';
 export const SEND_BACK_NOTE_ACTION = 'SAY_WHAT_THE_NEXT_EVIDENCE_REVISION_MUST_SHOW';
+export const GAP_FOLLOW_UP_INVALID_CODE = 'EVIDENCE_GAP_FOLLOW_UP_INVALID';
+export const GAP_FOLLOW_UP_INVALID_ACTION = 'NAME_A_FOLLOW_UP_TASK_IN_THIS_PROJECT';
+export const GAP_WITHOUT_FOLLOW_UP_CODE = 'EVIDENCE_JUDGMENT_GAP_WITHOUT_FOLLOW_UP';
+export const GAP_WITHOUT_FOLLOW_UP_ACTION = 'SEND_BACK_OR_ASK_FOR_A_FOLLOW_UP_TASK';
 
-/** The quoted criterion, when the stored evidence is the four-field envelope. */
+/** The criterion a stored revision is held to, when it carries one: the standard the server bound
+ * at submit time (`taskStandard`), or, on a revision stored before the server bound it, the
+ * submitter's own quote. Both are read and compared the same way. */
 export function quotedCriterion(evidence: unknown): { key: string; text: string } | null {
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return null;
   const criterion = (evidence as Record<string, unknown>).criterion;
@@ -125,6 +134,11 @@ export async function criterionStandingRefusal(
 ): Promise<CriterionStandingRefusal | null> {
   const criterion = quotedCriterion(evidence);
   if (!criterion) {
+    // The server binds no standard when the task had no live one at submit time
+    // (`taskStandard`), so a revision with none says that, in the words the task's state calls for.
+    if (heldToProjectCriterion(task) && task.criterionDefinitionId === null) {
+      return { ...movedRefusal(task, ''), criterionKey: null };
+    }
     const reason =
       'this evidence quotes no project criterion, so there is no stated standard to decide it '
       + 'against';
@@ -513,5 +527,86 @@ export function decisionNote(
       'written. The task is left OPEN and nothing else changes, so the note is the only thing ' +
       'the next revision has to aim at',
     requiredAction: SEND_BACK_NOTE_ACTION,
+  });
+}
+
+/** Where the follow-ups a gap names must be: tasks of this owner, in the project this task is in. */
+export interface GapFollowUpScope {
+  ownerId: string;
+  taskId: string;
+  projectId: string | null;
+}
+
+/**
+ * Why a `followUpTaskId` in `gapClauses` does not count, for the first one that does not; null when
+ * every named follow-up is a task of this owner in the same project as this task (both in no
+ * project counts as the same) and is not this task itself. An entry with no follow-up is not this
+ * question's: that is the decision door's (`assertConfirmGapsFollowedUp`).
+ */
+export async function gapFollowUpProblem(
+  tx: PrismaTypes.TransactionClient,
+  scope: GapFollowUpScope,
+  clauses: readonly EvidenceGapClause[],
+): Promise<string | null> {
+  const named = clauses.flatMap((clause, index) => clause.followUpTaskId === undefined
+    ? []
+    : [{ index, ref: clause.followUpTaskId, id: rowIdOf(clause.followUpTaskId) }]);
+  if (named.length === 0) return null;
+  const ids = named.flatMap(({ id }) => (id === null ? [] : [id.toLowerCase()]));
+  const rows = await tx.task.findMany({
+    where: { ownerId: scope.ownerId, id: { in: ids } },
+    select: { id: true, projectId: true },
+  });
+  const byId = new Map(rows.map((row) => [row.id.toLowerCase(), row]));
+  for (const { index, ref, id } of named) {
+    const path = `gapClauses[${index}].followUpTaskId (${ref})`;
+    const row = id === null ? undefined : byId.get(id.toLowerCase());
+    if (!row) return `${path} names no task of this account`;
+    if (row.id.toLowerCase() === scope.taskId.toLowerCase()) return `${path} names this task itself`;
+    if (row.projectId !== scope.projectId) return `${path} is a task in another project`;
+  }
+  return null;
+}
+
+/** Submit time: a named follow-up that is no task of this project is refused to the submitter. */
+export async function assertGapFollowUpsValid(
+  tx: PrismaTypes.TransactionClient,
+  scope: GapFollowUpScope,
+  clauses: readonly EvidenceGapClause[] | undefined,
+): Promise<void> {
+  const problem = clauses ? await gapFollowUpProblem(tx, scope, clauses) : null;
+  if (problem === null) return;
+  throw new BadRequestException({
+    code: GAP_FOLLOW_UP_INVALID_CODE,
+    message: `${problem}; nothing was written. A follow-up has to be a task in the same project as this one: `
+      + 'file it with task_create, or leave followUpTaskId out until it exists.',
+    requiredAction: GAP_FOLLOW_UP_INVALID_ACTION,
+  });
+}
+
+/**
+ * The decision door, CONFIRM only (docs/evidence-always-has-an-addressee-design.md §6, D4). A gap
+ * that names a clause of the task's standard leaves that clause unproven, so accepting it means
+ * naming the task that will prove it: CONFIRM is refused while such a gap has no follow-up, or one
+ * that is no longer a task of this project. A plain-text gap, and SEND_BACK, are not affected.
+ */
+export async function assertConfirmGapsFollowedUp(
+  tx: PrismaTypes.TransactionClient,
+  scope: GapFollowUpScope,
+  evidence: unknown,
+): Promise<void> {
+  const clauses = storedEvidenceEnvelope(evidence)?.gapClauses ?? [];
+  const bare = clauses.filter((clause) => clause.followUpTaskId === undefined);
+  const problem = bare.length > 0
+    ? `${bare.length === 1 ? 'a gap names' : `${bare.length} gaps name`} a clause of this task's standard `
+      + `with no follow-up task (${bare.map((clause) => `gaps[${clause.gap}]: "${clause.criterionClause}"`).join('; ')})`
+    : await gapFollowUpProblem(tx, scope, clauses);
+  if (problem === null) return;
+  throw new ConflictException({
+    code: GAP_WITHOUT_FOLLOW_UP_CODE,
+    message: `this evidence cannot be confirmed: ${problem}; nothing was written. A gap that hits the standard is `
+      + 'accepted only with a follow-up task in this project that will prove it: SEND_BACK asking the run to file one '
+      + 'and name it in gapClauses, or file it yourself and send it back with its id.',
+    requiredAction: GAP_WITHOUT_FOLLOW_UP_ACTION,
   });
 }

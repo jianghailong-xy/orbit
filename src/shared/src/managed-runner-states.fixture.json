@@ -22,7 +22,7 @@
     "carries one. `retry` offers Retry (POST /managed-runner/retry with the read revision), `ensure` offers",
     "Set up (POST /managed-runner/ensure), `signIn` points at the runner's runtimes on the Machines & models page.",
     "`acceptsWork`: a message or turn sent now is accepted and waits for the runner, so a client does not",
-    "refuse it as offline. `startsNewSession`: a first session in the managed default workspace can start:",
+    "refuse it as offline. `startsNewSession`: a first session on the managed runner can start:",
     "the server names what it starts on (`firstSessionProvider`: `initialProvider` once the runner was READY,",
     "before that the owner's key the session waits for the runner on); with none, no client offers a default",
     "engine there. `moving`: read the status again soon (MANAGED_RUNNER_STATUS_POLL_SECONDS).",
@@ -36,7 +36,23 @@
     "with `patch` applied: a management state or a contract version this client does not know. Each",
     "must decode and show no managed UI (`display` null), never fail or wait.",
     "",
-    "`copy` is MANAGED_RUNNER_COPY's action words, the same in every client."
+    "`copy` is MANAGED_RUNNER_COPY's action words, the same in every client.",
+    "",
+    "The managed runner as one machine in the machine list (docs/managed-runner-existing-account-entry-design.md):",
+    "`short` is MANAGED_RUNNER_COPY.short, the row's label per display kind in place of the heartbeat's",
+    "Online/Offline (an asleep runner reads Asleep, never Offline; `notOffered` has no row), and `rowTone`",
+    "MANAGED_RUNNER_ROW_TONE, how the row marks it (`ready` green, `progress` a spinner, `idle` grey,",
+    "`attention` orange). `entry` is the list's Managed runner · Set up entry, its subtitle, the web Set up",
+    "page's sentence and Register a machine's line; `confirm` the question asked before Set up on an",
+    "account that already has a runner or a workspace; `asleep` the calm row line and the composer line",
+    "for a managed runner asleep, which sending wakes.",
+    "",
+    "`setupState` (per state): how a machine's setup card treats the managed runner (`managedSetupState`,",
+    "docs/managed-runner-no-default-workspace.md): `preparing` or `asleep` while it is not up, so the card takes a",
+    "new folder and makes the workspace; null when the card reads the runner as any machine. `setup` is",
+    "MANAGED_RUNNER_COPY.setup, the card's words for those two states, and `reposRoot` MANAGED_RUNNER_REPOS_ROOT, where",
+    "a new folder goes on a managed runner that has never reported. `status.workspaceId` is always null: a managed",
+    "runner has no default workspace."
   ],
   "now": "2026-10-09T08:00:00.000Z",
   "heartbeatFreshMs": 90000,
@@ -49,6 +65,64 @@
     "ensure": "Set up",
     "signIn": "Open Machines & models",
     "registerOwn": "Register your own machine"
+  },
+  "short": {
+    "setup": "Set up",
+    "preparing": "Preparing",
+    "waking": "Waking up…",
+    "modelUnavailable": "Needs a model",
+    "waitingCapacity": "Waiting for capacity",
+    "available": "Ready",
+    "unresponsive": "Not responding",
+    "stopping": "Going to sleep",
+    "sleeping": "Asleep",
+    "waitingOperator": "Waiting for an operator",
+    "failed": "Failed",
+    "removing": "Removing",
+    "removed": "Removed"
+  },
+  "rowTone": {
+    "setup": "idle",
+    "preparing": "progress",
+    "waking": "progress",
+    "modelUnavailable": "attention",
+    "waitingCapacity": "progress",
+    "available": "ready",
+    "unresponsive": "progress",
+    "stopping": "progress",
+    "sleeping": "idle",
+    "waitingOperator": "attention",
+    "failed": "attention",
+    "removing": "progress",
+    "removed": "idle"
+  },
+  "entry": {
+    "title": "Managed runner",
+    "action": "Set up",
+    "subtitle": "Orbit runs a runner for you on this server.",
+    "page": "Your own machines are not changed. Setting it up adds one machine and its workspace to this list.",
+    "register": "Or let Orbit run one for you"
+  },
+  "confirm": {
+    "title": "Set up a managed runner?",
+    "body": "Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are.",
+    "cancel": "Cancel",
+    "confirm": "Set up"
+  },
+  "asleep": {
+    "row": "Wakes automatically when you start a session",
+    "composer": "Your managed runner is asleep. Sending wakes it (about 10 s)."
+  },
+  "setup": {
+    "notice": {
+      "preparing": "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",
+      "asleep": "Your managed runner is asleep. Your first message wakes it (about 10 s)."
+    },
+    "folderUnchecked": {
+      "preparing": "Not checked until your managed runner is up: used if it’s there, created if not.",
+      "asleep": "Not checked while it’s asleep: used if it’s there, created if not."
+    },
+    "reposRoot": "/home/orbit/orbit-repos"
   },
   "capabilities": [
     {
@@ -133,6 +207,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -179,6 +254,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -228,6 +304,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -284,6 +361,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -291,7 +369,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -306,7 +384,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -339,6 +417,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -346,7 +425,7 @@
         "managementState": "PROVISIONING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -365,7 +444,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -396,6 +475,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -403,7 +483,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -418,7 +498,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -453,6 +533,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -460,7 +541,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -475,7 +556,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -512,6 +593,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -519,7 +601,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -538,7 +620,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -562,7 +644,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -570,6 +652,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -577,13 +660,13 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,
@@ -596,7 +679,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -636,7 +719,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -644,6 +727,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -651,13 +735,13 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:50.000Z",
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,
@@ -670,7 +754,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -705,6 +789,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -712,7 +797,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -731,7 +816,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -770,6 +855,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -777,7 +863,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -796,7 +882,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -828,6 +914,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -835,7 +922,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -850,7 +937,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -882,6 +969,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -889,7 +977,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -904,7 +992,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -936,6 +1024,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -943,7 +1032,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -958,7 +1047,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -990,6 +1079,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -997,7 +1087,7 @@
         "managementState": "DRAINING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:55.000Z",
         "usable": false,
@@ -1012,7 +1102,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1044,6 +1134,7 @@
         "startsNewSession": true,
         "moving": false
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1051,7 +1142,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1066,7 +1157,66 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "sleeping: waiting for a login",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "lastErrorCode": "MODEL_UNAVAILABLE"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
+        "retry": false,
+        "ensure": false,
+        "signIn": true,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "setupState": "preparing",
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": null,
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "firstSessionProvider": null,
+        "actions": {
+          "canEnsure": false,
+          "canWake": true,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1098,6 +1248,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1105,7 +1256,7 @@
         "managementState": "SLEEPING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1120,7 +1271,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1152,6 +1303,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1159,7 +1311,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1174,7 +1326,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1209,6 +1361,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1216,7 +1369,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1235,7 +1388,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1269,6 +1422,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1276,7 +1430,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1295,7 +1449,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1328,6 +1482,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1335,7 +1490,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1354,7 +1509,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1388,6 +1543,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1395,7 +1551,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1414,7 +1570,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1448,6 +1604,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1455,7 +1612,7 @@
         "managementState": "STARTING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1474,7 +1631,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1508,6 +1665,7 @@
         "startsNewSession": true,
         "moving": true
       },
+      "setupState": "asleep",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1515,7 +1673,7 @@
         "managementState": "WAITING_CAPACITY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -1534,7 +1692,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1567,6 +1725,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1574,7 +1733,7 @@
         "managementState": "FENCING",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:50:00.000Z",
         "usable": false,
@@ -1593,7 +1752,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1625,6 +1784,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1632,7 +1792,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -1651,7 +1811,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1675,7 +1835,7 @@
       "display": {
         "kind": "failed",
         "title": "Managed runner failed",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": true,
         "ensure": false,
         "signIn": true,
@@ -1683,6 +1843,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1690,13 +1851,13 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:40.000Z",
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,
@@ -1709,7 +1870,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1740,6 +1901,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1747,7 +1909,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -1766,7 +1928,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1800,6 +1962,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1807,7 +1970,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1826,7 +1989,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1860,6 +2023,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1867,7 +2031,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T07:55:00.000Z",
         "usable": false,
@@ -1886,7 +2050,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1919,6 +2083,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1926,7 +2091,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T21:00:00.000Z",
         "usable": false,
@@ -1945,7 +2110,7 @@
           "canRetry": true,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -1980,6 +2145,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": "preparing",
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -1987,7 +2153,7 @@
         "managementState": "REQUESTED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -2006,7 +2172,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2041,6 +2207,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2048,7 +2215,7 @@
         "managementState": "FAILED",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": null,
         "usable": false,
@@ -2067,7 +2234,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2099,6 +2266,7 @@
         "startsNewSession": false,
         "moving": true
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2106,7 +2274,7 @@
         "managementState": "DELETING",
         "desiredState": "DELETED",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
         "usable": false,
@@ -2121,7 +2289,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2154,6 +2322,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2161,7 +2330,7 @@
         "managementState": "DELETED",
         "desiredState": "DELETED",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-08T08:00:00.000Z",
         "usable": false,
@@ -2176,7 +2345,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2198,6 +2367,7 @@
         }
       },
       "display": null,
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": false,
@@ -2205,7 +2375,7 @@
         "managementState": "READY",
         "desiredState": "RUNNING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "ONLINE",
         "lastHeartbeatAt": "2026-10-09T07:59:45.000Z",
         "usable": true,
@@ -2224,7 +2394,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2256,6 +2426,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2263,7 +2434,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -2282,7 +2453,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     },
@@ -2315,6 +2486,7 @@
         "startsNewSession": false,
         "moving": false
       },
+      "setupState": null,
       "status": {
         "contractVersion": 1,
         "enabled": true,
@@ -2322,7 +2494,7 @@
         "managementState": "SLEEPING",
         "desiredState": "SLEEPING",
         "runnerId": "2zQeDGWFFAgN2112jNTf7",
-        "workspaceId": "2zQeDGWFFAgN2112jNTf8",
+        "workspaceId": null,
         "heartbeatStatus": "OFFLINE",
         "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
         "usable": false,
@@ -2341,7 +2513,7 @@
           "canRetry": false,
           "canDelete": false
         },
-        "workspacePublicId": "2zQeDGWFFAgN2112jNTf8",
+        "workspacePublicId": null,
         "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
       }
     }

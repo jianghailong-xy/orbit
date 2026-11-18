@@ -52,23 +52,34 @@ data class DirProbeAnswer(
 }
 
 /**
- * Sent on `POST /sessions` when the session makes its machine's first workspace (docs/first-workspace-contract.md §3).
- * Exactly one of [workDir] or [newFolder] is set.
+ * The folder `POST /workspaces` makes a machine's workspace in (docs/first-workspace-contract.md §3).
+ * Exactly one of the three is set. [workDir] is a folder the runner has confirmed, as it resolved it; [newFolder] is one path segment the
+ * server joins to the runner's folder root; [github] is a clone of one of the person's repositories into its Repos Folder
+ * (docs/github-workspace-design.md §5.3).
  */
 data class NewWorkspaceRequest(
     val workDir: String? = null,
     val newFolder: String? = null,
+    val github: GithubClone? = null,
 ) {
+    /** `github`: the repository by GitHub's id, the branch when it isn't the default one, and the folder under the Repos Folder. */
+    data class GithubClone(val repoId: Long, val ref: String? = null, val folder: String? = null)
+
     fun toJson(): JsonObject = buildJsonObject {
         workDir?.let { put("workDir", it) }
         newFolder?.let { put("newFolder", it) }
+        github?.let { clone ->
+            put("github", buildJsonObject {
+                put("repoId", clone.repoId)
+                clone.folder?.let { put("folder", it) }
+                clone.ref?.let { put("ref", it) }
+            })
+        }
     }
 }
 
 /** A machine as a Set up row names it (rule 9). */
 data class MachineToSetUp(val id: String, val name: String)
-
-enum class FolderChoice { SUGGESTED, NEW, OTHER }
 
 /**
  * How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a folder that is not a git
@@ -84,27 +95,37 @@ data class FolderVerdict(
     enum class Tone { OK, WARN, BAD }
 }
 
-/** The folder step's answer, once the person has pressed Use This Folder. */
+/** The folder the card's name finds, which Create workspace makes the workspace in. */
 sealed interface PickedFolder {
     val path: String
 
     data class Existing(override val path: String, val note: String) : PickedFolder
     data class New(val name: String, override val path: String) : PickedFolder
+    /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3). */
+    data class Github(val pick: GithubPick) : PickedFolder {
+        override val path: String get() = pick.path
+    }
 
-    /** What `POST /sessions` is told. An existing folder is sent as the runner resolved it. */
+    /** What `POST /workspaces` is told. An existing folder is sent as the runner resolved it. */
     val newWorkspace: NewWorkspaceRequest
         get() = when (this) {
             is Existing -> NewWorkspaceRequest(workDir = path)
             is New -> NewWorkspaceRequest(newFolder = name)
-        }
-
-    /** The workspace it makes, as the server names it (§3.2). */
-    val workspaceName: String
-        get() = when (this) {
-            is Existing -> MachineSetup.folderName(path)
-            is New -> name
+            is Github -> NewWorkspaceRequest(github = NewWorkspaceRequest.GithubClone(pick.repoId, pick.ref, pick.name))
         }
 }
+
+/** The repository From GitHub picked, and the folder it is cloned into. [ref] null is the repository's default branch, which
+ *  [defaultBranch] names. */
+data class GithubPick(
+    val repoId: Long,
+    val repository: String,
+    val isPrivate: Boolean,
+    val defaultBranch: String,
+    val ref: String?,
+    val name: String,
+    val path: String,
+)
 
 /** The second step's answer for the draft's engine and credential. */
 sealed interface SetupCredential {
@@ -128,33 +149,11 @@ data class EnginePick(val engine: String, val provider: String)
 object MachineSetup {
     const val DIR_PROBE_CAPABILITY = "dir-probe/v1"
     const val CREATE_WORKDIR_CAPABILITY = "create-workdir/v1"
+    /** What a runner declares when it clones a GitHub repository on request (docs/github-workspace-design.md §6). */
+    const val CLONE_WORKDIR_CAPABILITY = "clone-workdir/v1"
 
-    /**
-     * Whether the directory `orbit register` ran in is worth asking about: the two answers a path can give on its face are left
-     * unasked. Null when there is nothing to ask.
-     */
-    fun registerDirToProbe(registerDir: String?): String? {
-        var dir = registerDir?.trim().orEmpty()
-        while (dir.length > 1 && dir.endsWith("/")) dir = dir.dropLast(1)
-        return if (dir.isEmpty() || dir == "~" || dir == "/") null else dir
-    }
-
-    /**
-     * Rule 2: a checked register directory is offered only when it is a folder that exists and is neither the home directory nor the
-     * root. The installer runs where the terminal stands, which is usually home, and all of home is no default.
-     */
-    fun isOfferedFolder(probe: DirProbe?): Boolean =
-        probe != null && probe.error.isNullOrEmpty() && probe.exists && probe.isDir && !probe.isHome && probe.path != "/"
-
-    /**
-     * Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder. The rest is what a machine
-     * that can't make one leaves.
-     */
-    fun defaultFolderChoice(suggested: DirProbe?, offersNewFolder: Boolean): FolderChoice {
-        if (suggested?.isGit == true) return FolderChoice.SUGGESTED
-        if (offersNewFolder) return FolderChoice.NEW
-        return if (suggested != null) FolderChoice.SUGGESTED else FolderChoice.OTHER
-    }
+    /** A runner that makes a new folder in its home, the directory its reposRoot (`<home>/orbit-repos`) sits in. */
+    const val CREATE_WORKDIR_HOME_CAPABILITY = "create-workdir/v2"
 
     /** Whether a machine can be asked about a path at all: the capability it declares (§2). */
     fun answersDirProbe(runner: JsonObject): Boolean =
@@ -163,6 +162,58 @@ object MachineSetup {
     /** Whether it can make a new folder: the capability, and the Repos Folder it goes in (§3.1). */
     fun makesNewFolders(runner: JsonObject): Boolean =
         CREATE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    /**
+     * Whether a machine clones a GitHub repository on request: it declares clone-workdir/v1 and has reported the Repos Folder the clone
+     * goes in. POST /sessions refuses either missing.
+     */
+    fun clonesRepositories(runner: JsonObject): Boolean =
+        CLONE_WORKDIR_CAPABILITY in runner.strings("capabilities") && !runner.text("reposRoot")?.trim().isNullOrEmpty()
+
+    private val homePrefix = Regex("""^(?:/Users/[^/]+|/home/[^/]+|/root)(?=/|$)""")
+
+    /** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
+    fun homeShortPath(path: String): String = homePrefix.replaceFirst(path, "~")
+
+    /** The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder name. */
+    fun repositoryFolder(fullName: String): String {
+        val name = fullName.split('/').last()
+        return if (isValidNewFolder(name)) name else ""
+    }
+
+    /** The branch a clone is asked for: what was typed under Other branch, unless it is empty or the default. */
+    fun cloneRef(typed: String?, defaultBranch: String): String? {
+        val ref = typed?.trim().orEmpty()
+        return if (ref.isEmpty() || ref == defaultBranch) null else ref
+    }
+
+    /** How many repositories the picker shows before anything is typed (board 01, note 4). */
+    const val FIRST_REPOSITORIES = 8
+
+    /** What From GitHub would pick, on the machine's answer about the folder: only a folder that isn't there yet can be cloned into. */
+    fun githubPick(repository: GithubRepository, name: String, ref: String?, reposRoot: String, probe: DirProbe?): PickedFolder? {
+        if (!isValidNewFolder(name) || probe == null || !probe.error.isNullOrEmpty() || probe.exists) return null
+        return PickedFolder.Github(GithubPick(repository.id, repository.fullName, repository.private, repository.defaultBranch, ref, name,
+            newFolderPath(reposRoot, name)))
+    }
+
+    /**
+     * The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares create-workdir/v2, else
+     * reposRoot itself. The separator is the one the root is written with. Port of @orbit/shared `newFolderRoot`.
+     */
+    fun newFolderRoot(reposRoot: String, capabilities: List<String>?): String {
+        var root = reposRoot.trim()
+        while (root.length > 1 && (root.endsWith("/") || root.endsWith("\\"))) root = root.dropLast(1)
+        if (capabilities?.contains(CREATE_WORKDIR_HOME_CAPABILITY) != true) return root
+        val cut = maxOf(root.lastIndexOf('/'), root.lastIndexOf('\\'))
+        if (cut < 0) return root
+        // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+        return if (cut == 0 || root[cut - 1] == ':') root.take(cut + 1) else root.take(cut)
+    }
+
+    /** The directory the folder step's name goes in: the machine's home, or its Repos Folder on an older runner. */
+    fun newFolderRootOf(runner: JsonObject): String =
+        newFolderRoot(runner.text("reposRoot").orEmpty(), runner.strings("capabilities"))
 
     /**
      * Whether a machine too old to answer gets there by itself: not one that reports its updater off, or unable to write where it is
@@ -197,17 +248,13 @@ object MachineSetup {
         return name.all { ch -> ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' || ch == '.' || ch == '_' || ch == '-' }
     }
 
-    /** Where a new folder lands: `<reposRoot>/<name>`, as the server joins it. */
-    fun newFolderPath(reposRoot: String, name: String): String {
-        val separator = if ('\\' in reposRoot && '/' !in reposRoot) "\\" else "/"
-        var root = reposRoot
-        while (root.endsWith("/") || root.endsWith("\\")) root = root.dropLast(1)
-        return "$root$separator$name"
+    /** Where a new folder lands: `<root>/<name>`, as the server joins it. */
+    fun newFolderPath(root: String, name: String): String {
+        val separator = if ('\\' in root && '/' !in root) "\\" else "/"
+        var dir = root
+        while (dir.endsWith("/") || dir.endsWith("\\")) dir = dir.dropLast(1)
+        return "$dir$separator$name"
     }
-
-    /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
-    fun folderName(path: String): String =
-        path.trimEnd('/', '\\').split('/', '\\').lastOrNull()?.takeIf { it.isNotEmpty() } ?: path
 
     fun folderVerdict(probe: DirProbe, machine: String): FolderVerdict {
         fun refused(text: String) = FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false)
@@ -224,8 +271,8 @@ object MachineSetup {
     }
 
     /**
-     * What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a new folder
-     * starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a file can't become one.
+     * What the folder step's name finds at `<root>/<name>`, asked before anything is sent. Nothing there is a new folder, made as the
+     * session starts; a directory is used as it stands, read as any folder is; a file can't become one.
      */
     fun newFolderVerdict(probe: DirProbe, machine: String): FolderVerdict {
         fun refused(text: String) = FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false)
@@ -239,20 +286,39 @@ object MachineSetup {
             )
         }
         if (!probe.isDir) return refused(MachineSetupCopy.setupNewFolderIsFile(machine))
-        return FolderVerdict(
-            FolderVerdict.Tone.WARN,
-            MachineSetupCopy.setupNewFolderExists(machine),
-            folderVerdict(probe, machine).short,
-            usable = true,
-        )
+        return folderVerdict(probe, machine)
     }
 
-    /** What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
-    fun newFolderPick(probe: DirProbe, name: String, reposRoot: String, machine: String): PickedFolder? {
+    /** What Create workspace makes the workspace in on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
+    fun newFolderPick(probe: DirProbe, name: String, root: String, machine: String): PickedFolder? {
         val verdict = newFolderVerdict(probe, machine)
         if (!verdict.usable) return null
         return if (probe.exists) PickedFolder.Existing(probe.path, verdict.short)
-        else PickedFolder.New(name, newFolderPath(reposRoot, name))
+        else PickedFolder.New(name, newFolderPath(root, name))
+    }
+
+    /**
+     * The workspace's name on the card: the folder's until it is edited ([edited] non-null), and from then on what was typed, empty
+     * included: an emptied name is never filled in again.
+     */
+    fun shownName(edited: String?, folder: String): String = edited ?: folder
+
+    /** The line under the Name field, and whether it is a refusal. */
+    fun nameLine(edited: String?): Pair<String, Boolean> = when {
+        edited != null && edited.trim().isEmpty() -> MachineSetupCopy.SETUP_NAME_EMPTY to true
+        edited != null -> MachineSetupCopy.SETUP_NAME_EDITED to false
+        else -> MachineSetupCopy.SETUP_NAME_HINT to false
+    }
+
+    /** Whether Create workspace can be pressed: a folder found usable, a name, a machine that can check and make folders, nothing out. */
+    fun canCreate(pick: PickedFolder?, name: String, usable: Boolean, creating: Boolean): Boolean =
+        pick != null && name.trim().isNotEmpty() && usable && !creating
+
+    /** `POST /workspaces`: the workspace alone, in [folder] on the runner, under [name] (trimmed). */
+    fun createWorkspaceBody(name: String, runnerId: String, folder: PickedFolder): JsonObject = buildJsonObject {
+        put("name", name.trim())
+        put("runnerId", runnerId)
+        folder.newWorkspace.toJson().forEach { (key, value) -> put(key, value) }
     }
 
     /** The login CLIs installed here, in the app's order. */
@@ -303,12 +369,6 @@ object MachineSetup {
         return SetupCredential.SignIn
     }
 
-    /** Rule 5's Use X instead: the other sign-ins installed here, among the engines this app draws. */
-    fun otherEngines(runner: JsonObject, engine: String, fleet: List<JsonObject>? = null): List<String> =
-        installedLogins(runner).filter {
-            it != engine && ProviderEngines.androidShowsEngine(it, fleet ?: listOf(runner))
-        }
-
     /**
      * Rule 5's Use an API Key: the first key or pool that can run here, the draft's own engine's first. Null with none, and then the
      * card doesn't offer it: a key is connected on the web.
@@ -324,10 +384,6 @@ object MachineSetup {
         return null
     }
 
-    /** Rule 1 and §3: both steps are done and the machine is here, so the next send makes the workspace. */
-    fun isReady(bare: Boolean, folder: PickedFolder?, online: Boolean, credential: SetupCredential): Boolean =
-        bare && folder != null && online && credential.done
-
     /**
      * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
      * on them: an offline one is already what Machines & models says needs you.
@@ -336,11 +392,12 @@ object MachineSetup {
         runners: List<JsonObject>?,
         workspaces: List<JsonObject>,
         nowMs: Long = System.currentTimeMillis(),
+        managedStatus: ManagedRunner.Status? = null,
     ): List<MachineToSetUp> {
         if (runners == null) return emptyList()
         return runners.mapNotNull { runner ->
             val id = runner.text("id") ?: return@mapNotNull null
-            if (RunnerPage.isOffline(runner, nowMs)) return@mapNotNull null
+            if (RunnerPage.isOffline(runner, nowMs) && ManagedRunner.managedSetupState(id, managedStatus) == null) return@mapNotNull null
             if (workspaces.any {
                     (it["deletedAt"] == null || it["deletedAt"] is JsonNull) && ObjectId.same(it.text("runnerId"), id)
                 }
@@ -352,8 +409,8 @@ object MachineSetup {
     /**
      * Rule 11: the first online machine in the runner list's order, for landing or New session when the account has no workspaces.
      */
-    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis()): String? =
-        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) }?.text("id")
+    fun firstOnlineRunnerId(runners: List<JsonObject>, nowMs: Long = System.currentTimeMillis(), managedStatus: ManagedRunner.Status? = null): String? =
+        runners.firstOrNull { !RunnerPage.isOffline(it, nowMs) || ManagedRunner.managedSetupState(it.text("id"), managedStatus) != null }?.text("id")
 
     /**
      * What a machine's first draft stands on (`Agent.machineDraft` in OrbitKit). The composer's engine, model and account pickers
@@ -371,71 +428,6 @@ object MachineSetup {
 }
 
 /**
- * The first message, waiting for a machine's two steps (rule 6). Files are on the control plane already, so they wait as
- * [StagedAttachment]s, ready to restore to the composer if withdrawn.
- */
-data class HeldMessage(
-    val content: String,
-    val shell: Boolean = false,
-    val attachments: List<StagedAttachment> = emptyList(),
-    val error: String? = null,
-)
-
-/** What a composer's send does on a machine's new session page. */
-sealed interface MachineSend {
-    data object Nothing : MachineSend
-    data object AlreadyWaiting : MachineSend
-    data object Hold : MachineSend
-    data class Create(val newWorkspace: NewWorkspaceRequest) : MachineSend
-}
-
-/**
- * What a machine's new session page has been told so far: the folder and the message waiting on it. The page is left and come back
- * to on the way (a key is picked elsewhere, a sign-in goes through a browser), and neither answer should have to be given twice.
- */
-data class MachineSetupState(
-    val folder: PickedFolder? = null,
-    val held: HeldMessage? = null,
-    val sendingHeld: Boolean = false,
-) {
-    fun pick(folder: PickedFolder?): MachineSetupState = copy(folder = folder)
-
-    fun send(bare: Boolean, ready: Boolean): MachineSend {
-        if (!bare) return MachineSend.Nothing
-        if (held != null) return MachineSend.AlreadyWaiting
-        if (ready && folder != null) return MachineSend.Create(folder.newWorkspace)
-        return MachineSend.Hold
-    }
-
-    fun hold(message: HeldMessage): MachineSetupState = copy(held = message)
-
-    /**
-     * Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per waiting message, because the
-     * send makes a workspace: while it is out this answers null, and a refusal leaves it waiting on the person (`error`) rather than
-     * on another try.
-     */
-    fun takeHeldToSend(ready: Boolean, busy: Boolean): Pair<MachineSetupState, Pair<HeldMessage, NewWorkspaceRequest>>? {
-        val currentHeld = held ?: return null
-        val currentFolder = folder ?: return null
-        if (!ready || busy || sendingHeld || currentHeld.error != null) return null
-        return copy(sendingHeld = true) to (currentHeld to currentFolder.newWorkspace)
-    }
-
-    fun failHeld(why: String): MachineSetupState =
-        copy(sendingHeld = false, held = held?.copy(error = why))
-
-    fun retryHeld(): MachineSetupState =
-        copy(held = held?.copy(error = null))
-
-    fun withdraw(): Pair<MachineSetupState, HeldMessage?> {
-        if (sendingHeld) return this to null
-        return copy(held = null) to held
-    }
-
-    fun finish(): MachineSetupState = MachineSetupState()
-}
-
-/**
  * The first line of a conversation that made its workspace (rule 8): what was made, where, and the two ways to change it.
  */
 data class CreatedWorkspaceLine(
@@ -444,6 +436,11 @@ data class CreatedWorkspaceLine(
     val machine: String,
     val path: String?,
     val live: Boolean,
+    /** A workspace cloned from GitHub (docs/github-workspace-design.md §8): its `owner/name`, and where its clone stood when the detail
+     *  was read ([cloneError] is why it failed). All null for one that is not. */
+    val repository: String? = null,
+    val cloneState: String? = null,
+    val cloneError: String? = null,
 ) {
     companion object {
         fun fromSession(
@@ -471,12 +468,18 @@ data class CreatedWorkspaceLine(
             val path = liveWorkspace?.text("workDir")?.takeIf { it.isNotEmpty() }
                 ?: agent?.text("workDir")?.takeIf { it.isNotEmpty() }
             val deleted = agent != null && agent["deletedAt"] != null && agent["deletedAt"] !is JsonNull
+            // The clone's fields ride on the detail's workspace; the web reads them as `workspace`, OrbitKit as `agent`.
+            val made = listOfNotNull(agent, detail["workspace"] as? JsonObject)
+            fun cloneField(key: String) = made.firstNotNullOfOrNull { it.text(key)?.takeIf(String::isNotEmpty) }
             return CreatedWorkspaceLine(
                 workspaceId = workspaceId,
                 name = name,
                 machine = machine,
                 path = path,
                 live = !deleted,
+                repository = WorkspaceClone.repositoryOf(cloneField("repoUrl")),
+                cloneState = cloneField("cloneState"),
+                cloneError = cloneField("cloneError"),
             )
         }
     }
@@ -494,14 +497,6 @@ object DirProbeRelay {
         data object Replaced : Outcome
         data object Unanswered : Outcome
     }
-
-    /**
-     * Whether the register directory is asked about again. A path asked before the machine had answered about it took its question's
-     * place, and the suggestion would never come: it is asked again once nothing else on the card waits for an answer. Only while the
-     * machine can be asked: offline, a stored answer is all there is.
-     */
-    fun asksAgain(outcome: Outcome?, online: Boolean, otherWaiting: Boolean): Boolean =
-        outcome == Outcome.Replaced && online && !otherWaiting
 
     suspend fun probe(
         ask: (suspend () -> Unit)?,

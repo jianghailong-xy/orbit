@@ -199,7 +199,7 @@ func (tc *testConn) await(body string, timeout time.Duration, match func(*linkpb
 	for {
 		select {
 		case f := <-tc.frames:
-			if bodyName(f) == body && (match == nil || match(f)) {
+			if (body == "" || bodyName(f) == body) && (match == nil || match(f)) {
 				return f
 			}
 		case <-tc.done:

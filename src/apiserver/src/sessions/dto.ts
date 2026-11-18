@@ -107,6 +107,23 @@ export interface CreateSessionDto {
    *  (docs/session-folders-move-design.md §3.2). It has to be one of the caller's folders in this
    *  session's own `workspaceId`, else 400. Omitted files it in none. */
   folderId?: string;
+  /** `false` runs the session in its workspace's own directory, with no branch and no worktree, even when the
+   *  workspace's setting is worktrees: what `orbit` in a terminal sends, so its edits land in the folder it was typed
+   *  in (docs/terminal-session-design.md D4). It can only turn isolation off: `true` or omitted follows the
+   *  workspace. Anything but a boolean is a 400. */
+  worktree?: boolean;
+  /** The folder below the workspace's workDir a session with no worktree runs in: what `orbit` typed in a
+   *  subfolder of a workspace sends, so the engine starts in that subfolder. Relative, `/`-separated and
+   *  normalized, with no `..` segment (work-subdir.ts); anything else, or one sent for a session that has a
+   *  worktree, is a 400 and nothing is created. Omitted runs the session at workDir. */
+  workSubdir?: string;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
+   *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
+  skipTranslation?: boolean;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt in the agent language, sent
+   *  beside the owner-language text Use put in the box. Under Settings › Translation the message is held as usual
+   *  and released with this text, with no translator call. Ignored when the owner's Translation is off. */
+  optimizedTranslation?: string;
 }
 
 export interface SessionTurnDto {
@@ -126,6 +143,13 @@ export interface SessionTurnDto {
    *  delivery reads and appends as the control plane's note, so `content` stays the words alone. Taken
    *  only by a chat; a message to any other session that carries one is a 400. */
   wikiContext?: WikiChatContext | null;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
+   *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
+  skipTranslation?: boolean;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt in the agent language, sent
+   *  beside the owner-language text Use put in the box. Under Settings › Translation the message is held as usual
+   *  and released with this text, with no translator call. Ignored when the owner's Translation is off. */
+  optimizedTranslation?: string;
 }
 
 /** Stop the running turn, and — when a follow-up rides along — queue what to do instead,

@@ -277,8 +277,9 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
           await new Promise((r) => requestAnimationFrame(() => r(null)));
           if (!openRef.current) return;
         }
-        // A hit folded into a steps line opens it first, so the match is drawn and painted.
-        const folded = elementForSeq(hit.seq)?.closest('.chat-steps:not(.is-open)');
+        // A hit folded into a steps line, or in a long message's hidden part, opens it first, so the
+        // match is drawn and painted.
+        const folded = elementForSeq(hit.seq)?.closest('.chat-steps:not(.is-open), .smc.is-clamped');
         if (folded) {
           folded.dispatchEvent(new Event(REVEAL_EVENT));
           await new Promise((r) => requestAnimationFrame(() => r(null)));

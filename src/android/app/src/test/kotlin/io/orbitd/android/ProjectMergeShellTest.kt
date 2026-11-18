@@ -56,12 +56,13 @@ class ProjectMergeShellTest {
     /** The owner item a merge's push names (`openItemID`). */
     private val mergeItem = "019a11a9-0000-7000-8000-000000000001"
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
+    // A blocked candidate is a record at decidedAt; keep it inside this coordinator's conversation.
     private fun candidate(state: String, conflicts: String = "[]", execution: String? = null, extra: String = "") = """{"promotionId":"pr-1","state":"$state",
         "sourceRef":"refs/heads/project/launch","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":7,"filesChanged":10,
         "taskIds":["t1","t2","t3","t4"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs off by default"},
         {"taskId":"t3","title":"P6 end to end"},{"taskId":"t4","title":"P7 rehearsal"}],
         "checks":[{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":372000}],
-        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${execution?.let { ",\"execution\":$it" }.orEmpty()}$extra}"""
+        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${if (state == "BLOCKED") ",\"decidedAt\":\"${ago(120)}\"" else ""}${execution?.let { ",\"execution\":$it" }.orEmpty()}$extra}"""
     private val criteria = """[{"key":"c1","text":"Notes exist","satisfied":true},{"key":"c2","text":"Contract written","satisfied":true},
         {"key":"c3","text":"Smoke passes","satisfied":false}]"""
 
@@ -307,8 +308,9 @@ class ProjectMergeShellTest {
      * and the merge already made is one line that opens its receipt. */
     @Test fun theConversationKeepsOneLinePerMoment() {
         ProjectShell.promotion = candidate("READY")
+        // The coordinator was created 10 hours ago; earlier merges belong to its predecessor.
         ProjectShell.merged = """[${candidate("MERGED").replace("\"promotionId\":\"pr-1\"", "\"promotionId\":\"pr-0\"").replace("\"merged\":null",
-            "\"merged\":{\"sha\":\"8d5a868e90df\",\"at\":\"${ago(60 * 26)}\",\"automatic\":true,\"revert\":\"git revert -m 1 8d5a868e90df\"}")}]"""
+            "\"merged\":{\"sha\":\"8d5a868e90df\",\"at\":\"${ago(60 * 6)}\",\"automatic\":true,\"revert\":\"git revert -m 1 8d5a868e90df\"}")}]"""
         openPage()
         await { exists(hasText("Coordinate launch") and hasClickAction()) }
         compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
@@ -334,16 +336,19 @@ class ProjectMergeShellTest {
         await { exists(hasText("git revert -m 1 8d5a868e90df") and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
     }
 
-    /** The needs-you bar's merge waiting elsewhere opens its project's sessions page, where its card is (iOS 6b4bef713), and not the
-     * coordinator conversation. */
-    @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
-        ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
+    /** A merge that starts waiting is noticed once at the top (the owner, 2026-11-15, needs-you-capsule/12-once), and the notice
+     * opens its project's sessions page, where its card is (iOS 6b4bef713), and not the coordinator conversation. What already waited
+     * at sign-in ("Quota retry") is not news. */
+    @Test fun theNoticeOfAWaitingMergeOpensItsProjectsSessionsPage() {
+        ProjectShell.promotion = candidate("READY")
         signIn()
         await { exists(hasText("Plain notes") and hasClickAction()) }
-        compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
-        await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
-            exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
-        compose.onNodeWithTag("needs-you-bar").performClick()
+        assertFalse("what waited at sign-in is not noticed", exists(hasTestTag("needs-you-toast")))
+        ProjectShell.mergeWaiting = true
+        app().realtime.refreshDirectory()
+        await { exists(hasTestTag("needs-you-toast-line") and hasText("Approve merge to main", substring = true), unmerged = true) }
+        compose.onAllNodesWithTag("needs-you-toast").assertCountEquals(1)
+        compose.onNode(hasTestTag("needs-you-toast") and hasText("Approve merge to main", substring = true)).performClick()
         await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
         compose.onNodeWithContentDescription("Back").assertExists()
@@ -434,7 +439,7 @@ class ProjectMergeShellTest {
     private fun openPage() {
         signIn()
         await { exists(hasTestTag("project-row:$launch")) }
-        compose.onNodeWithTag("project-row:$launch").performClick()
+        compose.openProjectSessionsPage(launch)
         // The coordinator's row: a merge card above it can push the last members out of the lazy list's composed rows.
         await { exists(hasTestTag("project-sessions")) && exists(hasText("Coordinate launch") and hasClickAction()) }
     }

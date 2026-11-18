@@ -901,3 +901,55 @@ test('a Claude session whose sign-in its runtime refused moves to a signed-in ac
   assert.deepEqual(await plan(false, signedOutOn('claude', ['default'])), stays);
   assert.deepEqual(await plan(false, ENGINES, []), stays);
 });
+
+// A failure of the connection to the API — Cloudflare's block page, a dropped socket — is dressed in
+// the runtime's sign-in prefix, but the credentials are intact and it clears on its own. Reading it
+// as a refusal moves the session off an account that never left and tells the user that account was
+// signed out (2026-11-13: two dozen sessions on three machines, every account still signed in). It is
+// a transient API error instead: the session stays where it is and is re-sent on the API-error ladder.
+test('a failure of the connection is re-sent on the account it ran on, not moved and called a sign-out', async () => {
+  const controller = new RunnerApiController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  const tx = transactionDouble<RetryPlanTransaction>({
+    runEvent: { findFirst: async () => null },
+    session: {
+      findMany: async () => [],
+      findUnique: async () => ({
+        ownerId: 'owner-1',
+        provider: AgentProvider.CLAUDE,
+        retryAttempts: 0,
+        codexAccount: null,
+        claudeAccount: WORK,
+        claudeAccountPinned: false,
+        kimiAccount: null,
+        poolSwitchNotice: null,
+        workspace: { env: null, codexAccount: null, claudeAccount: null, kimiAccount: null },
+      }),
+    },
+    runner: {
+      // Default is signed in and has room: the sign-in path would move the session there, so a
+      // move here would be the misjudgment.
+      findUnique: async () => ({ planUsage: null, engines: ENGINES, accountNames: null, accountPauses: null, defaultRemoved: [], capabilities: [CLAUDE_ACCOUNT_MOVE_V1] }),
+    },
+  });
+  for (const text of [
+    'Failed to authenticate. API Error: 403 Attention Required! | Cloudflare',
+    'Failed to authenticate. API Error: 403 ECONNRESET: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()',
+  ]) {
+    const plan = await (
+      controller as unknown as {
+        retryPlanFor(tx: RetryPlanTransaction, id: string, runnerId: string, text: string): Promise<{ retryAt?: Date | null; claudeAccount?: string; poolSwitchNotice?: string }>;
+      }
+    ).retryPlanFor(tx, 'session-1', RUNNER.id, text);
+    assert.equal(plan.claudeAccount, undefined, `moved off an account whose credentials are intact: ${text}`);
+    assert.equal(plan.poolSwitchNotice, undefined, `called a signed-out account: ${text}`);
+    assert.ok(plan.retryAt instanceof Date && plan.retryAt.getTime() > Date.now(), `re-sent, after the API-error ladder rather than at once: ${text}`);
+  }
+});

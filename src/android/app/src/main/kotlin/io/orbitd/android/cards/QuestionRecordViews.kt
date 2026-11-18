@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,8 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.core.realtime.RunEvent
-import io.orbitd.android.reader.AttachedNoteEntry
 import io.orbitd.android.reader.personWords
 import io.orbitd.android.text.MarkdownText
 import io.orbitd.android.ui.LocalOrbitColors
@@ -44,7 +45,9 @@ import io.orbitd.android.ui.LocalOrbitColors
  */
 @Composable
 internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, notice: String? = null, onOpen: () -> Unit) {
-    val record = card.source
+    // The question in the owner's language as it was translated while open (Settings › Translation); its review flips it.
+    val owner = LocalTranslation.current.cardLanguage
+    val record = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) } ?: card.source
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     val shape = RoundedCornerShape(14.dp)
@@ -106,7 +109,10 @@ internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, 
  */
 @Composable
 internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null, open: (String) -> Unit) {
-    val record = card.source
+    var showOriginal by remember(card.key) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) }
+    val record = if (translated != null && !showOriginal) translated else card.source
     val question = record.obj("question")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxSize().testTag(card.key)) {
@@ -117,6 +123,7 @@ internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null,
                 CoordinatorQuestions.askedAtLine(record)?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = secondary) }
             }
             MarkdownText(question?.text("question").orEmpty(), open = open)
+            if (translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
             val chosen = CoordinatorQuestions.chosenOption(record)
             question?.objects("options").orEmpty().forEachIndexed { index, option ->
                 ReplayOption("${card.key}:option:$index", option.text("label").orEmpty(), option.text("description"),
@@ -185,7 +192,6 @@ internal fun ToldFold(tag: String, event: RunEvent, heading: String = OwnerAnswe
                     RoundedCornerShape(6.dp)).padding(8.dp).testTag("$tag:words"), fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall)
             }
-            event.fields.text("controlPlaneNote")?.takeIf { it.isNotBlank() }?.let { AttachedNoteEntry(it.trim()) }
         }
     }
 }

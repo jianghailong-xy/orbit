@@ -108,6 +108,7 @@ export interface ProjectPanorama {
 export const projectPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
+    meta: { entities: ['task', 'session'] },
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
     refetchInterval: streamPoll(30_000),
   });
@@ -368,6 +369,18 @@ export const LANDING_WORDS = {
   MAY_HAVE_BEEN_PUSHED: 'may have been pushed',
   RETRIED_BY_OWNER: 'retried by you',
   RETRIED_BY_COORDINATOR: 'retried by the coordinator',
+  /** The owner's skip of a landing still in flight (§2.4 J-S5): the check does not run for it. */
+  SKIP_CHECK: 'Land without the check',
+  SKIP_CHECK_CONFIRM: "The landing check won't run for this landing. It stops now and lands again without the check, recorded as skipped by you.",
+  SKIP_CHECK_GO: 'Land without it',
+  SKIP_CHECK_CANCEL: 'Keep checking',
+  SKIP_CHECK_FAILED: 'Could not skip the check',
+  /** Where a skip stands, in the place of "Nothing to do": the stopped generation still answering… */
+  SKIP_CHECK_STOPPING: 'Stopping — it lands again without the landing check.',
+  /** …and the generation that runs without it. */
+  SKIP_CHECK_SKIPPED: 'Landing without the landing check — you skipped it.',
+  /** What the owner's press records as the reason on the landing (the door requires one). */
+  SKIP_CHECK_REASON: 'The owner chose to land this without waiting for the landing check.',
 };
 
 /**
@@ -693,6 +706,10 @@ export interface LandingJobLine {
   detail: string | null;
   /** Whether the owner's Retry takes this job now — the server's answer, not `line.timedOut`. */
   retryable: boolean;
+  /** Whether "Land without the check" takes this job now — the server's `skippable`. */
+  skippable: boolean;
+  /** Where a skip of this job's check stands — the server's `skipCheck`. */
+  skipCheck: 'STOPPING' | 'SKIPPED' | null;
   /** The landing session this job belongs to (§2.9), or null where the server named none — an
    *  older build, or a job whose subject opened no session. "Open landing ›" is drawn from it. */
   landingSessionId: string | null;
@@ -746,6 +763,8 @@ export function landingJobLines(
           ? `Generation ${job.generation} · ${job.retriedBy === 'OWNER' ? LANDING_WORDS.RETRIED_BY_OWNER : LANDING_WORDS.RETRIED_BY_COORDINATOR} at ${landingClockTime(job.queuedAt)}`
           : null,
       retryable: job.retryable,
+      skippable: job.skippable === true,
+      skipCheck: job.skipCheck ?? null,
     };
   });
 }
@@ -772,6 +791,10 @@ export interface LandingCardJob {
   timedOut: boolean;
   /** The server's `retryable`, never inferred from `timedOut`. */
   retryable: boolean;
+  /** The server's `skippable`. */
+  skippable: boolean;
+  /** The server's `skipCheck`. */
+  skipCheck: 'STOPPING' | 'SKIPPED' | null;
   /** What a timed-out runner did before it stopped; the job list's own sentence. */
   detail: string | null;
 }
@@ -816,6 +839,12 @@ export interface LandingCard {
   detail: string | null;
   /** The job Retry takes, when the server says a retry takes one. */
   retryJobId: string | null;
+  /** The task whose landing "Land without the check" skips, when the card holds that one landing
+   *  and the server says the skip takes it; null otherwise. */
+  skipTaskId: string | null;
+  /** Where a skip of the one landing's check stands, said in the place of "Nothing to do"; null
+   *  when nobody skipped it. */
+  skipNote: string | null;
   /** The card holds one job — by the same counts its head is named by — and it is a round of
    *  merging into main (a merge check, or the merge itself). It lands no task, so the card says no
    *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
@@ -861,6 +890,8 @@ export function landingCard(
     running: job.line.running,
     timedOut: job.line.timedOut,
     retryable: job.retryable,
+    skippable: job.skippable,
+    skipCheck: job.skipCheck,
     detail: job.detail,
   }));
   // The row's own rule for the name slot, one row down: several jobs are a count in the head and a
@@ -885,6 +916,10 @@ export function landingCard(
     ...(line.liveness ? { liveness: line.liveness } : {}),
     detail: line.timedOut ? lead?.detail ?? null : null,
     retryJobId: lead?.retryable ? lead.jobId : null,
+    skipTaskId: !several && lead?.skippable && lead.taskId ? lead.taskId : null,
+    skipNote: several ? null
+      : lead?.skipCheck === 'STOPPING' ? LANDING_WORDS.SKIP_CHECK_STOPPING
+        : lead?.skipCheck === 'SKIPPED' ? LANDING_WORDS.SKIP_CHECK_SKIPPED : null,
     mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
   };
 }

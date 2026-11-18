@@ -243,7 +243,7 @@ final class StartProjectWiringTests: XCTestCase {
                       "the plan is drawn as the task graph by OrbitKit's rule")
         XCTAssertTrue(start.contains("ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)"),
                       "and a plan listed by level opens the project page's task graph full screen")
-        XCTAssertTrue(start.contains("graph: console.projectGraph)"),
+        XCTAssertTrue(start.contains("graph: console.projectGraph,"),
                       "the conversation's card is given the graph its plan is read off")
         XCTAssertTrue(start.contains("Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,"),
                       "and the line under Start says what pressing it does")

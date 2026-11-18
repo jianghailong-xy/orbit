@@ -69,8 +69,8 @@ import Foundation
 public struct ProposedCriterion: Codable, Equatable, Sendable, Identifiable {
     public let id: String?
     public let ordinal: Int
-    public let text: String
-    public let verificationMethod: String
+    public var text: String
+    public var verificationMethod: String
     /// The reason the proposer gave, when the edit carried one. Null far more often than not.
     public let completionCriterionOverrideReason: String?
 
@@ -113,8 +113,8 @@ public enum CriteriaProposalField: String, Codable, Equatable, Sendable {
 
 /// One criterion's words, on either side of the comparison.
 public struct CriterionWording: Codable, Equatable, Sendable {
-    public let text: String
-    public let verificationMethod: String?
+    public var text: String
+    public var verificationMethod: String?
     public let completionCriterionOverrideReason: String?
 
     public init(text: String, verificationMethod: String? = nil,
@@ -170,13 +170,13 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
     /// Its place in the proposed set — or, for one being dropped, in the set on record.
     public let ordinal: Int
     /// The proposal's words. Nil for `.removed`: the proposal states none.
-    public let proposed: CriterionWording?
+    public var proposed: CriterionWording?
     /// THE WORDS IT REPLACES, off the definition in force. Nil for `.new`: it replaces nothing.
     public let onRecord: CriterionWording?
     /// Which fields differ. Empty except on `.changed`.
     public let changed: [CriteriaProposalField]
     /// Each of those fields cut into what the rewrite keeps, drops and adds, in `changed` order.
-    public let rewrites: [CriterionFieldRewrite]
+    public var rewrites: [CriterionFieldRewrite]
 
     public init(change: CriteriaProposalChange, definitionId: String? = nil, ordinal: Int,
                 proposed: CriterionWording? = nil, onRecord: CriterionWording? = nil,
@@ -217,7 +217,7 @@ public struct CriteriaProposalChangeEntry: Codable, Equatable, Sendable {
 /// SERVER said rather than one a collapsed list implies — otherwise "5 unchanged" would be a claim
 /// about how many rows this client chose not to draw.
 public struct CriteriaProposalDiff: Codable, Equatable, Sendable {
-    public let entries: [CriteriaProposalChangeEntry]
+    public var entries: [CriteriaProposalChangeEntry]
     public let sameCount: Int
     public let changedCount: Int
     public let newCount: Int
@@ -268,12 +268,15 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
     public let baselineSeal: String
     /// The seal standing NOW. Equal to `baselineSeal` exactly when the proposal is decidable.
     public let currentSeal: String
-    public let proposed: [ProposedCriterion]
+    public var proposed: [ProposedCriterion]
     /// The same restatement read against the criteria in force — what the card is drawn from.
-    public let diff: CriteriaProposalDiff
+    public var diff: CriteriaProposalDiff
     /// The proposal this one displaced, or nil when it displaced nothing.
     public let supersededIntentId: String?
     public let decidability: CriteriaDecisionDecidability
+    /// `proposed[].text` and `verificationMethod` in the owner's language (Settings › Translation),
+    /// index for index; nil until translated.
+    public let translation: OwnerCardTranslation?
 
     public var id: String { intentId }
 
@@ -281,7 +284,8 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
                 filedAt: String, ageSeconds: Int, baselineSeal: String, currentSeal: String,
                 proposed: [ProposedCriterion], diff: CriteriaProposalDiff = .unreadable,
                 supersededIntentId: String? = nil,
-                decidability: CriteriaDecisionDecidability) {
+                decidability: CriteriaDecisionDecidability,
+                translation: OwnerCardTranslation? = nil) {
         self.intentId = intentId
         self.projectId = projectId
         self.commitToken = commitToken
@@ -294,6 +298,7 @@ public struct PendingCriteriaDecisionRow: Codable, Equatable, Sendable, Identifi
         self.diff = diff
         self.supersededIntentId = supersededIntentId
         self.decidability = decidability
+        self.translation = translation
     }
 }
 
@@ -526,14 +531,19 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         public let satisfied: Bool?
         /// The criterion's `key`, which a gap names it by (`AcceptedGap.criterionKey`).
         public let key: String?
+        /// Its text revision and how it is checked — what the done card's Confirm sheet names.
+        public let revision: Int?
+        public let verificationMethod: String?
 
         public init(id: String, ordinal: Int, text: String, satisfied: Bool? = nil,
-                    key: String? = nil) {
+                    key: String? = nil, revision: Int? = nil, verificationMethod: String? = nil) {
             self.id = id
             self.ordinal = ordinal
             self.text = text
             self.satisfied = satisfied
             self.key = key
+            self.revision = revision
+            self.verificationMethod = verificationMethod
         }
     }
 
@@ -573,16 +583,21 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// The settings half of the project's integration line, for the main branch the done cards name
     /// where its work landed. Nil from a server that did not say, and then they say main.
     public let integration: ProjectIntegrationSettings?
+    /// The non-code mark and the criteria moved out, for the done card (`ProjectDoneFollowUps.swift`).
+    public let followUps: ProjectDoneFollowUpFields
 
     /// What the done cards read off this document.
     public var doneSubject: ProjectDoneSubject {
         ProjectDoneSubject(title: title ?? id, status: status,
                            criteria: (acceptanceCriteriaItems ?? []).map {
                                ProjectDoneSubject.Criterion(id: $0.id, key: $0.key, ordinal: $0.ordinal,
-                                                            text: $0.text)
+                                                            text: $0.text, revision: $0.revision,
+                                                            verificationMethod: $0.verificationMethod)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef)
+                           acceptedGaps: acceptedGaps, upstreamRef: integration?.upstreamRef,
+                           projectID: id, nonCodeMark: followUps.nonCodeMark,
+                           criteriaMovedOut: followUps.criteriaMovedOut)
     }
     /// How many tasks the project holds — what the confirmation card's condition asks before it
     /// offers to start anything, because "Start the project" is a verb and this is its object.
@@ -611,7 +626,8 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
                 derivedDone: ProjectDerivedDone? = nil, doneBy: ProjectDoneBy? = nil,
                 doneAt: String? = nil, acceptedGaps: [AcceptedGap] = [],
                 coordinatorSessionId: String? = nil, exceptionEscalationSeconds: Int? = nil,
-                integration: ProjectIntegrationSettings? = nil) {
+                integration: ProjectIntegrationSettings? = nil,
+                followUps: ProjectDoneFollowUpFields = ProjectDoneFollowUpFields()) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
@@ -627,6 +643,7 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         self.coordinatorSessionId = coordinatorSessionId
         self.exceptionEscalationSeconds = exceptionEscalationSeconds
         self.integration = integration
+        self.followUps = followUps
     }
 
     public init(from decoder: Decoder) throws {
@@ -648,9 +665,11 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
         coordinatorSessionId = try? c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
         exceptionEscalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .exceptionEscalationSeconds)
         integration = try? c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
+        followUps = (try? ProjectDoneFollowUpFields(from: decoder)) ?? ProjectDoneFollowUpFields()
     }
 
     public func encode(to encoder: Encoder) throws {
+        try followUps.encode(into: encoder)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encodeIfPresent(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)
@@ -1037,7 +1056,7 @@ public enum CriteriaDecisions {
     /// that never saw the question still shows what was decided. Web draws the same receipts in the
     /// same place, from the same array (`criteriaDecisionReceiptRows`).
     ///
-    /// An answer older than everything this console holds is still drawn: as a ROW it carries the
+    /// An answer since conversation creation but older than everything loaded is still drawn: it carries the
     /// moment the door recorded (`decidedAt`), and `TranscriptRows.build` resolves that against the
     /// rows loaded at render time — inside the window it sits where the decision happened, above it
     /// it leads at the head (`ReceiptAnchor.Placement`). Nothing is captured here but the answer.
@@ -1433,7 +1452,7 @@ public enum AcceptanceConfirmations {
     /// The record this conversation draws, or nothing: a confirmation on record — current or
     /// superseded by an edit, both of which happened. A moment older than every loaded row is not
     /// dropped here: the record carries its own `confirmedAt`, and `TranscriptRows.build` puts it at
-    /// the head of the window when that moment is above it (`ReceiptAnchor.Placement`).
+    /// the head of the window when that moment is since conversation creation but above it (`ReceiptAnchor.Placement`).
     ///
     /// Drawn from the READ and not from the window that pressed. A press kept as this window's own
     /// state lasted exactly as long as the console did: the record of it was gone on the next open,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
+import { SESSION_MERGE_BESIDE_TURN_V1, SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -55,7 +55,10 @@ function harness(overrides: Record<string, unknown> = {}, capabilities = [SESSIO
       },
     },
   } as never;
-  const realtime = { notifyRunnerWake: (runnerId: string) => order.push(`wake ${runnerId}`) } as never;
+  const realtime = {
+    notifyRunnerWake: (runnerId: string) => order.push(`wake ${runnerId}`),
+    publishSessionUpdated: () => order.push('published'),
+  } as never;
   return {
     service: new SessionsService(prisma, {} as never, realtime),
     lockCalls,
@@ -244,4 +247,114 @@ test('merge queueing cannot overlap a runner-claimed commit', async () => {
 
   assert.equal(locks(h.lockCalls).length, 1);
   assert.deepEqual(h.writes, []);
+});
+
+const dataOf = (write: unknown) => (write as { data: Record<string, unknown> }).data;
+
+test('a session merging itself during its own turn is kept for the turn\'s end, not refused', async () => {
+  const h = harness({ status: RunStatus.RUNNING });
+
+  const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined,
+    { requestedBy: 'AGENT', selfRequest: true });
+
+  assert.equal((answer as { mergeAfterTurn?: boolean }).mergeAfterTurn, true);
+  assert.equal(h.writes.length, 1);
+  const data = dataOf(h.writes[0]);
+  assert.ok(data.mergeAfterTurnAt instanceof Date);
+  assert.equal(data.mergeAfterTurnTarget, 'develop');
+  assert.equal('mergeStatus' in data, false, 'nothing is queued while the turn runs');
+  assert.deepEqual(h.order, ['commit', 'published']);
+});
+
+test('a session merging itself with waitSeconds is answered at once, without waiting on its own turn', async () => {
+  const h = harness({ status: RunStatus.RUNNING });
+
+  const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, 60,
+    { requestedBy: 'AGENT', selfRequest: true }) as { outcome: string; receiptAbsentReason: string };
+
+  assert.equal(answer.outcome, 'AFTER_TURN');
+  assert.equal(answer.receiptAbsentReason, 'MERGE_AFTER_TURN');
+});
+
+test('another caller is still told to wait for the turn', async () => {
+  const h = harness({ status: RunStatus.RUNNING });
+  await assert.rejects(
+    () => h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, undefined, { requestedBy: 'AGENT' }),
+    ConflictException,
+  );
+  assert.deepEqual(h.writes, []);
+});
+
+test('on a runner that merges beside a turn, a merge mid-turn is queued at once, whoever asks', async () => {
+  for (const options of [{ requestedBy: 'AGENT' as const, selfRequest: true }, { requestedBy: 'AGENT' as const }, {}]) {
+    const h = harness({ status: RunStatus.RUNNING }, [SESSION_MERGE_RECOVERY_V1, SESSION_MERGE_BESIDE_TURN_V1]);
+
+    const answer = await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined, options);
+
+    assert.equal((answer as { mergeAfterTurn?: boolean }).mergeAfterTurn, undefined, JSON.stringify(options));
+    assert.equal(h.writes.length, 1);
+    const data = dataOf(h.writes[0]);
+    assert.equal(data.mergeStatus, 'pending', 'the merge is queued while the turn runs');
+    assert.equal(data.mergeAfterTurnAt, null, 'nothing is kept for the turn\'s end');
+    assert.deepEqual(h.order, ['commit', 'wake runner-1']);
+  }
+});
+
+test('a merge that queues clears a merge kept for the turn\'s end', async () => {
+  const h = harness({ mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: 'develop' });
+  await h.service.mergeToMain(OWNER_ID, SESSION_ID);
+  const data = dataOf(h.writes[0]);
+  assert.equal(data.mergeStatus, 'pending');
+  assert.equal(data.mergeAfterTurnAt, null);
+  assert.equal(data.mergeAfterTurnTarget, null);
+});
+
+test('the end of the turn queues the merge the session asked for, at the target it named', async () => {
+  const h = harness({ mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: 'develop' });
+
+  assert.equal(await h.service.mergeAfterOwnTurn(SESSION_ID), 'QUEUED');
+
+  assert.equal(h.writes.length, 1);
+  const data = dataOf(h.writes[0]);
+  assert.equal(data.mergeStatus, 'pending');
+  assert.equal(data.mergeTarget, 'develop');
+  assert.equal(data.mergeRequestedBy, 'AGENT');
+  assert.equal(data.mergeAfterTurnAt, null);
+  assert.deepEqual(h.order, ['commit', 'wake runner-1', 'published']);
+});
+
+test('the end of a turn with nothing owed, or with another turn already running, writes nothing', async () => {
+  const none = harness();
+  assert.equal(await none.service.mergeAfterOwnTurn(SESSION_ID), 'NOTHING_OWED');
+  assert.deepEqual(none.writes, []);
+
+  const running = harness({ status: RunStatus.RUNNING, mergeAfterTurnAt: new Date() });
+  assert.equal(await running.service.mergeAfterOwnTurn(SESSION_ID), 'DEFERRED');
+  assert.deepEqual(running.writes, []);
+});
+
+for (const status of [RunStatus.FAILED, RunStatus.CANCELLED]) {
+  test(`a session that ended ${status} does not merge on the word of the turn that asked`, async () => {
+    const h = harness({ status, mergeAfterTurnAt: new Date() });
+    assert.equal(await h.service.mergeAfterOwnTurn(SESSION_ID), 'DROPPED');
+    assert.equal(h.writes.length, 1);
+    assert.deepEqual(dataOf(h.writes[0]), { mergeAfterTurnAt: null, mergeAfterTurnTarget: null });
+  });
+}
+
+test('a merge kept for the turn\'s end that is refused then says so on the session', async () => {
+  const h = harness({ assignedRunnerId: null, mergeAfterTurnAt: new Date() });
+  assert.equal(await h.service.mergeAfterOwnTurn(SESSION_ID), 'REFUSED');
+  assert.equal(h.writes.length, 1);
+  const data = dataOf(h.writes[0]);
+  assert.equal(data.mergeStatus, 'error');
+  assert.equal(data.mergeError, 'no runner is associated with this session');
+  assert.equal(data.mergeAfterTurnAt, null);
+});
+
+test('a turn that failed or was stopped drops the merge it asked for, though the session is idle again', async () => {
+  const h = harness({ mergeAfterTurnAt: new Date() });
+  assert.equal(await h.service.mergeAfterOwnTurn(SESSION_ID, false), 'DROPPED');
+  assert.equal(h.writes.length, 1);
+  assert.deepEqual(dataOf(h.writes[0]), { mergeAfterTurnAt: null, mergeAfterTurnTarget: null });
 });

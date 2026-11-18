@@ -78,6 +78,9 @@ export interface ProviderPool {
   /** A Codex pool of one's own: every ChatGPT account it holds, oldest first — the one its sessions
    *  run on being the first of them. Absent from an older server, which names that one only. */
   logins?: CodexLogin[];
+  /** Every engine a Codex pool of one's own runs on, its own first: `['codex', 'claude']` where the
+   *  server runs Claude Code on it too (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY). Absent otherwise: `engine`. */
+  engines?: string[];
   /** The first of `logins` — the account the pool's sessions run on, or null before anyone signed in. */
   login?: CodexLogin | null;
   /** A shared pool (sharedPoolAsProviderPool): the whole of it as its page reads it — its people, its
@@ -94,6 +97,7 @@ export const PROVIDER_POOLS_KEY = ['providers', 'pools'] as const;
 export const providerPoolsQuery = () =>
   queryOptions({
     queryKey: PROVIDER_POOLS_KEY,
+    meta: { entities: ['provider'] },
     queryFn: async () => (await api<ProviderPool[]>('/providers/pools')).map((pool) => withLogin(pool)),
   });
 
@@ -160,6 +164,7 @@ export const poolsAsProviders = (pools: readonly ProviderPool[]): ConfiguredProv
     presetSlug: poolRunsCodex(pool) ? 'openai' : 'anthropic',
     modelsFromRuntime: true,
     planUsage: null,
+    ...(pool.engines && !pool.shared ? { engines: pool.engines } : {}),
   }));
 
 /**

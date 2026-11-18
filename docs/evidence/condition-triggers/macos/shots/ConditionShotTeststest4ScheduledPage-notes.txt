@@ -1,0 +1,14 @@
+scheduled: no window after launch; File > New Window
+scheduled: Needs you shown
+scheduled: Mon disk guard shown
+scheduled: Can't read shown
+scheduled: When root disk below 5% shown
+scheduled: Ceph capacity guard shown
+scheduled: When raw used above 90% shown
+scheduled: 6.9% shown
+scheduled: 1 min ago shown
+scheduled: Set kubernetes pool to 3 copies shown
+scheduled: Task · once, when 3 or more OSDs are in · HPC shown
+scheduled: 2 in shown
+scheduled: 3 min ago shown
+scheduled: Today shown

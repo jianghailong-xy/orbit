@@ -4,17 +4,19 @@ import { RunnerStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
+const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 
 /** A heartbeat harness whose runner row can be seeded, so the cleanup relay can be driven. */
 function harness(row: Record<string, unknown> = {}) {
   const writes: Array<Record<string, unknown>> = [];
+  const published: Array<[string, string]> = [];
   const prisma = {
     runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);
         Object.assign(row, data);
-        return { maxConcurrent: 2, ...row };
+        return { maxConcurrent: 2, ownerId: OWNER_ID, ...row };
       },
       findUnique: async () => row,
     },
@@ -27,10 +29,12 @@ function harness(row: Record<string, unknown> = {}) {
     drainMergeRequests: async () => [],
     drainCommitRequests: async () => [],
     drainArtifactRequests: async () => [],
+    publishWorkspaceRepoHealthChanged: (ownerId: string, workspaceId: string) => published.push([ownerId, workspaceId]),
   } as never;
   return {
     api: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     writes,
+    published,
     row,
   };
 }
@@ -129,4 +133,43 @@ test('a cleanup result corrects the stored health for that checkout', async () =
   ]);
   assert.equal(h.row.repoCleanupBranch, 'orbit/rescue-abc1234');
   assert.equal(h.row.repoCleanupStatus, 'done');
+});
+
+// The Main checkout bar draws the workspace list's repoHealth: a beat that changes it tells the owner's clients, so the
+// bar follows a commit, push, move or clean-up without a reload — and a beat that changes nothing tells nobody.
+test('a beat that changes a workspace\'s checkout health tells its owner, once per changed workspace', async () => {
+  const h = harness({
+    repoHealth: [
+      { root: '/root/orbit', state: 'dirty', branch: 'main', fileCount: 3, ahead: 0, agentIds: ['workspace-1'] },
+      { root: '/root/other', state: 'clean', agentIds: ['workspace-2'] },
+    ],
+  });
+  await h.api.heartbeat(
+    { id: RUNNER_ID, version: null },
+    beat({
+      repos: [
+        { root: '/root/orbit', state: 'dirty', branch: 'main', fileCount: 1, ahead: 1, agentIds: ['workspace-1'] },
+        { root: '/root/other', state: 'clean', agentIds: ['workspace-2'] },
+      ] as never,
+    }),
+  );
+  assert.deepEqual(h.published, [[OWNER_ID, 'workspace-1']]);
+
+  // The same report again: nothing moved, nothing is told.
+  await h.api.heartbeat(
+    { id: RUNNER_ID, version: null },
+    beat({
+      repos: [
+        { agentIds: ['workspace-1'], ahead: 1, fileCount: 1, branch: 'main', state: 'dirty', root: '/root/orbit' },
+        { root: '/root/other', state: 'clean', agentIds: ['workspace-2'] },
+      ] as never,
+    }),
+  );
+  assert.deepEqual(h.published, [[OWNER_ID, 'workspace-1']]);
+});
+
+test('a beat without a checkout report tells nobody', async () => {
+  const h = harness({ repoHealth: [{ root: '/root/orbit', state: 'dirty', fileCount: 3, agentIds: ['workspace-1'] }] });
+  await h.api.heartbeat({ id: RUNNER_ID, version: null }, beat());
+  assert.deepEqual(h.published, []);
 });

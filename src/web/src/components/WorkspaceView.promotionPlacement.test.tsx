@@ -94,7 +94,8 @@ function conversation(id: string, projectId: string | null, title: string) {
     runState: 'RUNNING',
     engineTurnActive: true,
     provider: 'claude',
-    createdAt: '2026-09-11T03:00:00Z',
+    // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+    createdAt: '2026-09-09T00:00:00Z',
     updatedAt: '2026-09-11T03:10:00Z',
   };
 }
@@ -520,6 +521,20 @@ describe('the record a merge leaves, in the conversation it happened in', { time
       receipt.compareDocumentPosition(first!) & Node.DOCUMENT_POSITION_FOLLOWING,
       'the record is not ahead of the first loaded event',
     ).toBeTruthy();
+  });
+
+  it('is not drawn in a conversation created after it (handoff v2 §4: it starts clean)', async () => {
+    mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-08T02:00:00Z', automatic: false, revert: null } })];
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
+      expect(
+        requested.some((path) => path.endsWith('/promotions/merged')),
+        'the merges on record were never read',
+      ).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(record(), 'a merge from before this conversation was drawn in it').toBeNull();
   });
 
   it('is drawn in no conversation that coordinates no project, which reads nothing for one', async () => {

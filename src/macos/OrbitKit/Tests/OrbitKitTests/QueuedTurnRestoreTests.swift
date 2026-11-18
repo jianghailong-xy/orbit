@@ -232,8 +232,8 @@ final class QueuedTurnRestoreTests: XCTestCase {
 
         let cancel = try section(console, from: "func cancelQueued(_ bubble: UserBubble) async {",
                                  to: "private func foldQueuedBackIntoComposer")
-        XCTAssertTrue(cancel.contains("if let words = ComposerLogic.restorableText(of: bubble) {"),
-                      "a withdrawn turn comes back only when somebody typed it")
+        XCTAssertTrue(cancel.contains("if let words = ComposerLogic.withdrawnText(of: bubble) {"),
+                      "a withdrawn turn comes back only when somebody typed it, as they wrote it")
         XCTAssertFalse(cancel.contains("WatchWakeText.parse") || fold.contains("WatchWakeText.parse"),
                        "one rule for both paths, not a list of exceptions kept in two places")
     }

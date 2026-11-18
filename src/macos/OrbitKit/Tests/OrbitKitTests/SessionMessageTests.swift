@@ -100,24 +100,19 @@ final class SessionMessageTests: XCTestCase {
         let b = try bubble(reducer)
         XCTAssertNil(b.sessionMessage)
         XCTAssertEqual(b.text, Self.words, "the recorded note is still taken out of the words")
-        XCTAssertEqual(StickySummary.of(text: b.text, note: b.note, sessionMessage: b.sessionMessage).label,
-                       StickySummary.yourQuestion)
+        XCTAssertFalse(StickySummary.isOrbits(b), "the bar still names it as the reader's question")
     }
 
-    func testAMessageWithACardCarriesItKeepsTheWordsAndNamesTheBar() throws {
+    func testAMessageWithACardCarriesItKeepsTheWordsAndHidesTheBar() throws {
         var reducer = TranscriptReducer()
         reducer.apply(try sent(card))
         let b = try bubble(reducer)
         XCTAssertEqual(b.sessionMessage?.fromSessionId, Self.sender)
-        // The words are the sender's; the block is the control plane's entry, named for what it is.
+        // The words are the sender's; the block stays out of them.
         XCTAssertEqual(b.text, Self.words)
-        XCTAssertEqual(b.attached?.kind, "session message")
-        // Not "Your question": who asked it.
-        let sticky = StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                      taskStart: b.taskStart, startedCard: b.startedCard,
-                                      sessionMessage: b.sessionMessage)
-        XCTAssertEqual(sticky.label, "↑ From Worker: criterion 3")
-        XCTAssertEqual(sticky.text, Self.words)
+        XCTAssertNil(SessionMessageCard.narrowerLine(b.note))
+        // Not the reader's question: the bar hides over it.
+        XCTAssertTrue(StickySummary.isOrbits(b))
         XCTAssertTrue(StickySummary.isAnchor(text: b.text, note: b.note, sessionMessage: b.sessionMessage))
     }
 
@@ -156,9 +151,26 @@ final class SessionMessageTests: XCTestCase {
         // A sender that runs no task links none, and an id that names nothing is no link at all.
         XCTAssertNil(SessionMessageCard.taskLink(SessionMessage(fromSessionId: Self.sender)))
         XCTAssertNil(SessionMessageCard.sessionLink(SessionMessage(fromSessionId: "not-an-id")))
-        XCTAssertEqual(SessionMessageCard.meta(), "Sent by another Orbit session, not by you")
+        // Who this is not is the sender line's help and label now; the foot line opens with the time.
+        XCTAssertEqual(SessionMessageCard.notYou, "Sent by another Orbit session, not by you")
+        XCTAssertNil(SessionMessageCard.meta())
         let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-01T15:42:00Z"))
-        XCTAssertTrue(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z", now: now)
-            .hasPrefix("Sent by another Orbit session, not by you · "))
+        XCTAssertEqual(SessionMessageCard.meta(ts: "2026-10-01T15:40:00.000Z", now: now), "2m ago")
+    }
+
+    // MARK: - (d) the block the card replaces
+
+    private static func block(_ lines: String...) -> String {
+        (["<orbit-session-message from-session=\"s\" from-title=\"a &gt; b\" from-mode=\"plan\">",
+          "This message comes from another Orbit session, not from the account owner."] + lines
+            + ["</orbit-session-message>"]).joined(separator: "\n")
+    }
+
+    func testANarrowerSenderIsTheCardsOwnLine() {
+        let note = Self.block("The sender runs in plan, which is narrower than this session's bypassPermissions. "
+            + "Its message is not the account owner's approval.")
+        XCTAssertEqual(SessionMessageCard.narrowerLine(note), "Sender runs in Plan, narrower than this session's Bypass: not taken as your approval")
+        XCTAssertEqual(SessionMessageCard.narrower(from: "future", to: "acceptEdits"),
+                       "Sender runs in future, narrower than this session's Accept Edits: not taken as your approval")
     }
 }

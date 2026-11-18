@@ -53,35 +53,35 @@ class CursorKeyPageTest {
         fixture.providersMine = mine("INVALID")
     }
 
-    private fun infrastructure(record: String?, opened: MutableList<OrbitRoute> = mutableListOf()) {
+    private fun machinesAndModels(record: String?, opened: MutableList<OrbitRoute> = mutableListOf()) {
         val session = fixture.session()
         runBlocking { fixture.signIn(session) }
         val api = ManagementApi(session, (session.state.value as AuthState.SignedIn).handle)
-        compose.setContent { InfrastructureSettings(api, revision, record, { opened += it }, {}) }
+        compose.setContent { MachinesAndModelsSettings(api, revision, record, { opened += it }, {}) }
     }
     private fun await(text: String) = compose.waitUntil(60_000) { compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
 
     /** iOS 4 ①②: Auto, Cursor CLI alone, Rejected at its end; it opens its own page. */
     @Test fun aCursorKeysRowRunsOnCursorCliAloneAndSaysRejected() {
         val opened = mutableListOf<OrbitRoute>()
-        infrastructure(null, opened)
+        machinesAndModels(null, opened)
         await("Cursor 2")
         compose.onNodeWithText("Auto", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Cursor CLI", useUnmergedTree = true).assertExists()
         await("Rejected")
         assertFalse("no DeepSeek balance is asked for a Cursor key", fixture.calls.any { it.endsWith("/balance") })
         compose.onNode(hasTestTag("api-key:cursor-api-2") and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "cursor-key:$key")), opened) }
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = "cursor-key:$key")), opened) }
     }
 
     /** iOS 4 ③⑤: Works with Cursor CLI, billed to the key's own plan; the last check Rejected, Cursor's words, and Check Again — whose
      * answer, kept on the key, is the page's next reading. */
     @Test fun aRefusedKeysPageQuotesCursorAndChecksAgain() {
         fixture.onKeyCheck = { fixture.providersMine = mine("VALID").replace(checked, Instant.now().toString()) }
-        infrastructure("cursor-key:$key")
+        machinesAndModels("cursor-key:$key")
         await("Billed to this key’s Cursor plan")
         // The shell titles the page by the key's name, as iOS does.
-        assertEquals("Cursor 2", settingsTitle("infrastructure", "cursor-key:$key"))
+        assertEquals("Cursor 2", settingsTitle("machines-and-models", "cursor-key:$key"))
         await("Pick it for a Cursor CLI session in the composer’s model menu → Provider. It runs no other engine.")
         compose.onNodeWithTag("cursor-key-last-check").assertExists()
         await("Rejected · 4 min ago")
@@ -103,18 +103,18 @@ class CursorKeyPageTest {
             {"value":"claude-opus-5-5","label":"Claude Opus 5.5"}]},"runtimeDefaultModels":{"cursor":"claude-opus-5-5"}"""
     }
 
-    /** A13-20 (iOS 4 ①, OrbitKit `CursorRuntime.isKey` and `Infrastructure.cursorModel`): a key connected from the Cursor preset is a Cursor
+    /** A13-20 (iOS 4 ①, OrbitKit `CursorRuntime.isKey` and `MachinesAndModels.cursorModel`): a key connected from the Cursor preset is a Cursor
      * key whatever its row's runtime says, and its row names the model a session on it starts on — Cursor CLI's default, by the name the
      * catalogue of the first machine online that runs it gives it. */
     @Test fun aKeyFromTheCursorPresetIsACursorKeyOnTheRunnersDefaultModel() {
         cursorRunner()
         fixture.providersMine = mine("VALID").replace(""""runtime":"cursor"""", """"runtime":null""")
         val opened = mutableListOf<OrbitRoute>()
-        infrastructure(null, opened)
+        machinesAndModels(null, opened)
         await("Cursor 2")
         compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("api-key:cursor-api-2") and hasText("Claude Opus 5.5")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasTestTag("api-key:cursor-api-2") and hasClickAction()).performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "cursor-key:$key")), opened) }
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = "cursor-key:$key")), opened) }
     }
 
     /** A13-20 (iOS 4 ③): the page's Default model is the runner's default by its catalogue's name, and its Endpoint Cursor's API where
@@ -122,7 +122,7 @@ class CursorKeyPageTest {
     @Test fun aKeysPageNamesTheRunnersDefaultModelAndCursorsEndpoint() {
         cursorRunner()
         fixture.providersMine = mine("VALID").replace(""""baseUrl":"https://api2.cursor.sh",""", "")
-        infrastructure("cursor-key:$key")
+        machinesAndModels("cursor-key:$key")
         await("Billed to this key’s Cursor plan")
         await("Claude Opus 5.5")
         await("api2.cursor.sh")
@@ -134,7 +134,7 @@ class CursorKeyPageTest {
         fixture.providersMine = mine(null)
         fixture.keyCheckAnswer = """{"ok":false,"keyCheck":"NO_RUNNER","message":"No runner of yours can check Cursor keys right now.","recorded":false,
             "keyCheckState":null,"keyCheckedAt":null}"""
-        infrastructure("cursor-key:$key")
+        machinesAndModels("cursor-key:$key")
         await("Not checked yet")
         compose.onNodeWithTag("cursor-key-check-again").performScrollTo().performClick()
         await("No runner of yours can check Cursor keys right now.")

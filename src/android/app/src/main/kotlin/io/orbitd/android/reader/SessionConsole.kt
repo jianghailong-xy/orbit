@@ -48,7 +48,7 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val provider get() = detail?.string("provider").orEmpty()
     val runnerId get() = detail?.string("assignedRunnerId") ?: detail?.string("runnerId")
     val runnerName get() = runner?.let(RunnerPage::displayName)?.takeIf { it.isNotEmpty() }
-        ?: (detail?.get("assignedRunner") as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
+        ?: (detail?.get("assignedRunner") as? JsonObject)?.let { RunnerPage.nameOf(runnerId, it.string("name"), it.string("displayName")).takeIf { n -> n.isNotEmpty() } }
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
     /** The engine this session runs on for good: the one it records, else the one its provider ran on before engines were. */
     val engine get() = ProviderEngines.sessionEngine(detail?.string("engine"), provider, providers)
@@ -151,7 +151,7 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
 
     /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
-     * Infrastructure's API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
+     * Machines & models' API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
      * stands in for the session's. These clients don't edit keys themselves. */
     suspend fun dshKeyUrl(): String {
         val origin = handle.account.server.trimEnd('/')

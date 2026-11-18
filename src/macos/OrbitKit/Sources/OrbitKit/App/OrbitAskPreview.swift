@@ -48,6 +48,9 @@ public struct BatchPreviewTask: Equatable, Sendable {
     /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
     /// picture without being one overall, and the row says so.
     public let dependsOnTaskIds: [String]?
+    /// A task that starts when its condition holds: the card's Starts when, Today and If never (condition-triggers
+    /// board frame 2). Nil on a task without one.
+    public var startWhen: StartWhenCardLines? = nil
 }
 
 public struct BatchApprovalPreview: Equatable, Sendable {
@@ -115,6 +118,12 @@ public struct CreateApprovalPreview: Equatable, Sendable {
     /// The project's criteria arrive one per item; a task's arrive as one Markdown block.
     public var criteriaText: String {
         isProject ? criteria.map { "- \($0)" }.joined(separator: "\n") : criteria.joined(separator: "\n")
+    }
+
+    /// A task that starts when its condition holds: the server's Starts when, Today and If never lines (condition-
+    /// triggers board frame 2). Nil for a project or a task without one.
+    public var startWhen: StartWhenCardLines? {
+        isProject ? nil : preview?.tasks.first?.startWhen
     }
 
     /// The noun the fold's label names, so a project's goal is never called a description.
@@ -325,6 +334,13 @@ public extension Approvals {
     static func workspaceWriteRawInput(toolName: String, from input: JSONValue) -> String? {
         guard isWorkspaceCreate(toolName: toolName) || isWorkspaceUpdate(toolName: toolName),
               workspaceWritePreview(toolName: toolName, from: input) == nil else { return nil }
+        return rawInput(input)
+    }
+
+    /// A call's whole input as indented JSON: the plain card's body when no field of it says what the
+    /// call does — web's plain card prints the same. Without it a provider write, or any tool with
+    /// neither a command nor a path, asked for a yes with nothing on it.
+    static func rawInput(_ input: JSONValue) -> String? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return (try? encoder.encode(input)).flatMap { String(data: $0, encoding: .utf8) }
@@ -349,8 +365,8 @@ public extension Approvals {
             }
         }
         written("workDir", "Working directory")
-        written("systemPrompt", "System prompt")
-        written("appendSystemPrompt", "Appended system prompt")
+        written("systemPrompt", "Base instructions")
+        written("appendSystemPrompt", "Runtime instructions")
         if let runner = runnerName(changes?["runner"]) { fields.append(.init(caption: "Runner", value: runner)) }
         if let worktree = changes?["enableWorktree"]?.boolValue {
             fields.append(.init(caption: "Worktree", value: worktree
@@ -477,6 +493,13 @@ public extension Approvals {
         return batchPreview(from: input)?.needsManualStart == 1
     }
 
+    /// Whether Create and start is the card's filled answer, with Create it beside it: whenever it is
+    /// offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a hold
+    /// someone asked for, so the prominent press does not start it. Web's `createAndStartLeads`.
+    static func createAndStartLeads(toolName: String, input: JSONValue?) -> Bool {
+        offersCreateAndStart(toolName: toolName, input: input) && input?["autoRunWhenReady"]?.boolValue != false
+    }
+
     /// What Create and start sends: the yes and the start, and nothing else — no message, answers or
     /// remember rules, none of which a create card carries.
     static let createAndStartRequest = ApprovalDecisionRequest(behavior: .allow, startAfterCreate: true)
@@ -584,7 +607,8 @@ public extension Approvals {
             }
             return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
                                     dependsOnRefs: strings("dependsOnRefs"),
-                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"),
+                                    startWhen: StartWhenCardLines(json: t["startWhen"]))
         }
     }
 
@@ -636,5 +660,132 @@ public extension Approvals {
         }
         if lines.isEmpty { lines.append("No task changes state — this only rewrites edges") }
         return lines
+    }
+}
+
+/// A provider write (`orbit_provider_create` / `_update` / `_delete`) as the card reads it: the fields
+/// by name, then the model list one model a row. The runner files only what the write sets
+/// (`providerCard` in runner-go), so a change shows its changes and nothing it leaves alone. Web reads
+/// the same card (`providerWriteInput`).
+public struct ProviderWritePreview: Equatable, Sendable {
+    public enum Verb: Equatable, Sendable { case add, change, delete }
+
+    public struct Field: Equatable, Sendable, Identifiable {
+        public let caption: String
+        public let value: String
+        /// A value the agent types exactly — a URL, a model id — set in monospace.
+        public let mono: Bool
+        public var id: String { caption }
+    }
+
+    public struct Model: Equatable, Sendable, Identifiable {
+        public let value: String
+        public let label: String
+        /// "64K context", or empty when the model names no window.
+        public let context: String
+        public let isDefault: Bool
+        public var id: String { value }
+        /// The line under the id: its display name and its window.
+        public var detail: String { [label, context].filter { !$0.isEmpty }.joined(separator: " · ") }
+    }
+
+    public let verb: Verb
+    /// The label on an add, the slug otherwise.
+    public let name: String
+    public let fields: [Field]
+    /// The model list it writes, or nil when the write leaves the list alone.
+    public let models: [Model]?
+
+    /// The header; the name is the row under it, as on a delete.
+    public var heading: String {
+        switch verb {
+        case .add: return "Add this provider?"
+        case .change: return "Change this provider?"
+        case .delete: return "Delete this provider?"
+        }
+    }
+    public var badge: String { "provider" }
+    /// The yes. Web's card says the same (`PROVIDER_ACTIONS`).
+    public var action: String {
+        switch verb {
+        case .add: return "Add it"
+        case .change: return "Save changes"
+        case .delete: return "Delete it"
+        }
+    }
+    /// The caption over the models: a change replaces the whole list, which is easy to miss.
+    public var modelsCaption: String { verb == .change ? "Models · replaces the current list" : "Models" }
+    /// The line at the foot, nil on an add. Web's card says the same.
+    public var note: String? {
+        switch verb {
+        case .add: return nil
+        case .change: return "Only the fields shown change. Everything else stays as it is."
+        case .delete: return "The provider and its key are removed from your account."
+        }
+    }
+
+    /// 65536 → "64K", 1048576 → "1M". Web's `contextSize` says the same.
+    public static func contextSize(_ tokens: Int) -> String {
+        if tokens >= 1_048_576 && tokens % 1_048_576 == 0 { return "\(tokens / 1_048_576)M" }
+        if tokens >= 1_000_000 {
+            let millions = (Double(tokens) / 100_000).rounded() / 10
+            return millions == millions.rounded() ? "\(Int(millions))M" : "\(millions)M"
+        }
+        if tokens % 1024 == 0 { return "\(tokens / 1024)K" }
+        if tokens >= 1000 { return "\(Int((Double(tokens) / 1000).rounded()))K" }
+        return String(tokens)
+    }
+}
+
+public extension Approvals {
+    /// What the endpoint speaks, by the `runtime` a provider is written with.
+    private static let providerProtocols: [String: String] = [
+        "claude": "Anthropic Messages", "codex": "OpenAI Responses", "kimi": "Moonshot",
+        "antigravity": "Gemini", "cursor": "Cursor User API Key",
+    ]
+
+    /// The provider write on an `orbit_provider_*` card, or nil for any other approval.
+    static func providerWritePreview(toolName: String, from input: JSONValue) -> ProviderWritePreview? {
+        let verb: ProviderWritePreview.Verb
+        switch toolName {
+        case "orbit_provider_create": verb = .add
+        case "orbit_provider_update": verb = .change
+        case "orbit_provider_delete": verb = .delete
+        default: return nil
+        }
+        guard case .object(let object) = input else { return nil }
+        func text(_ key: String) -> String { object[key]?.stringValue ?? "" }
+        var known: Set<String> = ["slug", "models"]
+        var fields: [ProviderWritePreview.Field] = []
+        func field(_ key: String, _ caption: String, _ value: String, mono: Bool) {
+            known.insert(key)
+            if object[key] != nil { fields.append(.init(caption: caption, value: value, mono: mono)) }
+        }
+        // On an add the label is the name under the header; on a change it is one of the things written.
+        if verb == .add { known.insert("label") } else { field("label", "Label", text("label"), mono: false) }
+        let runtime = text("runtime")
+        field("runtime", "Protocol", providerProtocols[runtime].map { "\($0) (\(runtime))" } ?? runtime, mono: false)
+        field("baseUrl", "Base URL", text("baseUrl"), mono: true)
+        field("apiKey", "API key", "Set — not shown", mono: false)
+        field("defaultModel", "Default model", text("defaultModel"), mono: true)
+        // Anything a later runner sends that this card has no name for is still shown, never dropped.
+        for key in object.keys.sorted() where !known.contains(key) {
+            let value = object[key].flatMap { $0.asString ?? rawInput($0) } ?? ""
+            fields.append(.init(caption: key, value: value, mono: true))
+        }
+        var models: [ProviderWritePreview.Model]?
+        if case .array(let rows)? = object["models"] {
+            let defaultModel = text("defaultModel")
+            models = rows.map { row in
+                let value = row["value"]?.stringValue ?? ""
+                return .init(value: value,
+                             label: row["label"]?.stringValue ?? "",
+                             context: row["contextWindow"]?.intValue
+                                 .map { "\(ProviderWritePreview.contextSize($0)) context" } ?? "",
+                             isDefault: !value.isEmpty && value == defaultModel)
+            }
+        }
+        return ProviderWritePreview(verb: verb, name: verb == .add ? text("label") : text("slug"),
+                                    fields: fields, models: models)
     }
 }

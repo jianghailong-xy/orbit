@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.AnswerNotTranslated
+import io.orbitd.android.translation.CardTranslationFoot
 import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -45,23 +49,31 @@ import java.time.Instant
 @Composable
 internal fun ProjectDoneCard(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, record: JsonObject?,
     sealRead: Boolean, now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit,
-    onNotYet: (suspend (String) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, trailing: @Composable () -> Unit = {}) {
+    onNotYet: (suspend (String, Boolean) -> Boolean)?, onReopen: (suspend () -> Unit)?, doneCheck: JsonObject? = null, actions: CriteriaActions? = null,
+    trailing: @Composable () -> Unit = {}, notTranslated: Boolean = false) {
     if (ProjectDone.recorded(doc, record)) ProjectDoneReceipt(doc, record, enabled, error, tag, onReopen, trailing)
-    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, trailing)
+    else ProjectDoneQuestion(doc, request, confirmedAt, openItems, running, sealRead, now, enabled, error, tag, onRecord, onNotYet, doneCheck, actions, trailing,
+        notTranslated)
 }
 
 @Composable
 private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmedAt: String?, openItems: Int, running: Int, sealRead: Boolean,
-    now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String) -> Boolean)?,
-    doneCheck: JsonObject?, trailing: @Composable () -> Unit) {
+    now: Instant, enabled: Boolean, error: String?, tag: String, onRecord: suspend () -> Unit, onNotYet: (suspend (String, Boolean) -> Boolean)?,
+    doneCheck: JsonObject?, actions: CriteriaActions?, trailing: @Composable () -> Unit, notTranslated: Boolean) {
     val counts = ProjectDone.counts(doc)
-    val asked = request?.obj("doneRequest")
+    val nonCode = DoneFollowUps.nonCode(doc)
+    val main = ProjectDone.mainBranch(doc)
+    // The coordinator's call and gaps in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
+    var showOriginal by rememberSaveable(tag) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = request?.let { OwnerCardTranslation.openItem(it, owner) }
+    val asked = (if (translated != null && !showOriginal) translated else request)?.obj("doneRequest")
     var recording by remember { mutableStateOf(false) }
     // "Not yet…" and the note it asks for, kept while the card is up.
     var notYetOpen by rememberSaveable(tag) { mutableStateOf(false) }
     var note by rememberSaveable(tag) { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
-    var criteriaOpen by remember { mutableStateOf(false) }
+    var criteriaOpen by remember { mutableStateOf((counts?.number("criteria") ?: 0) <= DONE_WHEN_OPEN_UP_TO) }
     val scope = rememberCoroutineScope()
     val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -72,31 +84,31 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
             trailing()
         }
         // Which project, and who asked and how long it has waited — or that nobody did.
-        Text(ProjectDone.meta(doc.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request.text("waitingSince"), now) else null),
+        Text(ProjectDone.meta(doc.text("title").orEmpty(), asked != null, if (asked != null) ProjectDone.requestWaiting(request?.text("waitingSince"), now) else null),
             Modifier.testTag("$tag-meta"), style = MaterialTheme.typography.labelMedium, color = muted)
         asked?.let { DoneHead(ProjectDone.coordinatorCall); DonePanel { Text(it.text("judgment").orEmpty(), Modifier.padding(12.dp).testTag("$tag-judgment")) } }
-        // Done when: the three counts, and every criterion one press away.
+        if (asked != null && translated != null) CardTranslationFoot(showOriginal, { showOriginal = !showOriginal })
+        // A non-code project says so first, who marked it and when, and where to change it (decided board ③ A).
+        if (nonCode) NonCodeBanner(doc, "$tag-non-code", actions?.changeMark)
+        // Done when: the counts, and every criterion — open at once up to a dozen, one press away beyond.
         val criteria = ProjectDone.criteria(doc)
         val count = counts?.number("criteria") ?: criteria.size
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { DoneHead(ProjectDone.doneWhenHead(count)) }
-            if (count > 0) Text(if (criteriaOpen) ProjectDone.showLess else ProjectDone.showAll(count),
+            if (count > DONE_WHEN_OPEN_UP_TO) Text(if (criteriaOpen) ProjectDone.showLess else ProjectDone.showAll(count),
                 Modifier.padding(top = 6.dp).clickable(role = Role.Button) { criteriaOpen = !criteriaOpen }.testTag("$tag-criteria"),
                 style = MaterialTheme.typography.labelMedium, color = accent)
         }
-        Text(ProjectDone.cardTally(counts, ProjectDone.mainBranch(doc)), Modifier.testTag("$tag-tally"), style = MaterialTheme.typography.labelMedium, color = muted)
+        Text(ProjectDone.cardTally(counts, main, nonCode, DoneFollowUps.waitingConfirmation(doc)), Modifier.testTag("$tag-tally"),
+            style = MaterialTheme.typography.labelMedium, color = muted)
         if (criteriaOpen) DonePanel {
             criteria.forEachIndexed { index, criterion ->
                 if (index > 0) HorizontalDivider()
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DoneOrdinal("${criterion.ordinal ?: index + 1}")
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(criterion.text, style = MaterialTheme.typography.bodySmall)
-                        Text(ProjectDone.criterionState(criterion, ProjectDone.mainBranch(doc)), style = MaterialTheme.typography.labelMedium, color = muted)
-                    }
-                }
+                DoneCriterionRow(doc, criterion, "${criterion.ordinal ?: index + 1}", nonCode, main, "$tag-row:${criterion.ordinal ?: index + 1}",
+                    actions?.let { it::startConfirm })
             }
         }
+        MovedOutLines(doc.objects("criteriaMovedOut"), "$tag-moved-out", actions?.openProject)
         if (asked != null) ProjectDoneGapList(doc, ProjectDone.gaps(doc, asked), tag)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("✓", Modifier.clearAndSetSemantics {}, style = MaterialTheme.typography.labelMedium, color = LocalOrbitColors.current.success)
@@ -104,26 +116,23 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 style = MaterialTheme.typography.labelMedium, color = muted)
         }
         val findings = doneCheck?.objects("findings").orEmpty()
-        if (asked == null && findings.isNotEmpty()) {
-            val red = MaterialTheme.colorScheme.error
-            Column(Modifier.fillMaxWidth().background(red.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
-                .border(1.dp, red.copy(alpha = 0.3f), RoundedCornerShape(10.dp)).padding(10.dp).testTag("$tag-findings")) {
-                Text(ProjectDone.findingsHeading.replace("{n}", "${findings.size}"), color = red, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                findings.forEach { Text(ProjectDone.findingLine(it, ProjectDone.mainBranch(doc)), color = red, style = MaterialTheme.typography.labelMedium) }
-            }
-            Text(ProjectDone.findingsAccepted, color = muted, style = MaterialTheme.typography.labelMedium)
-        } else if (asked != null) Text(ProjectDone.recordingExplanation, style = MaterialTheme.typography.bodyMedium)
+        if (asked == null && findings.isNotEmpty()) DoneFindings(doc, findings, tag, actions)
+        else if (asked != null) Text(ProjectDone.recordingExplanation, style = MaterialTheme.typography.bodyMedium)
         error?.let { Text(it, Modifier.testTag("$tag-error"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error) }
         if (notYetOpen && onNotYet != null) {
             OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth().testTag("$tag-note"), enabled = !sending,
                 placeholder = { Text(ProjectDone.missingBeforeDone) }, minLines = 2, maxLines = 5)
             Text(ProjectDone.notYetHint, style = MaterialTheme.typography.labelMedium, color = muted)
-            Button(onClick = {
-                val text = ProjectDone.declineNote(note) ?: return@Button
-                if (sending) return@Button
+            fun send(asWritten: Boolean) {
+                val text = ProjectDone.declineNote(note) ?: return
+                if (sending) return
                 sending = true
-                scope.launch { try { if (onNotYet(text)) { note = ""; notYetOpen = false } } finally { sending = false } }
-            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-send"), enabled = enabled && !sending && ProjectDone.declineNote(note) != null) {
+                scope.launch { try { if (onNotYet(text, asWritten)) { note = ""; notYetOpen = false } } finally { sending = false } }
+            }
+            // Settings › Translation (2A): the note could not be translated, so nothing was sent.
+            if (notTranslated) AnswerNotTranslated({ send(false) }, { send(true) }, enabled && !sending && ProjectDone.declineNote(note) != null,
+                Modifier.testTag("$tag-translation-failed"))
+            Button(onClick = { send(false) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-send"), enabled = enabled && !sending && ProjectDone.declineNote(note) != null) {
                 Text(ProjectDone.sendToCoordinator) }
             OutlinedButton(onClick = { notYetOpen = false }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-back"), enabled = !sending) {
                 Text(ProjectDone.back) }
@@ -133,7 +142,7 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
                 if (!sealRead || recording) return@Button
                 recording = true
                 scope.launch { try { onRecord() } finally { recording = false } }
-            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-record"), enabled = enabled && sealRead && !recording) { Text(if (asked == null) ProjectDone.recordAsDoneAnyway else ProjectDone.recordLabel(counts)) }
+            }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-record"), enabled = enabled && sealRead && !recording) { Text(ProjectDone.recordLabel(counts, asked != null, doneCheck)) }
             if (asked != null && onNotYet != null) OutlinedButton(onClick = { notYetOpen = true }, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("$tag-not-yet"),
                 enabled = !recording) { Text(ProjectDone.notYet) }
         }
@@ -241,18 +250,18 @@ private fun DoneSettledHead(badge: String, trailing: @Composable () -> Unit) {
 
 /** A section's head on the done cards: small, upper-cased, secondary. */
 @Composable
-private fun DoneHead(title: String) = Text(title.uppercase(), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelSmall,
+internal fun DoneHead(title: String) = Text(title.uppercase(), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.labelSmall,
     fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 /** The grouped panel the done cards' sections sit in, rows divided by hairlines — the start card's own panel. */
 @Composable
-private fun DonePanel(content: @Composable ColumnScope.() -> Unit) = Column(Modifier.fillMaxWidth()
+internal fun DonePanel(content: @Composable ColumnScope.() -> Unit) = Column(Modifier.fillMaxWidth()
     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
     .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f), RoundedCornerShape(12.dp)), content = content)
 
 /** A criterion's number, in the dark disc the cards number their rows with. */
 @Composable
-private fun DoneOrdinal(text: String) = Box(Modifier.defaultMinSize(18.dp, 18.dp).background(MaterialTheme.colorScheme.onSurface, CircleShape)
+internal fun DoneOrdinal(text: String) = Box(Modifier.defaultMinSize(18.dp, 18.dp).background(MaterialTheme.colorScheme.onSurface, CircleShape)
     .padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
     Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.surface)
 }
@@ -266,13 +275,15 @@ private fun DoneOrdinal(text: String) = Box(Modifier.defaultMinSize(18.dp, 18.dp
  * and the press no longer stands. A refusal stays on the card in the door's words. */
 @Composable
 fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId: String, projectId: String, detail: JsonObject,
-    reads: Map<String, JsonElement>, fresh: Boolean) {
+    reads: Map<String, JsonElement>, fresh: Boolean, open: ((String) -> Unit)? = null) {
     val doc = reads["project"] as? JsonObject
     val openItems = reads["openItems"] as? JsonObject
     val confirmation = reads["acceptanceConfirmation"] as? JsonObject
     var record by remember(handle, sessionId) { mutableStateOf<JsonObject?>(null) }
     var readsAtRecord by remember(handle, sessionId) { mutableStateOf<Map<String, JsonElement>?>(null) }
     var error by remember(handle, sessionId) { mutableStateOf<String?>(null) }
+    // The last "Not yet…" note was refused untranslated (422 TRANSLATION_FAILED): the card offers Retry and Send as written.
+    var notTranslated by remember(handle, sessionId) { mutableStateOf(false) }
     LaunchedEffect(reads) {
         if (record != null && reads !== readsAtRecord && doc != null && ProjectDoc.status(doc) != "DONE") { record = null; readsAtRecord = null }
     }
@@ -281,7 +292,7 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
     if (doc == null || slot == ProjectDone.Slot.None) return
     val api = remember(handle) { ProjectApi(app.session, handle) { app.canWrite(handle) } }
     var doneCheck by remember(projectId) { mutableStateOf<JsonObject?>(null) }
-    LaunchedEffect(projectId, live?.text("itemId")) {
+    LaunchedEffect(projectId, live?.text("itemId"), doc) {
         if (live == null) try { doneCheck = api.doneCheck(projectId) }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { error = failureReason(failure) }
@@ -295,7 +306,22 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
         finally { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
     }.await()
     val itemId = live?.text("itemId")
-    val notYet: (suspend (String) -> Boolean)? = if (itemId == null) null else { note -> write(ProjectDone.notDeclined) { api.declineDone(projectId, itemId, note) } }
+    val notYet: (suspend (String, Boolean) -> Boolean)? = if (itemId == null) null else { note, asWritten ->
+        write(ProjectDone.notDeclined) {
+            try { api.declineDone(projectId, itemId, note, asWritten); notTranslated = false }
+            catch (failure: Exception) { notTranslated = Translation.refused(failure); throw failure }
+        }.also { if (!it && notTranslated) error = null }
+    }
+    // Open, Change, Move to a follow-up… and Confirm… from the conversation: links into the app, and the owner's doors, after which the
+    // conversation is read again.
+    val actions = remember(handle, projectId, open) { open?.let { link ->
+        suspend fun <T> after(body: suspend () -> T): T = try { body() } finally { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
+        CriteriaActions(projectId, openTask = { link("orbit-task:$it") }, openProject = { link("orbit-project:$it") }, openSession = { link("orbit-session:$it") },
+            changeMark = { link("orbit-project:$projectId") }, projects = { api.index() },
+            move = { key, body -> after { api.moveCriterion(projectId, key, body) } },
+            confirm = { criterion, body -> after { api.confirmCriterion(projectId, criterion, body) } },
+            upload = { name, mime, bytes -> api.uploadImage(name, mime, bytes) }, image = { api.attachmentBytes(it) })
+    } }
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
         color = if (slot is ProjectDone.Slot.Done && !ProjectDone.recorded(doc, record)) MaterialTheme.colorScheme.surfaceVariant
             else LocalOrbitColors.current.success.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface)) {
@@ -308,12 +334,13 @@ fun CoordinatorDoneCard(app: OrbitApplication, handle: SessionHandle, sessionId:
                         val body = ProjectDone.body(doc, live?.text("itemId"), live?.obj("doneRequest"), confirmation?.obj("currentVersion")?.text("digest"))
                         if (body != null) write(ProjectDone.notRecorded) { api.done(projectId, body)?.let { record = it; readsAtRecord = reads } }
                     },
-                    onNotYet = notYet,
+                    onNotYet = notYet, actions = actions, notTranslated = notTranslated,
                     onReopen = { if (write(ProjectDone.notReopened) { api.setStatus(projectId, "OPEN", "reopen:${doc.text("updatedAt")}") }) { record = null; readsAtRecord = null } })
                 ProjectDone.Slot.None -> Unit
             }
         }
     }
+    actions?.let { CriteriaDialogs(it) }
 }
 
 @Composable

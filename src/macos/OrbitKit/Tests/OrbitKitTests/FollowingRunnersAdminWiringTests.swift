@@ -93,7 +93,7 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
     func testEveryListBuildsOneRowAndOnlyTheCompactContainerPushes() throws {
         let cases: [(view: String, start: String, end: String, tag: String, push: String)] = [
             ("Views/FollowingView.swift",
-             "@ViewBuilder private func row(_ watch: Watch, now: Date) -> some View {",
+             "@ViewBuilder private func row(_ watch: Watch) -> some View {",
              "/// One watch as a Following row", ".tag(watch.id)",
              "Button { model.push(.watchDetail(watchID: watch.id)) } label: {"),
             ("Views/SkillsRunnersView.swift",

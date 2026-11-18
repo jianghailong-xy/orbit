@@ -29,7 +29,7 @@ import { recordManagedDemand } from './managed-runner-work';
  */
 
 /** Where a piece of demand came from: for the log line, never for a decision. */
-export type ManagedDemandSource = 'session' | 'turn' | 'resume' | 'auto-retry' | 'sweep' | 'owner';
+export type ManagedDemandSource = 'session' | 'turn' | 'resume' | 'auto-retry' | 'sweep' | 'owner' | 'condition';
 
 export interface ManagedRunnerDemandAnswer {
   /** The switch is on and the runner is a managed runner: the demand was recorded on its mapping. */

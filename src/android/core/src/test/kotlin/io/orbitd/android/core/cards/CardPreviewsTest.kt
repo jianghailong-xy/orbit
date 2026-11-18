@@ -112,24 +112,24 @@ class CardPreviewsTest {
     /** An agent's ask answered here: "Answered", who did what and when — the server's time where it says it — and what came of it. */
     @Test fun anAnsweredAskIsItsRecord() {
         val allowed = buildJsonObject { put("status", "ALLOWED"); put("decidedAt", "2026-10-04T10:41:00.000Z") }
-        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Answered by you · 10:41", "Sent to the agent"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Answered by you · 10:41\u202FAM", "Sent to the agent"),
             record(card("approval:a2"), CardVerb.ANSWER, allowed))
-        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41", "The agent is running the plan"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41\u202FAM", "The agent is running the plan"),
             record(card("approval:a3"), CardVerb.APPROVE_PLAN, allowed))
-        assertEquals(CardRecord("Answered", CardRecord.Icon.KEPT, "Kept planning · by you · 10:40", "The agent goes on planning"),
+        assertEquals(CardRecord("Answered", CardRecord.Icon.KEPT, "Kept planning · by you · 10:40\u202FAM", "The agent goes on planning"),
             record(card("approval:a3"), CardVerb.KEEP_PLANNING, buildJsonObject { put("status", "DENIED") }))
         listOf("approval:a5" to CardVerb.CREATE_BATCH, "approval:a6" to CardVerb.CHANGE_DAG, "approval:a7" to CardVerb.RESOLVE_BLOCKER).forEach { (key, verb) ->
-            assertEquals(key, CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41", "Sent to the agent"), record(card(key), verb, allowed))
+            assertEquals(key, CardRecord("Answered", CardRecord.Icon.CHECK, "Approved by you · 10:41\u202FAM", "Sent to the agent"), record(card(key), verb, allowed))
         }
         // On another day the time says the date too.
-        assertEquals("Answered by you · 10/4 10:41", record(card("approval:a2"), CardVerb.ANSWER, allowed, java.time.Instant.parse("2026-10-05T09:00:00Z")).line)
+        assertEquals("Answered by you · 10/4 10:41\u202FAM", record(card("approval:a2"), CardVerb.ANSWER, allowed, java.time.Instant.parse("2026-10-05T09:00:00Z")).line)
     }
 
     /** A confirmation says which report it settled; one whose report has no time says nothing more. */
     @Test fun aConfirmedTaskIsItsRecord() {
         val owner = card("owner:$task:owner1")
         val decided = buildJsonObject { put("decision", "CONFIRM"); put("decidedAt", "2026-10-04T14:06:00.000Z") }
-        assertEquals(CardRecord("Confirmed done", CardRecord.Icon.CHECK, "Confirmed done by you · 14:06", "Recorded on the 00:00 report"),
+        assertEquals(CardRecord("Confirmed done", CardRecord.Icon.CHECK, "Confirmed done by you · 2:06\u202FPM", "Recorded on the 12:00\u202FAM report"),
             record(owner, CardVerb.CONFIRM_OWNER, decided))
         val view = owner.context.obj("view")!!
         val untimed = JsonObject(view + ("waiting" to JsonObject(view.obj("waiting")!! + ("report" to buildJsonObject { put("text", "Done.") }))))
@@ -141,7 +141,7 @@ class CardPreviewsTest {
         val document = fixture().obj("snapshot")!!.obj("standing")!!.obj("project")!!
         val start = InteractionCard("start:start1", CardFamily.START, "Start this project?", fixture().obj("startItem")!!, "s", project, "start1",
             "seal1:plan1", listOf(CardVerb.START), context = document)
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Started by you · 14:06", "On 3 criteria at seal a1b2c3d4e5f6"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Started by you · 2:06\u202FPM", "On 3 criteria at seal a1b2c3d4e5f6"),
             record(start, CardVerb.START, buildJsonObject { put("startedAt", "2026-10-04T14:06:00.000Z"); put("criteriaDigest", "a1b2c3d4e5f6a7b8"); put("criteriaCount", 3) }))
         assertEquals("without an answer to read, the card's own seal and count", "On 1 criterion at seal seal1", record(start, CardVerb.START).detail)
         val acceptance = cards.single { it.key.startsWith("acceptance:") }
@@ -150,7 +150,7 @@ class CardPreviewsTest {
             putJsonObject("currentVersion") { put("digest", "d4e5f6a7b8c9d0"); putJsonArray("material") { repeat(5) { addJsonObject { put("definitionId", "c$it") } } } }
             putJsonObject("confirmation") { put("confirmedAt", "2026-10-04T14:06:00.000Z") }
         }
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Confirmed by you · 14:06", "5 criteria at seal d4e5f6a7b8c9"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Confirmed by you · 2:06\u202FPM", "5 criteria at seal d4e5f6a7b8c9"),
             record(acceptance, CardVerb.CONFIRM_CRITERIA, confirmed))
         val stale = acceptance.copy(source = JsonObject(acceptance.source + mapOf("state" to JsonPrimitive("STALE"), "changesSinceConfirmed" to buildJsonObject {
             putJsonArray("added") { addJsonObject { put("ordinal", 4) } }; putJsonArray("stricter") { addJsonObject { put("ordinal", 2) } }; putJsonArray("revised") {}
@@ -164,10 +164,10 @@ class CardPreviewsTest {
         val approved = buildJsonObject {
             put("decision", "APPROVE"); put("decidedAt", "2026-10-04T14:06:00.000Z"); put("baseSeal", "d4e5f6"); put("resultingSeal", "e7f8a9")
         }
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Approved by you · 14:06", "Re-sealed: d4e5f6 → e7f8a9"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.CHECK, "Approved by you · 2:06\u202FPM", "Re-sealed: d4e5f6 → e7f8a9"),
             record(criteria, CardVerb.APPROVE_CRITERIA, approved))
         assertNull("no resulting seal, no detail", record(criteria, CardVerb.APPROVE_CRITERIA).detail)
-        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.REFUSED, "Refused by you · 10:40", "The criteria stay at seal seal1"),
+        assertEquals(CardRecord("Decision recorded", CardRecord.Icon.REFUSED, "Refused by you · 10:40\u202FAM", "The criteria stay at seal seal1"),
             record(criteria, CardVerb.REJECT_CRITERIA))
     }
 

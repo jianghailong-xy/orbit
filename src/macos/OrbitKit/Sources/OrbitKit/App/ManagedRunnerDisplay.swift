@@ -46,7 +46,7 @@ public struct ManagedRunnerDisplay: Equatable, Sendable {
     /// demand hook queues work for, and asleep only when the server offers a wake), so a console
     /// does not refuse it as offline.
     public let acceptsWork: Bool
-    /// A first session in the managed default workspace can start: the server names what it starts
+    /// A first session on the managed runner can start: the server names what it starts
     /// on (`firstSessionProvider` — what the runner was found ready with, or before that the owner's
     /// key the session waits for the runner on). With none the server refuses it with MODEL_UNAVAILABLE.
     public let startsNewSession: Bool
@@ -113,6 +113,103 @@ public enum ManagedRunnerCopy {
     public static let ensure = "Set up"
     public static let signIn = "Open Machines & models"
     public static let registerOwn = "Register your own machine"
+
+    /// The state as a machine row's short label, in place of the heartbeat's Online/Offline: a managed
+    /// runner asleep is Asleep, never Offline (docs/managed-runner-existing-account-entry-design.md, D4).
+    /// `notOffered` has no row (D2), so no label.
+    public static func short(_ kind: ManagedRunnerDisplayKind) -> String? {
+        switch kind {
+        case .setup: return "Set up"
+        case .preparing: return "Preparing"
+        case .waking: return "Waking up…"
+        case .modelUnavailable: return "Needs a model"
+        case .waitingCapacity: return "Waiting for capacity"
+        case .available: return "Ready"
+        case .unresponsive: return "Not responding"
+        case .stopping: return "Going to sleep"
+        case .sleeping: return "Asleep"
+        case .waitingOperator: return "Waiting for an operator"
+        case .failed: return "Failed"
+        case .removing: return "Removing"
+        case .removed: return "Removed"
+        case .notOffered: return nil
+        }
+    }
+
+    /// The machine list's entry for an account with no mapping that the server offers one (D1).
+    public enum Entry {
+        public static let title = "Managed runner"
+        public static let action = "Set up"
+        /// The row's subtitle on iPhone and Android.
+        public static let subtitle = "Orbit runs a runner for you on this server."
+        /// The web's Set up page, beside the notice.
+        public static let page = "Your own machines are not changed. Setting it up adds one machine and its workspace to this list."
+        /// On Register a machine, linking to the Set up entry.
+        public static let register = "Or let Orbit run one for you"
+    }
+
+    /// Asked before Set up on an account that already has a runner or a workspace (D3).
+    public enum Confirm {
+        public static let title = "Set up a managed runner?"
+        public static let body = "Orbit will start a runner for you on this server. Your own machines and workspaces stay as they are."
+        public static let cancel = "Cancel"
+        public static let action = "Set up"
+    }
+
+    /// Sleep is not a fault: a sending client wakes it, and nothing warns that it is offline.
+    public enum Setup {
+        public static let reposRoot = "/home/orbit/orbit-repos"
+        public enum Notice {
+            public static let preparing = "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready."
+            public static let asleep = "Your managed runner is asleep. Your first message wakes it (about 10 s)."
+        }
+        public enum FolderUnchecked {
+            public static let preparing = "Not checked until your managed runner is up: used if it’s there, created if not."
+            public static let asleep = "Not checked while it’s asleep: used if it’s there, created if not."
+        }
+    }
+
+    public enum Asleep {
+        /// The machine row's detail line beside Asleep.
+        public static let row = "Wakes automatically when you start a session"
+        /// Above the composer of a workspace whose managed runner is asleep.
+        public static let composer = "Your managed runner is asleep. Sending wakes it (about 10 s)."
+    }
+
+    /// A managed runner that has not reported yet (preparing, waiting): its Resources and Engines say
+    /// only this (the web's `MANAGED_RUNNER_NOT_REPORTED`).
+    public static let notReported = RunnerPageCopy.MANAGED_RUNNER_NOT_REPORTED
+}
+
+/// How a machine row marks the managed runner's state: `ready` green, `progress` a spinner, `idle`
+/// grey (asleep is neutral, never the colour of a fault), `attention` orange.
+public enum ManagedRunnerRowTone: String, Equatable, Sendable, CaseIterable {
+    case ready, progress, idle, attention
+
+    init(_ kind: ManagedRunnerDisplayKind) {
+        switch kind {
+        case .available: self = .ready
+        case .preparing, .waking, .waitingCapacity, .unresponsive, .stopping, .removing: self = .progress
+        case .modelUnavailable, .waitingOperator, .failed: self = .attention
+        case .setup, .sleeping, .removed, .notOffered: self = .idle
+        }
+    }
+}
+
+/// A machine row's reading of the account's managed runner: the shared short label in place of the
+/// heartbeat's Online/Offline, how the row marks it, and the calm line an asleep runner carries.
+public struct ManagedRunnerRow: Equatable, Sendable {
+    public let kind: ManagedRunnerDisplayKind
+    public let label: String
+    public let tone: ManagedRunnerRowTone
+    /// A calm line under the label, where the state has one (asleep); else nil.
+    public let detail: String?
+    /// Sending to it is accepted and wakes or waits for it: no "runner offline" warning.
+    public let acceptsWork: Bool
+    /// Asleep or going to sleep, and a message would wake it.
+    public let asleep: Bool
+    /// The managed runner's id, as the row was matched on: what a page names Orbit Cloud by.
+    public let runnerID: String
 }
 
 /// A managed runner as one console sees it: only the console of the managed runner's own
@@ -120,10 +217,6 @@ public enum ManagedRunnerCopy {
 public struct ManagedRunnerConsole: Equatable, Sendable {
     public let display: ManagedRunnerDisplay
     public let runnerID: String
-    /// A New Session draft in the managed default workspace before its runner was ever ready: the
-    /// server would refuse the session, so there is no engine to start it on and nothing to send.
-    public let blocksNewSession: Bool
-
     /// The state stands above the composer unless the runner is simply ready.
     public var showsBanner: Bool { display.kind != .available }
 }
@@ -132,6 +225,10 @@ public struct ManagedRunnerConsole: Equatable, Sendable {
 /// client interfaces"). Only the capability and the status fields are read — never a runner's name
 /// or its heartbeat. With the capability missing, switched off or of another contract, or a status
 /// that says the switch is off, there is no managed UI and every screen behaves as it did before.
+public enum ManagedSetupState: String, Equatable, Sendable, CaseIterable {
+    case preparing, asleep
+}
+
 public enum ManagedRunnerLogic {
     /// The contract this client knows (@orbit/shared `MANAGED_RUNNER_CONTRACT_VERSION`).
     public static let contractVersion = 1
@@ -216,11 +313,17 @@ public enum ManagedRunnerLogic {
             moving: !frozen && movingKinds.contains(kind))
     }
 
-    /// What a first session in the managed default workspace starts on, as the server says: its
+    /// What a first session on the managed runner starts on, as the server says: its
     /// `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which
     /// the field equals whenever the runner has one).
     public static func firstSessionProvider(_ status: ManagedRunnerStatus) -> String? {
         status.firstSessionProvider ?? status.initialProvider
+    }
+
+    public static func managedSetupState(runnerID: String?, status: ManagedRunnerStatus?) -> ManagedSetupState? {
+        guard let row = row(runnerID: runnerID, status: status), row.acceptsWork,
+              row.kind != .available, row.kind != .unresponsive else { return nil }
+        return status?.initialProvider?.isEmpty == false ? .asleep : .preparing
     }
 
     /// When to read the status again after this display.
@@ -229,8 +332,6 @@ public enum ManagedRunnerLogic {
     }
 
     /// What a console shows for the managed runner: nil unless `runnerID` is the managed runner.
-    /// `agentID` is the console's workspace; a draft in the managed default workspace cannot start a
-    /// session until the runner has been ready with a runtime.
     public static func console(status: ManagedRunnerStatus?,
                                runnerID: String?,
                                agentID: String?,
@@ -238,13 +339,7 @@ public enum ManagedRunnerLogic {
         guard let status, let display = display(status),
               let managedRunner = status.runnerId, let runnerID,
               PublicID.storageKey(managedRunner) == PublicID.storageKey(runnerID) else { return nil }
-        let inDefaultWorkspace = status.workspaceId.map { workspace in
-            agentID.map { PublicID.storageKey($0) == PublicID.storageKey(workspace) } ?? false
-        } ?? false
-        return ManagedRunnerConsole(
-            display: display,
-            runnerID: runnerID,
-            blocksNewSession: isDraft && inDefaultWorkspace && !display.startsNewSession)
+        return ManagedRunnerConsole(display: display, runnerID: runnerID)
     }
 
     /// The session's capabilities as a console acts on them. The server's, except that a managed
@@ -260,10 +355,38 @@ public enum ManagedRunnerLogic {
                                    canComplete: capabilities.canComplete, canRestore: capabilities.canRestore)
     }
 
-    /// The managed runner Infrastructure shows above its runners: only to an account with no runner
-    /// at all, where the web's default landing shows it too. Any other account finds its managed
-    /// runner in the console of its workspace.
+    /// Whether the runner a client is about to show — a machine row, or a workspace's runner — is the
+    /// account's managed runner, and how to show it. Nil when it is not, when the server offers no
+    /// managed UI, or for `notOffered` (D2, which has no row): the client then shows that runner by
+    /// its heartbeat, as before.
+    public static func row(runnerID: String?, status: ManagedRunnerStatus?) -> ManagedRunnerRow? {
+        guard let status, let managed = status.runnerId, let runnerID,
+              PublicID.storageKey(managed) == PublicID.storageKey(runnerID),
+              let display = display(status), let label = ManagedRunnerCopy.short(display.kind)
+        else { return nil }
+        // A spinner only while it moves by itself (not while the environment is unavailable).
+        let tone = ManagedRunnerRowTone(display.kind)
+        return ManagedRunnerRow(
+            kind: display.kind,
+            label: label,
+            tone: tone == .progress && !display.moving ? .idle : tone,
+            detail: display.kind == .sleeping && display.acceptsWork ? ManagedRunnerCopy.Asleep.row : nil,
+            acceptsWork: display.acceptsWork,
+            asleep: (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork,
+            runnerID: runnerID)
+    }
+
+    /// Set up asks first on an account that already has a runner or a workspace (D3): a workspace
+    /// appears in an established list, and no client can remove a managed runner.
+    public static func confirmsSetup(runnerCount: Int, workspaceCount: Int) -> Bool {
+        runnerCount > 0 || workspaceCount > 0
+    }
+
+    /// The managed runner Machines & models shows above its runners: to an account with no runner at
+    /// all, where the web's default landing shows it too, and to an existing account while the server
+    /// offers it one (`display.ensure`, D1). With a mapping it is one machine in the list instead (D4).
     public static func onboarding(_ display: ManagedRunnerDisplay?, runnerCount: Int) -> ManagedRunnerDisplay? {
-        runnerCount == 0 ? display : nil
+        guard let display else { return nil }
+        return runnerCount == 0 || display.ensure ? display : nil
     }
 }

@@ -13,6 +13,8 @@
  * the raw code rather than as an empty chip that looks like "fine".
  */
 
+import type { OwnerCardTranslation } from '@orbit/shared';
+
 export type AttributionProjectStatus = 'OPEN' | 'DONE' | 'CANCELLED';
 
 export interface AttributionProjectRef {
@@ -77,10 +79,23 @@ export interface ProjectCrossingRow {
   publicId?: string;
   fromProjectId: string;
   fromProjectPublicId?: string;
-  toProjectId: string;
-  toProjectPublicId?: string;
-  fromProject?: { title: string; status: AttributionProjectStatus } | null;
-  toProject?: { title: string; status: AttributionProjectStatus } | null;
+  /** Null on a MOVE_TASK that takes the task out of its project, filed under none. */
+  toProjectId: string | null;
+  toProjectPublicId?: string | null;
+  /** `coordinatorSessionId`: the source's live coordinator conversation, which draws a move out of
+   *  every project (`toProjectId` null) as a decision card. Absent from an older server. */
+  fromProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
+  /** `coordinatorSessionId`: the target's live coordinator conversation, which draws this row as a
+   *  decision card. Null when it has none or it is in Trash; absent from an older server. */
+  toProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
   kind: string;
   subjectTaskId: string | null;
   subjectTaskPublicId?: string;
@@ -100,6 +115,9 @@ export interface ProjectCrossingRow {
   requestedAt: string;
   decidedAt: string | null;
   expiresAt: string | null;
+  /** `title` and `reason` in the owner's language (Settings › Translation), while PENDING; absent until
+   *  translated, on every crossing translation is off for, and from an older server. */
+  translation?: OwnerCardTranslation | null;
 }
 
 /**

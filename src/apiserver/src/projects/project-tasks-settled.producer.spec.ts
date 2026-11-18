@@ -102,6 +102,8 @@ function producerFixture(
     // master, which is what the receipts above already name.
     projectCodebase: { findFirst: async () => null },
     project: {
+      // The derivation's read of the explicit non-code mark (0535): this project carries none.
+      findFirst: async () => ({ nonCode: false }),
       findUnique: async (args: { select: Record<string, unknown> }) => {
         // Two different questions of the same row: the guardrail's (is it still OPEN, and whose)
         // and the authorization after the claim (is the coordinator on).

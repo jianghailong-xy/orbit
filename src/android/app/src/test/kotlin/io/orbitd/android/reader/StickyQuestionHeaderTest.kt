@@ -129,4 +129,26 @@ class StickyQuestionHeaderTest : ComposerShellTest() {
         await { names("Second question") }
         assertEquals(line, top("event:30"), 1f)
     }
+
+    /** Board 04 (A, the owner 2026-11-15): a coordinator handing itself over says so in the capsule off the tail too, over the question;
+     * once the handoff no longer locks the composer the question has the capsule back. */
+    @Test fun aHandoffTakesTheCapsuleFromTheQuestionOffTheTail() {
+        fun handoff(state: String) { ComposerShell.session = mapOf("coordinatorHandoff" to buildJsonObject {
+            put("state", state); put("startedAt", java.time.Instant.now().minusSeconds(24).toString()) }) }
+        val handingOver = hasTestTag("handing-over-capsule")
+        session()
+        handoff("WRITING"); app().realtime.refreshSession()
+        await { has(handingOver) }
+        assertFalse("at the tail the bar had no question to give up", has(capsule))
+        dragBack(300f)
+        await { has(hasTestTag("transcript-jump")) }
+        compose.waitForIdle()
+        assertTrue("off the tail it still says it", has(handingOver))
+        assertTrue("it reads Handing over", has(hasText("Handing over") and hasAnyAncestor(handingOver), unmerged = true))
+        assertFalse("off the tail the question gives way", has(capsule))
+
+        handoff("CANCELLED"); app().realtime.refreshSession()
+        await { names("Second question") }
+        assertFalse("the mark is gone with the handoff", has(handingOver))
+    }
 }

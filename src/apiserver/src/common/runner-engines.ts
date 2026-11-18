@@ -10,6 +10,7 @@ import {
   type RunnerEngineAccount,
   type RunnerEngineHealth,
   type RunnerEngineUpdate,
+  type RunnerEngineUpdateDismissals,
   type DshRuntimeHealth,
 } from '@orbit/shared';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
@@ -326,6 +327,22 @@ function isoInstant(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length > 40) return undefined;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+}
+
+/**
+ * Read `runner.engine_update_dismissals` (RunnersService.dismissEngineUpdateWarning writes it): a
+ * reported engine and the `update.latest` it was dismissed against, a version as sanitizeEngineUpdate
+ * keeps one. Anything else is dropped. Always an object, so every client can index it by engine.
+ */
+export function sanitizeEngineUpdateDismissals(value: unknown): RunnerEngineUpdateDismissals {
+  const out: RunnerEngineUpdateDismissals = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  for (const [engine, latest] of Object.entries(value as Record<string, unknown>)) {
+    if (!isReportedEngine(engine) || typeof latest !== 'string') continue;
+    const trimmed = latest.trim();
+    if (trimmed && trimmed.length <= 120) out[engine] = trimmed;
+  }
+  return out;
 }
 
 /** The names the user gave a runner's accounts in Orbit, by engine and then account id. */

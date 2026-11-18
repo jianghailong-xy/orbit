@@ -314,9 +314,10 @@ export function SharedTaskPage({
                 </div>
               )}
             </header>
-            <Dependencies dependencies={task.dependencies} />
-            {task.description && <Description text={task.description} />}
+            {/* The app task panel's order: what done means and the brief, then the plan. */}
             <Acceptance task={task} />
+            {task.description && <Description text={task.description} />}
+            <Dependencies dependencies={task.dependencies} />
             {task.inputs && task.inputs.length > 0 && (
               <Card block="inputs" title="Inputs" hint={task.inputs.length}>
                 <div className="share-inputs">

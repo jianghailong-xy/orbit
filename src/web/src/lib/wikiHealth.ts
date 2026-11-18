@@ -1,4 +1,4 @@
-import type { WikiMaintenanceHealth, WikiSpaceHealth } from '@orbit/shared';
+import { wikiRepoReasonNeedsAttention, type WikiMaintenanceHealth, type WikiSpaceHealth } from '@orbit/shared';
 import { wikiCount } from './wikiArticles';
 import { WIKI_VIEW_RUN } from './wikiReviewMode';
 
@@ -40,6 +40,23 @@ export const WIKI_REASON_UNREACHABLE = 'System model unreachable';
 export const WIKI_REASON_RUNNER_OFFLINE = 'Waiting for the runner to come online';
 export const WIKI_REASON_RUNNER_UPGRADE = 'Upgrade the runner to read the repository';
 
+/**
+ * What the latest run read of the repository, said after the maintenance part while maintenance is on
+ * (docs/wiki-repo-tiers-design.md §7.2, mock 44 ⑤; contract `maintenance.health.repo.tier`): nothing on git; grey on the
+ * folder, its hint saying what that costs; amber while the code checks wait, red when the folder is another
+ * repository's or its remote refused the credentials — each with its way to Settings. A narrow screen says the short
+ * words only; the whole sentence is in Settings.
+ */
+export const WIKI_REPO_FOLDER = 'Reading the folder, not git';
+export const WIKI_REPO_FOLDER_SHORT = 'Reading the folder';
+export const WIKI_REPO_PAUSED = 'Code checks paused';
+export const WIKI_REPO_WRONG_SHORT = 'Wrong folder';
+export const WIKI_REPO_FIX = 'Fix in Settings';
+export const WIKI_REPO_COMMIT_ANCHORS = 'Commit anchors are not checked';
+export const wikiRepoPaused = (detail: string): string => `${WIKI_REPO_PAUSED}: ${detail}`;
+export const wikiRepoFolderHint = (detail: string | null | undefined): string =>
+  detail ? `${WIKI_REPO_COMMIT_ANCHORS}: ${detail}.` : `${WIKI_REPO_COMMIT_ANCHORS}.`;
+
 /** One part of the line: its words, how it is coloured and marked, and where it leads when it is a link. */
 export interface WikiStatusPart {
   text: string;
@@ -50,6 +67,8 @@ export interface WikiStatusPart {
   /** settings: the space's Wiki settings; run: the run that ended last — its session, or its row on Activity. */
   link: 'none' | 'settings' | 'run';
   strong: boolean;
+  /** What a pointer resting on it is told (the folder tier's cost); absent when there is nothing more to say. */
+  hint?: string;
 }
 
 const part = (text: string, shape: Partial<Omit<WikiStatusPart, 'text'>> = {}): WikiStatusPart => ({
@@ -145,18 +164,47 @@ export function wikiServerReason(health: Pick<WikiSpaceHealth, 'executor' | 'sys
   // The runner matters to a space whose maintenance reads the repository, or that has a read of it waiting.
   const repo = health.repo;
   if (!repo || !(health.maintenance.enabled || repo.pending > 0)) return null;
+  // The repository part says it already: the latest run read nothing for this very reason (`wikiRepoParts`).
+  if (wikiRepoParts(health, false).length > 0 && repo.reason === repo.look) return null;
   if (repo.look === 'runner_offline') return reason(WIKI_REASON_RUNNER_OFFLINE, 'warn');
   if (repo.look === 'runner_upgrade') return reason(WIKI_REASON_RUNNER_UPGRADE, 'warn');
   return null;
 }
 
-/** The status line's whole maintenance part: the look's parts, and the server's reason before their links. */
-export function wikiStatusParts(health: WikiSpaceHealth, now: number): WikiStatusPart[] {
+/**
+ * The repository's part of the line (see `WIKI_REPO_FOLDER`): its words first, and on a wide screen `Fix in Settings`
+ * after them when somebody has to act. Nothing while maintenance is off, on git, and from a read that names no tier.
+ */
+export function wikiRepoParts(health: Pick<WikiSpaceHealth, 'repo' | 'maintenance'>, narrow: boolean): WikiStatusPart[] {
+  const repo = health.repo;
+  if (!health.maintenance.enabled || !repo?.tier || repo.tier === 'git') return [];
+  if (repo.tier === 'folder') {
+    return narrow
+      ? [part(WIKI_REPO_FOLDER_SHORT, { tone: 'muted', link: 'settings' })]
+      : [part(WIKI_REPO_FOLDER, { tone: 'muted', link: 'settings', hint: wikiRepoFolderHint(repo.detail) })];
+  }
+  const wrong = repo.tier === 'wrong_repository';
+  const tone = wrong || wikiRepoReasonNeedsAttention(repo.reason) ? 'error' : 'warn';
+  const said = narrow
+    ? (wrong ? WIKI_REPO_WRONG_SHORT : WIKI_REPO_PAUSED)
+    : wrong ? (repo.detail || WIKI_REPO_WRONG_SHORT) : repo.detail ? wikiRepoPaused(repo.detail) : WIKI_REPO_PAUSED;
+  const words = part(said, { tone, mark: 'dot', strong: true });
+  return narrow ? [words] : [words, part(WIKI_REPO_FIX, { link: 'settings' })];
+}
+
+/**
+ * The status line's whole maintenance part: the look's parts, then the server's reason and the repository's words
+ * before their links, and `Fix in Settings` last. `narrow` is a phone's line, which says the repository's short words.
+ */
+export function wikiStatusParts(health: WikiSpaceHealth, now: number, narrow = false): WikiStatusPart[] {
   const parts = wikiMaintenanceParts(health.maintenance, now);
   const reason = wikiServerReason(health);
-  if (!reason) return parts;
+  const repo = wikiRepoParts(health, narrow);
+  const said = [...(reason ? [reason] : []), ...repo.filter((one) => one.link === 'none' || one.text !== WIKI_REPO_FIX)];
+  const fix = repo.filter((one) => one.text === WIKI_REPO_FIX);
   const link = parts.findIndex((one) => one.link !== 'none');
-  return link < 0 ? [...parts, reason] : [...parts.slice(0, link), reason, ...parts.slice(link)];
+  const placed = link < 0 ? [...parts, ...said] : [...parts.slice(0, link), ...said, ...parts.slice(link)];
+  return [...placed, ...fix];
 }
 
 /** The parts as one line of text: `●` before a dot, `✓` after a check, ` · ` between. */

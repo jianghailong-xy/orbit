@@ -276,7 +276,7 @@ def restore_under_name(ctx, step):
                           'containers': [{'name': 'check', 'image': al.IMAGE, 'command': ['python3', '-c', 'print(1)'], 'env': [{'name': 'HOME', 'value': '/tmp'}],
                                           'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
                                           'resources': {'requests': {'cpu': '100m', 'memory': '128Mi'}, 'limits': {'cpu': '1', 'memory': '512Mi'}},
-                                          'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}]}],
+                                          'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}]}],
                           'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': m['pvc_name']}}]}}
     refused = k('create', '-f', '-', input=json.dumps(check_pod), check=False)
     step.check('the admission guard refuses a check Pod on the restored claim', refused.returncode != 0 and 'orbit-managed-runner-admission' in refused.stderr,

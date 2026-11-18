@@ -4,6 +4,7 @@ import {
   uuidToBase62,
   type CoordinatorDeliveryCard,
   type ExternalMessageFrom,
+  type ExternalMessageSource,
   type OrbitMessageFrom,
   type SessionMessageCard,
   type SessionMessageFrom,
@@ -445,19 +446,24 @@ export function lastUserFromExternalOf(row: {
   lastUserFromExternalSource: string | null;
   lastUserFromExternalName: string | null;
 }): ExternalMessageFrom | null {
-  return row.lastUserFromExternalSource === 'FEISHU'
-    ? { source: 'FEISHU', name: row.lastUserFromExternalName }
-    : null;
+  const source = externalSourceOf(row.lastUserFromExternalSource);
+  return source ? { source, name: row.lastUserFromExternalName } : null;
 }
 
 /**
- * Who outside Orbit sent a turn, as the one door that knows writes it (feishu-group.service.ts): the source, the
- * sender's id there (a Feishu open_id) and their name, null when Feishu would not say.
+ * Who outside Orbit sent a turn, as the one door that knows writes it: the source, the sender's id there and their
+ * name. FEISHU (feishu-group.service.ts): a Feishu open_id, and the name Feishu gave, null when it would not say.
+ * ORBIT_GUEST (session-guests/guest-sessions.service.ts): the invited account's user id, and its name.
  */
 export interface ExternalTurnSender {
-  source: 'FEISHU';
+  source: ExternalMessageSource;
   id: string;
   name: string | null;
+}
+
+/** A stored `external_sender_source` / `last_user_from_external_source` as a source this server knows, or null. */
+function externalSourceOf(stored: string | null | undefined): ExternalMessageSource | null {
+  return stored === 'FEISHU' || stored === 'ORBIT_GUEST' ? stored : null;
 }
 
 /** The turn's columns for an outside sender (migration 0502), or none. A name is kept to one line of 200 characters. */
@@ -475,9 +481,8 @@ export function externalSenderColumns(sender: ExternalTurnSender | null | undefi
 export function externalSenderOf(
   turn: { externalSenderSource?: string | null; externalSenderName?: string | null } | null | undefined,
 ): ExternalMessageFrom | null {
-  return turn?.externalSenderSource === 'FEISHU'
-    ? { source: 'FEISHU', name: turn.externalSenderName ?? null }
-    : null;
+  const source = externalSourceOf(turn?.externalSenderSource);
+  return source ? { source, name: turn?.externalSenderName ?? null } : null;
 }
 
 /** A session row's `lastUserFrom`, read back from the two columns `pendingMessageColumns` writes. */

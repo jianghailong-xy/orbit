@@ -30,9 +30,6 @@ struct CoordinatorDeliveryLineView: View {
     /// The words the agent was handed, verbatim — what the line opens to.
     let text: String
     var undelivered: Bool = false
-    /// Whatever else the same turn's note carried, as its own folded entry under the words in the
-    /// sheet: nobody typed this turn, so it never goes back into a bubble in the reader's name.
-    var attached: (kind: String, text: String)?
     /// Withdraws a turn still queued behind the running one; nil once a runner has taken it.
     var onCancelQueued: (() -> Void)?
 
@@ -50,7 +47,7 @@ struct CoordinatorDeliveryLineView: View {
     var body: some View {
         VStack(spacing: 4) {
             Button {
-                openTold(CoordinatorDeliveryTold(card: card, text: text, attached: attached))
+                openTold(CoordinatorDeliveryTold(card: card, text: text))
             } label: {
                 // A capsule on one row; a rounded rectangle once the pill holds two. Off a phone the row
                 // count is decided by the width (`words`), so the corner is one a single row draws as a capsule.
@@ -69,7 +66,7 @@ struct CoordinatorDeliveryLineView: View {
             }
             if let onCancelQueued {
                 HStack(spacing: 8) {
-                    Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+                    QueuedWord()
                     Button("Cancel") { onCancelQueued() }
                         .buttonStyle(.plain)
                         .font(.orbitMeta)
@@ -140,7 +137,6 @@ struct CoordinatorDeliveryLineView: View {
 struct CoordinatorDeliveryTold: Identifiable {
     let card: CoordinatorDelivery
     let text: String
-    let attached: (kind: String, text: String)?
     var id: String { "\(card.kind.rawValue):\(card.deliveredAt):\(text.hashValue)" }
 }
 
@@ -161,6 +157,13 @@ extension EnvironmentValues {
 struct CoordinatorDeliverySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    /// The app's own link door, told by the console under the sheet whether this is a phone's
+    /// conversation: there the task is pushed over it, so the back swipe returns to it.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let told: CoordinatorDeliveryTold
 
     var body: some View {
@@ -174,12 +177,13 @@ struct CoordinatorDeliverySheet: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let attached = told.attached { AttachedNoteEntry(attached: attached) }
                     if let url = CoordinatorDeliveryCard.taskLink(told.card) {
                         // Into the app's own `orbit-task:` door, once the sheet is out of the way.
                         Button(CoordinatorDeliveryCard.itsTask) {
                             dismiss()
-                            openURL(url)
+                            // The console's answer is read before the sheet goes: after this press
+                            // the card is gone, but the environment it was drawn in is not.
+                            if app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
                         }
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
                     }

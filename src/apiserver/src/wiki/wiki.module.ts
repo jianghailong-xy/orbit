@@ -23,6 +23,7 @@ import { WikiService } from './wiki.service';
 import { WikiSystemModelReads } from './wiki-system-model';
 import { WikiSystemModelController } from './wiki-system-model.controller';
 import { WikiTrashPurge } from './wiki-trash';
+import { WikiMaintenanceController } from './wiki-maintenance.controller';
 
 /**
  * The Orbit Wiki's own module.
@@ -44,7 +45,7 @@ import { WikiTrashPurge } from './wiki-trash';
   // own, so WikiController's hand-built specs construct it as before — and so are the documents (contract `docs`).
   // The administrators' wiki routes (contract `plan.jobs.rebuild.support`) are a controller of their own, behind the
   // admin area's guard rather than the wiki's flag, which reads the caller's account.
-  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController, WikiJobsController, AdminWikiController],
+  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController, WikiSystemModelController, WikiJobsController, WikiMaintenanceController, AdminWikiController],
   // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to the server's
   // maintenance job, and reads the Sessions' and Projects' rows the way the other two do: through Prisma,
   // with no service of theirs. WikiArticles serves the articles the same way (contract `articles`).

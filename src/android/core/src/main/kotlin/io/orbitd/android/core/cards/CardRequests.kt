@@ -40,13 +40,14 @@ object CardRequests {
             val behavior = if (verb in setOf(CardVerb.DENY, CardVerb.KEEP_PLANNING, CardVerb.CHAT)) "deny" else "allow"
             // Create and start is Create task's yes that also starts the task; no other press names the key at all.
             val body = ApprovalDecision(behavior, if (verb == CardVerb.CHAT) note() else null, answers, rules,
-                startAfterCreate = if (verb == CardVerb.CREATE_AND_START) true else null)
+                startAfterCreate = if (verb == CardVerb.CREATE_AND_START) true else null, sendAsWritten = if (input.sendAsWritten) true else null)
             return request(listOf("sessions", card.sessionId, "approvals", card.objectId, "decision"), encoded(Wire.json.encodeToString(body)))
         }
         return when (verb) {
             CardVerb.CONFIRM_EVIDENCE, CardVerb.SEND_BACK -> if (card.family == CardFamily.EVIDENCE) {
                 val body = EvidenceDecision(requireNotNull(card.context.text("decidingSessionId")), required("evidenceRevision"),
-                    if (verb == CardVerb.SEND_BACK) "SEND_BACK" else "CONFIRM", if (verb == CardVerb.SEND_BACK) note() else null)
+                    if (verb == CardVerb.SEND_BACK) "SEND_BACK" else "CONFIRM", if (verb == CardVerb.SEND_BACK) note() else null,
+                    sendAsWritten = if (input.sendAsWritten && verb == CardVerb.SEND_BACK) true else null)
                 request(listOf("tasks", card.objectId, "evidence", "decision"), encoded(Wire.json.encodeToString(body)))
             } else owner(card, verb, input)
             CardVerb.CONFIRM_OWNER -> owner(card, verb, input)
@@ -84,6 +85,8 @@ object CardRequests {
                 request(projectPath("open-items", card.objectId, "answer"), buildJsonObject {
                     input.option?.let { put("option", it) }
                     input.text.trim().takeIf { it.isNotEmpty() }?.let { put("text", it) }
+                    // Settings › Translation (2A): the words again, untranslated, after a 422 TRANSLATION_FAILED.
+                    if (input.sendAsWritten) put("sendAsWritten", true)
                 })
             }
             CardVerb.RETURN_COORDINATOR -> request(projectPath("open-items", card.objectId, "return-to-coordinator"))
@@ -111,6 +114,10 @@ object CardRequests {
             CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
                 put("status", "OPEN"); put("supersededByTaskId", JsonNull); put("terminalReason", JsonNull)
             }, HttpMethod.PATCH)
+            // Restart the task (§3, D2 = A): the Run press's own name rides along, so a resend is the same press.
+            CardVerb.RESTART_TASK -> request(listOf("tasks", card.objectId, "evidence", required("evidenceRevision"), "restart"), buildJsonObject {
+                put("triggerId", requireNotNull(input.triggerId).also { require(it.isNotBlank()) })
+            })
             CardVerb.CONFIRM_MERGE -> request(projectPath("promotions", card.objectId, "confirm"), buildJsonObject { put("sourceSha", required("sourceSha")) })
             CardVerb.DECLINE_MERGE -> request(projectPath("promotions", card.objectId, "decline"))
             CardVerb.CANCEL_MERGE -> {
@@ -162,6 +169,8 @@ object CardRequests {
                 put("reviewRecordId", record)
                 if (answers.isNotEmpty()) put("answers", JsonArray(answers))
             } else put("note", input.text.trim().also { require(it.isNotEmpty() && it.length <= 4000) { "Enter a reason (up to 4000 characters)." } })
+            // Settings › Translation (2A): the owner's words again, untranslated, after a 422 TRANSLATION_FAILED.
+            if (input.sendAsWritten) put("sendAsWritten", true)
         }
         return ApiRequest(listOf("tasks", card.objectId, "owner-confirmation"), HttpMethod.POST, body = body.toString().encodeToByteArray())
     }

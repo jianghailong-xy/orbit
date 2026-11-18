@@ -1,4 +1,5 @@
 import { questionsWithCoordinator } from '../sessions/run-question';
+import { KEEP_BACKGROUND_WORK_END_CONTENT } from '../sessions/running-work';
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
@@ -34,6 +35,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
 import { enqueueRecap } from '../sessions/recap';
+import { translationEventOf } from '../sessions/reply-translation';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -42,6 +44,7 @@ import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
 import { lastUserFromExternalOf, lastUserFromOf, lastUserFromOrbitOf } from '../sessions/session-message';
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -68,10 +71,19 @@ import { APISERVER_PROCESS_QUIET_AFTER_MS, markRunnersChanged, RUNNER_BEATS } fr
 const EVENT_CHANNEL = 'orbit_event';
 /** For notifyWaiters. Named for what it first carried, turns for the inbox long polls that are gone. */
 const WAITERS_CHANNEL = 'orbit_inbox';
+/** For publishViewerRevoked: a viewer's access may have ended (docs/session-viewer-stream-design.md §5). */
+const VIEWER_CHANNEL = 'orbit_viewer';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 /** How often a runner change that could not be marked is reported (markRunnerChanged): once a minute, never per mark. */
 const UNMARKED_REPORT_MS = 60_000;
+
+/**
+ * Whose viewer streams a committed write may have ended (docs/session-viewer-stream-design.md §5): every stream of a
+ * session (it went to the Trash or was deleted), one guest's streams of a session (removed, or left), or every stream
+ * opened through a link (turned off, or changed). A stream it names rechecks its access and, if that is gone, ends.
+ */
+export type ViewerRevocation = { sessionId: string; guestId?: string } | { linkId: string };
 
 /**
  * Cap on the mid-turn text one session holds for a client that connects while it is streaming (see
@@ -253,8 +265,9 @@ function endedSessionStates(
  * The notification publishBatch sends the other replicas of a batch of a session's events, from the replica named
  * `instanceId`, or null when nothing of the batch is stored and the session's row did not change: the stored events
  * whole when they fit (MAX_NOTIFY_BYTES), otherwise their seq range. A function of its arguments alone, so that a
- * transaction storing several sessions' batches (RunnerApiController.ingestLinkEventCall) sends each one's itself,
- * and the other replicas hear of every batch once, at its commit (docs/runner-link-design.md §6.7).
+ * call storing several sessions' batches in one transaction (RunnerApiController.ingestLinkEventCall) sends every
+ * one's in one statement once it has committed, and the other replicas hear of every batch once
+ * (docs/runner-link-design.md §6.7).
  *
  * `rowChanged` (`u`) says the batch changed what the session's list row shows in a way no event of it announces
  * (controlTypeFor): the receiving replica follows the batch with a session_updated (batchRowUpdate).
@@ -276,6 +289,35 @@ export function runEventBatchNotice(
   return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: from, t: to, ...u }) };
 }
 
+/**
+ * The seqs of a batch an earlier delivery already stored, sent again: the batch's answer never reached the gateway, so
+ * it was forwarded again, and this ingest found those seqs stored (IngestOutcome.restated). Whether the delivery that
+ * stored them lived to announce them is not known here: its process may have died between its commit and its notice
+ * (RunnerApiController.ingestLinkEventCall). So they are announced again as a range every replica reads back from
+ * run_event (relayStoredBatch), this one included; a stream that already had them drops them by seq.
+ */
+export interface RestatedSeqs {
+  from: number;
+  to: number;
+}
+
+/** The notification of a batch's restated seqs (RestatedSeqs): their range, read back by the other replicas. */
+export function restatedBatchNotice(instanceId: string, runId: string, restated: RestatedSeqs): { channel: string; payload: string } {
+  return { channel: EVENT_CHANNEL, payload: JSON.stringify({ i: instanceId, r: runId, f: restated.from, t: restated.to }) };
+}
+
+/**
+ * The statements notifications are sent with, on their own, never inside a transaction that writes anything. A
+ * transaction that sends a NOTIFY takes PostgreSQL's one notification-queue lock at its commit (PreCommit_Notify:
+ * object, database 0, classid 1262, objid 0, AccessExclusiveLock) and holds it until the commit is done, so a writer's
+ * NOTIFY holds it through that writer's WAL flush, and every writer that notifies commits one at a time. A transaction
+ * that only notifies is given no transaction id, writes no commit record and flushes nothing (PostgreSQL 13 and later):
+ * it holds the lock for as long as it takes to queue its notifications.
+ */
+const NOTIFY_ONE_SQL = 'SELECT pg_notify($1, $2)';
+/** NOTIFY_ONE_SQL for several notifications, in order, as one statement. */
+const NOTIFY_MANY_SQL = 'SELECT pg_notify(n.channel, n.payload) FROM unnest($1::text[], $2::text[]) AS n(channel, payload)';
+
 /** The session_updated a batch whose ingest changed the session's row is followed by (runEventBatchNotice). */
 function batchRowUpdate(): NormalizedRunEvent {
   return { seq: 0, type: RunEventType.SESSION_UPDATED, payload: {}, ts: new Date().toISOString() };
@@ -287,7 +329,10 @@ function batchRowUpdate(): NormalizedRunEvent {
  * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
  */
 export function approvalRequestEvent(
-  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null },
+  approval: {
+    id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null; coordinatorFallback?: string | null;
+    translation?: unknown;
+  },
   ts: string,
 ): NormalizedRunEvent {
   return {
@@ -303,7 +348,13 @@ export function approvalRequestEvent(
       // up, whatever the conversation is doing, and a client that reads only the turn would
       // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
       backgroundJobId: approval.backgroundJobId ?? undefined,
+      // The SubAgent that asked under this session: the card's grey "SubAgent · …" line, and the reader that
+      // outlives the turn the way a job does.
+      ...(approval.subagentRunId ? { subagentRunId: approval.subagentRunId } : {}),
       ...(approval.coordinatorFallback ? { coordinatorFallback: approval.coordinatorFallback } : {}),
+      // Settings › Translation (ApprovalTranslation, reply-translation.ts): what the card shows, in the
+      // owner's language. A card is published again with it once it is translated.
+      ...(approval.translation ? { translation: approval.translation } : {}),
     },
     ts,
   };
@@ -335,6 +386,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   /** This replica's own publications, never one the NOTIFY bridge carried in (see localPublications). */
   private readonly published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
   private readonly waiters = new EventEmitter(); // event name = the key waitForNotice waits on
+  /** publishViewerRevoked's signals, this replica's own and those the NOTIFY bridge carried in. */
+  private readonly viewerRevocations$ = new Subject<ViewerRevocation>();
   /** sessionId → what reached this replica for the session behind its read-back in flight (readBackInOrder). */
   private readonly heldBehindReadBack = new Map<string, Array<{ event: NormalizedRunEvent } | ReadBack>>();
   /** Runner changes markRunnerChanged could not mark since the last report, and when that report was. */
@@ -416,6 +469,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       await client.query(`LISTEN ${EVENT_CHANNEL}`);
       await client.query(`LISTEN ${WAITERS_CHANNEL}`);
       await client.query(`LISTEN ${RUNNER_WAKE_CHANNEL}`);
+      await client.query(`LISTEN ${VIEWER_CHANNEL}`);
       this.listener = client;
       this.log.log(`LISTEN/NOTIFY active (instance ${this.instanceId.slice(0, 8)})`);
       const lostAt = this.listenerLostAt;
@@ -509,7 +563,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string; u?: 1;
+      a?: string; ts?: string; u?: 1; x?: number; v?: ViewerRevocation;
     };
     try {
       m = JSON.parse(payload);
@@ -521,6 +575,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (m.i === this.instanceId && !(channel === RUNNER_WAKE_CHANNEL && m.c)) return;
     if (channel === WAITERS_CHANNEL) {
       this.waiters.emit(m.r);
+      return;
+    }
+    if (channel === VIEWER_CHANNEL) {
+      if (m.v) this.viewerRevocations$.next(m.v);
       return;
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
@@ -557,9 +615,23 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
           const row = await this.prisma.approval.findFirst({
             where: { id: approvalId, sessionId: m.r },
-            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true },
+            select: {
+              id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, subagentRunId: true, createdAt: true, coordinatorFallback: true,
+              translation: true,
+            },
           });
           return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
+        });
+      } else if (typeof m.x === 'number') {
+        // A reply's translation too big to ride along: built again from the payload of the event it translates.
+        const seq = m.x;
+        this.readBackInOrder(m.r, `translation of ${seq}`, async () => {
+          const row = await this.prisma.runEvent.findUnique({
+            where: { sessionId_seq: { sessionId: m.r, seq } },
+            select: { seq: true, payload: true, turnId: true },
+          });
+          const event = row ? translationEventOf(row) : null;
+          return event ? [event] : [];
         });
       }
     }
@@ -666,13 +738,26 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private notifyRaw(channel: string, payload: string): void {
+    this.sendNotices([{ channel, payload }]).catch((e) => this.log.warn('pg_notify failed: ' + (e as Error).message));
+  }
+
+  /**
+   * Send these notifications, in order, in one statement of their own (NOTIFY_ONE_SQL), and resolve once it has
+   * committed: once every listener has been told. Rejects when the statement fails, and then nobody was told.
+   * For a writer whose rows have committed and whose answer waits for its notifications
+   * (RunnerApiController.ingestLinkEventCall, publishBatch).
+   */
+  async sendNotices(notices: ReadonlyArray<{ channel: string; payload: string }>): Promise<void> {
+    if (notices.length === 0) return;
     // executeRaw (not queryRaw): pg_notify returns void, which Prisma's queryRaw
     // can't deserialize ("Failed to deserialize column of type 'void'"). executeRaw
     // runs the statement — firing the NOTIFY — and returns an affected-row count
     // instead of reading result columns.
-    this.prisma
-      .$executeRawUnsafe('SELECT pg_notify($1, $2)', channel, payload)
-      .catch((e) => this.log.warn('pg_notify failed: ' + (e as Error).message));
+    if (notices.length === 1) {
+      await this.prisma.$executeRawUnsafe(NOTIFY_ONE_SQL, notices[0].channel, notices[0].payload);
+      return;
+    }
+    await this.prisma.$executeRawUnsafe(NOTIFY_MANY_SQL, notices.map((n) => n.channel), notices.map((n) => n.payload));
   }
 
   // ── inbox (interactive turn delivery) ───────────────────────────────────
@@ -687,6 +772,21 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   notifyWaiters(key: string): void {
     this.waiters.emit(key); // same replica
     this.notifyRaw(WAITERS_CHANNEL, JSON.stringify({ i: this.instanceId, r: key })); // others
+  }
+
+  /**
+   * A write that may end viewers' access has committed: tell every replica's viewer streams it names
+   * (ViewerStreamService), this one's at once and the others' over NOTIFY. Best effort: a signal that is lost is
+   * caught by the streams' own recheck at their next ping.
+   */
+  publishViewerRevoked(revocation: ViewerRevocation): void {
+    this.viewerRevocations$.next(revocation);
+    this.notifyRaw(VIEWER_CHANNEL, JSON.stringify({ i: this.instanceId, r: 'viewer', v: revocation }));
+  }
+
+  /** Every publishViewerRevoked, from this replica and the others. */
+  viewerRevocations(): Observable<ViewerRevocation> {
+    return this.viewerRevocations$.asObservable();
   }
 
   /** Park until notifyWaiters(key) on any replica, or the timeout elapses. */
@@ -790,6 +890,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Read before this replica's streams are handed the card: a stream's public-id pass (addTwins) rewrites the ids of
     // what it sends in place, and the other replicas look the approval row up by the id it is stored under.
     const approvalId = event.type === RunEventType.APPROVAL_REQUEST ? approvalIdOf(event.payload) : null;
+    const translationOf = event.type === RunEventType.TRANSLATION ? (event.payload as { of?: unknown }).of : undefined;
     this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
@@ -800,6 +901,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // A card is never stored: the other replicas build it again from its approval row (approvalRequestEvent), at
       // the `ts` it was published at here.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalId, ts: event.ts }));
+    } else if (typeof translationOf === 'number') {
+      // A reply's translation is never an event of its own: the other replicas read it back from the payload of
+      // the event it translates (reply-translation.ts), where it was written before this was published.
+      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, x: translationOf }));
     } else {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.
@@ -830,18 +935,34 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *     of the replica it posts to, which with one replica is every stream there is.
    *   - the stored events ride the notification whole when it fits (MAX_NOTIFY_BYTES), and otherwise as the seq range
    *     the other replicas read back from run_event, where the ingest has already stored them.
+   *
+   * Seqs of the batch an earlier delivery stored (`restated`, RestatedSeqs) go first, read back here and announced
+   * as their range. Resolves once the other replicas have been told (sendNotices), and rejects when they could not
+   * be: the batch's answer then fails, and the batch sent again is announced again, as restated.
    */
-  publishBatch(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
-    this.publishBatchHere(runId, events, rowChanged);
+  async publishBatch(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false, restated?: RestatedSeqs | null): Promise<void> {
+    this.publishBatchHere(runId, events, rowChanged, restated);
+    await this.sendNotices(this.batchNotices(runId, events, rowChanged, restated));
+  }
+
+  /** What publishBatch tells the other replicas of a batch, in order: its restated seqs, then the batch. */
+  batchNotices(
+    runId: string,
+    events: readonly NormalizedRunEvent[],
+    rowChanged = false,
+    restated?: RestatedSeqs | null,
+  ): Array<{ channel: string; payload: string }> {
     const notice = runEventBatchNotice(this.instanceId, runId, events, rowChanged);
-    if (notice) this.notifyRaw(notice.channel, notice.payload);
+    return [...(restated ? [restatedBatchNotice(this.instanceId, runId, restated)] : []), ...(notice ? [notice] : [])];
   }
 
   /**
    * publishBatch without its notification: the batch to this replica's streams alone. For a batch whose notification
-   * the transaction that stored it sent (runEventBatchNotice), once that transaction has committed.
+   * was sent on its own (batchNotices), once the transaction that stored it has committed. Its restated seqs are
+   * read back first, and the batch's events wait behind that read-back (toHub).
    */
-  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false): void {
+  publishBatchHere(runId: string, events: readonly NormalizedRunEvent[], rowChanged = false, restated?: RestatedSeqs | null): void {
+    if (restated) this.relayStoredBatch(runId, restated.from, restated.to);
     for (const event of events) this.publishHere(runId, event);
     if (rowChanged) this.publishHere(runId, batchRowUpdate());
   }
@@ -913,6 +1034,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     });
+  }
+
+  /**
+   * A session's `session_updated` signals — a rename, a row change — which streamForRun keeps out of the transcript
+   * stream (isLifecycleType). The viewer streams re-read their head on them (sessions/viewer-stream.service.ts); the
+   * hub alone carries them, from this replica and over NOTIFY from the others.
+   */
+  sessionUpdatesForRun(runId: string): Observable<NormalizedRunEvent> {
+    return this.hub.asObservable().pipe(
+      filter((m) => m.runId === runId && m.event.type === RunEventType.SESSION_UPDATED),
+      map((m) => m.event),
+    );
   }
 
   /**
@@ -1188,6 +1321,30 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A workspace's checkout reads differently on its runner's heartbeat (repoHealth: counts, branch, state). Keyed by
+   *  the owner, since a heartbeat has no session; `repoHealth` tells a client only the workspace list moved, so it need
+   *  not read its session lists again, and `affectsTaskRows: false` tells the Apple apps the same of their task rows. */
+  publishWorkspaceRepoHealthChanged(ownerId: string, workspaceId: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.AGENT_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { id: workspaceId, repoHealth: true, affectsTaskRows: false },
+    });
+  }
+
+  /** A GitHub workspace's clone moved, or reported progress (docs/github-workspace-design.md §5.4). Keyed by the owner,
+   *  like repoHealth; `clone` carries the state and git's percentage, which nothing stores — a client that missed
+   *  one reads the state from the workspace and waits for the next percentage. */
+  publishWorkspaceCloneChanged(ownerId: string, workspaceId: string, clone: { state: string; progress: number | null }): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type: RunEventType.AGENT_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { id: workspaceId, clone: { state: clone.state, progress: clone.progress }, affectsTaskRows: false },
+    });
+  }
+
   /**
    * One of the owner's watches changed — made, edited, paused, resumed or stopped; matched, expired
    * or ended unmatched; or one of its deliveries delivered or dead-lettered. User-scoped, because a
@@ -1229,6 +1386,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    */
   publishWikiChanged(ownerId: string, spaceId: string): void {
     this.publishForUser(ownerId, RunEventType.WIKI_CHANGED, spaceId);
+  }
+
+  /**
+   * The owner's terminals changed (docs/terminal-session-design.md): a terminal asked to be approved, a request was
+   * decided or collected, or a credential was revoked. THE PAYLOAD IS THE REQUEST'S OR CREDENTIAL'S ID AND NOTHING
+   * ELSE — never the user code or the machine name. An accelerant only: the approve card and Settings → Terminals
+   * re-read their lists, and a dropped one costs latency. Published after the write commits.
+   */
+  publishTerminalsChanged(ownerId: string, id: string): void {
+    this.publishForUser(ownerId, RunEventType.TERMINALS_CHANGED, id);
   }
 
   /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
@@ -1296,6 +1463,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                 ...(typeof ev.payload.affectsTaskRows === 'boolean'
                   ? { affectsTaskRows: ev.payload.affectsTaskRows }
                   : {}),
+                ...(ev.payload.repoHealth === true ? { repoHealth: true } : {}),
+                ...(cloneOf(ev.payload.clone) ? { clone: cloneOf(ev.payload.clone) } : {}),
               }
             : { id: String(ev.payload.id ?? '') };
       return {
@@ -1349,6 +1518,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   ): Promise<Record<string, unknown> | null> {
     switch (type) {
       case ControlEventType.SESSION_CREATED:
+        // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
+        // told about it. It is reached from its schedule's history and its notification.
+        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+          return null;
+        }
+      // falls through
       case ControlEventType.SESSION_UPDATED: {
         const summary = await this.buildSessionSummary(sessionId);
         // Null when the session vanished mid-flight.
@@ -1416,7 +1591,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true },
+          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1474,6 +1649,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
         runningBgShells: true,
+        runningSubagents: true,
         engineStartedAt: true,
         enginePhase: true,
         runClaimedAt: true,
@@ -1608,6 +1784,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // That Orbit wrote it, with the notification card its line is written from; cleared with it.
       lastUserFromOrbit: lastUserFromOrbitOf(s),
       lastUserFromExternal: lastUserFromExternalOf(s),
+      // A coordinator's handoff, both halves, sent as null too — a value, which is how a row learns
+      // one cleared (projects/coordinator-handoff.ts).
+      ...(await readSessionCoordinatorHandoffs(this.prisma, sessionId)),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
@@ -1668,6 +1847,22 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     return sessions.map((s) => s.id);
+  }
+
+  /**
+   * Those of `sessionIds` (drainCancellations' answer) whose end is a coordinator handing over: their `end` turn
+   * carries KEEP_BACKGROUND_WORK_END_CONTENT, written in the transaction that requested the end. The heartbeat names
+   * them in `keepWorkSessionIds`, so a runner told of the end here before its inbox hands it that turn still leaves
+   * the session's SubAgent runs and jobs running.
+   */
+  async keepingWork(sessionIds: string[]): Promise<string[]> {
+    if (sessionIds.length === 0) return [];
+    const turns = await this.prisma.conversationTurn.findMany({
+      where: { sessionId: { in: sessionIds }, kind: 'end', content: KEEP_BACKGROUND_WORK_END_CONTENT },
+      select: { sessionId: true },
+      distinct: ['sessionId'],
+    });
+    return turns.map((turn) => turn.sessionId);
   }
 
   /**
@@ -1960,4 +2155,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         };
       });
   }
+}
+
+/** A clone relay's payload as it is passed on (publishWorkspaceCloneChanged), or null for anything else. */
+function cloneOf(value: unknown): { state: string; progress: number | null } | null {
+  if (!value || typeof value !== 'object') return null;
+  const { state, progress } = value as { state?: unknown; progress?: unknown };
+  if (typeof state !== 'string') return null;
+  return { state, progress: typeof progress === 'number' ? progress : null };
 }

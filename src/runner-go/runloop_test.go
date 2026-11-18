@@ -392,6 +392,9 @@ func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
 				{SessionID: "a", Status: stRunning},
 				{SessionID: "c", Status: stInterrupted},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]
@@ -442,6 +445,9 @@ func TestReclaimSetsAsidePersistentlyConflictedSessionInsteadOfLivelocking(t *te
 				{SessionID: "a-poisoned", Status: stAwaitingInput},
 				{SessionID: "b-healthy", Status: stRunning},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			if strings.Contains(r.URL.Path, "a-poisoned") {
 				poisonedAttempts.Add(1)
@@ -491,6 +497,9 @@ func TestAmbiguousClaimCanBeRecoveredFromAuthoritativeReclaim(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{{
 				SessionID: "claimed-after-eof", Status: stRunning,
 			}}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stRunning})
 		default:
@@ -889,10 +898,10 @@ func TestMergeAfterALeaseLostSupervisorIsCleanedUp(t *testing.T) {
 	}
 }
 
-// The other half of that fix: the fence a takeover raises is still shut while the takeover is
-// in flight — a merge may not cross a checkout being handed over — and it opens when the
-// takeover ends, including when it ends by giving the row up rather than starting a supervisor.
-func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
+// A merge reads only the commit the branch is at and replays it in a scratch worktree, so a
+// supervisor takeover in flight on the session's checkout does not hold it up
+// (session-merge-beside-turn-v1).
+func TestMergeRunsBesideASupervisorTakeover(t *testing.T) {
 	const (
 		sessionID   = "handed-over-merge"
 		branch      = "orbit/handed-over-merge"
@@ -909,6 +918,7 @@ func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare takeover: %v", err)
 	}
+	defer endTakeover()
 	advertised, _ := pool.heartbeatSnapshot()
 	command := MergeCommand{
 		SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch,
@@ -918,28 +928,17 @@ func TestMergeWaitsForASupervisorTakeoverAndNoLonger(t *testing.T) {
 		ran = true
 		return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
 	}
-	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); got.Status != "error" || ran {
-		t.Fatalf("merge crossed a takeover in flight: ran=%v status=%q", ran, got.Status)
-	}
-
-	endTakeover()
 	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); !ran || got.Status != "merged" {
-		t.Fatalf("merge after the takeover ended: ran=%v status=%q message=%q", ran, got.Status, got.Message)
+		t.Fatalf("merge beside a takeover in flight: ran=%v status=%q message=%q", ran, got.Status, got.Message)
 	}
 }
 
-// The warm-reuse takeover is the shape that leaves a live supervisor behind: the lease owner
-// still matches this process, so there is nothing to detach and the supervisor stays active and
-// parkable while the takeover holds the fence. When its turn ends inside that window — the
-// server committed AWAITING_INPUT and a claim was already on its way, both of which happen
-// before the turn-complete response reaches the supervisor — park lowered a fence it did not
-// raise and deleted the worktreeOps entry the takeover's count lived in. The takeover's release
-// then found no entry to lower and no way to re-raise one, so a merge delivered on a heartbeat
-// that advertised the epoch the turn was running under crossed the checkout mid-handover.
-func TestMergeDoesNotCrossATakeoverItsSupervisorParkedDuring(t *testing.T) {
+// Nor does a turn running in the checkout: the session can merge its own committed work while it
+// keeps working, and the turn is not held up or released by the merge.
+func TestMergeRunsBesideARunningTurn(t *testing.T) {
 	const (
-		sessionID   = "handed-over-while-parking"
-		branch      = "orbit/handed-over-while-parking"
+		sessionID   = "merging-mid-turn"
+		branch      = "orbit/merging-mid-turn"
 		operationID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 		leaseOwner  = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 	)
@@ -948,42 +947,21 @@ func TestMergeDoesNotCrossATakeoverItsSupervisorParkedDuring(t *testing.T) {
 	if !added {
 		t.Fatal("failed to register a running supervisor")
 	}
-	// The heartbeat that will carry the merge advertised this epoch: the running turn's.
+	if !pool.isActive(live) {
+		t.Fatal("the registered supervisor is not running a turn")
+	}
 	advertised, _ := pool.heartbeatSnapshot()
 	command := MergeCommand{SessionID: sessionID, OperationID: operationID, LeaseOwner: leaseOwner, Branch: branch}
-
-	endTakeover, err := prepareLocalSupervisorTakeover(
-		context.Background(),
-		pool,
-		&ClaimedSession{SessionID: sessionID, LeaseOwner: "process-owner"},
-		"process-owner",
-	)
-	if err != nil {
-		t.Fatalf("prepare takeover: %v", err)
-	}
-	if pool.isDetaching(live) {
-		t.Fatal("a takeover matching the process owner detached the supervisor it reused")
-	}
-	// The turn ends while the takeover is still in flight.
-	pool.park(live, pool.permitGeneration(live))
-	if pool.isActive(live) {
-		t.Fatal("park did not release the turn permit")
-	}
-
 	ran := false
 	merge := func(MergeCommand) mergeOutcome {
 		ran = true
 		return mergeOutcome{Status: "merged", MergedSha: "merged-sha", SourceSha: "source-sha", TargetBranch: "main"}
 	}
-	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); ran {
-		t.Fatalf("merge crossed a takeover its supervisor parked under: status=%q", got.Status)
-	}
-
-	// The takeover ends with a parked supervisor and no active turn: nothing else holds the
-	// checkout, so the fence has to come down rather than refuse every merge until eviction.
-	endTakeover()
 	if got := heartbeatMerge(pool, command, advertised[sessionID], merge); !ran || got.Status != "merged" {
-		t.Fatalf("merge after the takeover ended: ran=%v status=%q message=%q", ran, got.Status, got.Message)
+		t.Fatalf("merge beside a running turn: ran=%v status=%q message=%q", ran, got.Status, got.Message)
+	}
+	if !pool.isActive(live) {
+		t.Fatal("the merge ended the turn running beside it")
 	}
 }
 
@@ -1007,6 +985,9 @@ func TestMergeAfterARestartReclaimsAnAlreadyEndedSession(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{
 				{SessionID: sessionID, Status: stAwaitingInput},
 			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			// It ended while the old image was draining; the runner finds that out here.
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stSucceeded})

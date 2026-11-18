@@ -1,0 +1,12 @@
+data: {"seq":52,"type":"user","payload":{"text":"also add a test","delivery":"enqueued","sentFrom":{"client":"ios","device":"iphone"}},"turnId":"0193f2a0-0000-7000-8000-000000000002","ts":"2026-11-12T09:01:00.000Z"}
+
+data: {"seq":53,"type":"text_delta","payload":{"text":"Add"}}
+
+data: {"type":"ping"}
+
+data: {"seq":54,"type":"assistant","payload":{"text":"Adding a test for the limit."},"turnId":"0193f2a0-0000-7000-8000-000000000002","ts":"2026-11-12T09:01:02.000Z"}
+
+data: {"seq":0,"type":"approval_request","payload":{"id":"0193f2a0-0000-7000-8000-0000000000a1","toolName":"Bash","input":{"command":"npm test -- login","description":"Run the login tests"},"toolUseId":"toolu_01Npm"},"turnId":null,"ts":"2026-11-12T09:01:03.000Z"}
+
+data: {"seq":55,"type":"user","payload":{"text":"keep the limit at 5","delivery":"enqueued","externalSender":{"source":"FEISHU","name":"Li Wei"}},"turnId":"0193f2a0-0000-7000-8000-000000000003","ts":"2026-11-12T09:01:04.000Z"}
+

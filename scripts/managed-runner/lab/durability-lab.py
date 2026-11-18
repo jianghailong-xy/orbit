@@ -65,7 +65,7 @@ al.OWN_SERVER_DIRS = al.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.OWN_SERVER_DIRS = wl.OWN_SERVER_DIRS + OWN_SERVER_DIRS
 wl.EMAIL = ml.EMAIL = 't02c-{}@lab.invalid'
 wl.NAME_RE = re.compile(r't02c-([a-z0-9]+)@lab\.invalid')
-wl.PROBE_ROOT = '/var/lib/orbit/home/t02c-probe'
+wl.PROBE_ROOT = '/home/orbit/t02c-probe'
 al.CONTEXT = SERVER / 't02c-context.json'
 tl.OPERATOR = 'T02c lab operator (task 34ieaGY94CxelffWA9q66)'
 NODES = tl.NODES
@@ -121,7 +121,7 @@ READ = r'''
 import json, os, subprocess, sys
 from pathlib import Path
 want = json.loads(sys.argv[1])
-ROOT = Path(os.environ.get('T02C_VOLUME_ROOT', '/var/lib/orbit')); HOME = ROOT / 'home'; ORBIT = HOME / '.orbit'
+ROOT = Path(os.environ.get('T02C_VOLUME_ROOT', '/home/orbit')); HOME = ROOT; ORBIT = HOME / '.orbit'
 ENV = {**os.environ, 'GIT_OPTIONAL_LOCKS': '0', 'HOME': '/tmp', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}
 def size(p):
     try: return p.stat().st_size
@@ -173,7 +173,7 @@ out = {'kernel': os.uname().release, 'uid': os.getuid(),
        'git': subprocess.run(['git', '--version'], capture_output=True, text=True).stdout.strip()}
 for line in Path('/proc/self/mountinfo').read_text().splitlines():
     f = line.split()
-    if f[4] == '/var/lib/orbit':
+    if f[4] == '/home/orbit':
         src = f[f.index('-') + 2]
         out['mount'] = {'source': src, 'fstype': f[f.index('-') + 1], 'options': f[5], 'superOptions': f[f.index('-') + 3]}
         opts = Path('/proc/fs/ext4') / os.path.basename(src) / 'options'
@@ -217,7 +217,7 @@ def reader_pod(pod_name, claim, image, want):
                                     'env': [{'name': 'HOME', 'value': '/tmp'}],
                                     'securityContext': {'allowPrivilegeEscalation': False, 'readOnlyRootFilesystem': True, 'capabilities': {'drop': ['ALL']}},
                                     'resources': {'requests': {'cpu': '100m', 'memory': '128Mi'}, 'limits': {'cpu': '1', 'memory': '512Mi'}},
-                                    'volumeMounts': [{'name': 'data', 'mountPath': '/var/lib/orbit'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
+                                    'volumeMounts': [{'name': 'data', 'mountPath': '/home/orbit'}, {'name': 'tmp', 'mountPath': '/tmp'}]}],
                     'volumes': [{'name': 'data', 'persistentVolumeClaim': {'claimName': claim}}, {'name': 'tmp', 'emptyDir': {'sizeLimit': '128Mi'}}]}}
     k('create', '-f', '-', input=json.dumps(pod))
     deadline = time.monotonic() + 300
@@ -442,7 +442,7 @@ def run_sessions(run):
             step.check(f'{name} {label}: the engine committed a file in the session\'s worktree', bool(sessions[label]['wrote']['commit']), sessions[label]['wrote'])
         # Uncommitted work in s2's worktree, as an engine leaves it: the runner's commit takes it.
         _, pod = ml.running_pod(name)
-        path = f"/var/lib/orbit/home/.orbit/worktrees/{sessions['s2']['uuid']}/t02c-runner-{name}.txt"
+        path = f"/home/orbit/.orbit/worktrees/{sessions['s2']['uuid']}/t02c-runner-{name}.txt"
         sw.pod_exec(pod['metadata']['name'], 'sh', '-c', f'printf "T02c: committed by the runner for {name}\\n" > {shlex.quote(path)}')
         sessions['s2']['uncommitted'] = path
         with cn.as_owner(name):
@@ -495,7 +495,7 @@ def run_last(run):
         times = {}
         # What came before the last seconds is on the disk: only these seconds are under test.
         times['settleSyncStarted'] = now()
-        settled = sw.pod_exec(pod['metadata']['name'], 'sync', '-f', '/var/lib/orbit')
+        settled = sw.pod_exec(pod['metadata']['name'], 'sync', '-f', '/home/orbit')
         times['settleSyncEnded'] = now()
         step.check('the volume was synced before the last seconds', settled.returncode == 0)
         before_last = read_in_runner(name, {'sessions': [s1['uuid'], s2['uuid']], 'markers': [marker(name, 'LAST')]})
@@ -894,7 +894,7 @@ def again_syncs(ctx, step):
     _, pod = ml.running_pod(name)
     log = k('logs', pod['metadata']['name'], '-c', 'runner', check=False).stdout.splitlines()
     lines = [line[-300:] for line in log if 'volume syncs:' in line]
-    mount = sw.pod_exec(pod['metadata']['name'], 'sh', '-c', "grep ' /var/lib/orbit ' /proc/self/mountinfo").stdout.split()
+    mount = sw.pod_exec(pod['metadata']['name'], 'sh', '-c', "grep ' /home/orbit ' /proc/self/mountinfo").stdout.split()
     root, source = (mount[3], mount[mount.index('-') + 2]) if '-' in mount else (None, None)
     step.check(f'{name}: the runner syncs before reports and behind every tool, its volume a filesystem of its own on RBD',
                any('before reports and behind every tool' in line and '/dev/rbd' in line and 'a filesystem of its own' in line for line in lines), lines)

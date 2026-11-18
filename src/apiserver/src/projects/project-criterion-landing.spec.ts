@@ -477,3 +477,22 @@ test('a declaration is still the whole of §1.1’s first half, whatever the lin
   ], 'this is what the declaration always bought and still does: §1.1 reads it as authoritative, '
     + 'and a lane that read the line’s answers BEFORE the declaration would take it back');
 });
+
+test('an upstream receipt naming a line landing the task moved past does not cover the rework', () => {
+  const at = (minute: number) => new Date(Date.UTC(2026, 10, 15, 0, minute));
+  const line = (sourceSha: string, targetShaAfter: string | null, minute: number) => ({
+    result: targetShaAfter ? 'MERGED' : 'ALREADY_MERGED', targetBranch: 'project/2PgH', sourceSha, targetShaAfter,
+    createdAt: at(minute),
+  });
+  const main = (sourceSha: string, minute: number) => ({ result: 'MERGED', targetBranch: 'main', sourceSha, createdAt: at(minute) });
+  const first = line('b'.repeat(40), '2'.repeat(40), 1);
+  const rework = line('d'.repeat(40), '4'.repeat(40), 2);
+  assert.equal(taskLanding([first, rework, main('2'.repeat(40), 3)], PROJECT_BRANCH), 'ON_INTEGRATION_LINE',
+    'a merge in flight when the rework landed names the first landing, however new its receipt');
+  assert.equal(taskLanding([first, rework, main('2'.repeat(40), 3), main('4'.repeat(40), 4)], PROJECT_BRANCH),
+    'ON_UPSTREAM', 'the merge naming the rework puts it on main');
+  assert.equal(taskLanding([first, main('2'.repeat(40), 3)], PROJECT_BRANCH), 'ON_UPSTREAM',
+    'with no rework on the line, the receipt naming the landing covers it as before');
+  assert.equal(taskLanding([first, line('d'.repeat(40), null, 2), main('2'.repeat(40), 3)], PROJECT_BRANCH),
+    'ON_UPSTREAM', 'a rework the line already had moved nothing, so the first landing is still the line’s');
+});

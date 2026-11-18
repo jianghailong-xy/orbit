@@ -18,15 +18,21 @@ import (
 // secretWarnSinks is where each live session hears about a file left out (registerSecretWarnings), by session id.
 var secretWarnSinks sync.Map
 
-type secretWarnSink struct{ emit emitFn }
+type secretWarnSink struct {
+	emit emitFn
+	turn func() string
+}
 
 // secretWarned keeps a file from being announced on every live diff: once per session and path per process.
 var secretWarned sync.Map
 
 // registerSecretWarnings routes a session's warnings to its emit until the returned func is called.
-func registerSecretWarnings(sessionID string, emit emitFn) func() {
+func registerSecretWarnings(sessionID string, emit emitFn, turn ...func() string) func() {
 	key := decodeSessionID(sessionID)
 	sink := &secretWarnSink{emit: emit}
+	if len(turn) > 0 {
+		sink.turn = turn[0]
+	}
 	secretWarnSinks.Store(key, sink)
 	return func() { secretWarnSinks.CompareAndDelete(key, sink) }
 }
@@ -168,19 +174,51 @@ func secretUnstagedWarning(sessionID, path string, unstageErr error) {
 		logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value and could not be unstaged: %v", path, decodeSessionID(sessionID), unstageErr))
 		return
 	}
-	secretFileWarning(sessionID, path, "secret_unstaged", fmt.Sprintf("%s holds the value of a secret the owner delivered to this runner, so Orbit left it out of the commit. Keep secrets out of the checkout; use orbit secret exec or the secret's own file instead.", path))
+	secretFileWarning(sessionID, path, "secret_unstaged", secretHoldsValueReason, fmt.Sprintf("%s holds the value of a secret the owner delivered to this runner, so Orbit left it out of the commit. Keep secrets out of the checkout; use orbit secret exec or the secret's own file instead.", path))
 }
 
-// secretFileWarning tells the session, once per session, kind and path, that path was kept back for holding a value.
-// The value and the secret's name are not in it: the path is enough to act on.
-func secretFileWarning(sessionID, path, subtype, message string) {
+// secretHoldsValueReason is secretFileWarning's reason for a file found holding a value.
+const secretHoldsValueReason = "holds a secret's value"
+
+// secretFileWarning tells the session, once per session, kind, reason and path, that path was kept back: for holding
+// a value (secretHoldsValueReason), or for what reason says. The log line and the notice say the same reason. The
+// value and the secret's name are not in it: the path is enough to act on.
+func secretFileWarning(sessionID, path, subtype, reason, message string) {
 	key := decodeSessionID(sessionID)
-	if _, seen := secretWarned.LoadOrStore(key+"\x00"+subtype+"\x00"+path, true); seen {
+	if _, seen := secretWarned.LoadOrStore(key+"\x00"+subtype+"\x00"+reason+"\x00"+path, true); seen {
 		return
 	}
-	logln(fmt.Sprintf("secret grants: %s in session %s holds a secret's value (%s)", path, key, subtype))
+	logln(fmt.Sprintf("secret grants: %s in session %s %s (%s)", path, key, reason, subtype))
 	if sink, ok := secretWarnSinks.Load(key); ok && key != "" {
 		// `notice` is what every client already draws as the runner's heads-up (web Transcript NoticeNode).
 		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{"subtype": subtype, "path": path, "notice": message})
 	}
+}
+
+// secretPatchesWarning reports an unreadable record once per turn, without blaming any file.
+func secretPatchesWarning(sessionID string, count int) {
+	key := decodeSessionID(sessionID)
+	sink, ok := secretWarnSinks.Load(key)
+	turn := ""
+	if ok && sink.(*secretWarnSink).turn != nil {
+		turn = sink.(*secretWarnSink).turn()
+	}
+	if _, seen := secretWarned.LoadOrStore(key+"\x00"+turn+"\x00secret_patches_withheld", true); seen {
+		return
+	}
+	logln(fmt.Sprintf("secret grants: withheld diffs of %d files in session %s (record_unreadable)", count, key))
+	if ok && key != "" {
+		sink.(*secretWarnSink).emit(evSystem, map[string]interface{}{
+			"subtype": "secret_patches_withheld", "count": count, "reason": "record_unreadable",
+			"notice": secretPatchesWithheldNotice(count),
+		})
+	}
+}
+
+// secretPatchesWithheldNotice is the one notice for a turn whose diffs were all withheld for an unreadable record.
+func secretPatchesWithheldNotice(count int) string {
+	if count == 1 {
+		return "Orbit withheld the diff of 1 file because it could not read this runner's record of files that held a secret. No secret was found in it; its diff shows again once the record can be read."
+	}
+	return fmt.Sprintf("Orbit withheld the diffs of %d files because it could not read this runner's record of files that held a secret. No secret was found in these files; their diffs show again once the record can be read.", count)
 }

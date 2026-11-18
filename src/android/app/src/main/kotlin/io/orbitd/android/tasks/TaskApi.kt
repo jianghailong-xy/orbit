@@ -47,6 +47,8 @@ class TaskApi(private val api: AuthSession, private val handle: SessionHandle, w
     // One task
     suspend fun detail(id: String) = readObject(listOf("tasks", id))
     suspend fun attribution(id: String) = readObject(listOf("tasks", id, "attribution"))
+    /** `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first, each with its decision once it has one. */
+    suspend fun evidence(id: String): List<JsonObject> = (read(listOf("tasks", id, "evidence")) as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     /** Asked the way the browser's panel asks: both directions, up to 500 tasks, unary chains paired. */
     suspend fun dependencyGraph(id: String) = readObject(listOf("tasks", id, "dependency-graph"),
         listOf("direction" to "both", "maxNodes" to "500", "pairUnary" to "true"))

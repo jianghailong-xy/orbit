@@ -8,7 +8,7 @@
 - iOS 会话列表左滑新增 **Share** 和 **Move**，与原有的 **Delete** 并排。
 - 新概念 **文件夹**：属于某个 Workspace，一个会话最多在一个文件夹里。
 - **Move** 一个入口两种去处：移到当前 Workspace 的某个文件夹；或者搬到其他 Workspace（可同时选那边的文件夹）。
-- iOS 和 web 都有文件夹和 Move（web 的做法见第 7 节）。macOS 共用 SwiftUI，但列表不显示文件夹，新按钮也只在 iOS 出现。数据层对三端一致：macOS 看到的会话归属（Workspace）是对的，只是不分文件夹。
+- iOS 和 web 都有文件夹和 Move（web 的做法见第 7 节）。macOS 共用 SwiftUI：列表和 iPad 一样显示文件夹行、可收起的 Pinned（2026-11-13 起，和 web 一致），文件夹页在会话列里打开，可右键改名/删除；行的右键菜单有 Move…（同一个 Move 面板，含搬到其他 Workspace），工具栏有 New Folder…；会话页工具栏在 Share 旁有 Move…，区域卡片也有 Move。
 
 ## 2. 左滑与长按
 
@@ -110,7 +110,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 - 必须先**结束**（没有 runner 在托管它）。只有结束时 runner 才会收尾提交；没结束就改归属，原 runner 会直接撒手，未提交的改动会被晾在原机器上。
   - 空闲但还没结束的会话：确认框的按钮写 `End and Move`，先结束再搬，一步完成。
   - 正在跑、有排队的消息、在等审批：不能搬，写 `Stop the session first.`
-- 不能搬：回收站里的会话；任务的执行会话（归属跟着任务走，暂停的执行会话也按 Workspace 找回）；项目的协调会话（协调位置是项目设置；0164 之后数据库不再拦，只能由搬家接口拦）；还在导入中的会话。
+- 不能搬：回收站里的会话；任务的执行会话（归属跟着任务走，暂停的执行会话也按 Workspace 找回）；项目为单件事开的判断会话（`dispatch_origin = PROJECT_COORDINATOR`）；还在导入中的会话。
 - 暂时不能搬，过一会儿再试：正在结束、合并或提交进行中、合并修复还没处理完、等自动重试。
 - 派生出来的子会话可以搬（子会话本来就能建在别的 Workspace）。
 - 需要结束时，原 runner 必须在线（收尾提交在它那里做）。已经结束的会话没有这个要求。
@@ -151,6 +151,7 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
     - `branch` 保留原名，只在两边的 worktree 设置不同时生成或置空。`sessions.service.ts` 建会话处写着“分支一经确定不再改，因为 runner 可能已经建了检出”，5.5 的“检出认仓库”就是让这条在搬家时依然成立；
     - 清空描述旧检出的列：`base_sha`、`changed_files`、`isolation_status`、`merge_status` 一组、`branch_merged`、`worktree_branch`、`worktree_dirty`、`merge_target(s)`；
     - 账号槽位按 5.1 处理。
+    - 项目当前的协调会话（`project.coordinator_session_id`）可以搬（2026-11-11，docs/mocks/coordinator-move-workspace）：同一个事务里，会话行写完后再改 `project.coordinator_workspace_id`（project 锁序 40，在 session 之后；0126 的指针守卫此时读到的是新的一对）。`move-targets` 带 `coordinates`（项目 id 和名字）和每个目标的 `startsCoordinator`（对话带不过去时，能不能在那里新开一个 coordinator，走 `POST /projects/:id/coordinator/replace` 带 `workspaceId`）。被换下的旧协调会话就是普通会话，照常能搬，不动项目。
   - 之后：`publishSessionUpdated`；两个 Workspace 都发 `publishWorkspaceChanged`（Workspace 的默认运行时取自它最新的会话，搬家可能改变两边的默认值）；清掉 `RealtimeService` 里这个会话的 owner 缓存（缓存的 `workspaceId` 平时只在会话结束时淘汰）。
   - 新事务登记进 `common/db-write-inventory.ts`。
   - `End and Move` 由客户端编排：先 `POST /sessions/:id/end`，等会话变成已结束，再调 move。move 自己只认已结束的会话，中间若被新消息唤醒就返回 409。
@@ -172,7 +173,6 @@ iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… 
 
 - 代码跟着搬（推送分支、跨机器传改动）。
 - Codex 跨 runner、Kimi、OpenCode 的搬家。
-- macOS 的 Move 入口与文件夹显示。web 已经补齐，见第 7 节。
 
 ## 6. 分两期做
 

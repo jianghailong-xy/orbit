@@ -253,10 +253,13 @@ describe('owner-initiated done check', () => {
       { severity: 'WARN', code: 'DONE_CRITERION_UNLANDED', message: 'criterion 2 diagnostic; none of the gaps names it', criterion: { ordinal: 2 } },
     ];
     await mount(doc(), noItems, dialog(doc()), findings);
+    // A refusal stands in the way; a landing warning is what Orbit cannot prove — two boxes.
+    const blockers = window.document.querySelector('.project-done-blockers');
+    expect(blockers?.textContent).toContain('1 thing stands in the way');
+    expect(blockers?.textContent).toContain('2 tasks are still running');
     const box = window.document.querySelector('.project-done-findings');
-    expect(box?.textContent).toContain('Orbit can’t prove 2 things');
-    expect(box?.querySelectorAll('li')).toHaveLength(2);
-    expect(box?.textContent).toContain('2 tasks are still running');
+    expect(box?.textContent).toContain('Orbit can’t prove 1 thing');
+    expect(box?.querySelectorAll('li')).toHaveLength(1);
     expect(box?.textContent).toContain('Criterion 2 is not on main');
     expect(box?.textContent).not.toContain('diagnostic');
     expect(text()).toContain('These will be kept as the gaps you accepted.');

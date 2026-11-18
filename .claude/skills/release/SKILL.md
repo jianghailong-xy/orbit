@@ -10,12 +10,17 @@ from that same tag, so one command ships all three clients together:
 
 | Job (in `release.yml`) | Output |
 |------------------------|--------|
-| `dmg` | macOS: signed + notarized DMG, a GitHub Release, and the Sparkle auto-update appcast |
+| `identity` | Refuses the tag unless it is `v` + the root `package.json` version and carries a filled-in `release-notes/<version>.md`; every build job waits for it |
+| `dmg` | macOS: signed + notarized DMG, a GitHub Release whose body is those release notes, and the Sparkle auto-update appcast |
 | `testflight` | iOS: signed `.ipa` archived and uploaded to TestFlight |
 | `android-build` | Android: signed release APK (signing key from the `android-internal` environment) |
 | `android-publish` | Android: attaches `orbit-android-<version>.apk`, its `.sha256` and `android-update.json` to the **same GitHub Release** `dmg` created; installed Android apps update themselves from it |
 
-The tag is the single source of truth for the version:
+**The root `package.json` version is the version of record**, and the tag is that version with `v`. Every
+surface derives from it: the GitHub Release, the DMG/`.zip` names and `CFBundleShortVersionString`, the
+TestFlight marketing version (numeric, suffix stripped), the Android `versionName`, the runner binaries and
+`/dl/version.json`, the Sparkle appcast and `android-update.json`. `release.yml` refuses a tag that disagrees
+with the package, so the two cannot drift.
 
 - `vX.Y.Z` → macOS **stable** channel (reaches everyone) **+** an iOS TestFlight build.
 - `vX.Y.Z-beta.N` → macOS **beta** channel (only users who enabled "Receive beta updates") **+** an
@@ -26,48 +31,117 @@ The tag is the single source of truth for the version:
   `versionCode` is the same commit count as the iOS build number. Every Android phone on an older
   version is offered the new one, beta or stable.
 
+## Who runs it
+
+A release is mostly reading commits for its notes and then waiting 30 to 60 minutes on `release.yml`, which needs
+no expensive model. On one, such as an Opus, Fable or GPT-6.x Sol model, the session keeps only the decisions and
+hands the work to DeepSeek V4.1 Flash with Orbit's `delegate` (`model: "deepseek-flash"`, Orbit's id for it). If `delegate` refuses the
+model (`SUBAGENT_TARGET_CANNOT_RUN`), take another flash or mini model from the list the refusal prints. On an
+inexpensive model, follow [How to use](#how-to-use) yourself.
+
+The session decides, and no SubAgent does:
+
+- **The version.** `release.sh next` prints it; confirm it with the owner unless they named one.
+- **What reaches `main`.** A SubAgent never pushes to `main` and never tags anything but `origin/main`'s tip. The
+  session lands the release commit on `main` itself (its usual merge, such as Orbit's `session_merge`).
+- **The notes.** They become the GitHub Release body. Read the file before the release commit is merged, and fix
+  anything the SubAgent claimed without evidence (tests it did not see run, a server version it did not check).
+
+Then:
+
+1. **Prepare**, in the foreground (a few minutes): `delegate({ description: "Prepare release <version>", size: "S",
+   prompt: <the prepare brief> })`. It runs in this session's working directory, which must be a branch based on
+   `origin/main` with nothing uncommitted. Read the notes, then merge the release commit into `main`.
+2. **Tag and watch**, in the background: `delegate({ description: "Tag and watch release <version>", size: "S",
+   background: true, prompt: <the tag brief> })`. End the turn: Orbit wakes this session with the result.
+3. **Report** the tag, the run's link, each job's outcome, the TestFlight and Android state, and any job that
+   failed with its log lines. A failed job is reported, not retried: re-running or deleting a tag is the
+   session's decision (see Notes).
+
+The prepare brief: fill in `<version>` and `<previous tag>` (the newest `v*` tag, `git describe --tags --abbrev=0
+--match 'v*' origin/main`).
+
+```text
+Prepare Orbit client release <version> in the current working directory, a git branch based on origin/main. Read
+.claude/skills/release/SKILL.md first. Answer in English. Stop and report at the first step that fails; do not
+improvise around a guard. Never push, never tag, never touch main.
+
+1. `git fetch origin` and `git status --porcelain` must print nothing. `git merge-base --is-ancestor origin/main HEAD`
+   must succeed and `git rev-list --count origin/main..HEAD` must print 0; otherwise stop.
+2. `.claude/skills/release/release.sh bump <version>`. It commits package.json, the lockfile and
+   release-notes/<version>.md.
+3. Fill in every section of release-notes/<version>.md, following docs/release-notes-template.md and the previous
+   release's notes (release-notes/ of <previous tag>) for tone and length. Base it on
+   `git log --no-merges --format='%h %s%n%b' <previous tag>..origin/main` and
+   `git diff --stat <previous tag> origin/main -- src/apiserver/prisma/migrations/`: group what users see per client,
+   name each migration and whether it is additive, and say the runner served at /dl is built from this tag. State
+   only what the commits say; for "Artifacts and verification" name only checks a commit message records, and say
+   plainly where it records none. No TODO may remain.
+4. `git add release-notes/<version>.md && git commit --amend --no-edit`, so the release is one commit.
+5. Hand back: the commit hash, `git show --stat HEAD`, and the notes file in full.
+```
+
+The tag brief: fill in `<version>`.
+
+```text
+Tag and watch Orbit client release <version>. Read .claude/skills/release/SKILL.md first. Answer in English. Stop
+and report at the first step that fails; do not retry, re-run, delete a tag or push anything but this tag.
+
+1. W=/tmp/orbit-release-<version>. `git fetch origin --tags` and `git worktree add --detach "$W" origin/main`.
+   `node -p "require('$W/package.json').version"` must print <version>, and `$W/release-notes/<version>.md` must
+   exist; otherwise stop.
+2. `cd "$W" && .claude/skills/release/release.sh <version>`. It must end having pushed tag v<version>.
+3. Find the run: `gh run list --workflow release.yml -L 5 --json databaseId,headBranch,event,url` and take the one
+   whose headBranch is v<version>. Wait for it with `gh run watch <id> --exit-status` in steps of under 10 minutes
+   (`timeout 540 gh run watch <id>`; repeat while `gh run view <id> --json status -q .status` is not completed).
+4. `gh run view <id> --json jobs -q '.jobs[] | "\(.name) \(.conclusion)"'`, and
+   `gh release view v<version> --json assets -q '.assets[].name'`. For each failed job, its last 40 log lines
+   (`gh run view <id> --log-failed`).
+5. `git worktree remove --force "$W"`.
+6. Hand back: the tag and its commit, the run URL, each job's conclusion, the release's assets, and the failed jobs'
+   lines.
+```
+
 ## How to use
 
-1. **Pick the version.** `release.sh next` resolves it from the newest tag — the next beta in the
-   current series, or `X.Y.(Z+1)-beta.1` if the newest tag is a stable release. Confirm the
-   resolved version before tagging; pass an explicit version for anything else (a stable release,
-   or opening a new minor).
-
-   ```bash
-   git -c versionsort.suffix=-beta tag --list 'v*' --sort=-v:refname | head -1
-   ```
+1. **Pick the version.** `release.sh next` prints the one tag to cut next, resolved from the **package
+   version** alone (old tags are never read as a sequence): the package version itself while it has no
+   tag yet (the release commit is prepared and waiting), otherwise the next beta in the current series,
+   or `X.Y.(Z+1)-beta.1` once a stable version is the package version. It only prints. Confirm it before
+   bumping; pass an explicit version for anything else (a stable release, or opening a new minor).
 
    **A beta belongs to the version it precedes, not the one already out.** `0.1.1-beta.2` sorts
    *below* `0.1.1`, so once `X.Y.Z` ships stable, its betas are spent — the next beta must open on
-   `X.Y.(Z+1)`. Missing that bump is what left the counter running to `0.1.1-beta.100` on a version
-   that was never released. `next` handles the bump; if you pass a version by hand, check it
-   sorts above the newest stable tag.
+   `X.Y.(Z+1)`. `next` handles the bump.
 
-2. **Always cut from `main`, synced with `origin/main`.** Check out `main` and pull before tagging.
-   Tagging a feature/session branch — or a `main` that's behind `origin/main` — ships a tree that's
-   missing whatever landed on `main` in parallel, so the release silently **drops those features and
-   can revert already-merged fixes**. The tag must point at a committed, pushed `main` tip so both
-   workflows check out the right code. Verify before tagging:
+2. **Bump the package and open the notes.** This is the release commit: `package.json`, the lockfile and
+   `release-notes/<version>.md` all name the same version.
+
+   ```bash
+   .claude/skills/release/release.sh bump next          # or: bump 0.2.0-beta.3
+   ```
+
+   `bump next` while the package version is still untagged and its notes exist changes nothing.
+
+   Fill in every section of the notes file (`docs/release-notes-template.md`), commit it, and make sure
+   the branch is `main` synced with `origin/main` before tagging. Tagging a feature/session branch — or
+   a `main` that's behind `origin/main` — ships a tree that's missing whatever landed on `main` in
+   parallel, so the release silently **drops those features and can revert already-merged fixes**.
 
    ```bash
    git rev-parse --abbrev-ref HEAD                     # → main
    git fetch origin && git rev-list --count HEAD..origin/main   # → 0 (nothing on origin/main you're missing)
    ```
 
-   If a fix lives only on another branch, merge it into `main` first — never tag the branch directly.
-
-3. **Run the helper** (resolves the repo root itself):
+3. **Tag it** (resolves the repo root itself). It runs the same identity gate as CI, refuses a dirty
+   tree, a tag that disagrees with `package.json`, missing or placeholder notes, and an already-used tag
+   (local or remote), then creates an annotated tag and pushes it:
 
    ```bash
-   .claude/skills/release/release.sh next            # next beta after the newest tag
-   .claude/skills/release/release.sh 0.2.0           # stable macOS + iOS TestFlight
-   .claude/skills/release/release.sh 0.2.0-beta.3    # macOS beta channel + iOS TestFlight
+   .claude/skills/release/release.sh 0.2.0-beta.3    # the version package.json already carries
    ```
 
-   It validates the version, refuses a dirty tree or an already-used tag (local or remote), creates
-   an annotated `vX.Y.Z` tag, and pushes it to `origin`.
-
-4. **Watch the build and report the result.** All four jobs run in the one `release.yml` run:
+4. **Watch the build and report the result.** All five jobs run in the one `release.yml` run:
 
    ```bash
    gh run watch "$(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')"
@@ -88,6 +162,8 @@ The tag is the single source of truth for the version:
 
 ## Notes
 
+- `.agents/skills/release/` carries the same rules for other engines; its `scripts/release.sh` is this
+  `release.sh`, byte for byte (`npm run test:release-identity` checks it). Change both together.
 - Accepted: `X.Y.Z` (stable) or `X.Y.Z-beta.N` (macOS beta channel). iOS always ships the numeric
   `X.Y.Z` to TestFlight regardless of suffix.
 - **One tag fires all three** — every `v*` tag also uploads an iOS TestFlight build (two `macos-15`

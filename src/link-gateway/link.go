@@ -44,6 +44,8 @@ type linkState struct {
 	ingestSlots chan struct{}
 	// beats holds the newest heartbeat not yet forwarded; a newer one replaces it (heartbeat.go).
 	beats chan *linkpb.Heartbeat
+	// beating says a heartbeat worker is running (heartbeatWorker).
+	beating atomic.Bool
 	// facts is the last full value of each fact kind, for beats that send a digest only. Only the heartbeat worker
 	// touches it.
 	facts factCache
@@ -94,7 +96,6 @@ func (l *linkState) start(credit creditLevel) {
 		l.setCreditLocked(level)
 	}
 	l.mu.Unlock()
-	go l.heartbeatLoop()
 }
 
 // close lets go of what the connection held: its unacknowledged events no longer count against the gateway's ingest

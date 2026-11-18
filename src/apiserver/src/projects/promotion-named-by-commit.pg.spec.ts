@@ -859,7 +859,7 @@ async function servedError(stack: Stack, w: World, kind = 'INTEGRATION_ERROR') {
   });
   return {
     item, row, card, told,
-    payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown; sourceKind?: unknown },
+    payload: item.payload as { outdatedRunner?: unknown; errorCode?: unknown; failureClass?: unknown; sourceKind?: unknown; check?: unknown },
   };
 }
 
@@ -1192,6 +1192,13 @@ test('(8) §10.5 O-L8: a TASK_BRANCH candidate\'s failure, in each class, says w
         }
         assert.match(served.told, /A task stands behind this item, the one its title names/, what);
         assert.match(served.item.title, /“Backfill order stats” into main$/, what);
+        if (failureClass === 'CHECK_TIMED_OUT') {
+          // The relay records the budget the stopped check ran under, and the item says it beside the run time.
+          const check = served.payload.check as { timeoutSeconds?: unknown } | null;
+          assert.equal(check?.timeoutSeconds, 3_600, `${what}: the limit is recorded on the payload`);
+          assert.match(served.told, /did not finish: the platform stopped it at its 1h limit after running 1h 0m, so it reached no verdict/, what);
+          assert.doesNotMatch(served.told, /exited with code/, what);
+        }
 
         const ofProject = await failedProjectBranch(stack, `words-project-${label}`, body);
         const before = await servedError(stack, ofProject.w, kind);

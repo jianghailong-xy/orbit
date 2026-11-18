@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -258,6 +259,9 @@ private sealed interface ProjectDialog {
     data class Status(val status: String) : ProjectDialog
     data object Delete : ProjectDialog
     data object Replace : ProjectDialog
+    /** Change workspace…: the list, then the question for the workspace picked. */
+    data object Change : ProjectDialog
+    data class ChangeConfirm(val workspaceId: String, val name: String) : ProjectDialog
     data class Resolve(val blocker: JsonObject) : ProjectDialog
     data class ResumeList(val item: JsonObject) : ProjectDialog
     data object Start : ProjectDialog
@@ -402,8 +406,31 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             catch (failure: Exception) { state.notice = "Couldn't open the coordinator: ${failureReason(failure)}." }
         }
     }
-    fun replaceCoordinator() = write("Couldn't start a new coordinator: ") {
-        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}")?.text("sessionId")
+    /** A write at one of the criteria's doors: thrown back to the sheet or row that pressed it, and the page read again either way. */
+    suspend fun <T> criteriaWrite(body: suspend () -> T): T = try { body() } finally {
+        app.realtime.refreshDirectory()
+        if (state.attached) load(settled = true)
+    }
+    /** How it runs, brought into view: Change on the done card's non-code banner (web `#delivers`). */
+    fun revealRuns() = scope.launch {
+        delay(300)
+        for (index in 0 until listState.layoutInfo.totalItemsCount) {
+            listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "runs" }?.let { listState.animateScrollToItem(it.index); return@launch }
+            listState.scrollToItem(index)
+        }
+    }
+    val criteriaActions = remember(handle, id) { CriteriaActions(id, openTask,
+        openProject = { open(OrbitRoute(Destination.PROJECT, it)) }, openSession = { open(OrbitRoute(Destination.SESSION, it)) },
+        changeMark = { dialog = null; revealRuns() },
+        projects = { api.index() },
+        move = { key, body -> criteriaWrite { api.moveCriterion(id, key, body) } },
+        confirm = { criterion, body -> criteriaWrite { api.confirmCriterion(id, criterion, body) } },
+        upload = { name, mime, bytes -> api.uploadImage(name, mime, bytes) }, image = { api.attachmentBytes(it) },
+        withdraw = { criterion -> criteriaWrite { api.withdrawConfirmation(id, criterion) } },
+        check = { criterion -> criteriaWrite { api.startCheck(id, criterion) } },
+        setMode = { body -> criteriaWrite { api.setCriteria(id, body)?.obj("acceptanceCriteriaHold")?.text("notice") } }) }
+    fun replaceCoordinator(workspaceId: String? = null) = write("Couldn't start a new coordinator: ") {
+        api.replaceCoordinator(id, "replace:${state.coordinator?.obj("coordination")?.text("sessionId")}", workspaceId)?.text("sessionId")
             ?.let { if (state.attached) open(OrbitRoute(Destination.SESSION, it)) }
     }
 
@@ -482,10 +509,11 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
-        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) }, retry = { retryJob(it) }) {
+        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) },
+            retry = { retryJob(it) }, skipCheck = { taskId -> attempt("") { api.skipLandingCheck(id, taskId) } }) {
             dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
-            if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
+            if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace }, change = { dialog = ProjectDialog.Change })
         if (started != false) item(key = "runs") {
             RunSettingsSection(state, doc, now, enabled, editMergeCheck = { dialog = ProjectDialog.MergeCheck },
                 integration = { body -> if (body != null && body.isNotEmpty()) write("${RunSettings.notSaved} — ") { api.updateIntegration(id, body, revision(doc) + body) } },
@@ -496,6 +524,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 },
                 stepConcurrency = { stepConcurrency(it) },
                 pause = { next -> write("${if (next) RunSettings.notPaused else RunSettings.notResumed} — ") { api.pause(id, next, revision(doc)) } },
+                nonCode = { next -> write("${RunSettings.notSaved} — ") { api.setNonCode(id, next) } },
                 // Read at the press: a merge still live asks before the agent takes over. One that cannot be read asks too.
                 mergeLive = {
                     try { RunSettings.mergeLive(api.currentPromotion(id)) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { true }
@@ -516,7 +545,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                 try { api.run(taskId, trigger, "${taskId}:${item.text("status")}:${item.text("runState")}") } finally { state.starting = state.starting - taskId }
             }
         }, resume = { dialog = ProjectDialog.ResumeList(it) })
-        criteriaSection(doc, openTask)
+        criteriaSection(doc, openTask, criteriaActions.takeIf { enabled }, now)
         item(key = "instructions") {
             SectionHead(ProjectPage.instructionsHeading)
             doc.text("instructions")?.trim()?.takeIf { it.isNotEmpty() }?.let { Folded(it, 180, link) }
@@ -564,6 +593,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
 
     state.notice?.let { message -> AlertDialog(onDismissRequest = { state.notice = null }, title = { Text("Couldn't do that") }, text = { Text(message) },
         confirmButton = { TextButton(onClick = { state.notice = null }, modifier = Modifier.testTag("project-notice-ok")) { Text("OK") } }, modifier = Modifier.testTag("project-notice")) }
+    CriteriaDialogs(criteriaActions)
     when (val current = dialog) {
         null -> Unit
         is ProjectDialog.Status -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text(ProjectPage.confirmTitle(current.status, doc.text("title") ?: "this project")) },
@@ -581,6 +611,21 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             confirmButton = { TextButton(onClick = { dialog = null; replaceCoordinator() }, enabled = enabled, modifier = Modifier.testTag("project-replace-confirm")) {
                 Text(ProjectPage.replaceCoordinatorConfirm, color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { dialog = null }) { Text(ProjectPage.replaceCoordinatorKeep) } })
+        ProjectDialog.Change -> CoordinatorChangeSheet(api, state.coordinator?.obj("coordination")?.text("workspaceId"), close = { dialog = null }) { row ->
+            dialog = ProjectDialog.ChangeConfirm(row.workspaceId, row.name)
+        }
+        is ProjectDialog.ChangeConfirm -> {
+            val outgoing = CoordinatorChange.outgoing(state.coordinator)
+            AlertDialog(onDismissRequest = { dialog = null }, title = { Text(CoordinatorChange.title(doc.text("title") ?: "this project", current.name)) },
+                text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CoordinatorChange.paragraphs(current.name, state.coordinator?.obj("coordination")?.text("workspaceName"), outgoing).forEach { Text(it) }
+                } },
+                confirmButton = { TextButton(onClick = { dialog = null; replaceCoordinator(current.workspaceId) }, enabled = enabled,
+                    modifier = Modifier.testTag("project-change-confirm")) {
+                    Text(CoordinatorChange.action(current.name, outgoing),
+                        color = if (outgoing == CoordinatorChange.Outgoing.OPEN) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } },
+                dismissButton = { TextButton(onClick = { dialog = null }) { Text(CoordinatorChange.cancel) } })
+        }
         is ProjectDialog.Resolve -> {
             var reason by remember(current.blocker.text("id")) { mutableStateOf("") }
             AlertDialog(onDismissRequest = { dialog = null }, title = { Text(ProjectPage.resolveBlockerTitle(current.blocker)) },
@@ -610,7 +655,7 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         } ?: run { dialog = null }
         ProjectDialog.Share -> ShareSheet(app, handle, ShareRootKind.PROJECT, id, close = { dialog = null }) { state.share = it }
-        ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }) { refusal, body -> attempt(refusal, body) }
+        ProjectDialog.Done -> ProjectDoneSheet(api, id, state, now, enabled, close = { dialog = null }, actions = criteriaActions) { refusal, body -> attempt(refusal, body) }
         // The jobs the landing card counts, read off the page's own integration read, which its polls keep current. Retry answers the
         // line read again, which the list redraws from at once; then the page reads everything again (iOS `retryIntegrationJob`).
         ProjectDialog.LandingJobs -> LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
@@ -648,6 +693,7 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val running = ProjectDoc.status(doc) == "OPEN" && ProjectDoc.started(doc) != false
             Chip(ProjectDoc.statusLabel(doc), if (running) TagTone.BRAND else TagTone.NEUTRAL, Modifier.testTag("project-status"))
+            if (doc.flag("nonCode")) Chip(DoneCopy.NON_CODE_BADGE, TagTone.NEUTRAL, Modifier.testTag("project-non-code"))
             if (ProjectDone.readyToClose(ProjectDoc.status(doc), state.openItems)) Chip(ProjectDone.readyToClose, TagTone.WARNING, Modifier.testTag("project-ready-to-close"))
             val count = ProjectDoc.taskCount(doc)
             Text("$count task${if (count == 1) "" else "s"}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -657,6 +703,9 @@ private fun Header(state: ProjectPageState, doc: JsonObject, now: Instant, conne
         val view = state.integration
         val facts = view?.let { ProjectPage.integrationFacts(it, now) }
         when {
+            // A non-code project reads no landing (board 01 G): the mark, where the branch would be.
+            doc.flag("nonCode") -> Text(DoneCopy.NON_CODE_PROJECT_LINE, Modifier.testTag("project-non-code-line"),
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             facts != null -> Text("${if (view.text("line") == "PROJECT_BRANCH") "⎇" else "↓"} ${facts.joinToString(" · ")}", Modifier.testTag("project-integration-facts"),
                 style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             view != null && view["line"].let { it == null || it is JsonNull } && ProjectDoc.started(doc) == false -> {
@@ -833,7 +882,9 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
             Text(ProjectPage.who(row), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(if (row.obj("baseline") == null) row.text("title").orEmpty() else ExceptionCards.headingLine(row), fontWeight = FontWeight.SemiBold)
+            // In the owner's language while a usable translation exists; the card it opens offers Show original.
+            val language = LocalTranslation.current.cardLanguage
+            Text(if (row.obj("baseline") == null) OwnerCardTranslation.listTitle(row, language) else ExceptionCards.headingLine(row), fontWeight = FontWeight.SemiBold)
             if (row.obj("baseline") != null) {
                 var heldOpen by remember { mutableStateOf(false) }
                 TextButton(onClick = { heldOpen = !heldOpen }, enabled = enabled) { Text(LandingCheckCopy.viewHeld) }
@@ -844,7 +895,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
                     Text(if (fact.label.isEmpty()) fact.value else "${fact.label}: ${fact.value}", style = MaterialTheme.typography.labelMedium)
                 }
             }
-            row.text("detailLine")?.takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            OwnerCardTranslation.listDetailLine(row, language).takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             ExceptionCards.handlingLine(row, now, main)?.let { line ->
                 Row(Modifier.testTag("$tag:handling"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(ExceptionCards.handlingLabel, Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
@@ -862,7 +913,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, main: String, enabled: Bo
 }
 
 private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit,
-    openLanding: (String) -> Unit, retry: suspend (String) -> String?, openJobs: () -> Unit) {
+    openLanding: (String) -> Unit, retry: suspend (String) -> String?, skipCheck: suspend (String) -> String?, openJobs: () -> Unit) {
     val panorama = state.panorama ?: return
     val buckets = panorama.obj("buckets") ?: JsonObject(emptyMap())
     val status = ProjectDoc.status(doc)
@@ -878,7 +929,7 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
             state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
                 ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
-                    openLanding = openLanding, retry = retry) } }
+                    openLanding = openLanding, retry = retry, skipCheck = skipCheck) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
                     // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).
@@ -976,7 +1027,8 @@ internal fun LandingJobsList(lines: List<LandingJobLine>, retry: suspend (String
     }
 }
 
-private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, openCoordinator: () -> Unit, replace: (Boolean) -> Unit) {
+private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonObject, now: Instant, enabled: Boolean, openCoordinator: () -> Unit, replace: (Boolean) -> Unit,
+    change: () -> Unit) {
     val status = state.coordinator ?: return
     val pill = ProjectPage.coordinatorPill(status)
     val coordination = status.obj("coordination") ?: JsonObject(emptyMap())
@@ -1014,6 +1066,8 @@ private fun LazyListScope.coordinatorSection(state: ProjectPageState, doc: JsonO
                         FilledTonalButton(onClick = { more = true }, enabled = enabled, contentPadding = PaddingValues(horizontal = 12.dp),
                             modifier = Modifier.testTag("project-coordinator-more").semantics { contentDescription = "More coordinator actions" }) { Text("▾") }
                         DropdownMenu(more, { more = false }) {
+                            DropdownMenuItem(text = { Text(CoordinatorChange.button) }, onClick = { more = false; change() },
+                                modifier = Modifier.testTag("project-coordinator-change"))
                             DropdownMenuItem(text = { Column(Modifier.widthIn(max = 300.dp)) {
                                 Text(ProjectPage.startNewCoordinator)
                                 Text(ProjectPage.startNewCoordinatorDetail(finished), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1131,28 +1185,37 @@ internal fun RunPress(label: String, enabled: Boolean, tag: String, description:
     }
 }
 
-private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit) {
+private fun LazyListScope.criteriaSection(doc: JsonObject, openTask: (String) -> Unit, actions: CriteriaActions?, now: Instant) {
     val criteria = doc.objects("acceptanceCriteriaItems").sortedBy { it.number("ordinal") ?: 0 }
     item(key = "criteria-head") { SectionHead("Acceptance criteria") }
-    if (criteria.isEmpty()) { item(key = "criteria-empty") { Text(ProjectPage.noCriteria, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }; return }
+    val movedOut = doc.objects("criteriaMovedOut")
+    if (criteria.isEmpty()) { item(key = "criteria-empty") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(ProjectPage.noCriteria, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MovedOutLines(movedOut, "criteria-moved-out", actions?.openProject)
+    } }; return }
     item(key = "criteria") {
         var expanded by rememberSaveable { mutableStateOf(false) }
         val limit = ProjectPage.criteriaPreviewCompact
         Column(Modifier.testTag("project-criteria"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(ProjectPage.criteriaStanding(criteria.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val mixed = DoneFollowUps.standingMixed(criteria)
+            Text(mixed ?: ProjectPage.criteriaStanding(criteria.size), Modifier.testTag("criteria-standing"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             val main = RunSettings.mainBranchName(doc.obj("integration")?.text("upstreamRef"))
-            (if (expanded) criteria else criteria.take(limit)).forEach { criterion -> CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask) }
+            (if (expanded) criteria else criteria.take(limit)).forEach { criterion ->
+                CriterionRow(criterion, doc.obj("integration")?.text("ref"), main, openTask, criteria, actions, now) }
             ProjectPage.criteriaDisclosure(criteria.size, limit, expanded)?.let { (press, meta) ->
                 OutlinedButton(onClick = { expanded = !expanded }, Modifier.fillMaxWidth()) { Text(press) }
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
             }
-            Text(ProjectPage.criteriaOutcomeNote, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            MovedOutLines(movedOut, "criteria-moved-out", actions?.openProject)
+            Text(if (mixed != null) DoneCopy.ACCEPTANCE_NOTE_MIXED else ProjectPage.criteriaOutcomeNote, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit) {
+private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, openTask: (String) -> Unit, all: List<JsonObject>, actions: CriteriaActions?, now: Instant) {
     var method by rememberSaveable(criterion.text("id")) { mutableStateOf(false) }
     val satisfied = ProjectDoc.satisfied(criterion)
     Row(Modifier.fillMaxWidth().testTag("criterion:${criterion.number("ordinal")}"), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1167,7 +1230,9 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(criterion.text("text").orEmpty())
-            ProjectPage.criterionWork(criterion, ref, main)?.let { work ->
+            criterion.obj("movedFrom")?.let { MovedFromLine(it, actions?.openProject) }
+            if (DoneFollowUps.byConfirmation(criterion)) ConfirmationWorkView(criterion, actions, now, "criterion-confirmation:${criterion.number("ordinal")}")
+            else ProjectPage.criterionWork(criterion, ref, main)?.let { work ->
                 Text(buildString {
                     append(work.state); work.landing?.let { append(" · $it") }; work.landingWarning?.let { append(" · $it") }
                 }, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
@@ -1183,6 +1248,7 @@ private fun CriterionRow(criterion: JsonObject, ref: String?, main: String, open
                     color = MaterialTheme.colorScheme.primary)
                 if (method) Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            actions?.let { CriterionModeMenu(criterion, all, it, "criterion-mode:${criterion.number("ordinal")}") }
         }
     }
 }
@@ -1222,11 +1288,11 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
 }
 
 /** Work asked across this project's line, in either direction — the account owner's to answer, and nobody else's (iOS
- * `crossingsSection`, web's `ProjectCrossingsCard.tsx`): drawn once the project is an end of a crossing, or when the read failed
- * with nothing to show. */
+ * `crossingsSection`, web's `ProjectCrossingsCard.tsx`): drawn once the project is an end of a crossing no coordinator conversation
+ * answers, or when the read failed with nothing to show. */
 private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: Boolean, asking: Pair<String, Boolean>?,
     refused: Pair<String, ProjectCrossings.Refusal>?, ask: (JsonObject, Boolean) -> Unit, cancel: () -> Unit, answer: (JsonObject, Boolean) -> Unit) {
-    val rows = state.crossings
+    val rows = state.crossings?.let(ProjectCrossings::pageRows)
     if (!rows.isNullOrEmpty()) {
         item(key = "crossings-head") { SectionHead(ProjectCrossings.title, ProjectCrossings.waiting(ProjectCrossings.waitingCount(rows)), Modifier.testTag("crossings-head")) }
         items(ProjectCrossings.ordered(rows), key = { "crossing:${it.text("id")}" }) { row ->
@@ -1248,8 +1314,14 @@ private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: B
  * A question offers two presses; the second names the subject and both ends, says what the answer does, shows the crossing key it
  * echoes, and sends it. A refusal stays on its row with the door's own code and reason, the second press still open. */
 @Composable
-private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
+private fun CrossingRow(asked: JsonObject, confirming: Boolean?, busy: Boolean, locked: Boolean, connected: Boolean, refusal: ProjectCrossings.Refusal?,
     ask: (Boolean) -> Unit, cancel: () -> Unit, answer: (Boolean) -> Unit) {
+    // Its title and reason in the owner's language (Settings › Translation), flipped whole to the agent's words by the foot; the
+    // answer is pressed with the row as it came.
+    var showOriginal by remember(asked.text("id")) { mutableStateOf(false) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.crossing(asked, owner) }
+    val row = if (translated != null && !showOriginal) translated else asked
     val id = row.text("id")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val mono = SpanStyle(fontFamily = FontFamily.Monospace, color = secondary)
@@ -1273,7 +1345,8 @@ private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, lo
             }
             end(row.obj("fromProject"), ProjectCrossings.fromId(row))
             withStyle(SpanStyle(color = secondary)) { append(ProjectCrossings.arrow) }
-            end(row.obj("toProject"), ProjectCrossings.toId(row))
+            if (ProjectCrossings.hasNoTarget(row)) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(ProjectCrossings.noProject) }
+            else end(row.obj("toProject"), ProjectCrossings.toId(row))
         }, style = MaterialTheme.typography.labelMedium)
         Text(ProjectCrossings.meaning(row), Modifier.testTag("crossing:$id:meaning"), style = MaterialTheme.typography.labelMedium, color = secondary)
         if (ProjectCrossings.isMove(row)) {
@@ -1282,6 +1355,8 @@ private fun CrossingRow(row: JsonObject, confirming: Boolean?, busy: Boolean, lo
                 ProjectCrossings.moveWithdrawnCriterionNote) }
         }
         row.text("reason")?.let { Text(ProjectCrossings.reasonGiven(it), style = MaterialTheme.typography.labelMedium, color = secondary) }
+        if (translated != null) io.orbitd.android.translation.CardTranslationFoot(showOriginal, { showOriginal = !showOriginal },
+            Modifier.testTag("crossing:$id:translation-foot"))
         refusal?.let { refused ->
             Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f), RoundedCornerShape(8.dp)).padding(8.dp)
                 .testTag("crossing:$id:refusal"), verticalArrangement = Arrangement.spacedBy(2.dp)) {

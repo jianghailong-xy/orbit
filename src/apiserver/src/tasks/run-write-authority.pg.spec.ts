@@ -49,8 +49,14 @@ const DECIDE_REFUSED = 'EVIDENCE_JUDGMENT_FROM_RUN_REFUSED';
 const INDEPENDENCE_REFUSED = 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION';
 const ANOTHER_PROJECT_REFUSED = 'EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT';
 const VERIFIER_REFUSED = 'VERIFIER_WRITE_FROM_RUN_REFUSED';
-const CARD_REQUIRED = 'VERIFIER_CREATE_NEEDS_OWNER_CARD';
-const DAG_CARD_REQUIRED = 'VERIFIER_DAG_NEEDS_OWNER_CARD';
+// The control plane now cards every session create by caller (`task-write-approval.ts`), so the
+// door answers an uncarded verifier create with the universal code; the verifier rule still
+// requires the card to name the verifiers, and a card covering the whole body does.
+const CARD_REQUIRED = 'TASK_WRITE_NEEDS_OWNER_CARD';
+// The control plane now cards every session restructure by caller (`task-write-approval.ts`), so
+// the door answers an uncarded edit with the universal code; the verifier rule still requires the
+// card to name the verifier edits, and a card covering the whole batch does.
+const DAG_CARD_REQUIRED = 'TASK_WRITE_NEEDS_OWNER_CARD';
 const DELETE_REFUSED = 'TASK_DELETE_FROM_RUN_REFUSED';
 const CRITERION_KEY_REFUSED = 'CRITERION_KEY_FROM_RUN_REFUSED';
 const STANDARD_REFUSED = 'COMPLETION_STANDARD_FROM_RUN_REFUSED';
@@ -624,10 +630,21 @@ test('what a run answers for', { skip: !URL, concurrency: 1, timeout: 900_000 },
       assert.deepEqual(await edgesOf(listed), [{ dependsOnTaskId: another }]);
 
       const onOrdinary = [{ op: 'add', taskId: b62(ordinary), dependsOnTaskId: b62(another) }];
-      ok(await applyDag(peer.sessionId, listId, onOrdinary), 'an ordinary sibling needs no card here');
+      // Every session's restructure takes the card now, not only one that touches a verifier: the
+      // batch can release work into the dispatcher whichever tasks it edits (task-write-approval.ts).
+      const unapproved = await applyDag(peer.sessionId, listId, onOrdinary);
+      assert.deepEqual([unapproved.status, unapproved.json?.code], [403, 'TASK_WRITE_NEEDS_OWNER_CARD'], unapproved.text);
+      await cardOf({ listId: b62(listId), ops: onOrdinary });
+      ok(await applyDag(peer.sessionId, listId, onOrdinary), 'an ordinary sibling on its card');
       const removal = [{ op: 'remove', taskId: b62(listed), dependsOnTaskId: b62(another) }];
-      ok(await applyDag(project.coordinator, listId, removal), 'the coordinator needs none');
-      ok(await applyDag(undefined, listId, onVerifier), 'nor does a request that names no session');
+      const coordinatorUnapproved = await applyDag(project.coordinator, listId, removal);
+      assert.deepEqual([coordinatorUnapproved.status, coordinatorUnapproved.json?.code], [403, 'TASK_WRITE_NEEDS_OWNER_CARD'], coordinatorUnapproved.text);
+      await cardOf({ listId: b62(listId), ops: removal }, 'ALLOWED', ownerId, project.coordinator);
+      ok(await applyDag(project.coordinator, listId, removal), 'the coordinator on its card');
+      // A request that names no session is not the owner's terminal any more: the machine credential
+      // is the agent's, and a write that sheds its session is refused (task-write-approval.ts).
+      const noSession = await applyDag(undefined, listId, onVerifier);
+      assert.deepEqual([noSession.status, noSession.json?.code], [403, 'TASK_WRITE_NEEDS_OWNER_CARD'], noSession.text);
     });
   });
 

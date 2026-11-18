@@ -101,6 +101,8 @@ final class ProjectCrossingsWiringTests: XCTestCase {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let section = try slice(view, from: "private func crossingsSection(_ store: ProjectDetailModel) -> some View {",
                                 to: "private func answerCrossing(")
+        XCTAssertTrue(section.contains("if let rows = store.crossings.map(ProjectCrossings.shownOnProjectPage), !rows.isEmpty {"),
+                      "only the rows no coordinator conversation answers, and no section when none are left")
         XCTAssertTrue(section.contains("ForEach(ProjectCrossings.ordered(rows)) { row in"))
         XCTAssertTrue(section.contains("let asking = crossingAsk?.id == row.id"))
         XCTAssertTrue(section.contains("confirming: asking ? crossingAsk?.decision : nil,"))

@@ -20,6 +20,15 @@ final class OwnerRequestsModel {
     private(set) var savedSecrets: [AccountSecret] = []
     /// The coordinators' open questions: one inbox and one count with the requests (web `WaitingOnYouPage`).
     private(set) var questions: [OwnerInboxQuestion] = []
+    /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their cards
+    /// head the Open tab and count with the rest (docs/scheduled-tasks-design.md §6.4).
+    private(set) var scheduleItems: [ScheduleWaitingItem] = []
+    /// A condition's two kinds, pending: the can't-read card and the 30-day question (docs/condition-triggers-design.md
+    /// §5.3, §6.2). They head the Open tab with the schedule's and count with the rest.
+    private(set) var conditionItems: [ConditionWaitingItem] = []
+    /// Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and
+    /// count with the rest. Each waits ten minutes at most.
+    private(set) var terminalRequests: [TerminalRequest] = []
     /// Answer on a question's row: its card, in the coordinator conversation it was asked in.
     var onAnswerQuestion: (OwnerInboxQuestion) -> Void = { _ in }
     /// The titles of the tasks requests hold up, by id, read once each.
@@ -46,7 +55,17 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
-    var waitingCount: Int { OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) }
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient, store: OwnerRequestSnoozes = OwnerRequestSnoozes()) {
+        self.api = api
+        self.store = store
+        snoozes = store.all()
+    }
+
+    var waitingCount: Int {
+        OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
+            + scheduleItems.count + conditionItems.count
+    }
 
     /// The Open tab: pending requests and open questions, newest first.
     var openEntries: [OwnerInboxEntry] { OwnerRequests.openEntries(open, questions: questions) }
@@ -65,16 +84,20 @@ final class OwnerRequestsModel {
     func load() async {
         guard !unsupported else { return }
         do {
-            open = try await api.ownerRequests(state: "open").requests
-            all = try await api.ownerRequests(state: "all").requests
+            let openList = try await api.ownerRequests(state: "open")
+            assignIfChanged(\.open, openList.requests)
+            assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
+            assignIfChanged(\.conditionItems, openList.conditionItems.filter { $0.state == "PENDING" })
+            assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             if tab != .open { await loadTab(tab) }
             await loadQuestions()
+            await loadTerminalRequests()
         } catch APIError.http(let status, _) where status == 404 {
-            unsupported = true
+            assignIfChanged(\.unsupported, true)
         } catch {
             // The next tick reads again; what was drawn stays.
         }
-        snoozes = store.all()
+        assignIfChanged(\.snoozes, store.all())
     }
 
     /// The open projects whose coordinator asked the owner something, and each one's open questions.
@@ -92,12 +115,34 @@ final class OwnerRequestsModel {
                                             coordinatorSessionID: document?.coordinatorSessionId,
                                             coordinatorWorkspaceID: document?.coordinatorWorkspaceId)
         }
-        questions = next
+        assignIfChanged(\.questions, next)
+    }
+
+    /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
+    func loadTerminalRequests() async {
+        do {
+            assignIfChanged(\.terminalRequests, try await api.terminalRequests())
+        } catch APIError.http(let status, _) where status == 404 {
+            assignIfChanged(\.terminalRequests, [])
+        } catch {
+            // The next tick reads again; what was drawn stays.
+        }
+    }
+
+    /// Approve or Deny a terminal: the card leaves at once, and the list is read again either way.
+    func decideTerminal(_ request: TerminalRequest, approve: Bool) async throws {
+        defer { Task { await loadTerminalRequests() } }
+        if approve {
+            try await api.approveTerminalRequest(request.id)
+        } else {
+            try await api.denyTerminalRequest(request.id)
+        }
+        terminalRequests.removeAll { $0.id == request.id }
     }
 
     func loadTab(_ tab: OwnerRequests.InboxTab) async {
         guard tab != .open, let list = try? await api.ownerRequests(state: tab.filter) else { return }
-        ended[tab] = list.requests
+        if ended[tab] != list.requests { ended[tab] = list.requests }
     }
 
     func taskTitle(_ id: String) -> String { taskTitles[PublicID.storageKey(id)] ?? "Task" }
@@ -111,7 +156,7 @@ final class OwnerRequestsModel {
 
     func loadSavedSecrets() async {
         guard let list = try? await api.accountSecrets() else { return }
-        savedSecrets = list.secrets
+        assignIfChanged(\.savedSecrets, list.secrets)
     }
 
     /// The inbox, with this request's card open and its input focused: a push's first action, an
@@ -131,12 +176,28 @@ final class OwnerRequestsModel {
 
     // MARK: the doors
 
+    /// The 30-day question answered: Keep waiting (0) or Stop (1). The server's refusal in its own words, or nil.
+    func answerCondition(_ item: ConditionWaitingItem, option: Int) async -> String? {
+        do {
+            try await api.answerConditionItem(item.id, option: option)
+            assignIfChanged(\.conditionItems, conditionItems.filter { $0.id != item.id })
+            return nil
+        } catch {
+            return ScheduledModel.refusal(error)
+        }
+    }
+
     func complete(_ request: OwnerRequest, _ body: OwnerRequestDoneBody) async throws {
         adopt(try await api.completeOwnerRequest(request.id, body))
     }
 
-    func decline(_ request: OwnerRequest, reason: String) async throws {
-        adopt(try await api.declineOwnerRequest(request.id, reason: reason))
+    /// A WIKI_CREATE card's Create wiki: the server makes the wiki and answers with the card, DONE.
+    func createWiki(_ request: OwnerRequest) async throws {
+        adopt(try await api.createWikiFromOwnerRequest(request.id))
+    }
+
+    func decline(_ request: OwnerRequest, reason: String, sendAsWritten: Bool = false) async throws {
+        adopt(try await api.declineOwnerRequest(request.id, reason: reason, sendAsWritten: sendAsWritten))
     }
 
     /// The key goes in the body of one request and nowhere else; the answer never carries it back.
@@ -191,8 +252,9 @@ final class OwnerRequestsModel {
     /// Probe and preview fixtures: the lists as a read would have answered them.
     func seed(open: [OwnerRequest], all: [OwnerRequest], ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:],
               saved: [AccountSecret] = [], taskTitles: [String: String] = [:],
-              questions: [OwnerInboxQuestion] = []) {
+              questions: [OwnerInboxQuestion] = [], terminalRequests: [TerminalRequest] = []) {
         self.questions = questions
+        self.terminalRequests = terminalRequests
         self.taskTitles = Dictionary(uniqueKeysWithValues: taskTitles.map { (PublicID.storageKey($0.key), $0.value) })
         self.open = open
         self.all = all

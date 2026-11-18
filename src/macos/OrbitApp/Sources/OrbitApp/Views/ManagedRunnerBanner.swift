@@ -2,7 +2,7 @@ import OrbitKit
 import SwiftUI
 
 /// The managed runner's state (docs/managed-runner-design.md, "Server and three client interfaces"):
-/// above the composer of a workspace on the managed runner, and on Infrastructure for an account
+/// above the composer of a workspace on the managed runner, and on Machines & models for an account
 /// with no runner yet. The words are the shared display's (`ManagedRunnerLogic.display`, the same as
 /// the web's), and the actions only those the server allows: Retry, Set up, and the way to the
 /// runner's runtimes when what it lacks is one signed in.
@@ -10,7 +10,14 @@ struct ManagedRunnerBanner: View {
     let display: ManagedRunnerDisplay
     /// The managed runner, for the way to its runtimes; nil before a mapping exists.
     var runnerID: String? = nil
+    /// Set up on an account that already has a runner or a workspace asks first (D3); the
+    /// new-account landing keeps its one click.
+    var confirmsSetup = false
+    /// Where the server's answer takes the reader: the managed runner's own machine page (D1). Nil
+    /// leaves the banner where it is.
+    var onEnsured: ((String) -> Void)? = nil
     @Environment(AppModel.self) private var model
+    @State private var askingSetup = false
 
     /// The kinds that ask for somebody's attention rather than time.
     private var attention: Bool {
@@ -48,9 +55,11 @@ struct ManagedRunnerBanner: View {
                             .disabled(model.managedRunner?.acting == true)
                     }
                     if display.ensure {
-                        Button(ManagedRunnerCopy.ensure) { Task { await model.managedRunner?.ensure() } }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.managedRunner?.acting == true)
+                        Button(ManagedRunnerCopy.ensure) {
+                            if confirmsSetup { askingSetup = true } else { ensure() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.managedRunner?.acting == true)
                     }
                 }
                 .padding(.top, 2)
@@ -60,5 +69,17 @@ struct ManagedRunnerBanner: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .composerBandWash(attention ? .orange : .accentColor, opacity: 0.09)
         .accessibilityElement(children: .contain)
+        .orbitConfirmation(ManagedRunnerCopy.Confirm.title, isPresented: $askingSetup) {
+            Button(ManagedRunnerCopy.Confirm.action) { ensure() }
+            Button(ManagedRunnerCopy.Confirm.cancel, role: .cancel) {}
+        } message: {
+            Text(ManagedRunnerCopy.Confirm.body)
+        }
+    }
+
+    /// One press, one idempotency key (`ManagedRunnerModel.ensure`). The accepted answer names the
+    /// runner; where a caller asked for it, that is where the reader lands.
+    private func ensure() {
+        Task { await model.managedRunner?.ensure(then: onEnsured) }
     }
 }

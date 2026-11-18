@@ -6,8 +6,8 @@
  *   - moving a wiki to Trash: one short write that keeps every row, hides the wiki from its lists and pages, frees its
  *     name and repository, turns its maintenance off and drops the work queued or running for it;
  *   - whose it is: a session header is refused, another account's wiki is a 404, and neither writes or announces;
- *   - sessions meanwhile: one on the repository makes a new, empty wiki; one bound to a wiki with no repository is told
- *     its wiki is in Trash;
+ *   - sessions meanwhile: one on the repository makes no new wiki and is told its wiki is in Trash, as is one bound to a
+ *     wiki with no repository (docs/wiki-explicit-creation-design.md §3.3);
  *   - restoring: its name or the next free one, its repository unless a newer wiki holds it, its settings with
  *     maintenance off, everything it held, and the workspaces that did not join another wiki;
  *   - what was running: a job loses its row and ends with nothing to requeue, a runner's late result is told the
@@ -438,7 +438,7 @@ test('the Trash is the owner\'s: a session is refused, another account\'s wiki i
 
 // ── sessions meanwhile ───────────────────────────────────────────────────────────────────────────
 
-test('while a wiki with a repository is in Trash, the next session to use the wiki makes a new, empty one', { skip }, async () => {
+test('while a wiki with a repository is in Trash, a session on it makes no new wiki and is told it is in Trash', { skip }, async () => {
   const h = await boot();
   const owner = await account(h);
   const machine = await runner(h, owner.id);
@@ -456,20 +456,25 @@ test('while a wiki with a repository is in Trash, the next session to use the wi
   assert.equal((await call(h, { runner: machine.token, session: quiet }, 'GET', '/runner/wiki/search?q=old')).body.code, 'WIKI_SPACE_UNBOUND', 'and it is refused');
 
   await moveToTrash(h, owner, spaceId);
-  assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id, deletedAt: null } }), 0, 'nothing makes a wiki until a session asks');
+  const planJobs = await h.prisma.wikiPlanJob.count({ where: { ownerId: owner.id } });
 
+  // No session makes a wiki (docs/wiki-explicit-creation-design.md §3.1): the next one to search finds nothing and why.
   const again = await call(h, asSession, 'GET', '/runner/wiki/search?q=old');
   expectStatus(again, 200, 'the next session to use the wiki is answered');
-  assert.deepEqual(again.body.hits, [], 'by a wiki that knows nothing of the old one');
-  const made = await h.prisma.wikiSpace.findMany({ where: { ownerId: owner.id, deletedAt: null }, select: { id: true, repoUrlNorm: true } });
-  assert.equal(made.length, 1, 'a new wiki');
-  assert.ok(made[0].repoUrlNorm && url.endsWith(made[0].repoUrlNorm.split('/').pop()!), 'on the same repository');
-  assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: made[0].id } }), 0, 'and empty');
-  assert.equal((await h.prisma.wikiSpaceWorkspace.findUniqueOrThrow({ where: { workspaceId: inIt } })).spaceId, made[0].id, 'the workspace joined it');
+  assert.deepEqual(again.body, { q: 'old', semantic: false, hits: [], unavailable: 'wiki_in_trash' }, 'with nothing, because the wiki is in Trash');
+  const write = await call(h, asSession, 'POST', '/runner/wiki/notes', { text: 'what the session learned' });
+  expectStatus(write, 409, 'a write');
+  assert.equal(write.body.code, 'WIKI_SPACE_UNBOUND');
+  assert.equal(write.body.message, 'The wiki for this repository is in Trash: the owner restores it from Trash.');
+  assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id, deletedAt: null } }), 0, 'no new wiki');
+  assert.equal(await h.prisma.wikiPlanJob.count({ where: { ownerId: owner.id } }), planJobs, 'and no plan draft asked for');
+  assert.equal((await h.prisma.wikiSpaceWorkspace.findUniqueOrThrow({ where: { workspaceId: inIt } })).spaceId, spaceId, 'the row still names the wiki in Trash');
 
-  // The left-out mark was about the wiki in Trash: the workspace is in the new one, as the dialog's "starts a new one" says.
-  expectStatus(await call(h, { runner: machine.token, session: quiet }, 'GET', '/runner/wiki/search?q=old'), 200, 'the workspace left out of the old wiki is not out of the new one');
-  assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id, deletedAt: null } }), 1, 'and it finds the same new wiki rather than making another');
+  // The left-out mark was about the wiki in Trash: while it is there, that workspace has no wiki either.
+  const quietly = await call(h, { runner: machine.token, session: quiet }, 'GET', '/runner/wiki/search?q=old');
+  expectStatus(quietly, 200, 'the workspace left out of the wiki in Trash');
+  assert.equal(quietly.body.unavailable, 'wiki_in_trash');
+  assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id, deletedAt: null } }), 0, 'and it makes no wiki either');
 });
 
 test('while a wiki with no repository is in Trash, a session bound to it is told so', { skip }, async () => {
@@ -484,8 +489,11 @@ test('while a wiki with no repository is in Trash, a session bound to it is told
 
   await moveToTrash(h, owner, spaceId);
 
-  const refused = await call(h, { runner: machine.token, session: talk }, 'GET', '/runner/wiki/search?q=x');
-  expectStatus(refused, 409, 'the session');
+  const searched = await call(h, { runner: machine.token, session: talk }, 'GET', '/runner/wiki/search?q=x');
+  expectStatus(searched, 200, 'the session searches');
+  assert.deepEqual(searched.body, { q: 'x', semantic: false, hits: [], unavailable: 'wiki_in_trash' }, 'and finds nothing, because its wiki is in Trash');
+  const refused = await call(h, { runner: machine.token, session: talk }, 'POST', '/runner/wiki/notes', { text: 'what the session learned' });
+  expectStatus(refused, 409, 'a write');
   assert.equal(refused.body.code, 'WIKI_SPACE_UNBOUND');
   assert.match(refused.body.message, /moved to Trash/, 'told why');
   assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id, deletedAt: null } }), 0, 'and no wiki was made');
@@ -513,7 +521,8 @@ test('a restore brings back its name, its repository, its settings with maintena
   const rowsBefore = await rowsOf(h, spaceId, [first]);
 
   await moveToTrash(h, owner, spaceId);
-  // Meanwhile the repository's session makes a newer wiki, which takes the repository and the name.
+  // Meanwhile the owner makes a newer wiki, which takes the repository and the name, and the repository's session uses it.
+  await titled(h, owner, 'A wiki', url);
   expectStatus(await call(h, { runner: machine.token, session: talk }, 'GET', '/runner/wiki/search?q=x'), 200, 'a session uses the wiki');
   const newer = await h.prisma.wikiSpace.findFirstOrThrow({ where: { ownerId: owner.id, deletedAt: null }, select: { id: true, slug: true, repoUrlNorm: true } });
   assert.equal(newer.slug, made.slug, 'the newer wiki took its name');

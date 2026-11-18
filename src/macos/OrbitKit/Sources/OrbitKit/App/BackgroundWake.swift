@@ -41,10 +41,12 @@ public struct BackgroundWakeJob: Equatable, Sendable {
     public let outputTo: Int?
     /// The tail of the output the agent was shown; empty where the block said there was none.
     public let outputTail: String
+    /// Set for a job that is still running but has gone quiet (`<background-job-stall>`), nil otherwise.
+    public let stall: BackgroundJobStall?
 
     public init(id: String, kind: String, command: String, description: String?, status: String,
                 ended: Bool, exitCode: Int?, killReason: String?, outputPath: String?,
-                outputFrom: Int?, outputTo: Int?, outputTail: String) {
+                outputFrom: Int?, outputTo: Int?, outputTail: String, stall: BackgroundJobStall? = nil) {
         self.id = id
         self.kind = kind
         self.command = command
@@ -57,6 +59,26 @@ public struct BackgroundWakeJob: Equatable, Sendable {
         self.outputFrom = outputFrom
         self.outputTo = outputTo
         self.outputTail = outputTail
+        self.stall = stall
+    }
+}
+
+/// How a quiet job stood when its stall wake was sent, as the stall block spells it out.
+public struct BackgroundJobStall: Equatable, Sendable {
+    /// How long it had been running; nil where the block did not say.
+    public let runningForMs: Int?
+    /// How long it had written nothing — all of its run when it never wrote anything.
+    public let quietForMs: Int?
+    /// When it last wrote something; nil when it never did, or the block did not say.
+    public let lastOutputAt: String?
+    /// It has written nothing at all since it started.
+    public let wroteNothing: Bool
+
+    public init(runningForMs: Int?, quietForMs: Int?, lastOutputAt: String?, wroteNothing: Bool) {
+        self.runningForMs = runningForMs
+        self.quietForMs = quietForMs
+        self.lastOutputAt = lastOutputAt
+        self.wroteNothing = wroteNothing
     }
 }
 
@@ -95,12 +117,20 @@ public struct BackgroundWake: Equatable, Sendable {
 /// Every pattern here is the one the browser reads the same note with, character for character;
 /// `BackgroundWakeCopyParityTests` compares them to their declarations in `backgroundWake.ts`.
 public enum BackgroundWakeText {
-    /// A whole block, tag to matching tag.
-    static let blockPattern = "<(background-job-wake|scheduled-wakeup)>\\n([\\s\\S]*?)\\n<\\/\\1>"
+    /// A whole block, tag to matching tag. A quiet job's wake comes in a block of its own
+    /// (`<background-job-stall>`), whose job lines are written as a wake's are.
+    static let blockPattern = "<(background-job-wake|background-job-stall|scheduled-wakeup)>\\n([\\s\\S]*?)\\n<\\/\\1>"
     /// The line a job's fields open on, at the indent the block puts it at.
     static let jobHeadPattern = "^ {4}bgj_[^｜\\s]*｜"
     /// `ended｜…` / `已结束｜…`, and the same for a wake new output opened.
     static let triggerPattern = "^ {6}(ended|已结束|new output|有新输出)(?:｜(.*))?$"
+    /// `gone quiet｜still running｜running for 15m 2s when this was sent` — a stall block's trigger.
+    static let stallTriggerPattern = "^ {6}gone quiet｜(.*)$"
+    static let runningForPattern = "running for (.+?) when this was sent"
+    /// `no new output for 15m 0s｜last output at 2026-11-15T17:34:10Z`
+    static let quietForPattern = "^ {6}no new output for (.+?)(?:｜last output at (\\S+))?$"
+    /// `no output at all｜it has written nothing in the 15m 2s since it started`
+    static let wroteNothingPattern = "^ {6}no output at all｜"
     static let exitCodePattern = "^(?:exit code|退出码)\\s*(-?\\d+)$"
     static let killReasonPattern = "^(?:reason|原因)\\s*(.+)$"
     /// The gloss the block appends to a known kill reason, in either wording's brackets.
@@ -117,6 +147,10 @@ public enum BackgroundWakeText {
     private static let block = try? NSRegularExpression(pattern: blockPattern)
     private static let jobHead = Pattern(jobHeadPattern)
     private static let trigger = Pattern(triggerPattern)
+    private static let stallTrigger = Pattern(stallTriggerPattern)
+    private static let runningFor = Pattern(runningForPattern)
+    private static let quietFor = Pattern(quietForPattern)
+    private static let wroteNothing = Pattern(wroteNothingPattern)
     private static let exitCode = Pattern(exitCodePattern)
     private static let killReason = Pattern(killReasonPattern)
     private static let outputLine = Pattern(outputLinePattern)
@@ -131,7 +165,8 @@ public enum BackgroundWakeText {
     /// of a millisecond a note; a recorded note never changes, so the answer is kept.
     public static func carriesWake(_ note: String?) -> Bool {
         // No block can open without its tag, so every other note is answered without a reading.
-        guard let note, note.contains("<background-job-wake>") || note.contains("<scheduled-wakeup>") else {
+        guard let note, note.contains("<background-job-wake>") || note.contains("<background-job-stall>")
+                || note.contains("<scheduled-wakeup>") else {
             return false
         }
         let key = note as NSString
@@ -164,7 +199,7 @@ public enum BackgroundWakeText {
             rest += note[end..<whole.lowerBound]
             end = whole.upperBound
             blocks.append(String(note[whole]))
-            if tag == "background-job-wake" { jobs += parseJobs(body) } else { wakeups += parseWakeups(body) }
+            if tag == "scheduled-wakeup" { wakeups += parseWakeups(body) } else { jobs += parseJobs(body) }
         }
         // A block whose every field is unreadable is not a card: better the note as it always read.
         if jobs.isEmpty && wakeups.isEmpty { return nil }
@@ -186,13 +221,14 @@ public enum BackgroundWakeText {
     private static func parseJob(_ lines: [String]) -> BackgroundWakeJob {
         // The command can run to several lines of its own (a `while` loop, a heredoc), so the fields
         // end where the trigger line starts rather than at the first newline.
-        let at = lines.indices.first { $0 > 0 && trigger.matches(lines[$0]) }
+        let at = lines.indices.first { $0 > 0 && (trigger.matches(lines[$0]) || stallTrigger.matches(lines[$0])) }
         let head = lines[0..<(at ?? lines.count)].joined(separator: "\n")
             .replacingOccurrences(of: "^ {4}", with: "", options: .regularExpression)
         // id｜kind｜command[｜description]. A `｜` inside the command would be indistinguishable from
         // a field break to the writer too, so the ends are trusted and the middle is the command.
         let fields = head.components(separatedBy: "｜")
-        let triggered = at.flatMap { trigger.groups(lines[$0]) }
+        let stalled = at.flatMap { stallTrigger.groups(lines[$0]) }
+        let triggered = stalled != nil ? nil : at.flatMap { trigger.groups(lines[$0]) }
         let facts = (group(triggered, 2) ?? "").components(separatedBy: "｜")
         let kill = killReason.groups(field(facts, 1) ?? "")
         let output = first(lines, outputLine)
@@ -204,7 +240,7 @@ public enum BackgroundWakeText {
                 ? fields[2..<(fields.count - 1)].joined(separator: "｜")
                 : (field(fields, 2) ?? ""),
             description: fields.count > 3 ? fields[fields.count - 1] : nil,
-            status: triggered != nil ? (field(facts, 0) ?? "") : "",
+            status: triggered != nil ? (field(facts, 0) ?? "") : stalled != nil ? "running" : "",
             ended: word == "ended" || word == "已结束",
             exitCode: number(group(exitCode.groups(field(facts, 1) ?? ""), 1)),
             killReason: group(kill, 1).map {
@@ -213,7 +249,30 @@ public enum BackgroundWakeText {
             outputPath: group(output, 1),
             outputFrom: number(group(output, 2)),
             outputTo: number(group(output, 3)),
-            outputTail: parseTail(lines))
+            outputTail: parseTail(lines),
+            stall: stalled.map { parseStall(group($0, 1) ?? "", lines) })
+    }
+
+    private static func parseStall(_ facts: String, _ lines: [String]) -> BackgroundJobStall {
+        let runningForMs = durationMs(group(runningFor.groups(facts), 1))
+        let silent = lines.contains { wroteNothing.matches($0) }
+        let quiet = first(lines, quietFor)
+        return BackgroundJobStall(runningForMs: runningForMs,
+                                  quietForMs: silent ? runningForMs : durationMs(group(quiet, 1)),
+                                  lastOutputAt: group(quiet, 2),
+                                  wroteNothing: silent)
+    }
+
+    /// `2h 5m 0s` / `15m 2s` / `45s` (the block's `readableDuration`) in milliseconds; nil for anything else.
+    static func durationMs(_ text: String?) -> Int? {
+        guard let text, text.range(of: "^(?:\\d+[hms] ?)+$", options: .regularExpression) != nil else { return nil }
+        let unit: [Character: Int] = ["h": 3_600_000, "m": 60_000, "s": 1000]
+        var ms = 0
+        for part in text.split(separator: " ") {
+            guard let u = part.last, let scale = unit[u], let n = Int(part.dropLast()) else { return nil }
+            ms += n * scale
+        }
+        return ms
     }
 
     /// The output tail as the agent read it, back at column zero.
@@ -280,13 +339,23 @@ public enum BackgroundWakeCard {
     /// What happened, at a glance.
     public static func title(_ wake: BackgroundWake) -> String {
         guard let only = wake.jobs.first else { return "Scheduled wakeup" }
-        if wake.jobs.count > 1 { return "\(wake.jobs.count) background jobs finished" }
+        if wake.jobs.count > 1 {
+            return wake.jobs.allSatisfy { $0.stall != nil }
+                ? "\(wake.jobs.count) background jobs went quiet"
+                : "\(wake.jobs.count) background jobs finished"
+        }
+        if only.stall != nil { return "Background job went quiet" }
         if !only.ended { return "Background job has new output" }
         return isFailed(only) ? "Background job failed" : "Background job finished"
     }
 
-    /// How one job came out, as the word its row closes on — nil while it has only written something.
+    /// How one job came out, as the word its row closes on — how long it has been quiet when it went
+    /// quiet, nil while it has only written something.
     public static func status(_ job: BackgroundWakeJob) -> String? {
+        if let stall = job.stall {
+            guard let ms = stall.quietForMs else { return "quiet" }
+            return "quiet \(WatchProjection.duration(TimeInterval(ms) / 1000))"
+        }
         if job.status == "killed" {
             guard let reason = job.killReason, !reason.isEmpty else { return "killed" }
             return "killed: \(reason)"
@@ -327,6 +396,18 @@ public enum BackgroundWakeCard {
         if n < 1024 { return "\(n) B" }
         if n < 1024 * 1024 { return String(format: "%.1f KB", Double(n) / 1024) }
         return String(format: "%.1f MB", Double(n) / (1024 * 1024))
+    }
+
+    /// "Still running · 15m in · last wrote 15m ago" — how a quiet job stood, in its row in the fold.
+    public static func stallLine(_ stall: BackgroundJobStall, now: Date = Date()) -> String {
+        var parts = ["Still running"]
+        if let ms = stall.runningForMs { parts.append("\(WatchProjection.duration(TimeInterval(ms) / 1000)) in") }
+        if stall.wroteNothing {
+            parts.append("has written nothing yet")
+        } else if let at = stall.lastOutputAt, let relative = RelativeTime.format(at, now: now) {
+            parts.append("last wrote \(relative)")
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// "Asked for 1h out · came due 4m ago".
@@ -376,17 +457,26 @@ public enum BackgroundWakeCard {
     /// A wake turn's own content is empty — the block IS the turn — so anything else the same note
     /// carried (the inventory a returning engine is handed, a coordinator's standing role) used to
     /// be handed back to a user bubble, which drew a bubble with no words in it under the card,
-    /// signed with the reader's own name. The leftover is the line's fold's now (`attached`), and a
-    /// bubble is drawn only where somebody actually typed something. Web parity: `Transcript.tsx` draws the
+    /// signed with the reader's own name. A bubble is drawn only where somebody actually typed
+    /// something. Web parity: `Transcript.tsx` draws the
     /// bubble on `node.text.trim() !== ''` alone.
     public static func drawsBubble(text: String) -> Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// Whether a turn is only a note: no words, no files, and a note this client could not read as
+    /// anything else. The control plane opened it for a block this client does not know yet (a quiet
+    /// job's wake was one, before it had its line); drawn as a bubble it was an empty one in the
+    /// reader's name, so the note stands alone. Web parity: `Transcript.tsx`'s
+    /// `!queued && node.note && node.text.trim() === ''` fallback before `UserBubble`.
+    public static func drawsNoteAlone(text: String, hasAttachments: Bool, note: String?, queued: Bool) -> Bool {
+        guard !queued, let note, !note.isEmpty else { return false }
+        return !drawsBubble(text: text) && !hasAttachments
+    }
 }
 
 /// A compiled pattern, handing back the groups of its first match the way the TypeScript's `exec`
-/// does: nil for a group that did not take part. Shared with the reading of the inventory block
-/// (`BackgroundJobsText`), which reads the same lines with the same kind of pattern.
+/// does: nil for a group that did not take part.
 struct Pattern {
     private let re: NSRegularExpression?
 

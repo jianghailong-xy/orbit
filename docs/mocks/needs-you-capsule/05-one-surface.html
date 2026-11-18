@@ -1,0 +1,125 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .cap44.fl { z-index: 16; }
+  .ph.dark .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 28px rgba(0,0,0,.75); }
+  .cap44.ring { box-shadow: inset 0 .75px 0 var(--glass-hi), inset 0 0 0 1.5px rgba(255,159,10,.75), 0 0 0 4px rgba(255,159,10,.18), 0 10px 28px rgba(0,0,0,.75); }
+  .deck { position: absolute; height: 44px; border-radius: 22px; z-index: 15; }
+  .deck.d1 { left: 28px; right: 28px; background: #232325; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12), 0 6px 16px rgba(0,0,0,.5); }
+  .deck.d2 { left: 42px; right: 42px; background: #19191B; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1); z-index: 14; }
+  .srow .s .bl { color: #0A84FF; }
+  .pinhd { position: absolute; left: 20px; right: 20px; font: 700 22px/28px "Inter"; color: var(--l2); z-index: 3; display: flex; justify-content: space-between; align-items: center; }
+  /* 今天的琥珀卡（ToastHost .warning）：橙色调玻璃卡，6 秒后缩成顶部药丸 */
+  .amb { position: absolute; left: 16px; right: 16px; top: 114px; z-index: 18; border-radius: 22px; padding: 14px; display: flex; gap: 12px; color: #fff;
+         background: #3B2A17; box-shadow: inset 0 0 0 .75px rgba(255,159,10,.45), 0 12px 30px rgba(0,0,0,.6); }
+  .amb .ic { width: 26px; height: 26px; flex: none; color: #FF9F0A; display: flex; align-items: center; justify-content: center; }
+  .amb b { display: block; font-size: 15px; line-height: 20px; font-weight: 600; }
+  .amb s { display: block; text-decoration: none; font-size: 13px; line-height: 18px; color: rgba(235,235,245,.6); }
+  .ambpill { position: absolute; top: 114px; left: 50%; transform: translateX(-50%); z-index: 18; height: 30px; border-radius: 15px; padding: 0 12px 0 9px;
+             display: flex; align-items: center; gap: 6px; white-space: nowrap; font: 600 13px "Inter"; color: #fff;
+             background: #3B2A17; box-shadow: inset 0 0 0 .75px rgba(255,159,10,.45), 0 8px 20px rgba(0,0,0,.6); }
+  /* 系统推送（App 在后台） */
+  .wall { position: absolute; inset: 0; background: radial-gradient(120% 80% at 30% 20%, #3a4a6a, #10131c 70%); }
+  .lock { position: absolute; left: 0; right: 0; top: 120px; text-align: center; color: #fff; font: 600 92px/1 "Inter"; letter-spacing: -.03em; z-index: 2; }
+  .lockd { position: absolute; left: 0; right: 0; top: 96px; text-align: center; color: rgba(255,255,255,.85); font: 600 19px "Inter"; z-index: 2; }
+  .sysb { position: absolute; left: 12px; right: 12px; top: 300px; z-index: 5; border-radius: 24px; padding: 12px 14px; display: flex; gap: 11px;
+          background: rgba(60,60,64,.92); color: #fff; }
+  .sysb .app { width: 38px; height: 38px; border-radius: 9px; background: #0A84FF; flex: none; display: flex; align-items: center; justify-content: center; font: 800 20px "Inter"; }
+  .sysb .w { flex: 1; min-width: 0; }
+  .sysb .h { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; }
+  .sysb .h span { font-weight: 400; font-size: 13px; color: rgba(235,235,245,.6); }
+  .sysb p { margin: 1px 0 0; font-size: 15px; line-height: 20px; }
+  /* 会话里的确认卡（示意） */
+  .acard { position: absolute; left: 16px; right: 16px; top: 420px; z-index: 6; border-radius: 18px; padding: 14px; color: #fff;
+           background: #2A1F12; box-shadow: inset 0 0 0 1px rgba(255,159,10,.45); }
+  .acard .hd { display: flex; align-items: center; gap: 8px; font: 600 13px "Inter"; color: #FF9F0A; }
+  .acard h5 { margin: 8px 0 4px; font: 600 17px/22px "Inter", "Noto Sans SC"; }
+  .acard p { margin: 0; font-size: 14px; line-height: 20px; color: rgba(235,235,245,.65); }
+  .acard .bt { display: flex; gap: 8px; margin-top: 12px; }
+  .acard .bt span { height: 34px; border-radius: 17px; padding: 0 14px; display: flex; align-items: center; font: 600 14px "Inter"; background: rgba(120,120,128,.32); }
+  .acard .bt span.p { background: #0A84FF; }
+  /* Wiki 页（没有胶囊位的页面） */
+  .wt { position: absolute; left: 20px; top: 178px; font: 700 34px "Inter"; color: #fff; z-index: 3; }
+  .wsub { position: absolute; left: 20px; top: 226px; font-size: 15px; color: rgba(235,235,245,.6); z-index: 3; }
+  .wsearch { position: absolute; left: 16px; right: 16px; top: 262px; height: 40px; border-radius: 20px; background: rgba(118,118,128,.24); color: rgba(235,235,245,.6); display: flex; align-items: center; padding: 0 14px; gap: 8px; z-index: 3; }
+  .tag.gone { background: #e3e3e8; color: #8e8e93; text-decoration: line-through; }
+</style>
+<body>
+<h1>同一件事「有东西在等你」，今天有四个样子 → 合成一个</h1>
+<p class="lede">owner 11-15 问：<b>为什么这个（needs-you 胶囊）和创建任务的通知不一样？</b> 因为是两个组件、两个时间做的：创建任务（以及任何工具审批）在你用着 App 时到达，走的是全局 toast（<code>ToastHost</code>，10-03 toast 系统）：橙色卡浮在最上面，6 秒后缩成顶部药丸；needs-you 胶囊（10-21）是各个列表页、会话页里自己的一条。于是同一个审批，屏幕上会<b>同时</b>出现一张橙卡 + 一枚胶囊，样子、位置、颜色都不一样。owner 选了合成一个：<b>审批来了就是胶囊本身落下来</b>，不再另弹橙卡。示意数据取自 11-15 截图；「task_create」那一行是推送今天的原样（<code>Needs your reply · 工具名</code>）。</p>
+
+<h2>今天：同一个审批，四个样子（暗色 · iPhone）</h2>
+<div class="row4" id="today"></div>
+
+<h2>合成之后：只有一枚浮着的胶囊</h2>
+<div class="row4" id="merged"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const L = 'left:16px;right:16px';
+const ROWS = [
+  { t: 'SubAgent: routed sub-agents in the parent transcript', s: '<span class="bl">Resolving a merge conflict · 4h</span>', tm: 'now' },
+  { t: '单机 Ceph 部署方案设计', s: 'Running · writing ceph-plan.md', tm: '2m' },
+  { t: 'Android 自动更新报错', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: 'now' },
+  { t: 'Orbit 接入 Ollama（本地模型供应商）', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '19m' },
+  { t: 'GitHub workspaces P0: GitHub App config and install', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '2h' },
+  { t: 'Wiki 服务端执行与 System model', s: 'Completed · merged to main', tm: '1h' },
+  { t: 'Ship the 0.1.247 release', s: 'Completed · tagged v0.1.247', tm: '3h' },
+];
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const rows = (top) => `<div class="pinhd" style="top:${top}px"><span>Pinned</span>${ic('chevd', 18, 'var(--l2)', 2.6)}</div>` + ROWS.map((r, i) =>
+  `<div class="srow${i < ROWS.length - 1 ? ' sep' : ''}" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const bell = `<svg width="20" height="20" viewBox="0 0 24 24" fill="#FF9F0A"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6z"/><path d="M9.5 18a2.5 2.5 0 0 0 5 0z"/><circle cx="18.5" cy="5.5" r="3.2" fill="#FF453A" stroke="#3B2A17" stroke-width="1.2"/></svg>`;
+const moreX = (n) => `<span class="more x" style="display:inline-flex;align-items:center;gap:2px;padding:0 5px">+${n}${ic('chevd', 11, 'var(--l2)', 3)}</span>`;
+const deck = (top) => `<div class="deck d1" style="top:${top + 7}px"></div><div class="deck d2" style="top:${top + 13}px"></div>`;
+const shell = (body, h = 640, nav = listNav) => phone('dark', `${statusBar('11:04')}${nav}${body}<div class="home"></div>`, { h, cls: 'crop' });
+const todayCap = capA({ glyph: 'hand', title: '5 sessions need you', sub: 'Orbit 接入 Ollama（本地模型供应商）', age: '3d', top: 116, style: L }).replace('</b>', `</b>${moreX(4)}`);
+const NEW = { glyph: 'hand', title: 'Needs your reply · task_create', sub: 'Android 自动更新报错', age: 'now' };
+
+// ── 今天 ──
+const t1 = shell(`${rows(186)}${edge('dark', 160, 182)}${todayCap}<div class="amb"><span class="ic">${bell}</span><span><b>Needs your reply · task_create</b><s>Android 自动更新报错</s></span></div>`);
+const t2 = shell(`${rows(186)}${edge('dark', 160, 182)}${todayCap}<div class="ambpill">${bell.replace('width="20" height="20"', 'width="15" height="15"')}Needs your reply · task_create</div>`);
+const t3 = phone('dark', `<div class="wall"></div>${statusBar('11:04')}<div class="lockd">Sunday, November 15</div><div class="lock">11:04</div>
+<div class="sysb"><div class="app">O</div><div class="w"><div class="h">Android 自动更新报错<span>now</span></div><p>Needs your reply · task_create</p></div></div><div class="home"></div>`, { h: 640, cls: 'crop' });
+const t4 = phone('dark', `${statusBar('11:04')}${navCircles()}${tx(118)}${edge('dark', 70, 118)}
+<div class="acard"><div class="hd">${ic('plus', 14, '#FF9F0A', 2.6)}Create task</div><h5>Fix Android auto-update failing on 0.1.247</h5><p>Reproduce the update error on the emulator, then fix the installer path.</p>
+<div class="bt"><span class="p">Create it</span><span>Create and start</span><span>Chat about this</span></div></div><div class="home"></div>`, { h: 640, cls: 'crop' });
+document.getElementById('today').innerHTML = `
+<div class="col"><span class="tag gone">① 刚到的 6 秒：橙卡</span>${t1}<div class="cap"><h3>橙卡盖在胶囊上</h3><code>ToastHost</code> 的 .warning 卡，挂在 App 最外层，哪一页都会弹。它下面那枚胶囊说的其实是同一件事（已经算进 5 里）——同一个事实，两种颜色、两种形状，叠在一起。</div></div>
+<div class="col"><span class="tag gone">② 6 秒后：橙药丸 + 胶囊</span>${t2}<div class="cap"><h3>两个信号一直并排</h3>卡缩成顶部药丸，直到你处理掉才消失；胶囊也在。两个都能点、都去同一个会话。</div></div>
+<div class="col"><span class="tag alt">③ App 在后台：系统推送</span>${t3}<div class="cap"><h3>系统横幅（保留）</h3>App 不在前台时只有它能叫到你。样子由系统定，不在这次范围。</div></div>
+<div class="col"><span class="tag alt">④ 会话里：确认卡（保留）</span>${t4}<div class="cap"><h3>真正做决定的地方（保留）</h3>在会话转录里，按钮 <code>Create it</code> / <code>Create and start</code> / <code>Chat about this</code>。前三个样子都只是把你带到这里。</div></div>`;
+
+// ── 合成后 ──
+const m1 = shell(`${rows(186)}${edge('dark', 70, 118)}${deck(116)}${capA({ ...NEW, top: 116, style: L, cls: 'fl ring' })}`);
+const m2 = shell(`${rows(186)}${edge('dark', 70, 118)}${deck(116)}${capA({ glyph: 'hand', title: '5 sessions need you', sub: 'Orbit 接入 Ollama（本地模型供应商）', age: '3d', top: 116, style: L, cls: 'fl' })}`);
+const wikiNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div><div class="gc r">${ic('search', 20, 'var(--l1)', 2)}</div></div>`;
+const m3 = shell(`<div class="wt">Wiki</div><div class="wsub">9,430 entries · Maintaining now</div><div class="wsearch">${ic('search', 16, 'rgba(235,235,245,.6)', 2)}Search the wiki</div>
+${rows(330).replace(/Pinned/, 'Principles')}${edge('dark', 70, 118)}${deck(116)}${capA({ glyph: 'hand', title: '5 sessions need you', sub: 'Orbit 接入 Ollama（本地模型供应商）', age: '3d', top: 116, style: L, cls: 'fl' })}`, 640, wikiNav);
+const m4 = phone('dark', `${statusBar('11:04')}${navCircles()}${tx(118)}${edge('dark', 70, 118)}${deck(116)}${capA({ glyph: 'hand', title: '4 sessions need you', sub: 'Orbit 接入 Ollama（本地模型供应商）', age: '3d', top: 116, style: L, cls: 'fl' })}
+<div class="acard"><div class="hd">${ic('plus', 14, '#FF9F0A', 2.6)}Create task</div><h5>Fix Android auto-update failing on 0.1.247</h5><p>Reproduce the update error on the emulator, then fix the installer path.</p>
+<div class="bt"><span class="p">Create it</span><span>Create and start</span><span>Chat about this</span></div></div><div class="home"></div>`, { h: 640, cls: 'crop' });
+document.getElementById('merged').innerHTML = `
+<div class="col"><span class="tag rec">刚到：胶囊落下，说新来的那件</span>${m1}<div class="cap"><h3>到达 = 胶囊本身</h3>新审批到达时，胶囊从导航下方落下来（已在就原地换字），<b>先说新来的那件</b>：工具那一行 + 会话名，琥珀描边亮 6 秒，带今天橙卡的触感和声音。点它直达那个会话的卡。不再弹橙卡。</div></div>
+<div class="col"><span class="tag rec">6 秒后：回到总数</span>${m2}<div class="cap"><h3>平时的样子</h3>琥珀描边退掉，字回到「5 sessions need you」+ 最久那件；叠边说明能展开（04 板）。它一直在，处理完最后一件才走——这就是今天橙药丸做的事，现在只有一个它。</div></div>
+<div class="col"><span class="tag rec">没有胶囊位的页（Wiki / Tasks / 设置）</span>${m3}<div class="cap"><h3>同一枚，浮在导航下</h3>今天这些页只有橙卡 / 橙药丸。合成后同一枚胶囊浮在导航下面，盖在页面上（不留位，它本来就是浮层），一样能展开、能点。</div></div>
+<div class="col"><span class="tag rec">在那个会话里</span>${m4}<div class="cap"><h3>不提自己</h3>正在看的会话不算进胶囊（今天就是这样），它的卡就在转录里。还有别的会话在等时，胶囊照常说别人的（这里 4 件）。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>拿掉</td><td>iPhone / iPad 上前台审批不再 <code>showToast(… awaitsApproval: true)</code>：橙卡和它缩成的橙药丸都没了。其他 toast（完成、失败、合并冲突…）不动。</td></tr>
+<tr><td>到达</td><td>胶囊第一行 = 推送原文（<code>Needs your reply · task_create</code>），第二行 = 会话名，时间 <code>now</code>。琥珀描边 1.5pt + 4pt 外晕，6 秒后淡出、字换回总数（和今天卡缩起的时间一样）。触感 = 今天橙卡的 warning，声音照旧由系统推送那一路响。</td></tr>
+<tr><td>挂在哪</td><td>会话列表、会话页：04 板的位置（浮层，静止时留位）。其余页面：同一个视图挂在 App 最外层（今天 <code>ToastHost</code> 的位置），导航下方 10pt，<b>不留位</b>，浮在页面上。有胶囊位的页面不重复画外层那枚。</td></tr>
+<tr><td>宽屏（iPad 全宽）</td><td>胶囊在左侧会话列那一枚（今天就有），外层不再弹右上角的橙卡。Mac 不变（系统横幅）。</td></tr>
+<tr><td>后台 / 会话内</td><td>系统推送、会话里的确认卡都不变。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>和早先决定的关系</b>：10-03 toast 系统里「审批 = 一直留着的橙卡，6 秒缩成药丸」这一条被胶囊取代，其他 toast 规则不变；10-21 胶囊的样子、11-13 每件一枚展开、04 板浮层都沿用。<br>
+<b>待你定</b>：① 刚到时先说新来的那件、6 秒后回总数（推荐），还是一来就只把数字 +1；② 没有胶囊位的页面也挂这枚浮着的胶囊（推荐），还是那些页面干脆不提醒（只靠抽屉的角标）；③ 刚到时琥珀描边亮 6 秒（推荐），还是不加描边、只靠落下的动画。`;
+</script>
+</body></html>

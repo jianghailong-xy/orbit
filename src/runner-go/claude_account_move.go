@@ -169,3 +169,30 @@ func copyClaudeConversationDir(src, dst string) error {
 		return copyClaudeConversationFile(path, filepath.Join(dst, rel))
 	})
 }
+
+// moveIdleClaudeConversation is the move a switch to another account makes on a session it finds
+// idle. Its reload stops the engine and leaves the session cold rather than start one with no turn
+// to run, so the spawn that would carry the conversation (ensureClaudeTranscript) and record the
+// account it now runs on (writeClaudeSessionMeta) does not come until the next message — and until
+// then the account it left still has the conversation, and the record says the session is on it,
+// which refuses that account's removal (2026-11-16: three sessions switched away, their old account
+// still not removable). So the carry happens here, and the record moves only once the account the
+// session is on now holds its conversation: one that could not be carried stays where it is, and so
+// does the record that keeps its account from being removed.
+func moveIdleClaudeConversation(job *ClaimedSession, execDir, scratch string) {
+	if job.SessionUUID == "" {
+		return
+	}
+	base, err := claudeSessionAccountDir(job.Agent.Env, execDir)
+	if err != nil {
+		return
+	}
+	path, err := claudeTranscriptPathIn(base, execDir, job.SessionUUID)
+	if err != nil {
+		return
+	}
+	carryClaudeConversation(base, execDir, job.SessionUUID, path)
+	if claudeTranscriptHasConversation(path) {
+		writeClaudeSessionMeta(scratch, job, execDir)
+	}
+}

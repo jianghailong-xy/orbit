@@ -1,7 +1,9 @@
 package io.orbitd.android.directory
 
 import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.OwnerItem
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
@@ -37,7 +39,7 @@ data class SessionLine(val text: String, val tone: Tone) {
         WATCHING,
         /** Its report is with its reviewer: drawn, not counted, never amber. */
         REVIEW,
-        /** Amber words for a fact that asks nothing: a landing the server judged timed out. */
+        /** Amber words for a fact that asks nothing: a landing the server judged timed out, a runner updating. */
         WARNING,
     }
 
@@ -55,21 +57,34 @@ data class SessionLine(val text: String, val tone: Tone) {
             // A run whose report is still with its reviewer: who has it, in the quiet tone.
             if (live && s.confirmationUnderReview != null) return SessionLine(SessionLineCopy.underReviewLine(s.reviewerTitle), Tone.REVIEW)
             if (live && s.isGenerating) {
+                // A sub-agent launch still in flight (a synchronous Agent, a foreground delegate) names the sub-agent's work.
+                if (s.lastToolUse?.let { fmtTool(it) in SUBAGENT_LAUNCH_TOOLS } == true && (s.runningSubagentCount ?: 0) > 0)
+                    return SessionLine(SessionLineCopy.subagentRunningLine(s.runningSubagentCount ?: 0, s.runningSubagentTitle), Tone.RUNNING)
                 s.lastToolUse?.takeIf { it.isNotEmpty() }?.let { return SessionLine(SessionLineCopy.runningTool(fmtTool(it)), Tone.RUNNING) }
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
-                s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
+                s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
                 // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
                 s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
                 return SessionLine(SessionLineCopy.running, Tone.RUNNING)
             }
-            if (live && s.effectiveRunState == RunState.QUEUED) return SessionLine(ClaudeRegion.heldWords(s.regionHeld, machine) ?: SessionLineCopy.queued, Tone.QUEUED)
+            if (live && s.effectiveRunState == RunState.QUEUED) {
+                val held = ClaudeRegion.heldWords(s.regionHeld, machine)
+                // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it can last hours, and
+                // only the owner can shorten it.
+                if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.runnerUpdatingTitle(s.queuedGate), Tone.WARNING)
+                // A full runner, run or batch reads in plain words, in the queue's own colour (board session-row-runner-full, web `sessionLine`).
+                if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.CAPACITY_HELD_LINE, Tone.QUEUED)
+                // Keep Free holds a new session on a runner short of disk (web `queuedLabel`).
+                if (held == null && QueuedDiskLow.isDiskHeld(s.queuedGate)) return SessionLine(QueuedDiskLow.TITLE, Tone.QUEUED)
+                return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
+            }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
-            if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
+            if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.
             if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
-            // Parked, with a background process still up: not idle, not the agent working either.
-            if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
+            // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
+            if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
@@ -78,15 +93,19 @@ data class SessionLine(val text: String, val tone: Tone) {
             // it was written is the Recap card's to say, at the conversation's end ([RecapCard]).
             if (recaps) s.recapText?.trim()?.takeIf { it.isNotEmpty() }?.let { return SessionLine(it, Tone.PREVIEW) }
             s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
+            // Parked, with a background process still up. It never takes the line from the unanswered message, the recap or the
+            // reply (the owner, 2026-11-16; OrbitKit parity): the glyph already says a process is up.
+            if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // Nothing to preview: the run's own state word, so the row still says what happened.
             return SessionLine(SessionHeader.statusWord(s, now = now), Tone.PREVIEW)
         }
 
         private fun sentLine(text: String, from: SessionMessageFrom?) = SessionLine(SessionLineCopy.sent(sender(from), plainPreview(text)), Tone.PREVIEW)
 
-        /** The line for a message somebody outside Orbit sent — a connected Feishu group's member (OrbitKit `SessionLine.externalLine`,
-         * web `sentBy`; docs/feishu-bot-design.md §8.2) — or null for anybody else's: named as the conversation names them over their
-         * words, `From Feishu · <name>`, never "You". */
+        /** The line for a message somebody other than the owner sent — a connected Feishu group's member (OrbitKit
+         * `SessionLine.externalLine`, web `sentBy`; docs/feishu-bot-design.md §8.2) or a guest the owner invited
+         * (docs/session-guests-design.md §3) — or null for anybody else's: named as the conversation names them over their words,
+         * `From Feishu · <name>` or `From <name>`, never "You". */
         internal fun externalLine(text: String, from: ExternalMessageFrom?): SessionLine? =
             from?.let { SessionLine(SessionLineCopy.sent(ExternalSender.label(it), plainPreview(text)), Tone.PREVIEW) }
 
@@ -129,6 +148,13 @@ internal object SessionLineCopy {
     fun ongoing(label: String) = "$label…"
     /** The runtime's own sub-agents and workflows (web `subagentRunningLabel`). */
     fun subagentRunning(n: Int) = if (n > 1) "Running $n agents" else "Running Agent"
+    /** The row's words for the same, naming what the newest one is doing when the server knows (`runningSubagentTitle`):
+     *  "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for several, the bare label without a title (web `subagentRunningLine`). */
+    fun subagentRunningLine(n: Int, title: String?): String {
+        val t = title?.trim().orEmpty()
+        if (t.isEmpty()) return ongoing(subagentRunning(n))
+        return if (n > 1) ongoing("${subagentRunning(n)} · $t") else ongoing("Agent: $t")
+    }
     fun bgRunning(n: Int) = if (n > 1) "$n background processes running" else "Background process running"
     /** Who has a report under review: the review bar's word and its reviewer (`OwnerConfirmations.underReviewLine`). */
     fun underReviewLine(reviewerTitle: String?) = "${OwnerReview.underReview} · ${OwnerReview.reviewerName(reviewerTitle)}"
@@ -136,6 +162,8 @@ internal object SessionLineCopy {
     // The run's own word (`SessionHeader.statusWord`), when there is nothing to preview.
     const val stateRunning = "Running"
     const val waitingForReply = "Waiting for your reply"
+    /** A wait the server reports that will resume the session by itself (OrbitKit `Session.waitingToResume`). */
+    const val waitingToResume = "Waiting to resume"
     const val succeeded = "Succeeded"
     const val retrying = "Retrying"
     const val disconnected = "Disconnected"
@@ -154,13 +182,17 @@ internal object SessionHeader {
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.effectiveRunState) {
-            RunState.QUEUED -> SessionLineCopy.queued
+            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
+                else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate)
+                else if (QueuedDiskLow.isDiskHeld(s.queuedGate)) QueuedDiskLow.TITLE else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.
                 s.isGenerating -> SessionLineCopy.stateRunning
                 (s.runningSubagentCount ?: 0) > 0 -> SessionLineCopy.subagentRunning(s.runningSubagentCount ?: 0)
                 watching != null -> watching.word
+                // Something else will resume it — a wake-up, a retry, a watch this caller holds none of.
+                s.resumesOnItsOwn -> SessionLineCopy.waitingToResume
                 (s.runningBgCount ?: 0) > 0 -> SessionLineCopy.bgRunning(s.runningBgCount ?: 0)
                 else -> SessionLineCopy.waitingForReply
             }
@@ -175,13 +207,17 @@ internal object SessionHeader {
 
     /** What a session waiting on you says, in the words of whatever is waiting: the kind the server named, when this build has
      * words for it, else the row's long-standing approval word. */
-    fun waitingWord(s: DirectorySession): String = when (s.waitingKind) {
+    fun waitingWord(s: DirectorySession): String =
+        waitingWord(s.waitingKind, NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
+
+    /** The same words from the wire's own fields, for a reader holding the raw row (the needs-you notice). */
+    fun waitingWord(waitingKind: String?, ownerItems: List<OwnerItem>): String = when (waitingKind) {
         "OWNER_CONFIRMATION" -> OwnerConfirmationCopy.waitingForConfirmation
-        "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(NeedsYouLogic.ownerItems(s.ownerItems.orEmpty().filterIsInstance<JsonObject>()))
-            ?: SessionLineCopy.unnamedWord
+        "OWNER_ITEM" -> NeedsYouLogic.oldestItemWord(ownerItems) ?: SessionLineCopy.unnamedWord
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
+        "OWNER_REQUEST" -> OwnerRequests.waitingOnYou
         else -> SessionLineCopy.unnamedWord
     }
 }
@@ -212,6 +248,10 @@ internal val DirectorySession.regionHeld: Boolean get() = effectiveRunState == R
 /** Whether to draw it as working: dispatched, or a turn the runtime started for itself while parked (`isGenerating`). */
 internal val DirectorySession.isGenerating: Boolean get() = effectiveRunState.let { it == RunState.RUNNING || (it == RunState.AWAITING_INPUT && engineTurnActive == true) }
 
+/** Parked, and something will resume it by itself — a watch it observes, a scheduled wake-up, an armed auto-retry (the server's
+ * `activity` WAITING; OrbitKit `Session.resumesOnItsOwn`). Not waiting for your reply. */
+internal val DirectorySession.resumesOnItsOwn: Boolean get() = effectiveRunState == RunState.AWAITING_INPUT && activity == "WAITING"
+
 /** A failure the server is about to undo by itself: FAILED with a retry armed, and not more than two minutes past due (`retryPending`). */
 internal fun DirectorySession.retryPending(now: Instant): Boolean {
     if (effectiveRunState != RunState.FAILED) return false
@@ -239,13 +279,17 @@ internal fun DirectorySession.isRunning(): Boolean {
     }
 }
 
-/** Whether its glyph breathes (`WorkspaceActivityLogic.isRunningJob`): parked with a background job in flight, and nothing
+/** Whether its glyph is the terminal (`SessionStatusGlyph`'s `terminal`): parked with a background process up, and nothing
  * louder — no spinner, and no watch, whose eye takes the place. */
-internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean {
+internal fun DirectorySession.hasBackgroundProcess(watching: WatchSessionSummary? = null): Boolean {
     if (pendingApprovals > 0 || confirmationUnderReview != null || effectiveRunState != RunState.AWAITING_INPUT) return false
-    if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null) return false
-    return (runningBgCount ?: 0) > 0 && runningBgJobCount > 0
+    if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null || resumesOnItsOwn) return false
+    return (runningBgCount ?: 0) > 0
 }
+
+/** Whether that terminal breathes (`WorkspaceActivityLogic.isRunningJob`): at least one of those processes is a job in flight. */
+internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean =
+    hasBackgroundProcess(watching) && runningBgJobCount > 0
 
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 
@@ -277,3 +321,6 @@ internal fun plainPreview(md: String): String {
 
 /** A tool id shortened for the line: mcp__orbit__task_create reads task_create; Bash stays Bash. */
 internal fun fmtTool(name: String) = name.replace(Regex("^mcp__[^_]+__"), "")
+
+/** The calls that launch a sub-agent (the server's RUNTIME_SUBAGENT_TOOLS, shortened by [fmtTool]). */
+internal val SUBAGENT_LAUNCH_TOOLS = setOf("Task", "Agent", "Workflow", "delegate")

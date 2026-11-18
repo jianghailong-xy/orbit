@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, WORKSPACE_WRITE_NOTE, decliningPrefix } from './ApprovalPanel';
+import { ApprovalPanel, rememberRulesFor, CREATE_CRITERIA_CONFIRMED_AT_START, PROVIDER_CHANGE_NOTE, PROVIDER_MODELS_REPLACE, WORKSPACE_WRITE_NOTE, contextSize, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
@@ -240,8 +240,51 @@ describe('provider write approval', () => {
         apiKey: '(set — not shown)',
       }),
     );
+    expect(html).toContain('🔌 Confirm: add provider “Local vLLM”?');
     expect(html).toContain('http://127.0.0.1:8000');
-    expect(html).toContain('(set — not shown)');
+    // The key is a fact on the card, never a value — not even the runner's placeholder for it.
+    expect(html).toContain('Set — not shown');
+    expect(html).not.toContain('(set — not shown)');
+    expect(html).toContain('Add it');
+  });
+
+  it('reads an update as its fields and models, not as JSON', () => {
+    const html = render(
+      write('orbit_provider_update', {
+        slug: 'ollama-hpc-responses',
+        models: [
+          { label: 'Qwen3.8 27B (Ollama, 64K)', value: 'qwen3.8:27b', contextWindow: 65536 },
+          { label: 'Qwen3 Coder 30B (Ollama, 64K)', value: 'qwen3-coder:30b', contextWindow: 65536 },
+        ],
+        defaultModel: 'qwen3.8:27b',
+      }),
+    );
+    expect(html).toContain('🔌 Confirm: change provider “ollama-hpc-responses”?');
+    expect(html).not.toContain('"slug"');
+    expect(html).toContain('<dt>Default model</dt>');
+    expect(html).toContain(PROVIDER_MODELS_REPLACE);
+    expect(html).toContain('Qwen3 Coder 30B (Ollama, 64K) · 64K context');
+    // The default is marked on its own row and no other.
+    expect(html.match(/provider-write-default/g)).toHaveLength(1);
+    expect(html.indexOf('provider-write-default')).toBeLessThan(html.indexOf('qwen3-coder:30b'));
+    expect(html).toContain(PROVIDER_CHANGE_NOTE);
+    expect(html).toContain('Save changes');
+    // Nothing the write leaves alone is drawn as if it were written.
+    expect(html).not.toContain('Base URL');
+    expect(html).not.toContain('API key');
+  });
+
+  it('names a delete and keeps a field it has no name for', () => {
+    expect(render(write('orbit_provider_delete', { slug: 'old' }))).toContain('🔌 Confirm: delete provider “old”?');
+    expect(render(write('orbit_provider_delete', { slug: 'old' }))).toContain('Delete it');
+    expect(render(write('orbit_provider_update', { slug: 's', extraField: 3 }))).toContain('extraField');
+  });
+
+  it('says a context window the way the model menu does', () => {
+    expect(contextSize(65536)).toBe('64K');
+    expect(contextSize(200000)).toBe('200K');
+    expect(contextSize(1048576)).toBe('1M');
+    expect(contextSize(1000000)).toBe('1M');
   });
 });
 
@@ -354,7 +397,7 @@ describe('workspace write approval', () => {
       description: 'builds at night',
       defaultMergeTarget: 'develop',
     }));
-    for (const line of ['Working directory', '/srv/other', 'System prompt', 'Answer in French.', 'Appended system prompt',
+    for (const line of ['Working directory', '/srv/other', 'Base instructions', 'Answer in French.', 'Runtime instructions',
       'And briefly.', 'Runner', 'gpu-2', 'Worktree', 'Sessions run in the shared folder', 'Name', 'renamed', 'Description',
       'builds at night', 'Merge target', 'develop']) {
       expect(html).toContain(line);
@@ -1034,6 +1077,8 @@ describe('one waiting completion decision on the session page', () => {
       // The open items the coordinator question card reads (§5.2). Empty: no question is open in
       // this case, so the card draws nothing and what is asserted here is the evidence card beside
       // it — an unstubbed read would fail the census rather than the assertion.
+      // No cross-project request is waiting on this project: the crossing card reads this door.
+      if (path === `/projects/${PROJECT_ID}/handoffs`) return reply([]);
       if (path === `/projects/${PROJECT_ID}/open-items`) {
         return reply({ needsYou: [], withCoordinator: [] });
       }
@@ -1205,3 +1250,11 @@ describe('one waiting completion decision on the session page', () => {
 
 // The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
 vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
+
+it('shows and remembers the complete command for a check-only scheduled approval', () => {
+  const command = `python3 -c "print(open('watched.txt').read())"`;
+  const approval = { id: 'exact-card', toolName: 'Bash', input: { command, orbitScheduleCheckOnly: true }, status: 'PENDING' } as ApprovalInfo;
+  expect(rememberRulesFor(approval)).toEqual([{ toolName: 'Bash', ruleContent: command }]);
+  expect(render(approval)).toContain('print(open(&#x27;watched.txt&#x27;).read())');
+  expect(rememberRulesFor({ ...approval, input: { command } })).toEqual([{ toolName: 'Bash', ruleContent: 'python3:*' }]);
+});
