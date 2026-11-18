@@ -22,6 +22,11 @@ type claudeSwapFixture struct {
 	// owners is what Anthropic answers for each access token.
 	mu     sync.Mutex
 	owners map[string][2]string
+	// store is where the CLI keeps each folder's login: the files, or (macOS) the Keychain store
+	// reaching the fake Keychain security holds, whose items before the swap are before.
+	store    claudeCredentialStore
+	security *fakeSecurity
+	before   map[string]fakeKeychainItem
 }
 
 const (
@@ -82,7 +87,7 @@ func newClaudeSwapFixture(t *testing.T) *claudeSwapFixture {
 	}, owners: map[string][2]string{
 		"at-default": {"uuid-default", "org-default"},
 		"at-work":    {"uuid-work", "org-work"},
-	}}
+	}, store: claudeFileCredentials{}}
 	for path, b := range f.files {
 		if err := os.WriteFile(path, b, 0o600); err != nil {
 			t.Fatal(err)
@@ -95,7 +100,7 @@ func jsonInt(n int64) string { b, _ := json.Marshal(n); return string(b) }
 
 // status is `claude auth status` as the CLI answers it: from the folder's own oauthAccount.
 func (f *claudeSwapFixture) status(_ context.Context, folder claudeLoginFolder) (claudeAuthStatus, error) {
-	st, err := readClaudeLoginState(context.Background(), claudeFileCredentials{}, folder)
+	st, err := readClaudeLoginState(context.Background(), f.store, folder)
 	if err != nil {
 		return claudeAuthStatus{}, err
 	}
@@ -114,7 +119,7 @@ func (f *claudeSwapFixture) tokenOwner(_ context.Context, token string) (string,
 
 func (f *claudeSwapFixture) swap(t *testing.T) *claudeLoginSwap {
 	s := newClaudeLoginSwap(f.def, f.acct, filepath.Join(t.TempDir(), "backup"))
-	s.store = claudeFileCredentials{}
+	s.store = f.store
 	s.status, s.tokenOwner = f.status, f.tokenOwner
 	s.refresh = func(context.Context, claudeLoginFolder) error {
 		t.Fatal("refreshed a login far from expiry")
