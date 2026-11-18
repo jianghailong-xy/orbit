@@ -41,6 +41,7 @@ final class ScheduleDisplayTests: XCTestCase {
                 case .schedule(let s, _): return s.title
                 case .run(let s, _, _): return s.title
                 case .draft(let c, _): return c.title ?? ""
+                case .task(let t): return t.title
                 }
             }
             return "\(g.title)|\(g.subtitle ?? "nil")|\(items.joined(separator: ","))"

@@ -171,6 +171,7 @@ export function ProviderConnectPage() {
   // fills, so arriving from there costs nothing.
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
+    meta: { entities: ['provider'] },
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
   // A vendor's list is refreshed server-side, so the form asks for the current one rather than

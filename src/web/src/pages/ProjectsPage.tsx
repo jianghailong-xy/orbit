@@ -427,6 +427,7 @@ export function ProjectsPage() {
   const runners = useQuery(runnersQuery());
   const projects = useQuery({
     queryKey: projectsQueryKey(filter),
+    meta: { entities: ['project', 'task', 'session'] },
     queryFn: () => api<Project[]>(projectsPath(filter)),
     // Task writes and blocker ownership are server facts. Advancing only the local clock would
     // eventually label a still-active project quiet, so refresh the evidence at the same cadence.
@@ -1063,6 +1064,7 @@ export function ProjectDetailPage() {
   const openTaskId = routeId(params.taskId);
   const project = useQuery({
     queryKey: ['project', id],
+    meta: { entities: ['project', 'task'] },
     queryFn: () => api<ProjectDetail>(`/projects/${encodeURIComponent(id!)}`),
     enabled: Boolean(id),
   });
@@ -2263,6 +2265,14 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
   const { open } = useOpenProjectCoordinator(projectId, NEW_TASK_INTENT);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
+    // A row's work lane — Running above all — is read off the session carrying the task
+    // (`workState`), and a run starting or ending writes no task row: only `session.*` announces
+    // it. `task` alone would leave a row saying Running after its run had ended.
+    //
+    // Also the key ProjectBlockers reads (`RefusedTaskList`): the two are one cache entry, and
+    // react-query keeps one `meta` on it, taken from whichever observer set its options last, so
+    // every site on this key must declare the same entities or the declaration is a coin toss.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`),
   });
@@ -2565,6 +2575,7 @@ function ProjectTaskRow({
 function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
   const graph = useQuery({
     queryKey: ['task', task.id, 'prerequisites'],
+    meta: { entities: ['task'] },
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
         `/tasks/${encodeURIComponent(encodeId(task.id))}/dependency-graph?direction=upstream&maxDepth=1`,
@@ -2629,6 +2640,9 @@ export function ProjectTaskLevel({
 }) {
   const children = useQuery({
     queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
+    // The same project task page as the root level, row for row: a subtask's Running mark is its
+    // work session's, and a run starting or ending writes no task row.
+    meta: { entities: ['task', 'session'] },
     queryFn: () =>
       api<ProjectTaskPage>(
         `/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`,

@@ -36,6 +36,7 @@ export function scheduleClock(at: string | Date, timezone: string): string {
 export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
   queryOptions({
     queryKey: ['schedules', 'list', workspaceId ?? 'any', state ?? 'open'] as const,
+    meta: { entities: ['session', 'workspace'] },
     queryFn: () => {
       const params = new URLSearchParams();
       if (workspaceId) params.set('workspaceId', workspaceId);
@@ -49,6 +50,7 @@ export const schedulesQuery = (workspaceId?: string | null, state?: 'all') =>
 export const scheduleDetailQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'detail', id] as const,
+    meta: { entities: ['session', 'workspace'] },
     queryFn: () => api<ScheduleDetailResponse>(`/schedules/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
   });
@@ -56,6 +58,7 @@ export const scheduleDetailQuery = (id: string) =>
 export const scheduleDraftsQuery = () =>
   queryOptions({
     queryKey: ['schedules', 'drafts'] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<ScheduleDraftsResponse>('/schedules/drafts'),
     refetchInterval: streamPoll(15_000),
   });
@@ -63,12 +66,14 @@ export const scheduleDraftsQuery = () =>
 export const scheduleRequestQuery = (id: string) =>
   queryOptions({
     queryKey: ['schedules', 'request', id] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<ScheduleCard>(`/schedule-requests/${encodeURIComponent(id)}`),
   });
 
 export const sessionScheduleCardsQuery = (sessionId: string) =>
   queryOptions({
     queryKey: ['schedules', 'session', sessionId] as const,
+    meta: { entities: ['session'] },
     queryFn: () => api<SessionScheduleCardsResponse>(`/sessions/${encodeURIComponent(sessionId)}/schedule-cards`),
     refetchInterval: streamPoll(20_000),
   });

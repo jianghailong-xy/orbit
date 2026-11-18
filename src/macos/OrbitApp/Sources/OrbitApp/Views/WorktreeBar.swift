@@ -1236,19 +1236,6 @@ struct MainCheckoutBarView: View {
             .composerBandCard()
             .padding(.bottom, .composerBandGap)
             .accessibilityIdentifier("main-checkout-bar")
-            // A branch a project lands on: Push says so first, and never blocks.
-            .orbitConfirmation(bar.pushLabel ?? MainCheckoutCopy.label,
-                               isPresented: Binding(get: { model.pushWarning != nil },
-                                                    set: { if !$0 { model.pushWarning = nil } })) {
-                Button(bar.pushLabel ?? "Push") {
-                    if let read = model.pushWarning {
-                        Task { await model.push(read, workspaceID: workspaceID); app.refreshMainCheckoutSoon() }
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(model.pushWarning?.managedBranch.map { MainCheckoutCopy.managedBranchWarning(projectTitle: $0.projectTitle) } ?? "")
-            }
         }
     }
 

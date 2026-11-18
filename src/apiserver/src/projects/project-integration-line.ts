@@ -48,6 +48,7 @@ import {
 import { readProjectIntegrationLog } from './project-integration-log';
 import { queueLandingObservationIfPending } from './landing-observation';
 import { medianMs } from './project-promotion';
+import { SKIP_CHECK_STOP_CAUSE, inFlightSkipRefusal } from './project-integration-skip-check';
 import {
   queueBlockingSummary,
   type QueueBlockingFacts,
@@ -565,6 +566,10 @@ interface InFlightJobRow extends IntegrationCheckSource {
   outputMovedAt: Date | null;
   currentCheck: unknown;
   cancelRequestedAt: Date | null;
+  /** The claim generation a v2 claim reported PUSH under (§2.2 J-T4), or null. */
+  pushReportedGeneration: bigint | null;
+  /** The stop this generation was asked for is a skip's (`SKIP_CHECK_STOP_CAUSE`). */
+  stoppingToSkip: boolean;
   confirmedAutomatically: boolean;
   upstreamRef: string;
   createdAt: Date;
@@ -747,6 +752,19 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     liveness: livenessOf(row, timedOut),
     blockingReason: blockingReasonOf(row),
     retryable: timedOut && row.kind === 'LAND_TASK',
+    skippable: row.taskId !== null && inFlightSkipRefusal({
+      kind: row.kind,
+      state: row.state,
+      phase: row.phase,
+      cancelRequestedAt: row.cancelRequestedAt,
+      skipMergeCheck: row.skipMergeCheck,
+      progressProtocol: row.progressProtocol,
+      pushReportedGeneration: row.pushReportedGeneration,
+      claimGeneration: row.claimGeneration,
+      landingCheckCommand: row.landingCheckCommand ?? null,
+      mergeCheckCommand: row.mergeCheckCommand,
+    }) === null,
+    skipCheck: row.skipMergeCheck ? 'SKIPPED' : row.stoppingToSkip ? 'STOPPING' : null,
   };
 }
 
@@ -908,6 +926,11 @@ async function readInFlightJobsForProjects(
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
+           j."push_reported_generation" AS "pushReportedGeneration",
+           (j."cancel_requested_at" IS NOT NULL AND EXISTS (
+              SELECT 1 FROM "project_integration_job_event" stop
+               WHERE stop."job_id" = j."id" AND stop."kind" = 'STOP_REQUESTED'
+                 AND stop."data"->>'cause' = ${SKIP_CHECK_STOP_CAUSE})) AS "stoppingToSkip",
            j."progress_protocol" AS "progressProtocol",
            EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
            EXTRACT(EPOCH FROM now() - j."output_moved_at")::float8 AS "outputIdleSeconds",
@@ -965,8 +988,9 @@ async function readInFlightJobsForProjects(
            AND j."kind" <> 'OBSERVE_LANDING'
       ) runner_wait ON true
       -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
-      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
-      -- The claim reads the item, not a handling generation (T17), so this does too.
+      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3),
+      -- and so are the landings of a task filed to fix that item (fixes_open_item_id), as in the
+      -- claim. The claim reads the item, not a handling generation (T17), so this does too.
       LEFT JOIN LATERAL (
         SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
                ft."title" AS "taskTitle",
@@ -980,6 +1004,9 @@ async function readInFlightJobsForProjects(
            AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM j."task_id"
+           AND NOT EXISTS (
+             SELECT 1 FROM "task" fix
+              WHERE fix."id" = j."task_id" AND fix."fixes_open_item_id" = i."id")
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref, whichever project queued it.
@@ -1398,6 +1425,9 @@ export async function stopInFlightJob(
     /** Who pressed, when a person or a conversation did; the platform otherwise. */
     actor?: IntegrationTimelineActorInput;
     reason?: string | null;
+    /** More of what the stop asked, kept on its line: a skip's `SkipCheckStopData`, which the
+     *  result transaction reads back when the runner answers (`queueSkippedLandingAfterStop`). */
+    data?: Record<string, unknown>;
   },
 ): Promise<InFlightStop> {
   const [job] = await readInFlightJobs(tx, input.projectId, input.jobId);
@@ -1453,7 +1483,7 @@ export async function stopInFlightJob(
       phase: job.phase,
       actor: input.actor ?? { type: 'PLATFORM' },
       reason: input.reason ?? null,
-      data: { cause: input.cause ?? 'STOP' },
+      data: { cause: input.cause ?? 'STOP', ...input.data },
       text: stopRequestedText(job.claim ?? null),
       at: input.now,
     });
