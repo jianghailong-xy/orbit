@@ -1167,28 +1167,12 @@ final class AppModel {
         scheduled?.inspectedID = id
     }
 
-    /// Take a run's session off the Scheduled page: on the Mac a row or a sentence chosen in the timeline puts its
-    /// panel in the right-hand column, where the run was.
-    func closeScheduleRun() {
-        guard selectedSection == .scheduled, !nav.path.isEmpty else { return }
-        nav.path = []
-    }
-
-    /// A run's session, over the Scheduled page: run sessions are in no list (§7.4), so the back swipe returns to
-    /// the schedule they ran for.
-    func openScheduleRun(sessionID: String, scheduleID: String?) {
-        settingsPresented = false
+    /// Open the session in its workspace, with the list on the Scheduled runs folder.
+    func openScheduleRun(sessionID: String) {
         ownerRequests?.inboxPresented = false
         scheduled?.inspectedID = nil
         scheduled?.draftPanel = nil
-        selectedSection = .scheduled
-        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push. On the Mac
-        // the same frame is the Scheduled section's right-hand column (`ScheduledMacDetail`), with Scheduled lit in
-        // the sidebar and the timeline beside it (web board 02 ⑤): never a row of a workspace's list.
-        nav.path = [.console(sessionID: sessionID, origin: .list)]
-        // A run's session is in no list, so its own record is read as a link's is: the console's state band and
-        // its toolbar read that record.
-        refreshUnlistedSession(sessionID, adoptingAgent: false)
+        route(to: .session(sessionID), inScheduledRuns: true)
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
@@ -2595,7 +2579,6 @@ final class AppModel {
         case .projects: return nav.sectionAtRoot
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
-        // A run's session over the Scheduled page: the same one read.
         case .scheduled: return nav.sectionAtRoot
         }
     }
@@ -3890,10 +3873,14 @@ final class AppModel {
     /// is five chances to leave one out, and the one that gets left out is silent — the page opens
     /// under a pane still showing another agent's list. A no-op agent switch leaves the frame alone,
     /// so re-opening a session you are already on does not disturb the page beneath it.
-    private func show(_ node: NavNode, agent agentID: String? = nil) {
+    private func show(_ node: NavNode, agent agentID: String? = nil, folder: SessionFolderAddress? = nil) {
         selectedSection = .agents
         if let agentID, selectedAgentID != agentID { selectedAgentID = agentID }
-        nav.replaceTop(with: node)
+        if let folder {
+            nav.path = [.folder(folder), node]
+        } else {
+            nav.replaceTop(with: node)
+        }
     }
 
     /// The app's only door for navigation that arrives from *outside* it: an `orbit://` URL, a
@@ -3901,7 +3888,7 @@ final class AppModel {
     /// menu bar. In-app affordances (a list row, the drawer's Recents and Workspace rows, the
     /// needs-you banner, ⌘N, ⌘1…⌘9) call their entry point directly instead: a `Route` carries
     /// neither an origin nor an agent, and a frame pushed for a drawer row has to say both.
-    func route(to route: Route) {
+    func route(to route: Route, inScheduledRuns: Bool = false) {
         // A link or a notification goes somewhere, and Settings would cover it — and while Settings
         // is up a push lands on its stack, not on the route's.
         settingsPresented = false
@@ -3912,7 +3899,7 @@ final class AppModel {
         // public-id rewrite), while every list row and detail record spells it base62 — and the
         // console finds its record by `==`. A UUID frame found none, so its header fell back to the
         // agent's name. The frame takes the lists' spelling here, once, for everything downstream.
-        case .session(let id): openSession(PublicID.toPublic(id))
+        case .session(let id): openSession(PublicID.toPublic(id), inScheduledRuns: inScheduledRuns)
         case .task(let id):
             // A deep link or dependency jump may target a task outside the currently selected
             // named list. Aggregate scope guarantees the row and detail can resolve together.
@@ -3993,12 +3980,13 @@ final class AppModel {
     /// the id right away lets the console paint while the agent + lifecycle context resolve in the
     /// background; retaining that response is what lets Completed / Trash headers and composers
     /// render correctly on a cold launch.
-    private func openSession(_ id: String) {
+    private func openSession(_ id: String, inScheduledRuns: Bool) {
         // A route replaces what the detail pane / stack top is showing (a draft included) — the same
         // "select this session" act as a list row, so the three-column shells land exactly where
         // they did when this was a selection write.
-        show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id))
-        refreshUnlistedSession(id, adoptingAgent: true)
+        let folder = inScheduledRuns ? session(id: id).flatMap(SessionFolderAddress.scheduledRuns(for:)) : nil
+        show(.console(sessionID: id, origin: .deepLink), agent: agentID(for: id), folder: folder)
+        refreshUnlistedSession(id, adoptingAgent: true, inScheduledRuns: inScheduledRuns)
     }
 
     /// Another session's conversation over the one on screen — a link in a conversation, on a phone —
@@ -4059,8 +4047,9 @@ final class AppModel {
     /// control-plane refreshed; everything else (including an old detail-cache hit) is read again so
     /// repeated search/deep-link navigation cannot resurrect stale lifecycle or capability state.
     /// `adoptingAgent`: a route also makes the session's agent the one whose sessions are listed.
-    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool) {
+    private func refreshUnlistedSession(_ id: String, adoptingAgent: Bool, inScheduledRuns: Bool = false) {
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
+        let openingPath = nav.path
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
         // send an old route's id to a newly configured instance before the identity guard exists.
         let generation = apiGeneration
@@ -4077,6 +4066,11 @@ final class AppModel {
                 guard adoptingAgent, self.selectedSection == .agents,
                       self.selectedAgentSessionID == id else { return } // stale navigation resolve
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
+                // A cold route learns its folder from the detail. Keep any navigation made while it loaded.
+                if inScheduledRuns, self.nav.path == openingPath,
+                   let folder = SessionFolderAddress.scheduledRuns(for: resolved), self.nav.folderColumn != folder {
+                    self.nav.path = [.folder(folder)] + openingPath.suffix(1)
+                }
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
                 // No session of yours: it may be one somebody shared with you. The web asks the guest
@@ -4235,7 +4229,7 @@ final class AppModel {
         case let .openSchedule(scheduleID, sessionID):
             // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
             if let sessionID {
-                openScheduleRun(sessionID: PublicID.toPublic(sessionID), scheduleID: PublicID.toPublic(scheduleID))
+                openScheduleRun(sessionID: sessionID)
             } else {
                 openSchedule(PublicID.toPublic(scheduleID))
             }

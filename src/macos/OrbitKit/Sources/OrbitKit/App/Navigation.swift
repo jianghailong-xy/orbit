@@ -742,6 +742,12 @@ public struct SessionFolderAddress: Hashable, Sendable {
         Self(folderID: scheduledRunsID, agentID: agentID, view: view)
     }
 
+    public static func scheduledRuns(for session: Session) -> Self? {
+        guard let agentID = session.agent?.id ?? session.agentId else { return nil }
+        let view = SessionView.allCases.first { $0.lifecycleState == session.effectiveLifecycleState } ?? .open
+        return scheduledRuns(agentID: agentID, view: view)
+    }
+
     public init(folderID: String, agentID: String, view: SessionView) {
         self.folderID = folderID
         self.agentID = agentID

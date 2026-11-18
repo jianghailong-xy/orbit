@@ -206,7 +206,7 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
         XCTAssertFalse(root.contains("selectedRunnerID == nil") || root.contains("selectedWatchID == nil"))
 
         // The entries. A runner deep link is the same "select this runner" act a row is.
-        let route = code(try slice(app, from: "func route(to route: Route) {",
+        let route = code(try slice(app, from: "func route(to route: Route,",
                                    to: "/// Open a watch's record on Following."))
         XCTAssertTrue(route.contains("case .runner(let id):  selectedRunnerID = id"),
                       "the deep link routes through the same projection the list selects through")
