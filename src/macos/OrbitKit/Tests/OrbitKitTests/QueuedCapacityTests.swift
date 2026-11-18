@@ -31,7 +31,7 @@ final class QueuedCapacityTests: XCTestCase {
     func testTheListHeaderAndTagNameWhatIsFull() throws {
         let hpc = try Self.row("runner_at_capacity")
         XCTAssertEqual([QueuedCapacity.tag(hpc), QueuedCapacity.title(hpc)], ["runner full", "Runner full"])
-        XCTAssertEqual(SessionLine.make(for: hpc, live: true).text, "Runner full")
+        XCTAssertEqual(SessionLine.make(for: hpc, live: true).text, "Waiting for a free slot")
         let run = try Self.row("tree_at_capacity")
         XCTAssertEqual([QueuedCapacity.tag(run), QueuedCapacity.title(run)], ["run full", "Run full"])
         let batch = try Self.row("batch_at_capacity")
@@ -76,5 +76,14 @@ final class QueuedCapacityTests: XCTestCase {
         XCTAssertEqual(QueuedCapacity.waited(hpc, now: at.addingTimeInterval(75 * 60)), "Waiting 1 h 15 min")
         XCTAssertNil(QueuedCapacity.waited(try Self.row("runner_at_capacity", lastTurnAt: nil), now: at))
         XCTAssertNil(QueuedCapacity.waited(hpc, now: at.addingTimeInterval(-1)))
+    }
+
+    /// The Mac row's tooltip (board session-row-runner-full): web `capacityHeldHint`'s three lines.
+    func testTheRowTooltipNamesTheGateTheSlotsAndTheWait() throws {
+        let hpc = try Self.row("runner_at_capacity")
+        let at = try XCTUnwrap(RelativeTime.parse("2026-11-14T17:14:54.436Z"))
+        XCTAssertEqual(QueuedCapacity.rowHint(hpc, machine: "HPC", now: at.addingTimeInterval(15 * 60 + 5)),
+                       "Runner full\nHPC is using all 16 slots: 10 sessions are running a turn and 6 hold a slot with a background job. This message is sent as soon as one frees up.\nWaiting 15 min")
+        XCTAssertNil(QueuedCapacity.rowHint(try Self.row("runner_offline"), machine: "HPC", now: at))
     }
 }

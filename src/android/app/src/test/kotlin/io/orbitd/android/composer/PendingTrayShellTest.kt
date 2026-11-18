@@ -86,6 +86,14 @@ class PendingTrayShellTest : ComposerShellTest() {
         assertTrue(has(hasText("lfs 属于另一个仓库") and tray))
         assertFalse(has(hasText("lfs belongs to another repository") and tray))
         assertFalse(has(hasText("and update the changelog") and tray))
+
+        // Withdraw hands back the same words, not the English: the steer first (the first row), then the queued message.
+        compose.onAllNodesWithTag("pending-tray-withdraw")[0].performClick()
+        await { ComposerShell.calls.contains("DELETE sessions/${ComposerShell.SESSION}/turns/$steerId") }
+        await { input() == "lfs 属于另一个仓库" }
+        compose.onNodeWithTag("pending-tray-withdraw").performClick()
+        await { ComposerShell.calls.contains("DELETE sessions/${ComposerShell.SESSION}/turns/$queuedId") }
+        await { input() == "lfs 属于另一个仓库\n\n顺便更新变更日志" }
     }
 
     @Test fun steerSendsAQueuedMessageIntoTheRunningTurn() {

@@ -310,7 +310,12 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    gap, and a `gateway` it recreates then goes first, ahead of the `apiserver` ([Without a gap](#without-a-gap));
    `wiki-worker`, which serves no HTTP, is simply recreated;
 9. prints `docker compose ps`, and adds the release to `.upgrade/history`. Its whole output is in
-   `.upgrade/deploy.log`.
+   `.upgrade/deploy.log`;
+10. removes the target's earlier release images: every `<registry>/orbit-apiserver`, `orbit-web` and
+   `orbit-link-gateway` image except those of the last 3 releases in `.upgrade/history`, and any a container still
+   uses, which Docker refuses to remove. Nothing else removed them: on 2026-11-18 production had kept 77 releases'
+   images, 137 GB, with 6.6 GB of its disk left. This runs on every deploy, `--prune` or not; `--prune` still
+   prunes dangling images as well.
 
 A lost ssh connection does not stop it halfway: it ignores the hangup and goes on, writing its log.
 
@@ -345,7 +350,7 @@ to be copied to the registry, as `base-images.env` says, before a release names 
 
 **Rollback.** Deploy an earlier release: `upgrade.sh --deploy <its commit>`, with the same
 `ORBIT_REGISTRY` and `ORBIT_DEPLOY_HOST`; `--plan <its commit>` first shows what it changes. Its images are in
-the registry, its files come from its commit, nothing is built, and `up` recreates what differs from it. Its hosted
+the registry (the target keeps only the last 3 releases' images, so an older one is pulled again), its files come from its commit, nothing is built, and `up` recreates what differs from it. Its hosted
 runners' image is its own too: the profile names it again, and the runners move back onto it once idle. The
 target's `.upgrade/history` lists the releases it ran, newest last. The database keeps the migrations a later
 release applied: roll back past a migration only to code that runs on the database as that migration left it.

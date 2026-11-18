@@ -2431,11 +2431,22 @@ final class AppModel {
         if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
 
-    /// A press on a notice: the conversation it names, at the card it waits on.
+    /// A press on a notice: the conversation it names, at the card it waits on. An owner request's
+    /// card is opened in the "Waiting on you" inbox, as its push opens it: in the conversation it sits
+    /// where it was asked, under every turn taken since, so landing at the tail showed nothing.
     func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
         dismissNeedsYouToast(notice.id)
         if let item = notice.ownerItem {
             openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else if notice.target.waitingKind == .ownerRequest, let requests = ownerRequests {
+            if let request = OwnerRequests.oldestPending(requests.known, sessionID: notice.target.id) {
+                openOwnerRequest(request.id)
+            } else {
+                // Not read on this device yet: the inbox, whose Open tab reads it and holds its card.
+                settingsPresented = false
+                requests.tab = .open
+                requests.inboxPresented = true
+            }
         } else {
             openNeedsYouSession(notice.target)
         }
