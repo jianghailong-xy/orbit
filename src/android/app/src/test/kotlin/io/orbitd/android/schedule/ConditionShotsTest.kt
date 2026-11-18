@@ -174,11 +174,12 @@ class ConditionShotsTest {
     }
 
     /** Frame 4: the Scheduled page — "Waiting for a condition" above Today with each row's newest reading and its age, the gauge, and
-     * the condition that cannot be read under Needs you. */
+     * the condition that cannot be read at its head (no Needs you group, owner 2026-11-19). */
     @Test fun frame4ScheduledPage() {
         show { ScheduledPage(store, listOf("a1" to "HPC", "a2" to "apiserver"), "a1", null, {}, {}) }
         waitFor("Waiting for a condition")
-        listOf("Needs you", "Mon disk guard", "Can't read", "When root disk below 5% · HPC", "Ceph capacity guard", "6.9%",
+        assertEquals("no Needs you group", 0, compose.onAllNodesWithText("Needs you", useUnmergedTree = true).fetchSemanticsNodes().size)
+        listOf("Mon disk guard", "Can't read", "When root disk below 5% · HPC", "Ceph capacity guard", "6.9%",
             " · 1 min ago", "When raw used above 90% · HPC", "Set kubernetes pool to 3 copies", "2 in", " · 3 min ago",
             "Task · once, when 3 or more OSDs are in · HPC", "Today", "Release notes draft").forEach(::says)
         compose.onNodeWithTag("scheduled-count", useUnmergedTree = true).assertTextEquals("6")

@@ -82,7 +82,7 @@ final class ConditionDisplayTests: XCTestCase {
 
     // MARK: the Scheduled page (board ④)
 
-    func testTheConditionGroupSitsAboveTodayAndCantReadIsUnderNeedsYou() throws {
+    func testTheConditionGroupSitsAboveTodayAndCantReadLeadsIt() throws {
         let daily = try decode(ScheduleView.self, """
         {"id":"s-codex","title":"Codex stable check","rule":{"kind":"DAILY","time":"10:00"},"workspaceId":"w-api",
          "workspaceName":"apiserver","nextDueAt":"2026-11-17T06:00:00.000Z"}
@@ -95,11 +95,11 @@ final class ConditionDisplayTests: XCTestCase {
         """)
         let groups = ScheduleDisplay.timeline(schedules: [daily, try guardSchedule(), mon], waitingTasks: [osdTask()],
                                               now: now, timezone: zone)
-        XCTAssertEqual(groups.map(\.title), ["Needs you", "Waiting for a condition", "Today"])
-        XCTAssertEqual(groups[0].subtitle, "1")
-        XCTAssertEqual(groups[1].subtitle, "2")
-        XCTAssertEqual(groups[1].items.map(\.id), ["schedule-s-guard", "task-t-osd"], "schedules, then tasks")
-        XCTAssertEqual(groups[0].items.map(\.id), ["schedule-s-mon"])
+        // No Needs you group (owner 2026-11-19): the one that cannot be read leads Waiting for a condition.
+        XCTAssertEqual(groups.map(\.title), ["Waiting for a condition", "Today"])
+        XCTAssertEqual(groups[0].subtitle, "3")
+        XCTAssertEqual(groups[0].items.map(\.id), ["schedule-s-mon", "schedule-s-guard", "task-t-osd"],
+                       "can't read first, then schedules, then tasks")
         XCTAssertEqual(ScheduleDisplay.needsYouCount([daily, try guardSchedule(), mon], waitingTasks: [osdTask()]), 1)
 
         let cantRead = ScheduleDisplay.scheduleCircle(mon)
@@ -108,9 +108,26 @@ final class ConditionDisplayTests: XCTestCase {
         XCTAssertEqual(cantRead.tag?.tone, .held)
         XCTAssertTrue(ConditionDisplay.circle(cantRead: false).gauge, "a gauge in place of the circle")
 
-        let taskCantRead = ScheduleDisplay.timeline(schedules: [], waitingTasks: [osdTask(state: "UNKNOWN")],
-                                                    now: now, timezone: zone)
-        XCTAssertEqual(taskCantRead.map(\.title), ["Needs you"])
+        let taskCantRead = ScheduleDisplay.timeline(schedules: [try guardSchedule()],
+                                                    waitingTasks: [osdTask(state: "UNKNOWN")], now: now, timezone: zone)
+        XCTAssertEqual(taskCantRead.map(\.title), ["Waiting for a condition"])
+        XCTAssertEqual(taskCantRead[0].items.map(\.id), ["task-t-osd", "schedule-s-guard"])
+    }
+
+    func testAFailingWhenScheduleStaysInItsGroup() throws {
+        let failing = try decode(ScheduleView.self, """
+        {"id":"s-guard","title":"Ceph capacity guard","rule":\(Self.guardRule),"workspaceId":"w-hpc","nextDueAt":null,
+         "consecutiveFailures":2,"condition":{"id":"c-guard","text":"Raw used above 90%","state":"WAITING"}}
+        """)
+        let groups = ScheduleDisplay.timeline(schedules: [failing], now: now, timezone: zone)
+        XCTAssertEqual(groups.map(\.title), ["Waiting for a condition"])
+        XCTAssertEqual(groups[0].items.map(\.id), ["schedule-s-guard"])
+        XCTAssertEqual(ScheduleDisplay.scheduleCircle(failing).circle, .failed)
+        let running = [ScheduleRunView(id: "r", scheduleId: "s-guard", plannedAt: "2026-11-17T03:30:00.000Z",
+                                       state: "RUNNING")]
+        XCTAssertEqual(ScheduleDisplay.scheduleCircle(failing, runs: running).circle, .open)
+        XCTAssertTrue(ScheduleDisplay.scheduleCircle(failing, runs: running).gauge)
+        XCTAssertEqual(ScheduleDisplay.needsYouCount([failing], runs: running), 0)
     }
 
     func testARowShowsTheNewestReadingAndItsAge() throws {

@@ -66,15 +66,52 @@ final class ScheduleDisplayTests: XCTestCase {
         let groups = ScheduleDisplay.timeline(
             schedules: [sweep, audit, docs, notes, deploy, codex, cost, csp, gone],
             runs: [run(docs, "RUNNING", sh("2025-11-14T12:00"))], now: Self.now, timezone: Self.tz)
+        // No group of errors (owner 2026-11-19): the failing one is on its day, the held one in Paused.
         XCTAssertEqual(names(groups), [
-            "Needs you|2|Nightly pg spec sweep,Weekly dependency audit",
             "Today|Fri, Nov 14|Docs link check,Release notes draft,Deploy health check",
             "Tomorrow|Sat, Nov 15|Nightly pg spec sweep,Codex stable check,Docs link check",
             "Monday|Nov 17|Weekly cost report",
-            "Paused|1|Gateway CSP report digest",
+            "Paused|2|Weekly dependency audit,Gateway CSP report digest",
         ])
-        XCTAssertEqual(groups.map(\.key), [.needsYou, .today, .tomorrow, .day, .paused])
-        guard case .run = groups[1].items[0] else { return XCTFail("the running run leads Today") }
+        XCTAssertEqual(groups.map(\.key), [.today, .tomorrow, .day, .paused])
+        guard case .run = groups[0].items[0] else { return XCTFail("the running run leads Today") }
+    }
+
+    func testAFailingScheduleIsTaggedOnItsDayRow() {
+        let sweep = schedule(title: "Nightly pg spec sweep", nextDueAt: sh("2025-11-15T02:00"), consecutiveFailures: 3)
+        let groups = ScheduleDisplay.timeline(schedules: [sweep], now: Self.now, timezone: Self.tz)
+        XCTAssertEqual(names(groups), ["Tomorrow|Sat, Nov 15|Nightly pg spec sweep"])
+        XCTAssertEqual(ScheduleDisplay.scheduleCircle(sweep),
+                       .init(.failed, .alert, .init(tone: .fail, text: "Failed 3 in a row")))
+        XCTAssertEqual(ScheduleDisplay.needsYouCount([sweep]), 1)
+    }
+
+    func testARunUnderWayClearsTheFailure() {
+        let sweep = schedule(title: "Nightly pg spec sweep", nextDueAt: sh("2025-11-15T02:00"), consecutiveFailures: 2)
+        let other = schedule(title: "Other", nextDueAt: sh("2025-11-15T03:00"))
+        for state in ["QUEUED", "RUNNING", "AWAITING_APPROVAL"] {
+            let runs = [run(sweep, state, sh("2025-11-14T12:00"))]
+            XCTAssertEqual(ScheduleDisplay.scheduleCircle(sweep, runs: runs), .init(.open), state)
+            XCTAssertFalse(ScheduleDisplay.needsYou(sweep, runs: runs), state)
+            XCTAssertEqual(ScheduleDisplay.needsYouCount([sweep, other], runs: runs), 0, state)
+        }
+        // An ended run, or a run of another schedule, leaves the tag on.
+        for runs in [[run(sweep, "FAILED", sh("2025-11-14T02:00"))], [run(other, "RUNNING", sh("2025-11-14T12:00"))]] {
+            XCTAssertEqual(ScheduleDisplay.scheduleCircle(sweep, runs: runs).tag?.text, "Failed 2 in a row")
+            XCTAssertEqual(ScheduleDisplay.needsYouCount([sweep, other], runs: runs), 1)
+        }
+        // A held one stays counted with a run under way.
+        let held = schedule(state: "HELD", heldReason: "AGENT_DISABLED")
+        XCTAssertEqual(ScheduleDisplay.needsYouCount([held], runs: [run(held, "RUNNING", sh("2025-11-14T12:00"))]), 1)
+    }
+
+    func testHeldSchedulesLeadPaused() {
+        let a = schedule(title: "A paused", state: "PAUSED")
+        let z = schedule(title: "Z held", state: "HELD", heldReason: "AGENT_DISABLED")
+        let b = schedule(title: "B held", state: "HELD", heldReason: "AGENT_DISABLED")
+        let groups = ScheduleDisplay.timeline(schedules: [a, z, b], now: Self.now, timezone: Self.tz)
+        XCTAssertEqual(names(groups), ["Paused|3|B held,Z held,A paused"])
+        XCTAssertEqual(ScheduleDisplay.scheduleCircle(z).tag, .init(tone: .held, text: "Held"))
     }
 
     func testSplitsAtLocalMidnight() {
