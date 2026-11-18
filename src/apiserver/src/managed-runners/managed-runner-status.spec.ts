@@ -43,6 +43,9 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     imageRollTo: null,
     imageOutdatedSince: null,
     currentImageSha: null,
+    updateRequestedAt: null,
+    updateRequestedBy: null,
+    updateCompletedAt: null,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,
@@ -254,4 +257,18 @@ test('update: an outdated READY runner names both builds; draining for a roll is
   assert.equal(status(outdated, '0.42.0'), undefined);
   assert.equal(status(outdated, 'managed-a800ca3'), undefined);
   assert.equal(status(outdated, 'managed-95884b154f', true), undefined, 'a disabled account is never offered an update');
+});
+
+test('update: the owner\'s Update Now reads updating until the next generation is READY', () => {
+  const asked = { imageOutdatedSince: NOW, currentImageSha: 'a800ca3973', updateRequestedAt: NOW, updateRequestedBy: 'owner' };
+  const status = (change: Partial<ManagedRunner>, version = 'managed-95884b154f') =>
+    managedRunnerStatus({ enabled: true, available: true, mapping: mapping(change), runner: { ...beat(1000), version }, now: NOW, heartbeatFreshMs: FRESH }).update;
+  for (const managementState of ['READY', 'DRAINING', 'SLEEPING', 'PROVISIONING', 'STARTING'] as const) {
+    assert.equal(status({ ...asked, managementState })?.phase, 'updating', managementState);
+  }
+  assert.equal(status({ ...asked, managementState: 'FAILED' }), undefined, 'a failed runner is not updating');
+  // Ended by the next generation's READY: an older outdated record is available again, and the current build is none.
+  const done = { ...asked, updateCompletedAt: new Date(NOW.getTime() + 1) };
+  assert.equal(status(done)?.phase, 'available');
+  assert.equal(status(done, 'managed-a800ca3973'), undefined);
 });

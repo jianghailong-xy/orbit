@@ -55,12 +55,27 @@ function storedReason(value: unknown): ManagedRunnerReason | null {
 const MANAGED_VERSION = /^managed-([0-9a-f]{7,40})$/;
 
 /**
+ * The owner's Update Now is in progress: asked for (`updateRequestedAt`) and not yet ended by the next generation
+ * being READY (`updateCompletedAt`, written by the manager).
+ */
+export function ownerUpdatePending(mapping: Pick<ManagedRunner, 'updateRequestedAt' | 'updateCompletedAt'>): boolean {
+  const asked = mapping.updateRequestedAt;
+  return !!asked && (!mapping.updateCompletedAt || mapping.updateCompletedAt.getTime() < asked.getTime());
+}
+
+/** The states an owner's Update Now passes through on its way to the next generation's READY. */
+const UPDATING_STATES: ReadonlySet<ManagedRunner['managementState']> = new Set(['READY', 'DRAINING', 'SLEEPING', 'REQUESTED', 'WAITING_CAPACITY', 'PROVISIONING', 'STARTING']);
+
+/**
  * `update`: the manager found the READY instance made from an older image than the current one, whose build it
  * recorded (`currentImageSha`), and the runner reports the build it runs, another one. While an image roll drains
- * it, `updating`. Nothing when it is current, not running, or either build is unknown.
+ * it, or the owner's Update Now is on its way to the next generation, `updating`. Nothing when it is current, not
+ * running, or either build is unknown.
  */
 function managedRunnerUpdate(mapping: ManagedRunner, version: string | null | undefined): ManagedRunnerUpdate | undefined {
-  const phase = mapping.managementState === 'READY' ? 'available' : mapping.managementState === 'DRAINING' && mapping.imageRollTo ? 'updating' : null;
+  const phase = ownerUpdatePending(mapping) && UPDATING_STATES.has(mapping.managementState) ? 'updating'
+    : mapping.managementState === 'READY' ? 'available'
+    : mapping.managementState === 'DRAINING' && mapping.imageRollTo ? 'updating' : null;
   const current = mapping.currentImageSha;
   const running = MANAGED_VERSION.exec(version ?? '')?.[1];
   if (!phase || !mapping.imageOutdatedSince || !current || !running) return undefined;

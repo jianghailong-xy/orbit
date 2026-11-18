@@ -4,7 +4,7 @@ import type { ManagedRunnerStatus } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { ManagedRunnerWriteDto } from './dto';
+import { ManagedRunnerUpdateNowDto, ManagedRunnerWriteDto } from './dto';
 import { ManagedRunnerEnabledGuard } from './managed-runner-gate';
 import { ManagedRunnerService } from './managed-runner.service';
 
@@ -56,6 +56,15 @@ export class ManagedRunnerController {
   @HttpCode(202)
   sleep(@CurrentUser() user: AuthUser, @Body() dto: ManagedRunnerWriteDto): Promise<ManagedRunnerStatus> {
     return this.managed.sleep(user.userId, dto.idempotencyKey, dto.revision);
+  }
+
+  /** The owner's Update Now: an idle runner is moved onto the current image (ManagedRunnerService.updateNow). */
+  @PatForbidden('RUNNER_CONTROL')
+  @UseGuards(ManagedRunnerEnabledGuard)
+  @Post('update-now')
+  @HttpCode(202)
+  updateNow(@CurrentUser() user: AuthUser, @Body() _dto: ManagedRunnerUpdateNowDto): Promise<ManagedRunnerStatus> {
+    return this.managed.updateNow(user.userId);
   }
 
   @PatForbidden('RUNNER_CONTROL')

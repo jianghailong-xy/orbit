@@ -4,7 +4,6 @@ import { Logger } from '@nestjs/common';
 import { Prisma, type ManagedRunner } from '@prisma/client';
 import {
   MANAGED_RUNNER_CAPACITY_UNAVAILABLE,
-  MANAGED_RUNNER_SLEEP_CAPABILITY,
   MODEL_UNAVAILABLE,
   type ManagedRunnerReason,
 } from '@orbit/shared';
@@ -43,7 +42,8 @@ import {
 import { ownerAccountDisabled } from './managed-runner-eligibility';
 import { stopProofFor, type ManagedRunnerPredecessor, type ManagedRunnerStopProof } from './managed-runner-fencing';
 import type { ManagedRunnerProfile } from './managed-runner-profile';
-import { readStoredWorkload, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { freshInstanceReport, workloadIdle, type StoredManagedWorkload } from './managed-runner-sleep';
+import { ownerUpdatePending } from './managed-runner-status';
 import { readVolumeMeasurement, type VolumeMeasurement } from './managed-runner-storage';
 import { managedKeySupply, managedRuntimeSupply, type ManagedSupplyRunner } from './managed-runner-supply';
 import {
@@ -829,6 +829,8 @@ export class ManagedRunnerManager {
       startupDeadlineAt: null,
       lastError: Prisma.DbNull,
       initialProvider,
+      // The next generation READY ends the owner's Update Now.
+      ...(ownerUpdatePending(mapping) ? { updateCompletedAt: this.now() } : {}),
     });
     return { done: 'READY' };
   }
@@ -848,6 +850,7 @@ export class ManagedRunnerManager {
     // A stale heartbeat makes READY unusable (the status says so); it is not proof the instance died,
     // and on its own it authorizes nothing. Of a previous image, on a link-only server, it is asked to stop.
     return (await this.stopSilentPrevious(mapping, instance))
+      ?? (await this.ownerUpdate(mapping, instance))
       ?? (await this.rollPreviousImage(mapping, instance))
       ?? (await this.beginDrain(mapping))
       ?? { done: 'READY' };
@@ -883,6 +886,42 @@ export class ManagedRunnerManager {
   private async rollPreviousImage(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     const image = this.backend.rollImage;
     if (!image || !instance.previousImage || !instance.running || mapping.desiredState !== 'RUNNING') return null;
+    return this.rollWhenIdle(mapping, image, `idle on a previous image (${instance.previousImage})`);
+  }
+
+  /**
+   * The owner's Update Now (ManagedRunnerService.updateNow), in progress on a READY instance: the same roll as
+   * `rollPreviousImage`, on any backend — once the instance is idle, by its own fresh report and by the records, it
+   * drains marked as a roll and wakes at once as the next generation, made from the image the backend makes instances
+   * from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays READY and the next
+   * pass asks again. An instance found already on the current image ends the request (`updateCompletedAt`). The
+   * mark names the backend's roll image, or where it has none (Docker) the current build's commit. Null when it stays.
+   */
+  private async ownerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
+    if (!ownerUpdatePending(mapping)) return null;
+    if (!instance.previousImage) {
+      // A predicate write of its own column under this replica's lease, as recordImageOutdated's: nothing decides on it.
+      await this.prisma.managedRunner.updateMany({
+        where: { id: mapping.id, leaseHolder: this.holder, updateRequestedAt: mapping.updateRequestedAt },
+        data: { updateCompletedAt: this.now() },
+      });
+      return null;
+    }
+    if (!instance.running || mapping.desiredState !== 'RUNNING') return null;
+    const image = this.backend.rollImage ?? mapping.currentImageSha ?? instance.currentImageRevision ?? instance.previousImage;
+    return this.rollWhenIdle(
+      mapping,
+      image,
+      `its owner asked to update it (${mapping.updateRequestedAt!.toISOString()}), idle on a previous image (${instance.previousImage})`,
+    );
+  }
+
+  /**
+   * The roll's drain, for `rollPreviousImage` and `ownerUpdate`: once the instance is idle — by its own fresh report
+   * and by the records, as for sleep, but without waiting out the idle interval — it drains exactly as for sleep,
+   * marked `imageRollTo`. Null while it is not idle.
+   */
+  private async rollWhenIdle(mapping: ManagedRunner, image: string, why: string): Promise<Step | null> {
     const now = this.now();
     const report = await this.instanceReport(mapping, now);
     if (!report || !workloadIdle(report) || report.draining) return null;
@@ -910,10 +949,7 @@ export class ManagedRunnerManager {
       },
     });
     if (count === 0) throw new Superseded();
-    this.log.warn(
-      `managed runner ${mapping.id}: idle on a previous image (${instance.previousImage}); draining generation ${mapping.generation} `
-        + `to wake it on ${image}`,
-    );
+    this.log.warn(`managed runner ${mapping.id}: ${why}; draining generation ${mapping.generation} to wake it on ${image}`);
     return { next: await this.reread(mapping.id) };
   }
 
@@ -956,14 +992,7 @@ export class ManagedRunnerManager {
       where: { id: mapping.runnerId },
       select: { capabilities: true, ...RUNNER_BEATS, managedWorkload: true },
     });
-    if (!runner?.capabilities.includes(MANAGED_RUNNER_SLEEP_CAPABILITY)) return null;
-    const freshMs = this.profile.lifecycle.heartbeatFreshSeconds * 1000;
-    const beat = runnerLastBeatAt(runner);
-    if (!beat || now.getTime() - beat.getTime() > freshMs) return null;
-    const report = readStoredWorkload(runner.managedWorkload);
-    if (!report || report.generation !== mapping.generation || report.podUid !== mapping.podUid) return null;
-    const received = Date.parse(report.receivedAt);
-    return now.getTime() - received <= freshMs ? report : null;
+    return freshInstanceReport(runner, runnerLastBeatAt(runner), mapping, now, this.profile.lifecycle.heartbeatFreshSeconds * 1000);
   }
 
   /**
