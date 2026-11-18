@@ -196,6 +196,7 @@ import {
   ShownOriginalProvider,
   TranslationCtx,
   UserTranslationFoot,
+  replyOriginalHiddenKey,
   replyTranslationKey,
   useReplyShownOriginal,
   useShownOriginal,
@@ -4317,8 +4318,11 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
   const translation = node.replyTranslation;
   // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
-  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
-  const flipped = shownOriginal && !bilingual;
+  // "Hide original" leaves the translation alone, per message and never persisted.
+  const bilingualOn = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const [originalHidden, toggleHidden] = useShownOriginal(replyOriginalHiddenKey(node.seq));
+  const bilingual = bilingualOn && !originalHidden;
+  const flipped = shownOriginal && !bilingualOn;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
   // Block by block when the two texts pair (03-interleaved.png); whole, as before, when they do not.
@@ -4331,7 +4335,14 @@ function TranslatedReply({ node }: { node: TextNode }) {
       {bilingual && pairs ? (
         <>
           <InterleavedReply pairs={pairs} seq={node.seq} />
-          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
         </>
       ) : bilingual ? (
         <>
@@ -4339,7 +4350,26 @@ function TranslatedReply({ node }: { node: TextNode }) {
           <div className="chat-bilingual-reply">
             <BilingualEnglish text={node.text} collapsible />
           </div>
-          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+          <ReplyTranslationFoot
+            translation={translation}
+            pending={pending}
+            seq={node.seq}
+            flipped={flipped}
+            onFlip={flip}
+            onHideOriginal={toggleHidden}
+          />
+        </>
+      ) : bilingualOn ? (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot
+            translation={translation}
+            seq={node.seq}
+            flipped={false}
+            onFlip={flip}
+            originalHidden
+            onHideOriginal={toggleHidden}
+          />
         </>
       ) : translation?.text !== undefined && !translation.failed ? (
         // Delivered: the flip rides at the end of the reply's last line.

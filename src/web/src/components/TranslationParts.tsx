@@ -58,6 +58,8 @@ export function useShownOriginal(key: string): [boolean, () => void] {
 
 export const userTranslationKey = (seq: number, turnId?: string) => `user:${turnId ?? seq}`;
 export const replyTranslationKey = (seq: number) => `reply:${seq}`;
+/** "Show both languages": a reply whose original the owner hid, leaving the translation alone. */
+export const replyOriginalHiddenKey = (seq: number) => `reply-hidden:${seq}`;
 
 /** Whether the turn's copy button reads a reply's original, for TurnFoot. */
 export function useReplyShownOriginal(seq: number | undefined): boolean {
@@ -164,7 +166,8 @@ export function UntranslatedDecisionFoot({
 }
 
 /**
- * An agent reply: "Translated · Show original" ↔ "Original · Show translation"; failed (2A),
+ * An agent reply: "Translated · Show original" ↔ "Original · Show translation", or with both
+ * languages on "Translated · Hide original" ↔ "Translated · Show both"; failed (2A),
  * "Couldn't translate this reply · Retry"; still to be translated, the chip "Translates when the
  * reply is done". The flip is drawn at the end of the reply's last line, shown on hover, and always
  * while the original is on screen (docs/mocks/translation-reply-hover): the transcript hands it to
@@ -176,12 +179,17 @@ export function ReplyTranslationFoot({
   seq,
   flipped,
   onFlip,
+  originalHidden = false,
+  onHideOriginal,
 }: {
   translation?: ReplyTranslation;
   pending?: boolean;
   seq?: number;
   flipped: boolean;
   onFlip: () => void;
+  /** "Show both languages": whether the original under the translation is hidden, and its toggle. */
+  originalHidden?: boolean;
+  onHideOriginal?: () => void;
 }) {
   const actions = useContext(TranslationCtx);
   if (translation?.failed) {
@@ -197,6 +205,14 @@ export function ReplyTranslationFoot({
     return (
       <div className="chat-translate-foot is-reply">
         <span>{COPY.translated}</span>
+        {onHideOriginal && (
+          <>
+            <Sep />
+            <button type="button" className="chat-translate-action" onClick={onHideOriginal}>
+              {originalHidden ? COPY.showBoth : COPY.hideOriginal}
+            </button>
+          </>
+        )}
       </div>
     );
   }
