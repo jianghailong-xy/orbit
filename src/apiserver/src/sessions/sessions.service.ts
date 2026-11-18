@@ -271,14 +271,17 @@ import {
   titleFromPrompt,
 } from './naming';
 import { enqueueRecap, type RecapOutcome } from './recap';
-import { translate, TranslationFailed } from './translation';
+import { translate } from './translation';
 import { agentDecision, retranslateEvent, translatableText, type TranslationDeps } from './reply-translation';
 import {
   DRAIN_SKIPS_HELD,
   HELD_TURN_STATUS,
   accountAgentLanguage,
+  CLEARED_FAILURE_COLUMNS,
+  failedTurnColumns,
   heldTurnColumns,
   isSlashCommand,
+  logOwnerTranslationFailure,
   readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
@@ -7504,7 +7507,7 @@ export class SessionsService {
     if (!turn) return;
     const original = turnTranslationOf({ ...turn, translationState: 'TRANSLATING' });
     let translated: string | null = null;
-    let why = 'the message could not be read';
+    let failure: unknown = new Error('the held message could not be read');
     if (original && prepared !== null) {
       translated = prepared;
     } else if (original) {
@@ -7513,7 +7516,7 @@ export class SessionsService {
         const agent = await accountAgentLanguage(this.prisma, ownerId);
         translated = await translate(original.original, original.from, agent);
       } catch (error) {
-        why = error instanceof TranslationFailed ? `${error.reason}: ${error.message}` : String(error);
+        failure = error;
       }
     }
     if (translated !== null) {
@@ -7521,12 +7524,41 @@ export class SessionsService {
       await this.releaseHeldTurn(sessionId, turnId, translated, 'DONE', ['TRANSLATING', 'FAILED']);
       return;
     }
+    // FAILED with why (TranslationFailureReason, and the HTTP status beside HTTP): what the turn list and Retry answer.
     const failed = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
-      data: { translationState: 'FAILED' },
+      data: failedTurnColumns(failure),
     });
-    this.logger.warn(`turn ${turnId} of session ${sessionId} was not translated, so it was not sent (${why})`);
-    if (failed.count > 0) this.realtime.publishQueuedTurnsChanged(sessionId);
+    logOwnerTranslationFailure(failure, { door: 'held-turn', sessionId, turnId });
+    if (failed.count > 0) {
+      this.realtime.publishQueuedTurnsChanged(sessionId);
+      this.scheduleHeldMessagePush(sessionId, turnId);
+    }
+  }
+
+  /** How long a held message stays FAILED before its owner is pushed (frame 4B of translation-failure-policy.html). */
+  static readonly HELD_MESSAGE_PUSH_DELAY_MS = 60_000;
+
+  /** turnId → its pending held-message check, one per turn: a Retry that fails again replaces the earlier one. */
+  private readonly heldMessagePushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * One check, HELD_MESSAGE_PUSH_DELAY_MS after a held message's translation failed: RealtimeService.heldMessageUnseen
+   * pushes the owner unless they are viewing the session, and PushService.notifyHeldMessage only while the turn is
+   * still HELD and FAILED — so a Retry, Send as written, withdrawal or translation before then sends nothing.
+   * The check lives in this process's memory: a restart (or a deploy) inside the 60 s loses it, and that message
+   * is not pushed; the message itself stays held with Retry and Send as written, so only the reminder is lost.
+   */
+  private scheduleHeldMessagePush(sessionId: string, turnId: string): void {
+    clearTimeout(this.heldMessagePushes.get(turnId));
+    const timer = setTimeout(() => {
+      this.heldMessagePushes.delete(turnId);
+      void Promise.resolve().then(() => this.realtime.heldMessageUnseen(sessionId, turnId)).catch((error: unknown) => {
+        this.logger.warn(`held message push for turn ${turnId} failed: ${(error as Error)?.message ?? error}`);
+      });
+    }, SessionsService.HELD_MESSAGE_PUSH_DELAY_MS);
+    timer.unref?.();
+    this.heldMessagePushes.set(turnId, timer);
   }
 
   /**
@@ -7566,6 +7598,7 @@ export class SessionsService {
           content,
           status: 'PENDING',
           translationState: state,
+          ...CLEARED_FAILURE_COLUMNS,
           ...(steerTarget ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: steerTarget.id } : {}),
         },
       });
@@ -7594,7 +7627,10 @@ export class SessionsService {
     assertEngineSessionRow(session);
     const turn = await this.prisma.conversationTurn.findFirst({
       where: { id: turnId, sessionId },
-      select: { id: true, status: true, displayPrompt: true, translationState: true, translationLang: true },
+      select: {
+        id: true, status: true, displayPrompt: true, translationState: true, translationLang: true,
+        translationFailureReason: true, translationHttpStatus: true,
+      },
     });
     if (!turn) throw new NotFoundException('message not found');
     return turn;
@@ -7613,7 +7649,7 @@ export class SessionsService {
     await this.ownHeldTurn(ownerId, sessionId, turnId);
     const retried = await this.prisma.conversationTurn.updateMany({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: { in: ['FAILED', 'TRANSLATING'] } },
-      data: { translationState: 'TRANSLATING' },
+      data: { translationState: 'TRANSLATING', ...CLEARED_FAILURE_COLUMNS },
     });
     if (retried.count === 0) throw SessionsService.notHeld();
     this.realtime.publishQueuedTurnsChanged(sessionId);
@@ -8019,6 +8055,8 @@ export class SessionsService {
         displayPrompt: true,
         translationState: true,
         translationLang: true,
+        translationFailureReason: true,
+        translationHttpStatus: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -8224,6 +8262,8 @@ export class SessionsService {
       displayPrompt: null,
       translationState: null,
       translationLang: null,
+      translationFailureReason: null,
+      translationHttpStatus: null,
       attachments,
     }];
   }
@@ -9985,6 +10025,7 @@ export class SessionsService {
         answering.translation as unknown as ApprovalTranslation | null,
         dto,
         langs,
+        { door: 'approval-decision', sessionId: id },
       );
     }
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's

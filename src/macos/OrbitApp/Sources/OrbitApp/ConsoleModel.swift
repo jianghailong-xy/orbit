@@ -1153,6 +1153,8 @@ final class ConsoleModel {
         let behavior: ApprovalBehavior
         let answers: [String: [String]]?
         let remember: Bool
+        /// The line the card draws: why (the 422's `failureReason`), then Retry and Send as written.
+        let foot: [SessionTranslation.FootPart]
     }
 
     /// An approval as it was answered here: the card as it was asked, and the press that answered
@@ -2350,9 +2352,6 @@ final class ConsoleModel {
         agentName = s.agent?.name
         // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
         scheduleRunID = s.scheduleRunId
-        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
-        // lists, so this read is the only one that has them.
-        if s.scheduleRunId != nil { scheduleRunSession = s }
         Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
@@ -4418,7 +4417,8 @@ final class ConsoleModel {
             // back with Retry / Send as written rather than a failure line.
             approvalAnswers[approval.id] = nil
             untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
-                                                                      remember: remember)
+                                                                      remember: remember,
+                                                                      foot: SessionTranslation.refusedAnswerFoot(after: error))
             await refreshApprovals()
         }
         catch {
@@ -5088,11 +5088,12 @@ final class ConsoleModel {
         do {
             _ = try await api.declineDoneRequest(projectID: projectID, itemID: row.itemId, note: note,
                                                  sendAsWritten: sendAsWritten)
-            doneDeclineRefusedUntranslated = false
+            doneDeclineRefusedUntranslated = nil
         } catch {
-            // A note that could not be translated was not sent: the card offers Retry and Send as written.
+            // A note that could not be translated was not sent: the card says why, with Retry and Send as written.
             doneDeclineRefusedUntranslated = OwnerCardTranslations.refused(error)
-            if !doneDeclineRefusedUntranslated {
+                ? SessionTranslation.refusedAnswerFoot(after: error) : nil
+            if doneDeclineRefusedUntranslated == nil {
                 statusMessage = "\(ProjectDone.notDeclined) — \(APIClient.failureReason(error))."
             }
             return false
@@ -5101,8 +5102,9 @@ final class ConsoleModel {
         return true
     }
 
-    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent.
-    var doneDeclineRefusedUntranslated = false
+    /// The last "Not yet…" note was refused with 422 TRANSLATION_FAILED and not sent: the line the
+    /// card draws (why, then Retry and Send as written), nil otherwise.
+    var doneDeclineRefusedUntranslated: [SessionTranslation.FootPart]? = nil
 
     /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
     /// the door's own words.
@@ -5273,8 +5275,6 @@ final class ConsoleModel {
     /// That run and its schedule, once found; the detail for whether its finding was new and told.
     private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
     private(set) var scheduleRunDetail: ScheduleDetailResponse?
-    /// This run's session as its own read answered, for the head line's state and engine.
-    private(set) var scheduleRunSession: Session?
     private var loadingScheduleCards = false
     private var lastScheduleRead = Date.distantPast
 
@@ -6240,7 +6240,7 @@ final class ConsoleModel {
         do {
             let receipt = try await api.answerOpenItem(projectID: projectID, itemID: row.itemId,
                                                        request)
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             questionsAnsweredHere.insert(row.itemId)
             adoptQuestionRecord(CoordinatorQuestions.answeredHere(row: row, question: question,
                                                                   request: request, receipt: receipt))
@@ -6250,18 +6250,19 @@ final class ConsoleModel {
             // Words that could not be translated were not sent (decision 2A): the card offers Retry and
             // Send as written in place of a failure line.
             if OwnerCardTranslations.refused(error) {
-                answersRefusedUntranslated.insert(row.itemId)
+                answersRefusedUntranslated[row.itemId] = SessionTranslation.refusedAnswerFoot(after: error)
                 return nil
             }
-            answersRefusedUntranslated.remove(row.itemId)
+            answersRefusedUntranslated[row.itemId] = nil
             statusMessage = "That answer was not recorded — \(APIClient.failureReason(error))."
             return nil
         }
     }
 
-    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED: their
-    /// card shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
-    var answersRefusedUntranslated: Set<String> = []
+    /// The coordinator questions whose last answer was refused with 422 TRANSLATION_FAILED, with the
+    /// line their card shows: why ("…, so your answer wasn't sent", or the generic "Couldn't translate,
+    /// so it wasn't sent"), then Retry and Send as written.
+    var answersRefusedUntranslated: [String: [SessionTranslation.FootPart]] = [:]
 
     /// Ask the coordinator again (§4.7, mock 5): the item goes back to the conversation that
     /// should have had it, with the project's clock for it restarted. Nothing is retried and
