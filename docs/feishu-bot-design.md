@@ -523,6 +523,7 @@ service token 照旧可用，要保留自定义逻辑的可以继续写桥接。
 | `feishu_outbox` | F2 | 回传发件箱（§7.5） |
 | `feishu_chat_route` | F3 | 群路由（§8.1） |
 | `conversation_turn` 的外部发送者列 | F3 | 署名（§8.2） |
+| `feishu_app` 的 access 列、`feishu_chat_route` 的来源列、`feishu_thread.open_access_open_id` | O1 | 开放模式（§14） |
 
 每张新表都会碰到 apiserver 的普查：迁移台账、db-write inventory、trigger 清单、`@db.Uuid` 字段分类、NOT NULL 清单。
 新路由还有 tenant isolation 普查和 PAT 路由普查，所有者通道的路由另加 `pat-owner-channel.pg.spec.ts` 的门例。
@@ -544,6 +545,7 @@ service token 照旧可用，要保留自定义逻辑的可以继续写桥接。
 | `GET /api/integrations/feishu/chats` | 群路由列表 | `ACCOUNT` 拒绝 |
 | `POST /api/integrations/feishu/chats/confirm` | 确认接入群 | `OWNER_INTERACTIVE` |
 | `PATCH`、`DELETE /api/integrations/feishu/chats/:id` | 修改、停用群路由 | `OWNER_INTERACTIVE` |
+| `PUT /api/integrations/feishu/access` | 谁能用机器人，以及别人开会话用的设置（§14.1） | `OWNER_INTERACTIVE` |
 
 管理员路由：`GET` / `PUT /api/admin/integrations/feishu`（开关与应用数）、`DELETE /api/admin/users/:id/feishu`（移除某账号的应用）。
 
@@ -591,3 +593,113 @@ F0 → F1 → F2 → F3 串行，F3n 在 F3 之后两端并行。以后再做：
 - **决定 3 读作「只有每账号应用」**，不另做部署级的共享应用。要两种都支持，在 §4 加一种「部署应用 + 每人绑定」的接法。
 - **决定 5 的「详情」指提醒卡上的内容。** 在飞书里进行的对话（从飞书开的会话、在飞书里回复过的会话）每轮的回复照常回传，
   否则群派活没有结果。默认模式下审批卡只有工具名，与 iOS 锁屏横幅一致；要求看清细节才能批的，把详情切成 `FULL`。
+
+## 14. 开放给可用范围内的人（所有者 2026-11-18 决定 D1–D5，都按推荐 A）
+
+图板在 `docs/mocks/feishu-open-access/`（`01-open-access.html` 与 4 张 PNG）。机器人在飞书里说的每个字都是英文，都不提 Orbit。
+
+### 14.1 设置
+
+`feishu_app.access_mode` 取 `OWNER_ONLY` 或 `AVAILABILITY_SCOPE`（迁移 1140）：
+
+- `OWNER_ONLY` 是默认值，行为和今天一样；升级后的已有应用也是它（列的默认值）。
+- `AVAILABILITY_SCOPE` 下另存别人开会话用的设置：
+  - `open_workspace_id`：必填，属于本账号；外键指向 `workspace`，`ON DELETE SET NULL`；
+  - `open_permission_mode`：默认 `auto`；
+  - 四个上限：`open_max_running_per_person` 1、`open_sessions_per_day_per_person` 10、`open_max_running_total` 3、
+    `open_sessions_per_day_total` 50。取值范围与群路由的上限相同：同时 1–100，每天 1–10000。
+- 保存走所有者通道：`PUT /api/integrations/feishu/access`，在 `pat-owner-channel-routes.ts` 里；PAT 调用得
+  403 `OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`，零写入。
+  - 请求体：`mode`（必填）、`workspaceId`、`permissionMode`、`maxRunningPerPerson`、`sessionsPerDayPerPerson`、
+    `maxRunningTotal`、`sessionsPerDayTotal`。不带的字段保持已存的值，所以切回 Only you 时其余设置留着，下次打开不用重填。
+  - 校验，任何一条不过都零写入：workspace 不属于本账号（别人的与不存在的一样）得 404；`mode` 或 `permissionMode`
+    不合法、上限不是正整数或超出范围得 400；改成 `AVAILABILITY_SCOPE` 时，请求里和已存的都没有活着的 workspace，
+    得 400 `FEISHU_OPEN_WORKSPACE_REQUIRED`。
+  - 回答与 `GET` 相同：`GET /api/integrations/feishu` 的 `app.access` 是
+    `{ mode, workspaceId, permissionMode, maxRunningPerPerson, sessionsPerDayPerPerson, maxRunningTotal, sessionsPerDayTotal }`。
+- 换成另一个 App ID（§4.1 的 `PUT`）时，别人开会话用的设置跟着带过去，`access_mode` 回到 `OWNER_ONLY`：
+  可用范围是那个应用在飞书后台的设置，换了应用就要所有者重新决定是否开放。
+- 开放模式「有效」要求 `access_mode = AVAILABILITY_SCOPE` 且 `open_workspace_id` 指向本账号未删除的 workspace。
+  workspace 被删（软删或真删）后，按没有开放处理（`reserveOpenSlot` 答 `NOT_OPEN`，见 14.4），设置页照样显示已存的模式。
+
+### 14.2 消息路径（`AVAILABILITY_SCOPE` 下，来自非主人）
+
+先核实发送者（见 14.3），然后：
+
+- **私聊**（O3）
+  - 在 `open_workspace_id`、以 `open_permission_mode` 开会话，turn 记外部发送者（F3-5 的字段）；
+  - 回执 `Started · <title>` 和每轮的最终回复发回他的消息链，只有正文，没有 Orbit 链接；
+  - 在消息链里回复，进入同一个会话；另发一条顶层消息，开新会话。
+- **群**（O4）
+  - 接入过的群用它自己的路由和上限。
+  - 未接入的内部群第一次被 @ 时，建一条隐式路由，按默认设置开会话，用话题回执。隐式路由是 `feishu_chat_route` 的一行：
+    `source = 'OPEN_ACCESS'`、`enabled = true`、`confirmed_at` 为空、`workspace_id` 与 `permission_mode` 为空，
+    并记 `first_used_by_open_id`、`first_used_by_name`、`first_used_at`。`feishu_chat_route_enabled_chk` 已放宽：
+    未确认的行只有 `OPEN_ACCESS` 才能是 `enabled`。
+  - 隐式路由可以单独关掉：`PATCH /api/integrations/feishu/chats/:id` 只收 `enabled`（`disabled_reason` 记 `OWNER`），
+    带别的字段得 400。机器人被移出群时，隐式路由也停用（`disabled_reason = 'BOT_REMOVED'`，之后打开得 409，与接入过的群相同）。
+  - 在隐式路由的群里发 connect 并确认，这一行变成 `source = 'CONNECT'`，用它自己的设置；首次使用者保留。
+  - 已有一条 connect 后还没确认的行（`source = 'CONNECT'`、`confirmed_at` 为空）的群，第一次被 @ 时怎么处理由 O4 定，
+    定了写进本节。
+  - 外部群照旧拒绝。
+- 切回 `OWNER_ONLY` 后：
+  - 非主人私聊照旧回 stranger 句子；
+  - 隐式路由不再开会话，回 notConnected 句子；
+  - 接入过的群照常工作。
+- 非主人点卡片在任何模式下都照旧拒绝。
+
+Groups 列表（`GET /api/integrations/feishu/chats`）列出接入过的群和隐式路由，接入过的在前。每行带
+`source`、`firstUsedByOpenId`、`firstUsedByName`、`firstUsedAt` 和 `sessionsToday`（从 UTC 零点起，这个群开出且会话已建成的话题数）。
+还在等确认的 connect 行照旧不列。
+
+### 14.3 核实发送者（O2）
+
+- 每条消息都向飞书查一次：发送者在不在应用的可用范围里。不加缓存。
+- 不在范围、查询失败或超时，都按不在范围处理：不写任何数据，只回一句说明。
+- 接口、参数和所需权限由 O2 查定。
+
+### 14.4 上限
+
+- 只管开放模式开出的会话：非主人私聊，以及隐式路由的群。接入过的群不计入。
+- 「同时」数 PENDING 或 RUNNING 的会话；「每天」从 UTC 零点算起；私聊和群合在一起算。
+- 同一事件处理两次，只计一次。
+
+计数的依据是 `feishu_thread.open_access_open_id`（迁移 1140）：开放模式开出的会话，它的消息链 / 话题那一行记下发起人的
+open_id；主人的消息链和接入过的群的话题这一列为空，不计入。选它而不选 turn 的外部发送者列，是因为这一行在会话建成之前就写下，
+能先占位再开会话，和群路由的上限（F3-4）同一个写法。
+
+公共方法在 `src/apiserver/src/feishu/feishu-open-limits.ts`，O3、O4 在各自开会话的路径上调用：
+
+1. `reserveOpenSlot(tx, { appId, ownerId, chatId, rootMessageId, sessionId, openId })`，在事务里、开会话之前调用。
+   - 先 `SELECT … FOR UPDATE` 锁住应用那一行，同时到的两条请求排队计数。
+   - 应用不是有效的开放模式（14.1）时答 `{ ok: false, limit: 'NOT_OPEN' }`，调用方按没开放处理（私聊回 stranger，群回 notConnected）。
+   - 同一请求（同一 `(appId, chatId, rootMessageId)` 且同一 `sessionId`）已经占过位，直接答 `{ ok: true }`，不再计数。
+   - 依次查每人同时、每人每天、合计同时、合计每天，超了答 `{ ok: false, limit, max, words }`，`limit` 是
+     `PERSON_RUNNING`、`PERSON_DAILY`、`TOTAL_RUNNING`、`TOTAL_DAILY` 之一，`max` 是那条上限的值，`words` 是 14.6 的句子。不写任何数据。
+   - 没超就写下这一行（`last_spoken_at` 为占位标记，`open_access_open_id` 为发送者），答 `{ ok: true }`。
+   - 「同时」数：会话 PENDING 或 RUNNING 且不在回收站的行，加上会话还没建成、占位不到 10 分钟的行。
+     「每天」数：UTC 零点以后建的、会话已建成或占位不到 10 分钟的行。
+2. 会话建成后，在同一个事务里调 `openSlotStarted(tx, …)` 把占位改成已开始；返回 true 的那一次记 activity。
+3. 会话被拒（没有 runner 等）时调 `releaseOpenSlot(prisma, …)` 让出占位；已建成会话的行不会被删。
+
+`sessionId` 要由事件派生（如 `feishuDerivedUuid(…, appId, messageId)`），这一行的 id 与群话题一样是
+`feishuDerivedUuid('feishu-thread', appId, chatId, rootMessageId)`，所以同一事件再处理一次仍是同一行。
+
+### 14.5 审批
+
+审批和提问只发到主人私聊。卡上写明发起人和来源（O5）。
+
+### 14.6 英文句子
+
+机器人说的每个字都是英文，都不提 Orbit。这几句都在 `FEISHU_OPEN_REPLIES`（`feishu-open-limits.ts`）里，O2–O4 直接用：
+
+- 不在可用范围或核实失败：`You can't use this bot. Ask its owner to make the app available to you in Feishu.`
+- 每人同时：`You already have a session running. Wait for it to finish, then send this again.`；
+  n>1 时写 `You already have <n> sessions running. Wait for one to finish, then send this again.`
+- 每人每天：`You've started <n> sessions today, the most this bot allows one person. Try again after midnight UTC.`
+- 合计同时：`This bot is already running <n> sessions, the most it allows at a time. Try again when one finishes.`
+- 合计每天：`This bot has started <n> sessions today, the most it allows in a day. Try again after midnight UTC.`
+- 关掉的群：`The owner has switched this bot off in this group, so nothing was started.`
+
+`<n>` 是那条上限的值；n 为 1 时写 `1 session`。
+

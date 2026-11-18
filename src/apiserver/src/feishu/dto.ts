@@ -1,5 +1,6 @@
 import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import {
+  FEISHU_ACCESS_MODES,
   FEISHU_APP_ID_MAX_LENGTH,
   FEISHU_CHAT_ALLOWED_MAX,
   FEISHU_CHAT_MAX_CONCURRENT_LIMIT,
@@ -7,6 +8,8 @@ import {
   FEISHU_APP_SECRET_MAX_LENGTH,
   FEISHU_MESSAGE_DETAILS,
   FEISHU_PLATFORMS,
+  type FeishuAccessChange,
+  type FeishuAccessMode,
   type FeishuAdminChange,
   type FeishuAppChange,
   type FeishuAppConnect,
@@ -50,6 +53,48 @@ export class ChangeFeishuAppDto implements FeishuAppChange {
   @ValidateIf((_, value) => value !== null)
   @IsPublicId()
   defaultWorkspaceId?: string | null;
+}
+
+/**
+ * `PUT /integrations/feishu/access` (owner channel, docs/feishu-bot-design.md §14.1): who can use the bot, and what the
+ * sessions other people start run with. The limits take the bounds a connected group's do.
+ */
+export class SaveFeishuAccessDto implements FeishuAccessChange {
+  @IsIn(FEISHU_ACCESS_MODES)
+  mode!: FeishuAccessMode;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsPublicId()
+  workspaceId?: string | null;
+
+  @IsOptional()
+  @IsEnum(PermissionMode)
+  permissionMode?: PermissionMode;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(FEISHU_CHAT_MAX_CONCURRENT_LIMIT)
+  maxRunningPerPerson?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT)
+  sessionsPerDayPerPerson?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(FEISHU_CHAT_MAX_CONCURRENT_LIMIT)
+  maxRunningTotal?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(FEISHU_CHAT_SESSIONS_PER_DAY_LIMIT)
+  sessionsPerDayTotal?: number;
 }
 
 /** `PUT /admin/integrations/feishu`: "Allow accounts to connect Feishu bots". */

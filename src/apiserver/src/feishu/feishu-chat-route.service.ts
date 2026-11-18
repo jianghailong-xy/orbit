@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { FeishuChatRoute as FeishuChatRouteRow } from '@prisma/client';
 import {
   FEISHU_CHAT_BOT_REMOVED,
@@ -8,11 +8,13 @@ import {
   FEISHU_CHAT_TICKET_INVALID,
   FEISHU_CHAT_TICKET_INVALID_MESSAGE,
   FEISHU_CHAT_TICKET_TTL_MINUTES,
+  FEISHU_CHAT_USES_APP_SETTINGS_MESSAGE,
   FEISHU_CONNECT_GROUP_PATH,
   type FeishuChatChange,
   type FeishuChatConfirm,
   type FeishuChatDisabledReason,
   type FeishuChatRoute,
+  type FeishuChatRouteSource,
   type FeishuChatRoutes,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -68,11 +70,19 @@ function confirmUrl(ticket: string): string {
   return `${origin}${FEISHU_CONNECT_GROUP_PATH}?ticket=${encodeURIComponent(ticket)}`;
 }
 
-function present(row: FeishuChatRouteRow): FeishuChatRoute {
+/** Rows the Groups card lists: the connected groups, and those using the app's settings (§14.2). */
+const LISTED = (ownerId: string) => ({ ownerId, OR: [{ confirmedAt: { not: null } }, { source: 'OPEN_ACCESS' }] });
+
+function present(row: FeishuChatRouteRow, sessionsToday: number): FeishuChatRoute {
   return {
     id: row.id,
     chatId: row.chatId,
     chatName: row.chatName,
+    source: row.source as FeishuChatRouteSource,
+    firstUsedByOpenId: row.firstUsedByOpenId,
+    firstUsedByName: row.firstUsedByName,
+    firstUsedAt: row.firstUsedAt?.toISOString() ?? null,
+    sessionsToday,
     workspaceId: row.workspaceId ?? '',
     permissionMode: row.permissionMode ?? '',
     allowedOpenIds: row.allowedOpenIds,
@@ -189,20 +199,25 @@ export class FeishuChatRouteService {
     const changed = await this.prisma.$executeRaw`
       UPDATE "feishu_chat_route"
       SET "enabled" = false,
-          "disabled_reason" = CASE WHEN "confirmed_at" IS NULL THEN NULL ELSE 'BOT_REMOVED' END,
+          "disabled_reason" = CASE WHEN "confirmed_at" IS NULL AND "source" <> 'OPEN_ACCESS' THEN NULL ELSE 'BOT_REMOVED' END,
           "ticket_hash" = NULL, "ticket_open_id" = NULL, "ticket_expires_at" = NULL,
           "updated_at" = now()
       WHERE "app_id" = ${appId} AND "chat_id" = ${chatId}
-        AND ("enabled" OR "ticket_hash" IS NOT NULL OR ("confirmed_at" IS NOT NULL AND "disabled_reason" IS DISTINCT FROM 'BOT_REMOVED'))`;
+        AND ("enabled" OR "ticket_hash" IS NOT NULL
+             OR (("confirmed_at" IS NOT NULL OR "source" = 'OPEN_ACCESS') AND "disabled_reason" IS DISTINCT FROM 'BOT_REMOVED'))`;
     if (changed > 0) this.logger.log(`feishu app ${appId}: the bot was removed from a group; its route is off`);
   }
 
-  /** `GET /integrations/feishu/chats`: the confirmed groups, and the group a live ticket names, when given one. */
+  /**
+   * `GET /integrations/feishu/chats`: the confirmed groups, then those using the app's settings (§14.2), each with the
+   * sessions started from it since midnight UTC; and the group a live ticket names, when given one.
+   */
   async list(ownerId: string, ticket?: string): Promise<FeishuChatRoutes> {
     const rows = await this.prisma.feishuChatRoute.findMany({
-      where: { ownerId, confirmedAt: { not: null } },
-      orderBy: [{ confirmedAt: 'desc' }, { id: 'asc' }],
+      where: LISTED(ownerId),
+      orderBy: [{ confirmedAt: { sort: 'desc', nulls: 'last' } }, { firstUsedAt: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
     });
+    const today = await this.sessionsToday(ownerId);
     let pending: FeishuChatRoutes['pending'] = null;
     if (ticket) {
       const row = await this.prisma.feishuChatRoute.findFirst({
@@ -222,7 +237,20 @@ export class FeishuChatRouteService {
         };
       }
     }
-    return { routes: rows.map(present), pending };
+    return { routes: rows.map((row) => present(row, today.get(`${row.appId}\n${row.chatId}`) ?? 0)), pending };
+  }
+
+  /** Sessions started from each of the account's groups since midnight UTC: their topics whose session exists. */
+  private async sessionsToday(ownerId: string): Promise<Map<string, number>> {
+    const rows = await this.prisma.$queryRaw<Array<{ appId: string; chatId: string; sessions: number }>>`
+      SELECT t."app_id" AS "appId", t."chat_id" AS "chatId", count(*)::int AS "sessions"
+      FROM "feishu_thread" t
+      JOIN "feishu_chat_route" r ON r."app_id" = t."app_id" AND r."chat_id" = t."chat_id" AND r."owner_id" = t."owner_id"
+      WHERE t."owner_id" = ${ownerId}::uuid
+        AND t."created_at" >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AND EXISTS (SELECT 1 FROM "session" s WHERE s."id" = t."session_id" AND s."owner_id" = t."owner_id")
+      GROUP BY t."app_id", t."chat_id"`;
+    return new Map(rows.map((row) => [`${row.appId}\n${row.chatId}`, row.sessions]));
   }
 
   /**
@@ -252,6 +280,8 @@ export class FeishuChatRouteService {
           enabled: true,
           disabledReason: null,
           confirmedAt: new Date(),
+          // A group that used the app's settings has its own from now on (§14.2).
+          source: 'CONNECT',
           ticketHash: null,
           ticketOpenId: null,
           ticketExpiresAt: null,
@@ -263,13 +293,21 @@ export class FeishuChatRouteService {
     }
     const row = await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id: target.id } });
     this.logger.log(`account ${ownerId} connected a Feishu group to workspace ${workspace.id} (${dto.permissionMode})`);
-    return present(row);
+    return this.presentOne(row);
   }
 
-  /** `PATCH /integrations/feishu/chats/:id` (owner channel). Switching on a route whose bot left the group is a 409. */
+  /**
+   * `PATCH /integrations/feishu/chats/:id` (owner channel). Switching on a route whose bot left the group is a 409. A group
+   * using the app's settings (§14.2) is only switched off or on: anything else is a 400, and connecting it gives it its own.
+   */
   async change(ownerId: string, id: string, dto: FeishuChatChange): Promise<FeishuChatRoute> {
-    const row = await this.prisma.feishuChatRoute.findFirst({ where: { id, ownerId, confirmedAt: { not: null } } });
+    const row = await this.prisma.feishuChatRoute.findFirst({ where: { id, ...LISTED(ownerId) } });
     if (!row) throw new NotFoundException(FEISHU_CHAT_NOT_FOUND_MESSAGE);
+    if (row.source === 'OPEN_ACCESS'
+      && (dto.permissionMode !== undefined || dto.allowedOpenIds !== undefined
+        || dto.maxConcurrentSessions !== undefined || dto.sessionsPerDay !== undefined)) {
+      throw new BadRequestException(FEISHU_CHAT_USES_APP_SETTINGS_MESSAGE);
+    }
     if (dto.enabled === true && !row.enabled && row.disabledReason === 'BOT_REMOVED') {
       throw new ConflictException({ code: FEISHU_CHAT_BOT_REMOVED, message: FEISHU_CHAT_BOT_REMOVED_MESSAGE });
     }
@@ -277,7 +315,7 @@ export class FeishuChatRouteService {
       ? { enabled: true, disabledReason: null }
       : { enabled: false, disabledReason: 'OWNER' };
     const { count } = await this.prisma.feishuChatRoute.updateMany({
-      where: { id, ownerId, confirmedAt: { not: null } },
+      where: { id, ...LISTED(ownerId) },
       data: {
         ...switching,
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
@@ -288,7 +326,11 @@ export class FeishuChatRouteService {
     });
     if (count === 0) throw new NotFoundException(FEISHU_CHAT_NOT_FOUND_MESSAGE);
     this.logger.log(`account ${ownerId} changed Feishu group route ${id}`);
-    return present(await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id } }));
+    return this.presentOne(await this.prisma.feishuChatRoute.findUniqueOrThrow({ where: { id } }));
+  }
+
+  private async presentOne(row: FeishuChatRouteRow): Promise<FeishuChatRoute> {
+    return present(row, (await this.sessionsToday(row.ownerId)).get(`${row.appId}\n${row.chatId}`) ?? 0);
   }
 
   /** `DELETE /integrations/feishu/chats/:id` (owner channel): the group is no longer connected. */
