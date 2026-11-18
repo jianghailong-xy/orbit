@@ -375,6 +375,10 @@ describe('a message held for its translation', () => {
     const feet = () => [...mounted().querySelectorAll('.chat-translate-foot.is-error')].map((n) => n.textContent);
     await waitForUi(() => expect(feet()).toHaveLength(REASONS.length));
     expect(feet()).toEqual(REASONS.map(([, sentence]) => `${sentence}·Retry·Send as written`));
+    // Each line's row grows below the bubble when it wraps (indexCss.failureFoot.test.ts).
+    for (const foot of mounted().querySelectorAll('.chat-translate-foot.is-error')) {
+      expect(foot.parentElement?.classList.contains('has-failure-foot')).toBe(true);
+    }
   });
 
   it('failed TIMEOUT: Retry and Send as written still call the A1 doors for that turn', async () => {

@@ -3472,7 +3472,8 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         </button>
       )}
       {(typed || status || held || translationFoot) && (
-        <div className="chat-user-meta">
+        // A failed translation's line says why and can wrap (frame 7): the row then grows below the bubble.
+        <div className={translation?.state === 'FAILED' ? 'chat-user-meta has-failure-foot' : 'chat-user-meta'}>
           {/* A delivered translation's flip opens the row; copy and the time stay together at its
               end (docs/mocks/translation-user-hover). */}
           {flipFoot && translationFoot}

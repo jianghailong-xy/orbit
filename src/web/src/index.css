@@ -8178,6 +8178,20 @@ button.chat-jump-start:hover {
   height: 18px;
   white-space: nowrap;
 }
+/* Held because its translation failed (docs/ux/translation-failure-policy.html, frames 4B and 7): the reason's
+   sentence can outrun the column and wrap, so the row grows downward from under the bubble instead of being held
+   to one 18px line, which drew a wrapped first line up over the bubble's border. Right-aligned like the bubble. */
+.chat-user-meta.has-failure-foot {
+  height: auto;
+  min-height: 18px;
+  align-items: flex-start;
+  white-space: normal;
+}
+.chat-user-meta.has-failure-foot > .chat-translate-foot.is-error {
+  min-width: 0;
+  justify-content: flex-end;
+  text-align: right;
+}
 .chat-user-meta > .chat-copy,
 .chat-user-meta > .chat-time,
 .chat-user-meta > .chat-meta-sep {

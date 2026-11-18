@@ -832,6 +832,7 @@ export function SessionProjectSettlementCard({
         notYetRefused={answerRefusedUntranslated(decline.error) && decline.variables
           ? (sendAsWritten) => decline.mutateAsync({ note: decline.variables!.note, sendAsWritten })
           : null}
+        notYetRefusal={decline.error}
         notYetBusy={decline.isPending}
         openItemsCount={orbitCheckedOpenItemCount(openItemsRead.data)}
         runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
@@ -881,6 +882,8 @@ export interface ProjectDoneCardProps {
   /** The Not yet note the server refused 422 TRANSLATION_FAILED, so nothing was sent: posts it again,
    *  with `sendAsWritten: true` for Send as written. Null when nothing was refused. */
   notYetRefused?: ((sendAsWritten: boolean) => Promise<unknown>) | null;
+  /** That refusal itself, whose failureReason/httpStatus the line says why with (policy board frame 5). */
+  notYetRefusal?: unknown;
   onRecordDone?: () => void;
   onNotYet?: (note: string) => void;
   onReopen?: () => void;
@@ -1169,6 +1172,7 @@ export function ProjectDoneCard({
   notYetBusy = false,
   translation = null,
   notYetRefused = null,
+  notYetRefusal,
   onRecordDone,
   onNotYet,
   onReopen,
@@ -1312,7 +1316,7 @@ export function ProjectDoneCard({
               disabled={notYetBusy}
             />
             <p>{PROJECT_DONE_COPY.notYetHint}</p>
-            {notYetRefused ? <RefusedAnswerFoot resend={notYetRefused} /> : null}
+            {notYetRefused ? <RefusedAnswerFoot resend={notYetRefused} error={notYetRefusal} /> : null}
             <div className="project-done-not-yet-actions">
               <button type="button" className="card-action card-action--primary" disabled={notYetBusy || !note.trim()} onClick={() => onNotYet?.(note.trim())}>
                 {PROJECT_DONE_COPY.sendToCoordinator}
@@ -1465,6 +1469,7 @@ export function ProjectDoneDialog({
           notYetRefused={answerRefusedUntranslated(declineError) && decline.variables
             ? (sendAsWritten) => decline.mutateAsync({ ...decline.variables!, sendAsWritten })
             : null}
+          notYetRefusal={declineError}
           notYetBusy={decline.isPending}
           doneCheck={doneCheckRead.data}
           ownerInitiated={!request}
