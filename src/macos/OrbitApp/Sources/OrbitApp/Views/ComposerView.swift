@@ -797,7 +797,9 @@ struct ComposerView: View {
                     #if os(macOS)
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     #endif
-                    .layoutPriority(1)
+                    // Below the model control's 1: the model is offered its room first, so on a full
+                    // phone footer Optimize folds to ✦ before the model gives up its effort or name.
+                    .layoutPriority(0.5)
             }
             sendControls
         }
@@ -1295,23 +1297,11 @@ struct ComposerView: View {
     private var modelChipLabel: some View {
         let smart = smartRoute != nil
         #if os(iOS)
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if smart {
-                Text("✦")
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
-            }
-            Text(modelDisplayName)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            if !chipEffortLabel.isEmpty {
-                Text(chipEffortLabel)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+        // Where the name and the effort don't both fit, the effort leaves the footer (it stays in
+        // the menu) before the name truncates (board composer-usage-tap 04).
+        ViewThatFits(in: .horizontal) {
+            chipRow(smart: smart, effort: !chipEffortLabel.isEmpty)
+            if !chipEffortLabel.isEmpty { chipRow(smart: smart, effort: false) }
         }
         .padding(.horizontal, smart ? 7 : 0)
         .padding(.vertical, smart ? 2 : 0)
@@ -1325,6 +1315,30 @@ struct ComposerView: View {
             .lineLimit(1)
         #endif
     }
+
+    #if os(iOS)
+    /// One of the phone chip's two widths: the name with the effort after it, or the name alone.
+    private func chipRow(smart: Bool, effort: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+            Text(modelDisplayName)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if effort {
+                Text(chipEffortLabel)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        }
+    }
+    #endif
 
     /// The effort half of the chip, with the fast lane appended while the session is in one —
     /// "Max · Fast". Web parity (`.composer-model-effort`); the lane is named there too rather than
