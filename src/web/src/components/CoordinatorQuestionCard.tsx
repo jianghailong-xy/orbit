@@ -311,9 +311,10 @@ export function CoordinatorQuestionCard({
           onChange={(event) => setText(event.target.value)}
         />
         {/* What it holds up and what happens if nobody answers, in the server's own words — the
-            same line the item's row carries, so the card and the list cannot say different things. */}
-        {row.detailLine ? (
-          <p className="coordinator-question-meta">{row.detailLine}</p>
+            same line the item's row carries, so the card and the list cannot say different things.
+            Drawn translated, the server's line built from the translated ifUnanswered. */}
+        {(translated.shown?.detailLine ?? row.detailLine) ? (
+          <p className="coordinator-question-meta">{translated.shown?.detailLine ?? row.detailLine}</p>
         ) : null}
       </div>
       {answer.isError && answerRefusedUntranslated(answer.error) && answer.variables ? (

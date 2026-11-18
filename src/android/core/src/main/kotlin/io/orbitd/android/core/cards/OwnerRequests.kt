@@ -292,6 +292,9 @@ object OwnerRequests {
             (if (waited >= Duration.ofDays(1)) " for ${BackgroundWakeCard.duration(waited.seconds)}" else "")
     }
 
+    /** The row's title: the request's, in [owner]'s language when its card would be drawn translated ([OwnerCardTranslation.ownerRequest]). */
+    fun rowTitle(request: OwnerRequest, owner: String?): String = OwnerCardTranslation.ownerRequest(request, owner)?.title ?: request.title
+
     /** The row's detail line: the kind's own words, then what it holds up. */
     fun rowDetail(request: OwnerRequest, now: Instant): String = listOfNotNull(requestDetail(request), holdsText(request, now)).joinToString(" · ")
 

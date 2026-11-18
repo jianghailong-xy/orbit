@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,7 +46,8 @@ import io.orbitd.android.ui.LocalOrbitColors
 @Composable
 internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, notice: String? = null, onOpen: () -> Unit) {
     // The question in the owner's language as it was translated while open (Settings › Translation); its review flips it.
-    val record = remember(card.source) { OwnerCardTranslation.closedQuestion(card.source) } ?: card.source
+    val owner = LocalTranslation.current.cardLanguage
+    val record = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) } ?: card.source
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val line = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     val shape = RoundedCornerShape(14.dp)
@@ -108,7 +110,8 @@ internal fun QuestionRecordCard(card: InteractionCard, queued: Boolean = false, 
 @Composable
 internal fun QuestionRecordReview(card: InteractionCard, told: RunEvent? = null, open: (String) -> Unit) {
     var showOriginal by remember(card.key) { mutableStateOf(false) }
-    val translated = remember(card.source) { OwnerCardTranslation.closedQuestion(card.source) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(card.source, owner) { OwnerCardTranslation.closedQuestion(card.source, owner) }
     val record = if (translated != null && !showOriginal) translated else card.source
     val question = record.obj("question")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant

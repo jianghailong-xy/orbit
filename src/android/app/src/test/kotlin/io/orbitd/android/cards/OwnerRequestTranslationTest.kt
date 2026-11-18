@@ -13,7 +13,10 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.TestOrbitApplication
+import io.orbitd.android.management.AccountTranslation
+import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.translation.TranslationCopy
+import androidx.compose.runtime.CompositionLocalProvider
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,20 +58,40 @@ class OwnerRequestTranslationTest {
 
     @After fun tearDown() { scope.cancel(); runBlocking { fixture.auth.logout() }; fixture.close() }
 
-    private fun show(translation: String?) {
+    /** The owner's Settings › Translation: on, in Japanese, unless a test says otherwise. */
+    private var account = AccountTranslation(enabled = true, available = true, language = "ja")
+
+    private fun store(translation: String?): OwnerRequestStore {
         val asked = OwnerRequestFixture.decision()
         fixture.hold(if (translation == null) asked else JsonObject(asked + ("translation" to Json.parseToJsonElement(translation))))
         val store = OwnerRequestStore(fixture.auth, runBlocking { fixture.signIn() }, scope)
         store.load(OwnerRequestStore.OPEN)
         compose.waitUntil(10_000) { store.state.value.open.size == 1 }
+        return store
+    }
+
+    private fun show(translation: String?) {
+        val store = store(translation)
         compose.setContent { OrbitTheme(darkTheme = false) {
-            val state by store.state.collectAsState()
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-                state.open.forEach { OwnerRequestCard(it, store, { "mac-mini" }, {}) }
+            CompositionLocalProvider(LocalTranslation provides account) {
+                val state by store.state.collectAsState()
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    state.open.forEach { OwnerRequestCard(it, store, { "mac-mini" }, {}) }
+                }
             }
         } }
         compose.waitForIdle()
     }
+
+    /** The Waiting-on-you inbox, with the request's row. */
+    private fun showInbox(translation: String?) {
+        val store = store(translation)
+        compose.setContent { OrbitTheme(darkTheme = false) {
+            CompositionLocalProvider(LocalTranslation provides account) { WaitingOnYouScreen(store, emptyList(), null, 0, {}) }
+        } }
+        compose.waitForIdle()
+    }
+    private fun rowTitle() = compose.onNodeWithTag("waiting-on-you:row:$id:title", useUnmergedTree = true)
     private fun tag(part: String) = compose.onNodeWithTag("owner-request:$id:$part", useUnmergedTree = true)
     private fun has(text: String) = compose.onAllNodesWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     private fun bodies(door: String) = fixture.posts().filter { it.path == "/api/owner-requests/$id/$door" }.map { Json.parseToJsonElement(it.body).jsonObject }
@@ -92,6 +115,22 @@ class OwnerRequestTranslationTest {
         compose.onNodeWithText(TranslationCopy.SHOW_TRANSLATION, useUnmergedTree = true).performClick()
         compose.waitForIdle()
         tag("title").assertTextEquals("ステージングはどのリージョンで動かす？")
+    }
+
+    @Test fun theInboxRowDrawsTheTranslatedTitle() {
+        showInbox(japanese)
+        rowTitle().assertTextEquals("ステージングはどのリージョンで動かす？")
+    }
+
+    @Test fun theInboxRowDrawsTheOriginalTitleWithAFailedTranslation() {
+        showInbox("""{"lang":"ja","failed":true}""")
+        rowTitle().assertTextEquals("Which region should staging run in?")
+    }
+
+    @Test fun aTranslationInAnotherLanguageThanTheOwnersIsDrawnAsTheOriginal() {
+        account = AccountTranslation(enabled = true, available = true, language = "zh-Hans")
+        showInbox(japanese)
+        rowTitle().assertTextEquals("Which region should staging run in?")
     }
 
     @Test fun aTranslatedOptionStillAnswersByItsIndex() {

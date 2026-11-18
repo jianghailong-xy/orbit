@@ -20,6 +20,9 @@ import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.realtime.SessionSnapshot
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.management.AccountTranslation
+import io.orbitd.android.management.LocalTranslation
+import androidx.compose.runtime.CompositionLocalProvider
 import io.orbitd.android.projects.CoordinatorStartCard
 import io.orbitd.android.projects.CrossingBatch
 import io.orbitd.android.projects.ProjectDone
@@ -51,16 +54,23 @@ class OwnerCardTranslationViewsTest {
     private val project = "p1"
     private val seal = "a".repeat(64)
 
+    /** The owner's Settings › Translation the cards are drawn under: on, in Chinese (Simplified), unless a test says otherwise. */
+    private var account = AccountTranslation(enabled = true, available = true, language = "zh-Hans")
+
     /** A page that scrolls and weights its own body (a review), in a fixed frame rather than in a scrolling column. */
     private fun showPage(content: @Composable () -> Unit) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
-            Surface { androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) { content() } }
+            CompositionLocalProvider(LocalTranslation provides account) {
+                Surface { androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) { content() } }
+            }
         } } }
         compose.waitForIdle()
     }
     private fun show(content: @Composable () -> Unit) {
         compose.runOnUiThread { compose.activity.setContent { OrbitTheme(darkTheme = false) {
-            Surface { Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) { content() } }
+            CompositionLocalProvider(LocalTranslation provides account) {
+                Surface { Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) { content() } }
+            }
         } } }
         compose.waitForIdle()
     }
@@ -114,8 +124,9 @@ class OwnerCardTranslationViewsTest {
 
     // The coordinator's question.
 
-    private fun questionCard(translation: String?): InteractionCard {
+    private fun questionCard(translation: String?, detailLine: String = ""): InteractionCard {
         val row = j("""{"itemId":"q1","kind":"COORDINATOR_QUESTION","title":"The coordinator has a question","assignee":"OWNER","actions":["ANSWER"],
+            "detailLine":"$detailLine",
             "waitingSince":"2026-11-18T01:00:00.000Z","question":{"question":"Should the export keep the old columns?",
             "options":[{"label":"Keep the old columns","description":"Both shapes for one release."},{"label":"Update the sheet"}],"recommendedOption":0,
             "ifUnanswered":"I keep both shapes."}""" + (translation?.let { ""","translation":$it}""" } ?: "}"))
@@ -130,6 +141,26 @@ class OwnerCardTranslationViewsTest {
         show { BusinessCard(questionCard(questionJa), true, open = {}, submit = { _, _ -> }) }
         flips(listOf("新导出要保留旧列吗？", "保留旧列", "一个版本内两种格式。", "改财务表", "我两种都留。"),
             listOf("Should the export keep the old columns?", "Keep the old columns", "Both shapes for one release.", "Update the sheet", "I keep both shapes."))
+    }
+
+    @Test fun aCoordinatorQuestionDrawsTheTranslatedDetailLineAndRowDetailLineOnceFlipped() {
+        val served = questionJa.removeSuffix("}") + ""","detailLine":"If you don’t answer: 我两种都留。"}"""
+        show { BusinessCard(questionCard(served, "If you don’t answer: I keep both shapes."), true, open = {}, submit = { _, _ -> }) }
+        assertTrue(has("If you don’t answer: 我两种都留。"))
+        assertFalse(has("If you don’t answer: I keep both shapes."))
+        press(TranslationCopy.SHOW_ORIGINAL)
+        assertTrue("the original card draws row.detailLine", has("If you don’t answer: I keep both shapes."))
+        assertFalse(has("If you don’t answer: 我两种都留。"))
+    }
+
+    @Test fun aCoordinatorQuestionTranslatedIntoAnotherLanguageIsDrawnAsWritten() {
+        account = AccountTranslation(enabled = true, available = true, language = "ja")
+        show { BusinessCard(questionCard(questionJa), true, open = {}, submit = { _, _ -> }) }
+        assertTrue(has("Should the export keep the old columns?") && has("Keep the old columns"))
+        assertFalse(has("新导出要保留旧列吗？")); noFoot()
+        account = AccountTranslation(enabled = false, available = true, language = "zh-Hans")
+        show { BusinessCard(questionCard(questionJa), true, open = {}, submit = { _, _ -> }) }
+        assertTrue("translation off draws the original", has("Should the export keep the old columns?")); noFoot()
     }
 
     @Test fun aCoordinatorQuestionWithNoOrAFailedTranslationIsDrawnAsWritten() {

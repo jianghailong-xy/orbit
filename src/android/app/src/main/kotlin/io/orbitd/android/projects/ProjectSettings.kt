@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -479,7 +480,8 @@ internal fun RequestedStartSheet(api: ProjectApi, id: String, enabled: Boolean, 
                 val cancel: @Composable () -> Unit = { TextButton(onClick = close, enabled = !starting, modifier = Modifier.testTag("project-start-request-cancel")) { Text("Cancel") } }
                 val doc = document
                 val row = doc?.let { StartProjectCopy.live(openItems, ProjectDoc.started(it)) } ?: held
-                val translated = row?.let(OwnerCardTranslation::openItem)
+                val owner = LocalTranslation.current.cardLanguage
+                val translated = row?.let { OwnerCardTranslation.openItem(it, owner) }
                 val request = StartProjectCopy.request(if (translated != null && !showOriginal) translated else row)
                 if (doc != null && confirmation != null && row != null && request != null && integrationAnswered) {
                     LaunchedEffect(row) { if (held == null) held = row }

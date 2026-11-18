@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -112,7 +113,8 @@ fun CrossingReview(asked: CrossingBatch, state: CrossingCardStore.State, close: 
     // Each crossing's title and reason in the owner's language (Settings › Translation), the whole review flipped to the agent's
     // words by one foot; the answer goes by the rows' ids, which a translation does not change.
     var showOriginal by remember(asked.id) { mutableStateOf(false) }
-    val translated = remember(asked) { asked.rows.map(OwnerCardTranslation::crossing) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { asked.rows.map { OwnerCardTranslation.crossing(it, owner) } }
     val batch = if (translated.any { it != null } && !showOriginal) CrossingBatch(asked.rows.mapIndexed { i, row -> translated[i] ?: row }) else asked
     val tone = LocalOrbitColors.current.needsYou
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant

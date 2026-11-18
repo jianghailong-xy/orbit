@@ -325,6 +325,10 @@ export interface OwnerCardTranslation {
   options?: Array<{ label?: string; description?: string }>;
   /** A question's or a request's `ifUnanswered`. */
   ifUnanswered?: string;
+  /** An open coordinator question's `detailLine` (`ProjectOpenItemRow.detailLine`) built from the translated
+   *  `ifUnanswered`: "Blocks N tasks · If you don’t answer: <translated>". Served by the open-items read only,
+   *  beside a whole translation in the owner's current language; never stored. Absent from an older server. */
+  detailLine?: string;
   /** An owner request's `title`. */
   title?: string;
   /** An owner request's `why`. */

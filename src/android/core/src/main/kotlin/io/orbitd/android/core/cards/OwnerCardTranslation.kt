@@ -8,7 +8,8 @@ import kotlinx.serialization.json.*
  * request, an owner request, an owner confirmation's report and review, completion evidence, a criteria-change proposal and a
  * crossing. Each carries an optional `translation` beside the fields the agent wrote, which stay exactly as written.
  *
- * A card is drawn translated whole, or as the agent wrote it: a translation that is absent, `failed`, or changes nothing the card
+ * A card is drawn translated whole, or as the agent wrote it: a translation that is absent, `failed`, in a language other than the
+ * owner's current one ([owner]: the owner's language while their translation is on, null while it is off), or changes nothing the card
  * draws yields null here, and the card is drawn as it came, with no "Translated · Show original" foot. The fields each card
  * translates are the server's (`*_FIELDS` in src/apiserver/src/sessions/card-translation.ts); a field the original lacks is never
  * added, and arrays go index for index. Answers go by index, so a translated option label changes no press.
@@ -37,9 +38,10 @@ object OwnerCardTranslation {
     val CROSSING_FIELDS = mapOf("title" to Field.Words, "reason" to Field.Words)
     val CRITERIA_FIELDS = mapOf("proposed" to Field.Items(mapOf("text" to Field.Words, "verificationMethod" to Field.Words)))
 
-    /** A translation the card can be drawn in: an object that is not `failed`. */
-    fun usable(translation: JsonElement?): JsonObject? =
-        (translation as? JsonObject)?.takeIf { (it["failed"] as? JsonPrimitive)?.booleanOrNull != true }
+    /** A translation the card can be drawn in: an object in the [owner]'s language that is not `failed`. [owner] is null while the
+     *  owner's translation is off, and then none is. */
+    fun usable(translation: JsonElement?, owner: String?): JsonObject? =
+        (translation as? JsonObject)?.takeIf { owner != null && it.text("lang") == owner && (it["failed"] as? JsonPrimitive)?.booleanOrNull != true }
 
     /** [original] with [translation]'s words in place of each of [fields] it has; everything else as it is. */
     fun overlay(original: JsonObject, translation: JsonObject, fields: Map<String, Field>): JsonObject {
@@ -63,32 +65,38 @@ object OwnerCardTranslation {
     }
 
     /** [original] drawn in [translation], or null when there is none to draw it in, or it changes nothing. */
-    fun translated(original: JsonObject, translation: JsonElement?, fields: Map<String, Field>): JsonObject? {
-        val t = usable(translation) ?: return null
+    fun translated(original: JsonObject, translation: JsonElement?, fields: Map<String, Field>, owner: String?): JsonObject? {
+        val t = usable(translation, owner) ?: return null
         return overlay(original, t, fields).takeIf { it != original }
     }
 
     /** [row] with its nested [key] object drawn in the row's own `translation`; null when that changes nothing. */
-    private fun nested(row: JsonObject, key: String, fields: Map<String, Field>): JsonObject? {
+    private fun nested(row: JsonObject, key: String, fields: Map<String, Field>, owner: String?): JsonObject? {
         val inner = row.obj(key) ?: return null
-        return translated(inner, row["translation"], fields)?.let { JsonObject(row + (key to it)) }
+        return translated(inner, row["translation"], fields, owner)?.let { JsonObject(row + (key to it)) }
     }
 
-    /** A project open item (ProjectOpenItemRow): a COORDINATOR_QUESTION's `question`, a START_REQUEST's `startRequest.why`, a
-     * DONE_REQUEST's `doneRequest`, each from the row's `translation`. */
-    fun openItem(row: JsonObject): JsonObject? = when (row.text("kind")) {
-        "COORDINATOR_QUESTION" -> nested(row, "question", QUESTION_FIELDS)
-        "START_REQUEST" -> nested(row, "startRequest", START_REQUEST_FIELDS)
-        "DONE_REQUEST" -> nested(row, "doneRequest", DONE_REQUEST_FIELDS)
+    /** A project open item (ProjectOpenItemRow): a COORDINATOR_QUESTION's `question` and its `detailLine` (the server's line built
+     * from the translated `ifUnanswered`, `translation.detailLine`), a START_REQUEST's `startRequest.why`, a DONE_REQUEST's
+     * `doneRequest`, each from the row's `translation`. */
+    fun openItem(row: JsonObject, owner: String?): JsonObject? = when (row.text("kind")) {
+        "COORDINATOR_QUESTION" -> {
+            val shown = nested(row, "question", QUESTION_FIELDS, owner) ?: row
+            val line = usable(row["translation"], owner)?.let { words(it, "detailLine") }
+            (if (line != null && row["detailLine"] is JsonPrimitive) JsonObject(shown + ("detailLine" to JsonPrimitive(line))) else shown)
+                .takeIf { it != row }
+        }
+        "START_REQUEST" -> nested(row, "startRequest", START_REQUEST_FIELDS, owner)
+        "DONE_REQUEST" -> nested(row, "doneRequest", DONE_REQUEST_FIELDS, owner)
         else -> null
     }
 
     /** A question that has ended (ProjectClosedQuestion): its `question`, as it was translated while open. */
-    fun closedQuestion(record: JsonObject): JsonObject? = nested(record, "question", QUESTION_FIELDS)
+    fun closedQuestion(record: JsonObject, owner: String?): JsonObject? = nested(record, "question", QUESTION_FIELDS, owner)
 
     /** An owner request, as the card draws it. */
-    fun ownerRequest(request: OwnerRequest): OwnerRequest? {
-        val t = usable(request.translation) ?: return null
+    fun ownerRequest(request: OwnerRequest, owner: String?): OwnerRequest? {
+        val t = usable(request.translation, owner) ?: return null
         val shown = request.copy(
             title = words(t, "title") ?: request.title,
             why = words(t, "why")?.takeIf { request.why.isNotEmpty() } ?: request.why,
@@ -107,18 +115,18 @@ object OwnerCardTranslation {
     }
 
     /** A pending completion-evidence row: its `claim` and `gaps` (EvidenceTranslation). */
-    fun evidence(row: JsonObject): JsonObject? = translated(row, row["translation"], EVIDENCE_FIELDS)
+    fun evidence(row: JsonObject, owner: String?): JsonObject? = translated(row, row["translation"], EVIDENCE_FIELDS, owner)
 
     /** A crossing (a `GET /projects/:id/handoffs` row): its `title` and `reason`. */
-    fun crossing(row: JsonObject): JsonObject? = translated(row, row["translation"], CROSSING_FIELDS)
+    fun crossing(row: JsonObject, owner: String?): JsonObject? = translated(row, row["translation"], CROSSING_FIELDS, owner)
 
     /**
      * A pending criteria-change proposal: each proposed criterion's `text` and `verificationMethod`. The card draws the proposal as
      * its diff against the criteria in force, cut word by word from the agent's own words; drawn translated, each entry shows what is
      * on record and what is proposed, the proposal in the owner's language, matched to `proposed` by ordinal, without that cut.
      */
-    fun criteria(row: JsonObject): JsonObject? {
-        val proposed = translated(row, row["translation"], CRITERIA_FIELDS) ?: return null
+    fun criteria(row: JsonObject, owner: String?): JsonObject? {
+        val proposed = translated(row, row["translation"], CRITERIA_FIELDS, owner) ?: return null
         val byOrdinal = proposed.objects("proposed").associateBy { it.number("ordinal") }
         val diff = row.obj("diff") ?: return proposed
         val entries = diff.objects("entries").map { entry ->
@@ -138,17 +146,17 @@ object OwnerCardTranslation {
      * (its run event's own translation, `{ lang, text }`), the review's `judgment` and `needsYou`, and a PROBLEMS record's `reason`
      * and `problems`.
      */
-    fun confirmation(view: JsonObject): JsonObject? {
+    fun confirmation(view: JsonObject, owner: String?): JsonObject? {
         val waiting = view.obj("waiting") ?: return null
         val next = waiting.toMutableMap()
         waiting.obj("report")?.let { report ->
-            val text = usable(report["translation"])?.text("text")?.takeIf { it.isNotEmpty() }
+            val text = usable(report["translation"], owner)?.text("text")?.takeIf { it.isNotEmpty() }
             if (text != null && report["text"] is JsonPrimitive) next["report"] = JsonObject(report + ("text" to JsonPrimitive(text)))
         }
         waiting.obj("review")?.let { review ->
             val reviewed = review.toMutableMap()
-            review.obj("review")?.let { record -> translated(record, record["translation"], REVIEW_FIELDS)?.let { reviewed["review"] = it } }
-            review.obj("problems")?.let { record -> translated(record, record["translation"], PROBLEMS_FIELDS)?.let { reviewed["problems"] = it } }
+            review.obj("review")?.let { record -> translated(record, record["translation"], REVIEW_FIELDS, owner)?.let { reviewed["review"] = it } }
+            review.obj("problems")?.let { record -> translated(record, record["translation"], PROBLEMS_FIELDS, owner)?.let { reviewed["problems"] = it } }
             next["review"] = JsonObject(reviewed)
         }
         val shown = JsonObject(view + ("waiting" to JsonObject(next)))
@@ -157,12 +165,12 @@ object OwnerCardTranslation {
 
     /** A card from [CardCatalog] drawn in the owner's language, or null when it has no translation to draw. Its binding and its
      * doors are the card's own: only what it draws changes. */
-    fun card(card: InteractionCard): InteractionCard? = when (card.family) {
-        CardFamily.OWNER_QUESTION, CardFamily.START -> openItem(card.source)?.let { card.copy(source = it) }
-        CardFamily.QUESTION_RECORD -> closedQuestion(card.source)?.let { card.copy(source = it) }
-        CardFamily.EVIDENCE -> if (card.key.startsWith("receipt:")) null else evidence(card.source)?.let { card.copy(source = it) }
-        CardFamily.CRITERIA_CHANGE -> if (card.key.startsWith("receipt:")) null else criteria(card.source)?.let { card.copy(source = it) }
-        CardFamily.OWNER_CONFIRMATION -> if (card.context.text("ownerCard") != "question") null else confirmation(card.source)?.let { shown ->
+    fun card(card: InteractionCard, owner: String?): InteractionCard? = when (card.family) {
+        CardFamily.OWNER_QUESTION, CardFamily.START -> openItem(card.source, owner)?.let { card.copy(source = it) }
+        CardFamily.QUESTION_RECORD -> closedQuestion(card.source, owner)?.let { card.copy(source = it) }
+        CardFamily.EVIDENCE -> if (card.key.startsWith("receipt:")) null else evidence(card.source, owner)?.let { card.copy(source = it) }
+        CardFamily.CRITERIA_CHANGE -> if (card.key.startsWith("receipt:")) null else criteria(card.source, owner)?.let { card.copy(source = it) }
+        CardFamily.OWNER_CONFIRMATION -> if (card.context.text("ownerCard") != "question") null else confirmation(card.source, owner)?.let { shown ->
             card.copy(source = shown, context = JsonObject(card.context + ("view" to shown)))
         }
         else -> null

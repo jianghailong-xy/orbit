@@ -27,7 +27,7 @@ class OwnerCardTranslationTest {
     @Test fun aCoordinatorQuestionIsReadIndexForIndex() {
         val row = j("""{"kind":"COORDINATOR_QUESTION","question":{"question":"Q?","options":[{"label":"A","description":"a"},{"label":"B"}],"recommendedOption":0},
             "translation":{"lang":"ja","question":"問？","options":[{"label":"甲","description":"甲です"},{"label":"乙","description":"not in the original"}]}}""")
-        val q = OwnerCardTranslation.openItem(row)!!.obj("question")!!
+        val q = OwnerCardTranslation.openItem(row, "ja")!!.obj("question")!!
         assertEquals("問？", q.text("question"))
         assertEquals(listOf("甲", "乙"), q.objects("options").map { it.text("label") })
         assertEquals("甲です", q.objects("options")[0].text("description"))
@@ -37,18 +37,47 @@ class OwnerCardTranslationTest {
 
     @Test fun noTranslationAFailedOneOrOneThatChangesNothingIsNone() {
         val base = """{"kind":"COORDINATOR_QUESTION","question":{"question":"Q?"}"""
-        assertNull(OwnerCardTranslation.openItem(j("$base}")))
-        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja","failed":true}}""")))
-        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja","question":"Q?"}}""")))
-        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja"}}""")))
+        assertNull(OwnerCardTranslation.openItem(j("$base}"), "ja"))
+        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja","failed":true}}"""), "ja"))
+        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja","question":"Q?"}}"""), "ja"))
+        assertNull(OwnerCardTranslation.openItem(j("""$base,"translation":{"lang":"ja"}}"""), "ja"))
+    }
+
+    @Test fun aTranslationInAnotherLanguageThanTheOwnersOrWithTranslationOffIsNone() {
+        val row = j("""{"kind":"COORDINATOR_QUESTION","question":{"question":"Q?"},"translation":{"lang":"ja","question":"問？"}}""")
+        assertNotNull(OwnerCardTranslation.openItem(row, "ja"))
+        assertNull("another language than the owner's current one is drawn as the original", OwnerCardTranslation.openItem(row, "zh-Hans"))
+        assertNull("translation off", OwnerCardTranslation.openItem(row, null))
+        val request = Wire.decode(j("""{"id":"r","kind":"DECISION","state":"PENDING","title":"Pick","why":"W","createdAt":"2026-11-18T00:00:00Z",
+            "translation":{"lang":"ja","title":"選ぶ"}}""").toString().encodeToByteArray(), OwnerRequest.serializer())
+        assertNull(OwnerCardTranslation.ownerRequest(request, "zh-Hans"))
+        assertNull(OwnerCardTranslation.card(InteractionCard("item:q", CardFamily.OWNER_QUESTION, "Q", row, "s", "p", "q", "b", listOf(CardVerb.OWNER_ANSWER)), "zh-Hans"))
+    }
+
+    @Test fun aQuestionsDetailLineIsTheServersTranslatedOneWhileDrawnTranslated() {
+        val row = j("""{"kind":"COORDINATOR_QUESTION","detailLine":"If you don’t answer: I keep both.","question":{"question":"Q?","ifUnanswered":"I keep both."},
+            "translation":{"lang":"ja","question":"問？","ifUnanswered":"両方残す。","detailLine":"If you don’t answer: 両方残す。"}}""")
+        assertEquals("If you don’t answer: 両方残す。", OwnerCardTranslation.openItem(row, "ja")!!.text("detailLine"))
+        assertEquals("the original keeps row.detailLine", "If you don’t answer: I keep both.", row.text("detailLine"))
+        val older = j("""{"kind":"COORDINATOR_QUESTION","detailLine":"d","question":{"question":"Q?"},"translation":{"lang":"ja","question":"問？"}}""")
+        assertEquals("a translation served without one keeps row.detailLine", "d", OwnerCardTranslation.openItem(older, "ja")!!.text("detailLine"))
+    }
+
+    @Test fun anOwnerRequestsInboxRowTitleIsTranslatedWhileItsCardWouldBe() {
+        val request = Wire.decode(j("""{"id":"r","kind":"DECISION","state":"PENDING","title":"Pick a region","why":"W","createdAt":"2026-11-18T00:00:00Z",
+            "translation":{"lang":"ja","title":"リージョンを選ぶ"}}""").toString().encodeToByteArray(), OwnerRequest.serializer())
+        assertEquals("リージョンを選ぶ", OwnerRequests.rowTitle(request, "ja"))
+        assertEquals("Pick a region", OwnerRequests.rowTitle(request, "zh-Hans"))
+        assertEquals("Pick a region", OwnerRequests.rowTitle(request, null))
+        assertEquals("Pick a region", OwnerRequests.rowTitle(request.copy(translation = j("""{"lang":"ja","failed":true}""")), "ja"))
     }
 
     @Test fun startAndDoneRequestsReadTheirOwnFields() {
-        val start = OwnerCardTranslation.openItem(j("""{"kind":"START_REQUEST","startRequest":{"why":"Because","criteriaDigest":"d"},"translation":{"lang":"ja","why":"理由"}}"""))!!
+        val start = OwnerCardTranslation.openItem(j("""{"kind":"START_REQUEST","startRequest":{"why":"Because","criteriaDigest":"d"},"translation":{"lang":"ja","why":"理由"}}"""), "ja")!!
         assertEquals("理由", start.obj("startRequest")!!.text("why"))
         assertEquals("d", start.obj("startRequest")!!.text("criteriaDigest"))
         val done = OwnerCardTranslation.openItem(j("""{"kind":"DONE_REQUEST","doneRequest":{"judgment":"Met","gaps":[{"criterionKey":"k","title":"T","whyNotProven":"W"}]},
-            "translation":{"lang":"ja","judgment":"達成","gaps":[{"title":"題","whyNotProven":"理由"}]}}"""))!!.obj("doneRequest")!!
+            "translation":{"lang":"ja","judgment":"達成","gaps":[{"title":"題","whyNotProven":"理由"}]}}"""), "ja")!!.obj("doneRequest")!!
         assertEquals("達成", done.text("judgment"))
         assertEquals("k", done.objects("gaps")[0].text("criterionKey"))
         assertEquals("題", done.objects("gaps")[0].text("title"))
@@ -59,21 +88,21 @@ class OwnerCardTranslationTest {
             "steps":[{"text":"Run this","command":"gcloud services enable x","link":"https://example.test"}],"verifyHint":"Check it",
             "translation":{"lang":"ja","title":"有効にする","why":"失敗する","steps":[{"text":"これを実行"}],"verifyHint":"確認する"}}""").toString().encodeToByteArray(),
             OwnerRequest.serializer())
-        val shown = OwnerCardTranslation.ownerRequest(request)!!
+        val shown = OwnerCardTranslation.ownerRequest(request, "ja")!!
         assertEquals("有効にする", shown.title); assertEquals("失敗する", shown.why); assertEquals("確認する", shown.verifyHint)
         assertEquals(OwnerRequestStep("これを実行", "gcloud services enable x", "https://example.test"), shown.steps!!.single())
-        assertNull(OwnerCardTranslation.ownerRequest(request.copy(translation = j("""{"lang":"ja","failed":true}"""))))
-        assertNull(OwnerCardTranslation.ownerRequest(request.copy(translation = null)))
+        assertNull(OwnerCardTranslation.ownerRequest(request.copy(translation = j("""{"lang":"ja","failed":true}""")), "ja"))
+        assertNull(OwnerCardTranslation.ownerRequest(request.copy(translation = null), "ja"))
     }
 
     @Test fun evidenceCrossingAndCriteriaReadTheirFields() {
-        val evidence = OwnerCardTranslation.evidence(j("""{"claim":"Done","gaps":["G1","G2"],"translation":{"lang":"ja","claim":"完了","gaps":["欠1"]}}"""))!!
+        val evidence = OwnerCardTranslation.evidence(j("""{"claim":"Done","gaps":["G1","G2"],"translation":{"lang":"ja","claim":"完了","gaps":["欠1"]}}"""), "ja")!!
         assertEquals("完了", evidence.text("claim")); assertEquals(listOf("欠1", "G2"), evidence.strings("gaps"))
-        val crossing = OwnerCardTranslation.crossing(j("""{"id":"h","title":"T","reason":"R","translation":{"lang":"ja","title":"題","reason":"理"}}"""))!!
+        val crossing = OwnerCardTranslation.crossing(j("""{"id":"h","title":"T","reason":"R","translation":{"lang":"ja","title":"題","reason":"理"}}"""), "ja")!!
         assertEquals("題", crossing.text("title")); assertEquals("理", crossing.text("reason"))
         val criteria = OwnerCardTranslation.criteria(j("""{"proposed":[{"ordinal":1,"text":"T","verificationMethod":"V"}],
             "diff":{"entries":[{"ordinal":1,"onRecord":{"text":"Old"},"proposed":{"text":"T","verificationMethod":"V"},"rewrites":[{"field":"text"}]}]},
-            "translation":{"lang":"ja","proposed":[{"text":"案","verificationMethod":"方法"}]}}"""))!!
+            "translation":{"lang":"ja","proposed":[{"text":"案","verificationMethod":"方法"}]}}"""), "ja")!!
         val entry = criteria.obj("diff")!!.objects("entries").single()
         assertEquals("案", entry.obj("proposed")!!.text("text")); assertEquals("方法", entry.obj("proposed")!!.text("verificationMethod"))
         assertEquals("Old", entry.obj("onRecord")!!.text("text"))
@@ -85,7 +114,7 @@ class OwnerCardTranslationTest {
             "review":{"state":"REVIEWED","review":{"judgment":"OK","needsYou":[{"key":"k","text":"Pick","options":[{"label":"A"}]}],
               "translation":{"lang":"ja","judgment":"良い","needsYou":[{"text":"選ぶ","options":[{"label":"甲"}]}]}},
               "problems":{"reason":"Broke","problems":[{"text":"P"}],"translation":{"lang":"ja","failed":true}}}}}""")
-        val waiting = OwnerCardTranslation.confirmation(view)!!.obj("waiting")!!
+        val waiting = OwnerCardTranslation.confirmation(view, "ja")!!.obj("waiting")!!
         assertEquals("言った", waiting.obj("report")!!.text("text"))
         val record = waiting.obj("review")!!.obj("review")!!
         assertEquals("良い", record.text("judgment"))

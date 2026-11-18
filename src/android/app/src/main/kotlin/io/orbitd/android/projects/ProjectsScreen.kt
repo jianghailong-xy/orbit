@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1304,7 +1305,8 @@ private fun CrossingRow(asked: JsonObject, confirming: Boolean?, busy: Boolean, 
     // Its title and reason in the owner's language (Settings › Translation), flipped whole to the agent's words by the foot; the
     // answer is pressed with the row as it came.
     var showOriginal by remember(asked.text("id")) { mutableStateOf(false) }
-    val translated = remember(asked) { OwnerCardTranslation.crossing(asked) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.crossing(asked, owner) }
     val row = if (translated != null && !showOriginal) translated else asked
     val id = row.text("id")
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant

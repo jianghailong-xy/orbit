@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -52,7 +53,8 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
     // The owner cards outside a session — a coordinator's question, evidence, a criteria change, an owner confirmation — the same
     // way, drawn from the card's own `translation` (OwnerCardTranslation); their doors and binding stay the card's.
-    val owned = remember(card) { OwnerCardTranslation.card(card) }
+    val owner = LocalTranslation.current.cardLanguage
+    val owned = remember(card, owner) { OwnerCardTranslation.card(card, owner) }
     val shown = if (owned != null) (if (showOriginal) card else owned) else OrbitCardTranslation.shown(card, showOriginal)
     val batchPreview = shown.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
     val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }

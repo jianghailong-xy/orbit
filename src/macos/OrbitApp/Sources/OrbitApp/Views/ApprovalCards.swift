@@ -4319,8 +4319,10 @@ private struct CoordinatorQuestionCardView: View {
             }
             // What it holds up and what happens if nobody answers, in the server's own words — the
             // same line the project page's row carries, so the two cannot say different things.
-            if !row.detailLine.isEmpty {
-                Text(row.detailLine)
+            // Drawn translated, the server's line built from the translated ifUnanswered.
+            let detailLine = row.shownDetailLine(owner: owner, showOriginal: showOriginal)
+            if !detailLine.isEmpty {
+                Text(detailLine)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

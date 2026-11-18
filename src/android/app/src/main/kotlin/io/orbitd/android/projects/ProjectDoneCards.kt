@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,7 +65,8 @@ private fun ProjectDoneQuestion(doc: JsonObject, request: JsonObject?, confirmed
     val main = ProjectDone.mainBranch(doc)
     // The coordinator's call and gaps in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
     var showOriginal by rememberSaveable(tag) { mutableStateOf(false) }
-    val translated = request?.let(OwnerCardTranslation::openItem)
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = request?.let { OwnerCardTranslation.openItem(it, owner) }
     val asked = (if (translated != null && !showOriginal) translated else request)?.obj("doneRequest")
     var recording by remember { mutableStateOf(false) }
     // "Not yet…" and the note it asks for, kept while the card is up.

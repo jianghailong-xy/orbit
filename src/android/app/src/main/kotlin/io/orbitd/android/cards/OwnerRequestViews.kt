@@ -1,5 +1,6 @@
 package io.orbitd.android.cards
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,7 +69,8 @@ fun OwnerRequestCard(asked: OwnerRequest, store: OwnerRequestStore, runner: (Str
     // The agent's words in the owner's language (Settings › Translation), flipped whole to its own words by the foot; the doors
     // take the request's id and option indexes, which a translation does not change.
     var showOriginal by remember(asked.id) { mutableStateOf(false) }
-    val translated = remember(asked) { OwnerCardTranslation.ownerRequest(asked) }
+    val owner = LocalTranslation.current.cardLanguage
+    val translated = remember(asked, owner) { OwnerCardTranslation.ownerRequest(asked, owner) }
     val request = if (translated != null && !showOriginal) translated else asked
     val state by store.state.collectAsState()
     val context = LocalContext.current

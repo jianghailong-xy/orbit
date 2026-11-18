@@ -156,6 +156,9 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     options: [{ label: zh('Reopen now'), description: zh('Accept the cost.') }, { label: zh('Wait') }],
     ifUnanswered: zh('the rollout stays paused'),
   };
+  // What the open-items read serves: the stored translation and the detail line built from its ifUnanswered,
+  // Orbit's own "If you don’t answer:" kept in English.
+  const servedQuestion = { ...translatedQuestion, detailLine: `If you don’t answer: ${zh('the rollout stays paused')}` };
 
   await t.test('(a) a question and a request are translated after filing and served with it', async () => {
     await reset();
@@ -171,8 +174,9 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
       'a step\'s command and link are never sent');
     assert.deepEqual(await stored('project_open_item', itemId), translatedQuestion);
     const row = await openRow(itemId);
-    assert.deepEqual(row.translation, translatedQuestion, 'the open-items read serves it');
+    assert.deepEqual(row.translation, servedQuestion, 'the open-items read serves it, with its detail line translated');
     assert.equal(row.question?.question, QUESTION.question, 'and the question as the agent wrote it beside it');
+    assert.equal(row.detailLine, 'If you don’t answer: the rollout stays paused', 'and the detail line as built from it');
     assert.ok(published.includes(`project_changed:${p.projectId}`), 'the project is announced changed');
 
     assert.deepEqual((await listed(decision.id)).translation, {
@@ -205,7 +209,8 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
 
     assert.deepEqual(await stored('project_open_item', itemId), { lang: 'zh-Hans', failed: true });
     const row = await openRow(itemId);
-    assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true });
+    assert.deepEqual(row.translation, { lang: 'zh-Hans', failed: true }, 'no translated detail line beside a failed one');
+    assert.equal(row.detailLine, 'If you don’t answer: the rollout stays paused');
     assert.equal(row.question?.question, QUESTION.question);
     assert.deepEqual(row.question?.options, QUESTION.options, 'the original, untouched');
     const request = await listed(decision.id);
@@ -262,7 +267,7 @@ test('owner cards outside a session are translated, once, whole or failed', { sk
     const questionPieces = 5; // question, two labels, one description, ifUnanswered
     const decisionPieces = 6; // title, why, ifUnanswered, two labels, one description
     assert.equal(asked.length, questionPieces + decisionPieces, 'each card was translated exactly once');
-    assert.deepEqual((await openRow(itemId)).translation, translatedQuestion, 'and the next read serves it');
+    assert.deepEqual((await openRow(itemId)).translation, servedQuestion, 'and the next read serves it');
     assert.equal(((await listed(decision.id)).translation as { title?: string } | null)?.title, zh('Pick a region'));
   });
 

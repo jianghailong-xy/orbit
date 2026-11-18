@@ -3421,6 +3421,11 @@ export class ProjectOpenItemService {
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
     const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
+    // The owner's language, read only when a question's card is translated: its detail line is served
+    // translated too, in that language alone.
+    const langs = rows.some((row) => row.kind === 'COORDINATOR_QUESTION' && row.translation)
+      ? await translationLanguages(this.prisma, ownerId)
+      : null;
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
@@ -3447,7 +3452,9 @@ export class ProjectOpenItemService {
               ? doneRequestDetailLine(doneRequest)
               : detailLine(row.kind, row.payload),
         question,
-        ...(row.translation ? { translation: row.translation as unknown as OwnerCardTranslation } : {}),
+        ...(row.translation
+          ? { translation: withTranslatedDetailLine(question, row.translation as unknown as OwnerCardTranslation, langs) }
+          : {}),
         startRequest,
         doneRequest,
         facts: openItemFacts(
@@ -4069,6 +4076,23 @@ function conditionStandsRefusal(item: RefusedItem): string {
 
 function randomKey(): string {
   return randomUUID();
+}
+
+/**
+ * A question's translation as the open-items read serves it: with `detailLine`, the question's detail line
+ * built from the translated `ifUnanswered`, when the translation is whole and in the owner's current language.
+ * "Blocks N tasks · If you don't answer:" stays Orbit's own English; only the agent's words are swapped in.
+ */
+function withTranslatedDetailLine(
+  question: CoordinatorQuestion | null,
+  translation: OwnerCardTranslation,
+  langs: TranslationLanguages | null,
+): OwnerCardTranslation {
+  if (!question || translation.failed || !langs || !translatedInto(translation, langs)) return translation;
+  return {
+    ...translation,
+    detailLine: questionDetailLine({ ...question, ifUnanswered: translation.ifUnanswered ?? question.ifUnanswered }),
+  };
 }
 
 /** The line under an item's title, in the words of the fact (English: this is UI copy). */

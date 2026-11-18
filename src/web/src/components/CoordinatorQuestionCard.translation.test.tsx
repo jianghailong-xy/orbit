@@ -81,6 +81,25 @@ describe('the coordinator question in the owner’s language', () => {
     expect(h.text()).toContain(TRANSLATED);
   });
 
+  it('draws the translated detail line while translated, and row.detailLine once flipped to the original', async () => {
+    const original = 'Blocks 1 task · If you don’t answer: the export keeps both shapes';
+    const translatedLine = 'Blocks 1 task · If you don’t answer: l’export garde les deux formats';
+    const base = row();
+    await draw(row({ detailLine: original, translation: { ...base.translation!, detailLine: translatedLine } }));
+    expect(h.text()).toContain(translatedLine);
+    expect(h.text()).not.toContain(original);
+
+    await h.press(TRANSLATION_COPY.showOriginal);
+    expect(h.text()).toContain(original);
+    expect(h.text()).not.toContain(translatedLine);
+  });
+
+  it('draws row.detailLine when there is no translation', async () => {
+    const original = 'If you don’t answer: the export keeps both shapes';
+    await draw(row({ detailLine: original, translation: undefined }));
+    expect(h.text()).toContain(original);
+  });
+
   it.each([
     ['no translation', row({ translation: undefined }), clientWithMe()],
     ['a failed translation', row({ translation: { lang: OWNER_LANG, failed: true } }), clientWithMe()],

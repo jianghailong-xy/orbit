@@ -1,5 +1,6 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.management.LocalTranslation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -230,7 +231,7 @@ fun CoordinatorStartCard(card: InteractionCard, reads: Map<String, JsonElement>,
     val doc = card.context
     // The coordinator's why in the owner's language (Settings › Translation), flipped whole to its own words by the foot.
     var showOriginal by rememberSaveable(card.key) { mutableStateOf(false) }
-    val translated = OwnerCardTranslation.openItem(card.source)
+    val translated = OwnerCardTranslation.openItem(card.source, LocalTranslation.current.cardLanguage)
     val request = StartProjectCopy.request(if (translated != null && !showOriginal) translated else card.source)
     // The project's repository, the branches its main branch can be chosen from and this account's last choice there: the session
     // read carries them while the project is unstarted, so the card is never drawn on main and then moved. One that failed offers

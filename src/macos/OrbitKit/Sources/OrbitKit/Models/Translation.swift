@@ -855,12 +855,16 @@ public struct OwnerCardTranslation: Codable, Equatable, Sendable {
     public var reason: String?
     public var problems: [Text]?
     public var proposed: [TranslatedCriterionItem]?
+    /// An open coordinator question's `detailLine` built from the translated `ifUnanswered`, served by the
+    /// open-items read beside a whole translation in the owner's language. Absent from an older server.
+    public var detailLine: String?
 
     public init(lang: String, failed: Bool = false, question: String? = nil, options: [Option]? = nil,
                 ifUnanswered: String? = nil, title: String? = nil, why: String? = nil,
                 steps: [Text]? = nil, verifyHint: String? = nil, judgment: String? = nil,
                 gaps: [Gap]? = nil, needsYou: [NeedsYou]? = nil, reason: String? = nil,
-                problems: [Text]? = nil, proposed: [TranslatedCriterionItem]? = nil) {
+                problems: [Text]? = nil, proposed: [TranslatedCriterionItem]? = nil,
+                detailLine: String? = nil) {
         self.lang = lang
         self.failed = failed
         self.question = question
@@ -876,11 +880,12 @@ public struct OwnerCardTranslation: Codable, Equatable, Sendable {
         self.reason = reason
         self.problems = problems
         self.proposed = proposed
+        self.detailLine = detailLine
     }
 
     private enum CodingKeys: String, CodingKey {
         case lang, failed, question, options, ifUnanswered, title, why, steps, verifyHint, judgment
-        case gaps, needsYou, reason, problems, proposed
+        case gaps, needsYou, reason, problems, proposed, detailLine
     }
 
     public init(from decoder: Decoder) throws {
@@ -900,6 +905,7 @@ public struct OwnerCardTranslation: Codable, Equatable, Sendable {
         reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
         problems = (try? c.decodeIfPresent([Text].self, forKey: .problems)) ?? nil
         proposed = (try? c.decodeIfPresent([TranslatedCriterionItem].self, forKey: .proposed)) ?? nil
+        detailLine = (try? c.decodeIfPresent(String.self, forKey: .detailLine)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -919,6 +925,7 @@ public struct OwnerCardTranslation: Codable, Equatable, Sendable {
         try c.encodeIfPresent(reason, forKey: .reason)
         try c.encodeIfPresent(problems, forKey: .problems)
         try c.encodeIfPresent(proposed, forKey: .proposed)
+        try c.encodeIfPresent(detailLine, forKey: .detailLine)
     }
 }
 

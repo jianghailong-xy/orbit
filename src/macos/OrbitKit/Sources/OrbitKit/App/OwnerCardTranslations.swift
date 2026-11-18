@@ -141,6 +141,12 @@ public extension ProjectOpenItemRow {
         return question.translated(t)
     }
 
+    /// A `COORDINATOR_QUESTION`'s detail line as the card draws it: the server's line built from the
+    /// translated `ifUnanswered` while the card is drawn translated, `detailLine` otherwise.
+    func shownDetailLine(owner: TranslationLanguage?, showOriginal: Bool) -> String {
+        shownTranslation(owner, showOriginal)?.detailLine ?? detailLine
+    }
+
     /// A `START_REQUEST`'s request as the card draws it.
     func shownStartRequest(owner: TranslationLanguage?, showOriginal: Bool) -> ProjectStartRequest? {
         guard let startRequest, let t = shownTranslation(owner, showOriginal) else { return startRequest }

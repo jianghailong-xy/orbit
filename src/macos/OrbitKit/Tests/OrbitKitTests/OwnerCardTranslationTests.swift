@@ -109,6 +109,26 @@ final class OwnerCardTranslationTests: XCTestCase {
         XCTAssertEqual(none.translationFoot(owner: zh, showOriginal: false), [])
     }
 
+    func testTheQuestionsDetailLineIsDrawnTranslatedAndFlipsBack() throws {
+        let row = try decode(ProjectOpenItemRow.self, #"""
+        {"itemId":"i1","kind":"COORDINATOR_QUESTION","detailLine":"Blocks 1 task · If you don’t answer: I keep both.",
+         "question":{"question":"Keep?","ifUnanswered":"I keep both."},
+         "translation":{"lang":"zh-Hans","question":"保留？","ifUnanswered":"我两种都留。",
+                        "detailLine":"Blocks 1 task · If you don’t answer: 我两种都留。"}}
+        """#)
+        XCTAssertEqual(row.shownDetailLine(owner: zh, showOriginal: false), "Blocks 1 task · If you don’t answer: 我两种都留。")
+        XCTAssertEqual(row.shownDetailLine(owner: zh, showOriginal: true), row.detailLine, "the original card draws row.detailLine")
+        XCTAssertEqual(row.shownDetailLine(owner: .ja, showOriginal: false), row.detailLine, "another language is the original")
+        let older = try decode(ProjectOpenItemRow.self, #"""
+        {"itemId":"i1","kind":"COORDINATOR_QUESTION","detailLine":"If you don’t answer: I keep both.",
+         "question":{"question":"Keep?"},"translation":{"lang":"zh-Hans","question":"保留？"}}
+        """#)
+        XCTAssertEqual(older.shownDetailLine(owner: zh, showOriginal: false), older.detailLine,
+                       "a translation served without one draws row.detailLine")
+        let none = try decode(ProjectOpenItemRow.self, #"{"itemId":"i1","kind":"COORDINATOR_QUESTION","detailLine":"d","question":{"question":"Q?"}}"#)
+        XCTAssertEqual(none.shownDetailLine(owner: zh, showOriginal: false), "d")
+    }
+
     func testAnAnsweredQuestionsRecordIsDrawnTranslated() throws {
         let closed = try decode(ProjectClosedQuestion.self, """
         {"itemId":"i1","question":{"question":"Keep?","options":[{"label":"Yes"}]},"askedAt":"a",
