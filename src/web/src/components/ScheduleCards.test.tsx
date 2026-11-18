@@ -247,12 +247,9 @@ function RunSession({ sessionId }: { sessionId: string }) {
   if (!of) return null;
   return (
     <>
-      <cards.ScheduleRunCrumb of={of} />
       <cards.ScheduleRunStrip of={of} />
       <cards.ScheduleRunReport of={of} />
       <span data-inserts="">{inserts.length}</span>
-      {/* The header's agent, as WorkspaceView names it, beside a session that ran on Claude. */}
-      <span data-run-agent="">{cards.scheduleRunAgentName(of, 'Claude')}</span>
     </>
   );
 }
@@ -274,10 +271,9 @@ function serveRun(sessionId: string, run: typeof CODEX_NOV13_RUN) {
 }
 
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
-  it('has the crumb, the strip and the report card', async () => {
+  it('has the strip and the report card', async () => {
     serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
     await render(<RunSession sessionId="sess-codex-run-nov13" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Nov 13');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
       'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
@@ -285,14 +281,11 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(report.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · 0.49.0 · you were notified');
     expect(report.textContent).toContain('Codex 0.49.0 is out (pinned 0.48.0).');
     expect(report.querySelector('a')!.getAttribute('href')).toBe('https://github.com/openai/codex/releases/tag/0.49.0');
-    const crumbs = [...host.querySelectorAll('[data-schedule-crumb] a')].map((a) => a.getAttribute('href'));
-    expect(crumbs).toEqual(['/scheduled', '/scheduled?id=sch-codex']);
   });
 
   it('knows a run older than the schedule’s last 50 from the session alone, with no ?schedule= and no scan', async () => {
     serveRun('sess-codex-run-jun02', JUNE_RUN);
     await render(<RunSession sessionId="sess-codex-run-jun02" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Jun 2');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
       'Scheduled run · planned 10:00, started 10:01 · access Open a PR',
     );
@@ -303,21 +296,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('knows a run of a schedule that has ended', async () => {
     serveRun('sess-freeze-run', FREEZE_RUN);
     await render(<RunSession sessionId="sess-freeze-run" />);
-    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Release 2.0 freeze watch › run of Nov 14');
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · released@2.0.0 · you were notified');
-  });
-
-  it('names the agent in its header from the schedule’s view, not the session’s engine', async () => {
-    serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
-    await render(<RunSession sessionId="sess-codex-run-nov13" />);
-    // Codex stable check's view carries engine 'codex'; the session's own engine (Claude here) is not read.
-    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Codex');
-  });
-
-  it('names the session’s own engine when the schedule names none', async () => {
-    serveRun('sess-freeze-run', FREEZE_RUN);
-    await render(<RunSession sessionId="sess-freeze-run" />);
-    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Claude');
   });
 
   it('a reported failure’s report says what the run reported', async () => {
@@ -332,7 +311,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('draws nothing for a session that serves no run', async () => {
     serve((path) => (path === '/sessions/sess-plain/schedule-cards' ? { run: null, cards: [], records: [] } : undefined));
     await render(<RunSession sessionId="sess-plain" />);
-    expect(host.querySelector('[data-schedule-crumb]')).toBeNull();
+    expect(host.querySelector('[data-schedule-strip]')).toBeNull();
     expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-plain/schedule-cards']);
   });
 });

@@ -1800,25 +1800,6 @@ export function scheduleRunStripText(
   });
 }
 
-/**
- * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
- * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
- */
-export function scheduleRunHeadText(input: {
-  state: string | null;
-  engine: string | null;
-  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
-  now: Date;
-}): string {
-  const { run } = input;
-  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
-  if (run.startedAt) {
-    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
-    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
-  }
-  return parts.filter(Boolean).join(C.separator);
-}
-
 /** "run of Nov 13". */
 export function scheduleRunOfText(run: Pick<ScheduleRunView, 'plannedAt'>, timezone: string): string {
   return scheduleFill(C.runSession.runOf, { date: scheduleDateText(new Date(run.plannedAt), timezone) });

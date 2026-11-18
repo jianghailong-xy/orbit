@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
  * The owner's rulings: Scheduled lives in the left navigation. A workspace's session list draws no run session among
  * its own; since 2026-11-18 its runs' sessions are listed in one built-in folder, Scheduled runs, and nowhere else.
  * What the conversation does draw is read from the composition, as the landing's place is (WorkspaceView.landingSession.test.tsx): the cards and change
- * lines a session put up, and in a run's session the crumb, the strip, the report and no session column.
+ * lines a session put up, and in a run's session the strip and the report; its page is otherwise any session's.
  */
 
 const SOURCE = readFileSync(new URL('./WorkspaceView.tsx', import.meta.url), 'utf8');
@@ -53,16 +53,10 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 
-  it('has the crumb at the head of the header', () => {
-    const header = SOURCE.indexOf('<div className="workspace-header-main">');
-    const crumb = SOURCE.indexOf('<ScheduleRunCrumb of={scheduleRun} />');
-    expect(crumb).toBeGreaterThan(header);
-    expect(crumb - header).toBeLessThan(200);
-  });
-
-  it('has no Follow chip, and its header line is the run’s: state · agent · duration', () => {
-    expect(SOURCE).toContain('!selectedMissing && !isScheduleRun && (\n                <SessionWatchBadges sessionId={selectedId} />');
-    expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: scheduleRunAgentName\(scheduleRun, ENGINE_CLI_NAMES\[selectedEngine\] \?\? null\),/);
+  it('has an ordinary session’s header: no crumb, its own line and its Follow chip (owner 2026-11-19)', () => {
+    expect(SOURCE).not.toContain('ScheduleRunCrumb');
+    expect(SOURCE).not.toContain('scheduleRunHeadText');
+    expect(SOURCE).toContain('!composing && selectedId && !selectedTrashed && !selectedMissing && (\n                <SessionWatchBadges sessionId={selectedId} />');
   });
 
   it('keeps the session column: a run’s session is an ordinary session page (owner 2026-11-19)', () => {

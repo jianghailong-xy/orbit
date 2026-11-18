@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
   scheduleChangeLineText,
@@ -9,14 +9,12 @@ import {
   scheduleCreateWhen,
   scheduleDurationText,
   scheduleFill,
-  scheduleEngineName,
   scheduleEnvelopeNote,
   scheduleEnvelopeSides,
   scheduleEnvelopeTitle,
   scheduleKeepLabel,
   scheduleReportedText,
   scheduleRunLine,
-  scheduleRunOfText,
   scheduleRunStripText,
   scheduleRunsInText,
   type ScheduleCard,
@@ -357,11 +355,6 @@ export interface ScheduleRunOfSession {
   detail: ScheduleDetailResponse | undefined;
 }
 
-/** The agent a run's header names: the engine its schedule's view carries, else the session's own ("Codex"). */
-export function scheduleRunAgentName(of: Pick<ScheduleRunOfSession, 'schedule'>, sessionEngine: string | null): string | null {
-  return of.schedule.engine ? scheduleEngineName(of.schedule.engine) : sessionEngine;
-}
-
 /**
  * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer names the
  * run it serves however old (`run`), and the run names its schedule. Nothing else is searched.
@@ -372,19 +365,6 @@ export function useScheduleRunOfSession(sessionId: string | null | undefined): S
   const detail = useQuery({ ...scheduleDetailQuery(run?.scheduleId ?? ''), enabled: Boolean(run) });
   if (!run || !detail.data) return null;
   return { schedule: detail.data.schedule, run, detail: detail.data };
-}
-
-/** Scheduled › Codex stable check › run of Nov 13 (board 2/2 ⑤ ⑥). */
-export function ScheduleRunCrumb({ of }: { of: ScheduleRunOfSession }): JSX.Element {
-  return (
-    <div className="sched-crumb" data-schedule-crumb="">
-      <Link to="/scheduled">{C.runSession.crumb}</Link>
-      {' › '}
-      <Link to={schedulePath(of.schedule.id)}>{of.schedule.title}</Link>
-      {' › '}
-      {scheduleRunOfText(of.run, viewerTimezone())}
-    </div>
-  );
 }
 
 /**
