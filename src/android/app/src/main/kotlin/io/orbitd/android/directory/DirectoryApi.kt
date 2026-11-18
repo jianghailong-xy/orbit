@@ -87,6 +87,7 @@ data class DirectoryData(
                     put("id", r.id)
                     put("name", r.name)
                     r.displayName?.let { put("displayName", it) }
+                    r.managed?.let { put("managed", it) }
                     r.status?.let { put("status", it) }
                     r.online?.let { put("online", it) }
                     r.lastHeartbeatAt?.let { put("lastHeartbeatAt", it) }

@@ -104,6 +104,17 @@ export function useManagedRunnerId(): string | null {
   return flagged ?? (managedRunnerDisplay(data) ? (data?.runnerId ?? null) : null);
 }
 
+/**
+ * A list of machines with Orbit Cloud (the account's managed runner) first and the rest in their own
+ * order, as every machine list draws them (docs/mocks/orbit-cloud-pinned). The list as given without one.
+ */
+export function managedFirst<T extends { id: string }>(runners: T[], managedId: string | null): T[] {
+  if (!managedId) return runners;
+  const at = runners.findIndex((runner) => routeId(runner.id) === routeId(managedId));
+  if (at <= 0) return runners;
+  return [runners[at], ...runners.slice(0, at), ...runners.slice(at + 1)];
+}
+
 /** machineName with the account's managed runner said as Orbit Cloud. */
 export function useMachineName(): (runner: { id?: string; name?: string; displayName?: string | null; managed?: boolean }) => string {
   const managedId = useManagedRunnerId();

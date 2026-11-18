@@ -67,6 +67,16 @@ public enum RunnerPageFormat {
         return PublicID.storageKey(runnerID) == PublicID.storageKey(managedRunnerID)
     }
 
+    /// Orbit Cloud leads the list. The other machines keep the order the server gave them.
+    public static func managedFirst(_ runners: [Runner], managedRunnerID: String?) -> [Runner] {
+        guard let index = runners.firstIndex(where: { isManaged($0, managedRunnerID: managedRunnerID) }),
+              index != runners.startIndex else { return runners }
+        var order = runners
+        let managed = order.remove(at: index)
+        order.insert(managed, at: 0)
+        return order
+    }
+
     /// A list row's `4/12` and the bar beside it. The web card's rule: none for an offline machine,
     /// whose count would say nothing true, or for one with no limit reported.
     public struct Slots: Equatable, Sendable {

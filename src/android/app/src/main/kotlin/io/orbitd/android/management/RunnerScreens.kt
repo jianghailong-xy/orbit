@@ -33,6 +33,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -72,6 +73,7 @@ import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.FollowManagedRunner
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.ManagedRunnerIdentity
 import io.orbitd.android.composer.ManagedRunnerNotice
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.ProviderEngines
@@ -167,7 +169,7 @@ internal class RunnersModel(private val api: ManagementApi) {
     /** The rows move at once; the server's order settles it. */
     suspend fun reorder(ids: List<String>) {
         val before = runners
-        runners = ids.mapNotNull { id -> before.firstOrNull { it.text("id") == id } }
+        runners = ids.mapNotNull { id -> before.firstOrNull { it.text("id") == id } } + before.filterNot { it.text("id") in ids }
         try { runners = providerObjects(api.post("runners/reorder", buildJsonObject { put("ids", JsonArray(ids.map(::JsonPrimitive))) })) }
         catch (e: CancellationException) { throw e } catch (e: Exception) { runners = before; error = personalFailure(e) }
     }
@@ -254,7 +256,7 @@ private fun styled(text: String, strong: List<String> = emptyList(), code: List<
 }
 
 /** Machines & models' machines (iOS 5e75edbde's Machines section): every runner — a row opens it, its handle reorders it and its ⋯ menu
- * removes it, with no Edit mode (iOS 91316c246). The removal itself is asked by the page that holds the rows ([remove]). */
+ * removes it, with no Edit mode (iOS 91316c246). The managed runner is pinned above the reorderable rows. */
 @Composable
 internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) -> Unit, managed: ManagedRunner.Status? = null,
                          remove: (JsonObject) -> Unit) {
@@ -266,38 +268,53 @@ internal fun MachineRows(model: RunnersModel, now: Long, openRunner: (String) ->
     // A row moves by dragging its handle, as the Wiki plan's Edit sheet moves a section (the owner's decision, card
     // 34bs0PdYUHHwiKHYn3rCp): rows trade places as it passes half of the next one, and the order goes out once, when it is let
     // go. The drag is measured on the list, which stays put, not on the row, which moves with the finger.
-    val shown = drag?.order?.mapNotNull { id -> model.runners.firstOrNull { it.text("id") == id } } ?: model.runners
-    Column(Modifier.onPlaced { list = it }.pointerInput(Unit) {
+    val managedId = managed?.runnerId ?: ManagedRunnerIdentity.runnerId
+    val ordered = RunnerPage.managedRunnerFirst(model.runners, managedId)
+    val (pinned, movable) = ordered.partition { RunnerPage.isManaged(it, managedId) }
+    val current = movable.map { it.text("id") }
+    // Orbit Cloud stays first in the order saved too, for a client that does not pin it (as the web sends it).
+    val pinnedIds = pinned.map { it.text("id") }
+    val moving = drag?.order?.takeIf { it.size == current.size && it.containsAll(current) }
+    val shown = pinned + (moving?.mapNotNull { id -> movable.firstOrNull { it.text("id") == id } } ?: movable)
+    Column(Modifier.onPlaced { list = it }.pointerInput(current) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             // Only the handle of a row shown now: a removed row's handle lay where the next row moved to.
-            val current = model.runners.map { it.text("id") }
             val id = handles.entries.firstOrNull { it.key in current && it.value.contains(down.position) }?.key ?: return@awaitEachGesture
             drag = RunnerDrag(id, current, 0f)
             // Let go or cancelled: the rows stand in order again.
             try {
                 val ended = verticalDrag(down.id) { change -> drag = drag?.moved(change.positionChange().y, heights); change.consume() }
                 val order = drag?.order
-                if (ended && order != null && order != current) scope.launch { model.reorder(order) }
+                if (ended && order != null && order != current) scope.launch { model.reorder(pinnedIds + order) }
             } finally { drag = null }
         }
     }) {
         shown.forEachIndexed { index, runner ->
             val id = runner.text("id")
-            if (index > 0) HorizontalDivider()
+            val isPinned = index < pinned.size
+            if (pinned.isNotEmpty() && index == pinned.size) {
+                HorizontalDivider(Modifier.testTag("managed-runner-divider"), thickness = with(LocalDensity.current) { 1f.toDp() })
+            } else if (index > 0) HorizontalDivider()
             key(id) {
                 // A row that goes takes its handle with it.
                 DisposableEffect(id) { onDispose { handles.remove(id); heights.remove(id) } }
-                val dragged = drag?.id == id
+                val dragged = moving != null && drag?.id == id
                 Box(Modifier.onSizeChanged { heights[id] = it.height }.zIndex(if (dragged) 1f else 0f)
-                    .graphicsLayer { translationY = if (dragged) drag?.offset ?: 0f else 0f }) {
-                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, ManagedRunner.row(id, managed),
-                        canMoveUp = index > 0, canMoveDown = index < shown.lastIndex,
+                    .graphicsLayer {
+                        val offset = if (dragged) drag?.offset ?: 0f else 0f
+                        translationY = if (pinned.isNotEmpty() && index == pinned.size) offset.coerceAtLeast(0f) else offset
+                    }) {
+                    RunnerRow(runner, model.workspacesOf(id), model.latestVersion, now, ManagedRunner.row(id, managed), isPinned, managedId,
+                        canMoveUp = index > pinned.size, canMoveDown = !isPinned && index < shown.lastIndex,
                         open = { openRunner(id) }, remove = { remove(runner) },
                         move = { by -> scope.launch {
-                            val ids = model.runners.map { it.text("id") }.toMutableList()
-                            ids.add(index + by, ids.removeAt(index))
-                            model.reorder(ids)
+                            val at = current.indexOf(id)
+                            if (at >= 0 && at + by in current.indices) {
+                                val ids = current.toMutableList()
+                                ids.add(at + by, ids.removeAt(at))
+                                model.reorder(pinnedIds + ids)
+                            }
                         } },
                         handle = Modifier.onGloballyPositioned { at -> list?.takeIf { it.isAttached }?.let { handles[id] = it.localBoundingBoxOf(at) } })
                 }
@@ -329,9 +346,10 @@ internal data class RunnerDrag(val id: String, val order: List<String>, val offs
  * (iOS's swipe). TalkBack, which cannot drag, moves it with the row's Move up and Move down actions. */
 @Composable
 private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: String?, now: Long, managed: ManagedRunner.Row?,
-                      canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit, remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
-    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = managed != null || RunnerPage.isManaged(runner))
-    val name = RunnerPage.displayName(runner)
+                      pinned: Boolean, managedId: String?, canMoveUp: Boolean, canMoveDown: Boolean, open: () -> Unit,
+                      remove: () -> Unit, move: (Int) -> Unit, handle: Modifier) {
+    val items = RunnerPage.attention(runner, workspaces, now, latest, managed = pinned)
+    val name = RunnerPage.displayName(runner, managedId)
     var menu by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).clickable(role = Role.Button, onClick = open).semantics {
@@ -339,10 +357,12 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                     CustomAccessibilityAction("Move down") { move(1); true }.takeIf { canMoveDown })
             }.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (pinned) Icon(painterResource(R.drawable.ic_cloud), null, Modifier.size(18.dp).testTag("managed-runner-icon"),
+                tint = MaterialTheme.colorScheme.primary)
             if (managed != null) ManagedRunnerMark(managed.tone) else StatusDot(RunnerPage.presence(runner, now), ringed = true)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, Modifier.weight(1f), maxLines = 2)
+                    Text(name, Modifier.weight(1f), maxLines = 2, fontWeight = FontWeight.SemiBold.takeIf { pinned })
                     val slots = RunnerPage.slots(runner, now)
                     // The account's managed runner says the shared state's short label, never the heartbeat's Offline (D4).
                     if (managed != null) Text(managed.label, Modifier.testTag("managed-runner-label"), style = MaterialTheme.typography.bodySmall,
@@ -367,7 +387,7 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
             }
         }
         // The handle a row is dragged by; the drag itself is the list's.
-        Box(handle.size(48.dp).testTag("runner-handle:${runner.text("id")}").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+        if (!pinned) Box(handle.size(48.dp).testTag("runner-handle:${runner.text("id")}").clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_reorder), null, tint = Ink.muted)
         }
     }

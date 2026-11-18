@@ -1088,6 +1088,10 @@ internal object RunnerPage {
     fun isManaged(id: String?, managedRunnerId: String? = ManagedRunnerIdentity.runnerId, managed: Boolean? = null): Boolean =
         managed == true || (!id.isNullOrEmpty() && !managedRunnerId.isNullOrEmpty() && ObjectId.same(id, managedRunnerId))
 
+    /** Pin the account's managed runner, keeping the order the server sent for the other machines. */
+    fun managedRunnerFirst(runners: List<JsonObject>, managedRunnerId: String? = ManagedRunnerIdentity.runnerId): List<JsonObject> =
+        runners.sortedByDescending { isManaged(it, managedRunnerId) }
+
     /** Whether a version is a release number, not a managed image's `managed-<sha>` or a `dev` build. */
     fun isReleaseVersion(version: String?): Boolean = version != null && Regex("^[vV]?[0-9]").containsMatchIn(version.trim())
 
