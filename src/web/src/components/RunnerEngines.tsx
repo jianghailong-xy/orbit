@@ -70,6 +70,7 @@ import {
 } from '../lib/claudeRegionCopy';
 import {
   RUNNER_ENGINE_COULDNT_CHECK,
+  RUNNER_ENGINE_NO_PROVIDER_KEY,
   RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_NO_READING,
   RUNNER_ENGINE_RENEW,
@@ -274,7 +275,7 @@ function metaFor(kind: RowKind, engine: RowEngine, health?: RunnerEngineHealth, 
   // sign-in, not the version beside it — and, when the CLI listed no key at all, that it found none.
   if (kind === 'unknown') {
     if (signIn) return versionOf(engine, health);
-    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? 'no provider key found' : 'sign-in unknown'}`;
+    return `${versionOf(engine, health)} · ${health.openCodeNoKey ? RUNNER_ENGINE_NO_PROVIDER_KEY : 'sign-in unknown'}`;
   }
   // Which of Kimi's two sites the login is on: the same CLI signs in to either, and a session spends
   // that site's subscription.
