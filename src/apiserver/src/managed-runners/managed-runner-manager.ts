@@ -895,7 +895,7 @@ export class ManagedRunnerManager {
    * drains marked as a roll and wakes at once as the next generation, made from the image the backend makes instances
    * from now, on the same volume and runner. Nothing in flight is cut short: while busy it stays READY and the next
    * pass asks again. An instance found already on the current image ends the request (`updateCompletedAt`). The
-   * mark names the backend's roll image, or where it has none (Docker) the current build's commit. Null when it stays.
+   * mark names the backend's roll image, or where it has none the current build's commit. Null when it stays.
    */
   private async ownerUpdate(mapping: ManagedRunner, instance: ManagedInstance): Promise<Step | null> {
     if (!ownerUpdatePending(mapping)) return null;

@@ -1,8 +1,9 @@
 /**
  * The owner's Update Now of an Orbit Cloud runner (docs/managed-runner-update-now-design.md, "What changes" 3), the
  * idle path and the refusals: POST /api/managed-runner/update-now as ManagedRunnerService.updateNow answers it, and the
- * manager's READY pass that performs it (ManagedRunnerManager.ownerUpdate). The manager on DockerBackend — which has
- * no idle roll of its own (`rollImage`) — over the channel that keeps the real one's rules in memory
+ * manager's READY pass that performs it (ManagedRunnerManager.ownerUpdate). The manager on DockerBackend — which also
+ * rolls an idle previous image by itself (`rollImage`), so each runner here is busy when the manager first finds it
+ * outdated — over the channel that keeps the real one's rules in memory
  * (test-support/fake-docker-channel.ts), against a real PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty;
  * the clock is the test's.
  *
@@ -152,13 +153,16 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
       return { ownerId, mapping: await mappingOf(ownerId) };
     }
 
-    /** READY on the image before an upgrade, found outdated by the manager: its status offers the update. */
-    async function outdatedRunner(label: string, workload: Partial<typeof IDLE> = {}) {
+    /**
+     * READY on the image before an upgrade, found outdated by the manager: its status offers the update. Busy when
+     * the manager finds it so (a turn running, by default): an idle one would be rolled by itself (rollPreviousImage).
+     */
+    async function outdatedRunner(label: string, workload: Partial<typeof IDLE> = { activeTurns: 1 }) {
       const ready = await readyRunner(label);
       upgrade();
       advance(30_000);
       await heartbeat(ready.mapping.runnerId, workload);
-      assert.equal(await manager.reconcile(ready.mapping.id), 'READY', 'on Docker an idle previous image is not rolled by itself');
+      assert.equal(await manager.reconcile(ready.mapping.id), 'READY', 'busy on a previous image, it is not rolled');
       assert.equal((await service.status(ready.ownerId)).update?.phase, 'available');
       return { ownerId: ready.ownerId, mapping: await mappingOf(ready.ownerId) };
     }
@@ -213,8 +217,8 @@ test('an owner\'s Update Now moves an idle Orbit Cloud runner onto the current i
     const draining = await w.mappingOf(ownerId);
     assert.deepEqual(
       { state: draining.managementState, desired: draining.desiredState, rollTo: draining.imageRollTo, generation: draining.generation, podUid: draining.podUid },
-      { state: 'DRAINING', desired: 'SLEEPING', rollTo: NEW_SHA, generation: mapping.generation, podUid: mapping.podUid },
-      'drained as an image roll is, marked with the current build',
+      { state: 'DRAINING', desired: 'SLEEPING', rollTo: NEXT, generation: mapping.generation, podUid: mapping.podUid },
+      'drained as an image roll is, marked with the current image',
     );
     assert.ok(draining.stopRequestedAt, 'its heartbeat asks it to stop');
     assert.equal((await w.service.status(ownerId)).update?.phase, 'updating');
