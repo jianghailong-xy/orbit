@@ -61,17 +61,26 @@ export interface IntegrationRetryFacts {
   /** The task's open `project_blocker` episodes that wait on the account owner. */
   ownerBlockers: ReadonlyArray<{ id: string; kind: string }>;
   /**
-   * Measured only for a CONFLICT that stopped at MAIN_SYNC (`branch-carries-tips.ts`): true when the
-   * task's current branch tip contains both the current project-line tip and current main, so the
-   * next landing skips the main sync and lands by J-S4 MERGE (§3.1 M3). Anything else — not
-   * measured, a tip missing, or nobody could tell — keeps the refusal.
+   * Read only for a CONFLICT that stopped at MAIN_SYNC (§3.1 M3): the commit that landing was handed
+   * (`project_integration_job.source_sha`) and the tip of the branch a rerun would hand the line now,
+   * as its runner last reported it (`session.branch_sha`). Both are facts the server already holds;
+   * the apiserver runs no git.
+   *
+   * WHY "MOVED" IS ENOUGH. The same commit run again meets the same conflict, so an unmoved branch
+   * keeps the refusal. A branch that moved may carry the absorb (both tips merged into it): then J-S2
+   * ① skips the main sync and J-S4 lands it by MERGE. Whether it does is a question for git, and the
+   * landing job asks it on a runner that has the repository — if the branch still lacks a tip, the
+   * landing stops at MAIN_SYNC again and its conflict item comes back exactly as it does today.
    */
-  branchCarriesBothTips?: boolean;
+  sourceTips?: { conflicted: string | null; current: string | null };
 }
 
-/** What the rerun of an absorbed MAIN_SYNC conflict says it is doing. */
-export const MAIN_SYNC_ABSORBED_MESSAGE = 'Landing again: the branch now contains the project line and main, '
-  + 'so it lands by a merge.';
+/** What the rerun of a MAIN_SYNC conflict whose branch moved says it is doing. */
+export function mainSyncMovedMessage(from: string, to: string): string {
+  return `Landing again: the branch has moved since it conflicted at MAIN_SYNC (${from.slice(0, 7)} → `
+    + `${to.slice(0, 7)}). If it now contains the project line and main, it lands by a merge; if it `
+    + 'does not, the landing stops at MAIN_SYNC again and its conflict item comes back.';
+}
 
 /** A refusal, in the shape the service throws it: the status, and the body the caller reads. */
 export interface IntegrationRetryRefusal {
@@ -151,18 +160,19 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       { newestLanding: landing });
   }
   const classified: LandingFailureClass | null = timedOut ? 'ERROR' : landingFailureClass(newest);
-  // §3.1 M3: the line's conflict is answered once the source branch carries both tips — measured
-  // now, against the tips as they are, not read off the landing that stopped.
-  const absorbed = classified === 'CONFLICT' && newest.phase === 'MAIN_SYNC'
-    && facts.branchCarriesBothTips === true;
-  if (!absorbed && !isRetryableLandingFailure(classified)) {
+  // §3.1 M3: a MAIN_SYNC conflict is rerun once the branch has moved off the commit that conflicted
+  // — the runner's J-S2 decides whether the move was the absorb (see `sourceTips`).
+  const tips = facts.sourceTips;
+  const moved = classified === 'CONFLICT' && newest.phase === 'MAIN_SYNC'
+    && !!tips?.conflicted && !!tips.current && tips.current !== tips.conflicted;
+  if (!moved && !isRetryableLandingFailure(classified)) {
     return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
       notRetryable(newest.state, classified, newest.phase ?? null), {
         newestLanding: { ...landing, failureClass: classified },
       });
   }
   const failureClass = classified as LandingRetryFailureClass;
-  const message = absorbed ? { message: MAIN_SYNC_ABSORBED_MESSAGE } : {};
+  const message = moved ? { message: mainSyncMovedMessage(tips!.conflicted!, tips!.current!) } : {};
 
   const requester = facts.requester ?? 'COORDINATOR';
   if (requester === 'OWNER') {

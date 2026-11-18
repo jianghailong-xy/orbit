@@ -20,10 +20,10 @@ import {
   INTEGRATION_RETRY_OWNER_BLOCKER,
   INTEGRATION_RETRY_OWNER_ITEM,
   IntegrationRetryFacts,
-  MAIN_SYNC_ABSORBED_MESSAGE,
   PromotionRetryFacts,
   decideIntegrationRetry,
   decidePromotionRetry,
+  mainSyncMovedMessage,
 } from './project-integration-retry';
 
 /**
@@ -424,28 +424,40 @@ test('integration_retry still refuses a MAIN_SYNC conflict, and says to absorb t
   }
 });
 
-test('integration_retry reruns a MAIN_SYNC conflict once the branch carries both tips, and only that conflict', () => {
+test('integration_retry reruns a MAIN_SYNC conflict once its branch has moved off the conflicted commit, and only that conflict', () => {
   const item = { id: 'item-1', kind: 'INTEGRATION_CONFLICT', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' };
   const mainSync = { id: 'j', generation: 1, state: 'CONFLICT', checks: [], phase: 'MAIN_SYNC' };
-  const accepted = decideIntegrationRetry(facts({ newestLanding: mainSync, openItems: [item], branchCarriesBothTips: true }));
+  const conflicted = 'a'.repeat(40);
+  const moved = 'b'.repeat(40);
+  // Pure facts the server holds: no git, no repository, nothing to probe.
+  const accepted = decideIntegrationRetry(facts({
+    newestLanding: mainSync, openItems: [item], sourceTips: { conflicted, current: moved },
+  }));
   assert.ok(accepted.ok);
   assert.equal(accepted.failureClass, 'CONFLICT');
   assert.equal(accepted.retryOfJobId, 'j');
   assert.deepEqual(accepted.handle, ['item-1']);
-  assert.equal(accepted.message, MAIN_SYNC_ABSORBED_MESSAGE);
-  // A tip missing, or nobody could tell: today's refusal.
-  for (const branchCarriesBothTips of [false, undefined]) {
-    const refused = refusalOf(facts({ newestLanding: mainSync, openItems: [item], branchCarriesBothTips }));
-    assert.match(refused.message, /stopped at MAIN_SYNC/, String(branchCarriesBothTips));
+  assert.equal(accepted.message, mainSyncMovedMessage(conflicted, moved));
+  assert.match(accepted.message!, /^Landing again: the branch has moved since it conflicted at MAIN_SYNC \(aaaaaaa → bbbbbbb\)\. If it now contains the project line and main, it lands by a merge/);
+  // Not moved, or a tip the server never learned: today's refusal, word for word.
+  for (const sourceTips of [
+    { conflicted, current: conflicted },
+    { conflicted, current: null },
+    { conflicted: null, current: moved },
+    undefined,
+  ]) {
+    const refused = refusalOf(facts({ newestLanding: mainSync, openItems: [item], sourceTips }));
+    assert.match(refused.message, /stopped at MAIN_SYNC/, JSON.stringify(sourceTips));
+    assert.match(refused.message, /running it again meets the same conflict, and so does sending the task back to redo its work/);
   }
-  // A conflict of the task's own commits is not answered by both tips.
+  // A conflict of the task's own commits is not answered by a moved branch through this door.
   const rebase = refusalOf(facts({
-    newestLanding: { ...mainSync, phase: 'REBASE' }, openItems: [item], branchCarriesBothTips: true,
+    newestLanding: { ...mainSync, phase: 'REBASE' }, openItems: [item], sourceTips: { conflicted, current: moved },
   }));
   assert.match(rebase.message, /reworked against the line as it is now/);
   // A plain rerun says nothing extra.
   const red = decideIntegrationRetry(facts({
-    newestLanding: { id: 'k', generation: 1, state: 'CHECK_FAILED', checks: [] }, branchCarriesBothTips: true,
+    newestLanding: { id: 'k', generation: 1, state: 'CHECK_FAILED', checks: [] }, sourceTips: { conflicted, current: moved },
   }));
   assert.ok(red.ok);
   assert.equal(red.message, undefined);

@@ -109,10 +109,10 @@ import {
   endTimedOutLanding,
   enqueueForDoneTask,
   pushBoundaryPassed,
+  RetryableLandingFailureClass,
   queueLandingRetry,
-  readLandingSourceRefs,
+  readLandingSourceTip,
 } from './project-integration-job';
-import { probeBranchCarriesTips } from './branch-carries-tips';
 import {
   ProjectIntegrationView,
   projectIntegrationView,
@@ -2310,11 +2310,6 @@ export class ProjectOpenItemService {
           + 'project\'s landings again. The task\'s own project, and its coordinator, decide this one.',
       });
     }
-    // §3.1 M3: a landing that stopped at MAIN_SYNC is rerun once the task's branch carries both the
-    // project line and main. That is a question for the repository, asked here, outside the row lock
-    // (it fetches), and held to the landing it was asked about: the decision below uses the answer
-    // only while that landing is still the newest.
-    const absorbed = await this.probeMainSyncAbsorbed(ownerId, projectId, taskId);
 
     return withTransactionRetry(this.prisma, async (tx) => {
       const [locked] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
@@ -2333,7 +2328,9 @@ export class ProjectOpenItemService {
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true },
+        select: {
+          id: true, generation: true, state: true, checks: true, baselineRed: true, phase: true, sourceSha: true,
+        },
       });
       if (expectJobId && newestLanding?.id !== expectJobId) {
         throw new ConflictException({
@@ -2362,7 +2359,15 @@ export class ProjectOpenItemService {
         newestLanding: newestLanding && { ...newestLanding, timedOut: silent?.timedOut === true },
         openItems,
         ownerBlockers,
-        branchCarriesBothTips: absorbed !== null && absorbed === newestLanding?.id,
+        // §3.1 M3: only a MAIN_SYNC conflict reads the branch tips, and only facts already on record.
+        ...(newestLanding?.state === 'CONFLICT' && newestLanding.phase === 'MAIN_SYNC'
+          ? {
+            sourceTips: {
+              conflicted: newestLanding.sourceSha,
+              current: await readLandingSourceTip(tx, { ownerId, projectId, taskId }),
+            },
+          }
+          : {}),
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
       if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent, 'RETRY') : null) === null) {
@@ -2377,13 +2382,20 @@ export class ProjectOpenItemService {
         ownerId,
         projectId,
         taskId,
-        retry: {
-          ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
-          reason,
-          requestedBySessionId: ownerRequester ? undefined : asking!,
-          requestedByUserId: ownerRequester ?? undefined,
-        },
+        // A MAIN_SYNC conflict rerun after its branch moved is a new look at new commits, queued like
+        // one: the retry columns' class check admits only the retryable failures (0344/0513), so the
+        // row carries none, and who asked and why are kept on the items it handles below.
+        ...(decision.failureClass === 'CONFLICT'
+          ? { cause: 'RETRY' as const }
+          : {
+            retry: {
+              ofJobId: decision.retryOfJobId,
+              failureClass: decision.failureClass,
+              reason,
+              requestedBySessionId: ownerRequester ? undefined : asking!,
+              requestedByUserId: ownerRequester ?? undefined,
+            },
+          }),
       });
       if (!queued) {
         throw new ConflictException({
@@ -2412,23 +2424,6 @@ export class ProjectOpenItemService {
         handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
-  }
-
-  /**
-   * The newest landing's id when it is a CONFLICT that stopped at MAIN_SYNC and the task's branch tip
-   * now contains both the project-line tip and main's tip (`probeBranchCarriesTips`); null otherwise,
-   * including whenever the repository could not answer — which keeps the refusal.
-   */
-  private async probeMainSyncAbsorbed(ownerId: string, projectId: string, taskId: string): Promise<string | null> {
-    const newest = await this.prisma.projectIntegrationJob.findFirst({
-      where: { taskId, kind: 'LAND_TASK' },
-      orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-      select: { id: true, state: true, phase: true },
-    });
-    if (newest?.state !== 'CONFLICT' || newest.phase !== 'MAIN_SYNC') return null;
-    const refs = await readLandingSourceRefs(this.prisma, { ownerId, projectId, taskId });
-    if (!refs) return null;
-    return (await probeBranchCarriesTips(refs)) === 'BOTH' ? newest.id : null;
   }
 
   /** The account owner's user-channel door for a failed task landing. */
@@ -2796,7 +2791,8 @@ export class ProjectOpenItemService {
         taskId,
         retry: {
           ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
+          // Only `retryIntegration` hands a decision the branch tips, so only it can answer CONFLICT.
+          failureClass: decision.failureClass as RetryableLandingFailureClass,
           reason,
           requestedBySessionId: ownerRequester ? undefined : asking!,
           requestedByUserId: ownerRequester ?? undefined,
@@ -3048,7 +3044,8 @@ export class ProjectOpenItemService {
         promotionId,
         retry: {
           ofJobId: decision.retryOfJobId,
-          failureClass: decision.failureClass,
+          // Only `retryIntegration` hands a decision the branch tips, so only it can answer CONFLICT.
+          failureClass: decision.failureClass as RetryableLandingFailureClass,
           reason,
           requestedBySessionId: ownerRequester ? undefined : asking!,
           requestedByUserId: ownerRequester ?? undefined,

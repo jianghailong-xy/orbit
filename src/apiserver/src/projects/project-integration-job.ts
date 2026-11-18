@@ -206,8 +206,9 @@ export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
 /** Explicit retry treats BASELINE_RED like CHECK_FAILED; migrations 0344/0513 admit both. */
 export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'BASELINE_RED', 'ERROR'] as const;
 export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
-/** What a queued rerun records it reruns: a retryable failure, or a MAIN_SYNC conflict whose branch
- *  has since absorbed both tips (§3.1 M3, migration 1090). */
+/** What `integration_retry` reruns: a retryable failure, or a MAIN_SYNC conflict whose branch has
+ *  moved since (§3.1 M3). The CONFLICT one is queued without the retry columns, whose class check
+ *  (0344/0513) admits only the retryable classes. */
 export type LandingRetryFailureClass = RetryableLandingFailureClass | 'CONFLICT';
 
 /**
@@ -921,7 +922,7 @@ export function skippedMergeCheck(job: {
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
-  failureClass: LandingRetryFailureClass;
+  failureClass: RetryableLandingFailureClass;
   reason: string;
   /** Exactly one requester is recorded by migration 0380. */
   requestedBySessionId?: string;
@@ -1076,6 +1077,9 @@ export async function queueLandingRetry(
      * 0393). Omitted by `integration_retry`, which queues the same generation WITH the check.
      */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, when it is neither a recorded rerun nor a skip: the rerun of a MAIN_SYNC
+     *  conflict whose branch moved carries no retry columns (§3.1 M3) and is still the RETRY door's. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
@@ -1097,7 +1101,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
-    cause: input.retry ? 'RETRY' : 'SKIP_CHECK',
+    cause: input.cause ?? (input.retry ? 'RETRY' : 'SKIP_CHECK'),
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1113,33 +1117,22 @@ export async function queueLandingRetry(
 }
 
 /**
- * Where a rerun of this task's landing would fetch from, and the three refs it would read: the
- * branch `queueLandingRetry` would hand the line (the same `landingWorkSession` choice), the remote
- * its workspace pushes to, and the binding's two refs. Null when there is no such landing to ask
- * about — no work branch, no repository recorded, or a project that lands straight into main.
+ * The tip of the branch a rerun of this task's landing would hand the line — the same
+ * `landingWorkSession` choice `queueLandingRetry` makes — as its runner last reported it
+ * (`session.branch_sha`, 0370). Null when there is no such branch or no tip was reported.
  */
-export async function readLandingSourceRefs(
+export async function readLandingSourceTip(
   db: Prisma.TransactionClient,
   input: { ownerId: string; projectId: string; taskId: string },
-): Promise<{ repoUrl: string; sourceRef: string; integrationRef: string; upstreamRef: string } | null> {
+): Promise<string | null> {
   const task = await db.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
     select: { codeless: true, sessions: workSessionsOfTaskSelect() },
   });
   const work = landingWorkSession(task?.sessions ?? []);
-  const repoUrl = work?.workspace?.repoUrl;
-  if (!task || task.codeless || !work?.branch || !repoUrl) return null;
-  const codebase = await db.projectCodebase.findFirst({
-    where: { projectId: input.projectId, slot: 'primary' },
-    select: { integrationRef: true, upstreamRef: true },
-  });
-  if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
-  return {
-    repoUrl,
-    sourceRef: `refs/heads/${work.branch}`,
-    integrationRef: codebase.integrationRef,
-    upstreamRef: codebase.upstreamRef,
-  };
+  if (!task || task.codeless || !work?.branch) return null;
+  const tip = await db.session.findUnique({ where: { id: work.id }, select: { branchSha: true } });
+  return tip?.branchSha ?? null;
 }
 
 /** The stop a skip of an in-flight landing asks for: the cause its `STOP_REQUESTED` line carries,
