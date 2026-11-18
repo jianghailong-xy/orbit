@@ -424,6 +424,11 @@ private struct RunnerEngineContent: View {
                     HStack(spacing: 4) {
                         Text(line.name)
                             .font(.headline)
+                        // Web's DEFAULT chip: a Default renamed in Orbit, or promoted by Set as default
+                        // while keeping its name (`AccountName`'s re-chip).
+                        if line.isDefault && line.name != "Default" {
+                            PoolChip(text: RunnerEngineSetDefaultViews.defaultChip)
+                        }
                         // Where Automatic starts the next session — the account pools' mark for the same
                         // thing (web `AccountName`).
                         if RunnerPageFormat.marksNext(runner, engine: engine, account: line.id, now: now) {
@@ -493,28 +498,8 @@ private struct RunnerEngineContent: View {
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
             }
-            // Becoming the Default: said under the account, as a removal's move is, until the swap is done.
-            if let setting = RunnerPageFormat.settingDefaultLine(runner, line: line) {
-                Text(setting)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-            }
-            // The machine could not swap the logins, and put both back: its reason, as a refused removal's.
-            if let failed = RunnerPageFormat.failedSwap(runner, line: line) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name))
-                        .font(.orbitLabel)
-                        .foregroundStyle(RunnerInk.red)
-                    if let message = failed.message, !message.isEmpty {
-                        Text(message)
-                            .font(.orbitLabel)
-                            .foregroundStyle(RunnerInk.red)
-                    }
-                    Text(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED)
-                        .font(.orbitLabel)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            // Becoming the Default, or a swap that failed: the same chrome Set as default shots render.
+            RunnerEngineSetDefaultViews.SwapStatus(runner: runner, line: line)
             if let refused = removal?.refused {
                 Text(refused)
                     .font(.orbitLabel)
@@ -689,12 +674,7 @@ private struct RunnerEngineContent: View {
         if RunnerPageFormat.offersSetDefault(line, engine: engine) {
             let blocked = RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)
             Button { pendingSetDefault = line } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT)
-                    Text(blocked ?? RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT)
-                        .font(.orbitLabel)
-                        .foregroundStyle(.secondary)
-                }
+                RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)
             }
             .disabled(blocked != nil)
         }

@@ -597,8 +597,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         try assertInOrder(menu, ["if RunnerPageFormat.offersSetDefault(line, engine: engine) {",
                                  "RunnerPageFormat.setDefaultBlocked(runner, offline: offline, pressing: swapPressing)",
                                  "pendingSetDefault = line",
-                                 "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
-                                 "blocked ?? RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT",
+                                 "RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)",
                                  ".disabled(blocked != nil)"],
                           "Set as default is the menu's, with its hint or why it can't be chosen")
         try assertInOrder(page, [".orbitConfirmation({ _ in setDefaultTitle },",
@@ -606,11 +605,19 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                                  "Text(setDefaultNote(line))"],
                           "Make default asks first")
         let row = try slice(page, from: "private func accountRow(", to: "private func withActions<")
-        try assertInOrder(row, ["RunnerPageFormat.settingDefaultLine(runner, line: line)",
-                                "RunnerPageFormat.failedSwap(runner, line: line)",
-                                "RunnerAccountCopy.runnerAccountSetDefaultFailed(name: line.name)",
-                                "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED"],
-                          "the waiting line and a failed swap sit under the account")
+        try assertInOrder(row, ["PoolChip(text: RunnerEngineSetDefaultViews.defaultChip)",
+                                "RunnerEngineSetDefaultViews.SwapStatus(runner: runner, line: line)"],
+                          "DEFAULT chip and the waiting/failed chrome sit under the account")
+        let chrome = code(try appSource("Views/RunnerEngineSetDefaultViews.swift"))
+        for piece in ["struct MenuItemLabel: View", "struct Confirm: View", "struct SwapStatus: View",
+                      "struct AccountRow: View", "struct MenuPanel: View",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_HINT",
+                      "RunnerPageFormat.settingDefaultLine",
+                      "RunnerAccountCopy.runnerAccountSetDefaultFailed",
+                      "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT_UNCHANGED"] {
+            XCTAssertTrue(chrome.contains(piece), "Set as default chrome lost \(piece)")
+        }
         let press = try slice(page, from: "private func setDefault(", to: "private func restoreDefault(")
         try assertInOrder(press, ["swapPressing = true",
                                   "await runners.setDefaultAccount(id, engine: login, account: line.id)",
@@ -650,7 +657,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                                  "Label(\"Change Duration…\", systemImage: \"clock\")",
                                  "Label(\"Pause…\", systemImage: \"pause.fill\")",
                                  "RunnerPageFormat.offersSetDefault(line, engine: engine)",
-                                 "RunnerAccountCopy.RUNNER_ACCOUNT_SET_DEFAULT",
+                                 "RunnerEngineSetDefaultViews.MenuItemLabel(blocked: blocked)",
                                  "Label(\"Remove…\", systemImage: \"trash\")"],
                           "the menu holds everything the row and its swipe offer, and Set as default")
 
